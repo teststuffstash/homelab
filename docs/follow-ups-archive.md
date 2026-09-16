@@ -10,6 +10,23 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-232** *(archived 2026-09-16)* — **Reporter-keyed subject collapse: fixed at the cascade.**
+  The responder's `subject:` — which IS an issue's identity under the #149 one-subject rule — was
+  the metric's EXPORTER whenever the failing object had no pod dimension of its own, so 19 of 28
+  triage comments in the 09-04→11 week grafted onto five reporter threads (#811/#882/#542
+  kube-state-metrics, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Shipped in
+  homelab#1733: the cascade reads the object's own labels (`daemonset`/`statefulset`/`deployment`/
+  `job_name`) BEFORE `pod`, and skips `pod` entirely when `job` names a monitoring scrape job —
+  structural rather than a pod-name regex, because kube-state-metrics is scraped with honorLabels,
+  so a metric that HAS a pod dimension legitimately keeps it. With no object label the key falls to
+  node, then `instance:` (the failing target, verbatim), then per-class `alert:<name>`. Evidence:
+  the live 2026-09-16 label sets — `KubeDaemonSetRolloutStuck` arrives carrying
+  `daemonset=runner-image-prepull-pve` AND `pod=…kube-state-metrics…`. Pinned by
+  `agents/replay/fixtures/responder-subject/{daemonset-reporter-pod,node-exporter-instance,statefulset,witness-pod-owned}`
+  and by `responder-behaviour-test.sh` §#149, whose graft scenario had been asserting the pre-fix
+  subject as correct behaviour. ⚠ The re-key RETIRES the magnet threads: each affected
+  (alert, object) files one fresh issue on its next fire and the magnets stop collecting.
+
 - **FU-213** *(archived 2026-09-14)* — **opencode.ai un-parked: the client now sends
   `x-opencode-session`.** Parked 2026-09-04 (operator mail: our UA sent no such header, "may
   error" from 09-06) behind `OPENCODE_RAIL_DISABLED=1`; closed by homelab#1640 acceptance 2

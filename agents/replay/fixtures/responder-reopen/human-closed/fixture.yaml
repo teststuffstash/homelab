@@ -1,0 +1,40 @@
+# homelab#1733 — a HUMAN's close is a decision, and the belt restores it.
+#
+# CONDITION UNDER REPLAY. Byte-for-byte the world of `responder-reopen-report-only` — same alert,
+# same two closed candidates, same reopen of #103 by the FU-133 subject belt — with exactly one
+# thing changed: #103's newest `closed` event has `actor.type: User` instead of `Bot`. #77 stays
+# machine-closed, so the pair also witnesses that the guard is per-thread and not a global mode.
+#
+# WHY. The reopen belt was built so a FLAPPING alert reopens its own record instead of churning new
+# issues — correct, and blind to WHO closed the thread. Measured on the live board 2026-09-16:
+# homelab#103 closed by the operator and reopened by this lane FIVE times since 2026-08-05; #100
+# and #121 three times each; #542/#811/#241/#538 all reopened after an operator close, two within
+# 48 h of the 2026-09-14 responder pass. A machine that undoes a person's close on a weekly cycle
+# is not deduplicating, it is arguing — and every cycle also spends a triage session.
+#
+# THE CONTRACT:
+#   1. The actor TYPE is the fact, not the login suffix. `[bot]` is a REST rendering that GraphQL
+#      omits — the same mismatch that killed the resolve leg's engagement test for two months
+#      (#1733's sibling fix) — so this reads `.actor.type` and nothing else.
+#   2. The label strip still runs FIRST: the thread ends as a clean CLOSED record, not a closed one
+#      wearing a dead life's `agent/queued`.
+#   3. ONE comment, and it is also the last word, because the thread ends closed — the #148 rule
+#      that keeps the resolve leg from commenting once per flap cycle, satisfied by construction.
+#   4. #77 draws no re-close: it was closed by the lane's own resolve leg and stayed closed, so
+#      neither the human guard nor the strip has anything to say about it.
+#   5. The verdict half still runs unchanged — a re-closed thread is still the record its verdict
+#      belongs to, and suppressing that would make the guard quietly eat a diagnosis.
+pins:
+  - IL-T03
+name: responder-reopen-human-closed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+requires:
+  - python3
+parts:
+  - file:../report-only/bridge.sh
+  - block:responder-reopen-presnap
+  - file:../report-only/session.sh
+  - block:responder-reopen-strip
+  - block:responder-verdict-dispatch
+  - file:../report-only/post.sh

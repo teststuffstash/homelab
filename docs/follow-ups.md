@@ -1011,34 +1011,26 @@ the block needs pruning, not more headings.
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
-- [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
-      confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
-      guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
-      `node-maintenance.sh settle/down` silence the window, `up` expires it; the label taxonomy is
-      the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600). ⚠ **Leg (a)
-      still leaks the DaemonSet-rollout class** (2026-09-16, #542 r3: `KubeDaemonSetRolloutStuck`
-      carries neither `node` nor `instance`, and its stuck pod postdates the silence) — leg (b) is
-      the general fix, not more label arms. **Next:** leg (b) — a seat-written ConfigMap window
-      record the brief prints like the ArgoCD observation-window line (durability caveat = FU-195).
-      Design read: `docs/spikes/responder-week-audit.md` §Design read.
+- [ ] **FU-230** — **The responder cannot see seat-driven change** — 7 of 9 confidently-wrong
+      writes in the 09-04→11 week had a cause the seat made outside the cluster's view.
+      **Leg (a) DONE 2026-09-12 (PR#1601)**: `node-maintenance.sh settle/down` silence the window,
+      `up` expires it. ⚠ It still leaks the DaemonSet-rollout class (2026-09-16, #542 r3 — that
+      alert carries neither `node` nor `instance`); leg (b) is the general fix, not more arms.
+      ⚖ **Re-weighed 2026-09-16 (#1733): real, no longer binding** — one of twenty filed issues,
+      against seven operator-close reversals and nine daily re-confirmations that #1733 fixed
+      deterministically. **Next:** leg (b) — a seat-written ConfigMap window record the brief
+      prints like the ArgoCD observation-window line (durability caveat = FU-195) — when a SECOND
+      window class leaks. Detail: `docs/spikes/responder-week-audit.md` §The 2026-09-16 pass.
 
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
-      actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
-      find ahead of the seat (#811 c2, Loki WAL, ~5 h early) sat as comment 2 on a Garage-quota
-      thread, unread. **Next:** typed finding record + transcript under FU-210's
-      `homelab/alert-<fp>/` prefix; `meta-events.sh` gains a `triage` source (new prefixes since
-      last tick); file an issue only on `fix-verdict: fix` + named surface (ADR-122) + outside an
-      FU-230 window. MCP server deliberately NOT part of this (README §Open, no consumer yet).
-      Design read: `docs/spikes/responder-week-audit.md` §Design read.
-- [ ] **FU-232** — **Reporter-keyed subject collapse: the responder's `subject:` is the metric's
-      EXPORTER, not the failing object — 19 of 28 comments this week grafted onto 5 magnet
-      threads** (kube-state-metrics → #811/#882/#542, pushgateway → #241, node-exporter → #103,
-      the cilium DaemonSet → #857, `ns:monitoring` → #884). The #149 one-subject rule is followed
-      to the letter and still lands unrelated problems on one thread. **Next:** derive the subject
-      from the alert's object labels (node / persistentvolumeclaim / pod / workflow) before the
-      reporter workload; extend `responder-behaviour-test.sh` §#149 with the five magnet shapes.
-      Evidence: `docs/spikes/responder-week-audit.md` §Totals.
+      actionable, history = git/S3). ⚠ **BLOCKED on FU-210** (no responder transcripts exist, so
+      there is no `homelab/alert-<fp>/` prefix to write beside — verified empty 2026-09-16) and
+      **re-scoped by #1733**: the binding cost was the lane RE-DECIDING settled conditions, not
+      where a finding landed, and the decided-once gate removed that without a bucket.
+      **Next:** re-read once #1733 has soaked and FU-210 has landed — is the residual comment
+      volume still worth re-routing? Mechanism, evidence and the MCP exclusion:
+      `docs/spikes/responder-week-audit.md` §Design read + §The 2026-09-16 pass.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 

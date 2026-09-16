@@ -1,0 +1,6 @@
+CALL gh api repos/teststuffstash/homelab/issues/1723/comments --paginate --jq [.[] | select((.user.type // "") != "Bot")] | length
+CALL gh issue comment 1723 --repo teststuffstash/homelab --body ✅ **Alert cleared** — `PodSigkilled` (alert-fp:`4cafb4ee21e29ace`) stopped firing at 2026-09-16T07:19:05Z. Posted by the responder's resolve leg (FU-133); the issue does not have to be true any more just because it was filed.
+CALL gh issue close 1723 --repo teststuffstash/homelab --reason completed
+OUT → resolved PodSigkilled (4cafb4ee21e29ace): commented + CLOSED teststuffstash/homelab#1723 (no human had engaged)
+OUT REACHED: end
+RC 0

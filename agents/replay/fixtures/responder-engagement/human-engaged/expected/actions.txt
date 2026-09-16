@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/issues/1723/comments --paginate --jq [.[] | select((.user.type // "") != "Bot")] | length
+CALL _record_clear teststuffstash/homelab 1723 ^alert-fp: A human is engaged, so the DEFECT closes this issue, not the alert.
+OUT → resolved PodSigkilled (4cafb4ee21e29ace): teststuffstash/homelab#1723 left OPEN — 1 human comment(s), someone owns it; no comment, last-cleared line updated
+OUT REACHED: end
+RC 0

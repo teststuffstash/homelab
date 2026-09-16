@@ -1,0 +1,29 @@
+# homelab#1733 — the resolve leg closes a thread nobody but the machine touched.
+#
+# CONDITION UNDER REPLAY. homelab#1723: a PodSigkilled on loki/kmsg-reader filed 2026-09-16 07:02Z,
+# its alert cleared 17 minutes later, one comment on the thread and that comment is the lane`s own.
+#
+# WHAT IT REDS ON. The engagement test used to read `.author.login | test("\\[bot\\]$")` off
+# `gh issue view --json body,comments`, and its own comment asserted "gh renders App logins with a
+# [bot] suffix HERE (REST)". That endpoint is GRAPHQL, which returns a Bot`s BARE login. So every
+# machine comment counted as a human and this branch could only ever be reached on a thread with
+# ZERO comments. Measured on the live board 2026-09-16: 24 open 🚨 issues, 17 whose alert had
+# already cleared, 13 carrying this leg`s own "A human is engaged" line — written about its own
+# prior comment. It is the same REST-vs-GraphQL login mismatch the reviewer hit (FU-069), which the
+# dead comment named as the reason it did not apply here.
+#
+# THE CONTRACT:
+#   1. The probe is REST and keys on `.user.type`, not the `[bot]` suffix — the suffix is a
+#      rendering, the type is the fact.
+#   2. Bots only ⇒ ONE comment AND the close. The comment is legal precisely because the close
+#      follows it: it is the last word on the thread, which is the #148 bound.
+#   3. RC 0.
+pins:
+  - IL-T03
+name: responder-engagement-bots-only
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-engagement
+  - file:post.sh

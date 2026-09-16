@@ -1,0 +1,2 @@
+OUT → NodeMemoryMajorPagesFaults (ca4004fb1c4f5028): subject=instance:192.168.2.182:9100
+RC 0
