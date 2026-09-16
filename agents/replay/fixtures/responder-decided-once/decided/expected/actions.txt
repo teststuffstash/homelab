@@ -1,0 +1,7 @@
+CALL gh search issues --owner teststuffstash --match body subject:alert:BlockingCodeownerParkWaiting --state open --json repository,number,title,body --limit 10
+CALL gh api repos/teststuffstash/homelab/issues/1598 --jq .body // ""
+CALL gh issue edit 1598 --repo teststuffstash/homelab --body-file /tmp/sfbody.md
+CALL kubectl -n agent-coordinator patch cm responder-seen --type merge -p {"data":{"fp-a9be9303edb3954b":"decided-2026-09-16"}}
+OUT → BlockingCodeownerParkWaiting (a9be9303edb3954b): DECIDED — teststuffstash/homelab#1598 already carries a verdict for alert:BlockingCodeownerParkWaiting; still-firing line updated, no session
+OUT REACHED: end
+RC 0

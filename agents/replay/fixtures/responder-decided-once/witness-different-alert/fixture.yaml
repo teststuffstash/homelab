@@ -1,0 +1,27 @@
+# homelab#1733 — the WITNESS. A DIFFERENT alert class on one subject is a different problem.
+#
+# WHY A GREEN-PATH FIXTURE. The decided-once gate can be misread as "this resource already has an
+# open issue, so say nothing", and that misreading would re-create the graft FU-232 spent this same
+# change removing. The subject names a RESOURCE; a second alert class on one resource is a second
+# problem — homelab#1686 took `PodEvicted` and then `KubePodNotReady` on `workload:loki/alloy`, and
+# the second was not the first. So the gate is anchored on the TITLE, which is where the alertname
+# lives (`🚨 <alertname>: …`), not on the subject alone.
+#
+# CONDITION UNDER REPLAY. Same subject, same search, same open verdict-carrying issue — and its
+# title names `CodeownerParkWaiting` while the firing alert is `BlockingCodeownerParkWaiting`. Note
+# the near-miss on purpose: one name is the other's suffix, so a `contains` test would match and a
+# `startswith("🚨 <name>:")` test does not. If the anchor is ever loosened to a substring, this
+# fixture reds.
+#
+# THE CONTRACT: no match, no body write, no marker — the gate falls through and `reached.sh`
+# prints, so the alert is triaged normally.
+pins:
+  - IL-T03
+name: responder-decided-once-witness-different-alert
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-decided-once
+  - file:reached.sh
+  - file:post.sh

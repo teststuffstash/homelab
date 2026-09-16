@@ -1,0 +1,6 @@
+[
+  {"id": 1, "user": {"login": "homelab-agents-1234[bot]", "type": "Bot"},
+   "body": "Re-triaged from a fresh alert delivery."},
+  {"id": 2, "user": {"login": "RasmusSoot", "type": "User"},
+   "body": "Cause: a planned maintenance window, not a hardware reboot."}
+]

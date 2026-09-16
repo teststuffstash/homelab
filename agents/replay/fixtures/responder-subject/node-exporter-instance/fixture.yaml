@@ -1,0 +1,27 @@
+# FU-232 (homelab#1733) — a reporter's pod with NO object label falls through to the target.
+#
+# CONDITION UNDER REPLAY. The live 2026-09-16 firing set, verbatim: NodeMemoryMajorPagesFaults
+# carries namespace=monitoring (the EXPORTER's namespace — node_vmstat_pgmajfault has no namespace
+# dimension, so the scrape target's survives), pod=kube-prometheus-stack-prometheus-node-exporter-l6rns
+# with job=node-exporter, instance=192.168.2.182:9100, and NO object label of any kind. The failing
+# object — the node — is identified by `instance` and by nothing else.
+#
+# WHAT IT REDS ON. Before the re-key this computed
+# `workload:monitoring/kube-prometheus-stack-prometheus-node-exporter`: one subject for every node
+# in the fleet, which is how homelab#103 — a wk-01 CPU-containment record — became the org-wide
+# search hit for node-exporter alerts on any node (the 2026-08-08 graft).
+#
+# THE CONTRACT:
+#   1. `job` names a monitoring scrape job, so `pod` is the reporter and is skipped.
+#   2. With no node label, `instance` is the subject and is carried VERBATIM — not renamed to a
+#      node. For node-exporter it is a node's ip:port, for blackbox a probed URL; inventing a node
+#      name from either would key two different things the same way.
+#   3. `ns:monitoring` is NOT reached — that arm is guarded by the same reporter test, because the
+#      exporter's namespace is what made #884 the `ns:monitoring` magnet.
+#   4. RC 0 — subject computation always succeeds.
+name: responder-subject-node-exporter-instance
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

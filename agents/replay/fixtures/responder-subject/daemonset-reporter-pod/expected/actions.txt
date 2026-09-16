@@ -1,0 +1,2 @@
+OUT → KubeDaemonSetRolloutStuck (ad41c0de9e1b7a52): subject=workload:arc-runners/runner-image-prepull-pve
+RC 0
