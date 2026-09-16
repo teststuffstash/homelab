@@ -9266,6 +9266,32 @@ Issues: #1620, #1621.
   done.
 
 
+## 2026-09-16 ~11:05Z — wk-metal-01 out of the ARC pool (hotfix, operator-ordered)
+
+`kubectl label node wk-metal-01 homelab.io/ephemeral-`. ARC pool 4 → 3 (nx-01, wk-03, wk-metal-02);
+the in-flight runner was left to finish (nodeSelector is scheduling-time only).
+
+**Not new drift — drift CORRECTION.** That label was never in git: `tofu/talos.tf` carries the
+ephemeral-label block for VMs and deliberately declines metal, so wk-metal-01/-02 held it from an
+imperative `kubectl label` predating boot-from-git. After PR#1726 the declared ARC pool is the
+`arc: true` nodes, which wk-metal-01 is not — so removing it makes live match declared. Nothing
+re-adds it, including a reinstall.
+
+**Why**: measured while an ARC runner was co-resident with `garage-2` — wk-metal-01 at **20.7 %
+idle / load1 4.82** on 4 threads, against m70s 50.4 % and wk-metal-04 84.7 %. `storage-ledger.md`
+§465 requires "≈ 2 cores free at peak" on a zone node; 20.7 % of 4 threads is 0.83. `garage-2`
+burns **0.54 cores** vs garage-1 0.18 / garage-0 0.09 for identical rf=3 work — the X240's 2C ULV
+cores needing more CPU-time per request, which is the ledger's "the X240 zone paces GC, resync and
+PutObject for the whole cluster". `garage_write_probe_seconds` ran ~0.12–0.16 s through the morning
+against a 0.048 s 24 h baseline, with 3.20 s (09:59Z) and 2.70 s (10:29Z) spikes.
+⚠ Causality NOT established for those spikes: this session also reinstalled nx-01 (08:09Z) and ran
+a registry GC (10:00Z) inside the same window. The structural condition is the finding; the spikes
+are consistent with it, not proof of it.
+
+`arc-runners-large.yaml` already excluded wk-metal-01 by hostname — this extends the same judgement
+to the regular scale set. Two duties remain on the box (kata rides + the Longhorn bulk tier); the
+kata half is the deferred `machines.yaml` change, and wk-metal-04 waits on the nx-01 soak.
+
 ## 2026-09-16 morning — seat: the stage-1 escape hatch built, the lock plane unwedged, the FU-198 belt shipped
 
 - **PR#1718's wedge got its ruling and its mechanism (operator, then PR#1721):** the gate stays —
