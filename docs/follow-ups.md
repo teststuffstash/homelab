@@ -1031,6 +1031,8 @@ the block needs pruning, not more headings.
       **Next:** re-read once #1734 has soaked and FU-210 has landed — is the residual comment
       volume still worth re-routing? Mechanism, evidence and the MCP exclusion:
       `docs/spikes/responder-week-audit.md` §Design read + §The 2026-09-16 pass.
+### Roles & platform capabilities — new lanes, sandboxes, context delivery
+
 - [ ] **FU-216** — **Rides' test IO rides virtiofs onto the shared laptop disk — try a memory-backed
       `/tmp`.** The 2026-09-05 specimen (oracle-fleet#370 r2): 24 of 30 min were `devbox run ci`,
       pytest 641 s in-pod vs 381–430 s on ARC, node IO pressure-stall 82–91 % the whole ride — a
