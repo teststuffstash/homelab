@@ -29,6 +29,23 @@ never the session's arc — that is TICK-LOG's.)
   open 🚨 24 → 21. Of the 17 open-with-cleared-alert threads, only 3 qualified for an unattended
   close — the other 14 have genuine human comments, so the `[bot]`-suffix bug's blast radius was
   smaller than the 13 `A human is engaged` body lines suggested.
+  (6) **Codeowner reads executed this session (ADR-110) — the PR board:**
+  **#1698** (`estimate_budget`: price `:exacto` as its base id) APPROVED — a price-lookup defect,
+  not budget semantics; miss-driven retry so `:free` never degrades, unknown models still escalate.
+  The updater refreshed it 14:00Z, CI re-running. **#1715** (scan: honour a CLOSED fleet-strike
+  filing inside the 24h window) APPROVED — ends the "a strip re-latches within a tick" freeze the
+  oracle five sit under; its author filter (only the loop's own bot may author the `issues=` marker)
+  is the load-bearing guard on a PUBLIC repo and tick 6 pins it against a spoofed world. Still
+  BEHIND — one updater slot per (repo, base) lane per pass.
+  (7) **PR#1699 CLOSED, #1692 re-scoped** (merge-conflict clause, close-and-re-queue): never
+  bot-approved, and the conflict (`docs/follow-ups.md` + `docs/glossary.md`) was in files the sweep
+  should not have touched. The bare-`§M` sweep matched `§M`+LETTER — `§MB1`/`§MB3`/`§MVP`/`§MODEL`/
+  `§Model class` — leaving the management sentinel's glossary row pointing at
+  `model-routing-history.md`; the rewrite shape pasted a bare path beside an existing link; and it
+  changed 48 files against a 4-doc `Touches:`. Corrected directive posted on #1692.
+  ⚠ **#1692 is NOT re-queued on purpose**: its `agent/error` is the fleet-strike latch, so a strip
+  re-latches within a tick until **#1715 merges**. Strip `agent/error`+`agent/blocked`, add
+  `agent/queued`, AFTER that lands.
   (5) **Quickfix landed direct:** `devbox run diff-ci` was failing on master for everyone (no
   map row for `agentstack-rbac-lint`); `scripts/**` is codeowner-author so PR is not a route.
   Bookkeeping is COMMITTED, **not pushed** — one master push at wind-down (the 2026-08-30 rule).
