@@ -153,11 +153,16 @@ data "talos_machine_configuration" "metal" {
     # ⚠ INSTALL-TIME ONLY: "the volume configuration is only applied when the volume has not been
     # provisioned yet". Changing this on a running node does nothing; XFS cannot shrink. Wipe +
     # reinstall (docs/provisioning.md) is the only path, which is why it is cheapest on a new box.
-    each.value.ephemeral_max_size != null ? [yamlencode({
-      apiVersion   = "v1alpha1"
-      kind         = "VolumeConfig"
-      name         = "EPHEMERAL"
-      provisioning = { maxSize = each.value.ephemeral_max_size }
+    (each.value.ephemeral_max_size != null || each.value.ephemeral_disk_selector != null) ? [yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "VolumeConfig"
+      name       = "EPHEMERAL"
+      provisioning = merge(
+        each.value.ephemeral_max_size != null ? { maxSize = each.value.ephemeral_max_size } : {},
+        # diskSelector moves EPHEMERAL off the system disk entirely (ride hosts: image store +
+        # scratch on a DRAM-cached NVMe while boot stays on a legacy-bootable SATA bay disk).
+        each.value.ephemeral_disk_selector != null ? { diskSelector = { match = each.value.ephemeral_disk_selector } } : {},
+      )
     })] : [],
     # User volumes — node-local XFS partitions mounted at /var/mnt/<name> (partition label u-<name>).
     # ADR-114 wants Garage on node-local XFS, NOT Longhorn (engines replicate, storage stores
