@@ -200,6 +200,12 @@ resource "kubernetes_node_taint" "ephemeral" {
     value  = "true"
     effect = "NoSchedule"
   }
+  # cilium-operator owns `.spec.taints` on any node it has untainted (it strips its own
+  # agent-not-ready taint via server-side apply at startup), so this SSA patch conflicts with it
+  # on a node that joined before the taint was declared — nx-01, 2026-09-16: "conflict with
+  # cilium-operator-generic using v1: .spec.taints". Force: the two managers never touch the same
+  # taint key, only the same field path.
+  force = true
 }
 
 # State moves for the four resources the for_each above replaces (same node, same taint, same
