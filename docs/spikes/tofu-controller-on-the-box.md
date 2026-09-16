@@ -1,7 +1,7 @@
-# Spike — Flux tofu-controller as the management box's controller substrate
+# Spike — Flux tofu-controller as the [management box](../management-box.md)'s controller substrate
 
 **Tracked by:** FU-242. **Status:** not started (written 2026-09-16 from the design sitting that produced
-ADR-132). **Nothing runs on the box during this spike** — the box is the recovery root and a spike is the
+ADR-132; design: [`management-box.md`](../management-box.md) §MB4). **Nothing runs on the box during this spike** — the box is the recovery root and a spike is the
 thing not yet trusted. **Where:** a throwaway VM on `pve`, created by hand and deleted after; plain k3s +
 Flux + tofu-controller. Phase two, if phase one says yes: the same VM built as a NixOS closure
 (`services.k3s.images` / `manifests`), which is also the dry run for the box.
