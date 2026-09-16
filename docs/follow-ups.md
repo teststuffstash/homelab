@@ -1192,7 +1192,21 @@ the block needs pruning, not more headings.
       during the hp-01 maintenance window). Scope REOPENED 2026-08-24: Option A's v1.13.8 pin
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
-      container req=limits since 07-28, pod still Burstable — folds into the same ruling). Relates FU-139/FU-112, ADR-044.
+      container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+- [ ] **FU-246** — **Talos ≥ v1.13.10 on the CI/ephemeral nodes — the `page_table_check` reboot bug: POINTER.**
+      nx-01's and wk-03's silent reboots are `kernel BUG at mm/page_table_check.c:143` on a container
+      exit in a time namespace (siderolabs/talos#13496; 1.13.x ships `page_table_check=off` from
+      v1.13.4, the kernel fix is 1.14+); this cluster is v1.13.2. Evidence + timeline:
+      [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md).
+      **Next (operator window):** `var.talos_version` v1.13.2 → v1.13.10 (or the spike's metal-tier
+      pin), nx-01 + wk-metal-02 via `talosctl upgrade`, wk-03 via the image.tf recreate (never
+      `talosctl upgrade` a nocloud VM); then uncordon nx-01. Subsumes FU-155 Option A; FU-033 gates 1.14.
+- [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
+      (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
+      2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
+      **Next:** ruler + one `KernelOopsCaptured` rule per node, or an Alloy-side counter metric the
+      existing Prometheus rules can fire on. Incident above; relates FU-155 (kmsg tenancy).
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel

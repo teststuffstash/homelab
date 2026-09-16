@@ -9426,3 +9426,23 @@ correct**, green through the whole of FU-232's life.
 **Quickfix, direct:** `devbox run diff-ci` was FAILING on master for everyone — `ci.yaml` runs
 `agentstack-rbac-lint` and the path→task map had no row for it, which its own one-home invariant
 reds on. One row added (`scripts/**` is codeowner-author, so PR is not a route).
+
+## 2026-09-16 ~15:30–16:00Z — the nx-01 investigation: a kernel bug, not the burn-in
+
+Picked up the meta-state handover. The "operator-only" BMC read was one `apt-get install ipmitool`
+away — .123 answers from the jail. SEL: nothing for today's resets (no PSU/thermal/ECC/watchdog
+event, BMC clock continuous since the 09-15 power-on; the dated `PEF Action` at BMC 14:32 = real
+06:37 is the morning power-on); real-but-irrelevant facts: VBAT 1.16 V (dead CMOS cell), PS2
+"failure" = uncabled. IPMI watchdog stopped. So: a **software** reboot (`panic_on_oops=1`,
+`panic=10`). Prometheus added a boot the handover missed (14:27:55 → the cadence was 43/15/15 min).
+Operator's mid-turn cue — "wk-03 had unexplained reboots, I attributed them to VM overprovisioning
+but it might be arc + talos + more than one runner" — was right: 2+ runners are on wk-03 7 % of the
+time, yet 4/6 of its reboots and 3/4 of nx-01's had 2–5. Loki's kmsg before three resets (wk-03
+09-10, nx-01 14:25 + 14:40): `kernel BUG at mm/page_table_check.c:143` in `free_time_ns`, Comm
+`crossplane` uid 65532 in an ARC job — siderolabs/talos#13496, fixed by `page_table_check=off`
+from Talos 1.13.4 (kernel patch in 1.14); cluster is v1.13.2. Rides were victims (kata guests
+cannot oops the host); the three pre-kata reboots rule the kata upgrade out; the cilium throttle
+was a symptom. wk-03 went quiet 09-14 because nx-01 took the jobs, not because of the right-size.
+Records: incident doc, FU-246 (upgrade — same action as FU-155 Option A) + FU-247 (oops alert),
+comments on #1735 + #882, variables.tf/machines.yaml comment corrections, ipmitool into the jail
+Dockerfile. nx-01 stays cordoned; SOL capture armed from the jail. Bookkeeping committed, not pushed.
