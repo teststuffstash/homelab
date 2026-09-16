@@ -36,6 +36,7 @@ bgp_node_ips:                                # Talos nodes that peer (BGP neighb
   - 192.168.2.58   # nx-01 (NX-6035-G5 node 1, onboarded 2026-09-15) — MISSED at onboarding (#1716),
                    # found 2026-09-15 by review: its CiliumBGPNodeConfig peer sat `idle` for 8 h.
                    # Third time this list was the miss (wk-03, wk-metal-04, now nx-01).
+  - 192.168.2.64   # wk-04 (VM on nx-02, the second hypervisor, onboarded 2026-09-15)
 
 # --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
 acme_account_name: "TestStuff OPNSense"

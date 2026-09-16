@@ -47,6 +47,31 @@ variable "network_bridge" {
   default     = "vmbr0"
 }
 
+# ---- nx-02, the second hypervisor (providers.tf alias `nx02`, tofu/nx02.tf) ------------------
+variable "nx02_endpoint" {
+  description = "Proxmox API endpoint of nx-02 (NX-6035-G5 node 2)."
+  type        = string
+  default     = "https://192.168.2.59:8006/"
+}
+
+variable "nx02_api_token" {
+  description = "nx-02 Proxmox API token 'user@realm!tokenid=uuid'. KeePass `nx-02-api-token-tofu`; via TF_VAR_nx02_api_token / main.tfvars — never commit."
+  type        = string
+  sensitive   = true
+}
+
+variable "nx02_node" {
+  description = "Proxmox node name on nx-02."
+  type        = string
+  default     = "nx-02"
+}
+
+variable "nx02_datastore_vms" {
+  description = "Datastore for VM disks on nx-02 — the Micron NVMe thin pool. Named for the pool, not the device: the VG was renamed off `nvme1n1-thin` on 2026-09-15 because /dev/nvmeXn1 shifts when a drive is added or moved."
+  type        = string
+  default     = "nvme-thin"
+}
+
 # ---- Cluster (provider-agnostic layer) ------------------------------------
 variable "cluster_name" {
   description = "Kubernetes / Talos cluster name."
@@ -123,6 +148,11 @@ variable "nodes" {
     # the ring buffer. Takes effect at the next full stop/start of the VM (a guest-initiated
     # reboot keeps the qemu process, so pending hardware never applies that way). #882.
     serial = optional(bool, false)
+    # Which hypervisor runs this VM: "pve" (tofu/proxmox.tf, the default provider) or "nx-02"
+    # (tofu/nx02.tf, the `nx02` provider alias). A provider cannot be chosen per for_each key,
+    # so each value gets its own resource block; the cluster layer (talos.tf) spans both and
+    # never learns which is which. Changing this on a live node REPLACES the VM.
+    hypervisor = optional(string, "pve")
   }))
   default = {
     # memory 8→12 GiB (2026-09-14, #1687): kube-apiserver alone holds ~4.1 GiB (10 nodes, the
@@ -174,11 +204,30 @@ variable "nodes" {
     # GC. Grow-only in place; Talos grows EPHEMERAL into it on the next reboot (a stop/start —
     # the VM's pending disk resize lands at qemu start, not at a guest reboot).
     wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 80, longhorn = true, serial = true }
+    # The first VM on the SECOND hypervisor (nx-02, 2026-09-15) — the untainted batch-compute
+    # worker the fleet-role table (ROADMAP §Hardware strategy) wants from Xeon-class boxes. 16 of
+    # nx-02's 40 threads and 32 of its 64 GiB, deliberately half the box: the other half is the
+    # headroom the three-CP move needs (a cp VM here later — ONE only: nx-01 and nx-02 share a
+    # chassis, a backplane and 1+1 PSUs, so they are not independent failure domains).
+    # longhorn = true is PLUMBING, not a storage role (the wk-01/wk-03 note above): an untainted
+    # worker MOUNTS Longhorn PVCs, which needs iscsi-tools + util-linux-tools in the image.
+    # It SERVES none — nx-02 is not in longhorn.tf's zone maps and gets no disk registration,
+    # and the box is on a noise/idle trial (private hardware register R11) that may end with the
+    # whole chassis leaving. serial stays false: the pve-serial-log Ansible role only tails pve.
+    wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02" }
   }
 
   validation {
     condition     = length([for n in var.nodes : n if n.role == "controlplane"]) >= 1
     error_message = "At least one controlplane node is required."
+  }
+
+  # A typo puts a node in NEITHER hypervisor map, so no VM resource is created for it — while
+  # talos.tf still iterates every entry and blocks applying a machine config to an IP with nothing
+  # behind it. Silent at plan time; a long hang at apply time. Fail at plan instead.
+  validation {
+    condition     = alltrue([for n in var.nodes : contains(["pve", "nx-02"], n.hypervisor)])
+    error_message = "nodes[*].hypervisor must be \"pve\" (tofu/proxmox.tf) or \"nx-02\" (tofu/nx02.tf) — a value with no provider block creates no VM."
   }
 }
 
