@@ -9266,6 +9266,32 @@ Issues: #1620, #1621.
   done.
 
 
+## 2026-09-16 ~11:25Z — CORRECTION to the 11:05Z entry: that label WAS in git
+
+The 11:05Z entry called the `kubectl label node wk-metal-01 homelab.io/ephemeral-` a "drift
+CORRECTION ... never in git". **Wrong.** `kubernetes_labels.ephemeral_tier` in
+`tofu/forgejo-runner.tf:32` force-applies that label to `for_each = ["wk-metal-01","wk-metal-02"]`.
+So the kubectl removal was DRIFT, and the next `tofu/` apply would have restored it — the box's
+apply loop refuses that root, which is the only reason the effect held. Caught by the bot reviewer
+on PR#1729, which had the proof attached the whole time: the management-sentinel plan listed
+`kubernetes_labels.ephemeral_tier["wk-metal-01"]` as `update`.
+
+The same false claim went into PR#1726's body. The label has THREE declaring sources — `talos.tf`
+(VMs), `forgejo-runner.tf` (the two laptops), and the new `arc` flag in `machines.yaml` — and
+reading one grep hit while missing another in the same file is how it happened.
+
+⚠ It also meant the kata eviction ALONE would not have met PR#1729's stated goal: the Forgejo
+runner selects the same label and tolerates the taint `operator: Exists`, so docker-in-docker CI
+would still have landed on the garage-2 zone node.
+
+**Resolved and applied 11:23Z** (PR#1729 + `c6bcd7da`, merged 11:22:41Z APPROVED):
+`mgmt-tf apply -target=talos_machine_configuration_apply.metal["wk-metal-01"]
+-target=kubernetes_labels.ephemeral_tier["wk-metal-01"]` → `0 added, 1 changed, 1 destroyed`.
+Live: wk-metal-01 has neither label, 0 kata pods, keeps its ephemeral taint AND its
+`topology.kubernetes.io/zone` (the destroy did NOT prune the zone key — the distinct
+`field_manager` holds on destroy as well as apply, which is the 2026-07-14 hazard that file warns
+about). kata pool = nx-01 + wk-metal-02/03/04; ARC pool = nx-01, wk-03, wk-metal-02.
+
 ## 2026-09-16 ~11:05Z — wk-metal-01 out of the ARC pool (hotfix, operator-ordered)
 
 `kubectl label node wk-metal-01 homelab.io/ephemeral-`. ARC pool 4 → 3 (nx-01, wk-03, wk-metal-02);
