@@ -41,6 +41,9 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      # ARC runner-pool membership: the homelab.io/ephemeral LABEL (the scale set's nodeSelector),
+      # which is NOT the homelab.io/ephemeral taint the `ephemeral` flag drives. Opt-in per node.
+      arc = try(m.arc, false) == true
       # Longhorn on the EPHEMERAL partition (default disk) — the kubelet imageGC floor patch.
       longhorn_default_disk = try(m.longhorn_default_disk, false) == true
       # Install-disk partitioning (INSTALL-TIME ONLY — Talos never re-partitions a provisioned
