@@ -34,6 +34,7 @@ MGMT_PATHS='^(policy/mgmt/|scripts/mgmt-[a-z-]*\.sh$|scripts/mgmt-root-env/|scri
 MAP=(
   "argocd-validate-pins:^argocd/"
   "manifest-lint:^argocd/"
+  "agentstack-rbac-lint:^argocd/resources/(agentstack|crossplane)/"
   "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|devbox\.(json|lock)$)"
   "mgmt-policy-test:$MGMT_PATHS"
   "prometheus-rules-lint:$PROM_PATHS"

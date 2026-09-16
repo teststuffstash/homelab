@@ -145,6 +145,19 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       Cause not chased (no local-exec in the root; `tf.sh` ends in `exec tofu`). Next: reproduce
       with `tf-plan`'s exit, then either fix the wrapper or add "the Apply line is truth, verify
       the end state" to the skill.
+- [ ] tofu-apply-G3 — **a github-provider apply that 403s PERSISTS THE PLANNED STATE, and
+      `-refresh-only` does not reconcile it.** Applying `github_repository_ruleset.required_checks`
+      with a token that can read but not write (the jail PAT has no repository *Administration*)
+      failed with `PUT …/rulesets/18664851: 403 Resource not accessible by personal access token`
+      — and tofu then recorded `e2e` in state anyway. The next plan read **No changes** while
+      GitHub still had only `ci`, so the drift was invisible AND self-sealing: a later apply with
+      the correct admin token would have been a no-op and the ruleset would have stayed wrong.
+      `apply -refresh-only` did NOT fix it (the provider's Read does not repopulate the nested
+      `required_check` blocks). Repair that worked: `state rm` + `import '<repo>:<ruleset_id>'`,
+      then re-plan to confirm the diff returns. Sighted 2026-09-16 (seat, oracle-fleet#369 /
+      homelab#1727). Next: the skill should say a failed apply is NOT a no-op — verify state
+      against live before retrying — and that `github-tofu` needs the org-admin wallet, not any
+      token that happens to plan cleanly.
 - [ ] tofu-apply-G2 — **a `machines.yaml` `longhorn_disks` apply REBOOTS the node**, and the skill
       does not say so. Talos provisions user disks at boot, so the provider's default (auto) mode
       staged the config and rebooted `m70s` — a node then carrying garage-1, loki-0 and six

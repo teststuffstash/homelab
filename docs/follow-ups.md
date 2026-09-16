@@ -183,7 +183,7 @@ six OVERSIZE items pointer-ized into
       2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
       picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
       longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
-      the bucket-sync container, 62 %). **DONE 2026-09-08 (operator: "run all of it"), PR#1519:
+      the bucket-sync container, 62 %). **Applied 2026-09-08 (operator: "run all of it"), PR#1519:
       manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
       the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
       panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
@@ -203,14 +203,14 @@ six OVERSIZE items pointer-ized into
       Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
-      `quota − held ≥ 2×layer` — rule, both failures, storage read: the header of
-      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml); cap **48Gi** (#1578).
-      **LIVE:** the quota belts (#1577: `GarageBucketQuotaNear`, `RegistryBucketCommitHeadroomLow`) and
-      the collector (`registry-garbage-collect` CronJob, Sundays 03:00Z, #1508; ad-hoc recipe in
-      [`runbook.md`](runbook.md) §Registry). **Missing = the POLICY half (ADR-085):** oracle-iac untags
-      outside its keep-set with its push cred (oracle-iac#664, derive-don't-declare) — nothing does
-      yet, so the CronJob collects nothing and each release eats ~10 GB of cap. ⚠ ADR-121 states the
-      policy too — one home wins. Link: ADR-121, ADR-089, ADR-085.
+      `quota − held ≥ 2×layer` — rule, both failures, storage read, retention ownership AND current
+      status: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml);
+      cap **48Gi** (#1578). **LIVE:** the quota belts (#1577), the collector (`registry-garbage-collect`,
+      Sundays 03:00Z, #1508), and since 2026-09-14 **the POLICY half** — oracle-fleet's nightly
+      `retention` CronWorkflow untags outside its keep-set (first prunable tag 09-16 02:31Z).
+      **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
+      to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
+      and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -367,6 +367,8 @@ six OVERSIZE items pointer-ized into
       `UnboundGithubServfail` window read `diagnostics/log/core/resolver` (search `SERVFAIL`;
       stamps are UTC+3); "upstream server timeout"/"all servers failed" → belt = `serveexpired`
       (+ client-timeout) via the same var; optionally enable WAN gateway monitoring for a loss series.
+      **Seen again 2026-09-16 ~16:35–17:00Z** (operator's browser + the jail's `gh`/`git`; probe 16:56–17:00;
+      TICK-LOG) — the API log read returned `[]`, so the GUI read is still the open step.
 
 
 ## CI & dependency automation
@@ -744,7 +746,7 @@ the block needs pruning, not more headings.
       of the same template succeed. A pipeline writer killed by an early-exiting reader under
       `set -o pipefail` in the scan preamble — the three `| grep -q` sites feed small variables,
       so the site was not named — **named 2026-09-09 by responder #1547: the `coordinator-scan.sh:1495`
-      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the [switchboard](glossary.md) OOM read,
+      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the switchboard OOM read,
       [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md).
       **Next:** on the next 141, pull the run's Loki tail with `container="main"` and bisect the
       preamble between the last printed line and the first GitHub listing; fix = `>/dev/null`
@@ -1143,18 +1145,6 @@ the block needs pruning, not more headings.
       until then `ArgoWorkflowsFailing` (2026-09-06, fleet Failed/Error >40/6h) shows a BURST, not
       four scattered Errors — a per-template belt still wants the RBAC fix. Relates FU-210.
 
-- [ ] **FU-213** — **opencode.ai is PARKED: our client sends no `x-opencode-session` header**
-      (operator mail, 2026-09-04 — "may error" from 09-06). Parked same-day at the egress proxy:
-      `OPENCODE_RAIL_DISABLED=1` → both legs 503, `/opencode-limit` serves
-      `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a Go-primary ride takes
-      the M12 degrade to `claude/haiku`. The jail shim (own UA, unflagged) stays live — it is
-      where a fix gets tested. What the header is, the public prior art
-      ([earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847), same defect,
-      fixed 2026-05-22), and where the id comes from:
-      [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session`
-      header. **Next:** homelab#1640 acceptance 2 — the ride's session id becomes BOTH the
-      per-(session, model) pin key and this header, then re-enable with `"0"`.
-
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
@@ -1196,7 +1186,24 @@ the block needs pruning, not more headings.
       during the hp-01 maintenance window). Scope REOPENED 2026-08-24: Option A's v1.13.8 pin
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
-      container req=limits since 07-28, pod still Burstable — folds into the same ruling). Relates FU-139/FU-112, ADR-044.
+      container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+- [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
+      Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
+      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
+      wk-metal-02 `talosctl upgrade`d (verified `CONFIG_PAGE_TABLE_CHECK_ENFORCED` unset, kata intact);
+      wk-03 SHUT DOWN (a VM — recreate, never `talosctl upgrade`); **PR#1740** splits the declared
+      version by role (control plane v1.13.2 / workers v1.13.10). **Next (human apply, one at a
+      time):** `mgmt-tf apply -target` wk-03's recreate first, then wk-01/wk-02/wk-04 + the metal
+      config updates; the remaining metal workers via `talosctl upgrade` at convenience; Matchbox PXE
+      assets to v1.13.10 before the next metal reinstall. Subsumes FU-155 Option A; FU-033 gates 1.14.
+- [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
+      (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
+      2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
+      **Next:** ruler + one `KernelOopsCaptured` rule per node, or an Alloy-side counter metric the
+      existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
+      v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
+      in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel

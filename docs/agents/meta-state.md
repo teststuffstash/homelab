@@ -9,6 +9,67 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  Cause: siderolabs/talos#13496 (incident `docs/incidents/2026-09-16-page-table-check-reboots.md`),
+  not the hardware. nx-01 + wk-metal-02 run v1.13.10 (verified) and are uncordoned; **wk-03 is shut
+  down on purpose** — do NOT `node-maintenance up wk-03`; its path is the VM RECREATE from the
+  v1.13.10 image (`mgmt-tf apply -target='proxmox_virtual_environment_vm.node["wk-03"]'` + its
+  machine-config apply) once PR#1740 merges. **PR#1740** (two version variables by role; sentinel
+  plan = 4 worker-VM replaces + 7 metal config updates + the taint noise, all human-apply) waits on
+  the reviewer + auto-merge (squash armed); the box loop refuses until a human applies — apply by
+  target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
+  is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
+  FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
+  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts.
+
+
+- **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**
+  **PR#1733 open + armed, CI running at hand-off** — four deterministic legs in
+  `responder-argo.yaml`: human-close guard, decided-once gate, REST engagement probe, FU-232
+  subject re-key. `agents/**` so it parks for the codeowner read; **FU-232 archived in the PR**.
+  (1) **Verify after merge, in order:** the next `respond-*` run's log carries `DECIDED —` or
+  `HUMAN-CLOSED` lines rather than a session per standing alert; `kubectl -n agent-coordinator get
+  cm responder-seen -o json | jq '[.data|to_entries[]|select(.value|startswith("decided-"))]|length'`
+  is non-zero within a day; `responder_triage_sessions_today` drops off its 11–12/day ceiling.
+  (2) ⚠ **One-time cost is EXPECTED, not a regression:** the FU-232 re-key retires the magnet
+  threads, so each affected (alert, object) files ONE fresh issue on its next fire (#811/#882/#542
+  kube-state, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Do not read that burst
+  as the fix failing.
+  (3) **Still open on the responder side:** FU-230 leg (b) (re-weighed non-binding — build when a
+  SECOND window class leaks) and FU-231's bucket (**BLOCKED on FU-210** — responder sessions leave
+  no transcript, the `homelab/alert-<fp>/` prefix is empty). Re-read FU-231 after this soaks.
+  (4) Board drained seat-side: #1546/#530/#1547 closed (alert cleared, zero human engagement);
+  open 🚨 24 → 21. Of the 17 open-with-cleared-alert threads, only 3 qualified for an unattended
+  close — the other 14 have genuine human comments, so the `[bot]`-suffix bug's blast radius was
+  smaller than the 13 `A human is engaged` body lines suggested.
+  (8) **PR#1733 (the responder rebuild) is APPROVED but went DIRTY** when #1698 + #1715 merged
+  under it — `docs/follow-ups.md` is the likely conflict (this PR archives FU-232 and pointer-ises
+  FU-230/231). Author == sole codeowner, so it auto-merges on green once resolved (MP-T08 waiver);
+  the codeowner read is DONE (four rounds of reviewer findings, all fixed in-PR). Next act: resolve
+  the conflict on `fix/responder-decide-once`, push, let CI+auto-merge finish. Worktree is at
+  `/tmp/claude-1000/-workspace-homelab/8ce7b148-*/scratchpad/wt` (host-side git PRUNES scratchpad
+  worktrees — re-add with `git worktree add -B fix/responder-decide-once <dir> origin/fix/responder-decide-once`
+  if it has vanished).
+  (6) **Codeowner reads executed this session (ADR-110) — the PR board:**
+  **#1698** (`estimate_budget`: price `:exacto` as its base id) APPROVED — a price-lookup defect,
+  not budget semantics; miss-driven retry so `:free` never degrades, unknown models still escalate.
+  The updater refreshed it 14:00Z, CI re-running. **#1715** (scan: honour a CLOSED fleet-strike
+  filing inside the 24h window) APPROVED — ends the "a strip re-latches within a tick" freeze the
+  oracle five sit under; its author filter (only the loop's own bot may author the `issues=` marker)
+  is the load-bearing guard on a PUBLIC repo and tick 6 pins it against a spoofed world. Still
+  BEHIND — one updater slot per (repo, base) lane per pass.
+  (7) **PR#1699 CLOSED, #1692 re-scoped** (merge-conflict clause, close-and-re-queue): never
+  bot-approved, and the conflict (`docs/follow-ups.md` + `docs/glossary.md`) was in files the sweep
+  should not have touched. The bare-`§M` sweep matched `§M`+LETTER — `§MB1`/`§MB3`/`§MVP`/`§MODEL`/
+  `§Model class` — leaving the management sentinel's glossary row pointing at
+  `model-routing-history.md`; the rewrite shape pasted a bare path beside an existing link; and it
+  changed 48 files against a 4-doc `Touches:`. Corrected directive posted on #1692.
+  ⚠ **#1692 is NOT re-queued on purpose**: its `agent/error` is the fleet-strike latch, so a strip
+  re-latches within a tick until **#1715 merges**. Strip `agent/error`+`agent/blocked`, add
+  `agent/queued`, AFTER that lands.
+  (5) **Quickfix landed direct:** `devbox run diff-ci` was failing on master for everyone (no
+  map row for `agentstack-rbac-lint`); `scripts/**` is codeowner-author so PR is not a route.
+  Bookkeeping is COMMITTED, **not pushed** — one master push at wind-down (the 2026-08-30 rule).
 
 - **⚑ PICKUP (2026-09-15 night — nx-02, unattended run).** Box facts live in the private
   **hardware** repo `docs/nx-6035-g5.md` §"nx-02 put to work"; the arc is in TICK-LOG.
@@ -534,8 +595,8 @@ never the session's arc — that is TICK-LOG's.)
   churn, not a wedge) → the quiet-month window (FU-150) restarts from 09-05 · FU-192 per-tenant ingest sizing (due ~09-03, PAST) · **paid-flash REVERT EXECUTED 2026-09-05 07:54Z** (PR#1395 — none of #715's three
   triggers had fired; operator-ordered; the FU-095 flip child, if wanted, mints from here;
   Go re-flip = FU-181) · opencode.ai
-  rails PARKED behind `OPENCODE_RAIL_DISABLED` since 09-04 (FU-213; the vendor's 09-06
-  header deadline; the jail shim stays live as the test bench).
+  rails UN-PARKED 2026-09-14 (`OPENCODE_RAIL_DISABLED` back to `"0"`; FU-213 closed by
+  homelab#1640 acceptance 2 / #1667 — the proxy now sends `x-opencode-session`).
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 

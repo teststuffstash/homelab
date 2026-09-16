@@ -37,16 +37,30 @@ import time
 # AST; never a third copy.
 import model_id
 
-# Strike taxonomy (model-routing.md §M1): these error classes are INFRA failures — they blacklist
-# the (task, model) pair without consuming a round. Kept in step with agent-session.sh's
-# classifier and agent-finalize (the authoritative signature copy).
-STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
+# ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
+# These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
+# pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
+# member of it, the finalizer (agent-runtime `agent-finalize`) reports a member of it, and the
+# scan's fleet-strike reader keys on a member of it. Neither keeps a second copy: the router
+# serves this list on GET /router-status (`strike_classes`/`serving_classes`, status_summary) so
+# both cite it instead of re-listing it. Extend the vocabulary HERE, nowhere else.
+#
+# `turn-cap` (homelab#1665): a goose ride that died at the turn cap. `tool-loop`: a cap death
+# with zero tool-result progress — the same tool call repeated to the cap — which is a SERVING
+# shape (below), not a model verdict. Both replace the `unknown` a cap death used to be rewritten
+# to, which is why `router_strikes_total{error_class="tool-loop"}` was empty on 2026-09-13 while
+# five rides looped. `unknown` stays: it is still the unclassified-death class the FU-200 reader
+# latches on (the goal's interim condition).
+STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr",
+                  "unknown", "turn-cap", "tool-loop"}
 
 # FU-201 c: serving-shaped strike classes — provider-side failures that exclude the (model,
 # provider) PAIR rather than the model entirely. A model-level blacklist needs ≥2-provider
 # evidence (the #783 rule). These classes are the ADR-115 evidence set: provider 4xx/5xx
-# responses and tool-call malformation that the serving provider caused.
-SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
+# responses and tool-call malformation that the serving provider caused. NOT a second
+# vocabulary: this is a SUBSET VIEW of STRIKE_CLASSES (self-test pins `SERVING_CLASSES <=
+# STRIKE_CLASSES`), so the two can never drift into disagreeing about what a strike is.
+SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm", "tool-loop"}
 
 # ── #1259: tier ordering for label_map tier_floor enforcement ──
 # Ordered from cheapest to most expensive. Used to compare a model's model_tiers grade against
@@ -54,16 +68,16 @@ SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm"}
 # excluded from the candidate walk.
 _TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
 
-# ⚑ ENFORCEMENT IS OFF BY DEFAULT — operator ruling 2026-08-07, and it makes an ACCIDENT explicit.
-# Strikes were never being recorded (the drift below), so `route()` has always filtered against an
-# empty table. That accident turned out to be *better* than the design: circles#19 died on
-# deepseek-v4-flash at r1 and the SAME model completed the SAME task at r2 — a strike would have
-# pushed it to a pricier chain entry for nothing. Tally so far is 3 deaths vs 3 clean runs on lg
-# work, i.e. "N strikes and you're out" is not supported by the evidence; "retry, or fan out N
-# parallel and keep the survivor" may well be cheaper than the next model in the chain.
-# So: RECORD the strikes (we need the data to decide), do NOT act on them yet. Flip this on only
-# with a policy decision behind it — see docs/agents/model-routing.md §M1a.
-STRIKE_ENFORCE = os.environ.get("ROUTER_STRIKE_ENFORCE", "0").strip().lower() not in ("", "0", "false", "no", "off")
+# ── STRIKE ENFORCEMENT IS UNCONDITIONAL (Goal #1640 acceptance 3) ─────────────────────────────
+# The 2026-08-23 ruling (model-routing.md §M1a) RETIRED the strike-enforcement env knob as a
+# blacklist knob: the 16-day store read showed six strikes, five one harness class, and
+# enforcement would have changed ~1 decision for cents. The knob was left as dead code for the
+# G-A sweep, and the 2026-09-13 checkpoint on #1231 read it `False` in production on every
+# routerMode — the branch never ran. It is DELETED here: `route()` now enforces the task's struck
+# cells unconditionally (the (model, provider) PAIR for serving-shaped classes, the MODEL once
+# struck at two providers) and prices each candidate by the provider it lands on AFTER the
+# exclusion. The residual provider 4xx/5xx class still rides `model_cooldowns` (the transport
+# belt).
 # Retention (days): the FU-057 ledger (pushgateway + transcripts) is the long-horizon store;
 # this DB answers "recent enough to route on".
 RETAIN_EVENTS_D = 30   # provider_events, decisions
@@ -1090,6 +1104,70 @@ def active_cooldowns(now: float | None = None, role: str | None = None) -> dict[
             for m, u, s, r in rows}
 
 
+# ── Goal #1640 acceptance 5 (router half): the (model, provider) PAIR cooldown ────────────────
+# A SEPARATE, coarser mechanism from the transport belt above. `model_cooldowns` is HTTP-fed and
+# keyed (model, role); ANY 2xx clears it. This one is keyed (model, provider), tripped by the
+# STRIKE evidence (>= pair_min_tasks DISTINCT tasks striking the pair with a SERVING_CLASSES
+# class inside pair_window_s), and cleared ONLY by a clean ride — never by a 2xx. The two must
+# never be conflated: a 2xx from a provider that is serving a model badly behind HTTP 200 is
+# exactly the 2026-09-13 failure this cooldown exists to route around.
+#
+# STATE IS THE EXISTING `strikes` TABLE — no new table (the Goal's design pin). The hold is a
+# DERIVED view: for each pair, the distinct tasks that struck it with a serving class inside the
+# window, minus any strike a later clean ride refuted. streak = distinct_tasks - min_tasks + 1,
+# hold = base_s doubling per streak up to max_s, until = the pair's newest surviving strike + hold.
+# Expiry is HALF-OPEN: the pair is eligible again (one ride is the probe) and a strike during
+# half-open raises the distinct-task count, which doubles the hold — the acceptance's third leg.
+def _pair_cooldown_cfg() -> dict:
+    cfg = _classes.get("cooldown") or {}
+    return {"window_s": int(cfg.get("pair_window_s", 86400)),
+            "min_tasks": max(2, int(cfg.get("pair_min_tasks", 2))),
+            "base_s": int(cfg.get("pair_base_s", 21600)),
+            "max_s": int(cfg.get("pair_max_s", 604800))}
+
+
+def pair_cooldowns(now: float | None = None) -> dict[tuple[str, str], dict]:
+    """Active (model, provider) pair cooldowns, derived from the strikes table. Keyed by the
+    (model, provider) tuple; each value carries until/remaining_s/streak/reason. A pair whose
+    hold has expired is ABSENT (half-open — eligible again). A clean ride (a run_report with
+    outcome 'pr' for the same model+served_provider) after the pair's newest strike refutes the
+    whole set, so the pair is absent until it is struck afresh."""
+    now = now or time.time()
+    cfg = _pair_cooldown_cfg()
+    since = now - cfg["window_s"]
+    # The ONLY clear: a clean ride. Keyed on the same (model, served_provider) the strike uses.
+    # Bounded to the window: a clean ride older than `since` is older than every strike the query
+    # below can return, so it can refute none of them.
+    clean = {(m, p): (ts or 0.0) for m, p, ts in _read(
+        "SELECT model, served_provider, MAX(ts) FROM run_reports "
+        "WHERE outcome='pr' AND served_provider != '' AND ts > ? "
+        "GROUP BY model, served_provider", (since,))}
+    _ph = ",".join("?" * len(SERVING_CLASSES))
+    rows = _read(
+        f"SELECT model, provider, task, MAX(ts) FROM strikes "
+        f"WHERE ts > ? AND provider != '' AND error_class IN ({_ph}) "
+        f"GROUP BY model, provider, task",
+        (since, *sorted(SERVING_CLASSES)))
+    agg: dict[tuple[str, str], dict[str, float]] = {}
+    for m, p, task, ts in rows:
+        if ts <= clean.get((m, p), 0.0):
+            continue  # a clean ride after this strike refutes it
+        agg.setdefault((m, p), {})[task] = ts
+    out: dict[tuple[str, str], dict] = {}
+    for (m, p), tasks in agg.items():
+        if len(tasks) < cfg["min_tasks"]:
+            continue  # one task is a task-local strike, not a provider verdict
+        streak = len(tasks) - cfg["min_tasks"] + 1
+        hold = min(cfg["base_s"] * (2 ** (streak - 1)), cfg["max_s"])
+        until = max(tasks.values()) + hold
+        if until <= now:
+            continue  # expired → half-open: eligible again, one ride is the probe
+        out[(m, p)] = {"model": m, "provider": p, "until": until,
+                       "remaining_s": round(until - now), "streak": streak,
+                       "reason": "pair-strike"}
+    return out
+
+
 def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
     model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
@@ -1156,7 +1234,8 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
 
 
 def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
-                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick) -> dict:
+                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick,
+                   excl: dict | None = None) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
     The would-be pick if the ladder were authoritative: rungs ordered by true marginal cost
@@ -1199,7 +1278,10 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
         else:
             ok, reason = or_gate()
             if ok:
-                price, basis = ctx["price"](model)
+                # Same post-exclusion cell price as the served walk (Goal #1640 acceptance 3):
+                # the shadow must price a struck-pair model by the provider it lands on after
+                # the exclusion, or it would log a divergence the ladder never had.
+                price, basis, _prov = ctx["price"](model, (excl or {}).get(model, frozenset()))
             else:
                 blocked = reason or "openrouter-unavailable"
         return {"model": model, "rail": rail, "_t": ladder_tier(model, rail, price),
@@ -1270,11 +1352,15 @@ def route(payload: dict, ctx: dict) -> dict:
 
     payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?,
               urgency?, slot?, jitter?}
-    ctx:     {price: fn(model)->(usd_per_mtok|None, basis|None),
+    ctx:     {price: fn(model, exclude_providers=frozenset())
+                    ->(usd_per_mtok|None, basis|None, provider|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
               openrouter_ok:  fn(key_ref)->(ok, reason|None),
               pick: fn(list)->item  (optional; defaults to uniform random — the jitter band.
                     Unused under `jitter: false`, where the tie-break is caller/pool order)}
+              `price`'s `exclude_providers` is the task's struck provider slugs (Goal #1640
+              acceptance 3): the returned price/provider is the CELL the model lands on AFTER
+              those are excluded, so a struck pair is never priced or pinned.
 
     Walk: resolve class (explicit > label_map > role_defaults) → candidates (a `slot` DRAW on the
     class's curated pool, else the chain, else rotation-fed) → filter deny/strikes/cooldowns/rail
@@ -1358,29 +1444,39 @@ def route(payload: dict, ctx: dict) -> dict:
     decorrelate_family = None
     if decorrelate_from:
         decorrelate_family = vendor_family(decorrelate_from)
-    # FU-201 c: strike rows carry provider + error_class. Serving-shaped strikes (provider-5xx,
-    # timeout, auth-storm) exclude the (model, provider) PAIR — the model stays eligible for
-    # re-pick with a different provider. Infra-shaped strikes (harness-death, no-pr, unknown)
-    # exclude the model entirely. A model with serving-shaped strikes from ≥2 providers is
+    # FU-201 c / Goal #1640 acceptance 3: strike rows carry provider + error_class. Serving-shaped
+    # strikes (the SERVING_CLASSES subset of the one strike vocabulary) exclude the (model,
+    # provider) PAIR — the model stays eligible for re-pick with a different provider, priced by
+    # the provider it lands on AFTER the exclusion (the next cheapest CELL). Every other strike
+    # class excludes the model entirely. A model with serving-shaped strikes from ≥2 providers is
     # excluded at model level (the #783 rule: model-level verdicts need multi-provider evidence).
-    # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
-    # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
+    # ENFORCED UNCONDITIONALLY: the 2026-08-23 ruling retired the strike-enforcement knob (see the
+    # note above), so the flag and its `if <flag> else []` filter are gone — the task's struck
+    # cells are always excluded.
     _strike_rows = strikes_for(str(payload.get("task") or ""),
-                               str(payload.get("stack") or "")) if STRIKE_ENFORCE else []
+                               str(payload.get("stack") or ""))
     struck_models: set[str] = set()
-    _serving_providers: dict[str, set[str]] = {}
+    struck_pairs: dict[str, set[str]] = {}
     for _m, _p, _ec in _strike_rows:
         if _ec in SERVING_CLASSES:
             if _p:
-                _serving_providers.setdefault(_m, set()).add(_p)
+                struck_pairs.setdefault(_m, set()).add(_p)
         else:
             struck_models.add(_m)
-    for _m, _providers in _serving_providers.items():
+    for _m, _providers in struck_pairs.items():
         if len(_providers) >= 2:
             struck_models.add(_m)
     cool = active_cooldowns(now, role=role)
+    # Goal #1640 acceptance 5: the (model, provider) pair cooldowns, derived from the strikes
+    # table. A cooled pair joins the exclusion set beside the task's struck pairs, so the model
+    # is priced by the provider it lands on AFTER both exclusions — and a cooled pair is never
+    # pinned (the proxy unions strike_excluded + cooldown_excluded for the pin).
+    cooled = pair_cooldowns(now)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
+    # model → the providers struck for it (serving-shaped classes). The model stays eligible and
+    # is priced by the provider it lands on AFTER these are excluded (the next cheapest CELL).
+    _excl: dict[str, frozenset] = {}
     for m in chain:
         rail = "subscription" if m.startswith("claude/") else "openrouter"
         # ── #1259: label_map tier_floor/never_free enforcement ──
@@ -1405,12 +1501,25 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
-        elif decorrelate_family:
-            if vendor_family(m) == decorrelate_family:
-                skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
-            else:
-                eligible.append((m, rail))
+        elif decorrelate_family and vendor_family(m) == decorrelate_family:
+            skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
         else:
+            # Serving-shaped strikes exclude the (model, provider) PAIR, not the model: it stays
+            # eligible and is priced by the provider it lands on AFTER the exclusion. The struck
+            # pair(s) are recorded so the decision row shows WHY the cell was skipped.
+            _struck = struck_pairs.get(m, set())
+            _cooled = {p for (cm, p) in cooled if cm == m}
+            for _p in sorted(_struck):
+                skipped.append({"model": m, "provider": _p, "reason": "strike"})
+            # Goal #1640 acceptance 5: a cooled pair is excluded under its OWN reason, so a
+            # decision row tells a strike exclusion from a cooldown exclusion (the issue's
+            # "distinct reason" requirement). A pair that is BOTH struck and cooled is reported
+            # once, as a strike — the strike is the sharper, task-local fact.
+            for _p in sorted(_cooled - _struck):
+                skipped.append({"model": m, "provider": _p, "reason": "cooldown-pair",
+                                "retry_after_s": cooled[(m, _p)]["remaining_s"]})
+            if _struck or _cooled:
+                _excl[m] = frozenset(_struck | _cooled)
             eligible.append((m, rail))
     capacity_block: dict | None = None
     result: dict | None = None
@@ -1442,7 +1551,7 @@ def route(payload: dict, ctx: dict) -> dict:
                 skipped += [{"model": m, "reason": reason} for m in pool]
                 continue
             result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
-                      "basis": "subscription", "jitter_pool": pool[:1]}
+                      "basis": "subscription", "provider": None, "jitter_pool": pool[:1]}
         else:
             ok, reason = or_gate()
             if not ok:
@@ -1450,7 +1559,18 @@ def route(payload: dict, ctx: dict) -> dict:
                 capacity_block = capacity_block or {"reason": reason, "retry_after_s": 900}
                 skipped += [{"model": m, "reason": reason} for m in pool]
                 continue
-            priced = [(m, *ctx["price"](m)) for m in pool]
+            # Price each candidate by the provider it lands on AFTER the task's struck pairs are
+            # excluded (Goal #1640 acceptance 3): the next cheapest CELL, not the model's default
+            # provider. A model whose every provider is struck drops out of the pool entirely.
+            priced = []
+            for m in pool:
+                _ex = _excl.get(m, frozenset())
+                _p, _b, _prov = ctx["price"](m, _ex)
+                if _prov is None and _ex:
+                    continue  # every provider for this model is struck — the cell is empty
+                priced.append((m, _p, _b, _prov))
+            if not priced:
+                continue
             known = [p for p in priced if p[1] is not None]
             if known:
                 floor = min(p[1] for p in known)
@@ -1459,8 +1579,16 @@ def route(payload: dict, ctx: dict) -> dict:
             else:
                 pick, band = priced[0], priced[:1]  # unpriced chain: keep caller order
             result = {"model": pick[0], "rail": rail, "price_per_mtok": pick[1],
-                      "basis": pick[2], "jitter_pool": [p[0] for p in band]}
+                      "basis": pick[2], "provider": pick[3], "jitter_pool": [p[0] for p in band]}
         break
+    # Goal #1640 acceptance 3: the providers excluded for the PICKED model, so the proxy can pin
+    # the completion to the same post-exclusion provider the decision priced (never the struck
+    # one). Captured before the :exacto suffix is appended (the exclusion keys the bare id).
+    _picked_excl = sorted(_excl.get(result["model"], ())) if result else []
+    # Split the picked model's exclusions by CAUSE so the proxy can pin against both and a
+    # decision row still says which mechanism excluded which provider (Goal #1640 acceptance 5).
+    _picked_struck = sorted(struck_pairs.get(result["model"], ())) if result else []
+    _picked_cooled = sorted(set(_picked_excl) - set(_picked_struck))
     # FU-186 step 1: class-level provider_policy — append :exacto suffix when the resolved
     # class carries provider_policy: "exacto", so the completion path skips pin injection
     # (the :exacto suffix is already handled at openrouter-proxy.py L3232/L3302).
@@ -1471,10 +1599,19 @@ def route(payload: dict, ctx: dict) -> dict:
     # opencode-go/* rides the Go subscription leg — its coarse `rail` reads "openrouter" here;
     # openrouter/<codename> is a cloaked/aggregate id OpenRouter serves itself — one upstream,
     # no provider ordering to delegate).
+    # homelab#1693: IDEMPOTENT for an id that ALREADY carries the suffix. The platform claim's
+    # `workerModel` is `deepseek/deepseek-v4.1-flash:exacto` (verified 2026-09-14), so a chain
+    # entry arriving from the claim gets a SECOND `:exacto` — printed live on the PR#1685 ride's
+    # launcher line (`deepseek/deepseek-v4.1-flash:exacto:exacto`). Inert while the claim is
+    # `routerMode: shadow` (the doubled id is printed and discarded); Goal #1640 acceptance 6
+    # flips the claim to `authoritative`, at which point the doubled id is what OpenRouter
+    # receives and it serves no `:exacto:exacto` variant. The rail/`:free`/`opencode-go/`/
+    # `openrouter/` exclusions are unchanged.
     if (result and cinfo.get("provider_policy") == "exacto"
             and result.get("rail") == "openrouter"
             and not result["model"].startswith(("opencode-go/", "openrouter/"))
-            and not result["model"].endswith(":free")):
+            and not result["model"].endswith(":free")
+            and not result["model"].endswith(":exacto")):
         result["model"] += ":exacto"
     if result:
         half_open = bool(_read(
@@ -1482,6 +1619,8 @@ def route(payload: dict, ctx: dict) -> dict:
             (result["model"], role, now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
+                    "strike_excluded": _picked_struck,
+                    "cooldown_excluded": _picked_cooled,
                     "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
@@ -1490,10 +1629,12 @@ def route(payload: dict, ctx: dict) -> dict:
             retry = None
         elif capacity_block:
             reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
-        elif any(s["reason"].startswith("cooldown:") for s in skipped):
+        elif any(s["reason"].startswith("cooldown") for s in skipped):
+            # Both cooldown mechanisms defer as `cooldown` with a retry_after: the transport
+            # belt's `cooldown:<reason>` rows and the pair cooldown's `cooldown-pair` rows.
             reason = "cooldown"
             retry = min(s.get("retry_after_s") or 900
-                        for s in skipped if s["reason"].startswith("cooldown:"))
+                        for s in skipped if s["reason"].startswith("cooldown"))
         else:
             reason = "chain-exhausted"  # deny/strike only — the one defer that escalates
             retry = None
@@ -1512,7 +1653,7 @@ def route(payload: dict, ctx: dict) -> dict:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
-                            sub_gate, or_gate, jitter, pick_fn)
+                            sub_gate, or_gate, jitter, pick_fn, _excl)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
     # point of the shadow line). Present on dispatch, absent on defer.
@@ -1600,6 +1741,14 @@ def status_summary() -> dict:
             "worker": active_cooldowns(now, role="worker"),
             "probe": active_cooldowns(now, role="probe"),
         },
+        # Goal #1640 acceptance 5: the (model, provider) pair cooldown table, so the seat reads
+        # it without the sqlite file. `until` is the epoch the hold expires (half-open); `streak`
+        # is the doubling count (2 distinct tasks → 1, 3 → 2, …).
+        "pair_cooldowns": [
+            {"model": v["model"], "provider": v["provider"], "until": v["until"],
+             "remaining_s": v["remaining_s"], "streak": v["streak"]}
+            for v in sorted(pair_cooldowns(now).values(),
+                            key=lambda x: (x["model"], x["provider"]))],
         "decisions_24h": [
             {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
             for d, rl, m, rs, n in decisions_24h],
@@ -1618,6 +1767,10 @@ def status_summary() -> dict:
         "rotation": [{"source": s, "entries": n,
                       "age_s": round(now - (ts or now))} for s, n, ts in rot],
         "classes_loaded": bool(_classes),
+        # Goal #1640 acceptance 1: the ONE strike vocabulary, served so the finalizer and the
+        # fleet-strike reader cite this list instead of keeping a copy that drifts.
+        "strike_classes": sorted(STRIKE_CLASSES),
+        "serving_classes": sorted(SERVING_CLASSES),
         "tier_thresholds": _classes.get("tier_thresholds") or {},
         # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
         # and where the would-be pick disagreed with what actually got served.
@@ -1680,6 +1833,17 @@ def metrics_lines() -> list[str]:
               "# HELP router_cooldowns_active Models currently held out of the routing pool per role (addendum-4 temporary blacklist)."]
     for _role in ("worker", "probe"):
         lines.append(f'router_cooldowns_active{{role="{_role}"}} {len(active_cooldowns(now, role=_role))}')
+    # Goal #1640 acceptance 5: the (model, provider) pair cooldown as a per-cell gauge — the
+    # monitoring surface the fleet-strike reader keys on instead of walking issue comments.
+    lines += ["# TYPE router_cell_cooldown gauge",
+              "# HELP router_cell_cooldown Seconds remaining on a (model, provider) pair cooldown (Goal #1640 acceptance 5); one series per cooled pair, 0 when none is cooled."]
+    _pc = pair_cooldowns(now)
+    if _pc:
+        lines += [f'router_cell_cooldown{{model="{v["model"]}",provider="{v["provider"]}"}} '
+                  f'{v["remaining_s"]}' for v in sorted(_pc.values(),
+                                                        key=lambda x: (x["model"], x["provider"]))]
+    else:
+        lines.append("router_cell_cooldown 0")
     lines += ["# TYPE router_decisions_total counter",
               "# HELP router_decisions_total /route outcomes by decision and defer reason."]
     dec = _read("SELECT decision, COALESCE(NULLIF(reason,''),'-'), COUNT(*) FROM decisions "
@@ -1824,8 +1988,12 @@ def self_test() -> int:
     # and assert the strike row carries the provider.
     record_provider_event("deepseek/deepseek-v4-flash", "Fireworks", 200,
                           session="test-ns/test-session-secret")
+    # Goal #1640 acceptance 3: this fixture's task is deliberately NOT the route tests' `issue-42`
+    # — enforcement is now unconditional, so a serving strike recorded here would (correctly)
+    # exclude the (deepseek-v4-flash, Fireworks) pair from every `issue-42` route below. The
+    # fixture tests provider ATTRIBUTION (session-keyed), not routing, so the task is incidental.
     stored5, striked5, provider5 = record_report({
-        "session": "t-provider-1", "task": "issue-42", "stack": "sleep", "role": "worker",
+        "session": "t-provider-1", "task": "issue-42-provider", "stack": "sleep", "role": "worker",
         "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.05,
         "error_class": "provider-5xx", "outcome": "no-pr"},
         session_ref="test-ns/test-session-secret")
@@ -1835,6 +2003,37 @@ def self_test() -> int:
         f"strike provider must be 'Fireworks' from provider_events lookup, got {_p_row}"
     assert provider5 == "Fireworks", \
         f"record_report must RETURN the resolved provider (the /report reply's third value), got {provider5!r}"
+    # ── Goal #1640 acceptance 1: the cap-death vocabulary ──
+    # A goose ride that dies at the turn cap now reports `turn-cap`; a cap death with zero
+    # tool-result progress reports `tool-loop`, which is serving-shaped (the pair exclusion).
+    # Each must STRIKE and must store UNDER ITS OWN CLASS: `router_strikes_total{error_class=
+    # "tool-loop"}` is the goal's evidence line, so a report that landed as a sub-type or as
+    # `unknown` (the rewrite this vocabulary retires) would leave the metric empty — exactly the
+    # 2026-09-13 miss. Table-driven so every future vocabulary member is covered the same way.
+    # `outcome` is the REAL cap-death shape, `no-output` — deliberately NOT a strike class, so
+    # the row can only pass because the CLASS ITSELF is in the vocabulary: with the pre-#1665
+    # set this report does not strike at all (the 2026-09-13 miss), which is the pin-vacuity bar.
+    for _cls, _task, _serving in (("turn-cap", "issue-70", False),
+                                  ("tool-loop", "issue-71", True)):
+        _st, _sk, _pv = record_report({
+            "session": f"t-{_cls}", "task": _task, "stack": "sleep", "role": "worker",
+            "round": 1, "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.02,
+            "error_class": _cls, "outcome": "no-output"})
+        assert _st and _sk, f"cap-death class {_cls} must store + strike"
+        _cls_row = _read("SELECT error_class FROM strikes WHERE session=?", (f"t-{_cls}",))
+        assert _cls_row and _cls_row[0][0] == _cls, \
+            f"strike must store under its own class, got {_cls_row}"
+        assert (_cls in SERVING_CLASSES) is _serving, \
+            f"{_cls} serving-shaped={_serving} — the pair-vs-model split is the goal's pin"
+    # ONE VOCABULARY: the serving set is a subset VIEW of the strike vocabulary, never a second
+    # copy — drift here silently changes which strikes exclude a PAIR vs a whole MODEL.
+    assert SERVING_CLASSES <= STRIKE_CLASSES, \
+        f"SERVING_CLASSES must be a subset of STRIKE_CLASSES: {SERVING_CLASSES - STRIKE_CLASSES}"
+    # …and the home is served, so the finalizer / reader can cite it (the "one home" half).
+    _vocab = status_summary()
+    assert _vocab["strike_classes"] == sorted(STRIKE_CLASSES) and \
+        _vocab["serving_classes"] == sorted(SERVING_CLASSES), \
+        "the strike vocabulary must surface on /router-status for the finalizer/reader to cite"
     # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
     # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
     # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
@@ -1904,8 +2103,11 @@ def self_test() -> int:
             os.unlink(_mig_cool_db)
         _conn, _persistent = _saved_conn, _saved_persistent
     assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "goose-32602-truncation")]
-    # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
-    assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
+    # Goal #1640 acceptance 3: enforcement is UNCONDITIONAL — the retired strike-enforcement knob
+    # and its `if <flag> else []` filter are gone (the 09-13 checkpoint read it False in
+    # production on every routerMode). The route() rows below prove the enforcement.
+    assert not hasattr(sys.modules[__name__], "STRIKE_ENFORCE"), \
+        "the strike-enforcement flag must be deleted, not merely defaulted off"
     assert strikes_for("issue-9", "sleep") == [("deepseek/deepseek-v4-flash", "", "harness-death")]
     record_provider_event("qwen/qwen3-coder", "deepinfra", 500)
     record_provider_event("qwen/qwen3-coder", "deepinfra", 200)
@@ -2286,10 +2488,14 @@ def self_test() -> int:
     g2 = _gd("5h=boom,7d=weekly:nope,30d=")     # every spec unparseable → defaults
     assert g2 == gometer._GO_WINDOW_DEFAULTS, (g2, gometer._GO_WINDOW_DEFAULTS)
     # ── addendum 4: the 429→cooldown→recovery loop + route() scenarios ──
+    # Goal #1640 acceptance 3: the price callback now takes the providers to EXCLUDE and returns
+    # the provider the model lands on (the CELL), so /route can price post-exclusion. The base
+    # fixture has no provider dimension (provider=None) — the strike rows below supply one.
+    _BASE_PRICES = {"tencent/hy3": (0.041, "market"),
+                    "deepseek/deepseek-v4-flash": (0.033, "market")}
     CTX = {
-        "price": lambda m: (0.0, "free") if m.endswith(":free") else
-                           ({"tencent/hy3": (0.041, "market"),
-                             "deepseek/deepseek-v4-flash": (0.033, "market")}.get(m, (None, None))),
+        "price": lambda m, exclude=frozenset(): (0.0, "free", None) if m.endswith(":free")
+                 else (*_BASE_PRICES.get(m, (None, None)), None),
         "subscription_ok": lambda tier: (True, None, 0),
         "openrouter_ok": lambda ref: (True, None),
         "pick": lambda band: band[0],  # deterministic for the test
@@ -2357,6 +2563,32 @@ def self_test() -> int:
     _exacto_sub = route(dict(base, chain=["claude/haiku"]), CTX)
     assert _exacto_sub["decision"] == "dispatch" and _exacto_sub["model"] == "claude/haiku", \
         f"subscription pick must stay bare under exacto: {_exacto_sub}"
+    # (b2) homelab#1693: the append is IDEMPOTENT. The platform claim's `workerModel` is
+    #      `deepseek/deepseek-v4.1-flash:exacto` (verified 2026-09-14), so a chain entry that
+    #      ALREADY carries the suffix must route to a SINGLE-suffixed id — never
+    #      `…:exacto:exacto` (the doubled id observed live on the PR#1685 ride's launcher line,
+    #      inert only while the claim is `routerMode: shadow`; Goal #1640 acceptance 6 flips it
+    #      to `authoritative`, where the doubled id reaches OpenRouter). Non-vacuous: without the
+    #      guard this row reads `deepseek/deepseek-v4.1-flash:exacto:exacto` and goes RED.
+    _pre = route(dict(base, chain=["deepseek/deepseek-v4.1-flash:exacto"]), CTX)
+    assert _pre["decision"] == "dispatch" and \
+        _pre["model"] == "deepseek/deepseek-v4.1-flash:exacto", \
+        f"a pre-suffixed chain entry must stay single-suffixed under exacto: {_pre}"
+    # …and the bookkeeping path keys it under the BARE id: record_provider_event strips ONE
+    # :exacto (router.py:521), which lands on the bare id only because the guard above kept the
+    # id single-suffixed. A doubled id would key cooldowns under `…flash:exacto`.
+    for _ in range(8):
+        record_provider_event(_pre["model"], "novita", 429)
+    assert cooldown_note("deepseek/deepseek-v4.1-flash", 429, role="worker") == "tripped", \
+        "a pre-suffixed entry's cooldown must key under the bare id"
+    assert "deepseek/deepseek-v4.1-flash" in active_cooldowns(role="worker"), \
+        "bare id must be in active_cooldowns for a pre-suffixed entry"
+    assert "deepseek/deepseek-v4.1-flash:exacto" not in active_cooldowns(role="worker"), \
+        "the single-suffixed id must NOT be a cooldown key"
+    for _ in range(8):
+        record_provider_event("deepseek/deepseek-v4.1-flash", "novita", 200)
+    assert cooldown_note("deepseek/deepseek-v4.1-flash", 200, role="worker") == "cleared", \
+        "cooldown must clear for the bare id"
     _classes.clear()
     _classes.update(copy.deepcopy(_saved_classes))
     # (c) NON-VACUOUS: cooldown/breaker bookkeeping under the BARE id, not the :exacto-suffixed id.
@@ -2429,6 +2661,94 @@ def self_test() -> int:
     dd = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
                     deny=["deepseek/deepseek-v4-flash"]), CTX)
     assert dd["decision"] == "defer" and dd["reason"] == "chain-exhausted", dd
+    # ── Goal #1640 acceptance 3: strikes enforced per task, cell pricing post-exclusion ──
+    # A serving-shaped strike excludes the (model, provider) PAIR, not the model: the model is
+    # re-priced by the provider it lands on AFTER the exclusion. Here deepseek-v4-flash's default
+    # provider (open-inference) is struck; at its next provider (deepinfra) it costs $0.05/M,
+    # MORE than tencent/hy3 at novita ($0.03/M) — so the next-cheapest CELL is hy3, and the row
+    # shows the struck pair skipped and hy3 picked with the price that won. This is the issue's
+    # "the same model at another provider may cost more than another model" case.
+    _CELLS = {
+        "deepseek/deepseek-v4-flash": [("open-inference", 0.01), ("deepinfra", 0.05)],
+        "tencent/hy3": [("novita", 0.03)],
+    }
+
+    def _cell_price(m, exclude=frozenset()):
+        for _prov, _price in _CELLS.get(m, []):
+            if _prov not in exclude:
+                return _price, "market", _prov
+        return None, None, None
+
+    _CELL_CTX = {**CTX, "price": _cell_price}
+    _PAIR_CHAIN = ["deepseek/deepseek-v4-flash", "tencent/hy3"]
+    # (1) serving-shaped strike on the PAIR (deepseek-v4-flash, open-inference): the model is NOT
+    #     excluded — it is re-priced at deepinfra ($0.05) and LOSES to hy3 ($0.03). The row shows
+    #     the struck pair skipped and the next-cheapest CELL picked.
+    record_report({"session": "t-strike-pair-1", "task": "issue-80", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    _sp = route({"stack": "sleep", "task": "issue-80", "role": "worker",
+                 "session": "t-strike-pair-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sp["decision"] == "dispatch" and _sp["model"] == "tencent/hy3", _sp
+    assert _sp["provider"] == "novita" and _sp["price_per_mtok"] == 0.03, _sp
+    assert {"model": "deepseek/deepseek-v4-flash", "provider": "open-inference",
+            "reason": "strike"} in _sp["skipped"], _sp["skipped"]
+    assert not any(s["reason"] == "strike" and s.get("provider") is None
+                   for s in _sp["skipped"]), \
+        f"a single-provider serving strike must NOT exclude the model: {_sp['skipped']}"
+    # …and the SHADOW ladder prices the same post-exclusion CELL (it must not log a divergence
+    # the served walk never had): deepseek-v4-flash's shadow candidate is $0.05 at deepinfra.
+    _sp_shadow_ds = next(c for c in _sp["shadow"]["candidates"]
+                         if c["model"] == "deepseek/deepseek-v4-flash")
+    assert _sp_shadow_ds["price_per_mtok"] == 0.05, _sp_shadow_ds
+    # (2) the SAME model is re-priced by the provider it lands on AFTER the exclusion: strike
+    #     deepseek-v4-flash's default (open-inference) and it is picked at deepinfra — the row's
+    #     price is the CELL's ($0.05), not the model's default ($0.01 at the struck provider).
+    record_report({"session": "t-strike-pair-2", "task": "issue-81", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "timeout",
+                   "outcome": "no-output"})
+    _sp2 = route({"stack": "sleep", "task": "issue-81", "role": "worker",
+                  "session": "t-strike-pair-2", "chain": ["deepseek/deepseek-v4-flash"]}, _CELL_CTX)
+    assert _sp2["decision"] == "dispatch" and _sp2["model"] == "deepseek/deepseek-v4-flash", _sp2
+    assert _sp2["provider"] == "deepinfra" and _sp2["price_per_mtok"] == 0.05, _sp2
+    assert {"model": "deepseek/deepseek-v4-flash", "provider": "open-inference",
+            "reason": "strike"} in _sp2["skipped"], _sp2["skipped"]
+    # (3) a model struck at TWO providers is excluded at MODEL level (the #783 rule): the skipped
+    #     row carries no provider, and the model is not a candidate at all.
+    record_report({"session": "t-strike-pair-3a", "task": "issue-82", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    record_report({"session": "t-strike-pair-3b", "task": "issue-82", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "deepinfra", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    _sp3 = route({"stack": "sleep", "task": "issue-82", "role": "worker",
+                  "session": "t-strike-pair-3", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sp3["decision"] == "dispatch" and _sp3["model"] == "tencent/hy3", _sp3
+    assert {"model": "deepseek/deepseek-v4-flash", "reason": "strike"} in _sp3["skipped"], \
+        _sp3["skipped"]
+    # (4) a NON-serving class excludes the model on ONE strike (no pair dimension)
+    record_report({"session": "t-strike-model-1", "task": "issue-83", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "no-pr",
+                   "outcome": "no-output"})
+    _sm = route({"stack": "sleep", "task": "issue-83", "role": "worker",
+                 "session": "t-strike-model-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sm["decision"] == "dispatch" and _sm["model"] == "tencent/hy3", _sm
+    assert {"model": "deepseek/deepseek-v4-flash", "reason": "strike"} in _sm["skipped"], \
+        _sm["skipped"]
+    # Goal #1640 acceptance 5: fixtures (1)-(3) struck (deepseek-v4-flash, open-inference) from
+    # three distinct tasks with serving classes, which trips the PAIR cooldown. The tests between
+    # here and fixture (5) are about OTHER mechanisms (capability floors, rotation), so refute the
+    # cooldown with a clean ride — the same explicit-cleanup pattern the fixtures above use. The
+    # pair cooldown's own assertions live after fixture (7), where the fixtures re-trip it.
+    record_report({"session": "t-pc-clean-early", "task": "issue-91", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "outcome": "pr"})
+    assert ("deepseek/deepseek-v4-flash", "open-inference") not in pair_cooldowns()
     # subscription-limited defers with retry_after when only claude/* remains
     lim = {**CTX, "subscription_ok": lambda tier: (False, "utilization-5h", 1200)}
     ds = route(dict(base, chain=["claude/haiku"]), lim)
@@ -2443,7 +2763,7 @@ def self_test() -> int:
                      {"model": "not-in-tiers/mystery", "rank": 2}])
     record_rotation("provider-events",
                     [{"model": "poolside/laguna-s-2.1:free", "canary_verdict": "broken"}])
-    dv = route(dict(base, chain=[]), {**CTX, "price": lambda m: (0.05, "market")})
+    dv = route(dict(base, chain=[]), {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
     assert dv["model"] == "tencent/hy3", dv
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
@@ -2462,6 +2782,145 @@ def self_test() -> int:
     assert capability_floor_block("coding", "lowcap/model:free") == "coding=9.0<30"
     assert record_task_market([{"tag": "code:devops_config", "model": "xiaomi/mimo-v2.5",
                                 "rank": 1, "usage_share": 0.182, "token_share": 0.183}]) == 1
+    # ── Goal #1640 acceptance 3: pair strike + active cooldown / capability-floor edge cases ──
+    # (5) pair strike + active cooldown: cooldown takes precedence in the filter order. The
+    #     struck pair is recorded in skipped before the model is excluded by cooldown.
+    record_report({"session": "t-strike-cool-1", "task": "issue-84", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    for _ in range(8):
+        record_provider_event("deepseek/deepseek-v4-flash", "deepinfra", 429)
+    assert cooldown_note("deepseek/deepseek-v4-flash", 429, role="worker") == "tripped"
+    _sc = route({"stack": "sleep", "task": "issue-84", "role": "worker",
+                 "session": "t-strike-cool-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sc["decision"] == "dispatch" and _sc["model"] == "tencent/hy3", _sc
+    # Cooldown is the filter that stops it from being eligible
+    assert any(s["reason"].startswith("cooldown:") for s in _sc["skipped"]), \
+        f"cooldown must block the pair-struck model: {_sc['skipped']}"
+    # Clear the cooldown for subsequent tests
+    assert cooldown_note("deepseek/deepseek-v4-flash", 200, role="worker") == "cleared"
+    # (6) pair strike + capability-floor fail: capability-floor takes precedence. The struck
+    #     pair is recorded in skipped before the model is excluded by capability-floor.
+    record_report({"session": "t-strike-floor-1", "task": "issue-85", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "timeout",
+                   "outcome": "no-output"})
+    # Set up a capability record for deepseek that fails the existing coding floor
+    record_capability("artificial-analysis", [
+        {"model": "deepseek/deepseek-v4-flash", "intelligence": 25.0, "coding": 9.0, "agentic": 5.0}])
+    _sf = route({"stack": "sleep", "task": "issue-85", "role": "worker",
+                 "session": "t-strike-floor-1", "chain": _PAIR_CHAIN}, _CELL_CTX)
+    assert _sf["decision"] == "dispatch" and _sf["model"] == "tencent/hy3", _sf
+    # Capability-floor is the filter that stops it from being eligible
+    assert any(s["reason"].startswith("capability-floor:") for s in _sf["skipped"]), \
+        f"capability-floor must block the pair-struck model: {_sf['skipped']}"
+    # Clean up: remove the deepseek capability record so it doesn't affect subsequent tests
+    _write("DELETE FROM capability WHERE model=? AND source=?",
+           ("deepseek/deepseek-v4-flash", "artificial-analysis"))
+    # (7) pair strike + decorrelate_from set to an unrelated family: the struck provider must be
+    #     excluded even when the model is not in the decorrelated family. The decision carries
+    #     skipped with the strike row, and the model is priced/pinned at the post-exclusion cell.
+    record_report({"session": "t-strike-decor-1", "task": "issue-86", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "error_class": "provider-5xx",
+                   "outcome": "no-output"})
+    _sdc = route({"stack": "sleep", "task": "issue-86", "role": "worker",
+                  "session": "t-strike-decor-1", "chain": ["deepseek/deepseek-v4-flash"],
+                  "decorrelate_from": "moonshotai/kimi-k3"}, _CELL_CTX)
+    assert _sdc["decision"] == "dispatch" and _sdc["model"] == "deepseek/deepseek-v4-flash", _sdc
+    assert _sdc["provider"] == "deepinfra" and _sdc["price_per_mtok"] == 0.05, _sdc
+    assert {"model": "deepseek/deepseek-v4-flash", "provider": "open-inference",
+            "reason": "strike"} in _sdc["skipped"], _sdc["skipped"]
+    assert _sdc.get("strike_excluded") == ["open-inference"], \
+        f"strike_excluded must record the struck provider: {_sdc.get('strike_excluded')}"
+    # ── Goal #1640 acceptance 5: the (model, provider) PAIR cooldown ──
+    # Fixtures (5)-(7) struck (deepseek-v4-flash, open-inference) from three distinct tasks with
+    # serving classes — exactly the trip condition (>= pair_min_tasks DISTINCT tasks inside
+    # pair_window_s). The pair is cooled, and /route excludes it under its OWN reason, distinct
+    # from a task-local strike.
+    _pc_fix = pair_cooldowns()
+    assert ("deepseek/deepseek-v4-flash", "open-inference") in _pc_fix, _pc_fix
+    assert _pc_fix[("deepseek/deepseek-v4-flash", "open-inference")]["streak"] == 2, _pc_fix
+    # …and /route excludes it as a COOLDOWN, not a strike: the route's task (issue-92) has no
+    # strike of its own, so strike_excluded is empty and cooldown_excluded names the cooled
+    # provider — the issue's "distinct reason so a decision row tells the two apart".
+    _pcr = route({"stack": "sleep", "task": "issue-92", "role": "worker",
+                  "session": "t-pc-route", "chain": ["deepseek/deepseek-v4-flash"]}, _CELL_CTX)
+    assert _pcr["decision"] == "dispatch" and _pcr["model"] == "deepseek/deepseek-v4-flash", _pcr
+    assert _pcr["provider"] == "deepinfra" and _pcr["price_per_mtok"] == 0.05, _pcr
+    assert any(s.get("model") == "deepseek/deepseek-v4-flash"
+               and s.get("provider") == "open-inference" and s.get("reason") == "cooldown-pair"
+               for s in _pcr["skipped"]), _pcr["skipped"]
+    assert _pcr["cooldown_excluded"] == ["open-inference"], _pcr
+    assert _pcr["strike_excluded"] == [], \
+        "a cooldown exclusion must NOT be reported as a strike exclusion"
+    # /router-status exposes the table (pair, until, streak) so the seat reads it without sqlite.
+    _pc_status = status_summary()["pair_cooldowns"]
+    assert any(e["model"] == "deepseek/deepseek-v4-flash" and e["provider"] == "open-inference"
+               and e["streak"] == 2 and e["until"] > time.time() for e in _pc_status), _pc_status
+    # …and the per-cell gauge is scraped from /metrics (the fleet-strike reader's surface).
+    assert 'router_cell_cooldown{model="deepseek/deepseek-v4-flash",provider="open-inference"}' \
+        in "\n".join(metrics_lines()), "the pair cooldown must surface as a per-cell gauge"
+    # ── the three acceptance behaviours, on a DEDICATED pair so they are controlled ──
+    # A synthetic model id, so this pair cannot collide with any other fixture's model.
+    _PM, _PP = "cooldown/model-a", "prov-x"
+    _PC_CELLS = {"cooldown/model-a": [("prov-x", 0.02), ("prov-y", 0.05)]}
+
+    def _pc_price(m, exclude=frozenset()):
+        for _prov, _price in _PC_CELLS.get(m, []):
+            if _prov not in exclude:
+                return _price, "market", _prov
+        return None, None, None
+
+    _PC_CTX = {**CTX, "price": _pc_price}
+    # (a) two strikes on one pair inside the window → the pair is excluded from /route.
+    for _t in ("issue-93", "issue-94"):
+        record_report({"session": f"t-pc-{_t}", "task": _t, "stack": "sleep", "role": "worker",
+                       "round": 1, "model": _PM, "served_provider": _PP,
+                       "error_class": "provider-5xx", "outcome": "no-output"})
+    _pc1 = pair_cooldowns()
+    assert (_PM, _PP) in _pc1 and _pc1[(_PM, _PP)]["streak"] == 1, _pc1
+    # a SECOND strike on the SAME task must not raise the streak — the trip is per DISTINCT task
+    record_report({"session": "t-pc-issue-93b", "task": "issue-93", "stack": "sleep",
+                   "role": "worker", "round": 2, "model": _PM, "served_provider": _PP,
+                   "error_class": "timeout", "outcome": "no-output"})
+    assert pair_cooldowns()[(_PM, _PP)]["streak"] == 1, \
+        "the trip counts DISTINCT tasks, not strikes"
+    # the pair is excluded from /route, priced at the provider it lands on AFTER the exclusion
+    _pcr2 = route({"stack": "sleep", "task": "issue-98", "role": "worker",
+                   "session": "t-pc-route-2", "chain": [_PM]}, _PC_CTX)
+    assert _pcr2["decision"] == "dispatch" and _pcr2["provider"] == "prov-y", _pcr2
+    assert _pcr2["price_per_mtok"] == 0.05, _pcr2
+    assert any(s.get("model") == _PM and s.get("provider") == _PP
+               and s.get("reason") == "cooldown-pair" for s in _pcr2["skipped"]), _pcr2["skipped"]
+    # (b) expiry → half-open: the pair is eligible again (absent from the table)
+    _pc_until = pair_cooldowns()[(_PM, _PP)]["until"]
+    assert (_PM, _PP) not in pair_cooldowns(now=_pc_until + 1), \
+        "an expired hold is half-open — the pair is eligible again"
+    # (c) a strike DURING half-open doubles the hold (streak 2 → 12 h)
+    record_report({"session": "t-pc-issue-95", "task": "issue-95", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": _PM, "served_provider": _PP,
+                   "error_class": "provider-5xx", "outcome": "no-output"})
+    _pc2 = pair_cooldowns()
+    assert _pc2[(_PM, _PP)]["streak"] == 2, _pc2
+    assert _pc2[(_PM, _PP)]["remaining_s"] > 11 * 3600, \
+        f"a strike during half-open must double the hold to 12 h: {_pc2[(_PM, _PP)]}"
+    # (d) a 2xx does NOT clear it — the transport belt's rule does not apply to a pair cooldown
+    for _ in range(8):
+        record_provider_event(_PM, _PP, 200)
+    assert (_PM, _PP) in pair_cooldowns(), "a 2xx must NOT clear a pair cooldown"
+    # …only a CLEAN RIDE does
+    record_report({"session": "t-pc-clean", "task": "issue-96", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": _PM, "served_provider": _PP,
+                   "outcome": "pr"})
+    assert (_PM, _PP) not in pair_cooldowns(), "a clean ride clears the pair cooldown"
+    # Clean up the fixtures' cooldown so the downstream tests (which are about other mechanisms)
+    # are not polluted — the same pattern the capability/cooldown fixtures above use.
+    record_report({"session": "t-pc-clean-ds", "task": "issue-97", "stack": "sleep",
+                   "role": "worker", "round": 1, "model": "deepseek/deepseek-v4-flash",
+                   "served_provider": "open-inference", "outcome": "pr"})
+    assert ("deepseek/deepseek-v4-flash", "open-inference") not in pair_cooldowns()
     # ── M11 shadow ladder (homelab#159): free → subscription-headroom → paid, per (class, urgency) ──
     # Every assertion here is about the SHADOW block. The served pick is asserted unchanged beside
     # each one — that is the acceptance criterion of this leg, not a nicety.
@@ -2523,7 +2982,11 @@ def self_test() -> int:
             ("t-cell-4", "inclusionai/ling-3.0-flash:free", "pr", ""),
             ("t-cell-5", "inclusionai/ling-3.0-flash:free", "pr", "")):
         route(dict(base, session=sess), CTX)
-        record_report({"session": sess, "task": "issue-42", "stack": "sleep", "role": "worker",
+        # Goal #1640 acceptance 3: the strike fixture's task is NOT the route tests' `issue-42`
+        # — enforcement is unconditional now, so t-cell-1's harness-death strike would (correctly)
+        # exclude claude/haiku from every `issue-42` route below. The cell fold keys on the
+        # SESSION, so the task is incidental to what this leg proves.
+        record_report({"session": sess, "task": "issue-42-cell", "stack": "sleep", "role": "worker",
                        "model": model, "outcome": outcome, "error_class": err})
         if sess == "t-cell-1":  # a strike at the subscription rung climbs the cell above it
             assert cell_state("coding", "tight")["start_tier"] == 2, cell_state("coding", "tight")
@@ -2583,7 +3046,8 @@ def self_test() -> int:
     # pick is the first in caller order and the shadow ladder stops re-probing a rung down.
     # (class `review`, whose ladder cell is still unproven here — the `coding` cell was promoted
     # to the free rung by the leg-3 fixtures above, and a proven cell never re-probes.)
-    EQ = {**CTX, "price": lambda m: (0.05, "market"), "pick": lambda b: b[-1]}
+    EQ = {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None),
+          "pick": lambda b: b[-1]}
     _eqbase = dict(base, chain=CHAIN[:3], **{"class": "review"})
     dj_on = route(dict(_eqbase, session="t-jitter-on"), EQ)
     dj_off = route(dict(_eqbase, session="t-jitter-off", jitter=False), EQ)
@@ -2794,7 +3258,15 @@ def self_test() -> int:
     # + the 5 M11 ladder-cell fixtures, + the 2 homelab#577 deployed-pod pod-name shapes,
     # + null-rail-1) and 3 strikes (issue-9/sleep from the vocabulary fixture,
     # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
-    assert summary["rows"]["run_reports"] == 18 and summary["rows"]["strikes"] == 4  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1
+    # homelab#1665 MOVES both counts by the two cap-death fixtures (t-turn-cap, t-tool-loop):
+    # each is a run_report AND a strike, so 18→20 and 4→6. The assertion is kept, not dropped.
+    # Goal #1640 acceptance 3 MOVES them again by the five strike fixtures (t-strike-pair-1/2,
+    # t-strike-pair-3a/3b, t-strike-model-1): each is a run_report AND a strike, so 20→25 and
+    # 6→11. Round 3 adds t-strike-cool-1, t-strike-floor-1, t-strike-decor-1: 25→28 and 11→14.
+    # Goal #1640 acceptance 5 MOVES them by the pair-cooldown fixtures: four strikes
+    # (t-pc-issue-93/94/93b/95) and three clean rides (t-pc-clean-early, t-pc-clean,
+    # t-pc-clean-ds) — seven run_reports, four strikes: 28→35 and 14→18.
+    assert summary["rows"]["run_reports"] == 35 and summary["rows"]["strikes"] == 18  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
