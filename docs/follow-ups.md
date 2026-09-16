@@ -369,7 +369,9 @@ six OVERSIZE items pointer-ized into
       client-timeout 1800 ms — RFC 8767). **Root cause (evidence):** infra cache holds 389 IPv6
       name-server entries at the never-measured 376 ms placeholder while the WAN has NO IPv6 — OPNsense
       sets `do-ip6` from Interfaces → Settings → *Allow IPv6* (`unbound.inc`), a legacy page with no
-      API. **Next (operator, GUI — no code path exists):** untick *Allow IPv6*, then watch the window rate.
+      API. **Done 17:55Z:** *Turn off IPv6* ticked (LAN had no v6 at all), Unbound restarted — infra cache
+      0 IPv6 entries, github/LAN/public names NOERROR. **Next:** soak — `UnboundGithubServfail` quiet for
+      a week → archive; the GUI-only knob is recorded in `docs/runbook.md` §OPNsense as code.
 
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
