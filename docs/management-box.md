@@ -309,6 +309,58 @@ The probe that found the third gap (same day): a `provider "proxmox" {}` block p
 block. `deny_patterns` now carries `^[[:space:]]*provider[[:space:]]+"` (the `provider =` meta-argument on
 a resource stays allowed), with both cases in `mgmt-policy-test`.
 
+## MB4. The end state — master is truth, the box reconciles (ADR-132)
+
+**Tracked by:** FU-235 (the diff), FU-242 (the substrate spike), FU-244 (flags out of git). The ArgoCD model
+applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers, in build order.
+
+1. **The diff.** `talos_machine_configuration_apply` records *delivery*; Talos honours install-time fields
+   (schematic, `install.disk`, the EPHEMERAL `VolumeConfig`) only on the next install. So state is truthful,
+   `plan` is clean, and the node runs the wrong image — nx-01 after #1717: `nodeLabels` took, the schematic and
+   EPHEMERAL did not. The reconciler's diff is declared (`machines/machines.yaml`, the schematic ids tofu
+   outputs) vs live (`talosctl get extensions` — the `schematic` extension's version — and `volumestatus`;
+   labels and taints from the API), per node, one gauge each, on the belt (§MB2). It is the detector first,
+   the sync's completion condition second.
+2. **The pre-merge impact line.** The sentinel's `tofu plan` is blind to this class, so its verdict grows a
+   line computed from the PR head's declaration against live: *"this head changes the install of nx-01
+   (schematic, EPHEMERAL disk) → one reinstall window"*. That sentence is what the codeowner read refuses;
+   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit.
+3. **Sync policy in the declaration.** `reconcile: auto | manual` per node. Compute-tier nodes go `auto`
+   first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
+   A `manual` node still shows its diff as drift; the box does nothing.
+4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
+   first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
+   window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
+   state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
+   mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
+   apply and lands in a window instead.
+5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
+   surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
+   inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
+   flags out of the tracked tree (`flags.local.tf`, gitignored; a live flag shows as drift until unflagged).
+6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
+   virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
+   nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
+   human for hypervisor reinstalls and recovery (ISO over virtual media, BIOS over SOL) — a runbook, never a
+   loop. `machines.yaml` gains `bmc:` beside `plug:`; `node-maintenance.sh` is the first caller.
+7. **Two networks.** The box's second NIC is the management-network leg; the BMCs (today the Nutanix twin's
+   two IPMI ports sit on the LAN) move behind it, so nothing but the box can speak to BMC firmware. Static
+   addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
+   BMC network through the node's routing.
+
+**The substrate is undecided until FU-242 reports.** The candidate: a single-node k3s from the NixOS module —
+no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
+source controller + tofu-controller as the reconcile engine, the whole thing a **Nix closure**: images as
+`dockerTools.pullImage` digests, manifests as files (`services.k3s.images` / `manifests` — verify in the
+26.05 pin), so `mgmt-confirm`'s gate-and-reboot covers the cluster and `nixos-anywhere` recreates it. Prior
+art and why none of it fits as-is: Flux tofu-controller and Burrito (the model, but in-cluster state + creds),
+Atlantis (the sentinel by another name, pre-merge apply), Sidero Omni / CAPI+CAPT / Tinkerbell / Metal3 (the
+metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md).
+
+**Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
+(FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
