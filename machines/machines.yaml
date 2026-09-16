@@ -383,8 +383,10 @@ machines:
     # Measured again 2026-09-16 with a runner co-resident: 20.7 % idle / load1 4.82 on 4 threads
     # (m70s 50.4 %, wk-metal-04 84.7 %), and garage-2 burning 0.54 cores against garage-1's 0.18
     # and garage-0's 0.09 for the same rf=3 work.
-    # The ARC half was removed the same day by dropping the node's imperative homelab.io/ephemeral
-    # LABEL (never in git; see the `arc` flag). This is the kata half.
+    # The ARC half went the same day: the node left `kubernetes_labels.ephemeral_tier`'s for_each in
+    # tofu/forgejo-runner.tf, which force-applies the homelab.io/ephemeral LABEL that both the ARC
+    # scale sets and the Forgejo runner select on. (A kubectl removal alone was NOT enough — that
+    # resource would have re-asserted it on the next apply.) This is the kata half.
     # ⚠ Two consequences, both accepted:
     #   - the kubelet memory guard in tofu/metal.tf is gated on `kata` and goes with it (operator,
     #     2026-09-16: "let it go with kata — if they are required they should be configured together
