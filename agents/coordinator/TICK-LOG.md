@@ -9498,3 +9498,14 @@ the wrapper's silent install and mine corrupted its cache). Also: the tracker co
 glossary link `docs-graph-lint` check #3 needed — master was red on that lint for ~35 min; fixed by a
 conventions line that names glossary.md outside any item (check #3 is per-file, the backlink rule
 is per-item). Both PRs' second CI runs failed on exactly that; re-merging master into them.
+
+## 2026-09-16 ~17:50–18:00Z — FU-215: do-ip6 off, verified
+
+Operator ticked Interfaces → Settings → *Turn off IPv6* (this release's wording of the `ipv6allow`
+flag; checked first that nothing on the LAN has v6: no global address on igb0, zero non-link-local
+v6 routes, radvd empty, dnsmasq v4-only — phones/YouTube untouched). Seat restarted Unbound via
+`unbound/service/restart`; infra cache went 743 entries (389 v6) → 58, **0 IPv6**, after resolving
+a spread of v6-capable zones; github.com / api.github.com / results-receiver / LAN overrides /
+google.com all NOERROR; the serve-expired belt survived the restart. Unbound has been re-rendered
+with `do-ip6: no`. FU-215's remaining step is the soak: `UnboundGithubServfail` quiet for a week
+→ archive. The PR watcher had to be re-armed as a bash script (zsh `$ids` did not word-split).

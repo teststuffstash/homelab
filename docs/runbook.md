@@ -82,6 +82,13 @@ Why the wrapper exists (the non-obvious bits):
 - Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==25.7.8` for
   os-frr 1.52 / OPNsense 26.1).
 
+Settings with **no API at all** (legacy pages — a GUI click by necessity, recorded here so nobody
+hunts for a playbook; each one names the code it affects):
+- **Interfaces → Settings → *Turn off IPv6*** (`system.ipv6allow`): OPNsense derives Unbound's
+  `do-ip6` from it (`unbound.inc`). **Ticked 2026-09-16** (FU-215): the WAN has no IPv6, so
+  `do-ip6: yes` made every github resolution burn its send budget on unreachable v6 authoritatives
+  (`SERVFAIL … exceeded the maximum number of sends`). Leave it ticked until the WAN has v6.
+
 API/module gotchas:
 - The generic **`raw`** module is the escape hatch for plugins with no/incompatible module (HAProxy
   backend/frontend/server). **Mutating `raw` commands need `action: post`** — they default to `get`
