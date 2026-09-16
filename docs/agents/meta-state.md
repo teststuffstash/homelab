@@ -23,23 +23,21 @@ never the session's arc — that is TICK-LOG's.)
   — it was never added at onboarding, peer `idle`; ⚠ NOT verifiable as `established` until nx-01
   boots).
 
-  **THE ONE THING WAITING ON YOU — PR#1718 (`fix/nx-02-worker`, `wk-04`) cannot merge.** It is
-  reviewed (a `/code-review` high pass; nine findings, the substantive ones fixed in `d7c81107`),
-  CI + iac-sentinel green, and re-planned on the box: `5 to add, 1 to change, 0 to destroy`. But
-  `management-sentinel` is a REQUIRED context and reports `failure` — stage 1 refuses to plan any
-  PR touching `tofu/providers.tf`, which this must (a second provider instance for the second
-  hypervisor). That refusal is CORRECT; the consequence is not: the merge is blocked AND
-  `review-reflex` never dispatches (needs green) AND `reviewer-session` stands aside at STEP 0 —
-  both observed. So the PR got no bot review either. Written up as **FU-237 (e)** +
-  `docs/management-box.md` §"When the box refuses", with the two candidate fixes; both are policy
-  calls (the obvious one weakens the gate), so it was NOT force-merged.
-  **Your move, either:** rule on FU-237 (e), or `gh pr merge 1718 --repo teststuffstash/homelab
-  --admin --squash` and then the **two-phase** apply (the label resource does not depend on the VM
-  and fails with `nodes "wk-04" not found` if applied in one pass — exact commands in the PR body).
+  **PR#1718 MERGED 2026-09-16 07:37Z through the normal lane** — the operator ruled on FU-237 (e)
+  (gate stays, no bot-vs-human split) and PR#1721 built the mechanism: `devbox run mgmt-human-plan
+  -- <pr>` posted the human plan's `management-sentinel: success` on the rebased head, the reviewer
+  approved, auto-merge landed. **THE ONE THING WAITING ON YOU — the apply of wk-04**, two-phase
+  (the label resource does not depend on the VM; exact commands in the PR body), from master via
+  `devbox run mgmt-tf -- apply -target=…`. ⚠ The box's plan of master reads **`+6 ~2 -0`**, not the
+  PR's `+5 ~1 -0`: master also carries **#1717 (merged 8e39f029, not by this session)** —
+  `kubernetes_node_taint.ephemeral["nx-01"]` + `talos_machine_configuration_apply.metal["nx-01"]`
+  — plus the standing longhorn metadata drift; target deliberately. The apply loop REFUSES master
+  (stage 1 on providers.tf + nx-01 outside the allowlist) until a FULL `mgmt-tf apply` of master
+  stamps its baseline (PR#1721) — do that last, after the targeted phases.
 
   **Also open:** `nx-01` is still powered off and cannot see a boot disk (untouched tonight, per
-  the handover); **PR#1717** (`fix/nx-01-ride-box`) still deliberately un-armed — applying it wipes
-  nx-01 and targets the ADATA that does not enumerate. **FU-235 is still stale** (says the kata pool
+  the handover); **PR#1717** (`fix/nx-01-ride-box`) is MERGED (8e39f029) but NOT applied — applying
+  it wipes nx-01 and targets the ADATA that does not enumerate. **FU-235 is still stale** (says the kata pool
   is 2; live it is 4) — close it on evidence. `wk-metal-02` recovered on its own (Ready again).
 
   **Do NOT re-derive:** the Matchbox profile sets `console=ttyS0` (COM1) but these boards have COM1

@@ -9293,3 +9293,13 @@ Issues: #1620, #1621.
   Alertmanager fans to ha-webhook too, so it reaches a human while the responder is a waiter.
 - Also: `/workspace/homelab`'s worktree registry lost every entry mid-session (only master + a
   prunable stale one remained; cause not chased) — branches were pushed, nothing lost; re-registered.
+- **PR#1718 landed through the lane the morning built (07:37Z):** rebased twice (master moved under
+  it — #1717, #1722, the quickfix), each time `mgmt-human-plan 1718 --yes` re-posted the verdict
+  on the new head (stage 1's two hits named as overridden; the box's plan `+5 ~1 -0`, then
+  `+6 ~2 -0` once #1717's nx-01 taint + metal config were on master), the reviewer approved,
+  auto-merge merged. The mechanism's first real run also found a **pre-existing sentinel bug**:
+  the head fetch `refs/pull/N/head:refs/mgmt/pr-N` was rejected non-fast-forward after any
+  force-push, so a REBASED PR was never evaluated ("fetch of the head failed" every tick — #1717
+  had sat in that state); `+` refspec, quickfix direct (476030b6). PR#1722 merged 07:22Z;
+  `ArgoLockPlaneWedged` loaded in Prometheus (inactive, health ok). **Apply of wk-04 not done —
+  operator's (two-phase; the apply loop refuses master until a full human apply stamps).**
