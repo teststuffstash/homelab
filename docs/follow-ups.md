@@ -367,6 +367,8 @@ six OVERSIZE items pointer-ized into
       `UnboundGithubServfail` window read `diagnostics/log/core/resolver` (search `SERVFAIL`;
       stamps are UTC+3); "upstream server timeout"/"all servers failed" → belt = `serveexpired`
       (+ client-timeout) via the same var; optionally enable WAN gateway monitoring for a loss series.
+      **Seen again 2026-09-16 ~16:35–17:00Z** (operator's browser + the jail's `gh`/`git`; probe 16:56–17:00;
+      TICK-LOG) — the API log read returned `[]`, so the GUI read is still the open step.
 
 
 ## CI & dependency automation

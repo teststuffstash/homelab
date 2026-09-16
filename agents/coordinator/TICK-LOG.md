@@ -9465,3 +9465,15 @@ image files, 7 metal config updates, 3 taint updates — 16 addresses outside th
 apply by target. The SOL capture was stopped: the X10DRT's SOL is ttyS1, and v1.13.10's metal
 cmdline dropped `console=ttyS0` — it never could have caught the panic (FU-247 carries the fix).
 Bookkeeping committed, not pushed (push after #1740 lands).
+
+## 2026-09-16 ~16:35–17:00Z — FU-215 window, live: github.com SERVFAIL on Unbound
+
+Operator: `DNS_PROBE_FINISHED_NXDOMAIN` for github.com; the jail's master push hung on the same.
+`dig @192.168.2.1 github.com` → SERVFAIL (api.github.com too); google.com/example.com NOERROR; LAN
+overrides fine; 1.1.1.1/8.8.8.8 resolve github. GitHub's nsone authoritatives answered the LAN
+directly (UDP + TCP, NOERROR) while Unbound still failed — the infra cache at 17:00 showed the nsone
+entries at rtt ≈830 ms, no timeouts. `UnboundGithubServfail` reached `pending` only (probe 1/min:
+0 from ~16:56, back at 17:00:34; `for: 3m`). `diagnostics/log/core/resolver` via the API returned
+`[]` with every parameter shape — the `log-servfail` line the FU waits for is still unread (GUI
+read — the API key lacks the log privilege: the system log returns `[]` the same way). Self-cleared,
+as every FU-215 window has. No config touched.
