@@ -203,14 +203,14 @@ six OVERSIZE items pointer-ized into
       Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
-      `quota − held ≥ 2×layer` — rule, both failures, storage read: the header of
-      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml); cap **48Gi** (#1578).
-      **LIVE:** the quota belts (#1577: `GarageBucketQuotaNear`, `RegistryBucketCommitHeadroomLow`) and
-      the collector (`registry-garbage-collect` CronJob, Sundays 03:00Z, #1508; ad-hoc recipe in
-      [`runbook.md`](runbook.md) §Registry). **Missing = the POLICY half (ADR-085):** oracle-iac untags
-      outside its keep-set with its push cred (oracle-iac#664, derive-don't-declare) — nothing does
-      yet, so the CronJob collects nothing and each release eats ~10 GB of cap. ⚠ ADR-121 states the
-      policy too — one home wins. Link: ADR-121, ADR-089, ADR-085.
+      `quota − held ≥ 2×layer` — rule, both failures, storage read, retention ownership AND current
+      status: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml);
+      cap **48Gi** (#1578). **LIVE:** the quota belts (#1577), the collector (`registry-garbage-collect`,
+      Sundays 03:00Z, #1508), and since 2026-09-14 **the POLICY half** — oracle-fleet's nightly
+      `retention` CronWorkflow untags outside its keep-set (first prunable tag 09-16 02:31Z).
+      **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
+      to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
+      and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating

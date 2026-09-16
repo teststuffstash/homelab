@@ -48,6 +48,23 @@
 #     already keeps the blob-descriptor cache off in registry.yaml.
 #   ⚠ ADR-121 also states the policy ("keep 2 latest prod + latest built"), so that string has two
 #     homes today. FU-203 carries the resolution; do not grow a third copy here.
+#   STATUS 2026-09-16 — the POLICY half is LIVE. oracle-fleet's nightly `retention` CronWorkflow
+#     (ADR-OF-004, its scripts/registry-prune.sh, unblocked by homelab#1620 on 2026-09-14) untags
+#     everything outside {served, previous, newest}; first prunable tag 2026-09-16 02:31Z
+#     (`2026-07-12`). ⚠ Do NOT re-derive the 09-10 → 09-15 flat bucket line as a stalled prune: both
+#     held tags were legitimately in the keep-set, so there was nothing to untag and the 09-13
+#     collector's 7 s no-op was CORRECT. (homelab#241 2026-09-16 07:40Z read it as a stall; corrected
+#     on the thread the same day.)
+#   ⚠ WHAT REMAINS IS A SCHEDULE MISMATCH, and it is the platform's half: the untag is NIGHTLY, the
+#     reclaim WEEKLY. A prunable tag sits up to six days while RegistryBucketCommitHeadroomLow fires
+#     on the 2× rule, and each round costs a responder session — 2026-09-15 13:15Z → 2026-09-16
+#     10:00Z was 20 h firing, one triage comment and one cross-jail handoff, to run a 45 s job.
+#     Run by hand on that handoff: 37.73 GB → 21.3 GB, i.e. 16.4 GB, more than the ~10.6 GB the stack
+#     projected because it also swept the 2026-09-01 lineage (untagged before the CronWorkflow era,
+#     no collector run behind it). The off-schedule precondition is "NO PUSH IN FLIGHT", not "only on
+#     Sunday": the Sunday slot dodges the Tuesday 07:17Z release window, and --delete-untagged is
+#     hazardous only against a concurrent push, where a blob whose manifest is not yet written is
+#     indistinguishable from garbage. Fix = pair the collector to the prune, or move it to daily.
 apiVersion: tf.upbound.io/v1beta1
 kind: Workspace
 metadata:
