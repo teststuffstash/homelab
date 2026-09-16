@@ -16,6 +16,8 @@ range.** Real machines get an inventory entry (`machines/machines.yaml` or a
 `opnsense/dnsmasq-dhcp.py` static) *before* they get an address; VIPs come only from the two VIP
 blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 
+**Pending ruling — the control-plane endpoint VIP (Tracked by: FU-243, ADR-133):** a Talos shared VIP is an L2 address on the CPs' own subnet (`192.168.2.0/24`), which this rule and the `.2–.49` "no NEW VIPs" note both refuse today; it needs a reserved address or sub-range declared here before the cutover, not an exception.
+
 ## The partition
 
 | Block | CIDR | Size | Purpose |
