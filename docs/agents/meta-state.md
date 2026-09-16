@@ -10,6 +10,29 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**
+  **PR#1733 open + armed, CI running at hand-off** — four deterministic legs in
+  `responder-argo.yaml`: human-close guard, decided-once gate, REST engagement probe, FU-232
+  subject re-key. `agents/**` so it parks for the codeowner read; **FU-232 archived in the PR**.
+  (1) **Verify after merge, in order:** the next `respond-*` run's log carries `DECIDED —` or
+  `HUMAN-CLOSED` lines rather than a session per standing alert; `kubectl -n agent-coordinator get
+  cm responder-seen -o json | jq '[.data|to_entries[]|select(.value|startswith("decided-"))]|length'`
+  is non-zero within a day; `responder_triage_sessions_today` drops off its 11–12/day ceiling.
+  (2) ⚠ **One-time cost is EXPECTED, not a regression:** the FU-232 re-key retires the magnet
+  threads, so each affected (alert, object) files ONE fresh issue on its next fire (#811/#882/#542
+  kube-state, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Do not read that burst
+  as the fix failing.
+  (3) **Still open on the responder side:** FU-230 leg (b) (re-weighed non-binding — build when a
+  SECOND window class leaks) and FU-231's bucket (**BLOCKED on FU-210** — responder sessions leave
+  no transcript, the `homelab/alert-<fp>/` prefix is empty). Re-read FU-231 after this soaks.
+  (4) Board drained seat-side: #1546/#530/#1547 closed (alert cleared, zero human engagement);
+  open 🚨 24 → 21. Of the 17 open-with-cleared-alert threads, only 3 qualified for an unattended
+  close — the other 14 have genuine human comments, so the `[bot]`-suffix bug's blast radius was
+  smaller than the 13 `A human is engaged` body lines suggested.
+  (5) **Quickfix landed direct:** `devbox run diff-ci` was failing on master for everyone (no
+  map row for `agentstack-rbac-lint`); `scripts/**` is codeowner-author so PR is not a route.
+  Bookkeeping is COMMITTED, **not pushed** — one master push at wind-down (the 2026-08-30 rule).
+
 - **⚑ PICKUP (2026-09-15 night — nx-02, unattended run).** Box facts live in the private
   **hardware** repo `docs/nx-6035-g5.md` §"nx-02 put to work"; the arc is in TICK-LOG.
 
