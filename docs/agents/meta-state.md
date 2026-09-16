@@ -10,6 +10,11 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  **Update 18:55Z: wk-01/02/03/04 ALL on v1.13.10** — wk-03 by design, the other three by the seat's
+  targeted-apply incident (`docs/incidents/2026-09-16-targeted-apply-replaced-three-vms.md`, FU-248): no data
+  lost, ~12 min platform outage, recovered via `tofu console` + `talosctl apply-config --insecure`. Tofu's
+  `talos_machine_configuration_apply.node[wk-01|02|04]` state is stale-but-harmless (static id); the
+  remaining plan = 7 metal config updates + taint noise. Do NOT `-target` anything on this root.
   **Update 18:10Z: ALL THREE MERGED** — #1733 (responder), #1742 (FU-215 belt), #1740 (version split, incl.
   the image-axis fix). **Next act = wk-03's recreate on v1.13.10**, human apply by target from the box
   (`devbox run mgmt-tf -- apply -target='proxmox_download_file.talos["longhorn-v1.13.10"]'

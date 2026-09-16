@@ -9509,3 +9509,20 @@ a spread of v6-capable zones; github.com / api.github.com / results-receiver / L
 google.com all NOERROR; the serve-expired belt survived the restart. Unbound has been re-rendered
 with `do-ip6: no`. FU-215's remaining step is the soak: `UnboundGithubServfail` quiet for a week
 → archive. The PR watcher had to be re-armed as a bash script (zsh `$ids` did not word-split).
+
+## 2026-09-16 ~18:05–18:55Z — wk-03 recreate → the targeted apply that took three VMs (incident)
+
+PR#1740 merged 18:06 (reviewer's one blocking finding — the image axis — fixed in-PR). Plan for the
+wk-03 recreate: `-target` refused (moved sources must be included) → `-target`+`-exclude` refused
+(cannot combine) → `-exclude` of the other VMs + metal applies + taints = `3 add / 3 destroy`, right.
+Applied with `-replace` on wk-03's config apply added — silently NOT executed; wk-03 booted the fresh
+image into maintenance mode, `up` timed out. Then the error: `-target='talos_machine_configuration_apply.node["wk-03"]'
+-replace=…` applied WITHOUT its own plan — `-target` pulls the dependency `proxmox_virtual_environment_vm.node`
+as a whole resource, so wk-01/02/04's pending replaces ran: 4/4, three workers destroyed 18:39–18:44, every
+platform pod Pending, operator noticed before the seat did. Longhorn read FIRST: 40 volumes, 0 replicas on
+the VM tier → availability only. Operator: "might as well do the upgrade" (the fresh VMs already boot
+v1.13.10). Recovery: `tofu console` on the box renders each node's config (`nonsensitive(data.talos_machine_configuration.node[…].machine_configuration)`;
+`state pull` is not on the wrapper's -state list and returned nothing) → `talosctl apply-config --insecure`
+×3 → all Ready 18:50, uncordoned; pods rescheduling. Incident doc + FU-248 (plan-file-only applies;
+`-exclude`-shaped recreates). Side effects: the seat silences were expired by the failing chain and not
+re-armed after the second round; the responder budget was already exhausted so no triage issues.
