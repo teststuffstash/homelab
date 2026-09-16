@@ -1151,18 +1151,6 @@ the block needs pruning, not more headings.
       until then `ArgoWorkflowsFailing` (2026-09-06, fleet Failed/Error >40/6h) shows a BURST, not
       four scattered Errors — a per-template belt still wants the RBAC fix. Relates FU-210.
 
-- [ ] **FU-213** — **opencode.ai is PARKED: our client sends no `x-opencode-session` header**
-      (operator mail, 2026-09-04 — "may error" from 09-06). Parked same-day at the egress proxy:
-      `OPENCODE_RAIL_DISABLED=1` → both legs 503, `/opencode-limit` serves
-      `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a Go-primary ride takes
-      the M12 degrade to `claude/haiku`. The jail shim (own UA, unflagged) stays live — it is
-      where a fix gets tested. What the header is, the public prior art
-      ([earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847), same defect,
-      fixed 2026-05-22), and where the id comes from:
-      [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session`
-      header. **Next:** homelab#1640 acceptance 2 — the ride's session id becomes BOTH the
-      per-(session, model) pin key and this header, then re-enable with `"0"`.
-
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
