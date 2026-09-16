@@ -23,17 +23,15 @@ never the session's arc — that is TICK-LOG's.)
   — it was never added at onboarding, peer `idle`; ⚠ NOT verifiable as `established` until nx-01
   boots).
 
-  **PR#1718 MERGED 2026-09-16 07:37Z through the normal lane** — the operator ruled on FU-237 (e)
-  (gate stays, no bot-vs-human split) and PR#1721 built the mechanism: `devbox run mgmt-human-plan
-  -- <pr>` posted the human plan's `management-sentinel: success` on the rebased head, the reviewer
-  approved, auto-merge landed. **THE ONE THING WAITING ON YOU — the apply of wk-04**, two-phase
-  (the label resource does not depend on the VM; exact commands in the PR body), from master via
-  `devbox run mgmt-tf -- apply -target=…`. ⚠ The box's plan of master reads **`+6 ~2 -0`**, not the
-  PR's `+5 ~1 -0`: master also carries **#1717 (merged 8e39f029, not by this session)** —
-  `kubernetes_node_taint.ephemeral["nx-01"]` + `talos_machine_configuration_apply.metal["nx-01"]`
-  — plus the standing longhorn metadata drift; target deliberately. The apply loop REFUSES master
-  (stage 1 on providers.tf + nx-01 outside the allowlist) until a FULL `mgmt-tf apply` of master
-  stamps its baseline (PR#1721) — do that last, after the targeted phases.
+  **PR#1718 + PR#1717 APPLIED 2026-09-16 ~08:00Z (operator: "one big apply").** wk-04 (VM 8114 on
+  nx-02) is Ready, zone `nx-02`, untainted, BGP `established` (playbook run); nx-01 carries the
+  ephemeral taint + its cordon, BGP `established`. The apply loop's baseline is stamped at master
+  (PR#1721's stamp works). ⚠ **nx-01 was NOT reinstalled by this** — `talos_machine_configuration_apply.metal["nx-01"]`
+  applied in place (0 s); the wipe/reinstall onto the NVMe is the Matchbox path (the `nx-01-diag`
+  group is committed now, f844711a; transient — remove it post-install). **Standing plan noise:**
+  `kubernetes_node_taint.ephemeral["nx-01"]` wants to drop `node.kubernetes.io/unschedulable` (a
+  forced SSA read-back — FU-235 (2); do NOT apply that resource with force). nx-02's
+  `TerraformProv` role gained `VM.GuestAgent.Audit` (the 403 warning on the VM's agent read).
 
   **Also open:** `nx-01` is still powered off and cannot see a boot disk (untouched tonight, per
   the handover); **PR#1717** (`fix/nx-01-ride-box`) is MERGED (8e39f029) but NOT applied — applying

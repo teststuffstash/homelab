@@ -9303,3 +9303,18 @@ Issues: #1620, #1621.
   had sat in that state); `+` refspec, quickfix direct (476030b6). PR#1722 merged 07:22Z;
   `ArgoLockPlaneWedged` loaded in Prometheus (inactive, health ok). **Apply of wk-04 not done —
   operator's (two-phase; the apply loop refuses master until a full human apply stamps).**
+- **"One big apply" (operator, ~07:45–08:05Z): #1717 + #1718 applied from master via `mgmt-tf`.**
+  First full apply created everything except two k8s resources that failed fast (wk-04's zone
+  label — the node did not exist yet — and nx-01's ephemeral taint: `Field manager conflict …
+  cilium-operator-generic … .spec.taints`), which also stopped tofu scheduling the rest; a second
+  pass showed "No changes" because the first HAD created the VM/downloads/Talos configs (the grep
+  missed them). wk-04 Ready in ~2 min. **A mistake, caught by the fresh plan:** `force = true` on
+  the taint resource made the third apply succeed (2 added, 5 changed, baseline stamped) but the
+  forced SSA with the shared "Terraform" manager PRUNED `topology.kubernetes.io/zone` off all six
+  ephemeral nodes (Garage/Longhorn zone spread!) and claimed the atomic taint list (the next apply
+  would have dropped nx-01's cordon). Reverted within the hour; labels restored by a targeted
+  apply; every node re-verified (zone + taints). FU-235 extended: labels AND taints belong in the
+  Talos machine config. Also: wk-04 registered as an OPNsense BGP neighbour (`established`);
+  nx-02's `TerraformProv` role gained `VM.GuestAgent.Audit` (PVE 9 priv the VM agent read wants);
+  the nx-01-diag Matchbox group committed (f844711a — was live + in state, in git nowhere).
+  nx-01 itself is NOT reinstalled — the metal config applied in place; the wipe is the PXE path.

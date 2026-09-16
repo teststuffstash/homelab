@@ -200,12 +200,14 @@ resource "kubernetes_node_taint" "ephemeral" {
     value  = "true"
     effect = "NoSchedule"
   }
-  # cilium-operator owns `.spec.taints` on any node it has untainted (it strips its own
-  # agent-not-ready taint via server-side apply at startup), so this SSA patch conflicts with it
-  # on a node that joined before the taint was declared — nx-01, 2026-09-16: "conflict with
-  # cilium-operator-generic using v1: .spec.taints". Force: the two managers never touch the same
-  # taint key, only the same field path.
-  force = true
+  # ⚠ NEVER `force = true` here (tried 2026-09-16, reverted the same hour): `.spec.taints` is an
+  # ATOMIC list, so a forced server-side apply makes this resource the owner of the WHOLE list —
+  # the next apply drops every taint it did not declare (nx-01's cordon showed up as "- taint
+  # node.kubernetes.io/unschedulable"), and because it shares the default "Terraform" field
+  # manager with kubernetes_labels, the same patch pruned the zone labels off all six ephemeral
+  # nodes. The standing conflict on a node cilium-operator has already untainted ("conflict with
+  # cilium-operator-generic using v1: .spec.taints") is real and unsolved here — the taint's
+  # proper home is the Talos machine config (machine.nodeTaints), tracked on FU-235.
 }
 
 # State moves for the four resources the for_each above replaces (same node, same taint, same

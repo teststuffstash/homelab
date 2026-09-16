@@ -1191,16 +1191,17 @@ the block needs pruning, not more headings.
       `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
       shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
       Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier.
-- [ ] **FU-235** — **Two nodes are declared kata-capable and cannot receive a kata pod.**
-      `machines/machines.yaml` sets `kata: true` on wk-metal-01/-02/-03/-04 and `tofu/metal.tf:57`
-      applies `homelab.io/kata=true` from the machine config, but LIVE (2026-09-12
-      `kubectl get nodes -L homelab.io/kata`) only **wk-metal-01 and -02** carry it — and
-      `tofu/kata.tf:30` makes that label the RuntimeClass's `scheduling.nodeSelector`, so the
-      kata pool is **2, not 4**. Found while costing the three-CP promotion, not by any belt.
-      **Next:** targeted `tofu apply -target='talos_machine_configuration_apply.metal["wk-metal-03"]'`
-      (safe — no `longhorn_disks`), then -04 **inside a maintenance window**: it is a Garage zone
-      node and GAPS `tofu-apply-G2` says a `longhorn_disks` apply reboots the node. Then a belt:
-      declared-vs-labelled is a one-line PromQL over `kube_node_labels`. Relates FU-218, FU-072.
+- [ ] **FU-235** — **Declared node labels AND taints vs live: the metal nodes drift.** (1) `kata: true`
+      on wk-metal-01..04, but LIVE only -01/-02 carry `homelab.io/kata` (2026-09-12), so the kata
+      pool is 2, not 4 (`tofu/kata.tf:30` nodeSelector). (2) **2026-09-16:** `kubernetes_node_taint.ephemeral`
+      cannot own `.spec.taints` on a node cilium-operator has untainted (nx-01: `Field manager
+      conflict`, Ready 18 h) — `force = true` was tried and reverted the same hour: taints are an
+      ATOMIC list (a forced owner drops the cordon + cilium's taints next apply) and the shared
+      "Terraform" manager pruned the zone labels off all six ephemeral nodes (restored). **Next:**
+      move BOTH labels and taints into the Talos machine config (`machine.nodeLabels` already
+      carries kata; add `machine.nodeTaints`) and retire the k8s-provider taint resource; the
+      -03 apply is safe, -04 inside a maintenance window (Garage zone, GAPS `tofu-apply-G2`);
+      then the declared-vs-live belt (one PromQL over `kube_node_labels`/taints). Relates FU-218, FU-072.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 

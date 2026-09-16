@@ -67,6 +67,13 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
    `kubernetes_node_taint.ephemeral["<name>"]`, `homelab.io/ephemeral`). Apply this **after** the
    node is Ready — while it still carries transient not-ready/cilium taints, `kube-controller-manager` owns
    `.spec.taints` and the apply conflicts (`kubectl wait --for=condition=Ready node/<name>` first).
+   ⚠ Ready is not always enough: `cilium-operator-generic` keeps ownership of `.spec.taints` on a
+   node whose agent-not-ready taint it stripped (nx-01, 2026-09-16 — Ready for 18 h, still
+   `Field manager conflict`). **Never answer that with `force = true`**: taints are an atomic list
+   and a forced apply makes tofu the owner of the whole list (the next apply drops the cordon and
+   cilium's taints), and it shares the default field manager with `kubernetes_labels`, so the
+   same patch stripped the zone labels off every ephemeral node. The durable home for the taint is
+   the Talos machine config — FU-235.
 8. **Peer it with OPNsense BGP** — add the node IP to `bgp_node_ips` in
    `ansible/group_vars/opnsense.yml` and run
    `bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml`. Cilium's BGP nodeSelector is
