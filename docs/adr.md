@@ -2159,3 +2159,8 @@ change (the exceptions ordering rule); the sentinel gets its own credential set,
 provider allows, and the App key sits in two stores (one identity, two seats); a compromised head
 still reads the whole state — the residual the allowlist bounds, not removes. Design:
 [`management-box.md`](management-box.md) §MB3. Tracker: FU-237.
+**Amended 2026-09-16 (operator):** a stage-1 refusal stays a hard `failure` — no author-based
+relaxation (bot-vs-human considered, rejected as a second gate), no non-blocking verdict class. The
+escape hatch the policy already named gets its mechanism instead: a human who has read the diff
+orders the plan (`mgmt-human-plan`), the verdict posts marked as a human plan with the overridden
+rules named, and a full human apply of master advances the apply loop's baseline. §MB3 "When the box refuses".

@@ -271,6 +271,44 @@ is therefore push-then-apply from now on; the working tree is not something the 
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
+### When the box refuses — the human plan (FU-237 (e), 2026-09-16)
+
+A stage-1 refusal posts `failure` on `management-sentinel`, a **required** context, and three
+mechanisms interlock: branch protection blocks the merge (correct — the box has not judged the
+change), `agents/review-reflex.sh` never dispatches a reviewer (its pick needs every present check
+green), and `agents/reviewer-session.sh` stands aside at STEP 0 on a concluded failure. So a PR the
+box legitimately declines to plan got **no merge and no review** — first hit on **#1718** (a second
+`proxmox` provider instance for the nx-02 hypervisor; `tofu/providers.tf` is a `deny_paths` entry,
+so the refusal was exactly right), and every `providers.tf` / `versions.tf` / `backend.tf` /
+`*.tfvars` / `*.sh` / `provider "…" {}` change under a planned root is the same shape.
+
+**The ruling (operator, 2026-09-16): the gate stays as it is — the timer never plans a refused
+head, and there is no author-based relaxation** (a bot-vs-human split of the refusal was considered
+and rejected as a second, messier gate). What was missing was the mechanism behind the policy's own
+sentence, *"or gets a human plan in the jail"*: **`devbox run mgmt-human-plan -- <pr>`**
+(`scripts/mgmt-human-plan.sh` → ssh → the box's `mgmt-sentinel.sh --human-plan <pr>`). It is the
+same sentinel run, for ONE head, ordered by a human who has read the diff — the act `mgmt-tf plan`
+already was, with a verdict at the end: stage 1 runs and is **reported, not enforced** (its hits
+print in the terminal and in the verdict comment as "overridden"), stage 2 plans as usual, the plan
+text is shown in the terminal for the human to read and stays on the box, and the status + comment
+post under `homelab-sentinel` — marked **HUMAN PLAN**, overridden rules named — only after a y/N
+confirmation on the exact head sha (`--yes` for a seat session; a push during the plan aborts the
+post). A later push is a new head the box refuses again; re-read, re-run. The reviewer then reads a
+green context whose description says `human plan: … — stage 1 overridden: deny_paths providers.tf`,
+so the review knows what the box did not judge on its own.
+
+The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
+that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
+its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
+the same hit forever. A **full** `devbox run mgmt-tf -- apply` of `origin/master` (no
+`-target`/`-exclude`/`-replace`) now stamps the baseline and clears `refused-rev` on success; a
+targeted apply does not (finish with a full one).
+
+The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
+`.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
+block. `deny_patterns` now carries `^[[:space:]]*provider[[:space:]]+"` (the `provider =` meta-argument on
+a resource stays allowed), with both cases in `mgmt-policy-test`.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
