@@ -55,7 +55,11 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    cd "$R"
    [ -d tofu/.terraform ] || devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >&2
    echo "mgmt-tf: $(git rev-parse --short HEAD) on $(hostname) — tofu $*" >&2
-   rc=0; flock /var/lib/mgmt/sentinel/.lock devbox run --quiet -- tofu -chdir=tofu "$@" || rc=$?
+   # ONE lock span for tofu AND the stamp: mgmt-apply reads/writes applied-rev under this same
+   # lock (a long-lived fd), so the stamp must not land after the command-form flock released
+   # (review finding on PR#1721)
+   exec 9>/var/lib/mgmt/sentinel/.lock; flock -w 600 9 || { echo "mgmt-tf: lock busy for 10 min" >&2; exit 1; }
+   rc=0; devbox run --quiet -- tofu -chdir=tofu "$@" || rc=$?
    if [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ]; then
      mkdir -p /var/lib/mgmt/apply; git rev-parse HEAD >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
      echo "mgmt-tf: apply loop baseline stamped at $(git rev-parse --short HEAD) (refused-rev cleared)" >&2

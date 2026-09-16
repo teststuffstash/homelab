@@ -82,7 +82,9 @@ human_confirm() {
   [ -r /dev/tty ] && [ -w /dev/tty ] || { log "no tty and no --yes — NOT posting the verdict for #$1@${2:0:8}"; return 1; }
   local ans
   printf 'post management-sentinel=%s on #%s@%s under homelab-sentinel? [y/N] (the loops wait on the lock — answer within 10 min) ' "$3" "$1" "${2:0:8}" >/dev/tty
-  read -r ans </dev/tty || ans=""
+  # -t 600: the prompt holds SDIR/.lock, which the timer and mgmt-apply wait on for at most 600 s
+  # (review finding on PR#1721) — an unanswered prompt times out to "no" before they PROBE-FAIL
+  read -r -t 600 ans </dev/tty || ans=""
   case "$ans" in y|Y|yes) return 0 ;; *) log "declined — nothing posted for #$1@${2:0:8}"; return 1 ;; esac
 }
 # head_still <pr> <sha> → 0 while the PR's head is still <sha> (a push during the plan = the verdict is stale)
