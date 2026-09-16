@@ -9526,3 +9526,17 @@ v1.13.10). Recovery: `tofu console` on the box renders each node's config (`nons
 ×3 → all Ready 18:50, uncordoned; pods rescheduling. Incident doc + FU-248 (plan-file-only applies;
 `-exclude`-shaped recreates). Side effects: the seat silences were expired by the failing chain and not
 re-armed after the second round; the responder budget was already exhausted so no triage issues.
+
+## 2026-09-16 ~19:05–19:25Z — responder paused (FU-249), the alert-issue board closed
+
+Operator: "How easy is it to disable the responder? … still doing only noise … a week or so" + "close all
+the open alert issues that are actually solved". **PR#1746**: the `responder` Sensor's `alert-dep` gets a
+never-matching data filter (`body.status == "__paused-FU-249__"`); Sensor/WorkflowTemplate/Role/seen-cache
+stay, re-enable = one revert; FU-249 filed in the PR (re-enable ≈09-23 after the FU-230/231 soak). Issue
+sweep: 20 open 🚨 threads — fingerprint match against Alertmanager was unreliable (it had just restarted,
+Prometheus too), so each was closed on SUBSTANCE: the reboot family (#1735/#1663/#882/#538/#542) by the
+page_table_check fix, wk-03's prepull pair (#1643/#1644) by its recreate, #1598 by PR#1576's merge,
+#1686/#1687 by cp-01's 5 GiB free, #884 by probe_success=1, the rest one-offs whose alert cleared weeks
+ago (FU-155 keeps the OOMController class). #1744 closed too: wk-01 recreated, the failed fstrim Job
+objects deleted. Open 🚨: 0. Recovery from the FU-248 incident: Grafana/Alertmanager/Argo/ArgoCD/Loki all
+Running by ~19:00; Longhorn volumes re-attaching.

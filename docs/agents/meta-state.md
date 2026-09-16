@@ -10,6 +10,9 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  **Update 19:25Z:** responder PAUSED (PR#1746 → FU-249, re-enable ≈09-23); all 21 open alert issues
+  closed on substance; platform back. The remaining plan on the main root = 7 metal config updates + taint
+  noise → the box loop refuses until a human applies them (`-exclude`-shaped, never `-target`).
   **Update 18:55Z: wk-01/02/03/04 ALL on v1.13.10** — wk-03 by design, the other three by the seat's
   targeted-apply incident (`docs/incidents/2026-09-16-targeted-apply-replaced-three-vms.md`, FU-248): no data
   lost, ~12 min platform outage, recovered via `tofu console` + `talosctl apply-config --insecure`. Tofu's
