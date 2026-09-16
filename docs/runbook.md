@@ -39,7 +39,9 @@ Gotchas:
   every `devbox run`.
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
   ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
-  `tf-plan`/`tf-apply` refuse and say so. [`management-box.md`](management-box.md) §MB3.
+  `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
+  surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
+  diff; a full `mgmt-tf apply` of master un-wedges the apply loop. [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
