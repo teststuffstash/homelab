@@ -85,6 +85,17 @@
 #                     (kubernetes_node_taint in tofu/metal.tf), so stateful workloads never land
 #                     there; explicitly-tolerating workloads still can. Applied AFTER the node
 #                     joins (docs/provisioning.md step 7).
+#   arc               node joins the ARC runner pool ⇒ Talos machine.nodeLabels
+#                     homelab.io/ephemeral=true, which is what the runner scale set's
+#                     nodeSelector matches (argocd/platform/arc-runners.yaml). SEPARATE from
+#                     `ephemeral` above on purpose: that flag is the TAINT (keep stateful work
+#                     off), this one is POOL MEMBERSHIP (invite CI runners in), and a runner pod
+#                     (~2.5 Gi incl. dind) competes with a kata microVM (≤4 Gi + 512 Mi overhead)
+#                     for the same RAM — so widening the pool onto a small kata node is an
+#                     operator call, not a default (FU-218 (a); the VM path's equivalent block in
+#                     tofu/talos.tf declines it for exactly this reason). Same boot-from-git
+#                     pattern as `avx2`: the label rides the machine config and survives a
+#                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
 #   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
 #                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
 #                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
@@ -502,6 +513,10 @@ machines:
     avx2: true           # Broadwell-EP — AVX2 present (unlike the Pentium Gold boxes)
     kata: true           # VT-x present; metal_kata install image + homelab.io/kata label
     ephemeral: true      # the ride/ARC tier taint — nothing lands here that cannot tolerate it
+    # 62 Gi and 40 threads is the ONE node where rides and ARC runners do not contend: the 8 GB
+    # laptops fit either one microVM or one runner, which is why tofu/talos.tf declines to label
+    # them. This box IS the storage-ledger's "RIDE/ARC box" row, so it carries both (FU-218 (a)).
+    arc: true            # join the ARC runner pool (homelab.io/ephemeral LABEL, not the taint)
     # EPHEMERAL (containerd image store + ride scratch) goes on the NVMe, NOT the system disk.
     # Boot stays on the SATA bay drive above: these boards boot LEGACY and a passive M.2 adapter
     # has no option ROM, so an NVMe cannot be a boot device — but it can carry EPHEMERAL, which is

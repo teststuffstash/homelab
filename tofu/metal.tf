@@ -56,6 +56,16 @@ data "talos_machine_configuration" "metal" {
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }
     })] : [],
+    # ARC runner pool. The scale set selects on the homelab.io/ephemeral LABEL while tolerating the
+    # same-named TAINT (argocd/platform/arc-runners.yaml) — so the taint alone lets runners past a
+    # node without ever sending them there. tofu/talos.tf carries this block for VMs and declines
+    # it for metal deliberately: labelling an 8 GB kata laptop would widen the pool onto the
+    # headroom a microVM needs. Hence a per-node opt-in rather than `local.ephemeral_nodes`, and
+    # boot-from-git rather than the imperative `kubectl label` wk-metal-01/-02 still carry — that
+    # one does not survive a reinstall, which is why wk-metal-03/-04 silently left the pool.
+    each.value.arc ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/ephemeral" = "true" } }
+    })] : [],
     # Kata nodes run k3d/kind-in-dind rides whose kata microVM grows to ~5Gi. Without a memory
     # reservation the kernel global-OOMs the node and takes cilium/longhorn as collateral
     # (FU-112b; incidents #63-66, #68, #69). Reserve memory + raise the HARD eviction threshold
