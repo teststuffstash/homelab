@@ -41,7 +41,14 @@ locals {
       # Install-disk partitioning (INSTALL-TIME ONLY — Talos never re-partitions a provisioned
       # volume, and XFS cannot shrink, so changing either needs a wipe + reinstall).
       ephemeral_max_size = try(m.ephemeral_max_size, null) # cap /var so user volumes get space
-      user_volumes       = tolist(try(m.user_volumes, [])) # [{name, min_size, grow}] → /var/mnt/<name>
+      # Put EPHEMERAL (containerd image store + ride scratch) on a disk OTHER than the system disk.
+      # A Talos CEL disk expression, e.g. `disk.transport == "nvme"`. Default null = system_disk.
+      # Why this exists rather than "install to the fast disk": these boards boot LEGACY, and a
+      # passive M.2 adapter carries no option ROM, so an NVMe cannot be a boot device — but it can
+      # carry EPHEMERAL, which is where the ride-host pressure actually lands (storage-ledger:
+      # `<25 % free = no scratch PVC = every docker:true worker wedged`).
+      ephemeral_disk_selector = try(m.ephemeral_disk_selector, null)
+      user_volumes            = tolist(try(m.user_volumes, [])) # [{name, min_size, grow}] → /var/mnt/<name>
     } if try(m.talos_metal_node, false) == true
   }
 
