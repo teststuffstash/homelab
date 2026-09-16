@@ -1,0 +1,27 @@
+# Scrapes the kubelet's /metrics/resource endpoint, which is the only source that can see KATA pod
+# memory — cAdvisor reads host cgroups and a kata workload lives in a microVM, so every kata ride
+# is invisible in `container_memory_working_set_bytes` today. Metrics are renamed `kubelet_resource_*`
+# so nothing collides with the cadvisor series of the same name. Manifest + the full reasoning in
+# argocd/resources/kubelet-resource-metrics/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubelet-resource-metrics
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/kubelet-resource-metrics
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
