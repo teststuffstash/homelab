@@ -360,7 +360,7 @@ machines:
     kind: metal
     zone: wk-metal-01
     label: "`wk-metal-01` (ThinkPad X240, PXE)"
-    role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier
+    role: k8s worker, compute tier (tainted, 8GB) + Longhorn bulk tier + the garage-2 zone — NO rides
     hardware: Lenovo ThinkPad X240
     cpu_cores: 4         # 2C / 4T
     memory_gb: 8
@@ -371,13 +371,31 @@ machines:
     singlecore_bogo_s: 1182.1
     multicore_bogo_s: 1932.2
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`).
-    # kata=true 2026-07-14 (docker-capable agent workers on all 3 laptops): the flag's
-    # install.image only matters at (re)install; the RUNNING node was moved to the kata image
-    # via `talosctl upgrade` (safe on metal), which is the same end state.
     # Haswell → AVX2.
+    #
+    # ⚠ NO RIDES ON THIS BOX — it carries the garage-2 zone. `kata: true` was set 2026-07-14
+    # (docker-capable agent workers on all 3 laptops) and REMOVED 2026-09-16: docs/storage-ledger.md
+    # §"a Garage zone node's envelope" requires >= 4 threads at desktop clocks, ~2 cores free at
+    # peak and 16 GB, and names "no rides on the node" — this box is 2C/4T ULV with 8 GB and fails
+    # the envelope on both counts. It is also the zone that PACES THE CLUSTER: mean PutObject 1.99 s
+    # vs 0.66 s on the other two, and both recorded stall episodes (09-08, and the 09-10 08:25Z
+    # release with the node at 9 % idle and every endpoint p99 28-100 s) were a ride sharing it.
+    # Measured again 2026-09-16 with a runner co-resident: 20.7 % idle / load1 4.82 on 4 threads
+    # (m70s 50.4 %, wk-metal-04 84.7 %), and garage-2 burning 0.54 cores against garage-1's 0.18
+    # and garage-0's 0.09 for the same rf=3 work.
+    # The ARC half went the same day: the node left `kubernetes_labels.ephemeral_tier`'s for_each in
+    # tofu/forgejo-runner.tf, which force-applies the homelab.io/ephemeral LABEL that both the ARC
+    # scale sets and the Forgejo runner select on. (A kubectl removal alone was NOT enough — that
+    # resource would have re-asserted it on the next apply.) This is the kata half.
+    # ⚠ Two consequences, both accepted:
+    #   - the kubelet memory guard in tofu/metal.tf is gated on `kata` and goes with it (operator,
+    #     2026-09-16: "let it go with kata — if they are required they should be configured together
+    #     with garage so all garage nodes get them"). Not built today.
+    #   - install.image reverts to the plain metal schematic in CONFIG only. The running node keeps
+    #     the metal_kata image until some future reinstall, which is benign: the `kata` LABEL is what
+    #     the RuntimeClass schedules on, and that goes away live. Do not "fix" that drift.
     talos_metal_node: true
     install_disk: /dev/sda
-    kata: true
     longhorn_default_disk: true
     avx2: true
     ephemeral: true

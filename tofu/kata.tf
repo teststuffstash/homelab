@@ -8,7 +8,9 @@
 # creds) survives; Cilium policies still apply at the pod's veth.
 #
 # The handler exists only on nodes installed with the metal_kata image (metal.tf `kata = true`,
-# BIOS VT-x required) — since 2026-07-14 all three laptops (wk-metal-01/02/03); the scheduling
+# BIOS VT-x required). wk-metal-02/03/04 + nx-01 today: wk-metal-01 LEFT the kata pool 2026-09-16
+# because it carries the garage-2 zone and the storage ledger's zone envelope says no rides there
+# (machines.yaml has the measurements); nx-01 joined as the RIDE/ARC box. The scheduling
 # block confines kata pods to those nodes and lets them tolerate the compute-tier taint.
 # Overhead reserves headroom for the VM itself.
 #

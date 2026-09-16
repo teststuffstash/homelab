@@ -29,8 +29,15 @@ locals {
 # "Terraform", and same-manager SSA applies prune each other's keys on a shared node — this
 # resource silently deleted longhorn_bulk_zone's topology.kubernetes.io/zone off wk-metal-01
 # (found 2026-07-14; a day of bulk-tier anti-affinity blindness).
+# ⚠ wk-metal-01 LEFT this set 2026-09-16: it carries the garage-2 zone, and the storage ledger's
+# zone-node envelope says no rides there. This resource force-applies the label the ARC scale sets
+# AND the Forgejo runner below both select on, so leaving the node here would have re-asserted it on
+# the next apply and put docker-in-docker CI back on the zone — the same ride class the kata removal
+# evicts (review finding on PR#1729; the management-sentinel plan listed this resource as `update`).
+# New members belong on the `arc` flag in machines/machines.yaml, not here — this set is the legacy
+# home and should shrink to nothing as nodes move over.
 resource "kubernetes_labels" "ephemeral_tier" {
-  for_each    = toset(["wk-metal-01", "wk-metal-02"])
+  for_each    = toset(["wk-metal-02"])
   api_version = "v1"
   kind        = "Node"
   metadata { name = each.value }
