@@ -14,7 +14,7 @@ resource "proxmox_download_file" "talos_nx02" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.nx02_node
-  file_name               = "talos-${var.talos_version}-nocloud-amd64.img"
+  file_name               = "talos-${var.talos_version_controlplane}-nocloud-amd64.img"
   url                     = data.talos_image_factory_urls.this.urls.disk_image
   decompression_algorithm = "zst"
   overwrite               = false
@@ -26,7 +26,7 @@ resource "proxmox_download_file" "talos_longhorn_nx02" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.nx02_node
-  file_name               = "talos-${var.talos_version}-longhorn-nocloud-amd64.img"
+  file_name               = "talos-${var.talos_version_worker}-longhorn-nocloud-amd64.img"
   url                     = data.talos_image_factory_urls.longhorn.urls.disk_image
   decompression_algorithm = "zst"
   overwrite               = false

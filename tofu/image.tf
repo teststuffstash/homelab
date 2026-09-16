@@ -13,7 +13,7 @@ resource "talos_image_factory_schematic" "this" {
 }
 
 data "talos_image_factory_urls" "this" {
-  talos_version = var.talos_version
+  talos_version = var.talos_version_controlplane
   schematic_id  = talos_image_factory_schematic.this.id
   platform      = "nocloud"
   architecture  = "amd64"
@@ -27,7 +27,7 @@ resource "proxmox_download_file" "talos" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.proxmox_node
-  file_name               = "talos-${var.talos_version}-nocloud-amd64.img"
+  file_name               = "talos-${var.talos_version_controlplane}-nocloud-amd64.img"
   url                     = data.talos_image_factory_urls.this.urls.disk_image
   decompression_algorithm = "zst"
   overwrite               = false
@@ -53,7 +53,7 @@ resource "talos_image_factory_schematic" "longhorn" {
 }
 
 data "talos_image_factory_urls" "longhorn" {
-  talos_version = var.talos_version
+  talos_version = var.talos_version_worker
   schematic_id  = talos_image_factory_schematic.longhorn.id
   platform      = "nocloud"
   architecture  = "amd64"
@@ -78,7 +78,7 @@ resource "talos_image_factory_schematic" "metal" {
 }
 
 data "talos_image_factory_urls" "metal" {
-  talos_version = var.talos_version
+  talos_version = var.talos_version_worker
   schematic_id  = talos_image_factory_schematic.metal.id
   platform      = "metal"
   architecture  = "amd64"
@@ -103,7 +103,7 @@ resource "talos_image_factory_schematic" "metal_kata" {
 }
 
 data "talos_image_factory_urls" "metal_kata" {
-  talos_version = var.talos_version
+  talos_version = var.talos_version_worker
   schematic_id  = talos_image_factory_schematic.metal_kata.id
   platform      = "metal"
   architecture  = "amd64"
@@ -113,7 +113,7 @@ resource "proxmox_download_file" "talos_longhorn" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.proxmox_node
-  file_name               = "talos-${var.talos_version}-longhorn-nocloud-amd64.img"
+  file_name               = "talos-${var.talos_version_worker}-longhorn-nocloud-amd64.img"
   url                     = data.talos_image_factory_urls.longhorn.urls.disk_image
   decompression_algorithm = "zst"
   overwrite               = false

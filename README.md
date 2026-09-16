@@ -45,7 +45,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 <!-- END GENERATED hosts -->
 
 <!-- BEGIN GENERATED versions — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
-Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
+Cluster: **Talos v1.13.2 (control plane) / v1.13.10 (workers) / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
 <!-- END GENERATED versions -->
 
 (Host table + version line above are generated from [`machines/machines.yaml`](machines/machines.yaml)

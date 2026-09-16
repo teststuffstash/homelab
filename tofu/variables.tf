@@ -79,10 +79,22 @@ variable "cluster_name" {
   default     = "homelab"
 }
 
-variable "talos_version" {
-  description = "Talos Linux version (also selects the Image Factory image)."
+# Two Talos versions, by ROLE (operator, 2026-09-16): control planes move as one deliberate act
+# (the three-CP program, ADR-133/FU-243), workers roll one node at a time — metal via
+# `talosctl upgrade`, VMs via the image.tf recreate — so a rollout always shows a declared-vs-live
+# gap for the nodes not yet done; that gap is the rollout's progress bar, not drift. The secrets
+# bundle follows the control-plane version. First use: FU-246 (the page_table_check reboots —
+# workers must be ≥ v1.13.4).
+variable "talos_version_controlplane" {
+  description = "Talos Linux version for control-plane nodes (secrets bundle, CP machine configs, the plain nocloud image)."
   type        = string
   default     = "v1.13.2"
+}
+
+variable "talos_version_worker" {
+  description = "Talos Linux version for worker nodes (worker machine configs, metal installer images, the longhorn nocloud image)."
+  type        = string
+  default     = "v1.13.10"
 }
 
 variable "kubernetes_version" {

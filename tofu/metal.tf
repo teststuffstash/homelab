@@ -28,7 +28,7 @@ data "talos_machine_configuration" "metal" {
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
-  talos_version      = var.talos_version
+  talos_version      = var.talos_version_worker # every metal node is a worker today (ADR-133 changes that)
 
   # Hostname is PINNED via the HostnameConfig document (highest-priority source, overrides DHCP),
   # so a cold-booted node no longer ghosts as `talos-xxx` if it DHCP-discovers before dnsmasq.
