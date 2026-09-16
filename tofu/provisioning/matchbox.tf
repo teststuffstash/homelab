@@ -54,3 +54,10 @@ resource "matchbox_profile" "talos_worker" {
 # maintenance, then REMOVE the group again post-install so it boots from disk (not a
 # reinstall loop). Groups are intentionally transient — only persistent flags stay.
 
+
+# TRANSIENT (2026-09-15) — nx-01 disk diagnostic after the NVMe swap.
+resource "matchbox_group" "nx_01_diag" {
+  name     = "nx-01-diag"
+  profile  = matchbox_profile.talos_worker.name
+  selector = { mac = "ac:1f:6b:60:ed:9a" }
+}

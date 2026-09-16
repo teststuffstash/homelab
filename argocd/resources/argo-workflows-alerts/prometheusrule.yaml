@@ -48,6 +48,31 @@ spec:
     # own DAG failing), every incident day at 54–133 — the 08-26 reviewer 404-loop, the 08-31 and
     # 09-02/03 anonymous-git throttle outages, and this one — so 40/6h fires on each of those and
     # none of the quiet days. `for: 15m` rides out a single burst that stops on its own.
+    # The lock-plane belt (FU-198; docs/incidents/2026-08-31-argo-semaphore-leak.md — three instances:
+    # 2026-08-31 the sync manager corrupted under a failure storm, 2026-09-12 the SAME signature from
+    # a benign fleet-wide latch, 2026-09-15/16 a holder whose pod Errored but whose Workflow stayed
+    # Running for two days + three phantom slots — 137 responder runs queued, no review dispatched,
+    # found on the dashboard 27 h after the belt below would have fired). The shape is "waiters exist
+    # while the subscription pool has FREE slots and nobody is latched": Argo's Pending gauge counts
+    # the lock waiters, the proxy's server-side `anthropic_subscription_semaphore_running` counts the
+    # sessions actually holding a slot, and `anthropic_subscription_dispatch_limited` is the
+    # discriminator the 09-12 instance demanded — latched ⇒ every claude consumer is deferring by
+    # design and the queue is EXPECTED, so the alert stays quiet. Replayed over the 7d ending
+    # 2026-09-16: fires from 2026-09-15 03:00Z (Pending 11, pool idle, not latched) through the fix;
+    # quiet on 2026-09-12 20–21Z (Pending 14–19, latched) and on every other hour. Threshold 10: a
+    # healthy busy hour queues a few reviews behind five running sessions with the pool FULL, which
+    # the second term already excludes; `for: 30m` rides out pods still starting.
+    - name: argo-workflows-lock-plane
+      rules:
+        - alert: ArgoLockPlaneWedged
+          expr: sum(argo_workflows_gauge{phase="Pending"}) >= 10 and on() (max(anthropic_subscription_semaphore_running) < max(anthropic_subscription_semaphore_max)) and on() (max(anthropic_subscription_dispatch_limited) == 0)
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "{{ $value | humanize }} Argo workflows Pending for 30m while the subscription pool has free slots and no rail is latched"
+            description: "Argo has held {{ $value | humanize }} workflows in Pending for 30 minutes while the proxy reports free subscription slots (anthropic_subscription_semaphore_running < anthropic_subscription_semaphore_max) and neither rail is latched — the lock plane is not granting the `subscription-capacity/claude` semaphore it could grant, so the responder, reviewer and coordinate lanes are all queued (docs/incidents/2026-08-31-argo-semaphore-leak.md; three instances so far). STEP 1 — confirm the shape and find the holders: `kubectl get wf -A -o json | jq -r '.items[] | select(.status.synchronization != null) | [.metadata.namespace, .metadata.name, .status.phase, (.status.synchronization|tostring)] | @tsv'` and read one waiter's `.status.message` (`Lock status: N/5`). N larger than the real holders listed = corrupt sync-manager state. STEP 2 — a holder that is Running with its pod already Error/Completed and no retry pending (the 2026-09-15 shape: a fix-debounce-backstop whose decide pod Errored, workflow Running for two days, also holding the fix-debounce-decide mutex) is a wedged holder: `kubectl delete wf -n <ns> <name>`. STEP 3 — restart the controller so the sync manager rebuilds from live workflow status (the only reconciliation that exists): `kubectl -n argo rollout restart deploy/argo-workflows-workflow-controller`; Running workflows ride through. BEFORE the restart decide what the queue should do when it drains: hours-old `respond-*` waiters are stale triages (still-firing alerts re-notify every repeat_interval) and 130 of them draining five at a time would occupy the pool for hours and burn the 7d budget — delete the stale ones, keep `review-*`. ⚠ If `anthropic_subscription_dispatch_limited` is 1 this alert is not firing by design and a restart fixes nothing (the 2026-09-12 lesson) — never restart on the latched shape."
     - name: argo-workflows-outcomes
       rules:
         # Per-LOOP-NAMESPACE sibling of the fleet belt above (homelab#1456 deliverable 3, FU-227 gap 1:

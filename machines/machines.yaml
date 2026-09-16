@@ -85,6 +85,17 @@
 #                     (kubernetes_node_taint in tofu/metal.tf), so stateful workloads never land
 #                     there; explicitly-tolerating workloads still can. Applied AFTER the node
 #                     joins (docs/provisioning.md step 7).
+#   arc               node joins the ARC runner pool ⇒ Talos machine.nodeLabels
+#                     homelab.io/ephemeral=true, which is what the runner scale set's
+#                     nodeSelector matches (argocd/platform/arc-runners.yaml). SEPARATE from
+#                     `ephemeral` above on purpose: that flag is the TAINT (keep stateful work
+#                     off), this one is POOL MEMBERSHIP (invite CI runners in), and a runner pod
+#                     (~2.5 Gi incl. dind) competes with a kata microVM (≤4 Gi + 512 Mi overhead)
+#                     for the same RAM — so widening the pool onto a small kata node is an
+#                     operator call, not a default (FU-218 (a); the VM path's equivalent block in
+#                     tofu/talos.tf declines it for exactly this reason). Same boot-from-git
+#                     pattern as `avx2`: the label rides the machine config and survives a
+#                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
 #   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
 #                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
 #                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
@@ -179,6 +190,21 @@ machines:
                          # (2→4 slots). Deliberately a VM: CI needs no metal (no kata/KVM — that
                          # is the RIDE pool's requirement), and reclaiming the RAM later is
                          # drain + tofu destroy of this one VM (nothing stateful lands here).
+
+  - name: wk-04
+    kind: vm
+    zone: nx-02        # the nx-02 BOX is the failure domain. ⚠ nx-01 and nx-02 are the two nodes
+                       # of ONE 2U twin chassis (shared backplane, 1+1 shared PSUs), so as zone
+                       # labels they are NOT the independent domains Longhorn/Garage anti-affinity
+                       # reads them as. Harmless while neither carries data — both are declared
+                       # storage-free — so the rule is: BEFORE any replica is placed on either
+                       # node, collapse the two to ONE zone name. Renaming a zone after replicas
+                       # land makes Longhorn see a new empty disk and declare the old one missing.
+    label: "`wk-04` (VM on nx-02)"
+    role: k8s worker, untainted batch compute (the second hypervisor's first VM)
+    hardware: Talos VM on nx-02
+    ip: 192.168.2.64
+    avx2: true           # Xeon E5-2640 v4 (Broadwell) — same family as the pve VMs
 
   - name: thinkcentre
     kind: metal
@@ -334,7 +360,7 @@ machines:
     kind: metal
     zone: wk-metal-01
     label: "`wk-metal-01` (ThinkPad X240, PXE)"
-    role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier
+    role: k8s worker, compute tier (tainted, 8GB) + Longhorn bulk tier + the garage-2 zone — NO rides
     hardware: Lenovo ThinkPad X240
     cpu_cores: 4         # 2C / 4T
     memory_gb: 8
@@ -345,13 +371,31 @@ machines:
     singlecore_bogo_s: 1182.1
     multicore_bogo_s: 1932.2
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`).
-    # kata=true 2026-07-14 (docker-capable agent workers on all 3 laptops): the flag's
-    # install.image only matters at (re)install; the RUNNING node was moved to the kata image
-    # via `talosctl upgrade` (safe on metal), which is the same end state.
     # Haswell → AVX2.
+    #
+    # ⚠ NO RIDES ON THIS BOX — it carries the garage-2 zone. `kata: true` was set 2026-07-14
+    # (docker-capable agent workers on all 3 laptops) and REMOVED 2026-09-16: docs/storage-ledger.md
+    # §"a Garage zone node's envelope" requires >= 4 threads at desktop clocks, ~2 cores free at
+    # peak and 16 GB, and names "no rides on the node" — this box is 2C/4T ULV with 8 GB and fails
+    # the envelope on both counts. It is also the zone that PACES THE CLUSTER: mean PutObject 1.99 s
+    # vs 0.66 s on the other two, and both recorded stall episodes (09-08, and the 09-10 08:25Z
+    # release with the node at 9 % idle and every endpoint p99 28-100 s) were a ride sharing it.
+    # Measured again 2026-09-16 with a runner co-resident: 20.7 % idle / load1 4.82 on 4 threads
+    # (m70s 50.4 %, wk-metal-04 84.7 %), and garage-2 burning 0.54 cores against garage-1's 0.18
+    # and garage-0's 0.09 for the same rf=3 work.
+    # The ARC half went the same day: the node left `kubernetes_labels.ephemeral_tier`'s for_each in
+    # tofu/forgejo-runner.tf, which force-applies the homelab.io/ephemeral LABEL that both the ARC
+    # scale sets and the Forgejo runner select on. (A kubectl removal alone was NOT enough — that
+    # resource would have re-asserted it on the next apply.) This is the kata half.
+    # ⚠ Two consequences, both accepted:
+    #   - the kubelet memory guard in tofu/metal.tf is gated on `kata` and goes with it (operator,
+    #     2026-09-16: "let it go with kata — if they are required they should be configured together
+    #     with garage so all garage nodes get them"). Not built today.
+    #   - install.image reverts to the plain metal schematic in CONFIG only. The running node keeps
+    #     the metal_kata image until some future reinstall, which is benign: the `kata` LABEL is what
+    #     the RuntimeClass schedules on, and that goes away live. Do not "fix" that drift.
     talos_metal_node: true
     install_disk: /dev/sda
-    kata: true
     longhorn_default_disk: true
     avx2: true
     ephemeral: true
@@ -448,6 +492,86 @@ machines:
       Longhorn disk since 2026-08-07 (ADR-089 addendum): 150Gi reserved, because Longhorn shares
       the ephemeral partition with the containerd+kata image store and the kubelet's nodefs
       floor evicts pods when they collide.
+
+  - name: nx-01
+    kind: metal
+    zone: nx-01        # ⚠ SAME 2U twin chassis as nx-02 (shared backplane + 1+1 PSUs), so these
+                       # two zone labels are NOT the independent domains Longhorn/Garage
+                       # anti-affinity reads them as. Both nodes are declared storage-free, which
+                       # is what keeps it harmless; before any replica lands on either, collapse
+                       # the two to ONE zone name (docs/storage-ledger.md §Requirements).
+    label: "`nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE)"
+    role: k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn
+    hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
+    cpu_cores: 40        # 2 sockets × 10C/20T — the largest node in the fleet
+    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    ip: 192.168.2.58
+    plug: null
+    idle_w: null         # 104 W read from the BMC (DCMI, BIOS idle, no drives, single PSU) —
+                         # deliberately NOT in this column, which holds WALL-METER numbers.
+                         # Supply-side detail + method: teststuff/hardware docs/nx-6035-g5.md.
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    remote_power: "IPMI/BMC — the fleet's FIRST (ADR-013 assumed none): `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN chassis power on|off|cycle`. No WoL or smart plug needed."
+    # Bought 2026-09-14 (€399) against the hardware register's own "no" — the objections were noise
+    # and idle draw, never function. Onboarded 2026-09-15 as a BURN-IN: the open question is whether
+    # a 2U twin is liveable in the house over days and nights under moderate load, which is why it
+    # takes ordinary workloads but carries NO Longhorn disk — nothing here is load-bearing and a
+    # drain is instant. If the noise verdict is "no", this node leaves without taking data with it.
+    # ⚠ Only ONE of the two nodes in the chassis is cabled and running; the second is deliberately
+    # off until the trial concludes. The PSUs are chassis-level 1+1 SHARED by both nodes.
+    # ⚠ eno2 (ac:1f:6b:60:ed:9b) is intentionally unconfigured and uncabled — one address per node.
+    # The install disk is pinned by SERIAL, not by wwn: this ADATA reports a NULL WWN
+    # (naa.5000000000000000) through the SAS3008, so the wwn-* symlink is not unique and /dev/sda
+    # will shift the moment an NVMe is added. It is a DRAM-less QLC drive = boot + image store only,
+    # never data (the hardware register's R2 filter).
+    talos_metal_node: true
+    install_disk: /dev/disk/by-id/ata-ADATA_SU630_2J4720061320
+    avx2: true           # Broadwell-EP — AVX2 present (unlike the Pentium Gold boxes)
+    kata: true           # VT-x present; metal_kata install image + homelab.io/kata label
+    ephemeral: true      # the ride/ARC tier taint — nothing lands here that cannot tolerate it
+    # 62 Gi and 40 threads is the ONE node where rides and ARC runners do not contend: the 8 GB
+    # laptops fit either one microVM or one runner, which is why tofu/talos.tf declines to label
+    # them. This box IS the storage-ledger's "RIDE/ARC box" row, so it carries both (FU-218 (a)).
+    arc: true            # join the ARC runner pool (homelab.io/ephemeral LABEL, not the taint)
+    # EPHEMERAL (containerd image store + ride scratch) goes on the NVMe, NOT the system disk.
+    # Boot stays on the SATA bay drive above: these boards boot LEGACY and a passive M.2 adapter
+    # has no option ROM, so an NVMe cannot be a boot device — but it can carry EPHEMERAL, which is
+    # where ride-host pressure actually lands. Matched by TRANSPORT, not serial, so it survives
+    # whichever of the two 256 GB NVMe units is fitted (same lesson as the answer-file's
+    # ID_SERIAL_SHORT match: never pin to a device name that can shift).
+    ephemeral_disk_selector: disk.transport == "nvme"
+    notes: Nutanix NX-6035-G5 node 1; the fleet's RIDE/ARC box (storage-ledger §a RIDE/ARC box); BMC 192.168.2.123; onboarded 2026-09-15, converted from compute-only 2026-09-15.
+
+  - name: nx-02
+    kind: metal
+    # No `zone:` — this box is a hypervisor, not a cluster member (same as `pve`); tofu's
+    # kubernetes_labels.node_zone would try to label a Kubernetes node that does not exist.
+    label: "`nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin)"
+    role: Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04`
+    hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
+    cpu_cores: 40        # 2 sockets × 10C/20T
+    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    ip: 192.168.2.59
+    plug: null
+    idle_w: null         # BMC/DCMI reads only; this column holds WALL-METER numbers. Method +
+                         # the per-node ladder: private hardware register docs/nx-6035-g5.md.
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    remote_power: "IPMI/BMC: `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P ADMIN chassis power on|off|cycle`. BMC `nx-02-bmc` 192.168.2.173 (DHCP-reserved)."
+    # Installed unattended 2026-09-15 from an answer-file ISO mounted over the BMC's NFS virtual
+    # media — no console, no Java iKVM (private register docs/nx-6035-g5.md). Proxmox VE 9.2.2.
+    # Storage: `nvme-thin` (233Gi Micron NVMe thin pool — the VM tier) + `local-lvm` (337Gi on the
+    # WD5000AAKX boot spinner, deliberately unused by VMs). BIOS boot order was fixed the same day
+    # (Hard Disk #1, Network #2) so a mounted virtual CD can never hijack a boot again.
+    # ⚠ BMC still on the factory ADMIN/ADMIN — LAN-only and never routed (ADR-013 posture),
+    # to change before the box is load-bearing.
+    # ⚠ DR: tofu reaches this box over SSH with the shared pve seed key, and no Proxmox API can
+    # inject it — a rebuilt nx-02 needs `ssh-copy-id -i ~/.claude/homelab-pve-ssh/id_ed25519.pub
+    # root@192.168.2.59` before the first apply, or the apply dies mid-run at disk import.
+    notes: Nutanix NX-6035-G5 node 2; Proxmox VE 9.2.2 hypervisor for wk-04; BMC 192.168.2.173; installed 2026-09-15.
 
   - name: ci-runner-01
     kind: vm

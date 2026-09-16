@@ -2159,3 +2159,48 @@ change (the exceptions ordering rule); the sentinel gets its own credential set,
 provider allows, and the App key sits in two stores (one identity, two seats); a compromised head
 still reads the whole state — the residual the allowlist bounds, not removes. Design:
 [`management-box.md`](management-box.md) §MB3. Tracker: FU-237.
+**Amended 2026-09-16 (operator):** a stage-1 refusal stays a hard `failure` — no author-based
+relaxation (bot-vs-human considered, rejected as a second gate), no non-blocking verdict class. The
+escape hatch the policy already named gets its mechanism instead: a human who has read the diff
+orders the plan (`mgmt-human-plan`), the verdict posts marked as a human plan with the overridden
+rules named, and a full human apply of master advances the apply loop's baseline. §MB3 "When the box refuses".
+
+### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
+
+**Status:** Accepted as the end state (operator, 2026-09-16); mechanism spike-gated. **Decision:** master is
+the desired state for the tofu roots and for the metal fleet's *install* (schematic, disk layout, role), and
+the management box is the controller: it DIFFS declared vs live per node (install-time included — the class
+`tofu plan` cannot see, nx-01 2026-09-16), renders that impact on the PR before merge, and SYNCS nodes
+declared `reconcile: auto` one at a time (WIP 1, a fleet floor, one attempt then parked with an alert). The
+protections live before merge (sentinel, reviewer, codeowner); operation state — windows, PXE flags — is the
+controller's and is never a commit. A human-ordered verb over ssh is the canary of the path, not the design.
+**Considered:** the human-ordered verb as the end state (rejected: the seat stays the applier); Flux
+tofu-controller / Burrito in the cluster (state + creds inside the cone FU-012 emptied); Atlantis on the box
+(imports the mechanism the DIY ruling wanted understood); hand-rolled forever (today's ceiling: every behaviour
+is another fail-closed bash loop). **Why:** a merged change that deploys nothing is the deploy-paths gap
+(FU-051/FU-097); the sentinel's plan is blind to install drift by construction. **Consequences:** the diff belt
+first (FU-235); the impact line in the sentinel verdict; `reconcile:` per node in `machines/machines.yaml`
+(control planes, hypervisors, router: `manual` until ADR-133's CPs and a CARP pair exist); transient PXE flags
+leave git (FU-244); the controller substrate — a single-node k3s on the box as a Nix closure — is decided by
+the spike (FU-242), not here; BMC duty splits reconciler (lifecycle, `reconcile: auto` nodes only) / human
+(hypervisor + recovery) on one inventory; the box's second NIC is the management-network bridge (ADR-013 to
+amend when the BMCs move). Design: [`management-box.md`](management-box.md) §MB4.
+
+### ADR-133 — Three control planes before router HA: a Talos shared VIP endpoint, one CP per chassis (2026-09-16)
+
+**Status:** Accepted (operator); executes AFTER the box program of ADR-132. **Decision:** promote to three
+control planes — `cp-01` (pve VM), one laptop (`wk-metal-03`), one VM on `nx-02` — behind a **Talos shared L2
+VIP** as `cluster_endpoint`; the single OPNsense stays; the CARP pair and Proxmox HA remain the ROADMAP's later
+layers. Order: VIP on cp-01 first (a runtime machine-config apply, no pve maintenance); the laptop reinstalled
+to maintenance; the VM created; both joins back to back — **never rest at two etcd members**. nx-02 is not
+CP-production-ready until its drives are in. **Considered:** a HAProxy VIP on the router (with one OPNsense it
+makes the API — and the recovery path — depend on the router; the L2 VIP keeps kubectl alive with the router
+down); CARP first (rewrites every service VIP + both BGP peers — the riskier move, and safer AFTER three CPs);
+both Nutanix nodes as CPs (one backplane, one PSU pair); waiting for the laptop's RAM (8 GB carries a
+workload-free CP; the two hypervisors resize in minutes). **Why:** cp-01 dying and pve maintenance taking the
+API with it are the failures that hurt most; the Nutanix twin pays the ride-pool bill the ROADMAP charged the
+promotion. **Consequences:** an ip-plan ruling for an L2 VIP address (`.2–.49` admits no NEW VIPs) — FU-243;
+the CP placement rule (one per chassis; never nx-01 while nx-02 hosts one) into `machines/generate.py`;
+`wk-metal-03` leaves the ephemeral tier (kata pool unchanged — it never carried the label, FU-235); external
+kubectl pins to the VIP owner while KubePrism spreads in-cluster API load — verify it is on; ROADMAP §HA
+re-phased. Tracker: FU-243.

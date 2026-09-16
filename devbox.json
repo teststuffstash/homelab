@@ -131,6 +131,9 @@
       "mgmt-tf": [
         "bash scripts/mgmt-tf.sh \"$@\""
       ],
+      "mgmt-human-plan": [
+        "bash scripts/mgmt-human-plan.sh \"$@\""
+      ],
       "mgmt-policy-test": [
         "bash scripts/mgmt-policy-test.sh"
       ],

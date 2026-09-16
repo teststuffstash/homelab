@@ -2,6 +2,11 @@ locals {
   controlplane = { for k, n in var.nodes : k => n if n.role == "controlplane" }
   workers      = { for k, n in var.nodes : k => n if n.role == "worker" }
 
+  # Split by hypervisor: one resource block per provider instance (a provider cannot be chosen
+  # per for_each key). Only the INFRA layer splits — talos.tf still spans all of var.nodes.
+  pve_nodes  = { for k, n in var.nodes : k => n if n.hypervisor == "pve" }
+  nx02_nodes = { for k, n in var.nodes : k => n if n.hypervisor == "nx-02" }
+
   # IP (without CIDR mask) per node.
   node_ip = { for k, n in var.nodes : k => split("/", n.ip_cidr)[0] }
 
@@ -36,12 +41,22 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      # ARC runner-pool membership: the homelab.io/ephemeral LABEL (the scale set's nodeSelector),
+      # which is NOT the homelab.io/ephemeral taint the `ephemeral` flag drives. Opt-in per node.
+      arc = try(m.arc, false) == true
       # Longhorn on the EPHEMERAL partition (default disk) — the kubelet imageGC floor patch.
       longhorn_default_disk = try(m.longhorn_default_disk, false) == true
       # Install-disk partitioning (INSTALL-TIME ONLY — Talos never re-partitions a provisioned
       # volume, and XFS cannot shrink, so changing either needs a wipe + reinstall).
       ephemeral_max_size = try(m.ephemeral_max_size, null) # cap /var so user volumes get space
-      user_volumes       = tolist(try(m.user_volumes, [])) # [{name, min_size, grow}] → /var/mnt/<name>
+      # Put EPHEMERAL (containerd image store + ride scratch) on a disk OTHER than the system disk.
+      # A Talos CEL disk expression, e.g. `disk.transport == "nvme"`. Default null = system_disk.
+      # Why this exists rather than "install to the fast disk": these boards boot LEGACY, and a
+      # passive M.2 adapter carries no option ROM, so an NVMe cannot be a boot device — but it can
+      # carry EPHEMERAL, which is where the ride-host pressure actually lands (storage-ledger:
+      # `<25 % free = no scratch PVC = every docker:true worker wedged`).
+      ephemeral_disk_selector = try(m.ephemeral_disk_selector, null)
+      user_volumes            = tolist(try(m.user_volumes, [])) # [{name, min_size, grow}] → /var/mnt/<name>
     } if try(m.talos_metal_node, false) == true
   }
 
