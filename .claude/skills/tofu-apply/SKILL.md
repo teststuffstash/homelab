@@ -28,6 +28,8 @@ for what the allowlist refuses. [`docs/management-box.md`](../../../docs/managem
 ```bash
 devbox run mgmt-tf -- plan                            # main root, ON the box, origin/master
 MGMT_REF=origin/fix/foo devbox run mgmt-tf -- plan    # a pushed branch
+devbox run mgmt-human-plan -- <pr>                    # stage-1-REFUSED PR (providers.tf etc.): read the diff,
+                                                      # plan on the box, post the required verdict as a human plan
 devbox run mgmt-tf -- apply                           # review the plan first
 devbox run mgmt-tf -- plan -target='kubernetes_deployment.ha'
 devbox run tf-validate                                # syntax-only, no backend/secrets
