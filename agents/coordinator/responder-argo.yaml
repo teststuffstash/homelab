@@ -127,6 +127,15 @@ spec:
     - name: alert-dep
       eventSourceName: agent-loop
       eventName: alert
+      # PAUSED 2026-09-16 (operator: "still doing only noise") until the responder mechanism
+      # fixes soak — FU-249 re-enables by deleting this filter (≈2026-09-23). The filter can
+      # never match: an Alertmanager webhook status is "firing" or "resolved". Everything else
+      # (the WorkflowTemplate, the Role, the seen-cache) stays, so re-enabling is one revert.
+      filters:
+        data:
+          - path: body.status
+            type: string
+            value: ["__paused-FU-249__"]
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 6 } # dumb outer belt vs alert storms
       template:

@@ -1,5 +1,17 @@
 # Fixture notes
 
+## FU-249 — the responder paused for a week (PR#1746)
+
+No fixture applies. The change is a data filter on the `responder` Sensor's `alert-dep`
+(`agents/coordinator/responder-argo.yaml`) that no Alertmanager webhook can satisfy, so Argo Events
+never submits a `respond-*` Workflow. It sits entirely in the Sensor object — before any code the
+replay harness exercises (the harness replays the WorkflowTemplate's pod-side blocks; it does not
+model Argo Events dependency filtering). The `respond` WorkflowTemplate itself is byte-identical,
+so every existing responder fixture keeps asserting exactly what it asserted before. What pins the
+pause is live: `responder_triage_sessions_today` flat at 0 while alerts fire, and no `respond-*`
+Workflows in `agent-coordinator` (`argo list`). Re-enabling (delete the filter) is the same
+no-fixture change in reverse.
+
 ## FU-072 — removing the kata endpoint-IP rewrite and `dnsPolicy: None`
 
 No fixture applies. The deleted code (`resolve_ep` plus the three docker-mode rewrites of
