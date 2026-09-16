@@ -14,8 +14,8 @@
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
 #
 # `down` does as much as it can before it lets a drain block (operator direction 2026-09-09):
-#   WAIT  a ride / Argo Workflow / coordinator pod, or a last replica whose consumer is such a
-#         transient pod (Job, Workflow, bare Pod, anything in an agent namespace) — settle waits
+#   WAIT  a ride / Argo Workflow / coordinator pod / ARC runner with a job assigned, or a last
+#         replica whose consumer is such a transient pod (Job, Workflow, bare Pod, anything in an agent namespace) — settle waits
 #         for it to finish (≤ SETTLE_TIMEOUT, 3600 s), node cordoned so nothing new lands
 #   MOVE  a last replica whose consumer is long-lived (StatefulSet/Deployment/DaemonSet) — settle
 #         adds a replica elsewhere (numberOfReplicas+1), waits for the rebuild, deletes the one on
@@ -41,7 +41,8 @@
 #   FAIL  any attached Longhorn volume cluster-wide is already degraded (a second outage on
 #         top of a rebuild is how a 2-replica volume loses data)
 #   WARN  a StatefulSet pod runs here (it moves, but that is a service interruption)
-#   WAIT  an Argo Workflow / agent ride / coordinator pod runs here (not a WARN: settle waits)
+#   WAIT  an Argo Workflow / agent ride / coordinator pod / busy ARC runner runs here (not a WARN:
+#         settle waits — a drained busy runner is a cancelled CI job)
 #   WARN  a Deployment pod runs here with replicas==1 (drain = downtime for that service)
 #
 # This is a WORKER recipe. cp-01 is the only control plane — its window is the Proxmox
@@ -130,6 +131,18 @@ rides_running() {
              or ((.metadata.ownerReferences // [])|length==0)
              or ((.metadata.namespace|test("^agent-|-agents$")) and ((.metadata.ownerReferences[0].kind // "Pod")|IN("Pod","Job","Workflow"))))
     | "\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"'
+  # ARC ephemeral runners with a JOB ASSIGNED: the EphemeralRunner (same name as its pod) carries
+  # status.workflowRunId/jobRepositoryName only while a job runs — an idle warm runner has neither
+  # and is safe to evict (ARC re-creates it). The runner pod is controller-owned, so the drain
+  # deletes it without a word and the job dies as "The operation was canceled" (oracle-fleet run
+  # 34829496525, the wk-03 window of 2026-09-14) — so a busy runner is a ride: settle waits.
+  local busy; busy="$(kubectl get ephemeralrunners -A -o json 2>/dev/null \
+    | jq -r '.items[] | select(.status.workflowRunId != null) | "\(.metadata.namespace)/\(.metadata.name) \(.status.jobRepositoryName // "?")#\(.status.workflowRunId)"')"
+  [ -n "$busy" ] && kubectl get pods --field-selector "spec.nodeName=$NODE" -A -o json | jq -r --arg busy "$busy" '
+    ($busy | split("\n") | map(select(length>0) | split(" ") | {key: .[0], value: .[1]}) | from_entries) as $b
+    | .items[] | select(.status.phase=="Running") | "\(.metadata.namespace)/\(.metadata.name)" as $k
+    | select($b[$k] != null) | "\($k) Running ARC-job:\($b[$k])"'
+  return 0
 }
 
 # ------------------------------------------------------- the window silence (FU-230 leg a)

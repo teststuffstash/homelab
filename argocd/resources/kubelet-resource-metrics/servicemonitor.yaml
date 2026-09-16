@@ -1,0 +1,79 @@
+# The kubelet's /metrics/resource endpoint — the ONLY path that can see kata pods.
+#
+# WHY THIS EXISTS. Prometheus scrapes exactly one kubelet metrics path today,
+# `/metrics/cadvisor` (the chart's kube-prometheus-stack-kubelet ServiceMonitor), and cAdvisor
+# reads HOST cgroups. A kata pod's workload runs inside a microVM, so it is in no host cgroup the
+# kubelet can walk — every `container_memory_working_set_bytes` series for a kata container is
+# simply ABSENT. Measured 2026-09-16: two live rides on nx-01 returned 0 samples, and
+# `container_oom_events_total{container="agent"}` was empty for 14 days across the whole fleet.
+# That blindness is total and silent: it looks exactly like "the pod used no memory".
+#
+# It is NOT a kata limitation. The data exists one layer down — the kata shim reports it over CRI
+# (`talosctl stats -k` shows per-container memory for the same pods), the kubelet turns that into
+# `/metrics/resource`, and metrics-server already reads it (`kubectl top pod` works on kata rides).
+# Nothing scraped it into Prometheus. This ServiceMonitor does.
+#
+# WHY NOT the chart's own `kubelet.serviceMonitor.resource: true`:
+#   1. its default `resourcePath` is the pre-1.18 `/metrics/resource/v1alpha1`, which 404s here, and
+#   2. the endpoint emits `container_memory_working_set_bytes` under the SAME NAME as cAdvisor. For
+#      every non-kata container that is two series with identical {namespace,pod,container}, and the
+#      existing alerts do `… / on (namespace,pod,container) kube_pod_container_resource_limits`.
+#      Two LHS series matching one RHS is a many-to-one error — `ContainerMemoryNearLimit`
+#      (kube-prometheus-stack.yaml), the argo controller belt and the cluster-health dashboard's
+#      `sum by (namespace)` would break or double-count. The chart exposes `resourceRelabelings`
+#      (target relabelings) but no metricRelabelings hook for that endpoint, so the rename has to
+#      happen here.
+# Hence: same scrape, our own ServiceMonitor, every metric renamed `kubelet_resource_*`. Purely
+# ADDITIVE — no existing series, alert or dashboard changes shape.
+#
+# WHAT IT DOES NOT GIVE YOU. Working set and CPU only. NOT the anon-vs-file split, NOT
+# `memory.peak`, NOT OOM events. A kata ride that sits at its ceiling on reclaimable page cache
+# looks identical here to one about to die on anon growth — the 2026-09-16 `agent-oracle-fleet-
+# issue-443` rides were exactly that shape (anon 60Mi → 558Mi under 1.4Gi of cache, peak pinned at
+# memory.max). This answers "is it near the limit"; it does not answer "why". The per-ride
+# `memory.peak` in AGENT_RUN_STATS is the other half — FU-218.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubelet-resource-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: kubelet-resource-metrics
+spec:
+  # The kubelet Service/Endpoints object the chart already maintains (one entry per node).
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubelet
+      k8s-app: kubelet
+  namespaceSelector:
+    matchNames: [kube-system]
+  endpoints:
+    - port: https-metrics
+      path: /metrics/resource
+      scheme: https
+      # 30s, not the cadvisor endpoint's 10s: this is a capacity//trend signal, not a fast belt,
+      # and it adds one series per container per node on top of what cadvisor already stores.
+      interval: 30s
+      honorLabels: true
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecureSkipVerify: true
+      relabelings:
+        - action: replace
+          sourceLabels: [__metrics_path__]
+          targetLabel: metrics_path
+      metricRelabelings:
+        # Keep the container/pod series only. node_* is dropped on purpose: node_exporter owns
+        # node-level memory and CPU, and these carry different names that would invite two answers
+        # to the same question.
+        - action: keep
+          sourceLabels: [__name__]
+          regex: container_memory_working_set_bytes|container_cpu_usage_seconds_total|pod_memory_working_set_bytes|pod_cpu_usage_seconds_total
+        # The rename that keeps this additive. Must stay LAST — it rewrites the names the keep
+        # above matches on.
+        - action: replace
+          sourceLabels: [__name__]
+          regex: (.*)
+          targetLabel: __name__
+          replacement: kubelet_resource_$1

@@ -93,6 +93,20 @@ spec:
       port: "12000"
       endpoint: /update-pr
       method: POST
+    # homelab#1621 (oracle-fleet ADR-OF-004 handoff): the corpus-published doorbell — the
+    # oracle-fleet publisher step POSTs {repo, prefix} here when a corpus release is published,
+    # and the `corpus-dispatch` Sensor (corpus-dispatch-argo.yaml) turns that ring into a GitHub
+    # `repository_dispatch` (event_type: corpus-published) on the corpus repo with the
+    # COORDINATOR's identity — ING-RT-PUBLISH forbids GitHub credentials in the stack's in-cluster
+    # steps and FU-089 keeps App keys out of stack namespaces, so the write happens where a write
+    # identity already lives. The stack rings the platform; the platform rings GitHub (ADR-111's
+    # maybe_dispatch_behind shape, write direction flipped). Payload {repo, prefix} at most,
+    # at-least-once, Sensor-rate-limited; the emitter curls the same in-cluster address the loop ns
+    # already uses for /coordinate (agents/coordinator-session.sh, agents/agent-session.sh).
+    corpus-published:
+      port: "12000"
+      endpoint: /corpus-published
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

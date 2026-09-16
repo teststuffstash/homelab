@@ -37,6 +37,7 @@ data:
     |---|---|---|
     | GithubAccessToken (ESO generator, in agent-coordinator) | `agent-git-<repo>-gen` | ~1h installation token, scoped to that ONE repo — minted CENTRALLY (FU-089: the App private key never enters a stack namespace) |
     | ExternalSecret (in agent-coordinator) | `agent-git-<repo>` | the token Secret; broker- and ns-labeled — the egress proxy's `/git-token` serves it to that repo's worker pods |
+    | GithubAccessToken + ExternalSecret (only with `fixer.readOnlyGrants`) | `agent-git-readonly-<repo>-<i>-gen` / `agent-git-readonly-<i>` | downscoped READ-ONLY installation token for a stack workload that is NOT a worker pod (e.g. a CronWorkflow); minted centrally, mirrored in-namespace as Secret `agent-git-readonly-<i>` (key `token`) |
     | ServiceAccount | `agentstack-worker` | the worker pod's identity for the proxy's TokenReview (no RBAC grants) |
     | OpenRouterKey | `<repo>` | standing budget key; the operator writes Secret `<repo>-openrouter` |
     | CiliumNetworkPolicy | `agent-worker-egress` | worker egress lockdown with a monitor→enforce dial |
@@ -90,6 +91,30 @@ data:
     `workerModelFallbacks` — its designed chain position is the reliable rung before
     `agent/blocked`). Rides run on agent-base like every other harness: project devbox
     toolchain and `fixer.docker` both work.
+
+    ## Read-only tokens for stack workloads (`fixer.readOnlyGrants`)
+
+    A stack workload that is NOT a worker pod — a CronWorkflow, a Job — cannot use the egress
+    proxy's `/git-token` (that path TokenReviews an `agent-session` pod). Give it its own
+    DOWNSCONED, READ-ONLY installation token instead:
+
+        repos:
+          - name: my-app
+            fixer:
+              readOnlyGrants:
+                - repositories: [my-iac, my-app]      # the token is scoped to these repos
+                  permissions: {contents: read, actions: read}
+
+    Each grant mints one `homelab-agents` installation token and mirrors it into the namespace as
+    Secret `agent-git-readonly-<i>` (0-based position in the list; data key `token`), refreshed
+    ~45m. The App private key never enters the namespace (FU-089): the generator lives in
+    agent-coordinator and the token arrives through the same kubernetes-provider mirror the
+    transcripts key uses.
+
+    READ-ONLY IS ENFORCED AT THE GENERATOR, never trusted from the claim: the permission VALUES
+    are ignored — every listed permission is minted as `read`, and the schema rejects any value
+    other than `read`. A grant cannot express a write. Every repo named must be covered by the
+    `homelab-agents` installation or the whole mint 422s.
 
     ## Claim-owned labels (`repos[].labels` — the Issues tier, FU-068)
 

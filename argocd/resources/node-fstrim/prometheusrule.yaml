@@ -53,3 +53,21 @@ spec:
         # and stay fired. `node_fstrim_bytes_trimmed` is pushed regardless and is the series to
         # graph when attributing churn (registry-mirror GC, Longhorn replica churn, loki
         # retention are the known three).
+        # The REACTIVE guard (#1661, fstrim-guard-* CronJobs above) ran a trim and it FAILED.
+        # Separate series (job="node_fstrim_guard") from the twice-daily job's, on purpose: the
+        # guard pushes every 15 minutes, so sharing the node_fstrim_* series would keep
+        # NodeFstrimStale quiet forever and mask a dead floor. The two paths are watched
+        # independently — this is the rule for the path that answers an off-cycle spike.
+        - alert: NodeFstrimGuardTrimFailed
+          expr: node_fstrim_guard_rc != 0 and on(node) node_fstrim_guard_trimmed == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Reactive fstrim guard failed on {{ $labels.node }} (rc={{ $value }})"
+            description: >-
+              The guard tripped on a pool level ≥79% (see fstrim.yaml, #1661) and its trim exited
+              non-zero, so freed blocks on this node were NOT returned to pve's thin pool during
+              the burst it exists to absorb. The twice-daily floor will retry at its next slot;
+              if the pool is above 80% do not wait for it — read the guard Job log in ns
+              node-maintenance, then check the pool directly on pve with
+              `lvs -o lv_name,data_percent pve` and run the runbook recipe.

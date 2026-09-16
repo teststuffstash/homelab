@@ -1,0 +1,5 @@
+# Per-host values for the nx-02 hypervisor (group `pve`; shared values in ../group_vars/pve.yml).
+#
+# Nothing to override yet: nx-02 runs one VM (wk-04, vmid 8114) and it is not `serial = true` —
+# the pve-serial-log role only tails what tofu gave a serial device. This file exists so the
+# next per-host value has an obvious home rather than leaking into group_vars.

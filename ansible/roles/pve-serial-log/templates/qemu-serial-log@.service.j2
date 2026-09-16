@@ -1,0 +1,17 @@
+# Managed by ansible/roles/pve-serial-log — edit there. Instance = the VM's vmid.
+# Tails the VM's serial0 chardev socket into {{ pve_serial_log_dir }}/<vmid>.log (#882). The socket
+# exists only while the qemu process runs — Restart=always with no start-rate limit is the design,
+# not a bug: a stopped VM = a logger in auto-restart until the VM comes back.
+[Unit]
+Description=QEMU serial0 console log for VM %i
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'echo "=== qemu-serial-log attached $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) ===" >> {{ pve_serial_log_dir }}/%i.log'
+ExecStart=/usr/bin/socat -u UNIX-CONNECT:/var/run/qemu-server/%i.serial0 OPEN:{{ pve_serial_log_dir }}/%i.log,creat,append
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

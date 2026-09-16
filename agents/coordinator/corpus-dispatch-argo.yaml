@@ -1,0 +1,166 @@
+# corpus-dispatch-argo — the platform-owned DOORBELL that turns an in-cluster "corpus published"
+# event into a GitHub `repository_dispatch` (event_type: corpus-published) on the corpus repo
+# (homelab#1621; oracle-fleet ADR-OF-004, oracle-fleet#585, goal oracle-fleet#579).
+#
+# WHY IT LIVES HERE (the shape, not a preference): a `repository_dispatch` POST requires
+# `contents: write` on the TARGET repo. ING-RT-PUBLISH (oracle-fleet) forbids GitHub credentials
+# in the stack's in-cluster steps, and FU-089 keeps App keys out of stack namespaces — so the
+# write must happen where write identity ALREADY lives: the coordinator lane, whose
+# `coordinator-git` Secret is minted from the `homelab-agents` App (git-token.yaml). The stack
+# rings the platform; the platform rings GitHub. Same shape as ADR-111's `maybe_dispatch_behind`
+# in the exporter (update-pr-argo.yaml) with the write direction flipped: there the exporter saw a
+# condition and rang the platform, here the platform sees a condition and rings GitHub. The stack
+# never holds a write token, and the stack's `release-corpus.yaml` stops depending on GitHub's
+# `schedule:` alone (a cron that GitHub delivers late or skips leaves the release unwritten).
+#
+# THE EVENT IS A DOORBELL, NEVER A WORK ITEM (the /coordinate doctrine, coordinate-argo.yaml):
+# the payload names at most {repo, prefix}, it is at-least-once and missable, and the consumer
+# re-derives everything it needs. A false or duplicate ring costs one API call, never an LLM tick
+# — so there is deliberately NO dedup ledger here (deploy-revert's `responder-seen` key exists
+# because a duplicate there would open a second revert PR; a duplicate dispatch here just starts a
+# release that re-derives its own state).
+#
+# NO MUTEX, deliberately (the update-pr-branch/coordinate contrast): the Sensor's rateLimit is the
+# only belt and the step holds no shared mutable state — two concurrent rings are two dispatch
+# POSTs, which is the at-least-once contract rather than a race. Serializing them would only delay
+# the doorbell, which is the one thing a doorbell must not do.
+#
+# ⚠ THE TARGET IS AN ALLOWLIST, NOT A PASSTHROUGH. Without it this endpoint is an open proxy from
+# any in-cluster pod to a `contents: write` API call on every repo the App covers. The corpus
+# publisher is `teststuffstash/oracle-fleet` today; a second one extends the case arm in the step
+# DELIBERATELY — an unlisted name FAILS the workflow (exit 1), it never silently no-ops.
+---
+# Sensor — on a /corpus-published ring, submit the dispatch Workflow. `sensor-review` is the same
+# submit-only Role (workflows/workflowtemplates create) the other agent-loop Sensors use.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: corpus-dispatch
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: corpus-published-dep
+      eventSourceName: agent-loop
+      eventName: corpus-published
+  triggers:
+    # The Sensor-side rate limit IS the ring's backpressure (the issue's "at-least-once,
+    # rate-limited by the Sensor"): a publisher stuck in a retry loop cannot become a dispatch
+    # storm against the target repo. 4/min sits far above the real cadence (a corpus release is a
+    # daily-ish event) and far below anything GitHub reads as abuse.
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-corpus-dispatch
+        conditions: "corpus-published-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: corpus-dispatch-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: corpus-dispatch }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            # The WHOLE ring body, unparsed (the deploy-revert shape): the step jq's what it needs
+            # and tolerates every absent key, so a `{}` POST and a {repo, prefix} POST take the
+            # same path. `body` is the EventSource's parsed JSON body.
+            - src: { dependencyName: corpus-published-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: corpus-dispatch
+  namespace: agent-coordinator
+spec:
+  entrypoint: dispatch
+  serviceAccountName: agent-coordinator
+  # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  # homelab#867 soft Longhorn-disk de-preference — same rationale.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  templates:
+    - name: dispatch
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: corpus-dispatch-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          # The coordinator identity (git-token.yaml): contents:write across the agent repos is
+          # exactly what `/dispatches` needs, and it exists ONLY in this namespace. Optional on the
+          # Secret so a first sync before ESO materialises it does not park every workflow pod in
+          # CreateContainerConfigError — the step fails LOUDLY instead (never a silent no-op: the
+          # whole point of this doorbell is that the release does not wait on GitHub's schedule).
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            # The ring: {repo, prefix} at most, every field optional.
+            printf '%s' "${PAYLOAD:-}" > /tmp/ring.json
+            RING_REPO="$(jq -r 'if type == "object" then (.repo // empty) else empty end' /tmp/ring.json 2>/dev/null || true)"
+            RING_PREFIX="$(jq -r 'if type == "object" then (.prefix // empty) else empty end' /tmp/ring.json 2>/dev/null || true)"
+            # Allowlist (see the header): the bare short name and the slug both resolve to the
+            # corpus repo; anything else refuses LOUDLY — exit 1 marks the workflow Failed, which
+            # the argo-workflows-alerts Failed rule already watches, so a widened ring is a visible
+            # signal rather than a silently dropped release.
+            # >>>REPLAY:corpus-dispatch-allowlist>>>
+            case "${RING_REPO:-teststuffstash/oracle-fleet}" in
+              oracle-fleet|teststuffstash/oracle-fleet) TARGET="teststuffstash/oracle-fleet" ;;
+              "") TARGET="teststuffstash/oracle-fleet" ;;
+              *) echo "FATAL: corpus-published ring names '$RING_REPO' — not on the dispatch allowlist (only teststuffstash/oracle-fleet); refusing to spend the coordinator's write token on it"
+                 exit 1 ;;
+            esac
+            [ -n "${GH_TOKEN:-}" ] || { echo "FATAL: coordinator-git GH_TOKEN absent — cannot ring $TARGET (fail-closed, never a silent no-op)"; exit 1; }
+            # `--input` with a jq-built body, not `-f key=value`: the nested `client_payload` object
+            # is then exactly the JSON written here (and the behaviour test asserts those bytes)
+            # rather than whatever bracket-nesting the installed gh happens to support.
+            jq -n --arg et corpus-published --arg repo "$TARGET" --arg prefix "$RING_PREFIX" \
+              '{event_type: $et, client_payload: {repo: $repo, prefix: $prefix}}' > /tmp/dispatch.json
+            echo "corpus-published: ringing $TARGET (prefix='${RING_PREFIX}') as the coordinator identity"
+            gh api -X POST "repos/$TARGET/dispatches" --input /tmp/dispatch.json
+            # <<<REPLAY:corpus-dispatch-allowlist<<<
+            echo "→ repository_dispatch sent: event_type=corpus-published repo=$TARGET"
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "256Mi" }

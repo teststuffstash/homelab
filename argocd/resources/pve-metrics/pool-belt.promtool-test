@@ -1,6 +1,10 @@
 # Behaviour fixture for pool-belt.promtool-rules (FU-158 shape): `devbox run prometheus-rules-lint`
 # runs it. Each test drives one alert through its `for:` window and asserts the OTHER alerts stay
 # quiet on the same input — promtool evaluates every rule in the file at every step.
+#
+# ⚠ Every series carries a `host` label (2026-09-15): there are TWO hypervisors now, the rules are
+# written per series, and PveMetricsAbsent has one arm PER HOST. A test that leaves a host out is
+# not a quiet test — it is a firing one.
 rule_files:
   - pool-belt.promtool-rules
 evaluation_interval: 1m
@@ -8,15 +12,18 @@ evaluation_interval: 1m
 tests:
   # A pool that climbs 60→85→95 and comes back: warning after 10m above 80, critical after 2m
   # above 90, both clear on the way down. Textfile fresh throughout (mtime tracks time).
+  # nx-02's pool sits flat and calm beside it — which is also what keeps PveMetricsAbsent quiet.
   - interval: 1m
     input_series:
-      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '60x10 85x15 95x5 60x10'
-      - series: 'pve_lvm_thin_pool_metadata_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '12x40'
+      - series: 'pve_lvm_thin_pool_metadata_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '3x40'
-      - series: 'node_textfile_mtime_seconds{job="pve-node",file="/var/lib/prometheus/node-exporter/pve.prom"}'
+      - series: 'node_textfile_mtime_seconds{job="pve-node",host="pve",file="/var/lib/prometheus/node-exporter/pve.prom"}'
         values: '0+60x40'
-      - series: 'pve_qemu_status{job="pve-node",vmid="8112",name="wk-02",status="running",qmpstatus="running"}'
+      - series: 'pve_qemu_status{job="pve-node",host="pve",vmid="8112",name="wk-02",status="running",qmpstatus="running"}'
         values: '1x40'
     alert_rule_test:
       - eval_time: 10m
@@ -28,31 +35,32 @@ tests:
       - eval_time: 22m
         alertname: PveThinPoolFillingUp
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, vg: pve, lv: data }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, vg: pve, lv: data }
             exp_annotations:
               summary: "pve thin pool pve/data at 85.0%"
               description: >-
-                The LVM thin pool under cp-01/wk-01/wk-02/wk-03 (and ci-runner-01) is above 80%. The VG
-                has no free extents, so autoextend cannot act; at 100% every VM on it pauses on
-                io-error together, control plane included. Return blocks now: trigger the fstrim
-                CronJobs (`kubectl -n node-maintenance create job --from=cronjob/<node> ...`), then
-                read `lvs -o lv_name,data_percent pve` on pve. Recipe: docs/runbook.md
-                §"Reclaiming thin-pool space from a Talos VM".
+                An LVM thin pool carrying Talos VMs is above 80%. Check the VG's free extents first
+                (`pve_lvm_vg_free_bytes{host="pve",vg="pve"}`): pve's are ~0, so autoextend cannot
+                act there and the human IS the autoextend. At 100% every VM on the pool pauses on
+                io-error together — on pve that includes the control plane. Return blocks now:
+                trigger the fstrim CronJobs (`kubectl -n node-maintenance create job
+                --from=cronjob/<node> ...`), then read `lvs -o lv_name,data_percent pve` on pve.
+                Recipe: docs/runbook.md §"Reclaiming thin-pool space from a Talos VM".
       - eval_time: 22m
         alertname: PveThinPoolAlmostFull
         exp_alerts: []          # 85% is not >90
       - eval_time: 29m
         alertname: PveThinPoolAlmostFull
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, vg: pve, lv: data }
+          - exp_labels: { severity: critical, job: pve-node, host: pve, vg: pve, lv: data }
             exp_annotations:
               summary: "pve thin pool pve/data at 95.0% — VMs pause at 100%"
               description: >-
-                Under 10% headroom on the pool that carries the control plane. One image pull or one
-                Longhorn rebuild finishes it. Act on pve directly: fstrim the guests (runbook recipe),
-                or destroy a sacrificial guest (`qm destroy 9001` freed 26 points on 2026-09-03). If
-                VMs are already paused: `qm status <vmid> --verbose | grep qmpstatus`, free space,
-                then `qm resume <vmid>`.
+                Under 10% headroom on a pool carrying Talos VMs — on pve that pool carries the
+                control plane. One image pull or one Longhorn rebuild finishes it. Act on pve
+                directly: fstrim the guests (runbook recipe), or destroy a sacrificial guest (`qm
+                destroy 9001` freed 26 points on 2026-09-03). If VMs are already paused: `qm status
+                <vmid> --verbose | grep qmpstatus`, free space, then `qm resume <vmid>`.
       - eval_time: 36m
         alertname: PveThinPoolFillingUp
         exp_alerts: []          # back to 60%
@@ -72,34 +80,78 @@ tests:
         alertname: PveMetricsAbsent
         exp_alerts: []
 
+  # THE SECOND HYPERVISOR (2026-09-15). nx-02's own pool fills while pve's stays calm: the alert
+  # must name nx-02 and its VG, and exactly one alert must fire. This is the test that would have
+  # failed before the rules were made per-host — the old text sent the reader to the wrong box.
+  - interval: 1m
+    input_series:
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '70x5 92x20'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
+        values: '55x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PveThinPoolFillingUp
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vg: nvme-thin, lv: data }
+            exp_annotations:
+              summary: "nx-02 thin pool nvme-thin/data at 92.0%"
+              description: >-
+                An LVM thin pool carrying Talos VMs is above 80%. Check the VG's free extents first
+                (`pve_lvm_vg_free_bytes{host="nx-02",vg="nvme-thin"}`): pve's are ~0, so autoextend
+                cannot act there and the human IS the autoextend. At 100% every VM on the pool
+                pauses on io-error together — on pve that includes the control plane. Return blocks
+                now: trigger the fstrim CronJobs (`kubectl -n node-maintenance create job
+                --from=cronjob/<node> ...`), then read `lvs -o lv_name,data_percent nvme-thin` on
+                nx-02. Recipe: docs/runbook.md §"Reclaiming thin-pool space from a Talos VM".
+      - eval_time: 20m
+        alertname: PveThinPoolAlmostFull
+        exp_alerts:
+          - exp_labels: { severity: critical, job: pve-node, host: nx-02, vg: nvme-thin, lv: data }
+            exp_annotations:
+              summary: "nx-02 thin pool nvme-thin/data at 92.0% — VMs pause at 100%"
+              description: >-
+                Under 10% headroom on a pool carrying Talos VMs — on pve that pool carries the
+                control plane. One image pull or one Longhorn rebuild finishes it. Act on nx-02
+                directly: fstrim the guests (runbook recipe), or destroy a sacrificial guest (`qm
+                destroy 9001` freed 26 points on 2026-09-03). If VMs are already paused: `qm status
+                <vmid> --verbose | grep qmpstatus`, free space, then `qm resume <vmid>`.
+      - eval_time: 20m
+        alertname: PveMetricsAbsent
+        exp_alerts: []
+
   # A guest paused on a failed write (the 2026-09-03 signature) fires the io-error rule after 1m.
   - interval: 1m
     input_series:
-      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '99.9x10'
-      - series: 'node_textfile_mtime_seconds{job="pve-node",file="/var/lib/prometheus/node-exporter/pve.prom"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '12x10'
+      - series: 'node_textfile_mtime_seconds{job="pve-node",host="pve",file="/var/lib/prometheus/node-exporter/pve.prom"}'
         values: '0+60x10'
-      - series: 'pve_qemu_status{job="pve-node",vmid="8112",name="wk-02",status="running",qmpstatus="io-error"}'
+      - series: 'pve_qemu_status{job="pve-node",host="pve",vmid="8112",name="wk-02",status="running",qmpstatus="io-error"}'
         values: '1x10'
     alert_rule_test:
       - eval_time: 3m
         alertname: PveVmIoError
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, vmid: "8112", name: wk-02, status: running, qmpstatus: io-error }
+          - exp_labels: { severity: critical, job: pve-node, host: pve, vmid: "8112", name: wk-02, status: running, qmpstatus: io-error }
             exp_annotations:
               summary: "pve guest wk-02 (vmid 8112) is paused on io-error"
               description: >-
-                The guest hit a failed write and QEMU paused it — the 2026-09-03 signature (thin pool
-                at 100%). `qm list` still says running; the Talos API is "no route to host". On pve:
-                `lvs -o lv_name,data_percent pve`, free pool space, then `qm resume 8112`.
+                The guest hit a failed write and QEMU paused it — the 2026-09-03 signature (thin
+                pool at 100%). `qm list` still says running; the Talos API is "no route to host". On
+                pve: `lvs -o lv_name,data_percent`, free pool space, then `qm resume 8112`.
 
   # The collector stopped: mtime freezes at t=0 while the pool number keeps being served. Stale
   # after 600s + 5m; the pool alerts do NOT fire on the frozen 60%.
   - interval: 1m
     input_series:
-      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '60x20'
-      - series: 'node_textfile_mtime_seconds{job="pve-node",file="/var/lib/prometheus/node-exporter/pve.prom"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '12x20'
+      - series: 'node_textfile_mtime_seconds{job="pve-node",host="pve",file="/var/lib/prometheus/node-exporter/pve.prom"}'
         values: '0x20'
     alert_rule_test:
       - eval_time: 10m
@@ -108,7 +160,7 @@ tests:
       - eval_time: 16m
         alertname: PveMetricsStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, file: /var/lib/prometheus/node-exporter/pve.prom }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, file: /var/lib/prometheus/node-exporter/pve.prom }
             exp_annotations:
               summary: "pve textfile metrics not refreshed for 16m 0s"
               description: >-
@@ -121,7 +173,32 @@ tests:
         alertname: PveMetricsAbsent
         exp_alerts: []
 
-  # No series at all (exporter down / ScrapeConfig gone): absent after 15m.
+  # ONE hypervisor's meter goes away while the other keeps reporting — the case an unqualified
+  # absent() cannot see, and the reason the rule has one arm per host.
+  - interval: 1m
+    input_series:
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
+        values: '60x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PveMetricsAbsent
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PveMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02 }
+            exp_annotations:
+              summary: "nx-02 thin-pool meter absent — that pool is unmetered again"
+              description: >-
+                No pve_lvm_thin_pool_data_percent series from nx-02 for 15m: node_exporter there is
+                down, the ScrapeConfig lost its target, or the textfile is missing. Every pool alert
+                for that box is blind while this fires, and the runner-image-prepull gate holds
+                pool-VM pulls (fail closed, on the max across BOTH pools). Check `curl
+                <host>:9100/metrics | grep pve_lvm` from the LAN (pve 192.168.2.3, nx-02
+                192.168.2.59), then the ScrapeConfig (`kubectl -n monitoring get scrapeconfig
+                pve-node`) and Prometheus targets.
+
+  # No series at all (Prometheus lost the whole job): BOTH arms fire, one alert per hypervisor.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -131,27 +208,42 @@ tests:
       - eval_time: 16m
         alertname: PveMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node }   # absent() keeps the equality matcher's label
+          - exp_labels: { severity: warning, job: pve-node, host: pve }   # absent() keeps the equality matchers' labels
             exp_annotations:
-              summary: "pve thin-pool meter absent — the pool is unmetered again"
+              summary: "pve thin-pool meter absent — that pool is unmetered again"
               description: >-
-                No pve_lvm_thin_pool_data_percent series for 15m: node_exporter on pve down, the
-                ScrapeConfig gone, or the textfile missing. Every pool alert here is blind while this
-                fires, and the runner-image-prepull gate holds pool-VM pulls (fail closed). Check
-                `curl 192.168.2.3:9100/metrics | grep pve_lvm` from the LAN, then the ScrapeConfig
-                (`kubectl -n monitoring get scrapeconfig pve-node`) and Prometheus targets.
+                No pve_lvm_thin_pool_data_percent series from pve for 15m: node_exporter there is
+                down, the ScrapeConfig lost its target, or the textfile is missing. Every pool alert
+                for that box is blind while this fires, and the runner-image-prepull gate holds
+                pool-VM pulls (fail closed, on the max across BOTH pools). Check `curl
+                <host>:9100/metrics | grep pve_lvm` from the LAN (pve 192.168.2.3, nx-02
+                192.168.2.59), then the ScrapeConfig (`kubectl -n monitoring get scrapeconfig
+                pve-node`) and Prometheus targets.
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02 }
+            exp_annotations:
+              summary: "nx-02 thin-pool meter absent — that pool is unmetered again"
+              description: >-
+                No pve_lvm_thin_pool_data_percent series from nx-02 for 15m: node_exporter there is
+                down, the ScrapeConfig lost its target, or the textfile is missing. Every pool alert
+                for that box is blind while this fires, and the runner-image-prepull gate holds
+                pool-VM pulls (fail closed, on the max across BOTH pools). Check `curl
+                <host>:9100/metrics | grep pve_lvm` from the LAN (pve 192.168.2.3, nx-02
+                192.168.2.59), then the ScrapeConfig (`kubectl -n monitoring get scrapeconfig
+                pve-node`) and Prometheus targets.
 
   # Host memory: 12GiB available, then a KSM collapse to 2GiB. Warning only after 15m under
   # 3GiB; clears when it comes back. The pool alerts stay quiet on a calm 60% throughout.
   - interval: 1m
     input_series:
-      - series: 'node_memory_MemAvailable_bytes{job="pve-node",instance="192.168.2.3:9100"}'
+      - series: 'node_memory_MemAvailable_bytes{job="pve-node",host="pve",instance="192.168.2.3:9100"}'
         values: '12884901888x10 2147483648x20 12884901888x10'
-      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '60x40'
-      - series: 'pve_lvm_thin_pool_metadata_percent{job="pve-node",vg="pve",lv="data"}'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '12x40'
+      - series: 'pve_lvm_thin_pool_metadata_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
         values: '3x40'
-      - series: 'node_textfile_mtime_seconds{job="pve-node",file="/var/lib/prometheus/node-exporter/pve.prom"}'
+      - series: 'node_textfile_mtime_seconds{job="pve-node",host="pve",file="/var/lib/prometheus/node-exporter/pve.prom"}'
         values: '0+60x40'
     alert_rule_test:
       - eval_time: 20m
@@ -160,21 +252,21 @@ tests:
       - eval_time: 27m
         alertname: PveHostMemoryLow
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, instance: "192.168.2.3:9100" }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, instance: "192.168.2.3:9100" }
             exp_annotations:
-              summary: "pve host memory available 2GiB — below 3GiB"
+              summary: "pve memory available 2GiB — below 3GiB"
               description: >-
-                The hypervisor commits more VM RAM than it has (65GB of allocations on 62.7GiB since
-                2026-09-08, FU-225) and lives on KSM (~11GB shared); the Talos guests have no
-                virtio_balloon, so when KSM sharing collapses or a guest grows, the host swaps and
-                then OOM-kills a VM. On pve: `free -m`, `cat /sys/kernel/mm/ksm/pages_sharing`, the
-                per-VM RSS (`ps -o rss= -p $(cat /var/run/qemu-server/<vmid>.pid)`); relief is a
-                smaller allocation in `tofu/variables.tf` (reboots that VM) — never a RAM buy for
-                this box (operator direction: the second hypervisor).
+                A hypervisor is close to committing more VM RAM than it has. pve is the known case
+                (65GB of allocations on 62.7GiB since 2026-09-08, FU-225, living on KSM ~11GB
+                shared); Talos guests have no virtio_balloon, so when KSM sharing collapses or a
+                guest grows, the host swaps and then OOM-kills a VM. On pve: `free -m`, `cat
+                /sys/kernel/mm/ksm/pages_sharing`, the per-VM RSS (`ps -o rss= -p $(cat
+                /var/run/qemu-server/<vmid>.pid)`); relief is a smaller allocation in
+                `tofu/variables.tf` (reboots that VM), or the VM moves to the other hypervisor —
+                never a RAM buy for pve (operator direction: the second hypervisor was the answer).
       - eval_time: 27m
         alertname: PveThinPoolFillingUp
         exp_alerts: []
       - eval_time: 36m
         alertname: PveHostMemoryLow
         exp_alerts: []
-

@@ -17,6 +17,11 @@ all:
         matchbox-lxc:
           ansible_host: 192.168.2.30
     pve:
+      # The group is "Proxmox hypervisor hosts", not the box named pve — nx-02 (the SECOND
+      # hypervisor, 2026-09-15) is one too, and every play here is per-host work: the thin-pool
+      # meter, the package upgrade, the serial-console tails. Per-HOST values live in host_vars/.
       hosts:
         pve-host:
           ansible_host: 192.168.2.3
+        nx-02-host:
+          ansible_host: 192.168.2.59

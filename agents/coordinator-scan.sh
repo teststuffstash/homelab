@@ -1478,7 +1478,8 @@ agents/coordinator/coordinate-argo.yaml
 agents/coordinator/responder-argo.yaml
 agents/coordinator/retro-argo.yaml
 agents/coordinator/fix-debounce-argo.yaml
-agents/coordinator/deploy-revert-argo.yaml"
+agents/coordinator/deploy-revert-argo.yaml
+agents/coordinator/corpus-dispatch-argo.yaml"
 
 # ── PARITY ASSERTION: clause_files vs ci.yaml ratchet regex (homelab#853) ──
 # The canonical ratchet regex lives in .github/workflows/ci.yaml:118 (ONE HOME).
@@ -1837,6 +1838,9 @@ EOF_DBCAND
     # field it was not asked for as absent -> jq reads null -> the selector matched nothing, ever
     # (found 2026-08-05; the nudge had been silently falling back to the GitHub cron it exists to
     # stop depending on). Adding a selector field without adding it to --json is the failure mode.
+    # `reviewDecision` is the nudge's OTHER selector field since #1649 (the merge-ready half of
+    # leg 1's predicate) — same rule: it is in this fetch, and a selector added without it here
+    # would match nothing.
     # ⚠ It happened AGAIN the very next commit to touch a selector: 671a053 (2026-08-02) scoped
     # the changes-requested clause on .author.login WITHOUT adding author here — the clause
     # matched NOTHING for four days (fixed 2026-08-06, with headRefName added for the FU-143
@@ -3323,8 +3327,21 @@ EOF_GTHEMES_OPEN
     # DETERMINISTIC nudge: call the update-branch API directly — idempotent at GitHub (422 =
     # already current), self-limiting (a nudged PR stops being BEHIND), FAIL-LOUD on 403 (a
     # token-scope gap must be visible, not silent). No LLM, no unit, no session.
+    # ⚠ MERGE-READY ONLY (#1649) — this loop is the THIRD call site of the update-branch mutation
+    # (the other two are `agents/update-pr-branch.sh` legs 1 and 2) and it is a SIBLING of leg 1's
+    # pick, so it carries leg 1's predicate or it bypasses the merge queue. It did bypass it: the
+    # selector was armed ∧ BEHIND alone, so every armed+BEHIND PR was nudged on every master push —
+    # including the codeowner parks leg 1 deliberately leaves BEHIND (measured #1649: PR#1576 ×87,
+    # PR#1540 ×92, PR#1541 ×50 merge commits, each with its own `ci` run; the commits are authored
+    # by THIS loop's identity, coordinator-git, not by the updater's homelab-merge — which is how
+    # the churn was attributed to the updater for a week). The nudge now takes the half of leg 1's
+    # predicate the snapshot can decide — `reviewDecision == APPROVED`, "nothing but currency + CI
+    # left" — and leaves everything else to the updater, which owns the full predicate (the
+    # `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch does not
+    # carry, and duplicating it here would be a second reader of one predicate). A park
+    # (REVIEW_REQUIRED) is therefore never nudged: it waits for its human, as leg 1 intends.
     # >>>REPLAY:fu124-nudge>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND"))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND") and (.reviewDecision=="APPROVED"))|.number'); do
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
       if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" \
         ${u_oid:+-f expected_head_sha="$u_oid"} >/dev/null 2>&1; then
@@ -4217,6 +4234,10 @@ EOF_GTHEMES_OPEN
     # DEDUP: before filing, check for an existing OPEN issue in the repo whose title starts
     # with "fleet-strike:" and whose body names the same error_class. If one exists, extend it
     # (add a comment listing the new affected issues) instead of creating a new filing.
+    # RESOLUTION SUBTRACTION (homelab#1712): a CLOSED filing for the same error_class whose
+    # `issues=` marker covers the affected set, closed NEWER than the newest strike in the set,
+    # means the class was resolved inside the window — the reader neither re-files nor re-applies
+    # `agent/error`. Closing a filing is the resolution signal; it is not a licence to mint the next.
     # >>>REPLAY:fleet-strike-reader>>>
     # Read all open issues with agent-fix label (already fetched as $openall). For each, fetch
     # comments and extract AGENT_STRIKE lines with error_class=. Group by error_class and check
@@ -4310,6 +4331,57 @@ EOF_GTHEMES_OPEN
                   fi
               fi
               if [ "$all_within_24h" = 1 ]; then
+                # RESOLUTION SUBTRACTION (homelab#1712) — the BACKWARD half of the dedup below.
+                # Dedup looks only for an OPEN filing, so CLOSING a filing for this class minted the
+                # next one on the following tick, and the `agent/error` apply loop undid a human's
+                # strip on every tick the class stayed inside its 24h window. Subtraction, not
+                # another rule: a CLOSED filing for this `error_class` whose `issues=` marker covers
+                # this affected set, closed NEWER than the newest strike in the set, means the class
+                # was RESOLVED inside the window — neither re-file nor re-apply. A strike newer than
+                # the close re-arms it normally (max_ts > closed_s ⇒ this does not fire).
+                fs_resolved=0
+                closed_filings="$(gh issue list --repo "$slug" --state closed --limit 50 \
+                  --json number,title,closedAt 2>/dev/null)" || closed_filings='[]'
+                jq -e 'type == "array"' >/dev/null 2>&1 <<<"${closed_filings:-null}" || closed_filings='[]'
+                while IFS= read -r cl_entry; do
+                  [ -n "$cl_entry" ] || continue
+                  cl_n="${cl_entry%%=*}"; cl_at="${cl_entry#*=}"
+                  case "$cl_n" in ''|*[!0-9]*) continue;; esac
+                  cl_s="$(jq -rn --arg t "$cl_at" '($t | fromdateiso8601? // null) // -1' 2>/dev/null || echo -1)"
+                  case "$cl_s" in ''|*[!0-9-]*) continue;; esac
+                  # The close must be NEWER than the newest strike in the set, or the class was
+                  # re-armed after the resolution and the normal path below owns it.
+                  [ "$cl_s" -gt "$max_ts" ] || continue
+                  # The filing's covered set is its `fleet-strike-fp:` marker comment (the extend
+                  # path writes one on the filing; the create path writes one on the first affected
+                  # issue). No marker ⇒ no machine record of the set ⇒ not a resolution we honour.
+                  cl_cmt="$(gh api "repos/${slug}/issues/${cl_n}/comments?per_page=100" 2>/dev/null)" || cl_cmt=''
+                  jq -e 'type == "array"' >/dev/null 2>&1 <<<"${cl_cmt:-null}" || continue
+                  # AUTHOR FILTER (review, homelab#1712). The marker is a MACHINE ruling, so only
+                  # the loop's own bot may author it — same discipline as the arbitrate ruling read
+                  # (L4568). Without this, this repo being public with issues enabled means any
+                  # GitHub user can open a correctly-titled issue, post a wide `issues=` marker and
+                  # close it, and suppress the circuit breaker for that class at zero cost. The
+                  # REST comments response carries the App login with a `[bot]` suffix, so strip it
+                  # before comparing (the GraphQL reads elsewhere see it without).
+                  cl_set="$(jq -r --arg ec "$ec" '
+                    [.[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == "homelab-agents-1234")
+                     | (.body // "") | select(startswith("fleet-strike-fp: error_class=\($ec)"))
+                     | capture("issues=(?<s>[0-9,]+)") | .s] | last // ""
+                  ' <<<"$cl_cmt" 2>/dev/null || true)"
+                  [ -n "$cl_set" ] || continue
+                  cl_covers=1
+                  for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+                    [ -n "$fn" ] || continue
+                    case ",${cl_set}," in *",${fn},"*) : ;; *) cl_covers=0;; esac
+                  done
+                  if [ "$cl_covers" = 1 ]; then fs_resolved=1; break; fi
+                done <<< "$(printf '%s' "$closed_filings" | jq -r --arg ec "$ec" \
+                  '[.[] | select(.title | startswith("fleet-strike: error_class=\($ec)"))] | .[] | "\(.number)=\(.closedAt // "")"' 2>/dev/null || true)"
+                if [ "$fs_resolved" = 1 ]; then
+                  orphans="${orphans}[$repo] ✓ FLEET STRIKE RESOLVED: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — filing #${cl_n} closed ${cl_at} newer than the newest strike; no re-file, no agent/error re-apply\n"
+                  continue
+                fi
                 fleet_strike_issues="${fleet_strike_issues}${ec}=${nums} "
                 orphans="${orphans}[$repo] ⚠ FLEET STRIKE: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — applying agent/error, commenting, filing\n"
               fi

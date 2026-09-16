@@ -56,7 +56,25 @@ if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
   exit 2
 fi
 
-hits="$(git diff --name-only "$BASE" HEAD | grep -E "$GOVERNANCE" || true)"
+# homelab#1441 (b) — the SECOND half of that class (PR#1699, 2026-09-14): in PR CI the checkout
+# is the MERGE ref (base tip + head), so a two-dot diff from the fork-time base.sha lists every
+# file master changed since the fork as if the branch wrote it — a docs-only worker PR "touched"
+# ci.yaml, devbox.json and a script master had added that afternoon, ci-red twice. The branch's
+# OWN files are the three-dot compare base...head, which needs the merge-base — absent in a
+# depth-1 checkout — so in CI ask GitHub for it (server-side three-dot, depth-independent);
+# locally git has the history and `BASE...HEAD` is the same answer. Fail closed either way.
+if [ -n "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  if ! changed="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE_REF:-master}...${PR_HEAD_SHA}" --jq '.files[].filename' 2>/dev/null)"; then
+    echo "governance-lint: FAIL — could not read compare ${BASE_REF:-master}...${PR_HEAD_SHA} from GitHub; refusing to report success." >&2
+    exit 2
+  fi
+else
+  if ! changed="$(git diff --name-only "$BASE"...HEAD 2>/dev/null)"; then
+    echo "governance-lint: FAIL — no merge-base between '$BASE' and HEAD (shallow checkout?); refusing to report success." >&2
+    exit 2
+  fi
+fi
+hits="$(printf '%s\n' "$changed" | grep -E "$GOVERNANCE" || true)"
 
 # ASSEMBLY-LANE ARM (homelab#1036, 2026-09-01). ADR-102's assembly PR is opened by the
 # COORDINATOR, whose token is minted from the same App as the worker's — so a `goal/**` head

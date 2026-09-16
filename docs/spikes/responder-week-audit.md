@@ -75,6 +75,9 @@ Excluded (same login, not responder): #887 and #1467 timelines (coordinator agen
 
 ## OPEN responder issues (19) — what to do / where the context is
 
+> **Status 2026-09-14 (the seat's pass, operator-scoped — see the dated section at the end):**
+> every "YES now" row below is executed; the table is kept as the audit's record.
+
 | issue | what to do | context |
 |---|---|---|
 | homelab#1546 AgentAttentionStanding (oracle-fleet#361) | codeowner-read oracle-fleet PR#554 (`.agents/probe.md`, bot-approved, BLOCKED REVIEW_REQUIRED — verified now), then close | #1546 09-11 comment; #361 reopened 09-10 12:23 blocked on #344 → PR#554 |
@@ -150,6 +153,19 @@ Shape proposed (each leg tracked: FU-230 silence + declared window, FU-231 bucke
 FU-232 reporter-keyed subject grafts):
 1. `node-maintenance.sh settle/down` opens a node-scoped Alertmanager silence, `up` expires it —
    deterministic, no responder change; removes 5 of the 9 wrongs and 5 of the 7 #857 comments.
+   **Shipped as PR#1601, 2026-09-12 — the label taxonomy is the lesson.** One 9-min `m70s` window
+   cost THREE triage sessions (#261/#884/#1600) because `node=` alone catches almost nothing, so a
+   window now silences `instance=~<ip>`, `node=<name>`, the Garage health set on a zone node, and
+   the node's **pod names**; `PodSigkilled` carries no node key and fires up to 30 m late, so that
+   last silence deliberately outlives the window.
+   ⚠ **It still leaks the DaemonSet-rollout class — sighted 2026-09-16 (#542 recurrence #3).** An
+   `nx-01` wipe+reinstall window silenced all four arms at 08:08:46Z and `KubeDaemonSetRolloutStuck`
+   fired anyway, costing a responder session. That alert is labelled by namespace + daemonset: it
+   carries neither `node` nor `instance`, and the pod that went Pending (`cilium-przdf`) was minted
+   AFTER the silence, so the pod-name arm held only its predecessors. Every arm the taxonomy keys on
+   is absent by construction, so any multi-reboot window leaks this class. Leg 2 is the fix that
+   generalises — match on the DECLARED WINDOW, not on labels the alert does not carry; enumerating
+   `daemonset=~…` arms per alert name is the losing game this sighting demonstrates.
 2. A seat-written cluster record (ConfigMap, the `responder-seen` shape) declaring the change window
    — who is at the seat, what is being rolled, which objects to expect alerts on, until when — that
    the responder brief prints exactly like the ArgoCD observation-window line. Costs no push. An
@@ -165,3 +181,44 @@ FU-232 reporter-keyed subject grafts):
    `garage-s3.sh` + jq from the jail today. An MCP server is the packaged read for a consumer without
    jail tooling (a stack jail, a phone) — none has appeared (README's standing rule).
 Term hygiene: "seat window" / "triage bucket" are NOT coined here — glossary check (FU-163) at build.
+
+## Executed (2026-09-14, seat pass — "only the alerts/responder updates", operator-scoped, no sweep)
+
+What moved, row by row (TICK-LOG 2026-09-14 midday cont.; the machine truth is the board):
+
+| row | outcome |
+|---|---|
+| #1557, #1580, #1584, #903, #500 | closed by the operator 06:00Z on this audit's rows (#1584 re-closed 13:xxZ after the wk-03 disk/GC fix landed) |
+| #1547 → PR#1576 | merged 06:02Z at the codeowner read; #1547 closed `agent/done`; #1598 (its park alert) closed |
+| #153 | **fix landed**: Prometheus already carried the 8Gi limit live; the query-slots graft → PR#1679 `query.maxConcurrency` 40, live 11:23Z; closed |
+| #114 | **fix landed after 5 weeks**: the inline `renovate-approve.yaml` replaced by the reusable caller in sleep-tracking (#149) + circles (#95), admin-merged (the App lacks `workflows`); closed |
+| #811 | closed on substance (loki-0 stable since 09-12, quota 20Gi); meta-state (4) answered from c2 |
+| #1013, #542, #100, #261, #121 | closed on substance (rule guard present; node churn; Optanes left with thinkcentre → FU-234; single reboot + the repeat-class detectors exist; annotation already post-FU-038) |
+| #857 | pointer added: wk-02 (a VM) took an 11-kill OOMController spree 09:15Z with 5 GiB free — spike `talos-psi-thresholds.md` §7; FU-155's tune-vs-accept ruling is where it lands |
+| #1546, #241, #103, #882, #884 | left as-is (stack lane / graft reads / the serial console now waits for wk-03's next reboot on #882) |
+
+Two machinery defects this pass found that the week's audit could not see:
+
+- **SILENT class the crosscheck cannot detect** — every `respond-*` run carrying a 22-alert
+  `PodSigkilled` payload (58–65 KB) died on `configmaps is forbidden`: Argo v4.0 offloads an
+  oversized template into a ConfigMap the controller's ClusterRole could not create, while every
+  smaller run succeeded and wrote its ledger entry. The wk-02 spree got no issue. PR#1678
+  `controller.rbac.writeConfigMaps: true`, verified `can-i` → yes.
+- **A control-plane blackout locks sessions out for 15 min** — cp-01's 70 s power-cycle (#1687)
+  made the proxy's `ref: resolve` miss four times 7 s apart (one per negative-TTL expiry); each
+  fresh miss counted on the cred circuit (#1020 covered only blips shorter than the TTL) → a ride
+  died on it ten minutes later (#1620 round 2). PR#1691: transient kube-API failures answer 503 +
+  Retry-After and never count.
+
+Structural findings, status: (1) reporter-keyed subject grafts — still FU-232, the magnet threads
+above were closed rather than re-keyed; (2) maintenance windows invisible — **built** (FU-230 leg
+a: `node-maintenance.sh settle/down` opens node + pod-scoped silences, `up` expires them; today's
+three windows cost no triage session); (3) proof-fires — unchanged; (4) `fix` verdicts in comments
+inert — confirmed again by #153, done by hand; (5) the debouncer queuing a guarded path — the
+**currency gate (FU-133 leg c)** is the live behaviour now: a resolved alert is NOT queued and the
+machine asks a human to say "the defect outlives the alert" — the four remaining fixer-lane items
+(#1675 trim cadence, #1594 fixtures, #1664 csi-plugin limits, #1672 cron stagger) were queued by
+hand that way on 2026-09-14, each with its target narrowed in the comment; no Goal — four unrelated
+alert-born fixes are the maintenance stream, not a theme (ADR-126); (6) #1456's incomplete fix —
+closed by #1547/PR#1576.
+

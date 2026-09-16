@@ -39,7 +39,9 @@ Gotchas:
   every `devbox run`.
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
   ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
-  `tf-plan`/`tf-apply` refuse and say so. [`management-box.md`](management-box.md) §MB3.
+  `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
+  surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
+  diff; a full `mgmt-tf apply` of master un-wedges the apply loop. [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
@@ -171,8 +173,8 @@ only LAN DHCP.
 
 `tofu/longhorn.tf` — Helm 1.12.0, `longhorn` is the **default StorageClass** (replica=2, zone
 soft-anti-affinity). All stateful services use Longhorn PVCs (not node-pinned). ⚠ **Since
-2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02's pooled disk
-is `allowScheduling=false` and thinkcentre left cluster duty), so every r=2 std volume must hold
+2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02 left the tier
+for good on 2026-09-14 and thinkcentre left cluster duty), so every r=2 std volume must hold
 one copy on each — soft anti-affinity means a capacity squeeze surfaces as SILENT co-location,
 not a Pending volume. The `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy
 pods — eligibility ruling in `docs/storage-ledger.md`) has **no backing disk** until the Optane
@@ -363,48 +365,63 @@ reboot — that's why the explicit `reboot` follows (switches to B). Verify with
 extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
 (iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
 
-### Reclaiming thin-pool space from a Talos VM (pve `local-lvm`)
-Deleting data inside a Talos VM does **not** return blocks to pve's LVM thin pool. Nothing in the
-guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its thin volume was
-96.95% allocated, and the pool reached **99.14%** (at 100% every VM on it goes read-only together).
+### Reclaiming thin-pool space from a Talos VM
+Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
+Nothing in the guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its
+thin volume was 96.95% allocated, and pve's pool reached **99.14%** (at 100% every VM on that pool
+goes read-only together).
+
+**Which box and which pool — read this off the alert, do not assume.** There are two hypervisors,
+each with its own pool, and a trim on one returns nothing to the other. Every `PveThinPool*` alert
+carries `host` / `vg` / `lv`; the pairs today are:
+
+| `host` | ssh | VG / pool LV | Talos VMs on it |
+|---|---|---|---|
+| `pve` | `192.168.2.3` | `pve` / `data` (Proxmox storage `local-lvm`) | cp-01, wk-01, wk-02, wk-03 (+ ci-runner-01, not a k8s node) |
+| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | wk-04 |
+
+Below, `<host>`, `<vg>` and `<vmid>` are that row's values; the worked numbers are pve's.
 
 Two prerequisites, then the trim:
 
-1. **`discard=on` on the disk** (`ssd=1` too, it makes the guest advertise TRIM support). This is a
-   PENDING change — it needs a VM stop/start, not just a config write. `qm reboot` applies it.
+1. **`discard=on` on the disk** (`ssd=1` too, it makes the guest advertise TRIM support). Set by
+   tofu on every VM (`proxmox.tf` / `nx02.tf`), so this is a check, not a step — but it is a
+   PENDING change when newly set: it needs a VM stop/start, not just a config write. `qm reboot`
+   applies it.
    ```
-   qm set 8112 --scsi0 local-lvm:vm-8112-disk-0,...,discard=on,ssd=1
-   qm pending 8112 | grep scsi0     # cur == new once applied
+   qm set <vmid> --scsi0 <storage>:vm-<vmid>-disk-0,...,discard=on,ssd=1   # e.g. 8112 / local-lvm
+   qm pending <vmid> | grep scsi0     # cur == new once applied
    ```
 2. **Run `fstrim` from a privileged pod on the node.** This is the part that surprises:
 
    **This is automated since 2026-08-25** — `argocd/resources/node-fstrim/` runs exactly this,
-   daily, on every pool VM, and alerts if it stops (`NodeFstrimStale`). Reach for the manual form
-   below only for a one-off on a node the CronJob does not cover (ci-runner-01) or when you need
-   the reclaim NOW rather than at 03:00.
+   twice daily on every pool VM (both hypervisors), with a reactive guard every 15 min above 79 %,
+   and alerts if it stops (`NodeFstrimStale`). Reach for the manual form below only for a one-off
+   on a node the CronJob does not cover (ci-runner-01) or when you need the reclaim NOW.
 
    ```
-   kubectl run wk02-fstrim -n kata-spike --image=alpine:3.20 --restart=Never \
-     --overrides='{"spec":{"nodeName":"wk-02","tolerations":[{"operator":"Exists"}],
+   kubectl run <node>-fstrim -n kata-spike --image=alpine:3.20 --restart=Never \
+     --overrides='{"spec":{"nodeName":"<node>","tolerations":[{"operator":"Exists"}],
        "containers":[{"name":"fstrim","image":"alpine:3.20","command":["fstrim","-v","/hostvar"],
        "securityContext":{"privileged":true},
        "volumeMounts":[{"name":"hostvar","mountPath":"/hostvar"}]}],
        "volumes":[{"name":"hostvar","hostPath":{"path":"/var","type":"Directory"}}]}}'
    ```
    Use a namespace with `pod-security.kubernetes.io/enforce: privileged` (`kata-spike`,
-   `longhorn-system`, `monitoring`). Verify on pve with `lvs -o lv_name,data_percent`.
+   `longhorn-system`, `monitoring`). Verify on the node's OWN hypervisor:
+   `ssh root@<host-ip> lvs -o vg_name,lv_name,data_percent`.
 
 ⚠ **Two approaches that look right and do NOT work** (both tried 2026-08-07, keep them dead):
 - **`qm guest cmd <vmid> fstrim`** returns `{"paths": []}` and trims nothing. Talos' qemu-guest-agent
   does not enumerate the guest's filesystems — `qm agent <vmid> get-fsinfo` returns `[]`.
-- **Mounting the guest partition on the pve host** (`losetup -P` + `mount /dev/loopNp5`) fails:
+- **Mounting the guest partition on the hypervisor** (`losetup -P` + `mount /dev/loopNp5`) fails:
   `XFS: Superblock has unknown incompatible features (0xc0)` — Talos formats EPHEMERAL with XFS
   feature bits newer than the Proxmox kernel can mount. It refuses safely, but note the trap: if
   the mount fails and you run `fstrim` against the intended mountpoint anyway, you silently trim
-  the **pve host root** instead. Check `mount` succeeded before trimming.
+  the **hypervisor's own root** instead. Check `mount` succeeded before trimming.
 
 There is no `talosctl fstrim`, and Talos' `VolumeConfig` for EPHEMERAL exposes no `discard` mount
-option, so this pod is the mechanism. Applies equally to cp-01, wk-01, wk-03 and ci-runner-01.
+option, so this pod is the mechanism. Applies to every VM in the table above.
 
 ## CloudNativePG (Postgres)
 
@@ -428,6 +445,17 @@ snapshots `/etc/pve` to `~/.claude/homelab-pve-backup/`, runs an IN-MAJOR `apt d
 never reboots. The host's thin pool is metered the same way — `devbox run -- ansible-playbook
 ansible/pve-node-exporter.yml` puts node_exporter + a textfile timer on pve (FU-093; alerts
 `PveThinPool*`/`PveVmIoError` in `argocd/resources/pve-metrics/`; re-run after a reinstall).
+**A VM that reboots itself with nothing in the ring buffer** (wk-03, five times in a week —
+homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = true` on the node in
+`tofu/variables.tf` (→ `serial_device {}` in `proxmox.tf`; Talos already boots with
+`console=ttyS0`), applied at a FULL stop/start of the VM — a guest reboot keeps the qemu
+process, so pending hardware never lands that way; use `scripts/node-maintenance.sh down <node>`
+→ `devbox run mgmt-tf -- apply` (the provider starts the stopped VM) → `up <node>`. The host
+side is `devbox run -- ansible-playbook ansible/pve-serial-log.yml` (vmid list in
+`ansible/group_vars/pve.yml`): a `qemu-serial-log@<vmid>` socat unit on pve appends the console
+to `/var/log/qemu-serial/<vmid>.log` (logrotate weekly ×8) — the kernel's last words on a panic
+are there, read them with `ssh root@192.168.2.3 tail -n 200 /var/log/qemu-serial/8113.log`. The
+chardev takes one client, so `qm terminal <vmid>` needs the logger stopped first.
 When a pool VM goes NotReady with its Talos API "no route to host", read the hypervisor FIRST:
 `qm status <vmid> --verbose | grep qmpstatus` (`io-error` = paused on a failed write) and
 `lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):

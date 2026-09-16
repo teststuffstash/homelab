@@ -1,0 +1,12 @@
+# Host-side serial-console capture for the Talos VMs flagged `serial = true` in tofu/variables.tf
+# (#882: wk-03's silent self-reboots — the guest kernel's last words on a panic die with its ring
+# buffer; on ttyS0 they land in a file on pve). Thin role-caller — logic in roles/pve-serial-log,
+# the vmid list + log dir in group_vars/pve.yml. Idempotent; re-run after a pve reinstall or
+# whenever the vmid list changes.
+# Run: devbox run -- ansible-playbook ansible/pve-serial-log.yml
+#      (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local, no creds env)
+- name: Proxmox host serial-console loggers for the flagged VMs
+  hosts: pve
+  gather_facts: false
+  roles:
+    - pve-serial-log

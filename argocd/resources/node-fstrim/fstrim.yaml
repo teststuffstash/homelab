@@ -2,15 +2,22 @@
 # docs/storage-ledger.md §"A THIRD sum: the hypervisor underneath" (FU-093).
 #
 # WHY THIS EXISTS. Deleting data inside a Talos VM does not return blocks to pve's thin pool:
-# nothing in the guest issues TRIM, so the pool only ever grows. It has now filled three times
-# (2026-08-07, 08-18, 08-24); the third froze wk-01 twice and wiped Garage's metadata
-# (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md). At 100% every VM on the pool goes
-# read-only TOGETHER — cp-01, wk-01, wk-02 and ci-runner-01, i.e. the control plane and the CI
-# runner. `discard=on` (set on all five VMs) is necessary and NOT sufficient: it only means the
-# guest's discards are honoured, and Talos never issues any. Every reclaim so far has been a human
-# running the runbook recipe by hand; 2026-08-25 found the pool back at 77.41% one day after a trim
-# took it to 47.69%, with 1.00G of VG free — so the `thin_pool_autoextend_threshold=80` belt would
-# fail exactly as it did on 08-17 (257 extents). Hence a schedule, not a reminder.
+# nothing in the guest issues TRIM, so the pool only ever grows. It has now filled FOUR times, the
+# fifth alert (2026-09-14, #1661) confirmed a NEW failure mode: the twice-daily schedule is correct
+# for the slow-creep case (1-2 points/day) but the pool can gain 6 points in 45 minutes from a CI
+# burst (arc-runner disk-pressure eviction on a pool-backed node). The twice-daily cadence leaves a
+# reaction window of up to ~12 hours, during which the pool can cross 80 % (and given the slope,
+# 90 %/critical). Fix (#1661): a reactive guard CronJob per node that queries the pool level every
+# 15 minutes and trims immediately when it is ≥79 %, so reclaim starts BEFORE the PveThinPoolFillingUp
+# alert's 10-minute `for:` window fires. The twice-daily trims remain as the guaranteed floor.
+#
+# At 100% every VM on the pool goes read-only TOGETHER — cp-01, wk-01, wk-02 and ci-runner-01, i.e.
+# the control plane and the CI runner. `discard=on` (set on all five VMs) is necessary and NOT
+# sufficient: it only means the guest's discards are honoured, and Talos never issues any. Every
+# reclaim so far has been a human running the runbook recipe by hand; 2026-08-25 found the pool back
+# at 77.41% one day after a trim took it to 47.69%, with 1.00G of VG free — so the
+# `thin_pool_autoextend_threshold=80` belt would fail exactly as it did on 08-17 (257 extents).
+# Hence a schedule, not a reminder.
 #
 # WHY A PRIVILEGED POD AND NOT SOMETHING TIDIER — both alternatives are tried and dead
 # (docs/runbook.md §"Reclaiming thin-pool space from a Talos VM"):
@@ -22,11 +29,14 @@
 # There is no `talosctl fstrim`, and Talos' VolumeConfig for EPHEMERAL exposes no discard mount
 # option. A privileged pod with /var hostPath'd is the mechanism.
 #
-# SCOPE: the four Talos VMs on the pool (machines.yaml `zone: proxmox`). The metal nodes are
-# deliberately absent — they have real disks with no thin pool underneath, so a trim there would
-# be wear-levelling housekeeping, not the failure this addresses. ci-runner-01 shares the pool but
-# is not a k8s node; it is a normal Linux guest and is covered by its own systemd fstrim.timer —
-# verify that separately, this CronJob cannot reach it.
+# SCOPE: every Talos VM whose disk sits on an LVM thin pool — the four on pve (`zone: proxmox`)
+# and, since 2026-09-15, wk-04 on nx-02's `nvme-thin` (`zone: nx-02`). The membership test is "a
+# thin pool underneath", NOT the literal zone `proxmox`: a second hypervisor's VM needs reclaim for
+# exactly the same reason, and `discard=on` in tofu is as insufficient there as it is here. The
+# metal nodes are deliberately absent — real disks, no pool, so a trim there would be
+# wear-levelling housekeeping rather than this failure. ci-runner-01 shares pve's pool but is not a
+# k8s node; it is a normal Linux guest covered by its own systemd fstrim.timer — verify that
+# separately, this CronJob cannot reach it.
 #
 # One CronJob per node because a Job cannot pin different pods to different nodes, and `nodeName`
 # is what puts a pod on a specific box. They are staggered so four simultaneous discards do not
@@ -86,6 +96,78 @@ data:
       echo "pushed fstrim metrics for ${NODE}" ||
       echo "WARN could not push fstrim metrics (the trim itself already happened)"
     exit "$rc"
+  reactive-trim.sh: |
+    #!/bin/sh
+    # Reactive off-cycle fstrim guard — #1661: query the pool level, trim only above threshold,
+    # so a CI-burst spike events reclaim before the PveThinPoolFillingUp alert's `for:` window.
+    # Never `set -e`: decision logic must survive wget/Prometheus failures.
+    set -u
+    NODE="${NODE_NAME:-unknown}"
+    PG="${PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+    PROM="${PROMETHEUS_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090}"
+    THRESHOLD="${GUARD_THRESHOLD:-79}"
+    # The series for THIS node's pool, url-encoded. Default = pve's, so the four pve VMs are
+    # unchanged; a VM on another hypervisor passes its own (POOL_QUERY on its CronJob). It must be
+    # the node's OWN pool, not `max()` over all of them: trimming wk-04 returns nothing to pve, so
+    # a shared query would make every guard fire on a pool it cannot help (and stay silent on the
+    # one it can).
+    POOL_QUERY="${POOL_QUERY:-pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Chost%3D%22pve%22%2Cvg%3D%22pve%22%2Clv%3D%22data%22%7D}"
+
+    pool_pct=$(wget -q -O- --timeout=10 \
+      "${PROM}/api/v1/query?query=${POOL_QUERY}" \
+      2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([0-9.]*\)"\].*/\1/p' | head -1)
+
+    if [ -z "${pool_pct}" ]; then
+      # FAIL OPEN: if we cannot read the pool, trim anyway. Rationale: matching trim.sh's
+      # "best-effort-metrics, never-fail-the-trim" posture — the cost of a needless trim is
+      # bounded I/O on a shared NVMe (stagger is preserved), while the cost of a missed reclaim
+      # during a monitoring outage is a frozen control plane at 100 % (docs/incidents/).
+      # The twice-daily floor still runs independently as a second-time-around guarantee.
+      echo "GUARD-TRIM (query-fail) on ${NODE}: pool level unreadable — trimming anyway (fail-open)"
+      out="$(fstrim -v /hostvar 2>&1)"; rc=$?
+      echo "$out"
+      wget -q -O- --timeout=5 \
+        --post-data="node_fstrim_guard_pool_pct -1
+    node_fstrim_guard_trimmed 1
+    node_fstrim_guard_rc ${rc}
+    node_fstrim_guard_last_run_timestamp $(date +%s)
+    " "${PG}/metrics/job/node_fstrim_guard/node/${NODE}" >/dev/null 2>&1 || true
+      exit "$rc"
+    fi
+
+    pool_int=$(echo "${pool_pct}" | sed 's/\..*//')
+    [ -n "${pool_int}" ] || pool_int=0
+
+    if [ "${pool_int}" -ge "${THRESHOLD}" ]; then
+      echo "GUARD-TRIM on ${NODE}: pool at ${pool_pct}% >= ${THRESHOLD}% — running fstrim"
+      out="$(fstrim -v /hostvar 2>&1)"; rc=$?
+      echo "$out"
+      bytes="$(echo "$out" | sed -n 's/.*[( ]\([0-9]\{1,\}\) bytes.*/\1/p' | head -1)"
+      [ -n "${bytes:-}" ] || bytes=0
+      if [ "$rc" -ne 0 ]; then
+        echo "GUARD-FSTRIM-FAIL: rc=$rc on ${NODE} — pool blocks were NOT returned"
+      else
+        echo "guard-trimmed ${bytes} bytes on ${NODE} (pool was ${pool_pct}%)"
+      fi
+      wget -q -O- --timeout=5 \
+        --post-data="node_fstrim_guard_pool_pct ${pool_pct}
+    node_fstrim_guard_trimmed 1
+    node_fstrim_guard_rc ${rc}
+    node_fstrim_guard_last_run_timestamp $(date +%s)
+    " "${PG}/metrics/job/node_fstrim_guard/node/${NODE}" >/dev/null 2>&1 &&
+        echo "pushed guard metrics for ${NODE}" ||
+        echo "WARN could not push guard metrics (the trim happened)"
+      exit "$rc"
+    else
+      echo "GUARD-SKIP on ${NODE}: pool at ${pool_pct}% < ${THRESHOLD}% — no trim needed"
+      wget -q -O- --timeout=5 \
+        --post-data="node_fstrim_guard_pool_pct ${pool_pct}
+    node_fstrim_guard_trimmed 0
+    node_fstrim_guard_rc 0
+    node_fstrim_guard_last_run_timestamp $(date +%s)
+    " "${PG}/metrics/job/node_fstrim_guard/node/${NODE}" >/dev/null 2>&1 || true
+      exit 0
+    fi
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -285,6 +367,273 @@ spec:
                 - { name: script, mountPath: /script }
                 # /var is where Talos puts EPHEMERAL — the partition that actually holds the
                 # container images, Longhorn replicas and logs whose deletion never reached the pool.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-cp-01
+  namespace: node-maintenance
+spec:
+  # Reactive guard (#1661): every 15 min, query the pool level and fstrim ONLY when ≥79 % (one
+  # point below the PveThinPoolFillingUp alert's 80, so reclaim precedes the alert, normal
+  # 73–77 % operation never touches it). The guard answers the #1661 burst — 74.96 → 80.96 in
+  # ~45 min from an arc-runner disk-pressure eviction — with an off-cycle reclaim; the twice-daily
+  # fstrim above is still the guaranteed floor and runs unchanged. GUARD_THRESHOLD is an env so the
+  # exact point can be tuned without re-rendering the script. Staggered by node (:00/:03/:06/:09)
+  # for the same reason as the twice-daily set — four discards must not land on the one NVMe at
+  # once. `concurrencyPolicy: Forbid` + `nodeName` + `tolerations` mirror the floor jobs: a guard
+  # must still run on a cordoned node, and a slow query must not pile up jobs.
+  schedule: "0,15,30,45 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: cp-01
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                # Same /var hostPath as the floor job — EPHEMERAL is where the reclaimed blocks live.
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-wk-01
+  namespace: node-maintenance
+spec:
+  # Reactive guard (#1661) — same mechanism as fstrim-guard-cp-01; staggered +3 min.
+  schedule: "3,18,33,48 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-01
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-wk-02
+  namespace: node-maintenance
+spec:
+  # Reactive guard (#1661) — same mechanism as fstrim-guard-cp-01; staggered +6 min.
+  schedule: "6,21,36,51 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-02
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-wk-03
+  namespace: node-maintenance
+spec:
+  # Reactive guard (#1661) — same mechanism as fstrim-guard-cp-01; staggered +9 min.
+  schedule: "9,24,39,54 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-03
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+# ── wk-04, on the SECOND hypervisor (nx-02, 2026-09-15) ────────────────────────────────────────
+# Same pair as every pool VM above, with one difference: `POOL_QUERY` points the guard at nx-02's
+# own pool. Trimming wk-04 returns blocks to `nvme-thin` on nx-02 and to nothing else, so reading
+# pve's number here would be the wrong signal in both directions.
+# The stagger is kept for readability, not for I/O: this is a different NVMe in a different box.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-wk-04
+  namespace: node-maintenance
+spec:
+  schedule: "41 3,15 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-04
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-guard-wk-04
+  namespace: node-maintenance
+spec:
+  schedule: "12,27,42,57 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-04
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim-guard
+              image: alpine:3.20
+              command: ["/bin/sh", "/script/reactive-trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+                # nx-02's pool, url-encoded: {job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}
+                - name: POOL_QUERY
+                  value: "pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Chost%3D%22nx-02%22%2Cvg%3D%22nvme-thin%22%2Clv%3D%22data%22%7D"
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
                 - { name: hostvar, mountPath: /hostvar }
               resources:
                 requests: { cpu: 50m, memory: 32Mi }

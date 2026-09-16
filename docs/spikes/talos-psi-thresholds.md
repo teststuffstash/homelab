@@ -131,7 +131,7 @@ Composing §1 with what this repo declares for those nodes:
 |---|---|---|
 | the agent ride + dind (`agents/agent-session.sh` `AGENT_LIMITS`, ~L1535-1545, requests **=** limits) | Guaranteed, limit set | **0.0** (and likely not even enumerated, §1.3) |
 | `cilium-agent` (`tofu/cilium.tf:88`, 512Mi req=limit) | Guaranteed, limit set | **0.0** |
-| `longhorn-manager` / `longhorn-driver` (`tofu/longhorn.tf` ~L180-181) | Guaranteed, limit set | **0.0** |
+| `longhorn-manager` (`tofu/longhorn.tf:245`) / `longhorn-csi-plugin` + its CSI sidecars (`tofu/longhorn.tf:209`, `defaultSettings.systemManagedCSIComponentsResourceLimits`) | Guaranteed, limit set | **0.0** |
 | `cilium-envoy` (`tofu/cilium.tf:79`, requests only) | **Burstable, no limit** | 0.5 × ~20Mi |
 | `hubble-relay` (`tofu/cilium.tf:75`), `node-exporter` (`kube-prometheus-stack.yaml` ~L424) | **Burstable, no limit** | 0.5 × ~30Mi |
 | `longhorn` `instance-manager` / `engine-image` — Longhorn-managed, the chart's resource keys don't reach them (`tofu/longhorn.tf` ~L175-179) | **BestEffort, no limit** | 1.0 × current — the **top-ranked victim on any node they run on** |
@@ -286,6 +286,18 @@ Check 2 in particular converts this whole document from "mechanism that fits the
   during the hp-01 disk-swap maintenance + Longhorn rebuild window; self-recovered.
   hp-01's cilium-envoy also took an OOMController kill (18:03Z, requests-only Burstable —
   §2's known victim class; §5's "give cilium-envoy limits" option remains open).
+
+- **2026-09-14 — an 11-kill spree on a nocloud VM (wk-02), 5 GiB MemAvailable, in 12 s**: the
+  OOMController triggered on every 500 ms sample from 09:15:12Z to 09:15:24Z and SIGKILLed one
+  cgroup per tick — FIRST the Longhorn instance-manager (every replica process on the node), then
+  longhorn-manager, cilium-agent (twice), the four CSI controllers, the CSI plugin, engine-image
+  and the Argo Events JetStream pod (`agent-coordinator/eventbus-default-js-2`). `node_memory_
+  MemAvailable_bytes` sat at 5.1 GiB of 12 throughout (09:08–09:18Z), so the trigger was a PSI
+  stall, not exhaustion; the top working set was Prometheus at 2.2 GiB. Downstream: openrouter-
+  proxy's RWO volume multi-attached for 15 min and two coordinate ticks failed (homelab#1672
+  class B) — the VM tier is excluded from Option A's pin, so this is the shared-fate kill landing
+  on the tier the mitigation does not cover. Evidence: `talosctl -n 192.168.2.62 dmesg | grep
+  OOMController` (11 triggers, victim cgroups = pod UIDs), `kube_pod_info{uid=…}` at 09:14Z.
 
 ## Related
 

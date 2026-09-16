@@ -102,6 +102,16 @@ label_conflict() {
 # Everything else stays BEHIND and costs nothing: an unreviewed PR is reviewed BEHIND (PR#1446), a
 # changes-requested PR gets its fix round pushed BEHIND (CI runs on the content), a codeowner park
 # waits for its human — the #887 skip is now just a special case of "not merge-ready".
+# ⚠ THE PARK IS DECIDED BY `reviewDecision`, NOT RECONSTRUCTED FROM THE BOT'S REVIEWS (#1649). A
+# `REVIEW_REQUIRED` PR has the review gate still open whatever `bot_approved_head` says, so the arm
+# is never reached for one (see the guard in the loop): the #887 park skip used to live ONLY in the
+# candidate pre-filter's `latestReviews` arm, and that arm is a PROBE-COST filter, never the
+# enforcement. The two disagreed exactly on the platform's own documented trap: `latestReviews` is
+# the latest review PER AUTHOR, so an approve-then-aside reviewer sequence (the PR#235 trap —
+# docs/agents/* and 4 sibling readers carry the `reviews[]`, never `latestReviews[]` lesson) leaves
+# it non-APPROVED while `reviews[]` still carries the APPROVED at head. A park in that shape was a
+# candidate, and the arm below then re-admitted it → one update per master push for the whole park
+# (measured #1649: PR#1576 ×87, PR#1540 ×92, PR#1541 ×50 — the class #1452 exists to end).
 # NOT IMPLEMENTED, deliberately: the sole-codeowner waiver arm (author is the repo's only
 # codeowner ⇒ REVIEW_REQUIRED is waivable). CODEOWNERS ownership is not readable from the picker's
 # `gh pr list` snapshot, and this leg fails toward NOT updating: a park costs a pass, a wasted CI
@@ -112,11 +122,13 @@ label_conflict() {
 # commit — updater merge commits are not content, or this leg would invalidate its own approvals
 # (the nine-review loop, oracle-fleet#57).
 # The commit half is NOT in the snapshot (the node-cap note at the list call): it is probed per
-# candidate with `gh pr view --json commits`, and only for a candidate whose snapshot `reviews`
-# carry a bot APPROVED at all — without one the predicate is false with no call, which keeps the
-# common BEHIND population (unreviewed, waiting for its first review) at zero API cost. An
-# APPROVED reviewDecision is ready on the snapshot alone. An unreadable probe HOLDS with a line
-# (rule #6 — this leg fails toward NOT updating; the */15 cron retries).
+# candidate with `gh pr view --json commits`. The candidate pre-filter above exists ONLY to keep
+# that probe off the common BEHIND population (unreviewed, waiting for its first review) at zero
+# API cost — it is not an admission rule: everything it lets through still faces the park guard and
+# `bot_approved_head` below, and its `latestReviews` arm may be wrong (the trap above) without any
+# consequence beyond one wasted candidate slot. An APPROVED reviewDecision is ready on the
+# snapshot alone. An unreadable probe HOLDS with a line (rule #6 — this leg fails toward NOT
+# updating; the */15 cron retries).
 cands="$(jq -c '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                 and .reviewDecision != "CHANGES_REQUESTED"
                 and (.reviewDecision != "REVIEW_REQUIRED" or
@@ -130,6 +142,12 @@ while read -r pr; do
   if [ "$MERGE_READY_ONLY" = false ] || [ "$(jq -r '.reviewDecision' <<<"$pr")" = APPROVED ]; then
     ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; continue
   fi
+  # THE PARK GUARD (#1649) — the ONE enforcement of the codeowner park, and the reason the
+  # candidate pre-filter above must never be read as it. A REVIEW_REQUIRED PR is not merge-ready by
+  # GitHub's own computation: a review it requires has not been given, so there is more than
+  # currency + CI left, and no reconstruction of the bot's review history may overrule that. This
+  # also makes the guard probe-free — a park costs zero API calls, not just zero updates.
+  if [ "$(jq -r '.reviewDecision' <<<"$pr")" = REVIEW_REQUIRED ]; then continue; fi
   approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
     [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
       | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"

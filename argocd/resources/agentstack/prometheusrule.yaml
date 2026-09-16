@@ -1,0 +1,53 @@
+# AgentStack XR health belt (homelab#1620 closeout, 2026-09-14).
+#
+# Source metric: kube-state-metrics custom-resource-state on `.status.conditions` of every
+# AgentStack (argocd/platform/values/kube-prometheus-stack.yaml → `kube-state-metrics.customResourceState`).
+# Synced=False is the condition every missed-RBAC compose has parked a claim in so far
+# (rbac.yaml header: pods/exec, workflows, endpoints, resourcequotas, clustersecretstores), and the
+# XR stays there silently — Ready keeps its last True, the stack's workloads run on stale renders,
+# and the operator notices when a consumer waits on a Secret that never came.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentstack-health
+  namespace: monitoring
+  labels:
+    app: agentstack
+spec:
+  groups:
+    - name: agentstack-health
+      rules:
+        # `for: 15m` rides out the transient Synced=False flips a reconcile-error storm produces
+        # (an apiserver eviction window, the crossplane circuit breaker's own re-opens).
+        - alert: AgentStackNotSynced
+          expr: |
+            kube_agentstack_status_condition{type="Synced"} == 0
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "AgentStack {{ $labels.name }} has been Synced=False ({{ $labels.reason }}) for 15m"
+            description: >-
+              Crossplane cannot reconcile the {{ $labels.name }} claim: nothing it renders changes
+              until this clears, so a claim edit (a new grant, a knob) is silently not live.
+              Read the message with `kubectl get agentstack {{ $labels.name }} -o
+              jsonpath='{.status.conditions}'` and `kubectl get events --field-selector
+              involvedObject.name={{ $labels.name }}`. "failed waiting for Informer to sync" or
+              "attempting to grant RBAC permissions not currently held" = a composed kind or verb
+              missing from argocd/resources/agentstack/rbac.yaml (docs/agents/agentstack.md
+              §gotchas); a "cannot apply composed resource … not found" on a RoleBinding is the
+              Role-before-binding ordering and clears on its own.
+        # The "green that saw nothing" guard (FU-125/FU-108 class): if the custom-resource-state
+        # config stops producing the series (chart bump drops it, KSM RBAC lost), the belt above
+        # goes quiet rather than firing — this one says so.
+        - alert: AgentStackHealthMetricAbsent
+          expr: |
+            absent(kube_agentstack_status_condition{type="Synced"})
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "No AgentStack Synced condition series for 30m — the XR health belt is blind"
+            description: >-
+              kube-state-metrics is not exporting kube_agentstack_status_condition. Check the
+              kube-state-metrics pod args carry --custom-resource-state-config-file, that its
+              ClusterRole still lists agentstacks.platform.teststuff.net (rbac.extraRules in the
+              kube-prometheus-stack values), and that at least one AgentStack claim exists.
