@@ -50,6 +50,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import router  # ADR-096 control plane — sibling file in the same ConfigMap/dir
+import model_id  # FU-127 parser + the provider-routing-suffix strip rule (homelab#1697)
 import gometer  # ADR-108: shared Go-rail pricing/usage module (single home for proxy + jail shim)
 
 UPSTREAM = os.environ.get("UPSTREAM", "https://openrouter.ai")
@@ -3390,16 +3391,18 @@ class Proxy(BaseHTTPRequestHandler):
                             notes.append(f"at-pin:{at_provider_pin}")
                         payload["provider"] = {"order": [at_provider_pin],
                                                "allow_fallbacks": False}
-                    exacto_no_pin = str(payload["model"]).endswith(":exacto")
+                    # FU-186 step 1: the bookkeeping key drops the routing suffix so cooldown/
+                    # breaker state is keyed under the bare model id — the same id the /route
+                    # eligibility loop filters candidates against (router.py L1291/L1300). The raw
+                    # payload model keeps the suffix so Auto Exacto still owns provider ordering
+                    # upstream. The strip rule has ONE home, `model_id.strip_routing_suffix`
+                    # (homelab#1697) — imported here, never re-derived.
+                    or_model = normalize_model(str(payload["model"]))
+                    _bare_or = model_id.strip_routing_suffix(or_model)
+                    exacto_no_pin = _bare_or != or_model
                     if exacto_no_pin:
                         notes.append("exacto:no-pin")
-                    or_model = normalize_model(str(payload["model"]))
-                    # FU-186 step 1: strip :exacto from the bookkeeping key so cooldown/breaker
-                    # state is keyed under the bare model id — the same id the /route eligibility
-                    # loop filters candidates against (router.py L1291/L1300). The raw payload
-                    # model keeps the suffix so Auto Exacto still owns provider ordering upstream.
-                    if exacto_no_pin:
-                        or_model = or_model.removesuffix(":exacto")
+                        or_model = _bare_or
                     # ADR-107 / homelab#445: the opencode legs — a model id starting with
                     # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
                     # opencode.ai host with the prefix stripped and auth replaced by the rail key.
@@ -5970,13 +5973,14 @@ data: [DONE]
 
     # ── #1262: :exacto strip self-test ──────────────────────────────────────────────────────────
     print("\n=== :exacto strip self-test (issue #1262) ===")
-    # The production :exacto strip (L3255-3264) must key cooldown/breaker state under the
-    # BARE model id, skip the M4 pin, and preserve the :exacto suffix in the forwarded payload
-    # so Auto Exacto still owns provider ordering upstream.
+    # The production strip — `model_id.strip_routing_suffix`, the strip rule's ONE home since
+    # homelab#1697 — must key cooldown/breaker state under the BARE model id, skip the M4 pin, and
+    # preserve the :exacto suffix in the forwarded payload so Auto Exacto still owns provider
+    # ordering upstream.
 
     # Test 1: breaker keyed under bare model — seed a breaker for "gpt-4o", then send
-    # "gpt-4o:exacto" and verify the breaker trips (502). Non-vacuous: if the removesuffix
-    # is reverted, the breaker would be keyed under "gpt-4o:exacto" and would NOT match.
+    # "gpt-4o:exacto" and verify the breaker trips (502). Non-vacuous: if the strip is
+    # reverted, the breaker would be keyed under "gpt-4o:exacto" and would NOT match.
     _exacto_session = "direct:c2fd34dd"  # sha256("Bearer OAUTH-SECRET")[:8]
     with _cb_lock:
         _cb[(_exacto_session, "gpt-4o")] = {

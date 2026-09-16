@@ -47,6 +47,10 @@ from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import model_id  # noqa: E402 — the ONE model-id parser (FU-127), a sibling module
+# ...which also OWNS the provider-routing-suffix rule (homelab#1670, hoisted there by #1697): this
+# module CITES that rule rather than re-deriving it, and the two BOOKKEEPING consumers (the egress
+# proxy and its router) import the same functions from the same file. ONE home, four consumers.
+from model_id import lookup_ids, routing_suffix  # noqa: E402
 
 # ── Tunable assumptions (documented so the numbers aren't magic) ─────────────────────────────────
 CHARS_PER_TOKEN = 4  # rough English/code average; we only need order-of-magnitude
@@ -247,67 +251,13 @@ def normalize_model(model: str) -> str:
 
 
 # ── Provider-routing suffixes (the PRICING-path half of FU-127; homelab#1670) ────────────────────
-# OpenRouter overloads an id with routing shorthands — `:exacto` (tool-call-quality provider
-# ordering), `:nitro` (throughput), `:floor` (price), `:online` (web plugin). They pin ROUTING,
-# never PRICE, and the registry keys a model by its BARE id. So an id this platform's own router
-# appends — `:exacto` from FU-186 `provider_policy` on the coding class, the PR#1639 flip — used to
-# miss every lookup in this file, price at the conservative $1.0/M default, and print a PHANTOM
-# `⚠ ESCALATE`: 31× the real price on the #1665 ride, which a coordinator following
-# `agents/coordinator/README.md` step 3 ("stop, label agent/blocked") turns into every queued item
-# on the stack parked for a human, with correct numbers and a wrong conclusion.
-#
-# The retry is MISS-DRIVEN, and that is the whole safety argument: the id AS GIVEN is tried first
-# against the registry and the static table, and only an id NOTHING carries is retried as its base.
-# `:free` is therefore never degraded to its paid sibling — it is a variant OpenRouter lists in its
-# own right (`tencent/hy3:free`), priced as itself while any table still carries it — and a
-# genuinely unknown model still reaches the $1.0/M default and can still escalate.
-#
-# ONE HOME for the pricing path: `base_id`/`lookup_ids` below are the single definition the
-# registry read, the static table and `--lookup`'s report all go through, so those three can never
-# disagree about what an id costs. The two BOOKKEEPING sites (the proxy's cooldown/breaker key, the
-# router's `record_provider_event`) still strip `:exacto` inline, and the hoist that would give the
-# rule ONE home platform-wide is the FU-127 parser (`agents/model_id.py`) — a governance path
-# outside this issue's declared `Touches:` footprint, so it is sibling child homelab#1697, not this
-# diff. These three functions move there verbatim.
-def base_id(model: str) -> str | None:
-    """`model` truncated at its last `:` — the id a lookup RETRIES when nothing carries `model`
-    itself. Pricing-only: the suffix pins provider routing, so the FULL id stays the dispatch id
-    (`Estimate.model`, the claim, the routed model)."""
-    base, sep, _suffix = model.rpartition(":")
-    return base if sep and base else None
-
-
-def base_ids(model: str) -> list[str]:
-    """Every id `model` reduces to by dropping ONE colon-suffix at a time, nearest first (#1693's
-    doubled `:exacto` on a pre-suffixed chain entry reduces to the paid id, and `tencent/hy3:free`
-    reduces to `tencent/hy3` only AFTER itself has been tried)."""
-    out: list[str] = []
-    rest = base_id(model)
-    while rest and rest not in out:
-        out.append(rest)
-        rest = base_id(rest)
-    return out
-
-
-def lookup_ids(model: str) -> list[str]:
-    """The ids a PRICE lookup tries for `model`, in order: the id as given, its rail-normalized
-    form, then each one's successive base ids — best first, never degrading an id a table already
-    carries."""
-    out: list[str] = []
-    for candidate in (model, normalize_model(model)):
-        for one in (candidate, *base_ids(candidate)):
-            if one and one not in out:
-                out.append(one)
-    return out
-
-
-def routing_suffix(model: str, priced: str) -> str | None:
-    """The routing suffix `priced` dropped from `model` (e.g. ':exacto'), or None when `priced` is
-    not `model`'s base id — a rail prefix normalized away is NOT a routing suffix. Both sides are
-    normalized, so `priced` may be a candidate carrying the rail prefix itself."""
-    normalized, base = normalize_model(model), normalize_model(priced)
-    return normalized[len(base):] if base and normalized.startswith(base + ":") else None
-
+# The rule — a colon suffix pins ROUTING, never PRICE, and the retry is MISS-DRIVEN so a variant
+# (`tencent/hy3:free`) is never degraded to its paid sibling — has ONE HOME, the FU-127 parser
+# `agents/model_id.py` (the hoist homelab#1697 landed), together with the bookkeeping half
+# (`strip_routing_suffix`) the proxy and the router key their cooldown/breaker rows under. This
+# module only CITES it: the functions are imported below, so the registry read, the static table and
+# `--lookup`'s report can never disagree about what an id costs. The #1670 self-test cases further
+# down stay as the pricing path's regression net, and `devbox run model-id-test` pins the parser.
 
 def registry_hit(registry: dict | None, model: str) -> str | None:
     """The lookup id `registry` actually CARRIES for `model`, or None when it carries none — the
