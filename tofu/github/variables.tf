@@ -100,11 +100,24 @@ variable "protected_repos" {
     agent-coordinator   = { required_checks = ["ci"], require_code_owner_review = true }
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
-    oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true }                                          # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
-    oracle-iac          = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
-    sleep-iac           = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
-    sleep-tracking      = { required_checks = ["ci", "system-test"] }                                                             # system-test = the kind+Playwright render gate (sleep goal #121); job name, not the workflow name "integration"
-    snore-recorder      = { required_checks = ["ci"] }                                                                            # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
+    # `e2e` required since 2026-09-16 (oracle-fleet#369, open since 09-02 as agent/blocked because
+    # a ruleset write is outside worker scope). A red e2e did NOT block merge before: only `ci` was
+    # required, and `ci` is the gate job that runs local tests with no e2e dependency — so #363's
+    # acceptance item "e2e failure still blocks merge" was never actually true. The in-repo
+    # alternative (an assert step in `ci` reading e2e's conclusion for the same sha) was declined:
+    # rulesets are already the one home for "what blocks merge", and a second copy in workflow code
+    # is the drift bug that home exists to prevent.
+    # ⚠ The cost, accepted knowingly: merge availability now depends on the single self-hosted
+    # `[self-hosted, proxmox-vm]` runner (ci-runner-01, ADR-082). A dead e2e runner used to cost
+    # nothing; it now blocks every oracle-fleet PR. And with strict_required_status_checks_policy
+    # every master push re-runs e2e (30-min timeout, two slots) on every open PR before any can
+    # merge. Safe to require because e2e carries NO `if:` and NO `needs:` and triggers on both
+    # master and `goal/**` — a context that can skip is a required check that deadlocks.
+    oracle-fleet   = { required_checks = ["ci", "e2e"], require_code_owner_review = true }                                   # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
+    oracle-iac     = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
+    sleep-iac      = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
+    sleep-tracking = { required_checks = ["ci", "system-test"] }                                                             # system-test = the kind+Playwright render gate (sleep goal #121); job name, not the workflow name "integration"
+    snore-recorder = { required_checks = ["ci"] }                                                                            # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
   }
 }
