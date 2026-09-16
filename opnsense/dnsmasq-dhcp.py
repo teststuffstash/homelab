@@ -63,6 +63,29 @@ HOSTS = [  # static reservations preserved from ISC
     # integration that's addressed at .245). Any HA/integration device referenced by a
     # fixed IP needs a reservation here.
     {"host": "office-plants-irrigation", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
+    # Nutanix NX-6035-G5 node 1 BMC — the fleet's FIRST BMC. Shipped carrying the previous
+    # owner's static 10.98.152.206/23, switched to DHCP 2026-09-15 and pinned at the address
+    # it took. Kept IN the pool deliberately: docs/ip-plan.md has no BMC class yet, and
+    # inventing one is a decision this pin does not need to make. LAN-only, never routed —
+    # the firmware can't be patched (Nutanix LCM wants an entitled cluster).
+    # Box detail: hardware repo docs/nx-6035-g5.md. Node 2's BMC follows when it is cabled.
+    {"host": "nx-01-bmc", "hwaddr": "ac:1f:6b:60:e5:5c", "ip": "192.168.2.123"},
+    # Nutanix NX-6035-G5 node 1 itself — bare-metal Talos worker, compute-only (no Longhorn).
+    # eno1 only: eno2 is the second onboard I350 port and is deliberately NOT reserved, so a
+    # second cable cannot hand this node an ambiguous second address. Takes a .5x cluster-node
+    # address (docs/ip-plan.md: .51-.99) like m70s/hp-01, and maintenance IP == node IP so the
+    # tofu apply target is clean.
+    {"host": "nx-01", "hwaddr": "ac:1f:6b:60:ed:9a", "ip": "192.168.2.58"},
+    # NX-6035-G5 node 2 BMC. Same story as node 1: shipped on the previous owner's static
+    # (10.98.152.205 — one below node 1's .206), switched to DHCP 2026-09-15 and pinned where it
+    # landed. The node itself is NOT in the cluster: it is the trial box for the BMC virtual-media
+    # install path, deliberately left without a disk. Same standing caveat — LAN-only, never
+    # routed, firmware unpatchable (no Nutanix LCM entitlement).
+    {"host": "nx-02-bmc", "hwaddr": "ac:1f:6b:60:e5:8e", "ip": "192.168.2.173"},
+    # NX-6035-G5 node 2 itself (eno1). NOT a Talos node: this is the Proxmox trial box, installed
+    # unattended from an answer-file ISO served to the BMC over NFS. .5x cluster-node range like
+    # its sibling nx-01 (.58). eno2 deliberately unreserved, same reason as node 1.
+    {"host": "nx-02", "hwaddr": "ac:1f:6b:60:ed:fe", "ip": "192.168.2.59"},
     # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
     # UniFi network backbone — keep the switch + APs at stable IPs.
     {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},

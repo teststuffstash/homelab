@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-241** (2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-245** (2026-09-16: FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -400,12 +400,47 @@ six OVERSIZE items pointer-ized into
       §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
-      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617, operator-applied);
-      (b) the in-cluster no-root poster LIVE (#1631, four review rounds = the fail-closed policy-read
-      class across lib/sentinel/apply; proof: #1635's head carried the status 104 s after its commit,
-      ahead of the box's tick); `mgmt-policy-test` is a `ci` step (05ce8e8a). **Next:** (c) the
-      per-role user + env split; (d) the doorbell edge (lower priority now). Design + build state:
-      [`management-box.md`](management-box.md) §MB3. Relates FU-012, FU-097, ADR-130.
+      `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
+      in-cluster no-root poster LIVE (#1631); `mgmt-policy-test` is a `ci` step; **(e) the
+      stage-1-refusal wedge (no merge, no review — #1718) RULED + BUILT 2026-09-16, PR#1721:**
+      gate unchanged, `devbox run mgmt-human-plan -- <pr>` posts the human plan's verdict, a full
+      `mgmt-tf apply` stamps the apply baseline, `provider "…" {}` denied everywhere — §MB3 "When
+      the box refuses". **Next:** (c) the per-role user + env split; (d) the doorbell edge (lower
+      priority). Design + build state: [`management-box.md`](management-box.md) §MB3. Relates
+      FU-012, FU-097, ADR-130.
+- [ ] **FU-241** — **One SSH seed key now opens root on BOTH hypervisors.** `tofu/providers.tf`'s
+      `nx02` alias reuses `var.proxmox_ssh_private_key_file` (the pve seed), so a compromise of the
+      jail/box key is a compromise of pve AND nx-02. Deferred, not ignored: the key is already the
+      root-of-trust for pve and splitting it buys nothing until the two boxes differ in trust (a
+      guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
+      second seed at the first reason to distinguish them; until then the DR step is written down
+      in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
+- [ ] **FU-242** — **Spike: Flux tofu-controller as the box's controller substrate — on a throwaway pve VM,
+      never on the box** (ADR-132 leaves the substrate undecided). Single-node k3s + Flux + tofu-controller
+      against the two READ-ONLY roots (`github`, `cloudflare` — FU-238's plan-only shape). Five questions,
+      kill-order: (1) drives OUR pinned OpenTofu + provider mirror, or its runner image dictates versions
+      (FU-240's shape); (2) runs our roots as-is (`-state=` local file, `TF_ENCRYPTION`, per-root creds
+      from Secrets); (3) the `approvePlan` flow — a human plan as a commit on master; (4) drift-only mode +
+      where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
+      lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
+      [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
+- [ ] **FU-243** — **Control-plane endpoint = a Talos shared L2 VIP; first deliverable of the three-CP program
+      (ADR-133), AFTER the box program (operator ordering 2026-09-16).** Today `cluster_endpoint` is cp-01's
+      IP and every kubeconfig points at it. Steps: (a) the ip-plan ruling — an L2 VIP must sit in the CPs'
+      subnet and `docs/ip-plan.md` says no NEW VIPs in `.2–.49`, so a reserved address/sub-range
+      is a ruling, not an exception; (b) etcd snapshot; (c) the VIP on cp-01's machine config + `cluster_endpoint`
+      cutover (runtime apply, no pve maintenance); (d) kubeconfig/talosconfig/jail/box/loop endpoints. Then
+      the laptop (wk-metal-03) reinstall to maintenance, the nx-02 VM, both joins back to back — never rest at
+      two members; nx-02 is not CP-production-ready until its drives are in. Relates FU-235, FU-097.
+- [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
+      says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
+      the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
+      `tofu/provisioning/flags.local.tf` (gitignored `*.local.tf`) holds per-node groups; flag = write + targeted
+      apply, unflag = delete + targeted destroy; the box's provisioning plan shows a live flag as drift until
+      unflagged (the belt); a lint refuses `matchbox_group` in TRACKED provisioning files; provisioning.md
+      steps 1/6 + the onboarding skill rewritten around it. **First act:** move or destroy `nx_01_diag`
+      (a standing reinstall flag on a production node; 06:39 showed disk-first boot order bounds the loop
+      risk, not the STATE partition). End state: the reconciler sets and clears flags inside one sync. Relates FU-235.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
@@ -878,16 +913,15 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** The sync manager's
-      in-memory state corrupts under a fast-failure storm and Pending piles up silently
-      (2026-08-31, "5/5" against a provably empty semaphore for 65+ min). Postmortem, belt audit,
-      trigger, and — ⚠ **2026-09-12** — a SECOND, BENIGN cause with the SAME signature
-      (rail-latched `respond-*` hold their lock across Argo's retry backoff), hence a discriminator:
-      [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      **Next:** that alert — Pending high-and-not-draining while
-      `anthropic_subscription_semaphore_running` ≈ 0 **and NOT
-      `anthropic_subscription_dispatch_limited`** — into `argo-workflows-alerts` with promtool
-      cover; check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
+- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** Three instances: the sync
+      manager's in-memory state corrupted under a failure storm (2026-08-31, "5/5" against an empty
+      semaphore); a BENIGN twin with the same signature (2026-09-12, latched `respond-*` holding
+      their lock across retry backoff); a Running holder with an Errored pod + phantom slots
+      (2026-09-15/16, 137 queued, no responder run in 24 h). **Belt SHIPPED 2026-09-16 (PR#1722):
+      `ArgoLockPlaneWedged`** — Pending ≥10 while the pool has free slots and no rail is latched;
+      replayed: fires 27 h before the operator's read, quiet on the latch day. Postmortem + all
+      three: [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
+      **Next:** check upstream sync-manager fixes (`v4.0.7`) before any bump. Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
@@ -980,13 +1014,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
       confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
       guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
-      `node-maintenance.sh settle/down` now silence the window and `up` expires it; the label
-      taxonomy is the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600):
-      `node=` alone catches almost nothing, so a window silences `instance=~<ip>`, `node=`, the
-      Garage health set on a zone node, and the node's **pod names** — PodSigkilled has no node key
-      and fires up to 30m late, so that silence outlives the window. **Next:** leg (b) — a
-      seat-written ConfigMap window record the brief prints like the ArgoCD observation-window line
-      (durability caveat = FU-195). Design read: `docs/spikes/responder-week-audit.md` §Design read.
+      `node-maintenance.sh settle/down` silence the window, `up` expires it; the label taxonomy is
+      the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600). ⚠ **Leg (a)
+      still leaks the DaemonSet-rollout class** (2026-09-16, #542 r3: `KubeDaemonSetRolloutStuck`
+      carries neither `node` nor `instance`, and its stuck pod postdates the silence) — leg (b) is
+      the general fix, not more label arms. **Next:** leg (b) — a seat-written ConfigMap window
+      record the brief prints like the ArgoCD observation-window line (durability caveat = FU-195).
+      Design read: `docs/spikes/responder-week-audit.md` §Design read.
 
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
@@ -1183,16 +1217,16 @@ the block needs pruning, not more headings.
       `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
       shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
       Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier.
-- [ ] **FU-235** — **Two nodes are declared kata-capable and cannot receive a kata pod.**
-      `machines/machines.yaml` sets `kata: true` on wk-metal-01/-02/-03/-04 and `tofu/metal.tf:57`
-      applies `homelab.io/kata=true` from the machine config, but LIVE (2026-09-12
-      `kubectl get nodes -L homelab.io/kata`) only **wk-metal-01 and -02** carry it — and
-      `tofu/kata.tf:30` makes that label the RuntimeClass's `scheduling.nodeSelector`, so the
-      kata pool is **2, not 4**. Found while costing the three-CP promotion, not by any belt.
-      **Next:** targeted `tofu apply -target='talos_machine_configuration_apply.metal["wk-metal-03"]'`
-      (safe — no `longhorn_disks`), then -04 **inside a maintenance window**: it is a Garage zone
-      node and GAPS `tofu-apply-G2` says a `longhorn_disks` apply reboots the node. Then a belt:
-      declared-vs-labelled is a one-line PromQL over `kube_node_labels`. Relates FU-218, FU-072.
+- [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
+      true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
+      (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
+      (nx-01 conflict; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3 after the
+      shared manager pruned the zone labels). (3) **install-time drift** (2026-09-16, nx-01): the machine
+      config applied in place, tofu plans clean, yet the node runs the plain schematic and EPHEMERAL on the
+      SATA disk — the runtime half landed, the install half never can. **Next:** the DIFF on the box's probe
+      — declared (machines.yaml + schematic ids) vs live (`talosctl get extensions`/`volumestatus`, labels,
+      taints), one gauge per node → alert; then labels+taints into the Talos machine config and the k8s
+      taint resource retired. It is ADR-132's reconciler diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 

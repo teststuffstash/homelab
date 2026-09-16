@@ -56,6 +56,16 @@ data "talos_machine_configuration" "metal" {
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }
     })] : [],
+    # ARC runner pool. The scale set selects on the homelab.io/ephemeral LABEL while tolerating the
+    # same-named TAINT (argocd/platform/arc-runners.yaml) — so the taint alone lets runners past a
+    # node without ever sending them there. tofu/talos.tf carries this block for VMs and declines
+    # it for metal deliberately: labelling an 8 GB kata laptop would widen the pool onto the
+    # headroom a microVM needs. Hence a per-node opt-in rather than `local.ephemeral_nodes`, and
+    # boot-from-git rather than the imperative `kubectl label` wk-metal-01/-02 still carry — that
+    # one does not survive a reinstall, which is why wk-metal-03/-04 silently left the pool.
+    each.value.arc ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/ephemeral" = "true" } }
+    })] : [],
     # Kata nodes run k3d/kind-in-dind rides whose kata microVM grows to ~5Gi. Without a memory
     # reservation the kernel global-OOMs the node and takes cilium/longhorn as collateral
     # (FU-112b; incidents #63-66, #68, #69). Reserve memory + raise the HARD eviction threshold
@@ -153,11 +163,16 @@ data "talos_machine_configuration" "metal" {
     # ⚠ INSTALL-TIME ONLY: "the volume configuration is only applied when the volume has not been
     # provisioned yet". Changing this on a running node does nothing; XFS cannot shrink. Wipe +
     # reinstall (docs/provisioning.md) is the only path, which is why it is cheapest on a new box.
-    each.value.ephemeral_max_size != null ? [yamlencode({
-      apiVersion   = "v1alpha1"
-      kind         = "VolumeConfig"
-      name         = "EPHEMERAL"
-      provisioning = { maxSize = each.value.ephemeral_max_size }
+    (each.value.ephemeral_max_size != null || each.value.ephemeral_disk_selector != null) ? [yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "VolumeConfig"
+      name       = "EPHEMERAL"
+      provisioning = merge(
+        each.value.ephemeral_max_size != null ? { maxSize = each.value.ephemeral_max_size } : {},
+        # diskSelector moves EPHEMERAL off the system disk entirely (ride hosts: image store +
+        # scratch on a DRAM-cached NVMe while boot stays on a legacy-bootable SATA bay disk).
+        each.value.ephemeral_disk_selector != null ? { diskSelector = { match = each.value.ephemeral_disk_selector } } : {},
+      )
     })] : [],
     # User volumes — node-local XFS partitions mounted at /var/mnt/<name> (partition label u-<name>).
     # ADR-114 wants Garage on node-local XFS, NOT Longhorn (engines replicate, storage stores
@@ -195,6 +210,17 @@ resource "kubernetes_node_taint" "ephemeral" {
     value  = "true"
     effect = "NoSchedule"
   }
+  # Its OWN field manager (2026-09-16): both this resource and kubernetes_labels default to the
+  # server-side-apply manager "Terraform", and SSA prunes every field that manager owns and the
+  # new patch omits — so ANY re-apply of this taint stripped `topology.kubernetes.io/zone` off the
+  # node (all six ephemeral nodes, then wk-03 again on a non-forced re-test), and a labels apply
+  # could do the reverse to the taint. A distinct manager confines the prune to this resource's
+  # own fields. ⚠ NEVER `force = true` here either: `.spec.taints` is an atomic list, so a forced
+  # apply makes this resource the owner of the WHOLE list and the next apply drops the cordon and
+  # cilium's taints (nx-01 planned "- taint node.kubernetes.io/unschedulable"). The standing
+  # conflict on a node cilium-operator has already untainted is unsolved here — the taint's proper
+  # home is the Talos machine config (machine.nodeTaints), FU-235.
+  field_manager = "tofu-node-taint"
 }
 
 # State moves for the four resources the for_each above replaces (same node, same taint, same

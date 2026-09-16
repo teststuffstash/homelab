@@ -10,6 +10,38 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-15 night — nx-02, unattended run).** Box facts live in the private
+  **hardware** repo `docs/nx-6035-g5.md` §"nx-02 put to work"; the arc is in TICK-LOG.
+
+  **DONE tonight:** nx-02's BIOS boot order (`Hard Disk` #1, `Network` #2 — a mounted BMC virtual
+  CD can no longer hijack a boot; SOL driver at `pve:/root/bootorder.py`); the stale
+  `nvme0n1-thin` storage removed and the surviving pool renamed device-independently to
+  **`nvme-thin`**; a tofu API token minted (KeePass `nx-02-api-token-tofu`, on the box via
+  `mgmt-provision-secrets.sh --push`) and the pve SSH seed key authorized; **PR#1719 merged** —
+  nx-02's thin pool is metered end-to-end (`pve_lvm_thin_pool_data_percent{host="nx-02"}` live in
+  Prometheus, `PveMetricsAbsent` now one arm per host); **nx-01 added to `bgp_node_ips`** (736167cd
+  — it was never added at onboarding, peer `idle`; ⚠ NOT verifiable as `established` until nx-01
+  boots).
+
+  **PR#1718 + PR#1717 APPLIED 2026-09-16 ~08:00Z (operator: "one big apply").** wk-04 (VM 8114 on
+  nx-02) is Ready, zone `nx-02`, untainted, BGP `established` (playbook run); nx-01 carries the
+  ephemeral taint + its cordon, BGP `established`. The apply loop's baseline is stamped at master
+  (PR#1721's stamp works). ⚠ **nx-01 was NOT reinstalled by this** — `talos_machine_configuration_apply.metal["nx-01"]`
+  applied in place (0 s); the wipe/reinstall onto the NVMe is the Matchbox path (the `nx-01-diag`
+  group is committed now, f844711a; transient — remove it post-install). **Standing plan noise:**
+  `kubernetes_node_taint.ephemeral["nx-01"]` wants to drop `node.kubernetes.io/unschedulable` (a
+  forced SSA read-back — FU-235 (2); do NOT apply that resource with force). nx-02's
+  `TerraformProv` role gained `VM.GuestAgent.Audit` (the 403 warning on the VM's agent read).
+
+  **Also open:** `nx-01` is still powered off and cannot see a boot disk (untouched tonight, per
+  the handover); **PR#1717** (`fix/nx-01-ride-box`) is MERGED (8e39f029) but NOT applied — applying
+  it wipes nx-01 and targets the ADATA that does not enumerate. **FU-235 is still stale** (says the kata pool
+  is 2; live it is 4) — close it on evidence. `wk-metal-02` recovered on its own (Ready again).
+
+  **Do NOT re-derive:** the Matchbox profile sets `console=ttyS0` (COM1) but these boards have COM1
+  disabled and COM2/SOL enabled (= ttyS1), which is why Talos is invisible over SOL on both nodes
+  while BIOS output shows fine. A `console=ttyS1,115200` kernel arg would fix it.
+
 - **⚑ PICKUP (2026-09-14 midday session — the box + wk-03 window; arc in TICK-LOG).**
   (1) **Box hand-advance DONE** — gen 4, `mgmt-pull` hourly live (first tick advanced to
   115794f4, no re-activation). `scripts/mgmt-tf.sh` fixed (positionals never crossed the ssh hop)
@@ -46,6 +78,21 @@ never the session's arc — that is TICK-LOG's.)
   (10) Unchanged from the late-morning pickup: theme 1 queued (#1665–#1669, first ride reads
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
+- **⚑ PICKUP (2026-09-14 evening handoff/board session — no corpus load; arc in TICK-LOG).**
+  (1) **#1692 / PR#1699 fix round** — changes-requested (bare-`§M` sweep, recipe on #1692);
+  dispatch is blocked by the fleet-strike reader re-applying `agent/error` until **2026-09-15
+  16:45Z** (or #1712 landing) — strip after that if the reader has not stopped; then close
+  **#1707** (kept open as the dedup anchor). After the merge: the one-word docstring pointer in
+  `scripts/claude-model-shim.py` (`model-routing.md §M11` → `model-routing-history.md §M11`)
+  lands operator-direct; #1710 closes with it. (2) **PR#1698 codeowner read** (#1670,
+  bot-approved after two rounds, CI green, BEHIND) — the corpus-loaded seat merges it; #1697
+  unparks by itself. (3) **#1713** pin-only-lint's merge-ref two-dot (operator lane, sibling of
+  fadb0ff6). (4) **oracle-fleet#605** (ErtPipeline rules on the Argo counter) in the oracle
+  reviewer's hands; #604 item 3 after the chart rolls. (5) **Garage capacity**: the 150 GB
+  ert-delta ask is the SFF zone-disk item (ledger §"Garage bucket quotas vs the layout");
+  cheap interim = move the PyPI + mcr mirror volumes off wk-metal-04 `intel1` (258 GB scheduled
+  on 256) — not filed, operator's call. (6) Still the operator's: #1669 stays blocked until
+  theme 1 deploys + ≥2026-09-20.
 - **⚑ PICKUP (2026-09-14 afternoon, same session — wound down at ~600k ctx; arc in TICK-LOG).**
   (1) **PR#1652 (mgmt box follows master, ADR-129 amended) MERGED 08:3xZ (bd74bdd4)** — the box
   is still on the OLD generation (timer disabled, pull ref absent), so nothing moves until the

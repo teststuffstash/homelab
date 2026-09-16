@@ -1,18 +1,25 @@
 # `tofu/` — the main cluster root (Talos on Proxmox + bare metal, and the platform substrate)
 
-Provisions the Talos Linux Kubernetes cluster (VMs on the Proxmox host `pve` `192.168.2.3` +
-bare-metal workers), installs Cilium as the CNI, exposes services on the LAN via Cilium BGP, and
+Provisions the Talos Linux Kubernetes cluster (VMs on the Proxmox hosts `pve` `192.168.2.3` and
+`nx-02` `192.168.2.59` + bare-metal workers), installs Cilium as the CNI, exposes services on the LAN via Cilium BGP, and
 carries the platform substrate that ArgoCD can't manage for itself (ADR-005): storage, monitoring,
 Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1–2.
 
 > **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
-> (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63` **+ bare-metal**
-> hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
+> (kube-proxy-free). Nodes: VMs on **pve** cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63`,
+> a VM on **nx-02** (the second hypervisor) wk-04 `.64`, **+ bare-metal**
+> hp-01 `.54`, nx-01 `.58` (NX-6035-G5 node 1), wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
 > wk-metal-03 `.184`, wk-metal-04 `.186` (kata), m70s `.56` (ThinkCentre M70s SFF, third
-> physical Garage zone) — all
-> `Ready`. **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
-> monitoring stack run in-cluster on BGP VIPs (`192.168.40.0/24`). State is local
-> (`terraform.tfstate`, gitignored). Always `tofu plan` and review before any `apply`.
+> physical Garage zone).
+> **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
+> monitoring stack run in-cluster on BGP VIPs (`192.168.40.0/24`). State lives on the management
+> box since 2026-09-13 (`docs/management-box.md`) — plan and apply through
+> `devbox run mgmt-tf -- plan|apply`, never `tofu -chdir=tofu` from the jail. Always plan and
+> review before any `apply`.
+>
+> Two hypervisors means two provider instances: the default `proxmox` (pve, `proxmox.tf`) and the
+> `proxmox.nx02` alias (`nx02.tf`). A node picks between them with `hypervisor` in `var.nodes`;
+> everything above the infra layer (`talos.tf`) spans both and never learns which is which.
 >
 > Bare-metal node onboarding is its own procedure — see `../docs/provisioning.md`.
 

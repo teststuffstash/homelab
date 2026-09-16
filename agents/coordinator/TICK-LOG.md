@@ -9095,3 +9095,235 @@ Issues: #1620, #1621.
   allowlist from the claims) — not filed (contracts emerge from ≥2 consumers). #1621 stays open
   for its live acceptance. Session ends here; pickup in meta-state.
 
+
+## 2026-09-14 (evening) — /handoff: oracle's readOnlyGrants rendered nothing → detector first, then the grant
+
+- **Handoff `.handoff/oracle` 20260914-1530 (oracle-iac#794 merged 15:10Z, nothing rendered
+  45 min later; the filer could not read the XR).** Read: the field IS live in the XR; the
+  Composition (PR#1688) composes a `ClusterSecretStore` for the first time and the crossplane SA
+  had no grant for the kind → `Synced=False: failed waiting for *unstructured.Unstructured
+  Informer to sync`, the whole reconcile aborted after the first ExternalSecret (the RoleBinding
+  "not found" in the same event stream = Role-before-binding escalation ordering, self-clearing;
+  proven with a server dry-run as the crossplane SA). Fifth hand-found instance of the
+  `rbac.yaml` header class, zero belts — grep negative for any XR-health alert or crossplane
+  metric scrape.
+- **Detector first (the 2026-09-09 ruling, handoff-G1): PR#1701 merged 15:54Z** — kube-state-metrics
+  custom-resource-state on AgentStack `.status.conditions` →
+  `kube_agentstack_status_condition{name,type,reason}` + `AgentStackNotSynced` (15m) +
+  `AgentStackHealthMetricAbsent`; promtool fixture replays the shape. **Fallout:** the CRS config
+  lifted KSM's steady state ≤100Mi → flat ~204Mi (CRD discovery across every installed group),
+  OOM-loop at 192Mi within 13 s, every kube_* belt blind ~15 min → measured under a temporary 1Gi
+  patch (plateau, no growth), **quickfix direct to master 0606bbb3: 384Mi / request 128Mi**;
+  ArgoCD had self-healed the patch back to 192Mi before seeing the commit — refresh-annotated.
+  **The belt fired on the live condition 16:30Z** (`oracle ReconcileError`, pending since 16:15).
+- **Then the fix: PR#1703 merged 16:45Z** — `clustersecretstores(+/status)` on
+  external-secrets.io + `scripts/agentstack-rbac-lint.py` (`devbox run agentstack-rbac-lint`:
+  every composed apiVersion+kind must have a rule with observe+apply+GC verbs; reds on the
+  pre-fix tree exactly at composition.yaml:1485, allow-list = the XR + provider MRs, both
+  `auth can-i`-verified). CI step landed direct (c0255d76, workflow files are operator-direct).
+  Within 2 s of the grant: SA/Role/RoleBinding/CRB/ClusterSecretStore/generator all rendered;
+  ESO re-synced at 16:50Z → **Secret `agent-git-readonly-0` in ns oracle-fleet, XR Ready=True,
+  alert inactive.** Token probed from the Secret: installation lists exactly oracle-fleet +
+  oracle-iac; POST issue 403, contents read 200, actions read 200, issues read 403 — the
+  read-only contract holds end to end. Consumer: oracle-fleet#582 (02:30Z retention tick).
+- Durable homes: `docs/agents/agentstack.md` gotcha bullet (the two new-KIND instances + the
+  belt), the rbac.yaml row comment, the values-file comment on the KSM sizing. No FU filed:
+  nothing deferred (grep `clustersecretstore|readOnlyGrants|kube-state-metrics.*OOM` negative).
+- **Evening, cont. (operator: homelab#1705 fleet-strike `goose-32602-truncation`; then "claude/haiku
+  cannot have a goose truncation — it still got flagged"):** read the three struck rides' run.logs
+  from S3 — every `-32602` was CONTENT (router tests/docs spelling the class name; the haiku ride's
+  own report line), all three rides finished (#1668 → PR#1704 merged; #1692 → PR#1699), one on
+  HARNESS=claude. `agent-finalize` grepped the bare code anywhere in the log. **Fix merged:**
+  agent-runtime#133 (harness gate + real-shape lookbehind, tests on the three live shapes) +
+  homelab#1706 (launcher raw-log mirror, two replay rows, 20/20); reaches pods with the next
+  agent-base deploy-pin (build 18:14Z). `agent/error` stripped from #1668/#1692, #1705 closed
+  with the finding. **oracle-fleet#604 (operator: "it has the fix"):** the worker's pushed branch
+  restored ErtPipeline* on POD PHASE — blind on the real shape (a Failed step pod is GC'd after
+  ~1 min; `for: 5m` never holds; 7-day replay: 0 firings vs 2 failed steps). Seat amendment
+  69b6704: Failed on `increase(argo_workflows_total_count{phase=~"Failed|Error",
+  exported_namespace="oracle-fleet"}[15m]) > 0` (fires on all 5 Failed workflows of the week,
+  the AgentLoopWorkflowsFailing shape), Stuck stays on pod series; oracle-fleet CI green;
+  **PR oracle-fleet#605** opened through pr-open.sh, `Refs #604` (item 3 waits on the roll).
+  ⚠ #604's two `unknown` strikes = `Upstream idle timeout exceeded` on the same deepseek exacto
+  cell, after #588 closed — a recurrence for the router read; not filed (needs a second issue).
+- **Late evening (operator: "can I increase the ert-delta quota … ~150 GB later … split into
+  smaller buckets for placement?"):** read live — ert-snapshots 92 GB of 97 GB (the bucket
+  ert-delta and its step artifacts write to; `GarageBucketQuotaNear` had been FIRING on it since
+  2026-09-10 06:00Z, unacted for four days), all quotas 252 GB promised / 146 GB logical stored /
+  88 GB physical per zone of the 140 GB rf=3 layout (~1.65× compression on this mix), two zones on
+  256 GB disks (data 161 GB + meta 32 GB). Answer: raise is fine within ~52 GB/zone headroom;
+  splitting buys NO placement (rf=3 puts every block on every zone) — only quota isolation
+  (artifacts out of ert-snapshots, the workflow's own v1 deviation); 150 GB does not fit the
+  layout (ceiling ~215 GB data on the 256 GB disks) → the SFF larger-zone-disk capacity item.
+  **Operator: do 120Gi, comments say the pool math is homelab's.** oracle-iac#800 merged
+  (`max_size` 120Gi, claim comment points at the ledger) → Garage reports 120 GiB live; homelab
+  PR#1711 adds ledger §"Garage bucket quotas vs the layout (2026-09-14)" — the sum-of-quotas
+  table, logical/physical, ceilings, the ruling. Not filed: the artifact-bucket split (oracle's
+  call, recorded in their claim comment) and the 150 GB capacity ask (Requirements row exists).
+- **Closeout:** `GarageBucketQuotaNear ert-snapshots` RESOLVED once the exporter read the 120Gi;
+  agent-base deploy-pin #1708 (2026.9.14-gf4e0bbe) landed → the #1705 classifier fix is what pods
+  run now. Reviewer catch on #1711 (round 2, fixed on the branch): the zone ceilings are NOT
+  symmetric — wk-metal-04's `intel1` already carries the PyPI + mcr mirror volumes beside
+  garage-0's data + meta (258 GB scheduled on 256 GB), so that zone has ZERO room to grow and is
+  the smallest zone; pm961 ~60 GB, mx500 ~90 GB shared. Cheap interim = move the two mirror
+  volumes off intel1 (intel0 has ~50 GB); the real answer stays the SFF zone-disk item.
+- **Night queue read (operator: "anything to queue for the night?"; board showed #1697/#1709/#1710
+  parked-blocked/operator):** parked-blocked = a queued item whose dependency is still OPEN — they
+  unpark by themselves: #1697 waits on #1670 (PR#1698: bot-approved after two rounds, CI green,
+  BEHIND — waits on the CODEOWNER read, which this corpus-less session does not execute); #1709 on
+  #1692 AND theme-1 assembly (by design); #1710 on #1692. **#1692's PR#1699 was ci-red terminal**
+  (two no-op rounds, blocked-on human): `governance-lint` failed closed because the haiku ride's
+  40-file branch re-pointed a docstring in `scripts/claude-model-shim.py` (never-touch tier) —
+  the seat dropped that one file from the branch (441c6d95; the pointer lands operator-direct
+  after merge, exactly as #1710 scopes it) and the same branch already carries #1710's 37
+  re-points, so #1710 closes on that merge. **#1707** = the same three explained strikes
+  re-filed after #1705 closed: the reader dedups on an OPEN filing only and re-applies
+  `agent/error` every tick inside the 24h window → left OPEN as the anchor until 2026-09-15
+  16:45Z; the tail defect filed + queued as **#1712** (agent-fix, the night's one queue item).
+  Operator picks pending: #1675 (fstrim cadence — the guard #1673 landed 3 min before the
+  hand-queue directive and already covers the stated purpose per the worker's live read →
+  recommend close as superseded); #1669 stays blocked by design (≥2026-09-20 + theme 1 deployed).
+- **Night queue, cont. — the ci-red on #1699 was NOT the shim alone:** after dropping it the
+  lint listed `ci.yaml`, `devbox.json`, `scripts/agentstack-rbac-lint.py` — this session's own
+  direct commits — because PR CI checks out the MERGE ref and diffs it two-dot from the
+  fork-time base.sha (#1441's fix assumed a branch-tip HEAD). Every worker branch forked before
+  today would have gone red on its next push. **Fixed direct (governance path):** the file list
+  is GitHub's three-dot compare in CI, `BASE...HEAD` locally, fail-closed; verified on both
+  #1699 heads + a local probe. `pin-only-lint` shares the shape → operator-lane issue filed.
+  ⚠ self-note: the local probe briefly branch-switched the shared checkout (seconds, back on
+  master, nothing lost) — the rule says worktree; noted, not repeated.
+- **Wind-down (operator: "wind down after this merges" — it did NOT merge):** #1699 went CI-green
+  after the governance-lint fix (the replay expectations for the re-pointed scout digest were
+  re-pinned on the branch, 478/478), then the bot requested changes: the ride's §M sweep
+  matched BARE `§M` — 69 substitutions across 20 files, ≥6 re-pointing OTHER docs' sections
+  (`§MODEL`, `§MB1/3`, `§MVP`), two literal duplicate insertions, the single-writer tracker
+  touched. That is the worker's content defect → a fix round, not a wind-down rewrite; recipe
+  posted on #1692 (anchored pattern, verbatim spike, tracker/shim excluded). Finding 1 done by
+  hand (`Fixes #1710` on the PR, #1710's Touches widened). The round cannot dispatch until
+  `agent/error` stops being re-applied (2026-09-15 16:45Z, or #1712 landing). #1675 closed
+  (operator). Session ends; pickup in meta-state.
+
+## 2026-09-15 night — nx-02 (unattended; operator handoff "continue with nx-02")
+
+- **The handover's three items, in order.** (1) **BIOS boot order** on nx-02: was `CD/DVD` /
+  `USB CD/DVD:ATEN V…` / … / `Hard Disk` #5, i.e. a virtual CD left mounted at the BMC outranked
+  the installed OS on every boot; now `Hard Disk` #1, `Network` #2 (kept so a one-shot
+  `chassis bootdev pxe` is not the only route back to netboot). Saved with F4 and verified by the
+  reboot — Proxmox in 45 s. The reusable bit is the DRIVER, not the setting: the seven FIXED BOOT
+  ORDER rows all answer the same help text, so `bios2.py`'s seek-on-help-pane cannot tell them
+  apart. Seek the unique row ABOVE them (`Setup Prompt Timeout`), step down `SLOT+1`, read values
+  off the LEFT pane by label, match by PREFIX (`Hard Disk:#0100 I...` ≠ `Hard Disk` — an equality
+  match cycles straight past it) and re-read after every `+`, because the other slots re-shuffle.
+  `pve:/root/bootorder.py`. Also: a warm reboot of this board is 45 s where a COLD POST is ~5 min.
+  (2) **Storage**: the stale `nvme0n1-thin` removed (its NVMe left for nx-01) and the survivor
+  renamed `nvme1n1-thin` → **`nvme-thin`** (VG + thin LV) — a VG named after `/dev/nvmeXn1` is a
+  landmine in a chassis whose drives are expected to move. Empty pool, no VMs.
+  (3) **wk-04** as code — below.
+- **The second hypervisor in tofu (PR#1718).** bpg has no per-resource endpoint, so a second
+  Proxmox needs a second provider INSTANCE: a `proxmox.nx02` alias + a `hypervisor` field per node
+  (`local.pve_nodes` / `local.nx02_nodes`), with `tofu/nx02.tf` a deliberate literal near-copy of
+  `proxmox.tf` — a module buys nothing when the provider cannot be parameterised, and the literal
+  form keeps drift visible in review. talos.tf is unchanged in shape and still spans all of
+  `var.nodes`, which is the property that keeps a DR rebuild a providers.tf edit. Token
+  `tofu@pve!provisioner` minted on nx-02 (⚠ **PVE 9 removed the `VM.Monitor` privilege** — pve's
+  `TerraformProv` role does not copy verbatim), wallet `nx-02-api-token-tofu`, onto the box via
+  `mgmt-provision-secrets.sh --push`. Planned from the branch: `5 to add, 1 to change, 0 to destroy`.
+- **`/code-review` found nine things; the review was worth more than the PR.** Fixed in the branch:
+  wk-04 missing from `bgp_node_ips`; `discard=on` with no reclaim path (the fstrim CronJobs were
+  pinned to the four pve VMs, and the reactive guard hardcoded pve's pool — now `POOL_QUERY`, per
+  node, because trimming wk-04 returns blocks to nx-02 and nothing else); `nx02_api_token` supplied
+  by no committed code (keepass-env + mgmt-provision-secrets now do); no `hypervisor` validation (a
+  typo created NO VM while talos.tf still tried to reach the IP); 16 flat vCPU on a dual-socket host
+  (now `sockets = 2` + `numa = true`). Filed: **FU-241** (one seed key opens root on both
+  hypervisors) and a storage-ledger requirement row — **nx-01 and nx-02 are ONE failure domain
+  wearing two zone labels**; collapse them to one zone BEFORE any replica lands, never after.
+  And a live defect that was not this PR's: **nx-01 was never added to `bgp_node_ips`** at
+  onboarding (#1716) — its peer read `idle`. Fixed direct (736167cd) + playbook applied; ⚠ cannot
+  be verified `established` until nx-01 boots. Third time this list is the onboarding miss.
+- **Detector before the fix, as the rule says.** The reviewer's own point: nx-02 arrived with an
+  unmetered thin pool, which is the state that produced four fills. **PR#1719 merged** — nx-02 in
+  the ansible `pve` group (the group is "Proxmox hosts", not the box named pve; the serial-log vmid
+  list moved to `host_vars` because a vmid only exists on the hypervisor that runs it), a second
+  scrape target, every pool alert per SERIES naming `{{ $labels.host }}` (the prose was the bug —
+  the exprs already fired per series), `PveMetricsAbsent` with one arm PER HOST (an unqualified
+  `absent()` goes quiet the moment either hypervisor reports — exactly the state it must catch),
+  the prepull DaemonSet split made "thin pool underneath" rather than the literal zone `proxmox`
+  (wk-04 would otherwise have rejoined the UNGATED tier — FU-208's bug with a new name), and the
+  runbook recipe generalised off pve (the reviewer's blocking find: the alerts pointed at a section
+  titled "(pve `local-lvm`)" whose worked example is wk-02/8112). Verified live:
+  `pve_lvm_thin_pool_data_percent{host="nx-02",vg="nvme-thin"}` in Prometheus, the new absent rule
+  loaded, no Pve alert firing.
+- **PR#1718 did not merge, and that is a governance finding, not a blocker to route around.**
+  `management-sentinel` is REQUIRED and reports `failure` because stage 1 refuses to plan a PR
+  touching `tofu/providers.tf`. The refusal is correct — a provider block is credential + endpoint
+  surface and a plan EXECUTES it — but a required failure also means `review-reflex` never
+  dispatches (it needs green) and `reviewer-session` stands aside at STEP 0, so the PR gets no
+  review either. The policy's own escape hatch, "or gets a human plan in the jail", has no
+  mechanism behind it: a pasted plan turns no check green. Recorded as **FU-237 (e)** +
+  `management-box.md` §"When the box refuses" with two candidate fixes. NOT force-merged: the seat
+  has OrgAdmin and could, but "a refusal is advisory" is a policy ruling on the first instance of
+  the class, and gate semantics are the operator's. Left reviewed, re-planned and one command from
+  done.
+
+
+## 2026-09-16 morning — seat: the stage-1 escape hatch built, the lock plane unwedged, the FU-198 belt shipped
+
+- **PR#1718's wedge got its ruling and its mechanism (operator, then PR#1721):** the gate stays —
+  the timer never plans a stage-1-refused head, no bot-vs-human relaxation ("too messy"), no
+  non-blocking verdict class. `devbox run mgmt-human-plan -- <pr>` ssh-es to the box and runs its
+  sentinel in `--human-plan` mode: stage 1 reported (terminal + comment, "overridden"), stage 2
+  planned, the plan shown for the human to READ, the verdict posted under `homelab-sentinel` as
+  HUMAN PLAN after y/N on the exact head sha. Same PR: a full `mgmt-tf apply` of master stamps the
+  apply loop's baseline (the apply-side twin of the wedge — refused-rev would otherwise have held
+  every later master), and the **probed gap**: a `provider "x" {}` block in ANY other .tf passed
+  stage 1 (providers.tf deny = basename only) — `deny_patterns` gains the block, meta-argument
+  stays allowed, 43/43 fixtures. Review round 1 (prompt timeout under the lock; stamp inside the
+  lock span) fixed in-PR; still in review at the time of writing.
+- **The Argo lock plane was wedged for two days and nothing said so** (operator: "137 pending" on
+  the agent-running dashboard). Third instance of the 08-31 incident: `fix-debounce-backstop-
+  1789388220` Running since 09-14 12:17Z with its `decide` pod Errored and never finalised, holding
+  a `subscription-capacity/claude` slot AND the `fix-debounce-decide` mutex (the fixer's decide
+  waited 30 h); the sync manager reported 4/5 with ONE real holder. Discriminator read first:
+  `dispatch_limited` 0, `semaphore_running` 1 → wedge, not latch. No `respond-*` completed in 24 h;
+  four `review-*` queued since 09-15 13:25Z. Recovery 06:49–06:52Z: 132 stale queued `respond-*`
+  deleted (>1 h; alerts re-notify at repeat_interval; 132 triages 5-wide = hours of pool + budget),
+  the wedged holder deleted, controller `rollout restart` → 144→4 Pending in 90 s, the stale decide
+  Succeeded. **The belt (PR#1722, FU-198): `ArgoLockPlaneWedged`** — replayed over 7 d: fires from
+  09-15 03:00Z (27 h before the read), quiet on the 09-12 latch day and every other hour.
+  Alertmanager fans to ha-webhook too, so it reaches a human while the responder is a waiter.
+- Also: `/workspace/homelab`'s worktree registry lost every entry mid-session (only master + a
+  prunable stale one remained; cause not chased) — branches were pushed, nothing lost; re-registered.
+- **PR#1718 landed through the lane the morning built (07:37Z):** rebased twice (master moved under
+  it — #1717, #1722, the quickfix), each time `mgmt-human-plan 1718 --yes` re-posted the verdict
+  on the new head (stage 1's two hits named as overridden; the box's plan `+5 ~1 -0`, then
+  `+6 ~2 -0` once #1717's nx-01 taint + metal config were on master), the reviewer approved,
+  auto-merge merged. The mechanism's first real run also found a **pre-existing sentinel bug**:
+  the head fetch `refs/pull/N/head:refs/mgmt/pr-N` was rejected non-fast-forward after any
+  force-push, so a REBASED PR was never evaluated ("fetch of the head failed" every tick — #1717
+  had sat in that state); `+` refspec, quickfix direct (476030b6). PR#1722 merged 07:22Z;
+  `ArgoLockPlaneWedged` loaded in Prometheus (inactive, health ok). **Apply of wk-04 not done —
+  operator's (two-phase; the apply loop refuses master until a full human apply stamps).**
+- **"One big apply" (operator, ~07:45–08:05Z): #1717 + #1718 applied from master via `mgmt-tf`.**
+  First full apply created everything except two k8s resources that failed fast (wk-04's zone
+  label — the node did not exist yet — and nx-01's ephemeral taint: `Field manager conflict …
+  cilium-operator-generic … .spec.taints`), which also stopped tofu scheduling the rest; a second
+  pass showed "No changes" because the first HAD created the VM/downloads/Talos configs (the grep
+  missed them). wk-04 Ready in ~2 min. **A mistake, caught by the fresh plan:** `force = true` on
+  the taint resource made the third apply succeed (2 added, 5 changed, baseline stamped) but the
+  forced SSA with the shared "Terraform" manager PRUNED `topology.kubernetes.io/zone` off all six
+  ephemeral nodes (Garage/Longhorn zone spread!) and claimed the atomic taint list (the next apply
+  would have dropped nx-01's cordon). Reverted within the hour; labels restored by a targeted
+  apply; every node re-verified (zone + taints). FU-235 extended: labels AND taints belong in the
+  Talos machine config. Also: wk-04 registered as an OPNsense BGP neighbour (`established`);
+  nx-02's `TerraformProv` role gained `VM.GuestAgent.Audit` (PVE 9 priv the VM agent read wants);
+  the nx-01-diag Matchbox group committed (f844711a — was live + in state, in git nowhere).
+  nx-01 itself is NOT reinstalled — the metal config applied in place; the wipe is the PXE path.
+- **Addendum, the real cause (08:1xZ):** the label prune was never the `force` flag — a
+  non-forced re-apply of the wk-03 taint stripped its zone label again. `kubernetes_node_taint`
+  and `kubernetes_labels` both defaulted to the SSA field manager "Terraform", and server-side
+  apply prunes every field that manager owns and the new patch omits. Fix d4b350f3: the taint
+  resource gets `field_manager = "tofu-node-taint"`; the five non-nx-01 taints re-applied under
+  it, every zone label survived (re-read). Remaining plan: the nx-01 taint alone (cilium-operator
+  conflict, FU-235 — never force). The apply loop will refuse master on it until FU-235 moves
+  the taint into the Talos machine config; a human `mgmt-tf apply` on that resource errors, so
+  the baseline stays at 95b3159a by design for now.

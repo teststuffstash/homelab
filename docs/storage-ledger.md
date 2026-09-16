@@ -82,6 +82,58 @@ Two accountings against the same ~150Gi bulk tier:
 
 Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage workspaces).
 
+### Garage bucket quotas vs the layout (2026-09-14) — the sum is homelab's to keep
+
+The stacks state what they need (ADR-089: every bucket claim carries `max_size`); **whether the
+cluster can honour the sum is answered here, not in any one claim** (operator, 2026-09-14 — the
+oracle-iac `ert-snapshots` note used to carry its own pool math and it went stale the day the
+three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_bytes` /
+`garage_bucket_bytes` and `garage layout show`:
+
+| bucket | quota | used | owner |
+|---|---|---|---|
+| ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
+| registry | 52 GB | 27 GB | homelab (FU-203) |
+| agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
+| jail-transcripts | 21 GB | 1 GB | homelab |
+| loki | 17 GB | 11 GB | homelab |
+| allure-reports | 11 GB | 8 GB | oracle-iac |
+| argo-artifacts (+ per-repo) | 13 GB | 0 | homelab |
+| the rest (specs, sleep-*, tofu-state, probe) | 20 GB | 1 GB | mixed |
+| **sum promised** | **≈284 GB logical** *(252 GB before #800)* | **146 GB logical** | |
+| **the layout** | **130.4 GiB (140 GB) per zone, rf=3 → usable = one zone** | **88 GB physical per zone** | homelab |
+
+Two numbers make the table honest. **Logical vs physical:** the store holds 146 GB of objects in
+88 GB per zone — Garage's block compression on the ERT dumps, ~1.65×, measured on THIS mix (delta
+output may compress differently; measure before leaning on it). **Promised vs possible:** quotas
+are over-committed 2× against the layout on purpose (the same posture as the bulk tier's
+registry mirrors above); the belt that makes that safe is `GarageBucketQuotaNear` (80 % of a
+quota) plus the disk-fill belts in `garage-alerts/`. A quota counts LOGICAL bytes and frees the
+moment an object is deleted; the physical blocks are reclaimed by Garage's block GC after its
+grace period (upstream durability doc), so disk headroom lags quota headroom by about a day —
+a cleanup job does not buy the concurrent writer room the same hour.
+
+**Ceilings — per zone, because the zones are not symmetric** (Longhorn node CRs, 2026-09-14;
+scheduled = provisioned, not bytes):
+
+| zone | disk | scheduled / max | what else is on it | room to grow garage's 161 GB data volume |
+|---|---|---|---|---|
+| wk-metal-04 | `intel1` 256 GB | **258 / 256 GB** | garage-0 data 161 + meta 32, **PyPI + mcr mirrors 21 + 43** (Longhorn's most-free pick at the time, L30) | **none** — the disk is over-committed today; the mirrors would have to move (intel0 has ~50 GB) before this zone can grow |
+| m70s | `pm961` 256 GB | 193 / 256 GB | garage-1 data + meta only (dedicated) | ~60 GB → data ≈ 215 GB |
+| wk-metal-01 | `mx500` 498 GB | 408 / 498 GB, 107 GB reserved | garage-2 data + meta, the image store, four scratch/bulk replicas | ~90 GB nominal, shared with the scratch tier |
+
+The data PVC is 161 GB against the 140 GB layout, so ≈20 GB of slack per zone is a layout bump
+away without touching any disk. Beyond that, **usable = the smallest zone, and the smallest zone is
+wk-metal-04 at zero** — a 150 GB bucket does not fit this layout: at today's ratio it is ~90 GB
+physical plus ~55 GB for everything else, i.e. every data volume at ~200 GB, which intel1 cannot
+hold at all and pm961 barely. That ask is the capacity item the Requirements table already names
+(dedicated, larger zone disks in the SFFs — FU-137's residual, the fleet-role assignment), not a
+quota edit; the cheap interim on wk-metal-04 is moving the two mirror volumes off intel1.
+**Splitting a bucket
+buys no placement** — rf=3 over three zones puts every block on every zone regardless of bucket;
+split only for quota isolation (e.g. the ert-delta step artifacts out of `ert-snapshots`) or
+retention.
+
 ## The other half: nothing meters it
 
 A ledger that isn't measured is a spreadsheet. Four sightings in six days, all the same class —
@@ -412,6 +464,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
 | **a Garage zone node's envelope** (the register had no row; measured 2026-09-10, garage.md §Target architecture) | ≥ 4 threads at desktop-class clocks (the chain is serial: clock and IPC over core count — m70s's 2C/4T @ 4.0 GHz returns a PUT in 0.68 s, the 4-core 3.4 GHz Ivy Bridge 0.66 s, the 2C ULV X240 1.99 s); **≈ 2 cores free at peak** for Garage (0.8) + the Longhorn engine (up to 1.1) + kernel; **16 GB** so the compacted LMDB (5–6 GB, up to 24 GB before rotation) sits in page cache (X240 at 8 GB: 200–1,800 major faults/s; m70s at 16 GB: 50); DRAM NVMe; **no rides on the node** | both stall episodes (09-08 SA400 windows, 09-10 08:25Z release on wk-metal-01: node 9 % idle, every endpoint p99 28–100 s, quorum races lost) were a ride sharing the zone node; the X240 zone paces GC, resync and PutObject for the whole cluster (mean 1.99 s vs 0.66 s) | need | FU-137 (the garage-2 move), the fleet-role assignment, now durable in `ROADMAP.md` §Hardware strategy: SFFs = std + Garage zones, laptops = control planes |
 | **a RIDE/ARC box** — the "gaming PC" of the fleet-role assignment | desktop-class, tainted, own SSD carrying **no Longhorn replica**, **VT-x** (kata) and **AVX2** (Bun/opencode rides exclude `wk-metal-04` and `m70s` today). Sizing is **extrapolated, not measured**: an ARC runner requests ~2.5 Gi (FU-218) and a kata ride ~5 Gi ([`spikes/ride-latency-breakdown.md`](spikes/ride-latency-breakdown.md)), so ~32 GB would hold ~6 concurrent with headroom, and ≥ 6 fast cores follows the register's "per-core speed sets finish time" (pytest is serial; the IDP Maven/Spring suites are per-core-bound) — **the first IDP CI job's CPU-seconds and peak RSS are what would size this properly** | live labels 2026-09-12: ARC hosts **5**, kata-capable **2**; promoting `wk-metal-02`/`-03` to control planes takes those to **3** and **1**, and to **1** and **0** if this register's own zone-node row (no rides on a Garage zone node) is honoured — `wk-metal-01`/`-04` are two of the three zones, so that row is *already* violated today. ⚠ Cheaper lever first, from the same 2026-09-09 sitting: cilium-agent Burstable (~1.3 cores/node of request tax) before any purchase | **want** — becomes a **need** the day the promotion lands (this register's classes: need = a failure has already happened) | ROADMAP §Hardware strategy; FU-218, FU-235, FU-093 |
+| **`nx-01` and `nx-02` are ONE failure domain, not two** | they are the two nodes of a single NX-6035-G5 2U twin: shared backplane, shared 1+1 PSUs. Both carry `topology.kubernetes.io/zone` labels of their own (`nx-01`, `nx-02`) because they are separate machines for scheduling, and both are declared storage-free, so nothing is misplaced today. **The rule: before any Longhorn replica or Garage zone is placed on either, collapse the two to ONE zone name** — renaming a zone after replicas land makes Longhorn see a new empty disk and declare the old one missing | found in review of the wk-04 onboarding, 2026-09-15; the chassis facts are the private hardware register's `docs/nx-6035-g5.md` | **guard** — costs nothing until data is placed there | `machines/machines.yaml` (both rows carry the note) |
 | **storage spread equally — no box holds more than one zone's share** | a placement rule, not a purchase: Garage places by capacity and Longhorn by free space, so the fattest box becomes the centre of gravity unless the tier is spread | operator direction 2026-09-09 (the fleet-role sitting); the 2026-09-01 collision and the garage-1-on-the-shared-Micron rotation are both this shape | **need** | ROADMAP §Hardware strategy |
 | **`fast` big enough to be the scratch tier** (Optane, replica-1) | **the tier has NO disk since 2026-09-12** — the Optane pair left with thinkcentre and is queued for wk-metal-04 (FU-234), where 26.7 G still fits only ONE 20Gi ride; ≥ 60 G (two rides + headroom) would let the platform repos' scratch leave `bulk` | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data; it was unused at 1.4 G because nothing fits, which is what made retiring its host node safe | want | FU-234, FU-159 |
 

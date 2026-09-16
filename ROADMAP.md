@@ -98,15 +98,25 @@ acceptable at the public edge and replaceable.
 integrations over cloud ones. Live today; the remaining WAN-down gap is ArgoCD's git source
 (GitHub → Forgejo cutover, FU-007).
 
-## HA model (target end-state — not built)
+## HA model (target end-state — re-phased 2026-09-16, ADR-132/-133)
 
-Three independent failure layers — keep them distinct:
+Four independent failure layers (1–4) — keep them distinct — and, before any of them, the thing that
+operates them (0). **Order (operator, 2026-09-16): the management box first, three control planes second,
+router HA last** — the box is what fixes the other layers when they fail, and three CPs make the router
+work survivable.
 
-1. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).
-   A node dies → its VMs restart/migrate to a survivor.
+0. **The management box as reconciler** (ADR-132, [`docs/management-box.md`](docs/management-box.md) §MB4):
+   the declared-vs-live diff (FU-235) → the controller-substrate spike (FU-242) → the pre-merge impact line →
+   `reconcile: auto` on the compute tier, one node at a time. Transient PXE flags leave git (FU-244).
+1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133, FU-243): `cp-01` (pve), `wk-metal-03`
+   (laptop — a battery is a UPS for etcd), a VM on `nx-02` once its drives are in. VIP first on cp-01, then
+   both joins back to back; single OPNsense stays. The Nutanix twin pays the ride-pool bill counted below.
 2. **Router HA — OPNsense CARP pair** across two nodes (anti-affinity, never co-located).
-   `pfsync` = stateful failover; `hasync` = config sync; bonus = rolling firewall updates.
-3. **Public-service HA — Cloudflare LB** → home primary, Civo (scale-to-zero) failover.
+   `pfsync` = stateful failover; `hasync` = config sync; bonus = rolling firewall updates. After the CPs:
+   it rewrites every HAProxy VIP and both BGP peers.
+3. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).
+   A node dies → its VMs restart/migrate to a survivor.
+4. **Public-service HA — Cloudflare LB** → home primary, Civo (scale-to-zero) failover.
 
 Covers a box dying / host reboots. ⚠️ Single ISP uplink stays a SPOF for inbound-public + egress
 (multi-WAN is a separate add-on), but LAN keeps routing so local control stays up. WAN-side CARP is
@@ -193,6 +203,16 @@ Tofu-defined Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC 
 Multi-phase work with several deliverables each — too big to be a follow-up, too committed to be
 backlog. Each names the `FU-NNN` that carries its *next* concrete deliverable; the FU is not the
 program.
+
+### The management box first, then three control planes (ADR-132/-133; FU-235 → FU-242 → FU-243)
+
+The box becomes the reconciler for what ArgoCD cannot reach — the tofu roots and the metal fleet's install —
+and only then are control planes multiplied under it. Phases and their next deliverable: **(a)** the
+declared-vs-live diff on the box's belt — FU-235; **(b)** the controller-substrate spike on a throwaway VM
+— FU-242 ([`docs/spikes/tofu-controller-on-the-box.md`](docs/spikes/tofu-controller-on-the-box.md));
+**(c)** the impact line in the sentinel verdict + box-run maintenance verbs, first human-ordered; **(d)**
+`reconcile: auto` on the compute tier, WIP 1; **(e)** the control-plane endpoint VIP — FU-243 — then the two
+joins. Design: [`docs/management-box.md`](docs/management-box.md) §MB4; §HA model above carries the order.
 
 ### Platform self-service via Crossplane — "homelab as AWS/Civo" (FU-039)
 
