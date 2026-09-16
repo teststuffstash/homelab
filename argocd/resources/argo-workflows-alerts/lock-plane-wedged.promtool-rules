@@ -1,0 +1,16 @@
+# ArgoLockPlaneWedged, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file lock-plane-wedged.promtool-test loads. Not a
+# manifest and applied to nothing (see loop-workflows-failing.promtool-rules for why this file
+# exists and why it is not *.yaml). DRIFT-PINNED, both directions, by `devbox run
+# prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "argo-workflows-lock-plane", "rules": [.spec.groups[].rules[] | select(.alert == "ArgoLockPlaneWedged") | del(.annotations)]}]}' argocd/resources/argo-workflows-alerts/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: argo-workflows-lock-plane
+    rules:
+      - alert: ArgoLockPlaneWedged
+        expr: sum(argo_workflows_gauge{phase="Pending"}) >= 10 and on() (max(anthropic_subscription_semaphore_running) < max(anthropic_subscription_semaphore_max)) and on() (max(anthropic_subscription_dispatch_limited) == 0)
+        for: 30m
+        labels:
+          severity: warning
+          platform_machinery: "true"

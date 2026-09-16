@@ -83,3 +83,31 @@ Operational rule: **never restart the workflow-controller on this shape without 
 latch first.** Tonight a restart would have "fixed" nothing and re-queued five defers.
 
 Residual (the belt): FU-198.
+
+## Third instance (2026-09-14 12:17Z → 2026-09-16 06:50Z) — a wedged holder, phantom slots, and the belt
+
+Found by the operator on the agent-running dashboard: **137 Pending** fleet-wide. Every waiter read
+`subscription-capacity/claude … Lock status: 4/5`; the live holder list had **one** entry —
+`fix-debounce-backstop-1789388220`, `Running` since 09-14 12:17Z, its `decide` pod in `Error` with
+no `finishedAt` and no retry (the template has none), never finalised — holding one slot AND the
+`fix-debounce-decide` mutex, so `fix-debounce-7t4n2` had waited on `decide` since 09-15 00:52Z.
+The other three "held" slots existed only in the sync manager. Discriminator read first:
+`anthropic_subscription_dispatch_limited` = 0, `anthropic_subscription_semaphore_running` = 1 (the
+reviewer) — a wedge, not a latch. **No `respond-*` had completed in 24 h**; four `review-*` had
+queued since 09-15 13:25Z. The trigger for the phantom count is not established (no failure storm
+was looked for this time).
+
+Recovery, 06:49–06:52Z: deleted the **132 stale queued `respond-*`** (>1 h old — still-firing
+alerts re-notify at Alertmanager's `repeat_interval`, and 132 triages draining five at a time
+would have held the pool for hours and burnt the 7d budget), deleted the wedged holder,
+`rollout restart` of the controller. Ninety seconds later: 144 → 4 Pending, five real `respond-*`
+holders, the 30-hour-old `decide` **Succeeded**.
+
+**The belt shipped this time** (FU-198's "Next"): `ArgoLockPlaneWedged` in
+`argocd/resources/argo-workflows-alerts/` — `sum(argo_workflows_gauge{phase="Pending"}) >= 10`
+while `anthropic_subscription_semaphore_running < anthropic_subscription_semaphore_max` and
+`anthropic_subscription_dispatch_limited == 0`, `for: 30m`. Replayed over the 7 days ending
+2026-09-16: **fires from 2026-09-15 03:00Z** (27 h before the dashboard read) through the fix;
+**quiet on 2026-09-12 20–21Z** (Pending 14–19, latched) and on every other hour. Routed like every
+alert — the responder AND `ha-webhook` — so it reaches a human even while the responder is itself
+one of the waiters.

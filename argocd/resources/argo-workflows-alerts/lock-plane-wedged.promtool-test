@@ -1,0 +1,99 @@
+# Behaviour fixture for ArgoLockPlaneWedged (FU-198 — the lock-plane belt the 2026-08-31 incident
+# asked for, with the discriminator the 2026-09-12 instance demanded).
+#
+#   devbox run -- promtool test rules argocd/resources/argo-workflows-alerts/lock-plane-wedged.promtool-test
+#
+# WHAT IS BEING PINNED:
+#   1. THE WEDGE FIRES: waiters piled up (Pending ≥ 10) while the proxy's server-side pool has FREE
+#      slots (running < max) and no rail is latched — the 2026-08-31 and 2026-09-15 shape (case 1).
+#   2. THE LATCH IS NOT A WEDGE: the same Pending pile with `dispatch_limited` = 1 stays quiet —
+#      the 2026-09-12 instance, where five latched respond-* held their locks across Argo's retry
+#      backoff by design and a controller restart would have fixed nothing (case 2).
+#   3. A FULL POOL IS NOT A WEDGE: Pending high while running == max is a busy day — the queue is
+#      the semaphore doing its job (case 3).
+#   4. BELOW THE THRESHOLD stays quiet (case 4); and `for: 30m` rides out a short pile-up that
+#      drains (case 1's early eval).
+#
+# CLOCK: promtool starts at 0, one sample per minute; `for: 30m` fires at 30m, evals at 45m.
+rule_files:
+  - lock-plane-wedged.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. THE FIRE ARM — waiters, idle pool, not latched ────────────────────────────────────────
+  - interval: 1m
+    name: "pending waiters with free slots and no latch fire after 30m"
+    input_series:
+      - series: 'argo_workflows_gauge{job="argo-workflows-workflow-controller",namespace="argo",phase="Pending"}'
+        values: "20+2x60"
+      - series: 'argo_workflows_gauge{job="argo-workflows-workflow-controller",namespace="argo",phase="Running"}'
+        values: "2+0x60"
+      - series: 'anthropic_subscription_semaphore_running{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "1+0x60"
+      - series: 'anthropic_subscription_semaphore_max{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "5+0x60"
+      - series: 'anthropic_subscription_dispatch_limited{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArgoLockPlaneWedged
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: ArgoLockPlaneWedged
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations: {}
+
+  # ── 2. THE LATCH — same pile, both rails latched: expected, quiet ────────────────────────────
+  - interval: 1m
+    name: "a latched fleet queues by design and stays quiet"
+    input_series:
+      - series: 'argo_workflows_gauge{job="argo-workflows-workflow-controller",namespace="argo",phase="Pending"}'
+        values: "20+0x60"
+      - series: 'anthropic_subscription_semaphore_running{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "0+0x60"
+      - series: 'anthropic_subscription_semaphore_max{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "5+0x60"
+      - series: 'anthropic_subscription_dispatch_limited{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "1+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ArgoLockPlaneWedged
+        exp_alerts: []
+
+  # ── 3. A FULL POOL — five real sessions, a queue behind them: a busy day, quiet ──────────────
+  - interval: 1m
+    name: "pending behind a full pool is the semaphore working"
+    input_series:
+      - series: 'argo_workflows_gauge{job="argo-workflows-workflow-controller",namespace="argo",phase="Pending"}'
+        values: "20+0x60"
+      - series: 'anthropic_subscription_semaphore_running{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "5+0x60"
+      - series: 'anthropic_subscription_semaphore_max{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "5+0x60"
+      - series: 'anthropic_subscription_dispatch_limited{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ArgoLockPlaneWedged
+        exp_alerts: []
+
+  # ── 4. BELOW THE THRESHOLD ───────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: "a handful of waiters with an idle pool is not yet a wedge"
+    input_series:
+      - series: 'argo_workflows_gauge{job="argo-workflows-workflow-controller",namespace="argo",phase="Pending"}'
+        values: "4+0x60"
+      - series: 'anthropic_subscription_semaphore_running{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "0+0x60"
+      - series: 'anthropic_subscription_semaphore_max{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "5+0x60"
+      - series: 'anthropic_subscription_dispatch_limited{job="openrouter-proxy",namespace="agent-egress"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ArgoLockPlaneWedged
+        exp_alerts: []
