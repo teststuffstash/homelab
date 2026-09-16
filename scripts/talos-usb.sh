@@ -9,7 +9,7 @@
 #   devbox run talos-usb                      # download ISO + list candidate devices
 #   TALOS_USB_DEV=/dev/sdX devbox run talos-usb   # download + flash (asks to confirm)
 #
-# Keep TALOS_VERSION / TALOS_SCHEMATIC in lockstep with tofu (var.talos_version) and
+# Keep TALOS_VERSION / TALOS_SCHEMATIC in lockstep with tofu (var.talos_version_worker) and
 # ansible/matchbox-talos-assets.yml so USB-onboarded nodes match PXE-onboarded ones.
 set -euo pipefail
 

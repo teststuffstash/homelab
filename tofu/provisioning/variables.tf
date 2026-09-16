@@ -88,7 +88,7 @@ variable "matchbox_ca" {
 }
 
 variable "talos_version" {
-  description = "Talos version for the PXE assets. Keep in lockstep with ../ (cluster) and ansible/matchbox-talos-assets.yml."
+  description = "Talos version for the PXE assets. Keep in lockstep with ../ (var.talos_version_worker — PXE installs are workers) and ansible/matchbox-talos-assets.yml."
   type        = string
   default     = "v1.13.2"
 }

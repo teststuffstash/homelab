@@ -163,9 +163,11 @@ def render_hosts(machines):
 
 
 def render_versions():
-    talos = tofu_default("talos_version")
+    talos_cp = tofu_default("talos_version_controlplane")
+    talos_wk = tofu_default("talos_version_worker")
     kube = tofu_default("kubernetes_version")
     cilium = tofu_default("cilium_version")
+    talos = talos_cp if talos_cp == talos_wk else f"{talos_cp} (control plane) / {talos_wk} (workers)"
     return (f"Cluster: **Talos {talos} / Kubernetes {kube}**, **Cilium {cilium}** CNI "
             "(kube-proxy-free).")
 
