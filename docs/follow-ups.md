@@ -423,7 +423,7 @@ six OVERSIZE items pointer-ized into
       from Secrets); (3) the `approvePlan` flow — a human plan as a commit on master; (4) drift-only mode +
       where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
-      `docs/spikes/tofu-controller-on-the-box.md` (the spike's own doc). Relates FU-097, FU-012.
+      [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Control-plane endpoint = a Talos shared L2 VIP; first deliverable of the three-CP program
       (ADR-133), AFTER the box program (operator ordering 2026-09-16).** Today `cluster_endpoint` is cp-01's
       IP and every kubeconfig points at it. Steps: (a) the ip-plan ruling — an L2 VIP must sit in the CPs'
