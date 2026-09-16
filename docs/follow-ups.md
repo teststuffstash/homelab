@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-242** (2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-245** (2026-09-16: FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -415,6 +415,32 @@ six OVERSIZE items pointer-ized into
       guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
       second seed at the first reason to distinguish them; until then the DR step is written down
       in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
+- [ ] **FU-242** — **Spike: Flux tofu-controller as the box's controller substrate — on a throwaway pve VM,
+      never on the box** (ADR-132 leaves the substrate undecided). Single-node k3s + Flux + tofu-controller
+      against the two READ-ONLY roots (`github`, `cloudflare` — FU-238's plan-only shape). Five questions,
+      kill-order: (1) drives OUR pinned OpenTofu + provider mirror, or its runner image dictates versions
+      (FU-240's shape); (2) runs our roots as-is (`-state=` local file, `TF_ENCRYPTION`, per-root creds
+      from Secrets); (3) the `approvePlan` flow — a human plan as a commit on master; (4) drift-only mode +
+      where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
+      lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
+      `docs/spikes/tofu-controller-on-the-box.md` (the spike's own doc). Relates FU-097, FU-012.
+- [ ] **FU-243** — **Control-plane endpoint = a Talos shared L2 VIP; first deliverable of the three-CP program
+      (ADR-133), AFTER the box program (operator ordering 2026-09-16).** Today `cluster_endpoint` is cp-01's
+      IP and every kubeconfig points at it. Steps: (a) the ip-plan ruling — an L2 VIP must sit in the CPs'
+      subnet and `docs/ip-plan.md` says no NEW VIPs in `.2–.49`, so a reserved address/sub-range
+      is a ruling, not an exception; (b) etcd snapshot; (c) the VIP on cp-01's machine config + `cluster_endpoint`
+      cutover (runtime apply, no pve maintenance); (d) kubeconfig/talosconfig/jail/box/loop endpoints. Then
+      the laptop (wk-metal-03) reinstall to maintenance, the nx-02 VM, both joins back to back — never rest at
+      two members; nx-02 is not CP-production-ready until its drives are in. Relates FU-235, FU-097.
+- [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
+      says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
+      the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
+      `tofu/provisioning/flags.local.tf` (gitignored `*.local.tf`) holds per-node groups; flag = write + targeted
+      apply, unflag = delete + targeted destroy; the box's provisioning plan shows a live flag as drift until
+      unflagged (the belt); a lint refuses `matchbox_group` in TRACKED provisioning files; provisioning.md
+      steps 1/6 + the onboarding skill rewritten around it. **First act:** move or destroy `nx_01_diag`
+      (a standing reinstall flag on a production node; 06:39 showed disk-first boot order bounds the loop
+      risk, not the STATE partition). End state: the reconciler sets and clears flags inside one sync. Relates FU-235.
 - [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
       box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
       host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
@@ -1191,18 +1217,16 @@ the block needs pruning, not more headings.
       `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
       shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
       Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier.
-- [ ] **FU-235** — **Declared node labels AND taints vs live: the metal nodes drift.** (1) `kata: true`
-      on wk-metal-01..04, but LIVE only -01/-02 carry `homelab.io/kata` (2026-09-12), so the kata
-      pool is 2, not 4 (`tofu/kata.tf:30` nodeSelector). (2) **2026-09-16:** `kubernetes_node_taint.ephemeral`
-      cannot own `.spec.taints` on a node cilium-operator has untainted (nx-01: `Field manager
-      conflict`, Ready 18 h) — `force = true` was tried and reverted the same hour: taints are an
-      ATOMIC list (a forced owner drops the cordon + cilium's taints next apply); and the shared
-      "Terraform" SSA manager made EVERY taint re-apply prune the zone labels (six nodes, then
-      wk-03 on a non-forced re-test; restored; own `field_manager` since d4b350f3). **Next:**
-      move BOTH labels and taints into the Talos machine config (`machine.nodeLabels` already
-      carries kata; add `machine.nodeTaints`) and retire the k8s-provider taint resource; the
-      -03 apply is safe, -04 inside a maintenance window (Garage zone, GAPS `tofu-apply-G2`);
-      then the declared-vs-live belt (one PromQL over `kube_node_labels`/taints). Relates FU-218, FU-072.
+- [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
+      true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
+      (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
+      (nx-01 conflict; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3 after the
+      shared manager pruned the zone labels). (3) **install-time drift** (2026-09-16, nx-01): the machine
+      config applied in place, tofu plans clean, yet the node runs the plain schematic and EPHEMERAL on the
+      SATA disk — the runtime half landed, the install half never can. **Next:** the DIFF on the box's probe
+      — declared (machines.yaml + schematic ids) vs live (`talosctl get extensions`/`volumestatus`, labels,
+      taints), one gauge per node → alert; then labels+taints into the Talos machine config and the k8s
+      taint resource retired. It is ADR-132's reconciler diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 
