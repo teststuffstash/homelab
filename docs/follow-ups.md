@@ -1024,6 +1024,10 @@ the block needs pruning, not more headings.
       prints like the ArgoCD observation-window line (durability caveat = FU-195) — when a SECOND
       window class leaks. Detail: `docs/spikes/responder-week-audit.md` §The 2026-09-16 pass.
 
+      **Third sighting 2026-09-16 ~18:00Z (a SECOND window class): wk-03 shut down under a `node-maintenance` window;
+      `CiliumUnreachableNodes` ×11 (fires on every OTHER node's agent), `KubeDaemonSetRolloutStuck/MisScheduled` ×8,
+      `KubeNodeUnreachable`/`KubeletInstanceUnreachable`, `KubePodNotReady` ×4 — none carry node=/instance=, so the
+      window silence covered none; seat silenced by hand for 8 h. The FU's own build trigger has fired.**
 - [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
       bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
       actionable, history = git/S3). ⚠ **BLOCKED on FU-210** (no responder transcripts exist, so
