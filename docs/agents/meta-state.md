@@ -10,6 +10,8 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
+  **Update 18:00Z:** PR#1742 (FU-215 Unbound belt) MERGED; PR#1740 back in review after the image-axis fix
+  (bd3b8ed4 — the reviewer's one blocking finding); FU-215 root fixed (Turn off IPv6, do-ip6 off).
   Cause: siderolabs/talos#13496 (incident `docs/incidents/2026-09-16-page-table-check-reboots.md`),
   not the hardware. nx-01 + wk-metal-02 run v1.13.10 (verified) and are uncordoned; **wk-03 is shut
   down on purpose** — do NOT `node-maintenance up wk-03`; its path is the VM RECREATE from the
@@ -42,10 +44,7 @@ never the session's arc — that is TICK-LOG's.)
   open 🚨 24 → 21. Of the 17 open-with-cleared-alert threads, only 3 qualified for an unattended
   close — the other 14 have genuine human comments, so the `[bot]`-suffix bug's blast radius was
   smaller than the 13 `A human is engaged` body lines suggested.
-  (8) **PR#1733 (the responder rebuild): conflict RESOLVED 2026-09-16 17:06Z** (`docs/follow-ups-archive.md`,
-  both sides' new entries kept; merge 97b1dc3d pushed), auto-merge armed (squash), CI re-running —
-  the codeowner read was already done (four reviewer rounds fixed in-PR). If it is still open:
-  read CI, fix in-PR. Worktree `/tmp/claude-1000/-workspace-homelab/8ce7b148-*/scratchpad/wt`.
+  (8) **PR#1733 MERGED 2026-09-16 17:33Z** (squash c8c1395b) — the (1)–(3) verification list above is now live.
   (6) **Codeowner reads executed this session (ADR-110) — the PR board:**
   **#1698** (`estimate_budget`: price `:exacto` as its base id) APPROVED — a price-lookup defect,
   not budget semantics; miss-driven retry so `:free` never degrades, unknown models still escalate.
