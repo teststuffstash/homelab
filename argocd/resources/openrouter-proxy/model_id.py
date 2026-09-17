@@ -29,6 +29,11 @@ Rules, in one place, ordered:
 The string form stays canonical in claims and `agents/stacks.json`; this parser is the compatibility
 layer that lets consumers stop guessing. A structured claim field is the remaining FU-127 leg.
 
+The SECOND rule this file owns is the provider-routing suffix (`<vendor>/<model>:<suffix>`): the
+suffix pins ROUTING, never price, so it is never part of a lookup or bookkeeping KEY. `base_id` /
+`lookup_ids` are the pricing half (a MISS drives the retry), `strip_routing_suffix` the bookkeeping
+half (the suffix this platform's own router appends). See the section below.
+
 Use from shell:  eval "$(python3 agents/model_id.py --shell "$MODEL")"   # MODEL_RAIL/_HARNESS/_MODEL
 Use from python: from model_id import parse
 """
@@ -64,6 +69,86 @@ def parse(model_id: str) -> dict[str, str]:
 
 def is_subscription(model_id: str) -> bool:
     return parse(model_id)["rail"] == RAIL_SUBSCRIPTION
+
+
+# ── Provider-routing suffixes: the strip rule's ONE home (homelab#1670, #1697) ───────────────────
+# OpenRouter overloads an id with a colon-suffix shorthand that pins ROUTING, never PRICE, and the
+# registry keys a model by its BARE id. So an id this platform's own router appends — `:exacto`,
+# from the FU-186 `provider_policy` on the coding class — used to miss every lookup in
+# `agents/estimate_budget.py`, price at the conservative $1.0/M default and print a PHANTOM
+# `⚠ ESCALATE`: 31× the real price on the #1665 ride, which a coordinator following
+# `agents/coordinator/README.md` step 3 ("stop, label agent/blocked") turns into every queued item
+# on the stack parked for a human, with correct numbers and a wrong conclusion.
+#
+# Both halves of the rule live HERE, and every consumer imports them (#1697): the PRICING half
+# retries a MISS (`base_id`/`lookup_ids` — the registry read, the static table and `--lookup`'s
+# report all go through them, so those three can never disagree about what an id costs), and the
+# BOOKKEEPING half strips the suffix OUR router appends (`strip_routing_suffix` — the cooldown /
+# breaker key must be the chain id the /route eligibility loop filters candidates against).
+#
+# The retry is MISS-DRIVEN, and that is the whole safety argument: the id AS GIVEN is tried first
+# against the registry and the static table, and only an id NOTHING carries is retried as its base.
+# `:free` is therefore never degraded to its paid sibling — it is a variant OpenRouter lists in its
+# own right (`tencent/hy3:free`), priced as itself while any table still carries it, and it is a
+# chain id in its own right too, which is why `strip_routing_suffix` leaves it whole — and a
+# genuinely unknown model still reaches the $1.0/M default and can still escalate.
+def base_id(model: str) -> str | None:
+    """`model` truncated at its last `:` — the id a lookup RETRIES when nothing carries `model`
+    itself. Pricing-only: the suffix pins provider routing, so the FULL id stays the dispatch id
+    (`Estimate.model`, the claim, the routed model)."""
+    base, sep, _suffix = model.rpartition(":")
+    return base if sep and base else None
+
+
+def base_ids(model: str) -> list[str]:
+    """Every id `model` reduces to by dropping ONE colon-suffix at a time, nearest first (#1693's
+    doubled `:exacto` on a pre-suffixed chain entry reduces to the paid id, and `tencent/hy3:free`
+    reduces to `tencent/hy3` only AFTER itself has been tried)."""
+    out: list[str] = []
+    rest = base_id(model)
+    while rest and rest not in out:
+        out.append(rest)
+        rest = base_id(rest)
+    return out
+
+
+def lookup_ids(model: str) -> list[str]:
+    """The ids a PRICE lookup tries for `model`, in order: the id as given, its rail-normalized
+    form, then each one's successive base ids — best first, never degrading an id a table already
+    carries."""
+    out: list[str] = []
+    for candidate in (model, parse(model)["model"]):
+        for one in (candidate, *base_ids(candidate)):
+            if one and one not in out:
+                out.append(one)
+    return out
+
+
+def routing_suffix(model: str, priced: str) -> str | None:
+    """The routing suffix `priced` dropped from `model` (e.g. ':exacto'), or None when `priced` is
+    not `model`'s base id — a rail prefix normalized away is NOT a routing suffix. Both sides are
+    normalized, so `priced` may be a candidate carrying the rail prefix itself."""
+    normalized, base = parse(model)["model"], parse(priced)["model"]
+    return normalized[len(base):] if base and normalized.startswith(base + ":") else None
+
+
+# The suffixes THIS platform's router appends to a pick (`route()`: the class's `provider_policy`),
+# i.e. the closed set a BOOKKEEPING key may drop. OpenRouter's shorthand family is wider — `:nitro`
+# (throughput ordering), `:floor` (price ordering), `:online` (the web plugin) — and a second
+# appended shorthand adds its name HERE, in the one home, never at a call site.
+ROUTING_SUFFIXES = (":exacto",)
+
+
+def strip_routing_suffix(model: str) -> str:
+    """`model` without ONE routing suffix (`ROUTING_SUFFIXES`), unchanged when it carries none —
+    the BOOKKEEPING half of the strip rule. A cooldown/breaker row is keyed under the id the
+    /route eligibility loop filters candidates against, and a VARIANT (`:free`) IS that chain id,
+    so it stays whole: `base_id` truncates ANY suffix because there a miss drives the retry, while
+    this drops only what the router itself appended."""
+    base = base_id(model)
+    if base is None:
+        return model
+    return base if model[len(base):] in ROUTING_SUFFIXES else model
 
 
 def main(argv: list[str]) -> int:

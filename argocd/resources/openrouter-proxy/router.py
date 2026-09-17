@@ -512,13 +512,15 @@ def record_provider_event(model: str, provider: str, status: int,
                           session: str = "") -> None:
     """Passive data-plane observation: one row per forwarded OpenRouter chat/completions
     response. `class` buckets the status for cheap aggregation.
-    FU-186 step 1: strip :exacto suffix so cooldown/breaker bookkeeping is keyed under the
-    bare model id — the same id the /route eligibility loop filters candidates against.
+    FU-186 step 1: strip the routing suffix so cooldown/breaker bookkeeping is keyed under the
+    bare model id — the same id the /route eligibility loop filters candidates against. The strip
+    rule has ONE home, `model_id.strip_routing_suffix` (homelab#1697): it drops only the suffix
+    this platform's own router appends, so a `:free` chain id stays whole.
 
     FU-201 c: `session` is the proxy-side session key ref (from _cb_session()), stored so
     record_report() can look up the served provider for session-keyed requests (generations
     is not harvested for session keys). Defaults to empty string for legacy callers."""
-    model = model.removesuffix(":exacto")
+    model = model_id.strip_routing_suffix(model)
     klass = ("2xx" if 200 <= status < 300 else
              "429" if status == 429 else
              "4xx" if 400 <= status < 500 else
@@ -2597,7 +2599,10 @@ def self_test() -> int:
     _classes["classes"]["coding"]["provider_policy"] = "exacto"
     _exacto2 = route(dict(base, chain=["deepseek/deepseek-v4-flash"]), CTX)
     _exacto_model = _exacto2["model"]  # "deepseek/deepseek-v4-flash:exacto"
-    _bare_model = _exacto_model.removesuffix(":exacto")  # "deepseek/deepseek-v4-flash"
+    # The expectation is a LITERAL, not a re-derivation through the production strip: the point of
+    # this assertion is that the bookkeeping key is the bare chain id, and computing it with the
+    # same function under test would make the pin vacuous (homelab#1697).
+    _bare_model = "deepseek/deepseek-v4-flash"
     assert _bare_model != _exacto_model, f"paid pick must carry :exacto here: {_exacto2}"
     # Trip a cooldown using the model as it arrives on the completion path (suffixed).
     for _ in range(8):
