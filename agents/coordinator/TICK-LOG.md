@@ -9659,3 +9659,42 @@ env vars; the FU-249 Sensor filter is still `__paused-FU-249__`. Reach, measured
 2026-09-17 (338 firing series total): ~51 denied by the `triage:none` set (22 of them newly
 labelled, i.e. arrivals that would have been SESSIONS), 6 more by `severity:info`, and 69 in the
 classes a declared window covers while one is open.
+
+## 2026-09-17 ~08:30–09:00Z — KubeJobFailed reads a Job OBJECT, not a schedule (operator catch → PR#1751)
+
+Operator, on the alert my own #1748 had just decided NOT to deny: *"Who cares about a single job
+failing? … It did it on the next try? … And should I go and clean up all Error pods manually to
+clear the Error? meta rotation has actual alerts when disk is full?"* All three right, and the
+middle one names the defect.
+
+**`kube_job_failed > 0` reads a Job OBJECT.** On a CronJob that is a latch pointing the wrong way:
+the failed object leaves only when `failedJobsHistoryLimit` rotates it out, which requires the job
+to FAIL MORE — so the healthier the schedule, the longer the alert stands, and the only remedy on
+offer is `kubectl delete job` to silence a detector. Measured live: `garage-write-probe` runs every
+MINUTE, failed twice on 09-16 at 18:39/18:44Z, **succeeded 776 times since**, and was still firing
+13.5 h later needing three more failures to clear. `garage-meta-rotation`: one failure, ~54
+successes, needing five more. Both also carry purpose-built self-clearing belts
+(`GarageWriteProbe{Failing,Slow,Silent}`, `GarageMetaRotation{Failed,ControllerSilent,
+NotReclaiming}`, `GarageDiskFillingUp`) — the stock rule was noise ON TOP of coverage.
+
+⚠ **This reverses #1748's reading**, which kept the rule on the grounds that it is the only generic
+signal for a Job with no purpose-built belt. The premise was wrong: a detector that clears by
+failing more is not coverage. But a routing deny would still have been the wrong instrument — it
+hides the alert from the responder and leaves the operator the same broken rule. **Replaced, not
+denied**, which is what this repo's own route comment says to prefer: `defaultRules.disabled` (the
+NodeSystemSaturation precedent, #477) + `argocd/resources/job-health/` with the health question
+split three ways — `CronJobNotSucceeding` (the SCHEDULE is not completing; **threshold is
+cadence-derived**, `next_schedule_time - last_schedule_time` IS one interval, verified against all
+21 live CronJobs at 60s/900s/21600s/43200s/86400s/604800s, so one rule spans per-minute to weekly
+with no per-job table to rot; self-clears on the next success), `CronJobNeverSucceeded` (the series
+is ABSENT when nothing ever succeeded — the `unsuspended ≠ ever ran` class), and `KubeJobFailed`
+narrowed to Jobs no CronJob owns, where a persisting failure IS the open item.
+
+**End-state, watched rather than assumed:** app-of-apps synced 5ec4a676 → `job-health`
+Synced/Healthy → Prometheus dropped the stock `kubernetes-apps` copy → the three stale alerts aged
+out of Alertmanager by themselves at 08:56Z. **No Job objects were deleted.** That was the point.
+
+**Method note (the same lesson as PR#1750, applied on purpose this time):** the regression fixture
+was run against the rule it replaces BEFORE being committed — the stock expr fires at 2h50m on the
+identical input, the new rules are silent. A pin that passes pre-fix asserts nothing, and this
+session had already shipped one.
