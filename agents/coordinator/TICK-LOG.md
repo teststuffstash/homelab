@@ -9730,3 +9730,25 @@ real gap when the #1738 ride hit it on 09-16.
 #1751 KubeJobFailed replaced · #1752 replay hermeticity · #1738 read+merged), two of my own
 readings reversed on operator/reviewer evidence (KubeJobFailed's coverage, the pipe-join "bug"),
 both recorded above rather than quietly corrected. Wind-down at ~950k ctx.
+
+## 2026-09-17 — the opencode.ai rails re-parked (operator, FU-251)
+
+**Condition:** the operator read two oracle-fleet rides still going out on the Go rail
+(oracle-fleet #634 at 12:42, #636 at 12:23, both `opencode-go/deepseek-v4-flash`) and said the
+rail was supposed to be disabled already — we are not sending the correct session header yet.
+The live deploy had `OPENCODE_RAIL_DISABLED=0`: FU-213's un-park on 09-14 (Goal #1640 acceptance
+2) rested on `_forward_upstream` attaching `x-opencode-session: <the ride's session ref>`, and
+that premise does not hold.
+
+**Command:** the same one-flip choke point FU-213 built — `OPENCODE_RAIL_DISABLED` back to `"1"`
+in `argocd/resources/openrouter-proxy/deployment.yaml` (both legs: one account, one key, one UA),
+pushed to master, ArgoCD hard-refreshed, pod rolled. No launcher knob, no claim edit: the gate
+does the work. FU-251 filed with what the next un-park must establish (the header NAME OpenCode
+reads and the VALUE shape it expects — ours is the injected credential's opaque ref, not an
+opencode-issued session id); `chainless-redesign.md` §the header section re-opened, its 09-14
+"CLOSED" downgraded to "both gaps shut", and the proxy's own comment block corrected.
+
+**Verified live, not from the diff:** `/opencode-limit` → `{"limited": true, "reason":
+"rail-disabled"}` (so `--pick-rail` can never return Go and the Go arm takes the M12 degrade);
+the Go forward leg answers `503 the OpenCode Go rail is disabled`, the Zen leg 503 likewise; no
+pod carries `homelab.teststuff.net/rail=opencode-go`, so nothing was in flight at the flip.
