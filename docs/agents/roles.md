@@ -331,6 +331,12 @@ never harder posture on quiet ones.
   verdict or say why it is wrong), and **compose issue bodies with `--body-file`, never an
   interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own body
   and ate every inline code span, deleting exactly the identifiers a fixer needs.
+  **CAPTURE (FU-210/FU-231, 2026-09-17):** the lane was the one role outside §A1 — a triage that
+  filed no issue left NOTHING, and the 2026-09-03 forgejo-pg-1 session is the measured cost (subject
+  marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).
+  Every session now writes `homelab/alert-<fp>/responder-r1-<ts>/` — input alert, `triage.log`,
+  the transcript, an A1 manifest and a typed `finding.json` — with the write-only bucket key, before
+  the post-session belts, degrading loudly rather than failing.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).

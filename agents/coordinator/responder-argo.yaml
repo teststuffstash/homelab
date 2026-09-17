@@ -241,6 +241,20 @@ spec:
           - name: GH_TOKEN
             valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
           - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          # §A1 transcript capture (FU-210): the write-only key for the agent-transcripts bucket.
+          # Same-ns Secret written by the Crossplane Workspace (garage-workspace.yaml), same four
+          # vars and the same `optional: true` degrade as agents/reviewer-session.sh's pod — the
+          # capture hooks the A1 design named were worker + reviewer + coordinator, and this role
+          # was simply never wired, so the bucket had no responder prefix at all (verified empty
+          # 2026-09-16). WRITE-ONLY is the whole credential story: the key can append exhaust and
+          # cannot list or read a byte of it, which is also why the bucket can never become this
+          # lane's own state store (see the §finding record's note).
+          - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+          - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+          - name: AGENT_TS_ACCESS_KEY_ID
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+          - name: AGENT_TS_SECRET_ACCESS_KEY
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
@@ -249,6 +263,105 @@ spec:
           - |
             set -euo pipefail
             printf '%s' "$PAYLOAD" > /tmp/alerts.json
+
+            # ── §A1 CAPTURE: the transcript + the finding record (FU-210 / FU-231) ───────────
+            # THE HOLE THIS CLOSES. The A1 capture hooks (docs/agents/observability-and-retro.md)
+            # cover worker, reviewer and coordinator; the responder was never wired, so the bucket
+            # carried NO responder prefix at all. What that cost, measured: on 2026-09-03 a triage
+            # received CNPGInstanceNotReady/ExporterDown for forgejo-pg-1 (a real pg_rewind
+            # divergence), marked the subject triaged, filed NOTHING anywhere in the org, and the
+            # probe lane deferred to it as COVERED — the alert then stood 8 h. The DECISION was
+            # unrecoverable, because a session that files nothing leaves nothing. Every later read
+            # of this lane — the 2026-09-04→11 audit, the 09-16 pass — had to be reconstructed from
+            # GitHub artifacts, which by construction cannot see a triage that produced none.
+            #
+            # LAYOUT: s3://agent-transcripts/homelab/alert-<fp>/responder-r1-<ts>/ — the §A1
+            # <project>/<task>/<role>-r<round>-<ts> shape with task = the alert fingerprint, which
+            # is FU-210's own prefix. project is `homelab` for every alert regardless of where the
+            # triage routes its issue: the SESSION is the platform's, the issue is the stack's.
+            #
+            # DEGRADE, never fail: no key (the Secret is `optional: true`), no s5cmd, a refused
+            # put — each is one loud line and the triage continues. Uploading exhaust must never
+            # be able to break the lane it is recording.
+            #
+            # ⚠ THE KEY IS WRITE-ONLY (garage-workspace.yaml: read=false, write=true). That is the
+            # credential story and also a hard boundary on what this record may ever become: the
+            # pod can append but cannot list or read a byte, so the bucket can never serve as the
+            # lane's own dedup/decided-once state. That state stays in GitHub issues and the
+            # responder-seen ConfigMap. Anything that wants to READ these findings (the seat's
+            # meta-events `triage` source, the retro) does it with the READER key, outside the pod.
+            # >>>REPLAY:responder-capture>>>
+            TS_RUN=""; TS_PREFIX=""
+            _ts_ready() {
+              [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 absent?) — capture skipped"; return 1; }
+              command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — capture skipped (bump AGENT_COORDINATOR_IMAGE)"; return 1; }
+              return 0
+            }
+            _ts_put() { # <local-file> <remote-basename> — one loud failure, never fatal
+              [ -s "$1" ] || return 0
+              AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage \
+                s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
+                || echo "transcripts: upload FAILED for $2 (non-fatal)"
+            }
+            # Call ONE: straight after the session, so a crash in the post-session belts below
+            # cannot cost the transcript. Reads $FP/$NAME/$SUBJ/$rail from the loop.
+            _ts_session() {
+              _ts_ready || return 0
+              TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"
+              TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/alert-${FP}/responder-r1-${TS_RUN}"
+              jq -n --arg role responder --arg project homelab --arg task "alert-$FP" \
+                    --arg alertname "$NAME" --arg fp "$FP" --arg subject "$SUBJ" \
+                    --arg model "${TS_MODEL:-}" --arg rail "${rail:-}" --arg pod "${HOSTNAME:-}" \
+                    --arg key coordinator-claude --arg ts "$TS_RUN" \
+                    '{role:$role, project:$project, task:$task, round:1, alertname:$alertname,
+                      fingerprint:$fp, subject:$subject, model:$model, rail:$rail,
+                      session_key:$key, pod:$pod, timestamp:$ts,
+                      files:["alert.json","triage.log","finding.json"],
+                      grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json 2>/dev/null || return 0
+              _ts_put /tmp/alert-one.json alert.json
+              _ts_put /tmp/triage.log     triage.log
+              _ts_put /tmp/ts-manifest.json manifest.json
+              # The session's own JSONL — only this session's, keyed by the marker touched just
+              # before the claude call. `find -newer` rather than a whole-directory sweep: the pod
+              # walks N alerts in one loop and each prefix must carry ITS turn, not its
+              # predecessors'.
+              # ⚠ `|| true` is load-bearing, and its absence is a whole-loop kill: `$HOME/.claude/
+              # projects` does not exist until claude has written a session, so a triage that died
+              # before its first turn makes `find` exit non-zero, `pipefail` propagates it, and
+              # `set -e` takes down the alert loop MID-PAYLOAD — every remaining alert in the group
+              # silently untriaged, while the exhaust-upload that caused it is the one thing in
+              # this script that must never be load-bearing. Caught by the harness, not by review.
+              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do
+                _ts_put "$f" "$(basename "$f")"
+              done
+              echo "transcripts: uploaded → $TS_PREFIX"
+            }
+            # Call TWO (FU-231): the typed finding record, written once the verdict and the filed
+            # issue are known. This is the DIRECTION the operator set on 2026-09-11 — issues are
+            # for ACTIONABLE things, history accumulates in git or a bucket — built as the
+            # PRODUCER half only. Report-only issues are deliberately still filed: they are what
+            # the DECIDED-ONCE gate keys on (an OPEN issue carrying a `fix-verdict:` line), so
+            # routing them to the bucket INSTEAD would return every standing condition to a daily
+            # session, which is the generator #1733 just removed. Flipping that switch needs the
+            # bucket to be readable from the pod, and the key is write-only by design — recorded
+            # on FU-231 rather than worked around.
+            _ts_finding() { # <verdict> <issue-ref-or-empty> <route-repo>
+              [ -n "$TS_PREFIX" ] || return 0
+              jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg alertname "$NAME" --arg fp "$FP" \
+                    --arg subject "$SUBJ" --arg verdict "${1:-none}" --arg issue "${2:-}" \
+                    --arg route_repo "${3:-}" --arg route_stack "${ROUTE_STACK:-}" \
+                    --arg selfref "${SELF_REF:+true}" --arg window "${WIN:-}" \
+                    --arg model "${TS_MODEL:-}" --arg rail "${rail:-}" --arg pod "${HOSTNAME:-}" \
+                    '{schema:"responder-finding/v1", ts:$ts, alertname:$alertname, fingerprint:$fp,
+                      subject:$subject, verdict:$verdict, issue:$issue, route_repo:$route_repo,
+                      route_stack:$route_stack, self_referential:($selfref == "true"),
+                      observation_window:$window, model:$model, rail:$rail, pod:$pod}' \
+                > /tmp/ts-finding.json 2>/dev/null || return 0
+              _ts_put /tmp/ts-finding.json finding.json
+              echo "finding: recorded verdict='${1:-none}' issue='${2:-none}' → $TS_PREFIX/finding.json"
+            }
+            # <<<REPLAY:responder-capture<<<
+
             # ── RESOLVE LEG (FU-133, 2026-08-04) ────────────────────────────────────────────
             # "Alert cleared, issue remains" was never a bug in the triage — the event was never
             # DELIVERED: the responder receiver ran send_resolved = false, so nothing downstream
@@ -886,6 +999,11 @@ spec:
             ⚠ HUMAN-CLOSED THREADS — do NOT reopen these:$HUMANCLOSED. A person closed each of them deliberately, and the shell RE-CLOSES any reopen of them after your session (homelab#1733). If one of them is the right record for what you found, COMMENT on it and leave it closed. If what you found is genuinely new, file your own issue with a 'related: #N' line. Reopening is for a thread the resolve leg closed when its alert cleared — machinery undoing machinery — never for a human's decision."
 
               echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
+              # §A1: the marker `find -newer` keys this session's JSONL off, and a fresh log file.
+              # Touched HERE, immediately before the run, so a multi-alert payload never uploads a
+              # predecessor's transcript into this alert's prefix.
+              : > /tmp/ts-mark; : > /tmp/triage.log
+              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
               # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
               # alias — parse through the ONE parser (model_id.py), coordinator-session.sh's exact move
               # (FU-127, PR#813). Passed verbatim, EVERY triage session since 2026-09-01 19:24 died at
@@ -934,8 +1052,16 @@ spec:
               REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <one-clause reason>
             For example: 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master; a delete lets the ReplicaSet re-pull.'
             At most one per distinct remediation per session. Do NOT emit this line when your verdict is report-only or when no mechanical remediation applies." \
-                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
-                || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
+                --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 40 </dev/null 2>&1 \
+                | tee /tmp/triage.log \
+                || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow" | tee -a /tmp/triage.log
+              # The model resolution moved ABOVE the call (TS_MODEL) so the manifest can record
+              # which model actually ran. It is the same one-parser expression, not a second read:
+              # passing the routed answer verbatim is what killed EVERY triage session for a week
+              # (2026-09-01 → PR#1522, 8 of 12 daily slots spent on sessions that never started).
+              # Capture FIRST, belts after: a failure in the reopen/verdict blocks below must not
+              # be able to cost the transcript, which is the whole FU-210 property.
+              _ts_session
 
               # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────
               # Live 2026-08-09. The subject belt reopened closed homelab#103 for a new same-subject
@@ -1151,6 +1277,14 @@ spec:
                 fi
               fi
               # <<<REPLAY:responder-cause-line<<<
+
+              # ── §A1 call TWO: the typed finding record (FU-231 producer half) ───────────────
+              # Last act of the iteration, because it is the only point where the verdict, the
+              # filed issue and the route are all known. `VVERD` is unset when no issue carried
+              # this fingerprint (a report-only triage that filed nothing, or a quick-fix PR) —
+              # `none` is the honest value there, and it is exactly the state that used to leave
+              # no artifact at all.
+              _ts_finding "${VVERD:-none}" "${VHIT:+$VREPO#$VHIT}" "${VREPO:-$ROUTE_REPO}"
             done
         resources:
           requests: { cpu: "100m", memory: "256Mi" }

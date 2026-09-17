@@ -104,11 +104,21 @@ cat > "$BIN/claude" <<'EOF'
 # and EGRESS_NOTE the real script built can be asserted on.
 printf '%s\n' "claude $*" >> "$H/calls.log"
 for a in "$@"; do case "$a" in -*) ;; *) printf '%s' "$a" > "$H/brief.txt"; break;; esac; done
+# A real session prints its report; the §A1 capture tees that into triage.log, and an EMPTY file
+# is deliberately not uploaded — so the stub must speak or the capture assertions pass vacuously.
+echo "triage report (stub): diagnosis and verdict would be here"
 exit 0
 EOF
 cat > "$BIN/curl" <<'EOF'
 #!/bin/bash
 printf '%s\n' "curl $*" >> "$H/calls.log"; exit 0
+EOF
+# §A1 capture (FU-210): the bucket write recorder. Present ALWAYS, so the difference between the
+# two capture paths is the KEY, never the binary — which is the real production shape (the Secret
+# is `optional: true`, the image always carries s5cmd).
+cat > "$BIN/s5cmd" <<'EOF'
+#!/bin/bash
+printf '%s\n' "s5cmd $*" >> "$H/calls.log"; exit 0
 EOF
 cat > "$BIN/git" <<'EOF'
 #!/bin/bash
@@ -130,6 +140,17 @@ section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 # `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
 scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md; export H; }
 go() {
+  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
+  PUSHGATEWAY="" PATH="$BIN:$PATH" \
+    bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
+  OUT="$(cat "$H/out.txt")"
+}
+# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately leaves it unset,
+# so every other scenario exercises the degrade path (`optional: true` Secret absent) and the
+# capture can never be load-bearing for a triage.
+go_ts() {
+  AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s \
+  AGENT_TS_BUCKET=agent-transcripts AGENT_TS_ENDPOINT=http://garage.garage.svc:3900 \
   PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
@@ -676,6 +697,53 @@ searchhit teststuffstash/homelab 103
 go "$(alert f22 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
 want      "an unreadable close actor says so by name" "close actor unreadable"
 wantnot   "…and does NOT claim a human close it cannot prove" "HUMAN-CLOSED"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-210 / FU-231 — the §A1 transcript + finding record"
+# A triage that files nothing used to leave NOTHING: the 2026-09-03 forgejo-pg-1 session marked the
+# subject triaged, filed no issue anywhere, and the probe lane deferred to it as COVERED while the
+# alert stood 8 h. The decision was unrecoverable. So every session now writes its transcript, its
+# input alert and a typed finding to s3://agent-transcripts/homelab/alert-<fp>/responder-r1-<ts>/.
+# What the harness can hold: the prefix shape, WHICH files go up, that the verdict reaches the
+# finding record, and — the load-bearing half — that a missing key degrades instead of failing.
+
+scenario capture-degrades
+printf '[]' > "$H/gh/search.json"
+go "$(alert ts1 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want      "no S3 key → capture skipped, loudly" "no S3 key in pod"
+want      "…and the triage itself still completes" "subject=pvc:monitoring/x"
+wantnocall "…and nothing is written to the bucket" "s5cmd"
+
+scenario capture-uploads
+printf '[]' > "$H/gh/search.json"
+printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+go_ts "$(alert ts2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want     "the prefix is FU-210's: homelab/alert-<fp>/responder-r1-<ts>" "s3://agent-transcripts/homelab/alert-ts2/responder-r1-"
+wantcall "the INPUT alert is captured (the record is replayable)" "cp /tmp/alert-one.json"
+wantcall "the session's own words are captured" "cp /tmp/triage.log"
+wantcall "…with the A1 manifest beside them" "cp /tmp/ts-manifest.json"
+wantcall "…and the FU-231 typed finding record" "cp /tmp/ts-finding.json"
+want     "a triage that filed NOTHING still records a finding — the 09-03 shape" "verdict='none' issue='none'"
+
+# The verdict must REACH the record, or the finding is a list of alerts rather than of decisions.
+scenario capture-finding-verdict
+printf '[]' > "$H/gh/search.json"
+printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '[{number:42, body:"alert-fp:ts3\nfix-verdict: fix"}]' > "$H/gh/verdict-list-teststuffstash_sleep-iac.json"
+jq -n '{body:"alert-fp:ts3\nfix-verdict: fix"}' > "$H/gh/verdict-issue.json"
+go_ts "$(alert ts3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want "the finding carries the verdict and the filed issue" "verdict='fix' issue='teststuffstash/sleep-iac#42'"
+
+# The capture runs BEFORE the post-session belts, so a failure down there cannot cost the
+# transcript — that ordering IS the FU-210 property and is worth pinning rather than trusting.
+scenario capture-precedes-belts
+printf '[]' > "$H/gh/search.json"
+go_ts "$(alert ts4 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+tsline="$(grep -n 'transcripts: uploaded' "$H/out.txt" | head -1 | cut -d: -f1)"
+vline="$(grep -n 'verdict:' "$H/out.txt" | head -1 | cut -d: -f1)"
+{ [ -n "$tsline" ] && [ -n "$vline" ] && [ "$tsline" -lt "$vline" ]; } \
+  && ok "the transcript upload precedes the verdict/dispatch belts" \
+  || bad "transcript upload precedes the belts" "upload at line ${tsline:-none}, verdict at ${vline:-none}"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1)"

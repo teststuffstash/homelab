@@ -31,6 +31,7 @@ Two needs, one substrate:
 | coordinator | Claude Code JSONL on the `coordinator-transcripts` RWX PVC | **yes** (PVC) |
 | worker (goose) | `/tmp/run.log` (tee'd stdout → Loki) + goose's own session file | **no** (Loki keeps stdout only; goose session lost) |
 | reviewer | `--output-format json` single result; its `~/.claude` transcript | **no** |
+| responder (2026-09-17) | per firing alert: `alert.json` + `triage.log` + the `*.jsonl` + an A1 manifest + a typed `finding.json`, under `homelab/alert-<fp>/responder-r1-<ts>/` (FU-210 / FU-231, `agents/coordinator/responder-argo.yaml`) | **yes** (bucket) — before 2026-09-17 it was the one role with NO capture at all, and a triage that filed no issue therefore left nothing: the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed nothing, and the probe lane deferred to it as COVERED while the alert stood 8 h |
 | jail seat (2026-08-19) | Claude Code JSONL on the host bind-mount (`.claude-data/`), pushed by `scripts/jail-transcripts-sync.sh` (heartbeat + wind-down) to the **separate `jail-transcripts` bucket** | host + bucket — and the bucket is deliberately OUTSIDE the viewer/retro read set: jail transcripts can carry wallet VALUES, so no cluster role reads them (`agents/coordinator/jail-transcripts-workspace.yaml`) |
 
 The irreplaceable artifact is the transcript. Everything else (dashboards, retros) can be built
@@ -100,6 +101,14 @@ Hook points (all existing seams, small diffs):
 - **coordinator**: PVC stays as the live/interactive cache; an exit trap in
   `coordinator-session.sh` (+ a nightly sync CronJob for crashed sessions) mirrors new session
   files to the bucket with a manifest per tick.
+- **responder** (FU-210, 2026-09-17): the respond WorkflowTemplate uploads PER ALERT, inline in
+  the loop rather than from an exit trap — its alert loop runs in a `while read` SUBSHELL, so a
+  parent trap could not see which alert was in flight. Two calls: `_ts_session` immediately after
+  the model returns (input + transcript + manifest, so a failure in the reopen/verdict belts
+  cannot cost the record) and `_ts_finding` at the end of the iteration, when the verdict and the
+  filed issue are known. The key is the same WRITE-ONLY bucket key the worker holds, which is
+  also the ceiling on what the record may become — the pod cannot read its own findings back, so
+  the lane's dedup state stays in GitHub + the `responder-seen` ConfigMap (FU-231).
 
 ### A2. Browse (P1)
 
