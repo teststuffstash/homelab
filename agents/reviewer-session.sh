@@ -1047,13 +1047,15 @@ elif [ -z "${_router_adopted:-}" ]; then
       if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
         # 2026-09-17: qwen3.5-plus is DEAD — the vendor still lists it in /v1/models but every
         # call returns `400 … Model is unavailable` (3/3 probes), and it left the published
-        # pricing table. Its listing is not a liveness signal. Replaced by qwen3.8-max: tool_use
-        # round-trip re-probed the same day (2.5s, thinking+tool_use), a genuine top tier for the
-        # SAFETY-NET role, $15/mo pool. ⚠ that pool is ~22 review rounds at the measured ≈$1
-        # draw/round — failover duty, not a standing home; the capacity latch degrades on 402/429.
-        MODEL="opencode-go/qwen3.8-max"
+        # pricing table. Its listing is not a liveness signal. The replacement is its own lane's
+        # successor, qwen3.7-plus: tool_use round-trip probed the same day (4.3s,
+        # thinking+tool_use), $0.40/$1.60/cR $0.04 and a **$60/mo** pool — where the first pick
+        # (qwen3.8-max, also tool-verified) carried only $15, i.e. ~22 rounds at the measured ≈$1
+        # draw. Failover duty wants POOL, not tier: a max-tier reviewer that runs out mid-latch
+        # reviews nothing. qwen3.6-plus is the same pool at a higher output price (0.50/3.00).
+        MODEL="opencode-go/qwen3.7-plus"
         GO_SERVED=1
-        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.8-max)"
+        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.7-plus)"
       else
         echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
         exit 0
