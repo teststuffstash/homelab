@@ -215,11 +215,25 @@ scope.
 
 **Strike rules**
 
-- **Recording matches EITHER `outcome` or `error_class`.** The launcher sends the coarse class in
-  `outcome` and a fine sub-type in `error_class`; a predicate testing one field recorded almost
-  nothing (the §M1a drift). A row carrying the REAL producer shape is in the self-test.
-  - anchor: `router.py:record_report`.
-  - evidence: the self-test's producer-shape row; `/router-status` → `strikes_7d`.
+- **Recording matches EITHER `outcome` or `error_class`; the row STORES a vocabulary member.**
+  The launcher sends the coarse class in `outcome` and a fine sub-type in `error_class`; a
+  predicate testing one field recorded almost nothing (the §M1a drift). The write side is the
+  same rule's other half, landed 2026-09-17: the strike row's `error_class` holds the MEMBER
+  (`err` if it is one, else `outcome`, else `unknown`) and the fine sub-type is kept beside it in
+  `error_subclass` as evidence. Measured before the fix, on the live store: 31 strikes ever, **0
+  in `SERVING_CLASSES`**, 24 outside `STRIKE_CLASSES` — so `pair_cooldowns` (which filters
+  `error_class IN SERVING_CLASSES`) was empty by construction, and every serving failure fell to
+  model-scope. A reader tests the field the writer fills, or the vocabulary is decoration.
+  - anchor: `router.py:record_report` (the `_klass`/`_subclass` resolution).
+  - evidence: the self-test's producer-shape row + the "no non-vocabulary strike series" metric
+    guard; `/router-status` → `strikes_7d[].subclasses`.
+- **Pair scope is EARNED by knowing the provider; absent it, model scope stands.** The exclusion
+  loop tests `error_class IN SERVING_CLASSES **and** provider != ''` — a serving strike whose
+  provider is unknown excludes the MODEL, exactly as it did before the vocabulary was enforced.
+  Without this the write-side fix would have un-excluded live cells the day it landed
+  (`served_provider` was empty on all 42 rides in the 2026-09-17 window).
+  - anchor: `router.py:route` (the `_strike_rows` loop).
+  - evidence: the self-test's providerless-serving-strike row.
 - **A strike is per `(task, model, provider)` and lives in the router's `strikes` table**; the
   `AGENT_STRIKE:` comment is its audit twin.
   - anchor: `router.py:record_report`; `agents/agent-session.sh` (the comment).

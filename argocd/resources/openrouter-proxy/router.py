@@ -219,6 +219,14 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                     conn.execute("ALTER TABLE provider_events ADD COLUMN session TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
+                # Goal #1640 acceptance 1 (reader half, 2026-09-17): strikes grew
+                # error_subclass — the FINE producer sub-type (`http-401-storm`,
+                # `goose-32602-truncation`), kept as evidence now that `error_class` holds a
+                # vocabulary MEMBER. Same LAST-column discipline.
+                try:
+                    conn.execute("ALTER TABLE strikes ADD COLUMN error_subclass TEXT")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
                 
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
@@ -364,6 +372,20 @@ def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool, str]:
         _prov = _read("SELECT provider FROM provider_events WHERE session=? ORDER BY ts DESC LIMIT 1",
                        (session_ref,))
         provider = str(_prov[0][0]) if _prov else ""
+    # Goal #1640 acceptance 1 (reader half, 2026-09-17): the strike row must carry a
+    # vocabulary MEMBER, because that is the field every reader tests. Measured on the live
+    # store that day: 31 strikes ever, 0 in SERVING_CLASSES, 24 outside STRIKE_CLASSES
+    # entirely — while `run_reports` held the conformant half all along
+    # (`outcome='auth-storm'` beside `error_class='http-401-storm'`). The decision to strike
+    # already matches EITHER field (§M1a, below); only the WRITE dropped the coarse one, so
+    # `pair_cooldowns` (error_class IN SERVING_CLASSES) could never match and
+    # `/router-status → pair_cooldowns` sat empty by construction, not by luck.
+    # Resolution order — member wins, coarse breaks the tie, `unknown` is the floor:
+    _klass = err if err in STRIKE_CLASSES else (
+        outcome if outcome in STRIKE_CLASSES else "unknown")
+    # The fine sub-type is EVIDENCE, never a filter input: it is what tells a reader WHICH
+    # auth storm or WHICH harness death this was (the §M1a taxonomy's leaf).
+    _subclass = err if err and err != _klass else ""
     striked = False
     if stored and (err in STRIKE_CLASSES or outcome in STRIKE_CLASSES) \
             and not outcome.startswith("pr"):
@@ -371,9 +393,9 @@ def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool, str]:
         _write("DELETE FROM strikes WHERE task=? AND model=? AND session=?",
                (str(d.get("task") or ""), str(d.get("model") or ""), session))
         striked = _write(
-            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO strikes VALUES(?,?,?,?,?,?,?,?,?)",
             (now, str(d.get("task") or ""), str(d.get("stack") or ""), str(d.get("model") or ""),
-             err, int(d.get("round") or 1), session, provider))
+             _klass, int(d.get("round") or 1), session, provider, _subclass))
     if stored:  # M11 leg 3 (shadow): the same feed, folded into the (class, urgency) start tier
         fold = fold_outcome_into_cell(d, striked)
         if fold:
@@ -1460,9 +1482,15 @@ def route(payload: dict, ctx: dict) -> dict:
     struck_models: set[str] = set()
     struck_pairs: dict[str, set[str]] = {}
     for _m, _p, _ec in _strike_rows:
-        if _ec in SERVING_CLASSES:
-            if _p:
-                struck_pairs.setdefault(_m, set()).add(_p)
+        # Goal #1640 acceptance 1 (reader half): the provider test belongs in the CONDITION,
+        # not inside the serving branch. Before the write-side normalization every serving
+        # failure arrived as a non-member sub-type and fell to the model-level `else`, so the
+        # fleet was conservatively over-excluding; with members now stored, a serving strike
+        # that carries NO provider would otherwise match the pair branch, find nothing to add,
+        # and exclude NOTHING — the fix would have un-excluded live cells. Pair-scope is an
+        # upgrade earned by knowing the provider; absent it, model-scope stands.
+        if _ec in SERVING_CLASSES and _p:
+            struck_pairs.setdefault(_m, set()).add(_p)
         else:
             struck_models.add(_m)
     for _m, _providers in struck_pairs.items():
@@ -1725,7 +1753,9 @@ def status_summary() -> dict:
         "SUM(tokens_cached), SUM(tokens_prompt) FROM generations WHERE ts > ? "
         "GROUP BY requested_model, provider ORDER BY 4 DESC LIMIT 20", (now - 86400,))
     recent_strikes = _read(
-        "SELECT model, error_class, COUNT(*) FROM strikes WHERE ts > ? "
+        "SELECT model, error_class, COUNT(*), "
+        "  COALESCE(GROUP_CONCAT(DISTINCT NULLIF(error_subclass, '')), '') "
+        "FROM strikes WHERE ts > ? "
         "GROUP BY model, error_class ORDER BY 3 DESC LIMIT 20", (now - 7 * 86400,))
     provider_errs = _read(
         "SELECT provider, class, COUNT(*) FROM provider_events "
@@ -1756,7 +1786,9 @@ def status_summary() -> dict:
             for d, rl, m, rs, n in decisions_24h],
         "db_persistent": _persistent,
         "rows": counts,
-        "strikes_7d": [{"model": m, "error_class": e, "n": n} for m, e, n in recent_strikes],
+        "strikes_7d": [{"model": m, "error_class": e, "n": n,
+                        **({"subclasses": sc} if sc else {})}
+                       for m, e, n, sc in recent_strikes],
         "provider_errors_24h": [{"provider": p, "class": c, "n": n} for p, c, n in provider_errs],
         "provider_reliability_7d": reliability()[:20],
         "circuit_opens_7d": [
@@ -2104,7 +2136,39 @@ def self_test() -> int:
         if os.path.exists(_mig_cool_db):
             os.unlink(_mig_cool_db)
         _conn, _persistent = _saved_conn, _saved_persistent
-    assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "goose-32602-truncation")]
+    # Goal #1640 acceptance 1 (reader half): the stored class is a vocabulary MEMBER. The
+    # fixture above posts `outcome="harness-death"` (a member) beside
+    # `error_class="goose-32602-truncation"` (not one) — the real producer shape. Pre-fix the
+    # row stored the sub-type, which no reader tests, so the strike counted for nothing.
+    assert strikes_for("issue-19", "circles") == [("deepseek/deepseek-v4-flash", "", "harness-death")]
+    _sub = _read("SELECT error_class, error_subclass FROM strikes WHERE task=? AND stack=?",
+                 ("issue-19", "circles"))
+    assert _sub == [("harness-death", "goose-32602-truncation")], \
+        f"the fine sub-type survives as evidence beside the member (got {_sub})"
+    # A SERVING-shaped class with a known provider scopes to the PAIR; the same class with NO
+    # provider must keep MODEL scope. The second row is the trap this change had to avoid: move
+    # the provider test into the serving branch and a providerless auth-storm excludes nothing.
+    record_provider_event("vendor/pair-model", "providerx", 401, session="t-pairscope")
+    record_report({"session": "t-pairscope", "task": "issue-pairscope", "stack": "sleep",
+                   "role": "worker", "model": "vendor/pair-model",
+                   "outcome": "auth-storm", "error_class": "http-401-storm"},
+                  session_ref="t-pairscope")
+    _ps = strikes_for("issue-pairscope", "sleep")
+    assert _ps and _ps[0][2] == "auth-storm" and _ps[0][1] == "providerx", \
+        f"a fine auth sub-type normalizes to the serving member, with its provider (got {_ps})"
+    record_report({"session": "t-noprov", "task": "issue-noprov", "stack": "sleep",
+                   "role": "worker", "model": "vendor/pair-model",
+                   "outcome": "auth-storm", "error_class": "http-401-storm"})
+    _np = strikes_for("issue-noprov", "sleep")
+    assert _np == [("vendor/pair-model", "", "auth-storm")], f"providerless serving strike (got {_np})"
+    _np_models, _np_pairs = set(), {}
+    for _m, _p, _ec in _np:
+        if _ec in SERVING_CLASSES and _p:
+            _np_pairs.setdefault(_m, set()).add(_p)
+        else:
+            _np_models.add(_m)
+    assert _np_models == {"vendor/pair-model"} and not _np_pairs, \
+        "a serving strike with no provider keeps MODEL scope — it must never un-exclude the cell"
     # Goal #1640 acceptance 3: enforcement is UNCONDITIONAL — the retired strike-enforcement knob
     # and its `if <flag> else []` filter are gone (the 09-13 checkpoint read it False in
     # production on every routerMode). The route() rows below prove the enforcement.
@@ -3244,7 +3308,17 @@ def self_test() -> int:
     assert len(unknown_lines) == 1, \
         f"expected exactly 1 by_rail unknown line, got {len(unknown_lines)}: {unknown_lines}"
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
-    assert 'router_strikes_total{error_class="harness-death"} 1' in body
+    # Goal #1640 acceptance 1 (reader half): THREE harness-deaths now, where the pre-fix store
+    # counted one — issue-19's row moved from the non-member sub-type onto its member, and the
+    # metric is the surface where that silence was visible all along (24 of 31 live strikes sat
+    # outside the vocabulary on 2026-09-17 and no series said so).
+    assert 'router_strikes_total{error_class="harness-death"} 3' in body, \
+        [ln for ln in body.split("\n") if "router_strikes_total" in ln]
+    assert 'router_strikes_total{error_class="auth-storm"} 2' in body, \
+        "the two normalized auth strikes count on the SERVING member, not on http-401-storm"
+    assert not any('error_class="http-401-storm"' in ln or 'error_class="goose-32602-truncation"' in ln
+                   for ln in body.split("\n")), \
+        "no strike series may carry a non-vocabulary class — that is the defect this pins"
     assert 'router_circuit_open_total{class="auth"} 1' in body
     assert 'router_decisions_total{decision="dispatch"' in body
     assert status_summary()["decisions_24h"], "decisions must surface in status"
@@ -3271,7 +3345,7 @@ def self_test() -> int:
     # Goal #1640 acceptance 5 MOVES them by the pair-cooldown fixtures: four strikes
     # (t-pc-issue-93/94/93b/95) and three clean rides (t-pc-clean-early, t-pc-clean,
     # t-pc-clean-ds) — seven run_reports, four strikes: 28→35 and 14→18.
-    assert summary["rows"]["run_reports"] == 35 and summary["rows"]["strikes"] == 18  # + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
+    assert summary["rows"]["run_reports"] == 37 and summary["rows"]["strikes"] == 20  # + t-pairscope + t-noprov (Goal #1640 acceptance 1 reader half) + + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
