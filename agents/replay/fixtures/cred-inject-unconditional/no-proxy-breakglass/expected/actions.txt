@@ -1,0 +1,4 @@
+OUT OR_KEY: REAL (secretKeyRef)
+OUT GIT_BROKER: unset
+OUT OC_INJECT: unset
+RC 0

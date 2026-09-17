@@ -1785,6 +1785,7 @@ fi
 # which is exactly the premise the egress proxy's header handling was contorting itself around.
 # A REAL key is still rendered when there is NO proxy at all (AGENT_OPENROUTER_PROXY="") — the
 # documented break-glass for a proxy outage, where a ref has nothing to resolve it.
+# >>>REPLAY:cred-inject>>>
 OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
@@ -1816,6 +1817,7 @@ if [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode
     GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
   fi
 fi
+# <<<REPLAY:cred-inject<<<
 # Git credentials are broker-only (FU-089): every ride sets GIT_CRED_BROKER_URL and the pod holds
 # no standing git Secret at all — the in-ns agent-git-token fallback was deleted with FU-089 (a
 # standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
