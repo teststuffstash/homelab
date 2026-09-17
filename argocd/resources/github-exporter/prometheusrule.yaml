@@ -451,6 +451,11 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # A SPEND fact, and spend is the operator's: the remedy is a budget/plan decision
+            # nothing in the cluster may take. `triage: "none"` per the CodeownerParkWaiting
+            # rationale — the breakdown query is in the description, so a session could only
+            # run it and paste the answer back.
+            triage: "none"
           annotations:
             summary: "GitHub is billing real money this month"
             description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
@@ -467,6 +472,7 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            triage: "none" # a quota/spend fact — the operator's call, per GithubPaidUsage above
           annotations:
             summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
             description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
@@ -481,6 +487,7 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            triage: "none" # a quota/spend fact — the operator's call, per GithubPaidUsage above
           annotations:
             summary: "GitHub Actions/Packages storage at 80% of quota pace"
             description: '~{{ $value | printf "%.1f" }} GB held over the last day (2 GB included as a monthly average). Find it: per-repo github_billing_usage{unit=~"(?i)gigabytehour.*"}, then the repo''s /actions/artifacts — usually forgotten upload-artifact output (set retention-days, or push images to ghcr instead).'
@@ -714,6 +721,11 @@ spec:
             # homelab#239: the remedy is a delegated codeowner READ — an operator act by
             # construction; a worker dispatched at this alert could only re-conclude that.
             platform_machinery: "true"
+            # …and therefore the same `triage: "none"` its slower twin CodeownerParkWaiting
+            # carries: the sentence above IS the do-not-investigate argument, and it had only the
+            # machinery cap on it. The urgency this rule adds is the SEAT's (meta-events BLOCKPARK
+            # is its consumer); urgency never made the remedy machine-doable.
+            triage: "none"
           annotations:
             summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
             description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"

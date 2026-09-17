@@ -217,7 +217,29 @@ never harder posture on quiet ones.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
-  `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136);
+  `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136),
+  **filtered in THREE TIERS, cheapest first (2026-09-17)**: tier 0 = the route's own matchers
+  `severity != "info"` ∧ `triage != "none"` — a denied alert costs no Sensor trigger, no workflow,
+  no clone, and still reaches Home Assistant and Grafana; tier 1 = the in-pod `triage:none` belt
+  (ledger marker, no session, no daily-cap spend) which is now the belt UNDER tier 0 rather than
+  the mechanism; tier 2 = a session. **The test for tier 0 is `could a bounded in-cluster
+  investigation change what anyone does about this?`** — `info` fails it by definition, and
+  `triage: none` is the rule AUTHOR asserting the same thing where they know it, exactly as
+  `platform_machinery` is declared at the rule site (the two compose: `triage: none` = *do not
+  investigate*, `platform_machinery` = *investigate, but a human merges the fix*). The
+  OPERATOR-QUEUE class is what the 2026-09-17 pass added — an alert whose remedy is an act only
+  the operator can take by construction, so a session can only re-state the annotation:
+  `CodeownerParkWaiting` (ruled 2026-08-12), `BlockingCodeownerParkWaiting`,
+  `AgentAttentionStanding` (every class it counts is `who=operator` by definition), and the three
+  GitHub spend/quota rules. ⚠ Two readers of the tier-0 predicate exist and must agree — the route
+  and `agents/meta-alert-crosscheck.sh`, which would otherwise report every denied alert as stuck
+  machinery; the pairing is asserted in `responder-behaviour-test.sh` §routing, which also pins
+  two counterexamples so `triage: none` stays a judgment rather than a habit. ⚠ A STOCK
+  kube-prometheus-stack rule cannot carry the label (the chart has no per-alert label hook), so its
+  only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or
+  replace the rule instead: `KubeJobFailed` was the loudest arrival in the 7d to 2026-09-17 (48)
+  and every one of them was one genuinely broken CronJob, so denying it would have hidden the
+  fault rather than the noise;
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
   — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)

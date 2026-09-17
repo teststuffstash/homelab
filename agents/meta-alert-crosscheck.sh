@@ -9,8 +9,17 @@
 # window with NO ledger entry = the responder is stuck → the meta session investigates the
 # machinery (EventSource/Sensor/latch), never hand-triages the alert first.
 #
-# Output: one line per discrepancy (empty + exit 0 = belts healthy). Loud probe failures per
-# rule #6 — a dead Alertmanager/apiserver read is ITSELF the finding.
+# ⚠ TRIAGE-ELIGIBLE IS A ROUTING FACT, AND THE ROUTE IS ITS HOME. Since 2026-09-17 the
+# responder's Alertmanager child route carries `severity != "info"` and `triage != "none"`
+# (argocd/platform/values/kube-prometheus-stack.yaml §THE TRIAGE-ROUTING FILTER), so a denied
+# alert never reaches the lane and can never gain a ledger entry. This script must apply the SAME
+# predicate or it reports every deliberately-unrouted alert as stuck machinery — the loud-but-
+# wrong direction, which is how a belt teaches its reader to ignore it. Change one, change both;
+# the pairing is asserted by responder-behaviour-test.sh §routing.
+#
+# Output: one line per discrepancy (empty + exit 0 = belts healthy), plus ONE trailing summary
+# line naming what routing denied, so a denied alert is quiet but never invisible. Loud probe
+# failures per rule #6 — a dead Alertmanager/apiserver read is ITSELF the finding.
 set -euo pipefail
 
 AM_URL="${AM_URL:-http://192.168.40.14:9093}"
@@ -60,7 +69,18 @@ done < <(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '
   .[]
   | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
   | select((.labels.triage // "") != "none")
+  | select((.labels.severity // "") != "info")
   | select(.startsAt < $cutoff)
   | [.fingerprint, .labels.alertname, .startsAt] | @tsv')
+
+# The routing-denied set, counted not enumerated per alert: one line so a deliberately-unrouted
+# alert is quiet and still visible. `info` and `triage:none` are the route's two matchers.
+DENIED="$(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '
+  [ .[]
+    | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
+    | select((.labels.triage // "") == "none" or (.labels.severity // "") == "info")
+    | select(.startsAt < $cutoff)
+    | .labels.alertname ] | unique | join(", ")')"
+[ -n "$DENIED" ] && echo "routing-denied (firing, deliberately never triaged — severity:info / triage:none): $DENIED"
 
 [ "$FOUND" -eq 0 ] && echo "belts healthy: every firing triage-eligible alert (> ${GRACE_MIN}m) has a responder ledger entry"

@@ -338,6 +338,72 @@ v="$(stampval GithubWorkflowRunFailed argocd/resources/github-exporter/prometheu
 [ "$v" = "unset" ] && ok "GithubWorkflowRunFailed stays dispatchable (not stamped)" \
                    || bad "GithubWorkflowRunFailed unstamped" "got '${v:-alert not found}'"
 
+# ── THE ROUTING FILTER: what never reaches the lane at all (2026-09-17) ─────────────────────────
+# Tier 0 of the three routing tiers. The responder's Alertmanager child route carries
+# `severity != "info"` and `triage != "none"`, so a denied alert costs no Sensor trigger, no
+# workflow, no clone. Nothing downstream can catch a regression here: the route is in a values
+# file kubeconform SKIPs, and the in-pod `triage:none` belt would silently absorb a dropped
+# matcher while the workflow cost came back. Two readers exist and must agree — the route and
+# agents/meta-alert-crosscheck.sh, which would otherwise report every denied alert as stuck
+# machinery. So: assert the matchers ARE on the route, assert the crosscheck applies the same
+# two predicates, and assert the declarations on the rules the filter is FOR.
+section "routing — the tier-0 filter (route matchers ⟷ the crosscheck ⟷ the rule-site labels)"
+VALUES="$REPO/argocd/platform/values/kube-prometheus-stack.yaml"
+RMATCH="$(yq -r '.alertmanager.config.route.routes[] | select(.receiver == "agent-responder") | .matchers[]' "$VALUES" 2>/dev/null | tr '\n' ' ')"
+case "$RMATCH" in
+  *'severity != "info"'*) ok "the responder route denies severity:info" ;;
+  *) bad "responder route denies severity:info" "matchers are: ${RMATCH:-<none>}" ;;
+esac
+case "$RMATCH" in
+  *'triage != "none"'*) ok "the responder route honours triage:none (tier 0, not just the in-pod belt)" ;;
+  *) bad "responder route honours triage:none" "matchers are: ${RMATCH:-<none>}" ;;
+esac
+# The crosscheck's predicate, asserted on the SOURCE rather than by running it: its Alertmanager
+# read needs the LAN and this harness is hermetic. A dropped `select` here is the loud-but-wrong
+# failure (every denied alert reported UNTRIAGED), which is how a belt teaches its reader to
+# ignore it — so it is worth a grep-level pin.
+XCHK="$REPO/agents/meta-alert-crosscheck.sh"
+grep -qF 'select((.labels.triage // "") != "none")' "$XCHK" \
+  && ok "meta-alert-crosscheck excludes triage:none (reader 2 agrees with the route)" \
+  || bad "crosscheck excludes triage:none" "predicate missing from $XCHK"
+grep -qF 'select((.labels.severity // "") != "info")' "$XCHK" \
+  && ok "meta-alert-crosscheck excludes severity:info (reader 2 agrees with the route)" \
+  || bad "crosscheck excludes severity:info" "predicate missing from $XCHK"
+grep -qF 'routing-denied' "$XCHK" \
+  && ok "…and names the denied set once, so a denied alert is quiet but not invisible" \
+  || bad "crosscheck names the denied set" "no routing-denied summary line in $XCHK"
+
+# The rule-site declarations the filter is FOR. Same shape as the #239 stamp assertions above and
+# the same reason: a rule edit that drops one makes the alert dispatchable again in silence, and
+# no schema has an opinion about labels. Each entry here is an OPERATOR-QUEUE alert — its remedy
+# is an act only the operator can take, so a session could only re-conclude the annotation.
+triageval() { # <alertname> <file> → "none" | "unset" | "" (alert not found)
+  A="$1" yq -r '.spec.groups[].rules[] | select(.alert == strenv(A)) | .labels.triage // "unset"' \
+    "$REPO/$2" 2>/dev/null | head -1
+}
+notriage() { # <alertname> <file>
+  local v; v="$(triageval "$1" "$2")"
+  [ "$v" = "none" ] && ok "$1 declares triage:none (${2##*/resources/})" \
+                    || bad "$1 declares triage:none in $2" "got '${v:-alert not found}'"
+}
+notriage CodeownerParkWaiting         argocd/resources/github-exporter/prometheusrule.yaml
+notriage BlockingCodeownerParkWaiting argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubVendorOutage           argocd/resources/github-exporter/prometheusrule.yaml
+notriage AnthropicVendorDegraded      argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubPaidUsage              argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubActionsMinutesHigh     argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubStorageHeldHigh        argocd/resources/github-exporter/prometheusrule.yaml
+notriage AgentAttentionStanding       argocd/resources/pushgateway/prometheusrule.yaml
+# …and the counterexamples, so `triage: none` stays a JUDGMENT rather than a habit. Both are
+# alerts whose cause lives inside something the lane can read, so both must keep costing a
+# session: a red master CI run in a claimed repo, and a rate-limit pool that a loop can drain
+# (the FU-084 shape).
+for pair in "GithubWorkflowRunFailed" "GithubRateLimitLow"; do
+  v="$(triageval "$pair" argocd/resources/github-exporter/prometheusrule.yaml)"
+  [ "$v" = "unset" ] && ok "$pair stays triage-eligible (investigable from in-cluster reads)" \
+                     || bad "$pair stays triage-eligible" "got '${v:-alert not found}'"
+done
+
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#125 — the two brief rules that ride EVERY triage, not just egress drops"
 # Both are 2026-08-08 failures with no schema that could catch them: a session that re-derived from
