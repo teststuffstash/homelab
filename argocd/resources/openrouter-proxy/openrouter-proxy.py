@@ -4817,6 +4817,47 @@ data: [DONE]
     check(_split_rows and _split_rows[0] == (500, 0),
           f"cache-split: stored row cache_read=500 cache_creation=0 (got {_split_rows})")
 
+    # Test 14e (2026-09-17): a STREAMED response carries TWO usage blocks and they disagree on
+    # purpose — message_start reports the PROMPT SIZE (a per-session constant, no cache split),
+    # message_delta reports what was actually billed. Captured live off …/zen/go/v1/messages on
+    # qwen3.7-plus: 3210 then 408+2816-cached. Max-merging took the constant AND added the cache
+    # reads, charging a cached prefix at the fresh rate — /opencode-limit read $0.5671 for two
+    # reviewer rides the vendor's own dashboard billed at ~$0.16 (3.4×). The BILLING block wins.
+    #   billed = 408×0.40/1e6 + 601×1.60/1e6 + 2816×0.04/1e6 = $0.00123744
+    #   pre-fix it was 3210×0.40 → $0.00235824, i.e. 1.9× on this shape alone
+    _go_response["body"] = (
+        b'event: message_start\n'
+        b'data: {"type":"message_start","message":{"id":"gen-stream","model":"qwen3.7-plus",'
+        b'"usage":{"input_tokens":3210,"output_tokens":0}}}\n\n'
+        b'event: content_block_delta\n'
+        b'data: {"type":"content_block_delta","delta":{"text":"ok"}}\n\n'
+        b'event: message_delta\n'
+        b'data: {"type":"message_delta","usage":{"input_tokens":408,"output_tokens":601,'
+        b'"cache_creation_input_tokens":0,"cache_read_input_tokens":2816}}\n\n')
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/qwen3.7-plus",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:stream-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "streamed two-block request: HTTP 200 returned")
+    w_stream = router.go_usage_window(60)
+    check(abs(w_stream["by_stack"].get("stream-stack", 0) - 0.00123744) < 0.00001,
+          "two-block stream: the BILLING block prices the call ≈$0.0012374, not the "
+          f"prompt-size constant's $0.0023582 (got {w_stream['by_stack'].get('stream-stack')})")
+    _stream_rows = router._read("SELECT tokens_in, tokens_out, cache_read FROM go_usage "
+                               "WHERE stack='stream-stack' ORDER BY ts DESC LIMIT 1")
+    check(_stream_rows and _stream_rows[0] == (408, 601, 2816),
+          f"two-block stream: the stored row is the billing block's split (got {_stream_rows})")
+    # The direct extractor contract, stated once where it is cheapest to read.
+    _ex = gometer.extract_usage(_go_response["body"], _go_response["body"])
+    check(_ex["input_tokens"] == 408 and _ex["cache_read_input_tokens"] == 2816
+          and _ex["output_tokens"] == 601,
+          f"extract_usage: last block wins for the split, output max-merges (got {_ex})")
+
     # Test 15: ledger prune — rows older than 45d are deleted
     old_ts = now - 50 * 86400
     router.go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
