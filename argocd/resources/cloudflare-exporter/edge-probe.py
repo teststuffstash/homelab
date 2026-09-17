@@ -58,15 +58,63 @@ _last_success = 0
 HEALTHZ_STALE_SECONDS = 360
 
 HEADERS = [
-    "# HELP cloudflare_edge_requests_total Per-route request count by host and status.",
+    "# HELP cloudflare_edge_requests_total Cumulative request count by zone, host and edge status.",
     "# TYPE cloudflare_edge_requests_total counter",
-    "# HELP cloudflare_edge_cache_hit_ratio Per-route cache hit ratio (0-1).",
-    "# TYPE cloudflare_edge_cache_hit_ratio gauge",
-    "# HELP cloudflare_edge_rate_limit_events_total Per-route rate-limit/mitigation events.",
+    "# HELP cloudflare_edge_cached_requests_total Cumulative count of the subset served from cache (hit/stale/revalidated), by zone and host. Ratio is the CONSUMER's division: rate(cached)/rate(requests).",
+    "# TYPE cloudflare_edge_cached_requests_total counter",
+    "# HELP cloudflare_edge_rate_limit_events_total Cumulative rate-limit/mitigation events by zone, host and action.",
     "# TYPE cloudflare_edge_rate_limit_events_total counter",
-    "# HELP cloudflare_edge_probe_ok 1 when the edge poll succeeded for the zone this poll. 0 or absent means the gauges above are unknown, NOT safe.",
+    "# HELP cloudflare_edge_probe_ok 1 when the edge poll succeeded for the zone this poll. 0 or absent means the counters above are STALE, not safe.",
     "# TYPE cloudflare_edge_probe_ok gauge",
 ]
+
+# ── cumulative counter state (the #572 lesson) ──────────────────────────────────────────────
+# The first cut re-published each 5-minute window's count under a `_total` name declared
+# `counter`. Three defects fell out of that one lie, and a consumer doing the CONVENTIONALLY
+# CORRECT thing (`rate()` on a counter) got nonsense from all three:
+#   1. the value rose AND FELL, so rate() read every decrease as a counter reset;
+#   2. the 300s lookback against a 120s poll made windows overlap 2.5x — double counting;
+#   3. only label sets seen in the last window were emitted, so series churned in and out of
+#      existence (measured 2026-09-17: 14 series over 12h, 0 at any given instant, which is
+#      also what misled oracle-fleet#572's test author into asserting only that the query
+#      PARSES).
+# So the probe keeps its own totals. Per-bucket counts are deduped by the row's own `datetime`
+# dimension and only the INCREASE is added; every label set ever seen is emitted on every
+# scrape. These are now real Prometheus counters: monotonic for a process lifetime, resetting
+# only on restart — which rate()/increase() handle natively.
+_totals_req = {}     # (zone, host, status) -> cumulative requests
+_totals_cached = {}  # (zone, host)         -> cumulative cache-served requests
+_totals_fw = {}      # (zone, host, action) -> cumulative firewall/mitigation events
+_buckets = {}        # dedupe: bucket key -> (count already counted, first-seen epoch)
+
+# Buckets are datetime-anchored, so a bucket older than the lookback can never be re-reported.
+# 1800s is 6x the lookback and 15x the poll interval — generous, and it bounds memory.
+BUCKET_TTL_SECONDS = 1800
+
+
+def _accumulate(key, count, now):
+    """Return the INCREASE for one datetime-anchored bucket, remembering what was counted.
+
+    Overlapping poll windows re-report the same bucket; only its growth is new. Adaptive
+    sampling can also revise a bucket DOWN between polls — a negative delta is dropped rather
+    than subtracted, because a counter must never go backwards."""
+    seen, first = _buckets.get(key, (0, now))
+    _buckets[key] = (max(seen, count), first)
+    return max(0, count - seen)
+
+
+def _prune_buckets(now):
+    """Forget buckets the API can no longer re-report, so the dedupe map stays bounded."""
+    for key in [k for k, (_c, first) in _buckets.items() if now - first > BUCKET_TTL_SECONDS]:
+        del _buckets[key]
+
+
+def _reset_totals():
+    """Drop all cumulative state. Self-test only — each fixture case starts from a fresh process."""
+    _totals_req.clear()
+    _totals_cached.clear()
+    _totals_fw.clear()
+    _buckets.clear()
 
 
 def esc(value):
@@ -183,6 +231,7 @@ def collect(lines, fetch=None, zone_ids=None):
     start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 300))
     end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
 
+    probe_ok = []  # (zone label, 1|0) — emitted after the counters, one row per CONFIGURED zone
     for zone_id in (zone_ids if zone_ids is not None else ZONE_IDS):
         zone_name, failed = zone_id, 0
         try:
@@ -196,61 +245,65 @@ def collect(lines, fetch=None, zone_ids=None):
                 # For self-test: fetch returns a pre-built (zone_name, requests_rows, firewall_rows) tuple
                 zone_name, requests_rows, firewall_rows = fetch(zone_id, start, end)
 
-            # Aggregate requests by host + status
-            host_req = {}  # (host, status) -> count
-            host_cache = {}  # host -> {hit: count, total: count}
+            # Accumulate into the cumulative counters, deduped by each row's own datetime
+            # bucket so the overlapping poll windows cannot double-count.
             for row in requests_rows:
                 dims = row.get("dimensions", {})
                 host = dims.get("clientRequestHTTPHost", "unknown")
                 status = str(dims.get("edgeResponseStatus", "0"))
-                cache = dims.get("cacheStatus", "unknown")
-                count = row.get("count", 0)
-                key = (host, status)
-                host_req[key] = host_req.get(key, 0) + count
-                if host not in host_cache:
-                    host_cache[host] = {"hit": 0, "total": 0}
-                host_cache[host]["total"] += count
-                if cache and cache.lower() in ("hit", "stale", "revalidated"):
-                    host_cache[host]["hit"] += count
+                cache = dims.get("cacheStatus") or "unknown"
+                stamp = dims.get("datetime", "")
+                delta = _accumulate(("req", zone_name, stamp, host, status, cache),
+                                    row.get("count", 0), now)
+                # setdefault BEFORE the delta: a label set seen with no growth still deserves a
+                # series, and a host whose traffic is all misses must publish cached=0 rather
+                # than nothing — else the consumer's rate(cached)/rate(requests) has no
+                # numerator and the panel reads empty instead of "zero percent cached".
+                _totals_req.setdefault((zone_name, host, status), 0)
+                _totals_cached.setdefault((zone_name, host), 0)
+                if delta:
+                    _totals_req[(zone_name, host, status)] += delta
+                    if cache.lower() in ("hit", "stale", "revalidated"):
+                        _totals_cached[(zone_name, host)] += delta
 
-            # Emit per-route request totals
-            for (host, status), count in sorted(host_req.items()):
-                lines.append(metric("cloudflare_edge_requests_total", {
-                    "zone": zone_name,
-                    "host": host,
-                    "status": status,
-                }, count))
-
-            # Emit per-route cache hit ratio
-            for host, counts in sorted(host_cache.items()):
-                ratio = counts["hit"] / counts["total"] if counts["total"] > 0 else 0
-                lines.append(metric("cloudflare_edge_cache_hit_ratio", {
-                    "zone": zone_name,
-                    "host": host,
-                }, ratio))
-
-            # Aggregate firewall events by host + action
-            # firewallEventsAdaptive returns flat event rows (one row per event).
-            host_fw = {}  # (host, action) -> count
+            # firewallEventsAdaptive returns flat event rows (one per event), so a bucket's count
+            # is the number of rows sharing a (datetime, host, action). Identical events within
+            # one datetime are indistinguishable — which is exactly why the dedupe compares
+            # COUNTS PER BUCKET instead of trying to remember individual events.
+            fw_buckets = {}
             for row in firewall_rows:
-                host = row.get("clientRequestHTTPHost", "unknown")
-                action = row.get("action", "unknown")
-                key = (host, action)
-                host_fw[key] = host_fw.get(key, 0) + 1
-
-            for (host, action), count in sorted(host_fw.items()):
-                lines.append(metric("cloudflare_edge_rate_limit_events_total", {
-                    "zone": zone_name,
-                    "host": host,
-                    "action": action,
-                }, count))
+                key = (row.get("datetime", ""),
+                       row.get("clientRequestHTTPHost", "unknown"),
+                       row.get("action", "unknown"))
+                fw_buckets[key] = fw_buckets.get(key, 0) + 1
+            for (stamp, host, action), count in sorted(fw_buckets.items()):
+                delta = _accumulate(("fw", zone_name, stamp, host, action), count, now)
+                label_key = (zone_name, host, action)
+                _totals_fw[label_key] = _totals_fw.get(label_key, 0) + delta
 
         except Exception as exc:
             failed += 1
             _errors += 1
             print(f"zone {zone_id}: edge poll failed: {exc}", flush=True)
 
-        lines.append(metric("cloudflare_edge_probe_ok", {"zone": zone_name}, 0 if failed else 1))
+        probe_ok.append((zone_name, 0 if failed else 1))
+
+    _prune_buckets(now)
+
+    # Emit EVERY label set ever seen, not just this window's — the churn fix. A counter that
+    # stops incrementing HOLDS its value; it does not disappear. A zone that stops answering
+    # therefore shows flat counters plus probe_ok=0, which is "stale", not "zero traffic".
+    for (zone, host, status), value in sorted(_totals_req.items()):
+        lines.append(metric("cloudflare_edge_requests_total",
+                            {"zone": zone, "host": host, "status": status}, value))
+    for (zone, host), value in sorted(_totals_cached.items()):
+        lines.append(metric("cloudflare_edge_cached_requests_total",
+                            {"zone": zone, "host": host}, value))
+    for (zone, host, action), value in sorted(_totals_fw.items()):
+        lines.append(metric("cloudflare_edge_rate_limit_events_total",
+                            {"zone": zone, "host": host, "action": action}, value))
+    for zone_label, value in probe_ok:
+        lines.append(metric("cloudflare_edge_probe_ok", {"zone": zone_label}, value))
 
 
 def poll_forever():
@@ -473,7 +526,14 @@ def _fixture_fetch_failing():
     return fetch
 
 
-def _exposition(requests_rows, firewall_rows, zone_ids=(_Z_PRODUCT,)):
+def _exposition(requests_rows, firewall_rows, zone_ids=(_Z_PRODUCT,), reset=True):
+    """One poll through the REAL collector.
+
+    `reset=False` KEEPS the cumulative counters, which is how the multi-poll cases below
+    exercise dedupe, persistence and monotonicity — the three properties the first cut's
+    windowed-republish shape silently violated."""
+    if reset:
+        _reset_totals()
     lines = []
     collect(lines, fetch=_fixture_fetch(requests_rows, firewall_rows), zone_ids=list(zone_ids))
     return lines
@@ -568,6 +628,8 @@ def self_test():
         "quiet state must emit no request data series"
     assert not any(l.startswith("cloudflare_edge_rate_limit_events_total{") for l in body.splitlines()), \
         "quiet state must emit no rate-limit data series"
+    assert not any(l.startswith("cloudflare_edge_cached_requests_total{") for l in body.splitlines()), \
+        "quiet state must emit no cached-request data series"
 
     # 2. Flipped fixture → traffic with cache misses and rate-limit events.
     flipped = _exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL)
@@ -576,12 +638,49 @@ def self_test():
         'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 42',
         'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="429",zone="minutark.ee"} 5',
         'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100',
-        'cloudflare_edge_cache_hit_ratio{host="minutark.ee",zone="minutark.ee"} 1',
-        'cloudflare_edge_cache_hit_ratio{host="mcp.minutark.ee",zone="minutark.ee"} 0',
+        'cloudflare_edge_cached_requests_total{host="minutark.ee",zone="minutark.ee"} 100',
+        'cloudflare_edge_cached_requests_total{host="mcp.minutark.ee",zone="minutark.ee"} 0',
         'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
         'cloudflare_edge_probe_ok{zone="minutark.ee"} 1',
     ):
         assert sample in body, f"missing sample: {sample}\n--- exposition ---\n{body}"
+
+    # 2b. DEDUPE — the same bucket polled twice must not double-count. In production every
+    # bucket IS re-reported: the lookback is 300s against a 120s poll, so windows overlap 2.5x
+    # and the first cut added each bucket again on every pass.
+    _exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL)                           # poll 1 (resets)
+    twice = "\n".join(_exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL, reset=False))   # poll 2
+    for sample in (
+        'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 42',
+        'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100',
+        'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
+    ):
+        assert sample in twice, (
+            "re-polling an already-counted bucket changed its total — dedupe is broken.\n"
+            f"missing: {sample}\n--- exposition ---\n{twice}")
+
+    # 2c. PERSISTENCE — a label set absent from the CURRENT window keeps its series. This is
+    # the churn defect: measured live 2026-09-17, an instant query found the series only 26% of
+    # the time, which is what led oracle-fleet#572's author to assert merely that the query
+    # parses (the series looked absent, so the panel was never given a real assertion).
+    quiet_after = "\n".join(_exposition(_TODAY_REQUESTS, _TODAY_FIREWALL, reset=False))
+    assert 'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100' in quiet_after, (
+        "a counter must HOLD its value when its label set leaves the window\n"
+        f"--- exposition ---\n{quiet_after}")
+
+    # 2d. MONOTONICITY — a NEW datetime bucket adds; a bucket the API revises DOWN (adaptive
+    # sampling does this) must never decrement.
+    later = [dict(_FLIPPED_REQUESTS[0], dimensions=dict(
+        _FLIPPED_REQUESTS[0]["dimensions"], datetime="2026-09-02T18:51:00Z"))]
+    grew = "\n".join(_exposition(later, [], reset=False))
+    assert 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 84' in grew, (
+        "a new datetime bucket must ADD to the total (42 + 42)\n"
+        f"--- exposition ---\n{grew}")
+    revised = [dict(_FLIPPED_REQUESTS[0], count=1)]  # same bucket, sampled lower
+    held = "\n".join(_exposition(revised, [], reset=False))
+    assert 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 84' in held, (
+        "a downward-revised bucket must never decrement a counter\n"
+        f"--- exposition ---\n{held}")
 
     # 3. The committed rules, read from disk.
     exprs = rule_exprs()
@@ -612,16 +711,36 @@ def self_test():
 
     # 6. A zone that stops answering is blind, not silently safe.
     before = _errors
+    _reset_totals()
     broken_lines = []
     collect(broken_lines, fetch=_fixture_fetch_failing(), zone_ids=[_Z_PRODUCT])
     broken = samples_of(broken_lines)
-    assert not any(series == "cloudflare_edge_requests_total" for series, _ in broken), \
-        "a failed read must emit NO request series"
+    # Checked against the RAW lines, not samples_of(): that parser only captures zone-only
+    # series, so the old `series == "cloudflare_edge_requests_total"` form could never have
+    # matched a host/status-labelled sample and passed vacuously.
+    assert not any(l.startswith("cloudflare_edge_requests_total{") for l in broken_lines), \
+        "a failed read with no prior data must emit NO request series"
     assert broken[("cloudflare_edge_probe_ok", _Z_PRODUCT)] == 0
     assert firing_zones(exprs[blind], broken) == {_Z_PRODUCT}
     assert _errors == before + 1, \
         "a failed read must count toward cloudflare_edge_probe_errors_total"
     _errors = before
+
+    # 6b. A failure AFTER data has been seen KEEPS the counters and flips probe_ok. Holding the
+    # last value is correct counter behaviour; probe_ok is the only thing that can tell a
+    # consumer those flat counters are stale rather than genuinely idle.
+    before = _errors
+    _exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL)
+    stale_lines = []
+    collect(stale_lines, fetch=_fixture_fetch_failing(), zone_ids=[_Z_PRODUCT])
+    stale = "\n".join(stale_lines)
+    assert 'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100' in stale, (
+        f"counters must survive a failed poll\n--- exposition ---\n{stale}")
+    assert f'cloudflare_edge_probe_ok{{zone="{_Z_PRODUCT}"}} 0' in stale, \
+        "a failed poll must still emit probe_ok=0 for the configured zone"
+    assert _errors == before + 1
+    _errors = before
+    _reset_totals()
 
     # 7. A probe that is gone entirely fires the blind alert through its absent() arm.
     assert firing_zones(exprs[blind], {}) == {"<absent>"}, \
@@ -633,9 +752,12 @@ def self_test():
     # 9. The GraphQL transport guard through a fake urlopen — the seam the fixtures cannot reach.
     _transport_check()
 
-    print("cloudflare edge-probe self-test: OK (parser, handler over a real socket, GraphQL transport guard, today's exposition, and the committed "
-          f"{blind} expr replayed against flipped + blind fixtures; the retired "
-          "CloudflareEdge5xx asserted absent)")
+    print("cloudflare edge-probe self-test: OK (parser, handler over a real socket, GraphQL "
+          "transport guard, today's exposition, counter semantics — dedupe across overlapping "
+          "windows, persistence when a label set leaves the window, monotonicity under a "
+          f"downward-revised bucket, survival of a failed poll — and the committed {blind} expr "
+          "replayed against flipped + blind fixtures; the retired CloudflareEdge5xx asserted "
+          "absent)")
     return 0
 
 
