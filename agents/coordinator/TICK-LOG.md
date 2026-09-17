@@ -9540,3 +9540,30 @@ page_table_check fix, wk-03's prepull pair (#1643/#1644) by its recreate, #1598 
 ago (FU-155 keeps the OOMController class). #1744 closed too: wk-01 recreated, the failed fstrim Job
 objects deleted. Open 🚨: 0. Recovery from the FU-248 incident: Grafana/Alertmanager/Argo/ArgoCD/Loki all
 Running by ~19:00; Longhorn volumes re-attaching.
+
+## 2026-09-17 ~05:35–06:15Z — FU-206 built: operational paths are non-public (oracle handoff)
+
+Operator, one line: "FU-206 and the new handoff from oracle about the same FU — lets not serve metrics
+anymore. Build it." The handoff (`20260917-0531-…googlebot-walking-mcp-host.md`) carried the new fact:
+GSC shows Googlebot fetching `mcp.minutark.ee` (`robots.txt` → 404 = crawl everything) while `/metrics`
+served 8.8 KB of exposition — "reachable" had become "on course to be INDEXED", which outlives the fix.
+Dry-run first (gotcha 6 doctrine) through cf-api-proxy, every probe deleted: **20217 "exceeded maximum
+number of zone rulesets for phase"** — the one-ruleset-per-phase-per-zone limit finally OBSERVED (it had
+been "expected from the API model" since 09-02), so the edge rule can only serve the one claim per zone
+owning `http_request_firewall_custom` (minutark.ee: the mcp api claim, not the apex consumer one); and
+**`block` + a custom response is NOT entitled in that phase on Free** — though the same account serves a
+custom 429 in `http_ratelimit`, so entitlement is per PHASE. That killed ADR-123's structured 403 and
+exposed a latent defect: #1304's CORS preflight rule carries the same illegal response and would have
+failed at apply for the first claim setting `.spec.origins` (the live claim sets none). ADR-123 amended,
+mechanism gains a second leg: leg 1 = the claim's own tunnel config refuses `^/(metrics|healthz)(/|$)` at
+the connector (per-claim → carries the default on EVERY claim and zone), leg 2 = one more block rule first
+in the api claim's custom ruleset (keeps the traffic off the home connection). Opt-in
+`.spec.operationalPaths.public`. Both legs applied LIVE through the proxy ahead of the merge (the exposure
+was the point) — drift until the Workspace reconciles this composition. Verified: `/metrics`, `/healthz`
++ subpaths → 403, `/metricsx` → origin 404, `/` → 405, in-cluster `/metrics` → 200 (the LAN scrape path
+never traverses either leg). **PR#1747**, FU-206 archived, handoff answered + closed (kept oracle's
+robots.txt/`X-Robots-Tag` leg — crawler directives ≠ access control, and `robots.txt` 404 still invites
+every other path). Found while reading Workspace state: `pr-oracle-fleet-minutark` had been
+`Synced=False` since 09-16 on a terraform state lock stale since **09-09** (held by a pod that no longer
+exists; the kubernetes backend's lease `lock-tfstate-pr-oracle-fleet-minutark-garage` was the only one in
+crossplane-system with a holder) — cleared by dropping the holder + lock-info annotation.

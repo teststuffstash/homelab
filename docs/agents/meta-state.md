@@ -9,6 +9,13 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ FU-206 (operational paths) — PR#1747 in flight; the hand-applied interim does NOT hold.** Both
+  legs were applied to `mcp.minutark.ee` through cf-api-proxy to close the exposure early, and the
+  Workspace reverted both within the hour (observed 2026-09-17 ~06:10Z) — expected: it is drift against
+  a composition that does not render them yet. **Only the merge closes it for good.** On pickup:
+  `curl -s -o /dev/null -w '%{http_code}\n' https://mcp.minutark.ee/metrics` — 403 is the goal, 200
+  means #1747 has not reached the Workspace yet (check ArgoCD synced the composition, then nudge the
+  Workspace). Nothing else is owed; FU-206 is archived and the oracle handoff answered.
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
   **Update 19:25Z:** responder PAUSED (PR#1746 → FU-249, re-enable ≈09-23); all 21 open alert issues
   closed on substance; platform back. The remaining plan on the main root = 7 metal config updates + taint
