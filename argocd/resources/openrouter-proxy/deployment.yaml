@@ -88,13 +88,21 @@ spec:
             # subscription fallback) and both legs refuse 503 without calling out.
             # Flipped back to live 2026-09-14 (Goal #1640 acceptance 2) on the strength of
             # `_forward_upstream` attaching `x-opencode-session: <the ride's session ref>`.
-            # RE-PARKED 2026-09-17 (operator, FU-251): what we send is NOT the session header
-            # the vendor asked for, so the premise of that un-park does not hold — rides were
-            # still reaching opencode.ai on the Go rail (oracle-fleet #634/#636). Both legs
-            # again, for FU-213's reason: one account, one key, one UA. Back to "0" only when
-            # the header is verified against what OpenCode actually expects (FU-251).
+            # RE-PARKED 2026-09-17 (operator, FU-251) while the header question was open, then
+            # UN-PARKED the same day once it was answered ON THE WIRE (PR#1760 + the probes in
+            # chainless-redesign.md §Proved on the wire): the proxy now forwards the harness's
+            # OWN identity — claude-code's native `X-Claude-Code-Session-Id` (mirrored into
+            # `x-opencode-session`), opencode's and goose's own header untouched — and the vendor
+            # honours it: same id ⇒ warm prompt cache, a fresh id on the same prefix ⇒ cold. The
+            # gate is now hard, not advisory: a request with NO session header gets
+            # `400 MissingSessionID`, so the pre-fix allowlist would be failing this rail today.
+            # The 09-14 "rides reached opencode.ai while parked" seam is closed too — the knob
+            # was "0" at the time (operator, 2026-09-17), not a leak past the switch.
+            # Live because the subscription's 7d window is latched at 0.95 and the reviewer's
+            # failover (reviewer-session.sh: latched + Go clear ⇒ opencode-go/qwen3.5-plus) is
+            # the sanctioned backup role for this rail — no reviews land without it.
             - name: OPENCODE_RAIL_DISABLED
-              value: "1"
+              value: "0"
             # ADR-107 chunk C (homelab#423): the OpenCode Go API key, consumed by the Go leg
             # (PR#429). optional: true — the pod must keep serving the Anthropic/OpenRouter legs
             # even if ESO hasn't materialized the Secret; the code fails closed per-request.
