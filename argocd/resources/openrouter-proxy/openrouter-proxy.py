@@ -4643,21 +4643,26 @@ def _self_test() -> int:
     check("5h" in resp["windows"], "/opencode-limit: 5h window present")
     check(resp["by_stack"].get("test", 0) > 0, "/opencode-limit: by_stack includes test")
 
-    # Test 12: real usage extraction + badge HALVING via stub upstream (non-stream JSON)
-    # Stub returns JSON with usage at END: 1M in + 1M out, deepseek-v4-flash (half=True)
-    # List: 0.14/0.28 $/M → 1M+1M = $0.42 at 1×.
-    #   billed (by_stack)  = list ×1 = $0.42  (homelab#540: badge models BILL at list ×1)
-    #   draw (by_stack_draw) = list ×0.5 = $0.21  (the badge halving is WINDOW-DRAW only)
+    # Test 12: real usage extraction through the stub upstream (non-stream JSON).
+    # Model: mimo-v2.5 — deliberately a FLAT row (2026-09-17): deepseek-v4-flash became
+    # PEAK/OFF-PEAK priced, so a live end-to-end request through it would price differently
+    # depending on the wall clock. The peak/off-peak split is pinned with an INJECTED clock in
+    # router.py's self-test instead; this test only needs a stable price to prove the
+    # extraction → ledger path. mimo-v2.5 list 0.14/0.28 $/M → 1M+1M = $0.42.
+    #   billed (by_stack)    = list ×1 with cache discounts = $0.42
+    #   draw (by_stack_draw) = list on raw tokens           = $0.42
+    # (They are equal because NO row sets half=True since 2026-09-17 — the vendor dropped the
+    # 2x badge column, so the ungrounded halving was removed. The mechanism is still there.)
     _go_response["type"] = "json"
     _go_response["body"] = json.dumps({
-        "id": "gen-test", "model": "deepseek-v4-flash",
+        "id": "gen-test", "model": "mimo-v2.5",
         "usage": {"input_tokens": 1000000, "output_tokens": 1000000}
     }).encode()
 
     # Call proxy with Go model (no ref — direct key, stack="jail")
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
-              body=json.dumps({"model": "opencode-go/deepseek-v4-flash",
+              body=json.dumps({"model": "opencode-go/mimo-v2.5",
                                "messages": [{"role": "user", "content": "hi"}]}),
               headers={"Content-Type": "application/json",
                        "Authorization": "Bearer direct-key"})
@@ -4665,12 +4670,12 @@ def _self_test() -> int:
     r.read()
     c.close()
 
-    # Check ledger: billed $0.42 (list ×1), draw $0.21 (badge-halved) for jail stack
+    # Check ledger: billed $0.42 (list ×1), draw $0.42 (list on raw, no grounded badge)
     w = router.go_usage_window(60)
     check(abs(w["by_stack"].get("jail", 0) - 0.42) < 0.01,
           f"JSON extraction: jail stack billed ≈$0.42 (list ×1), got {w['by_stack'].get('jail')}")
-    check(abs(w["by_stack_draw"].get("jail", 0) - 0.21) < 0.01,
-          f"JSON extraction: jail stack draw ≈$0.21 (badge-halved), got {w['by_stack_draw'].get('jail')}")
+    check(abs(w["by_stack_draw"].get("jail", 0) - 0.42) < 0.01,
+          f"JSON extraction: jail stack draw ≈$0.42 (list on raw), got {w['by_stack_draw'].get('jail')}")
 
     # Test 12b: SSE extraction (message_start + message_delta)
     _go_response["type"] = "sse"
@@ -4685,7 +4690,7 @@ data: [DONE]
     # Call with ref-style header to attribute separately
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
-              body=json.dumps({"model": "opencode-go/deepseek-v4-flash",
+              body=json.dumps({"model": "opencode-go/mimo-v2.5",
                                "messages": [{"role": "user", "content": "hi"}]}),
               headers={"Content-Type": "application/json",
                        "Authorization": "Bearer ref:sse-stack/test-secret"})
@@ -4693,12 +4698,12 @@ data: [DONE]
     r.read()
     c.close()
 
-    # SSE test should also add billed $0.42 / draw $0.21 for sse-stack
+    # SSE test should also add billed $0.42 / draw $0.42 for sse-stack
     w2 = router.go_usage_window(60)
     check(abs(w2["by_stack"].get("sse-stack", 0) - 0.42) < 0.01,
           f"SSE extraction: sse-stack billed ≈$0.42, got {w2['by_stack'].get('sse-stack')}")
-    check(abs(w2["by_stack_draw"].get("sse-stack", 0) - 0.21) < 0.01,
-          f"SSE extraction: sse-stack draw ≈$0.21, got {w2['by_stack_draw'].get('sse-stack')}")
+    check(abs(w2["by_stack_draw"].get("sse-stack", 0) - 0.42) < 0.01,
+          f"SSE extraction: sse-stack draw ≈$0.42, got {w2['by_stack_draw'].get('sse-stack')}")
 
     # Restore default SSE response for remaining tests
     _go_response["type"] = "sse"
@@ -4734,10 +4739,11 @@ data: [DONE]
     check(abs(w3["by_stack"].get("fallback-stack", 0) - expected) < 0.01,
           f"fallback: fallback-stack ≈${expected}, got {w3['by_stack'].get('fallback-stack')}")
 
-    # Test 14b: cache-write pricing — gpt-5.6-luna has cW=0.25 AND half=True (compound case)
+    # Test 14b: cache-write pricing — gpt-5.6-luna has cW=0.25 (its half=True was removed
+    # 2026-09-17: the vendor no longer publishes a 2x badge, so the halving was ungrounded).
     # Usage: 100k in + 100k out + 1M cache_creation.
-    #   billed = list ×1 = 0.02 + 0.12 + 0.25 = $0.39  (homelab#540: badge models BILL at list ×1)
-    #   draw   = list ×0.5 = (0.02 + 0.12 + 0.25) × 0.5 = $0.195  (badge halving is DRAW-only)
+    #   billed = list ×1 = 0.02 + 0.12 + 0.25 = $0.39
+    #   draw   = list on raw + cache at list  = $0.39  (no grounded badge to halve)
     # Keep input below 272k threshold to test base rates
     _go_response["body"] = json.dumps({
         "id": "gen-cw", "model": "gpt-5.6-luna",
@@ -4755,7 +4761,7 @@ data: [DONE]
     check(r.status == 200, "cache-write request: HTTP 200 returned")
     w_cw = router.go_usage_window(60)
     expected_cw = 0.39   # billed: (0.02 + 0.12 + 0.25) × 1 = 0.39
-    expected_cw_draw = 0.195  # draw: (0.02 + 0.12 + 0.25) × 0.5
+    expected_cw_draw = 0.39  # draw: same — no half=True row exists (2026-09-17)
     check(abs(w_cw["by_stack"].get("cw-stack", 0) - expected_cw) < 0.01,
           f"cache-write: cw-stack billed ≈${expected_cw}, got {w_cw['by_stack'].get('cw-stack')}")
     check(abs(w_cw["by_stack_draw"].get("cw-stack", 0) - expected_cw_draw) < 0.01,
