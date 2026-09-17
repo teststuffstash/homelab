@@ -75,14 +75,17 @@ ZEN_UPSTREAM = os.environ.get("OPENCODE_ZEN_BASE", "https://opencode.ai/zen")
 ZEN_KEY = os.environ.get("OPENCODE_ZEN_API_KEY", GO_KEY)
 ZEN_PREFIX = "opencode/"
 # FU-213 (operator, 2026-09-04): the opencode.ai KILL SWITCH. OpenCode mailed that requests
-# from this proxy's client (`User-Agent: homelab-openrouter-proxy`, the UA both legs send —
-# set because Cloudflare 1010-blocks python-urllib's own) carry no `x-opencode-session` header
-# and "may error" from 2026-09-06. The park was the holding pattern; the header question is now
-# NOT settled after all: `_forward_upstream` attaches `x-opencode-session: <the ride's session
-# ref>` on both opencode legs (Goal #1640 acceptance 2, 2026-09-14), but that is not the header
-# the vendor asked for, so the deployment is RE-PARKED at `OPENCODE_RAIL_DISABLED=1` (operator,
-# 2026-09-17, FU-251). The knob is the operator's kill switch — BOTH legs by default, because
-# they share the account, the key and the UA:
+# from this proxy's client (then `User-Agent: homelab-openrouter-proxy` on both legs, the UA
+# this proxy SUBSTITUTED for the harness's own) carry no `x-opencode-session` header and "may
+# error" from 2026-09-06. FU-213/#1640 answered by ATTACHING `x-opencode-session: <the ride's
+# credential ref>`, and the operator re-parked the rail on 2026-09-17 because that is not what
+# the vendor reads. FU-251 settled it from the vendor's own docs (opencode.ai/docs/go): a client
+# should send its OWN user agent and "a stable session ID … for each conversation" — and each
+# harness we ride already does (opencode and goose send `x-opencode-session`; claude-code sends
+# `x-claude-code-session-id`, which their validated-client table says Go recognizes natively).
+# The defect was this proxy ERASING both, so `_forward_upstream` now forwards the client's
+# identity and synthesizes only as a last resort. The knob stays as the operator's kill switch —
+# BOTH legs by default, because they share the account and the key:
 #   OPENCODE_RAIL_DISABLED=1|all|both  → Go + Zen off
 #   OPENCODE_RAIL_DISABLED=go|zen      → that leg only (comma/space list accepted)
 #   unset|0|false|no                   → live (the default; nothing changes for a normal deploy)
@@ -790,6 +793,23 @@ _DROP_REQ = {
     "x-request-deadline-s",  # homelab#22: a proxy directive, not an upstream header
 }
 _DROP_RESP = {"connection", "keep-alive", "transfer-encoding", "content-length"}
+
+# FU-251: credential-bearing request headers never forwarded to a THIRD-PARTY upstream (the
+# go/zen/or legs). `authorization` is exempt on or_leg alone — there it is the `ref:` the proxy
+# must resolve. Every comparison in this file is `.lower()`ed, so case variants are covered by
+# the set itself; the 2026-09-14 allowlist's stated fear of a "case-sensitive strip" never had a
+# case-sensitive strip to fear.
+_DENY_THIRD_PARTY = {"authorization", "x-api-key", "api-key", "cookie"}
+# Value-shaped tripwire for the same legs. ADR-087 means none of these can be present on a ride
+# (the pod holds an opaque ref, not a key), so a hit is a REGRESSION — a launcher that stopped
+# injecting, or a credential arriving by a header name no list anticipated. Name lists cannot
+# catch a renamed carrier; this can. `ref:` is here too: a Secret name is not a secret, but it
+# names our namespaces and has no business at a vendor.
+def _cred_shaped(v: str) -> bool:
+    """True if a header value looks like a credential (or a credential REF). `ref:` is matched
+    anchored — a bare substring would flag any value carrying `href:`."""
+    return ("sk-ant-oat" in v or "sk-or-v1-" in v
+            or v.startswith("ref:") or "Bearer ref:" in v)
 
 # (session, model, struck-provider tuple) -> (expires_epoch, provider block|None). Goal #1640
 # acceptance 2 puts the RIDE in the key: the pre-fix entry was per MODEL alone, so one 1 h cache
@@ -2295,17 +2315,24 @@ class Proxy(BaseHTTPRequestHandler):
         # homelab#791: or_leg (OpenRouter) also uses allowlist + ref-auth injection, but with
         # explicit oauth-token guard (subscription oauth must never reach third-party).
         if go_leg or zen_leg or or_leg:
-            # SECURITY: allowlist-only headers for third-party upstreams — never forward inbound
-            # auth headers (case variants like AUTHORIZATION/X-API-KEY could smuggle the subscription
-            # credential past a case-sensitive strip). This is cross-provider egress, not
-            # operator-trusted hop; only send what the rail needs.
-            allowed = {}
-            for k, v in self.headers.items():
-                lk = k.lower()
-                # Allow: content-type (body shape), anthropic-version (client compat), accept
-                if lk in ("content-type", "anthropic-version", "accept"):
-                    allowed[k] = v
-            allowed["User-Agent"] = "homelab-openrouter-proxy"
+            # SECURITY (FU-251, 2026-09-17 — this was a three-name ALLOWLIST until then): the
+            # boundary here is a DENY list over the credential-bearing headers, plus the value
+            # tripwire below. ADR-087 is why: a ride holds no real credential — its Authorization
+            # is an opaque `ref:<ns>/<name>`, a k8s Secret NAME, and the go/zen legs do not even
+            # resolve it (they overwrite auth with the rail's own env key). The allowlist was
+            # therefore guarding a credential that cannot be present, and PAYING for it with the
+            # client's IDENTITY: the UA and the harness's own session header, both of which
+            # opencode.ai asks for (opencode.ai/docs/go) and all three harnesses already send.
+            # The one leg where a real credential exists is or_leg — the proxy itself materializes
+            # it via _inject_ref_auth below — and that leg keeps Authorization for exactly that.
+            deny = _DENY_THIRD_PARTY - ({"authorization"} if or_leg else set())
+            allowed = {k: v for k, v in self.headers.items()
+                       if k.lower() not in _DROP_REQ and k.lower() not in deny}
+            # The vendor asks a client to identify ITSELF ("rather than a generic SDK or
+            # HTTP-library name") — so the harness's own UA rides through; ours is the fallback
+            # for a caller that sent none (python-urllib's default UA is Cloudflare-1010'd).
+            if not any(k.lower() == "user-agent" for k in allowed):
+                allowed["User-Agent"] = "homelab-openrouter-proxy"
             if go_leg or zen_leg:
                 # Go/Zen: inject the rail's own key (not a ref — keys are environment secrets)
                 rail_key = (ZEN_KEY if zen_leg else GO_KEY)
@@ -2313,23 +2340,42 @@ class Proxy(BaseHTTPRequestHandler):
                 allowed["x-api-key"] = rail_key
                 allowed["Authorization"] = f"Bearer {rail_key}"
                 note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
-                # FU-213 (closed by Goal #1640 acceptance 2): the vendor's PROVIDER-AFFINITY key,
-                # not auth — opencode routes requests carrying the same id to the same upstream
-                # provider so the prompt cache hits, and absent it falls back to CLIENT-IP
-                # affinity (the whole fleet egresses one IP, which is why the mail read "may
-                # error"). A constant would be the hardcoded-id trap the FU-213 thread names
-                # (affinity bound to the installation, not the conversation), so the value is the
-                # RIDE's session ref — `_cb_session()`, the same id that keys the (session, model)
-                # pin. The note carries the id so one proxy log line evidences the header.
-                if cb_session:
-                    allowed["x-opencode-session"] = cb_session
-                    note += f"+oc-session:{cb_session}"
+                # The vendor's PROVIDER-AFFINITY key, not auth — opencode routes requests
+                # carrying the same id to the same upstream provider so the prompt cache hits,
+                # and absent it falls back to CLIENT-IP affinity (the whole fleet egresses one
+                # IP, which is why their mail read "may error").
+                #
+                # FU-251: what it wants is "a stable session ID … for each CONVERSATION"
+                # (opencode.ai/docs/go). Every harness we ride already mints one, so the fix is
+                # to stop overriding them — FU-213/#1640 set this to `_cb_session()` for every
+                # ride, which is the injected credential's ref (per session-key/project, and one
+                # `direct:<hash>` bucket per key for direct rides): the wrong GRANULARITY, and
+                # the hardcoded-id trap by another route. Precedence, cheapest truth first:
+                #   1. the client's own `x-opencode-session` — opencode and goose send it;
+                #   2. `x-claude-code-session-id` — claude-code v2.1.86+, a per-conversation
+                #      uuid the vendor's validated-client table says Go recognizes natively
+                #      ("no custom-header wrapper is needed"); we forward it AND mirror it here,
+                #      so either recognition path lands;
+                #   3. the ride's credential ref — the old behaviour, now only for a client that
+                #      identified nothing at all (better than absent: that is IP affinity).
+                # The note carries the id AND its source so one proxy log line evidences which.
+                _oc_client = next((v for k, v in allowed.items()
+                                   if k.lower() == "x-opencode-session"), None)
+                _oc_native = next((v for k, v in allowed.items()
+                                   if k.lower() == "x-claude-code-session-id"), None)
+                _oc_sess, _oc_src = ((_oc_client, "client") if _oc_client else
+                                     (_oc_native, "native") if _oc_native else
+                                     (cb_session, "ref"))
+                if _oc_sess:
+                    if not _oc_client:
+                        allowed["x-opencode-session"] = _oc_sess
+                    note += f"+oc-session[{_oc_src}]:{_oc_sess}"
             elif or_leg:
-                # or_leg: resolve ref-auth and guard against subscription oauth egress
-                # Copy the inbound Authorization header into allowed BEFORE resolving the ref
-                auth_v = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
-                if auth_v:
-                    allowed["Authorization"] = auth_v
+                # or_leg: resolve ref-auth and guard against subscription oauth egress. The
+                # inbound Authorization is already in `allowed` (FU-251: `authorization` is
+                # exempt from the deny set on THIS leg precisely because it is the ref to
+                # resolve) — this is the one third-party leg where a real credential exists,
+                # and the proxy is what puts it there.
                 _inject_suffix = _inject_ref_auth(allowed)
                 # homelab#1620: the kube API unreachable while resolving the ref — a retriable
                 # 503 for the client, no breaker count (it is not the credential that failed).
@@ -2373,6 +2419,24 @@ class Proxy(BaseHTTPRequestHandler):
             headers = allowed
             # Strip anthropic-beta headers (Anthropic-specific, not needed for Go/Zen/OpenRouter)
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
+            # FU-251: the value tripwire — refuse rather than forward a credential-shaped value
+            # in ANY header. The auth the proxy itself just set is the one legitimate carrier
+            # (the rail key on go/zen, the resolved OpenRouter key on or_leg), so it is excluded
+            # by identity, not by name.
+            _auth_ok = {v for k, v in headers.items()
+                        if k.lower() in ("authorization", "x-api-key")} if or_leg else \
+                       {f"Bearer {rail_key}", rail_key}
+            _leaked = sorted(k for k, v in headers.items()
+                             if v not in _auth_ok and _cred_shaped(v))
+            if _leaked:
+                log(f"{self.command} {self.path} → 502 [{note}] model={or_model or '-'} - "
+                    f"credential-shaped value in forwarded header(s) {_leaked} — refusing "
+                    f"(FU-251 tripwire; ADR-087 says a ride carries no credential)")
+                self._reply_json(502, {
+                    "error": f"credential-shaped value in header(s) {_leaked} — refusing to "
+                             f"forward to a third-party upstream (FU-251 tripwire)"
+                })
+                return
         else:
             _inject_suffix = _inject_ref_auth(headers)
             # homelab#1620: transient kube-API failure → retriable 503, no breaker count.
@@ -3837,6 +3901,9 @@ def _self_test() -> int:
                 # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
                 # proxy attaches on the Go/Zen legs (never to OpenRouter).
                 "x_opencode_session": self.headers.get("x-opencode-session"),
+                # FU-251: claude-code's NATIVE session header — the vendor recognizes it, so the
+                # proxy must forward it rather than substitute an identity of its own.
+                "x_claude_code_session_id": self.headers.get("x-claude-code-session-id"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -3895,6 +3962,9 @@ def _self_test() -> int:
                 # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
                 # proxy attaches on the Go/Zen legs (never to OpenRouter).
                 "x_opencode_session": self.headers.get("x-opencode-session"),
+                # FU-251: claude-code's NATIVE session header — the vendor recognizes it, so the
+                # proxy must forward it rather than substitute an identity of its own.
+                "x_claude_code_session_id": self.headers.get("x-claude-code-session-id"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -3936,6 +4006,9 @@ def _self_test() -> int:
                 # Goal #1640 acceptance 2 / FU-213: the opencode provider-affinity header the
                 # proxy attaches on the Go/Zen legs (never to OpenRouter).
                 "x_opencode_session": self.headers.get("x-opencode-session"),
+                # FU-251: claude-code's NATIVE session header — the vendor recognizes it, so the
+                # proxy must forward it rather than substitute an identity of its own.
+                "x_claude_code_session_id": self.headers.get("x-claude-code-session-id"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -4772,35 +4845,55 @@ data: [DONE]
           or "router_go_capacity_latched 1" in metrics,
           "/metrics: router_go_capacity_latched gauge present")
 
-    # Test 17: Go-leg User-Agent — stub must see "homelab-openrouter-proxy"
+    # Test 17 (FU-251): Go-leg User-Agent — the harness's OWN UA rides through (the vendor asks
+    # a client to identify itself, not to hide behind a proxy's name), and ours is the fallback
+    # for a caller that sent none.
     seen.clear()
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
               body=json.dumps({"model": "opencode-go/kimi-k3",
                                "messages": [{"role": "user", "content": "hi"}]}),
               headers={"Content-Type": "application/json",
-                       "Authorization": "Bearer test-key"})
+                       "Authorization": "Bearer test-key",
+                       "User-Agent": "claude-cli/2.1.259 (external, sdk-cli)"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    g = seen.get("go") or {}
+    check(g.get("user_agent") == "claude-cli/2.1.259 (external, sdk-cli)",
+          f"FU-251: Go leg forwards the client's own User-Agent (got {g.get('user_agent')})")
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.putrequest("POST", "/api/v1/chat/completions", skip_accept_encoding=True)
+    _b17 = json.dumps({"model": "opencode-go/kimi-k3",
+                       "messages": [{"role": "user", "content": "hi"}]}).encode()
+    c.putheader("Content-Type", "application/json")
+    c.putheader("Authorization", "Bearer test-key")
+    c.putheader("Content-Length", str(len(_b17)))
+    c.endheaders()
+    c.send(_b17)
     r = c.getresponse()
     r.read()
     c.close()
     g = seen.get("go") or {}
     check(g.get("user_agent") == "homelab-openrouter-proxy",
-          f"Go-leg User-Agent: homelab-openrouter-proxy (got {g.get('user_agent')})")
+          f"FU-251: UA-less caller falls back to the proxy's own UA (got {g.get('user_agent')})")
 
-    # Test 17b: Zen-leg User-Agent — stub must see "homelab-openrouter-proxy"
+    # Test 17b (FU-251): the Zen leg behaves identically — client UA through, ours as fallback.
     seen.clear()
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
               body=json.dumps({"model": "opencode/nemotron-3-ultra-free",
                                "messages": [{"role": "user", "content": "hi"}]}),
               headers={"Content-Type": "application/json",
-                       "Authorization": "Bearer test-key"})
+                       "Authorization": "Bearer test-key",
+                       "User-Agent": "opencode/1.4.2"})
     r = c.getresponse()
     r.read()
     c.close()
     z = seen.get("zen") or {}
-    check(z.get("user_agent") == "homelab-openrouter-proxy",
-          f"Zen-leg User-Agent: homelab-openrouter-proxy (got {z.get('user_agent')})")
+    check(z.get("user_agent") == "opencode/1.4.2",
+          f"FU-251: Zen leg forwards the client's own User-Agent (got {z.get('user_agent')})")
 
     # Test 17c (FU-213): the OPENCODE_RAIL_DISABLED kill switch. Both halves are pinned — the
     # leg REFUSES (503, and the stub is never reached: the whole point is that no request leaves
@@ -5002,6 +5095,66 @@ data: [DONE]
     check(_o_or.get("x_opencode_session") is None,
           "FU-213: the affinity header never reaches the OpenRouter leg "
           f"(got {_o_or.get('x_opencode_session')!r})")
+
+    # (c2) FU-251 — the client's OWN conversation identity wins over the ride's credential ref.
+    # The vendor wants one stable id per CONVERSATION; the ref is per session-key/project, so
+    # overriding a client that already sends one was the defect that re-parked the rail.
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-egress/ride-a-worker",
+                       "x-opencode-session": "oc-conversation-123"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    g = seen.get("go") or {}
+    check(g.get("x_opencode_session") == "oc-conversation-123",
+          "FU-251: a client-sent x-opencode-session is PRESERVED, not overwritten by the ref "
+          f"(got {g.get('x_opencode_session')!r})")
+
+    # (c3) FU-251 — claude-code sends no x-opencode-session, it sends its native header. Go
+    # recognizes that natively ("no custom-header wrapper is needed"), so it must SURVIVE the
+    # hop; the proxy also mirrors it into x-opencode-session so either path lands.
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:agent-egress/ride-a-worker",
+                       "X-Claude-Code-Session-Id": "b4326de5-985a-4a3d-8b9c-743ac1bbe0a5"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    g = seen.get("go") or {}
+    check(g.get("x_claude_code_session_id") == "b4326de5-985a-4a3d-8b9c-743ac1bbe0a5",
+          "FU-251: claude-code's native session header survives the hop "
+          f"(got {g.get('x_claude_code_session_id')!r})")
+    check(g.get("x_opencode_session") == "b4326de5-985a-4a3d-8b9c-743ac1bbe0a5",
+          "FU-251: the native session id is mirrored into x-opencode-session, NOT the cred ref "
+          f"(got {g.get('x_opencode_session')!r})")
+
+    # (c4) FU-251 — the value tripwire. ADR-087 says a ride carries no credential, so a
+    # credential-shaped value under ANY header name (one no deny list anticipated) is a
+    # regression: refuse locally, never forward it to the vendor.
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer test-key",
+                       "X-Debug-Note": "Bearer sk-ant-oat-LEAKED"})
+    r = c.getresponse()
+    _st_tw, _body_tw = r.status, r.read().decode()
+    c.close()
+    check(_st_tw == 502 and "FU-251" in _body_tw,
+          f"FU-251: a credential-shaped header value is refused 502 (got {_st_tw})")
+    check("go" not in seen,
+          "FU-251: the tripwire refuses BEFORE the vendor is reached (stub untouched)")
 
     # (d) the cache is BOUNDED (reviewer blocking finding, round 2): `session` is minted fresh
     # per ride/round, so the (session, model) key never repeats — without eviction `_pins` grows

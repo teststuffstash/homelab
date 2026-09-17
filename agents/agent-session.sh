@@ -1773,11 +1773,18 @@ fi
 
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
 # oracle-fleet#7/PR#12: full cycle incl. salvage-push + PR-open with zero pod credentials;
-# AGENT_CRED_INJECT=0 opts out; opencode joined the rail 2026-07-16 — the FU-018 opencode leg:
-# its session config points baseURL at the proxy, the pod key is the same opaque ref): the pod
-# gets an OPAQUE REF instead of the real OpenRouter key — the egress proxy resolves ref→key
-# (label-checked, per-namespace RBAC) and injects upstream. The ref is worthless outside the
-# cluster.
+# opencode joined the rail 2026-07-16 — the FU-018 opencode leg: its session config points
+# baseURL at the proxy, the pod key is the same opaque ref): the pod gets an OPAQUE REF instead
+# of the real OpenRouter key — the egress proxy resolves ref→key (label-checked, per-namespace
+# RBAC) and injects upstream. The ref is worthless outside the cluster.
+#
+# FU-251 (2026-09-17): the `AGENT_CRED_INJECT=0` opt-out is GONE — injection is unconditional
+# whenever a proxy is configured. It was the last of the "env/mount fallbacks" ADR-087's rollout
+# line says to drop once default-on landed (the git half went with FU-020, 2026-07-26); nothing
+# in the repo set it, and it survived only as a hypothetical "but a pod might hold a real key",
+# which is exactly the premise the egress proxy's header handling was contorting itself around.
+# A REAL key is still rendered when there is NO proxy at all (AGENT_OPENROUTER_PROXY="") — the
+# documented break-glass for a proxy outage, where a ref has nothing to resolve it.
 OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
@@ -1785,7 +1792,7 @@ CRED_BROKER_ENV=""; OC_INJECT=""
 if [ "$HARNESS" = "claude" ]; then
   OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
 fi
-if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
+if [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
   # FU-089: claude rides join the broker path too — they used to lean on the standing in-ns
   # agent-git-token Secret (the optional fallback FU-089 deleted; found live: issue-135 r1,
   # clone died tokenless — the goose/opencode-only gate was the gap).
@@ -1793,8 +1800,7 @@ if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] && [ "$HARNESS" = 
   CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
           value: \"${PROXY_URL}/git-token?ns=${NS}\""
 fi
-if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] \
-   && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
+if [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           value: \"ref:${NS}/${SECRET}\""
@@ -1853,7 +1859,7 @@ if [ "$HARNESS" = "opencode" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" --arg u "${PROXY_URL}/api/v1" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
       * {provider: {openrouter: {options: {baseURL: $u, apiKey: "{env:OPENROUTER_API_KEY}"}}}}')"
-    echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087; AGENT_CRED_INJECT=0 opts out)"
+    echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087)"
   fi
   # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
   # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
