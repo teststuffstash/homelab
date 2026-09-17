@@ -10,6 +10,25 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-206** *(archived 2026-09-17)* — **Operational paths are non-public on every PublicRoute
+  (ADR-123).** Built after an oracle handoff showed Googlebot walking `mcp.minutark.ee` (a 404
+  `robots.txt` = crawl everything) with `/metrics` answering 8.8 KB of Prometheus exposition —
+  the risk moved from "readable" to "on course to be indexed". TWO legs, because the dry-run
+  through cf-api-proxy turned up two facts ADR-123 did not have (cloudflare.md gotcha 8): a zone
+  admits ONE ruleset per phase (20217 — observed live at last), so the edge rule can only serve
+  the single claim per zone owning `http_request_firewall_custom`; and `block` + a custom
+  response is not entitled in that phase on Free, so the body is Cloudflare's block page, not
+  ADR-123's structured JSON. Leg 1 = the claim's own tunnel config refuses
+  `^/(metrics|healthz)(/|$)` at the connector — per-claim, so it carries the default on EVERY
+  claim and zone. Leg 2 = one more `block` rule, first in the api claim's custom-phase ruleset,
+  keeping the traffic off the home connection. Opt-in: `.spec.operationalPaths.public`. Same
+  change fixed a latent defect the probe exposed — #1304's CORS preflight rule carried the same
+  illegal custom response and would have failed at apply for the first claim setting
+  `.spec.origins`. Verified live on `mcp.minutark.ee`: `/metrics`, `/healthz` + subpaths → 403,
+  `/metricsx` → origin 404, `/` → 405, in-cluster `/metrics` → 200. ADR-123 amended; the edge leg
+  goes profile-agnostic with FU-039's zone-phase aggregation. Detail: `docs/cloudflare.md`
+  §PublicRoute.
+
 - **FU-232** *(archived 2026-09-16)* — **Reporter-keyed subject collapse: fixed at the cascade.**
   The responder's `subject:` — which IS an issue's identity under the #149 one-subject rule — was
   the metric's EXPORTER whenever the failing object had no pod dimension of its own, so 19 of 28

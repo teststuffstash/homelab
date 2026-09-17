@@ -123,17 +123,6 @@ six OVERSIZE items pointer-ized into
       same 4.9 GiB ungated. **Next:** a sentinel-scoped closure (or a second, small image for
       `agents/coordinator/sentinel-argo.yaml`) — hundreds of MB. Relates FU-015, FU-093, FU-207, #80.
 
-- [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
-      Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
-      them before auth, the tunnel forwards the whole hostname (seen at the oracle-iac#532
-      pre-merge read, 2026-09-03). Deferred: ruled after the api-profile fix (PR#1357) had landed
-      and #532 was merging. **Next:** the composition renders one more rule in the claim's
-      `http_request_firewall_custom` ruleset for BOTH profiles (structured 403; default path list
-      `/metrics`, `/healthz`; a per-path opt-in claim field — name clears the glossary), dry-run
-      through cf-api-proxy first ([`docs/cloudflare.md`](cloudflare.md) gotcha 6); product zones
-      only until zone-phase aggregation (teststuff.net = FU-039's leg). Link: cloudflare.md
-      §PublicRoute completion table.
-
 - [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
       where** (operator ask 2026-09-02 after two same-day WAN-limit incidents; no FU/ADR covers
       it). **Hard constraint (operator): FAMILY traffic must never reach the cluster** — so raw

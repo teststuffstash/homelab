@@ -5,6 +5,9 @@
 #   3. profile-specific Cloudflare resources (v1alpha2+):
 #      - consumer: edge caching rule (respect-origin; Cloudflare default TTL when the origin sends none) + RUM/client telemetry
 #      - api: per-IP rate-limit rule (10 s windows — Free-plan entitlement) + never-challenge Skip (custom phase)
+#   4. the operational-path block (ADR-123, both profiles): /metrics + /healthz are non-public
+#      by default — refused at the connector on EVERY claim, and additionally at the edge for
+#      the claim that owns the zone's http_request_firewall_custom entry point.
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
 # <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
 # v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
@@ -73,6 +76,18 @@ spec:
             {{- $profile := or $xr.spec.profile "consumer" }}
             {{- $rateLimit := 1200 }}
             {{- if $xr.spec.rateLimit }}{{ $rateLimit = $xr.spec.rateLimit.threshold }}{{ end }}
+            {{- /* ADR-123: operational paths are non-public by DEFAULT on every claim, both
+                 profiles. The claim opts a default path back into public service per path
+                 (.spec.operationalPaths.public); the list itself is a platform constant. */}}
+            {{- $opsPublic := list }}
+            {{- if $xr.spec.operationalPaths }}{{ $opsPublic = ($xr.spec.operationalPaths.public | default list) }}{{ end }}
+            {{- $opsBlocked := list }}
+            {{- range (list "/metrics" "/healthz") }}
+              {{- if not (has . $opsPublic) }}{{ $opsBlocked = append $opsBlocked . }}{{ end }}
+            {{- end }}
+            {{- $opsAlt := list }}
+            {{- range $opsBlocked }}{{ $opsAlt = append $opsAlt (trimPrefix "/" .) }}{{ end }}
+            {{- $opsRegex := printf "^/(%s)(/|$)" (join "|" $opsAlt) }}
             ---
             apiVersion: tf.upbound.io/v1beta1
             kind: Workspace
@@ -109,6 +124,19 @@ spec:
                     tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
                     config = {
                       ingress = [
+                        {{- /* Leg 1 of ADR-123 (amended 2026-09-17): the connector refuses the
+                             operational paths before they reach the backend. Per-claim, so it
+                             needs no zone-phase ruleset and covers EVERY claim — the edge leg
+                             below can only serve the one claim per zone that owns
+                             http_request_firewall_custom (Cloudflare error 20217). The LAN
+                             scrape/probe path does not traverse the tunnel and is untouched. */}}
+                        {{- if $opsBlocked }}
+                        {
+                          hostname = "{{ $host }}"
+                          path     = "{{ $opsRegex }}"
+                          service  = "http_status:403"
+                        },
+                        {{- end }}
                         {
                           hostname = "{{ $host }}"
                           service  = "{{ $origin }}"
@@ -198,24 +226,32 @@ spec:
                     kind     = "zone"
                     phase    = "http_request_firewall_custom"
                     rules = [
+                    {{- /* Leg 2 of ADR-123: the operational-path block at the EDGE — one more
+                         rule in the ruleset this claim already owns, so the request never
+                         reaches the home connection. First in the list: `block` terminates,
+                         `skip` does not. api profile only — a consumer claim rendering its own
+                         ruleset in this phase is refused by the API with 20217 "exceeded
+                         maximum number of zone rulesets for phase" (observed live on minutark.ee
+                         2026-09-17), because the zone already has an api claim holding the
+                         entry point. Consumer claims get leg 1 until zone-phase aggregation
+                         (FU-039). ⚠ NO custom response: `block` + action_parameters.response in
+                         THIS phase is refused on the Free plan ("not entitled to use a custom
+                         response") — unlike the rate-limit phase, which serves one. */}}
+                    {{- if $opsBlocked }}
+                      {
+                        ref         = "operational_paths_block"
+                        action      = "block"
+                        description = "operational paths are non-public (ADR-123): {{ join ", " $opsBlocked }}"
+                        expression  = "(http.host eq \"{{ $host }}\" and ({{ range $i, $p := $opsBlocked }}{{ if $i }} or {{ end }}http.request.uri.path eq \"{{ $p }}\" or starts_with(http.request.uri.path, \"{{ $p }}/\"){{ end }}))"
+                        enabled     = true
+                      },
+                    {{- end }}
                     {{- if $xr.spec.origins }}
                       {
                         ref         = "preflight_disallowed_origin"
                         action      = "block"
                         description = "api profile: reject CORS preflight from origins outside the claim allow-list"
                         expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
-                        action_parameters = {
-                          response = {
-                            status_code  = 403
-                            content_type = "application/json"
-                            content      = jsonencode({
-                              success  = false
-                              errors   = [{ code = 10403, message = "origin not allowed" }]
-                              messages = []
-                              result   = null
-                            })
-                          }
-                        }
                         enabled = true
                       },
                     {{- end }}
@@ -268,6 +304,12 @@ spec:
                   }
                   {{- end }}
                   {{- else }}
+                  # --- consumer profile: no custom-phase ruleset ---
+                  # The operational-path block (ADR-123) reaches a consumer claim through the
+                  # connector leg above, not the edge: rendering a second zone ruleset in
+                  # http_request_firewall_custom is refused (20217) wherever an api claim — or,
+                  # on teststuff.net, the ha mTLS ruleset — already holds the entry point.
+                  # The edge leg becomes profile-agnostic with zone-phase aggregation (FU-039).
                   # --- consumer profile: edge caching on ---
                   # Respect-origin cache headers (Cloudflare default edge TTL when the origin sends none).
                   # Filled in (#1305).
