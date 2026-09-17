@@ -10,8 +10,10 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ PICKUP (2026-09-17 corpus session — the responder rebuild's second half; arc in TICK-LOG).**
-  Three PRs: **#1748** (the triage-routing filter), **#1749** (§A1 capture) and **#1750**
-  (declared window + human-close + the crosscheck's pause line) — ALL MERGED. The lane is still PAUSED (FU-249), so
+  Six PRs, all MERGED: **#1748** (the triage-routing filter), **#1749** (§A1 capture), **#1750**
+  (declared window + human-close + the crosscheck's pause line), **#1751** (KubeJobFailed replaced
+  — see the separate bullet), **#1752** (replay: a recorded world is read-only to a run), and the
+  codeowner read on the parked **#1738** (model_id strip hoist — bot-approved since 09-16). The lane is still PAUSED (FU-249), so
   NOTHING below has been observed live — each item is a read to run at un-pause.
   (1) **At FU-249's un-pause (≈09-23), in this order:** delete the never-matching `alert-dep` filter
   in `responder-argo.yaml` (one revert); then (a) `responder_triage_sessions_today` for a day — it
@@ -37,6 +39,27 @@ never the session's arc — that is TICK-LOG's.)
   down) — expected during a window, but it is the class a declared window does NOT cover, and adding
   `KubeJobFailed` to `DECLARED_ALERTS` was rejected as too broad (it would mute every Job failure
   fleet-wide for the window). The narrower fix, unbuilt: the guard should skip a cordoned node.
+
+- **⚑ PICKUP (2026-09-17, same session — the alert-quality tail; two reversals worth re-reading).**
+  (1) **`KubeJobFailed` REPLACED (PR#1751)** after the operator caught what #1748 had got wrong: the
+  stock rule reads a Job OBJECT, so on a CronJob it clears only by failing MORE
+  (`garage-write-probe`: 2 failures, 776 successes, still firing 13.5 h later). Now
+  `argocd/resources/job-health/` — `CronJobNotSucceeding` (cadence-derived from
+  `next_schedule_time - last_schedule_time`, self-clearing), `CronJobNeverSucceeded`, and a
+  `KubeJobFailed` narrowed to Jobs no CronJob owns. Verified end-to-end: the three stale alerts aged
+  out of Alertmanager by themselves at 08:56Z, no Job objects deleted. **Watch at the next sitting:**
+  the first real `CronJobNotSucceeding` fire — the 600s floor × 3 intervals is an authored number,
+  and the honest re-read is whether a weekly job's 21-day threshold is tolerable or wants its own
+  belt (`RegistryGCMirrorsStale` already covers gc-mirrors).
+  (2) **Replay hermeticity (PR#1752):** a bridge that derives a world file wrote into the COMMITTED
+  `world/` dir — `$REPLAY_WORLD` is the fixture's own dir unless a registry world is in play.
+  `run.sh` now hashes every world file before/after a run and reds if any moved. Nothing to pick up;
+  recorded here because the class is easy to re-introduce.
+  (3) **#1737 closed on evidence** (the `diff-ci` `agentstack-rbac-lint` map row exists on master;
+  `diff-ci` exited 0 on four branches today) — it was real when #1738's ride hit it on 09-16.
+  (4) **Standing residue, unowned:** `fix/responder-decide-once` is a stale LOCAL branch from the
+  #1733 session (squash-merged, never pushed) holding a worktree at a dead scratchpad path — prune
+  with the rest of the stale-branch hygiene list.
 
 - **⚑ FU-206 (operational paths) — PR#1747 in flight; the hand-applied interim does NOT hold.** Both
   legs were applied to `mcp.minutark.ee` through cf-api-proxy to close the exposure early, and the
