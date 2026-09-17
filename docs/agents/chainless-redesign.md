@@ -448,9 +448,11 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    `model-classes.json` grows rails/class policy.
 5. Role wiring (coordinator/reviewer/responder/retro launchers call `/route`).
 6. Legacy deletion in one sweep: chains, `claudeTier`, `guardrail`, the M12 branch, the M10
-   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading, and the retired
-   `ROUTER_STRIKE_ENFORCE` read + filter branch (ruled 2026-08-23, §M1a) — each deletion site
-   is already named in its own doc. **Sweep additions + the ONE trap (goal #775 findings-store
+   case-maps, `REVIEW_GOAL_MODEL`, `GOOSE_MODEL` threading — each deletion site
+   is already named in its own doc. ✅ **The retired strike-enforcement knob's read + filter
+   branch (ruled 2026-08-23, §M1a) is ALREADY DELETED** — homelab#1666 (PR#1685, assembled to
+   master by PR#1734); `route()` now enforces the task's struck cells unconditionally. Not part
+   of this sweep. **Sweep additions + the ONE trap (goal #775 findings-store
    entry 5, surfaced here so the sweep session needs no graph read):** three post-wiring
    `--fallback` literals ARE sweep targets (`--fallback sonnet` on the responder + dispatch-unit
    launchers, `--fallback "$MODEL"` on retro), but the `case "$rail" in opencode-go/*)`
@@ -460,8 +462,10 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Related
 
-ADR-107 (decision record) · [`model-routing.md`](model-routing.md) §M8–M13 (mechanism home; M11
-generalizes, M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095 (routing program
+ADR-107 (decision record) · [`model-routing.md`](model-routing.md) (the routing RULES — the
+§M8–M13 mechanism home moved to
+[`../spikes/model-routing-history.md`](../spikes/model-routing-history.md), where M11 generalizes
+and M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095 (routing program
 pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (accounting) · FU-168
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
