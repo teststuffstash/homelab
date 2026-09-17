@@ -218,9 +218,12 @@ and no hostname label** on `cloudflared_tunnel_total_requests` (labels: containe
 namespace/pod — verified live, homelab#362), so the tunnel metrics are a liveness signal, NOT a
 substitute for zone analytics); the `homelab-observability-read` token for on-demand GraphQL +
 audit-log reads from the jail; the lablabs exporter (`argocd/resources/cloudflare-exporter/`) —
-correctly configured and **correctly idle**: neither zone can currently produce zone series
-(below), so its alert is keyed to scrape-target health (`CloudflareExporterDown`), not data
-presence; the **DIY GraphQL poller** (`argocd/resources/cloudflare-exporter/edge-probe.py`,
+correctly configured, and **partly idle rather than wholly idle** (corrected 2026-09-17 by a live
+read): its ZONE-ANALYTICS path is empty as designed, because that path uses `httpRequests1mGroups`,
+which free zones refuse (below) — but its **colocation** datasets DO answer on the free zone, and
+`cloudflare_zone_colocation_requests_total` / `_visits` carry ~98 live series for `minutark.ee`
+today. Nothing consumes them. Its alert stays keyed to scrape-target health
+(`CloudflareExporterDown`), not data presence; the **DIY GraphQL poller** (`argocd/resources/cloudflare-exporter/edge-probe.py`,
 built #1306) — a ConfigMap-python poller beside the exporter in the same app/namespace, on the
 same ESO-delivered `CLOUDFLARE_OBSERVABILITY_READ` token, polling `httpRequestsAdaptiveGroups`
 and `firewallEventsAdaptive` (both ✅ on free zones per the validated matrix below) to produce
@@ -231,20 +234,41 @@ ingress-write token and deliberately 403s settings paths; this is a direct read 
 **Edge series contract** (the ORACLE stack's Grafana folder consumes these — cross-repo consumers
 grep this doc, so the strings must match the emitter exactly):
 
-| series | labels |
-|---|---|
-| `cloudflare_edge_requests_total` | `zone`, `host`, `status` |
-| `cloudflare_edge_cache_hit_ratio` | `zone`, `host` |
-| `cloudflare_edge_rate_limit_events_total` | `zone`, `host`, `action` |
-| `cloudflare_edge_probe_ok` | `zone` |
+| series | type | labels | how to query it |
+|---|---|---|---|
+| `cloudflare_edge_requests_total` | counter | `zone`, `host`, `status` | `sum by (host) (rate(…[$__rate_interval]))` |
+| `cloudflare_edge_cached_requests_total` | counter | `zone`, `host` | the cache-served SUBSET of the above; ratio is the consumer's division — `sum by (host) (rate(cached…)) / sum by (host) (rate(requests…))` |
+| `cloudflare_edge_rate_limit_events_total` | counter | `zone`, `host`, `action` | `sum by (host, action) (rate(…[$__rate_interval]))` |
+| `cloudflare_edge_probe_ok` | gauge | `zone` | `min by (zone) (min_over_time(…[10m]))` |
+
+**There is no `route` label — the per-hostname dimension is `host`.** `by (route)` parses, returns
+one empty unlabelled series, and fails nothing: it is what oracle-fleet#572 shipped, and what its
+"query parses" acceptance rows could not catch.
+
+⚠ **The counters are process-cumulative, and that is deliberate** (rewritten 2026-09-17). The
+first cut re-published each 5-minute window's count under a `_total` name declared `counter`;
+one lie produced three defects — `rate()` read every decrease as a counter reset, the 300s
+lookback against a 120s poll double-counted 2.5x, and only label sets seen in the last window
+were emitted, so series churned in and out of existence (measured: 14 series over 12h, present
+on only 26% of instant queries). The probe now dedupes per-bucket by the row's own `datetime`
+dimension, adds only the increase, and emits every label set it has ever seen. Consequences a
+consumer must know:
+
+- **A flat counter is not idle traffic — check `cloudflare_edge_probe_ok`.** Counters hold their
+  last value through a failed poll on purpose; the gauge is the staleness signal.
+- **Restart = counter reset**, which `rate()`/`increase()` handle natively. Do not build on the
+  absolute value.
+- A **new** series here should name its dimensions in the metric name (the lablabs
+  `cloudflare_zone_requests_status_country_host` convention) so the contract travels with the
+  series and not only with this table. The four above keep their names to avoid a flag day.
 
 The poller queries one zone at a time (never batched — a free zone riding into a batched query
 would make Cloudflare reject the whole batch, homelab#132 round 3). Self-test replays recorded
 API shapes through the real collector AND through the alert expressions scraped out of the
 committed `prometheusrule.yaml` (`python3 edge-probe.py --self-test`). The alert
 `CloudflareEdgeProbeBlind` (severity: warning, `platform_machinery: "true"`) fires when the
-probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and
-edge data absence would go unnoticed.
+probe has not read a zone's edge data for 30m — the counters above are STALE (holding their last
+value), not safe, and edge data absence would go unnoticed.
 
 **Spend drift belt** (homelab#217, 2026-08-09; argo leg retired 2026-08-12 — §Spend surface):
 `cloudflare-spend-probe` — a ConfigMap-python poller beside the exporter in the same
