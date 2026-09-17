@@ -1939,6 +1939,18 @@ to the internet — the gateway answers `/metrics`/`/healthz` before auth by des
 forwards the whole hostname. **Consequences:** composition change (FU-206); on the platform zone
 the same phase is the ha mTLS entry point, so teststuff.net claims get it only with zone-phase
 aggregation (FU-039's leg); the health-contract leg is a rung-3 design item, named here.
+**Amended 2026-09-17 at the build (FU-206), on two facts the ruling did not have:** (a) a zone
+admits exactly ONE ruleset per phase and a second create fails with 20217 (observed live, not
+just expected), so the edge rule can only ever serve the single claim per zone that owns
+`http_request_firewall_custom` — it is not a per-claim mechanism; (b) `block` with a custom
+response is not entitled in that phase on the Free plan, so the body is Cloudflare's 403 page,
+not the structured JSON decided above. The default therefore gains a SECOND, contention-free leg
+that carries it on every claim and every zone: the claim's own tunnel config refuses the
+operational paths at the connector (`http_status:403` on a path-matched ingress rule ahead of
+the backend rule). The edge rule stays where it can be rendered — it keeps the traffic off the
+home connection — and becomes profile-agnostic when aggregation lands. Both properties the
+decision actually rests on are unchanged: enforcement is platform-side, and the LAN scrape/probe
+path never traverses either leg. Details in [`cloudflare.md`](cloudflare.md) §PublicRoute.
 
 ### ADR-124 — The public request map is rendered per app from two machine-readable maps, never hand-merged (2026-09-03)
 

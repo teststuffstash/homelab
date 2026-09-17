@@ -32,10 +32,10 @@ profiles:
          value: "Cloudflare-managed; Free-plan action override unverified", rejection: "block or managed challenge (interstitial)",
          verify: "UNVERIFIED — docs/cloudflare.md §PublicRoute completion table"}
       - {seq: 30, id: PRF-CUSTOM, owner: platform, stage: "WAF custom rules — never-challenge Skip · CORS preflight block · operational-path block",
-         guard: "ONE http_request_firewall_custom ruleset per claim: Skip products bic/securityLevel/uaBlock + phases sbfm/managed; OPTIONS from an Origin outside the allow-list → 403; /metrics,/healthz → 403 (ADR-123, ☐ FU-206)",
-         value: "PublicRoute `.spec.origins`; composition (argocd/resources/publicroute/composition.yaml)",
-         rejection: "structured 403 JSON (`{\"success\":false,\"errors\":[{\"code\":10403,…}]}`)",
-         verify: "GET /zones/{zone}/rulesets → kind=zone phase=http_request_firewall_custom; curl -X OPTIONS -H 'Origin: https://evil' → 403"}
+         guard: "ONE http_request_firewall_custom ruleset per ZONE, not per claim (error 20217) — the api claim holds it: operational-path block FIRST (/metrics,/healthz + subpaths, ADR-123/FU-206), then OPTIONS from an Origin outside the allow-list, then Skip products bic/securityLevel/uaBlock + phases sbfm/managed",
+         value: "PublicRoute `.spec.origins`, `.spec.operationalPaths.public`; composition (argocd/resources/publicroute/composition.yaml)",
+         rejection: "403 — Cloudflare's own block page, NOT structured JSON (a custom response is not entitled in this phase on Free; gotcha 8)",
+         verify: "GET /zones/{zone}/rulesets → kind=zone phase=http_request_firewall_custom; curl https://<host>/metrics → 403; curl -X OPTIONS -H 'Origin: https://evil' → 403"}
       - {seq: 40, id: PRF-RATELIMIT, owner: platform, stage: "per-IP rate limit — ⌈threshold/6⌉ per 10 s window (Free plan's only period)",
          guard: "characteristics cf.colo.id + ip.src; mitigation 10 s; counting is per colo",
          value: "PublicRoute `.spec.rateLimit.threshold` (per-minute figure; bounds in the XRD)",
@@ -51,6 +51,11 @@ profiles:
          value: "PublicRoute `.spec.backend`, `.spec.replicas`; Cloudflare plan constants",
          rejection: "524 (origin timeout), 413 (upload cap), 1033 (tunnel down), 404 (unlisted hostname)",
          verify: "kubectl -n <ns> get deploy pr-<ns>-<claim>-cloudflared; GET accounts/{a}/cfd_tunnel → healthy"}
+      - {seq: 75, id: PRF-OPSPATH, owner: platform, stage: "connector: operational paths refused before the backend",
+         guard: "the tunnel config's FIRST ingress rule matches `^/(metrics|healthz)(/|$)` on the claim hostname (ADR-123, amended 2026-09-17). Per-claim, so unlike stage 30 it needs no zone phase and carries the default on EVERY claim and zone. Per-path opt-in on the claim; the LAN path does not traverse the tunnel and is untouched",
+         value: "PublicRoute `.spec.operationalPaths.public`; composition tunnel config",
+         rejection: "403, empty body (cloudflared `http_status:403`)",
+         verify: "curl https://<host>/metrics → 403; in-cluster curl http://<svc>/metrics → 200"}
       - {seq: 80, id: PRF-SERVICE, owner: platform, stage: "Service → pod (Cilium, ClusterIP)",
          guard: "no NetworkPolicy on the backend by default; the LAN path joins here",
          value: "PublicRoute `.spec.backend.service` (trailing dot — gotcha 1) + `.port`",
@@ -64,8 +69,8 @@ profiles:
          guard: "zone settings from the product-zone bootstrap", value: "tofu/cloudflare/minutark.tf", rejection: "handshake failure / 301", verify: "curl -I http://<host>/ → 301"}
       - {seq: 20, id: PRF-DDOS, owner: cloudflare, stage: "HTTP DDoS managed ruleset (ddos_l7)", guard: "always on; challenges are LEGAL on this profile",
          value: "Cloudflare-managed", rejection: "block or managed challenge", verify: "—"}
-      - {seq: 30, id: PRF-CUSTOM, owner: platform, stage: "WAF custom rules — operational-path block", guard: "/metrics,/healthz → 403 (ADR-123, ☐ FU-206); no Skip — challenges legal",
-         value: "composition", rejection: "structured 403 JSON", verify: "GET /zones/{zone}/rulesets"}
+      - {seq: 30, id: PRF-CUSTOM, owner: platform, stage: "WAF custom rules", guard: "a consumer claim renders NOTHING in this phase — a second zone ruleset per phase is refused (20217) and the api claim (or, on teststuff.net, the ha mTLS ruleset) holds the entry point. Its operational-path block lives at stage 75; the edge leg becomes profile-agnostic with zone-phase aggregation (FU-039). No Skip — challenges legal",
+         value: "—", rejection: "—", verify: "GET /zones/{zone}/rulesets → no consumer-owned ruleset in this phase"}
       - {seq: 50, id: PRF-WAF, owner: cloudflare, stage: "Free managed WAF ruleset", guard: "runs normally (block-shaped rules)", value: "Cloudflare-managed", rejection: "403 block page", verify: "—"}
       - {seq: 60, id: PRF-CACHE, owner: platform, stage: "cache — respect origin cache-control, Cloudflare default TTL when absent",
          guard: "http_request_cache_settings ruleset per claim (one per zone!)", value: "composition; the origin's Cache-Control",
@@ -74,6 +79,9 @@ profiles:
          value: "composition (`cloudflare_web_analytics_site/_rule`)", rejection: "—", verify: "docs/cloudflare.md §Observability"}
       - {seq: 70, id: PRF-TUNNEL, owner: platform, stage: "edge → origin: the claim's tunnel + cloudflared", guard: "100 s read timeout, 100 MB upload cap (Free constants); tunnel routes only the claim hostname",
          value: "PublicRoute `.spec.backend`, `.spec.replicas`", rejection: "524 / 413 / 1033 / 404", verify: "GET accounts/{a}/cfd_tunnel → healthy"}
+      - {seq: 75, id: PRF-OPSPATH, owner: platform, stage: "connector: operational paths refused before the backend",
+         guard: "`^/(metrics|healthz)(/|$)` → 403 in the tunnel config (ADR-123/FU-206). For a consumer claim this is the ONLY operational-path leg — stage 30 is unavailable to it",
+         value: "PublicRoute `.spec.operationalPaths.public`; composition tunnel config", rejection: "403, empty body", verify: "curl https://<host>/metrics → 403"}
       - {seq: 80, id: PRF-SERVICE, owner: platform, stage: "Service → pod (Cilium, ClusterIP)", guard: "the LAN path joins here",
          value: "PublicRoute `.spec.backend.service` + `.port`", rejection: "502/503 when no endpoints", verify: "kubectl get endpoints"}
 
@@ -92,7 +100,7 @@ lan:
 # `fulfils: <id>`; the renderer lists unfulfilled rows as gaps (and fails under --strict).
 contract:
   - {id: CTR-PATH, applies_to: [api], stage: "one endpoint path; everything else 404", why: "the tunnel forwards the whole hostname — the app is the only path filter on the public side"}
-  - {id: CTR-OPS, applies_to: [api, consumer], stage: "answer readiness (and /metrics where it exists) BEFORE auth for the kubelet and Prometheus", why: "the edge hides operational paths from the public (ADR-123, FU-206); the LAN scrape/probe path must keep working"}
+  - {id: CTR-OPS, applies_to: [api, consumer], stage: "answer readiness (and /metrics where it exists) BEFORE auth for the kubelet and Prometheus", why: "the platform hides operational paths from the public (ADR-123, built FU-206 — stages 30 + 75); the LAN scrape/probe path must keep working"}
   - {id: CTR-BODY, applies_to: [api], stage: "bound the request body BEFORE reading it", why: "the edge cap is fixed at 100 MB on Free and `http.request.body.size` is an Enterprise field"}
   - {id: CTR-TIMEOUT, applies_to: [api], stage: "bound backend/upstream time", why: "the edge's 100 s proxy read timeout is fixed below Enterprise"}
   - {id: CTR-ORIGIN, applies_to: [api], stage: "default-deny Origin on the LAN path; relax on the public path only to the SAME list the edge enforces", why: "one Deployment serves both paths (seam S2) — a global 'public mode' drops the DNS-rebinding defence on the LAN"}

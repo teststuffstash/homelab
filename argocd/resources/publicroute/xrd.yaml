@@ -8,6 +8,8 @@
 # is the ha mTLS ruleset) — until the aggregation leg lands (docs/cloudflare.md §PublicRoute,
 # completion table; FU-039).
 #
+# v1alpha2: `operationalPaths.public` added 2026-09-17 (FU-206) — optional and additive, so
+# stored XRs need no conversion; absent means the ADR-123 default (both paths blocked).
 # v1alpha2: profile field (consumer|api) added — the route class fans out edge defaults the
 # way ADR-101's zone classes fan out zone defaults (docs/cloudflare.md §Predicted shape).
 # v1alpha2 is the referenceable (storage) version; v1alpha1 remains served for legacy claims
@@ -155,6 +157,23 @@ spec:
                   items:
                     type: string
                     pattern: ^https?://[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(:[0-9]+)?$
+                operationalPaths:
+                  type: object
+                  description: >-
+                    Operational paths (docs/glossary.md) — the backend's non-public HTTP paths.
+                    The platform blocks /metrics and /healthz (and their subpaths) on EVERY
+                    PublicRoute, both profiles, by default (ADR-123); the LAN scrape/probe path
+                    is untouched. List a default path under `public` to opt it back into public
+                    service — an honest consumer rarely wants one.
+                  properties:
+                    public:
+                      type: array
+                      description: >-
+                        Subset of the platform default list (/metrics, /healthz) to keep
+                        publicly served. Anything not listed here is blocked.
+                      items:
+                        type: string
+                        enum: ["/metrics", "/healthz"]
                 replicas:
                   type: integer
                   default: 1
