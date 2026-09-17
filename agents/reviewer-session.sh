@@ -1045,9 +1045,15 @@ elif [ -z "${_router_adopted:-}" ]; then
     if [ "$go_limited" = "false" ]; then
       # Go rail is available — use it for this review (only when no explicit --model was passed).
       if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
-        MODEL="opencode-go/qwen3.5-plus"
+        # 2026-09-17: qwen3.5-plus is DEAD — the vendor still lists it in /v1/models but every
+        # call returns `400 … Model is unavailable` (3/3 probes), and it left the published
+        # pricing table. Its listing is not a liveness signal. Replaced by qwen3.8-max: tool_use
+        # round-trip re-probed the same day (2.5s, thinking+tool_use), a genuine top tier for the
+        # SAFETY-NET role, $15/mo pool. ⚠ that pool is ~22 review rounds at the measured ≈$1
+        # draw/round — failover duty, not a standing home; the capacity latch degrades on 402/429.
+        MODEL="opencode-go/qwen3.8-max"
         GO_SERVED=1
-        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.5-plus)"
+        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.8-max)"
       else
         echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
         exit 0
