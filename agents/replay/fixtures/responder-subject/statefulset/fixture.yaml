@@ -1,0 +1,19 @@
+# FU-232 (homelab#1733) — the statefulset arm, the #811 magnet's own shape.
+#
+# CONDITION UNDER REPLAY. KubeStatefulSetReplicasMismatch on loki/loki: kube_statefulset_status_*
+# carries `statefulset` and the object's `namespace`, and has no pod dimension, so the scrape
+# target's pod (kube-state-metrics) and `job=kube-state-metrics` ride along.
+#
+# WHAT IT REDS ON. Before the re-key this computed
+# `workload:loki/kube-prometheus-stack-kube-state-metrics` — the subject homelab#811 was filed
+# under, and the reason three unrelated triages (an alloy DaemonSet, a Loki WAL corruption, a
+# crashlooping pod) all landed as comments on a Garage-quota thread on 2026-09-09/10. The Loki WAL
+# one was correct, five hours ahead of the seat, and unread.
+#
+# THE CONTRACT: `statefulset` wins; the arm is the daemonset arm's sibling and shares its rule.
+name: responder-subject-statefulset
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-245** (2026-09-16: FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-251** (2026-09-17: FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -21,6 +21,9 @@ tracker.
 - **An archive entry may stamp the date after the id or at the end of the entry** — both
   `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
   read by the freshness check. Prefer the first; it sorts and scans better.
+- **Terms link on first use, items link their evidence.** A ⚓ term from [`glossary.md`](glossary.md)
+  used in an item links its owning doc or the glossary on first use (`docs-graph-lint` check #3 reads
+  this file as one doc); a doc an item links back to must mention the id (`follow-ups-lint`).
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -120,17 +123,6 @@ six OVERSIZE items pointer-ized into
       same 4.9 GiB ungated. **Next:** a sentinel-scoped closure (or a second, small image for
       `agents/coordinator/sentinel-argo.yaml`) — hundreds of MB. Relates FU-015, FU-093, FU-207, #80.
 
-- [ ] **FU-206** — **PublicRoute: block operational paths at the edge by default (ADR-123).**
-      Every claim serves its backend's `/metrics` + `/healthz` publicly today — the gateway answers
-      them before auth, the tunnel forwards the whole hostname (seen at the oracle-iac#532
-      pre-merge read, 2026-09-03). Deferred: ruled after the api-profile fix (PR#1357) had landed
-      and #532 was merging. **Next:** the composition renders one more rule in the claim's
-      `http_request_firewall_custom` ruleset for BOTH profiles (structured 403; default path list
-      `/metrics`, `/healthz`; a per-path opt-in claim field — name clears the glossary), dry-run
-      through cf-api-proxy first ([`docs/cloudflare.md`](cloudflare.md) gotcha 6); product zones
-      only until zone-phase aggregation (teststuff.net = FU-039's leg). Link: cloudflare.md
-      §PublicRoute completion table.
-
 - [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
       where** (operator ask 2026-09-02 after two same-day WAN-limit incidents; no FU/ADR covers
       it). **Hard constraint (operator): FAMILY traffic must never reach the cluster** — so raw
@@ -183,7 +175,7 @@ six OVERSIZE items pointer-ized into
       2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
       picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
       longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
-      the bucket-sync container, 62 %). **DONE 2026-09-08 (operator: "run all of it"), PR#1519:
+      the bucket-sync container, 62 %). **Applied 2026-09-08 (operator: "run all of it"), PR#1519:
       manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
       the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
       panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
@@ -203,14 +195,14 @@ six OVERSIZE items pointer-ized into
       Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
-      `quota − held ≥ 2×layer` — rule, both failures, storage read: the header of
-      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml); cap **48Gi** (#1578).
-      **LIVE:** the quota belts (#1577: `GarageBucketQuotaNear`, `RegistryBucketCommitHeadroomLow`) and
-      the collector (`registry-garbage-collect` CronJob, Sundays 03:00Z, #1508; ad-hoc recipe in
-      [`runbook.md`](runbook.md) §Registry). **Missing = the POLICY half (ADR-085):** oracle-iac untags
-      outside its keep-set with its push cred (oracle-iac#664, derive-don't-declare) — nothing does
-      yet, so the CronJob collects nothing and each release eats ~10 GB of cap. ⚠ ADR-121 states the
-      policy too — one home wins. Link: ADR-121, ADR-089, ADR-085.
+      `quota − held ≥ 2×layer` — rule, both failures, storage read, retention ownership AND current
+      status: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml);
+      cap **48Gi** (#1578). **LIVE:** the quota belts (#1577), the collector (`registry-garbage-collect`,
+      Sundays 03:00Z, #1508), and since 2026-09-14 **the POLICY half** — oracle-fleet's nightly
+      `retention` CronWorkflow untags outside its keep-set (first prunable tag 09-16 02:31Z).
+      **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
+      to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
+      and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -357,19 +349,18 @@ six OVERSIZE items pointer-ized into
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
       public repos), applied outside the jail. `oracle-iac` stays private permanently.
-- [ ] **FU-215** — **Unbound SERVFAILs `github.com` names in ~2-min windows — probable cause
-      WAN-wide upstream UDP loss; confirm from the resolver log.** Four windows 2026-09-05
-      (08:17, 09:19, 10:28 fired, 17:56Z), all self-cleared, one AFTER a restart → restart is no
-      remedy. DNSSEC is OFF (validation theory dead); the infra cache holds 99/385 IPv4 upstreams
-      timeout-inflated (root servers too) — github shows first because `api.github.com` (TTL
-      60 s) is recursed every minute. Evidence: TICK-LOG 2026-09-05 ~17:55Z. **Done:**
-      `log-servfail` pinned as code (PR#1454, `unbound_advanced`). **Next:** after the next
-      `UnboundGithubServfail` window read `diagnostics/log/core/resolver` (search `SERVFAIL`;
-      stamps are UTC+3); "upstream server timeout"/"all servers failed" → belt = `serveexpired`
-      (+ client-timeout) via the same var; optionally enable WAN gateway monitoring for a loss series.
-
-
-## CI & dependency automation
+- [ ] **FU-215** — **Unbound SERVFAILs `github.com` names in short windows — reason READ 2026-09-16:
+      `exceeded the maximum number of sends`; belt applied; root cause = do-ip6 on a v4-only WAN.**
+      Windows 09-05 ×4, 09-16 16:35–17:00Z (browser, jail `gh`/`git`, CI's Actions results-receiver).
+      Operator's resolver-log export: 39 SERVFAILs, every one "exceeded the maximum number of sends"
+      (retry exhaustion — the nsone authoritatives answered the LAN directly throughout). **Belt
+      LIVE** (PR pending, `unbound_advanced`): `prefetch` + `serveexpired` (stale ≤ 1 d, reply TTL 30,
+      client-timeout 1800 ms — RFC 8767). **Root cause (evidence):** infra cache holds 389 IPv6
+      name-server entries at the never-measured 376 ms placeholder while the WAN has NO IPv6 — OPNsense
+      sets `do-ip6` from Interfaces → Settings → *Allow IPv6* (`unbound.inc`), a legacy page with no
+      API. **Done 17:55Z:** *Turn off IPv6* ticked (LAN had no v6 at all), Unbound restarted — infra cache
+      0 IPv6 entries, github/LAN/public names NOERROR. **Next:** soak — `UnboundGithubServfail` quiet for
+      a week → archive; the GUI-only knob is recorded in `docs/runbook.md` §OPNsense as code.
 
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
@@ -744,7 +735,7 @@ the block needs pruning, not more headings.
       of the same template succeed. A pipeline writer killed by an early-exiting reader under
       `set -o pipefail` in the scan preamble — the three `| grep -q` sites feed small variables,
       so the site was not named — **named 2026-09-09 by responder #1547: the `coordinator-scan.sh:1495`
-      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the [switchboard](glossary.md) OOM read,
+      parity-assertion `| head -1` (PR#1576, parked `blocked-on: human`, needs the ADR-103 replay pin).** Surfaced by the switchboard OOM read,
       [`incidents/2026-09-06-switchboard-oom-silent-failures.md`](incidents/2026-09-06-switchboard-oom-silent-failures.md).
       **Next:** on the next 141, pull the run's Loki tail with `container="main"` and bisect the
       preamble between the last printed line and the first GitHub listing; fix = `>/dev/null`
@@ -932,16 +923,15 @@ the block needs pruning, not more headings.
       retro's window? everything, and a bigger claim?) and implement it as an S3 lifecycle rule or a
       sync-job sweep — the design question belongs to `docs/agents/observability-and-retro.md`.
       Sibling: `allure-reports` at 89 % of 10Gi is oracle-iac's (their alert, their retention).
-- [ ] **FU-210** — **Responder sessions leave no transcript — a triage that files nothing is
-      unrecoverable.** 2026-09-03 22:29Z `CNPGInstanceNotReady`/`ExporterDown` fired for
-      forgejo-pg-1 (a real pg_rewind divergence after the incident failover); the responder
-      received them (sensor payloads), marked `workload:forgejo/forgejo-pg-1` triaged on 09-04
-      (ledger + 1/12 budget), filed NO issue anywhere in the org, and the probe lane deferred to it
-      ("COVERED"). The alert stood 8 h until the seat applied the runbook recipe. Why: the A1
-      capture hooks (`docs/agents/observability-and-retro.md`) cover worker/reviewer/coordinator
-      only — the bucket has no responder prefix, Loki has no agent-coordinator pod streams.
-      **Next:** upload the respond session's `~/.claude/projects` + a manifest like the reviewer's
-      exit trap (`homelab/alert-<fp>/responder-r1-<ts>/`); then the decision is readable.
+- [ ] **FU-210** — **Responder transcripts: POINTER.** A triage that filed nothing used to leave
+      nothing — the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed no issue, and
+      the probe lane deferred to it as COVERED while the alert stood 8 h. The lane was the one role
+      outside §A1. Mechanism, layout and the write-only-key ceiling:
+      [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §A1 (responder row +
+      hook point); gate = `responder-behaviour-test.sh` §FU-210. Shipped PR#1749.
+      **Next — the acceptance, which cannot run while the lane is paused:** at FU-249's un-pause,
+      read one prefix end-to-end and confirm a report-only session that files no issue still leaves
+      a readable decision. Relates FU-231, FU-249.
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
       0-byte run.log, until the 4h activeDeadline reap — which ALSO skips finalize: no strike,
@@ -1011,34 +1001,26 @@ the block needs pruning, not more headings.
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
-- [ ] **FU-230** — **The responder cannot see seat-driven change.** 2026-09-04→11 audit: 7 of its 9
-      confidently-wrong writes had a cause the seat made outside the cluster's view, and the session
-      guessed a story instead of "unknown". **Leg (a) DONE 2026-09-12 (PR#1601)** —
-      `node-maintenance.sh settle/down` silence the window, `up` expires it; the label taxonomy is
-      the lesson (one 9-min m70s window = THREE triage sessions, #261/#884/#1600). ⚠ **Leg (a)
-      still leaks the DaemonSet-rollout class** (2026-09-16, #542 r3: `KubeDaemonSetRolloutStuck`
-      carries neither `node` nor `instance`, and its stuck pod postdates the silence) — leg (b) is
-      the general fix, not more label arms. **Next:** leg (b) — a seat-written ConfigMap window
-      record the brief prints like the ArgoCD observation-window line (durability caveat = FU-195).
-      Design read: `docs/spikes/responder-week-audit.md` §Design read.
-
-- [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
-      bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
-      actionable, history = git/S3). 26 of 33 writes were report-only comments, 24 noise; the one
-      find ahead of the seat (#811 c2, Loki WAL, ~5 h early) sat as comment 2 on a Garage-quota
-      thread, unread. **Next:** typed finding record + transcript under FU-210's
-      `homelab/alert-<fp>/` prefix; `meta-events.sh` gains a `triage` source (new prefixes since
-      last tick); file an issue only on `fix-verdict: fix` + named surface (ADR-122) + outside an
-      FU-230 window. MCP server deliberately NOT part of this (README §Open, no consumer yet).
-      Design read: `docs/spikes/responder-week-audit.md` §Design read.
-- [ ] **FU-232** — **Reporter-keyed subject collapse: the responder's `subject:` is the metric's
-      EXPORTER, not the failing object — 19 of 28 comments this week grafted onto 5 magnet
-      threads** (kube-state-metrics → #811/#882/#542, pushgateway → #241, node-exporter → #103,
-      the cilium DaemonSet → #857, `ns:monitoring` → #884). The #149 one-subject rule is followed
-      to the letter and still lands unrelated problems on one thread. **Next:** derive the subject
-      from the alert's object labels (node / persistentvolumeclaim / pod / workflow) before the
-      reporter workload; extend `responder-behaviour-test.sh` §#149 with the five magnet shapes.
-      Evidence: `docs/spikes/responder-week-audit.md` §Totals.
+- [ ] **FU-230** — **The responder cannot see seat-driven change: POINTER.** 7 of 9
+      confidently-wrong writes in the 09-04→11 week had a cause the seat made outside the cluster's
+      view. Leg (a) (node/instance/pod-scoped Alertmanager silences) shipped PR#1601; **leg (b)
+      shipped PR#1750** after its own trigger fired twice on 2026-09-16 — a seat-written
+      **declared window** ([`glossary.md`](glossary.md)) naming the alert CLASSES a planned window
+      produces, for the ones carrying no `node`/`instance`/pod label at all — a ConfigMap, so the
+      FU-195 durability caveat is retired. Mechanism: [`agents/roles.md`](agents/roles.md)
+      §responder; evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md).
+      **Next:** at FU-249's un-pause, run one real `node-maintenance` window and confirm the
+      DaemonSet-rollout class costs no triage session.
+- [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
+      (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
+      `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage
+      included. ⚠ **The SWITCH stays OFF and cannot be flipped as sketched:** report-only issues
+      are DECIDED-ONCE's anchor (#1733), and moving that anchor into the bucket needs a pod read
+      the write-only transcripts key will never grant. **Next, two independent legs:** (a) the
+      CONSUMER — a `triage` source in `meta-events.sh` over new `homelab/alert-*/` prefixes, using
+      the jail-side READER key; (b) re-read the switch after FU-249's un-pause, against an anchor
+      that does not need an open issue. Evidence + the MCP exclusion:
+      [`../spikes/responder-week-audit.md`](spikes/responder-week-audit.md) §Design read.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
@@ -1151,18 +1133,6 @@ the block needs pruning, not more headings.
       until then `ArgoWorkflowsFailing` (2026-09-06, fleet Failed/Error >40/6h) shows a BURST, not
       four scattered Errors — a per-template belt still wants the RBAC fix. Relates FU-210.
 
-- [ ] **FU-213** — **opencode.ai is PARKED: our client sends no `x-opencode-session` header**
-      (operator mail, 2026-09-04 — "may error" from 09-06). Parked same-day at the egress proxy:
-      `OPENCODE_RAIL_DISABLED=1` → both legs 503, `/opencode-limit` serves
-      `limited=true reason=rail-disabled`, so `--pick-rail` skips Go and a Go-primary ride takes
-      the M12 degrade to `claude/haiku`. The jail shim (own UA, unflagged) stays live — it is
-      where a fix gets tested. What the header is, the public prior art
-      ([earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847), same defect,
-      fixed 2026-05-22), and where the id comes from:
-      [`agents/chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session`
-      header. **Next:** homelab#1640 acceptance 2 — the ride's session id becomes BOTH the
-      per-(session, model) pin key and this header, then re-enable with `"0"`.
-
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
@@ -1204,7 +1174,51 @@ the block needs pruning, not more headings.
       during the hp-01 maintenance window). Scope REOPENED 2026-08-24: Option A's v1.13.8 pin
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
-      container req=limits since 07-28, pod still Burstable — folds into the same ruling). Relates FU-139/FU-112, ADR-044.
+      container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+- [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
+      Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
+      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
+      wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
+      **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
+      incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
+      unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
+      metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
+      metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
+- [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable
+      and it wedges every reconcile report.** `pr-oracle-fleet-minutark` fails with
+      `POST …/rum/site_info → 403 "Authentication error"` from Cloudflare (the cf-api-proxy
+      allowlist passes it; the ingress-write token has no RUM write group — there is none to
+      grant, the #1311 residual). Terraform is not transactional, so the claim's other resources
+      DO apply — but `Synced=False` is then permanent, which is how a state lock stale since
+      2026-09-09 sat unnoticed for a week underneath it (cleared 2026-09-17, FU-206's sitting).
+      A red that is always red detects nothing. **Next:** decide the consumer profile's RUM leg —
+      drop `cloudflare_web_analytics_site`/`_rule` from the composition (it has never once
+      applied), or gate it on a claim field that defaults off; either way the consumer Workspace
+      must be able to go green. Link: [`docs/cloudflare.md`](cloudflare.md) §PublicRoute
+      completion table (RUM row, #1311).
+
+- [ ] **FU-249** — **Responder PAUSED 2026-09-16 (operator: "still doing only noise") — re-enable ≈2026-09-23.**
+      The `responder` Sensor's `alert-dep` carries a never-matching data filter
+      (`agents/coordinator/responder-argo.yaml`); WorkflowTemplate, Role and seen-cache untouched.
+      Alerts still fire in Alertmanager/Grafana — only the issue-filing stops. **Next:** after the
+      FU-230/FU-231 soak of PR#1733's four legs, delete the filter (one revert) and watch
+      `responder_triage_sessions_today` for a day. Relates FU-230, FU-231, ADR-122.
+- [ ] **FU-248** — **`mgmt-tf apply` must apply a PLANNED command; VM recreates are `-exclude`-shaped.**
+      2026-09-16: a `-target` apply for wk-03's config pulled the whole VM resource (dependency at
+      resource granularity) and replaced wk-01/02/04 — [`docs/incidents/2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
+      **Next:** (a) runbook recipe — recreate = `apply -exclude=<every other VM> -exclude=talos_machine_configuration_apply.metal
+      -exclude=kubernetes_node_taint.ephemeral`, then the fresh node's config via `tofu console` +
+      `talosctl apply-config --insecure` (the `-replace` beside `-exclude` is ignored silently);
+      (b) `scripts/mgmt-tf.sh`: `apply` only from a plan file it produced (`plan -out` → `apply plan.bin`,
+      the apply loop's own shape), refuse ad-hoc `-target`/`-replace` applies. Relates FU-246, FU-235.
+- [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
+      (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
+      2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
+      **Next:** ruler + one `KernelOopsCaptured` rule per node, or an Alloy-side counter metric the
+      existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
+      v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
+      in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel

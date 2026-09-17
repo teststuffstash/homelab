@@ -1,0 +1,33 @@
+# FU-230 leg (b) — a DECLARED window suppresses the triage the label taxonomy cannot reach.
+#
+# CONDITION UNDER REPLAY. The seat has `node-maintenance.sh down wk-03` open. Leg (a)'s four
+# Alertmanager silences are up (node, instance, the node's pod names, the zone Garage set), and
+# `KubeDaemonSetRolloutStuck` fires anyway.
+#
+# WHAT IT REDS ON. That alert is labelled by namespace + daemonset: it carries NEITHER `node` NOR
+# `instance`, and the pod that went Pending was minted AFTER the silence, so the pod-name arm held
+# only its predecessors. Every key leg (a) can match on is absent by construction. Live on
+# 2026-09-16: an nx-01 wipe leaked exactly this class with all four arms armed, and the same
+# evening wk-03's shutdown leaked CiliumUnreachableNodes ×11, DaemonSet rollout/misschedule ×8,
+# KubeNodeUnreachable, KubeletInstanceUnreachable and KubePodNotReady ×4 — silenced by hand for 8 h.
+# Adding `daemonset=~…` arms per alert name is the losing game that sighting demonstrates, so this
+# leg matches the DECLARED WINDOW instead.
+#
+# THE CONTRACT:
+#   1. NO SESSION. The gate `continue`s, so `reached.sh` never prints — everything downstream (the
+#      subject dedup, the decided-once search, the FU-149 budget check, the triage) is skipped.
+#   2. A ledger marker is written (`window-`), per FU-113(a): a deliberate stop must be
+#      distinguishable from a drop, or `meta-alert-crosscheck.sh` reads it as stuck machinery. The
+#      prefix matches neither the cap's `<date>|` arithmetic nor the subject ledger's `triaged-`.
+#   3. The log line names the window and the seat's OWN reason, so the record of why a triage did
+#      not happen is as readable as the record of one that did.
+pins:
+  - IL-T03
+name: responder-seat-window-declared
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

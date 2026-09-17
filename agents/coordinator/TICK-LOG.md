@@ -9266,6 +9266,58 @@ Issues: #1620, #1621.
   done.
 
 
+## 2026-09-16 ~11:25Z — CORRECTION to the 11:05Z entry: that label WAS in git
+
+The 11:05Z entry called the `kubectl label node wk-metal-01 homelab.io/ephemeral-` a "drift
+CORRECTION ... never in git". **Wrong.** `kubernetes_labels.ephemeral_tier` in
+`tofu/forgejo-runner.tf:32` force-applies that label to `for_each = ["wk-metal-01","wk-metal-02"]`.
+So the kubectl removal was DRIFT, and the next `tofu/` apply would have restored it — the box's
+apply loop refuses that root, which is the only reason the effect held. Caught by the bot reviewer
+on PR#1729, which had the proof attached the whole time: the management-sentinel plan listed
+`kubernetes_labels.ephemeral_tier["wk-metal-01"]` as `update`.
+
+The same false claim went into PR#1726's body. The label has THREE declaring sources — `talos.tf`
+(VMs), `forgejo-runner.tf` (the two laptops), and the new `arc` flag in `machines.yaml` — and
+reading one grep hit while missing another in the same file is how it happened.
+
+⚠ It also meant the kata eviction ALONE would not have met PR#1729's stated goal: the Forgejo
+runner selects the same label and tolerates the taint `operator: Exists`, so docker-in-docker CI
+would still have landed on the garage-2 zone node.
+
+**Resolved and applied 11:23Z** (PR#1729 + `c6bcd7da`, merged 11:22:41Z APPROVED):
+`mgmt-tf apply -target=talos_machine_configuration_apply.metal["wk-metal-01"]
+-target=kubernetes_labels.ephemeral_tier["wk-metal-01"]` → `0 added, 1 changed, 1 destroyed`.
+Live: wk-metal-01 has neither label, 0 kata pods, keeps its ephemeral taint AND its
+`topology.kubernetes.io/zone` (the destroy did NOT prune the zone key — the distinct
+`field_manager` holds on destroy as well as apply, which is the 2026-07-14 hazard that file warns
+about). kata pool = nx-01 + wk-metal-02/03/04; ARC pool = nx-01, wk-03, wk-metal-02.
+
+## 2026-09-16 ~11:05Z — wk-metal-01 out of the ARC pool (hotfix, operator-ordered)
+
+`kubectl label node wk-metal-01 homelab.io/ephemeral-`. ARC pool 4 → 3 (nx-01, wk-03, wk-metal-02);
+the in-flight runner was left to finish (nodeSelector is scheduling-time only).
+
+**Not new drift — drift CORRECTION.** That label was never in git: `tofu/talos.tf` carries the
+ephemeral-label block for VMs and deliberately declines metal, so wk-metal-01/-02 held it from an
+imperative `kubectl label` predating boot-from-git. After PR#1726 the declared ARC pool is the
+`arc: true` nodes, which wk-metal-01 is not — so removing it makes live match declared. Nothing
+re-adds it, including a reinstall.
+
+**Why**: measured while an ARC runner was co-resident with `garage-2` — wk-metal-01 at **20.7 %
+idle / load1 4.82** on 4 threads, against m70s 50.4 % and wk-metal-04 84.7 %. `storage-ledger.md`
+§465 requires "≈ 2 cores free at peak" on a zone node; 20.7 % of 4 threads is 0.83. `garage-2`
+burns **0.54 cores** vs garage-1 0.18 / garage-0 0.09 for identical rf=3 work — the X240's 2C ULV
+cores needing more CPU-time per request, which is the ledger's "the X240 zone paces GC, resync and
+PutObject for the whole cluster". `garage_write_probe_seconds` ran ~0.12–0.16 s through the morning
+against a 0.048 s 24 h baseline, with 3.20 s (09:59Z) and 2.70 s (10:29Z) spikes.
+⚠ Causality NOT established for those spikes: this session also reinstalled nx-01 (08:09Z) and ran
+a registry GC (10:00Z) inside the same window. The structural condition is the finding; the spikes
+are consistent with it, not proof of it.
+
+`arc-runners-large.yaml` already excluded wk-metal-01 by hostname — this extends the same judgement
+to the regular scale set. Two duties remain on the box (kata rides + the Longhorn bulk tier); the
+kata half is the deferred `machines.yaml` change, and wk-metal-04 waits on the nx-01 soak.
+
 ## 2026-09-16 morning — seat: the stage-1 escape hatch built, the lock plane unwedged, the FU-198 belt shipped
 
 - **PR#1718's wedge got its ruling and its mechanism (operator, then PR#1721):** the gate stays —
@@ -9327,3 +9379,354 @@ Issues: #1620, #1621.
   conflict, FU-235 — never force). The apply loop will refuse master on it until FU-235 moves
   the taint into the Talos machine config; a human `mgmt-tf apply` on that resource errors, so
   the baseline stays at 95b3159a by design for now.
+
+## 2026-09-16 — the responder, measured a second time and rebuilt (corpus session)
+
+Operator: *"it still does mostly noise. Either turn it off completely or do the build that was
+planned."* Corpus loaded; the answer was neither exactly — the PLANNED build (FU-231's
+bucket-first findings) was aimed at the wrong half, and the measurement is what said so.
+
+**The window 09-11→16:** 40 triage sessions, 20 homelab issues, **32 alerts dropped unread** at
+the FU-149 daily cap (25 on 09-14, 7 by midday today). ~8 of the 20 were genuinely actionable, so
+the catch rate is real; the budget was going to re-deciding settled conditions.
+
+**Four generators, each measured rather than inferred** (full audit:
+`docs/spikes/responder-week-audit.md` §The 2026-09-16 pass):
+1. the reopen belt undoes the operator's own closes — **#103 closed by the operator and reopened
+   by the lane 5×** since 08-05, #100/#121 3× each, #542/#811/#241/#538 all reopened after an
+   operator close (two within 48 h of the 09-14 pass). Untracked.
+2. the subject ledger keys on `triaged-<TODAY>`, so a standing condition buys a session every UTC
+   day forever — #1598 carries five *"confirming, not re-deriving"* comments. ~40 % of sessions.
+   Untracked.
+3. the resolve leg's auto-close **has never worked**: it tested the `[bot]` suffix against
+   `gh issue view --json comments`, which is GraphQL and omits it, while its own comment asserted
+   that endpoint was REST. Every machine comment counted as a human. Untracked; same class as
+   FU-069, which the dead comment cited as the reason it did not apply.
+4. FU-232's reporter-keyed subject, still live (#1644's subject was literally
+   `workload:arc-runners/kube-prometheus-stack-kube-state-metrics`).
+
+FU-230's class produced ONE of the twenty (#1600) — real, no longer binding.
+
+**Shipped as PR#1733** (4 legs, all deterministic shell in `responder-argo.yaml`): human-close
+guard, decided-once gate, REST engagement probe, FU-232 subject re-key (**FU-232 archived**).
+Replay: 10 new/changed fixtures, 6 red on master by stream move; behaviour test 126/126.
+FU-230/FU-231 re-pointed at the spike with their reasons — FU-231 is BLOCKED on FU-210 (no
+responder transcripts exist; the `homelab/alert-<fp>/` prefix is empty, verified).
+
+**Two lessons worth the ink.** The ADR-103 ratchet caught a defect in *this* change before it
+shipped — the decided-once predicate was written `test(…; "im")` and matched nothing, because on
+jq 1.6 `^` is string-anchored and jq's `m` means "dot matches newline"; `(?m)` inline is required.
+And `responder-behaviour-test.sh` §#149's graft scenario had been sending its alert WITHOUT the
+`job` label and asserting the GRAFT as the expected subject — **a test asserting a bug as
+correct**, green through the whole of FU-232's life.
+
+**Board drain, seat-side:** #1546, #530, #1547 closed (alert cleared, zero human engagement;
+#1547's fix merged 09-14 and the belt had reopened it afterwards). Open 🚨 24 → 21.
+
+**Quickfix, direct:** `devbox run diff-ci` was FAILING on master for everyone — `ci.yaml` runs
+`agentstack-rbac-lint` and the path→task map had no row for it, which its own one-home invariant
+reds on. One row added (`scripts/**` is codeowner-author, so PR is not a route).
+
+## 2026-09-16 ~15:30–16:00Z — the nx-01 investigation: a kernel bug, not the burn-in
+
+Picked up the meta-state handover. The "operator-only" BMC read was one `apt-get install ipmitool`
+away — .123 answers from the jail. SEL: nothing for today's resets (no PSU/thermal/ECC/watchdog
+event, BMC clock continuous since the 09-15 power-on; the dated `PEF Action` at BMC 14:32 = real
+06:37 is the morning power-on); real-but-irrelevant facts: VBAT 1.16 V (dead CMOS cell), PS2
+"failure" = uncabled. IPMI watchdog stopped. So: a **software** reboot (`panic_on_oops=1`,
+`panic=10`). Prometheus added a boot the handover missed (14:27:55 → the cadence was 43/15/15 min).
+Operator's mid-turn cue — "wk-03 had unexplained reboots, I attributed them to VM overprovisioning
+but it might be arc + talos + more than one runner" — was right: 2+ runners are on wk-03 7 % of the
+time, yet 4/6 of its reboots and 3/4 of nx-01's had 2–5. Loki's kmsg before three resets (wk-03
+09-10, nx-01 14:25 + 14:40): `kernel BUG at mm/page_table_check.c:143` in `free_time_ns`, Comm
+`crossplane` uid 65532 in an ARC job — siderolabs/talos#13496, fixed by `page_table_check=off`
+from Talos 1.13.4 (kernel patch in 1.14); cluster is v1.13.2. Rides were victims (kata guests
+cannot oops the host); the three pre-kata reboots rule the kata upgrade out; the cilium throttle
+was a symptom. wk-03 went quiet 09-14 because nx-01 took the jobs, not because of the right-size.
+Records: incident doc, FU-246 (upgrade — same action as FU-155 Option A) + FU-247 (oops alert),
+comments on #1735 + #882, variables.tf/machines.yaml comment corrections, ipmitool into the jail
+Dockerfile. nx-01 stays cordoned; SOL capture armed from the jail. Bookkeeping committed, not pushed.
+
+## 2026-09-16 ~15:55–16:25Z — the quickfix: nx-01 + wk-metal-02 to v1.13.10, wk-03 stopped, the version split PR
+
+Operator: quickfix nx-01 + wk-metal-02, stop wk-03, three-CP migration another session, two Talos
+version variables (control plane / workers) meanwhile, the rollout's declared-vs-live gap accepted.
+**nx-01** `talosctl upgrade` 15:56→16:00Z (kata schematic kept; the upgrade uncordons); kernel
+6.18.48-talos, `CONFIG_PAGE_TABLE_CHECK_ENFORCED is not set` — the fix is a kernel-config default,
+no cmdline flag. **wk-metal-02** settled (no rides) then upgraded — the client-side drain stalled
+twice on `homelab-ephemeral-vkjf9-runner-kxrvg`: Failed, Terminating since 09-10 19:09 (ten minutes
+after that node's own bug reboot), no finalizer, the kubelet never confirmed it; plain delete no-op,
+`--force --grace-period=0` cleared it; done 16:20Z, verified the same way. **wk-03** `node-maintenance
+down` (FORCE=1 past the single-replica forgejo-runner WARN) 16:04Z — a nocloud VM, so the fix is the
+recreate, not an upgrade. **PR#1740** `talos_version_controlplane` v1.13.2 / `talos_version_worker`
+v1.13.10 (secrets + CP configs + plain nocloud image ← CP; worker configs + metal schematics +
+longhorn nocloud image ← worker; generate.py renders both); sentinel plan: 4 worker-VM replaces, 2
+image files, 7 metal config updates, 3 taint updates — 16 addresses outside the allowlist, human
+apply by target. The SOL capture was stopped: the X10DRT's SOL is ttyS1, and v1.13.10's metal
+cmdline dropped `console=ttyS0` — it never could have caught the panic (FU-247 carries the fix).
+Bookkeeping committed, not pushed (push after #1740 lands).
+
+## 2026-09-16 ~16:35–17:00Z — FU-215 window, live: github.com SERVFAIL on Unbound
+
+Operator: `DNS_PROBE_FINISHED_NXDOMAIN` for github.com; the jail's master push hung on the same.
+`dig @192.168.2.1 github.com` → SERVFAIL (api.github.com too); google.com/example.com NOERROR; LAN
+overrides fine; 1.1.1.1/8.8.8.8 resolve github. GitHub's nsone authoritatives answered the LAN
+directly (UDP + TCP, NOERROR) while Unbound still failed — the infra cache at 17:00 showed the nsone
+entries at rtt ≈830 ms, no timeouts. `UnboundGithubServfail` reached `pending` only (probe 1/min:
+0 from ~16:56, back at 17:00:34; `for: 3m`). `diagnostics/log/core/resolver` via the API returned
+`[]` with every parameter shape — the `log-servfail` line the FU waits for is still unread (GUI
+read — the API key lacks the log privilege: the system log returns `[]` the same way). Self-cleared,
+as every FU-215 window has. No config touched.
+
+## 2026-09-16 ~17:10–17:40Z — FU-215 closed in on: the log reason, the belt, the IPv6 root
+
+Operator uploaded the resolver log ("nothing interesting there") — it was the line FU-215 waited
+for since 09-05: 39 × `SERVFAIL <…>: exceeded the maximum number of sends` 16:56–16:58Z
+(github.com, api.github.com, results-receiver.actions.githubusercontent.com, a glb-* CNAME). The
+operator then pasted three generic suggestions; checked each against evidence: (1) 0x20
+`use-caps-for-id` — not exposed in this OPNsense's Unbound settings at all; (2) forwarding mode —
+would work by sidestepping recursion, a design change, not taken; (3) IPv6 — CONFIRMED: the WAN
+(`em0`) has no IPv6 config and the router has only an IPv4 default route, yet Unbound's infra cache
+carries 389 IPv6 name-server entries (all at the 376 ms "never measured" placeholder), i.e.
+`do-ip6: yes` — and `opnsense/core` `unbound.inc` sets `do-ip6` from `is_ipv6_allowed()` =
+Interfaces → Settings → Allow IPv6, a legacy page with no API (NLnetLabs/unbound#422 is the same
+failure). Belt applied meanwhile as code — `prefetch` + `serveexpired` (RFC 8767 values) via the
+opnsense-unbound playbook from branch `fix/unbound-serve-expired`, read back from the API; the
+oxlorg.opnsense collection had to be installed from GitHub (galaxy.ansible.com 502 all afternoon —
+the wrapper's silent install and mine corrupted its cache). Also: the tracker counter was stale
+(FU-245 filed without bumping it; now FU-248), and my FU-219 backlink fix had removed the one
+glossary link `docs-graph-lint` check #3 needed — master was red on that lint for ~35 min; fixed by a
+conventions line that names glossary.md outside any item (check #3 is per-file, the backlink rule
+is per-item). Both PRs' second CI runs failed on exactly that; re-merging master into them.
+
+## 2026-09-16 ~17:50–18:00Z — FU-215: do-ip6 off, verified
+
+Operator ticked Interfaces → Settings → *Turn off IPv6* (this release's wording of the `ipv6allow`
+flag; checked first that nothing on the LAN has v6: no global address on igb0, zero non-link-local
+v6 routes, radvd empty, dnsmasq v4-only — phones/YouTube untouched). Seat restarted Unbound via
+`unbound/service/restart`; infra cache went 743 entries (389 v6) → 58, **0 IPv6**, after resolving
+a spread of v6-capable zones; github.com / api.github.com / results-receiver / LAN overrides /
+google.com all NOERROR; the serve-expired belt survived the restart. Unbound has been re-rendered
+with `do-ip6: no`. FU-215's remaining step is the soak: `UnboundGithubServfail` quiet for a week
+→ archive. The PR watcher had to be re-armed as a bash script (zsh `$ids` did not word-split).
+
+## 2026-09-16 ~18:05–18:55Z — wk-03 recreate → the targeted apply that took three VMs (incident)
+
+PR#1740 merged 18:06 (reviewer's one blocking finding — the image axis — fixed in-PR). Plan for the
+wk-03 recreate: `-target` refused (moved sources must be included) → `-target`+`-exclude` refused
+(cannot combine) → `-exclude` of the other VMs + metal applies + taints = `3 add / 3 destroy`, right.
+Applied with `-replace` on wk-03's config apply added — silently NOT executed; wk-03 booted the fresh
+image into maintenance mode, `up` timed out. Then the error: `-target='talos_machine_configuration_apply.node["wk-03"]'
+-replace=…` applied WITHOUT its own plan — `-target` pulls the dependency `proxmox_virtual_environment_vm.node`
+as a whole resource, so wk-01/02/04's pending replaces ran: 4/4, three workers destroyed 18:39–18:44, every
+platform pod Pending, operator noticed before the seat did. Longhorn read FIRST: 40 volumes, 0 replicas on
+the VM tier → availability only. Operator: "might as well do the upgrade" (the fresh VMs already boot
+v1.13.10). Recovery: `tofu console` on the box renders each node's config (`nonsensitive(data.talos_machine_configuration.node[…].machine_configuration)`;
+`state pull` is not on the wrapper's -state list and returned nothing) → `talosctl apply-config --insecure`
+×3 → all Ready 18:50, uncordoned; pods rescheduling. Incident doc + FU-248 (plan-file-only applies;
+`-exclude`-shaped recreates). Side effects: the seat silences were expired by the failing chain and not
+re-armed after the second round; the responder budget was already exhausted so no triage issues.
+
+## 2026-09-16 ~19:05–19:25Z — responder paused (FU-249), the alert-issue board closed
+
+Operator: "How easy is it to disable the responder? … still doing only noise … a week or so" + "close all
+the open alert issues that are actually solved". **PR#1746**: the `responder` Sensor's `alert-dep` gets a
+never-matching data filter (`body.status == "__paused-FU-249__"`); Sensor/WorkflowTemplate/Role/seen-cache
+stay, re-enable = one revert; FU-249 filed in the PR (re-enable ≈09-23 after the FU-230/231 soak). Issue
+sweep: 20 open 🚨 threads — fingerprint match against Alertmanager was unreliable (it had just restarted,
+Prometheus too), so each was closed on SUBSTANCE: the reboot family (#1735/#1663/#882/#538/#542) by the
+page_table_check fix, wk-03's prepull pair (#1643/#1644) by its recreate, #1598 by PR#1576's merge,
+#1686/#1687 by cp-01's 5 GiB free, #884 by probe_success=1, the rest one-offs whose alert cleared weeks
+ago (FU-155 keeps the OOMController class). #1744 closed too: wk-01 recreated, the failed fstrim Job
+objects deleted. Open 🚨: 0. Recovery from the FU-248 incident: Grafana/Alertmanager/Argo/ArgoCD/Loki all
+Running by ~19:00; Longhorn volumes re-attaching.
+
+## 2026-09-17 ~05:35–06:15Z — FU-206 built: operational paths are non-public (oracle handoff)
+
+Operator, one line: "FU-206 and the new handoff from oracle about the same FU — lets not serve metrics
+anymore. Build it." The handoff (`20260917-0531-…googlebot-walking-mcp-host.md`) carried the new fact:
+GSC shows Googlebot fetching `mcp.minutark.ee` (`robots.txt` → 404 = crawl everything) while `/metrics`
+served 8.8 KB of exposition — "reachable" had become "on course to be INDEXED", which outlives the fix.
+Dry-run first (gotcha 6 doctrine) through cf-api-proxy, every probe deleted: **20217 "exceeded maximum
+number of zone rulesets for phase"** — the one-ruleset-per-phase-per-zone limit finally OBSERVED (it had
+been "expected from the API model" since 09-02), so the edge rule can only serve the one claim per zone
+owning `http_request_firewall_custom` (minutark.ee: the mcp api claim, not the apex consumer one); and
+**`block` + a custom response is NOT entitled in that phase on Free** — though the same account serves a
+custom 429 in `http_ratelimit`, so entitlement is per PHASE. That killed ADR-123's structured 403 and
+exposed a latent defect: #1304's CORS preflight rule carries the same illegal response and would have
+failed at apply for the first claim setting `.spec.origins` (the live claim sets none). ADR-123 amended,
+mechanism gains a second leg: leg 1 = the claim's own tunnel config refuses `^/(metrics|healthz)(/|$)` at
+the connector (per-claim → carries the default on EVERY claim and zone), leg 2 = one more block rule first
+in the api claim's custom ruleset (keeps the traffic off the home connection). Opt-in
+`.spec.operationalPaths.public`. Both legs applied LIVE through the proxy ahead of the merge (the exposure
+was the point) — drift until the Workspace reconciles this composition. Verified: `/metrics`, `/healthz`
++ subpaths → 403, `/metricsx` → origin 404, `/` → 405, in-cluster `/metrics` → 200 (the LAN scrape path
+never traverses either leg). **PR#1747**, FU-206 archived, handoff answered + closed (kept oracle's
+robots.txt/`X-Robots-Tag` leg — crawler directives ≠ access control, and `robots.txt` 404 still invites
+every other path). Found while reading Workspace state: `pr-oracle-fleet-minutark` had been
+`Synced=False` since 09-16 on a terraform state lock stale since **09-09** (held by a pod that no longer
+exists; the kubernetes backend's lease `lock-tfstate-pr-oracle-fleet-minutark-garage` was the only one in
+crossplane-system with a holder) — cleared by dropping the holder + lock-info annotation.
+
+## 2026-09-17 ~06:20–08:30Z — the responder rebuild's second half: what never reaches the lane, what it records, what it decides once
+
+Operator: *"Build Responder follow-ups that are still not done — FU-210, FU-230, FU-231 … Figure out
+which alerts are not actionable and should not be routed to the responder at all."* Corpus session
+(`/design-agents`, full load). Three PRs, all merged (#1748, #1749, #1750); the lane is still PAUSED (FU-249), so
+every acceptance below is written as a thing to READ at un-pause rather than claimed.
+
+**The ask's third leg first, because it reframed the other two.** The question "which alerts should
+never reach the lane" has a testable form: *could a bounded in-cluster investigation change what
+anyone does about this?* `info` fails it by definition. The OPERATOR-QUEUE class fails it by
+construction — the remedy is an act only the operator can take, so a session can only re-state the
+annotation. `CodeownerParkWaiting` had carried `triage: none` on exactly that argument since
+2026-08-12 and nothing had generalised it; `BlockingCodeownerParkWaiting`'s own rule comment stated
+the argument verbatim and carried only the machinery cap.
+
+**PR#1748 — the routing filter (tier 0).** `triage: none` was honoured only INSIDE the pod, so a
+self-describing alert still bought an Argo workflow and a git clone: **154 of the responder ledger's
+1190 entries are that marker.** Both it and `severity != "info"` are matchers on the responder's own
+Alertmanager child route now — zero cost, and the alert still reaches Home Assistant and Grafana.
+Five rules gained the declaration (AgentAttentionStanding — 19 firing series in 7 d and the audit's
+own `#1546` row; BlockingCodeownerParkWaiting; the three GitHub spend/quota rules).
+⚠ **Two readers of a tier-0 predicate now exist** — the route and `meta-alert-crosscheck.sh`, which
+would otherwise report every denied alert as stuck machinery (loud-but-wrong, the direction that
+teaches a reader to ignore a belt). The crosscheck applies both `select`s and prints ONE trailing
+`routing-denied:` line; the pairing is asserted in `responder-behaviour-test.sh` §routing.
+NOT denied, deliberately: `CloudflareZonePlanNotFree` (its author ruled triage-runs-but-cannot-merge
+in the rule itself — flipping that quietly is not a routing change's business), and `KubeJobFailed`,
+whose 48 series looked like the loudest thing on the board and are mostly NAME CHURN — a CronJob
+mints a new `job_name` per run, so one broken schedule bills one series per tick. **Read arrivals per
+SUBJECT before reading them per series.** (The first cut of that paragraph said "one CronJob broken
+every 15 min"; a live re-read disproved it — 45 fstrim guards failing through the 09-16 worker
+replacements, 3 live garage failures — and PR#1750 corrects both texts. The conclusion held.)
+
+**PR#1749 — §A1 capture (FU-210 / FU-231 producer).** The responder was the ONE role outside the
+capture hooks, so a triage that filed no issue left nothing: the 2026-09-03 forgejo-pg-1 session
+marked the subject triaged, spent a budget slot, filed nothing, and the probe lane deferred to it as
+COVERED while the alert stood 8 h. Per alert now:
+`homelab/alert-<fp>/responder-r1-<ts>/{alert.json,triage.log,*.jsonl,manifest.json,finding.json}`.
+Two calls rather than an exit trap — the alert loop is a `while read` SUBSHELL, so a parent trap
+cannot see which alert is in flight; the capture runs BEFORE the reopen/verdict belts so a failure
+there cannot cost the record. **The harness earned its keep**: the first cut's
+`find "$HOME/.claude/projects" | while` had no `|| true`, and since that directory does not exist
+until claude writes a session, pipefail + `set -e` took down the ALERT LOOP mid-payload — every
+remaining alert silently untriaged, caused by the exhaust-upload that must never be load-bearing.
+⚠ **FU-231's switch stays OFF and cannot be flipped as sketched**: report-only issues are
+DECIDED-ONCE's anchor, and moving that anchor into the bucket needs a pod READ the write-only
+transcripts key will never grant. Recorded on the FU with two independent next legs.
+
+**PR#1750 — decide once (FU-230 leg b + the #1733 hole).** Leg (b)'s own trigger had fired twice the
+evening of 09-16, so it was built: `agents/seat-window.sh` writes a **declared window** (glossary
+row) that `node-maintenance.sh` opens and closes, naming the alert CLASSES a planned window produces
+for the ones carrying no `node`/`instance`/pod label at all. A ConfigMap, not a silence (FU-195); by
+alert NAME, never by namespace (a namespace mute would have hidden the rf=3 rollout's real findings);
+triage-only suppression. **And the hole #1733 left, which is the operator's own reboot example:**
+DECIDED-ONCE keys on an OPEN issue, so an operator CLOSE made the lane blind — no open record, a full
+session, a NEW issue filed against that close, every UTC day the condition stood
+(`NodeRebootingRepeatedly` = `changes(node_boot_time_seconds[7d]) >= 3`, both reboot rules firing
+since 09-16). A User close now decides for 14 days and nothing is written on a thread a person ended.
+Both gates fail toward TRIAGING.
+
+**Method note worth keeping:** the human-close fixtures write their close event from the BRIDGE
+rather than recording it — the condition is relative ("closed N days ago") and a frozen timestamp
+would cross the 14-day threshold on a calendar date and red for a behaviour that never changed.
+
+**Found while verifying #1748 live, folded into #1750:** `meta-alert-crosscheck.sh` cannot see a
+PAUSED lane. FU-249 pauses the responder with a never-matching Sensor filter and changes nothing
+else, so from the crosscheck the lane is indistinguishable from an EventSource that died — every
+firing alert reads UNTRIAGED and the script exits non-zero (3 lines and a red exit, observed, for a
+state the operator deliberately created). It is the same marker-vs-drop rule the script applies per
+ALERT, missing one level up. It reads the Sensor now.
+
+**A review lesson worth more than the code it was about (PR#1750, rounds 1–3).** Round 1 flagged the
+declared-window log line's `id|reason|until` join as truncating a free-text reason containing a
+pipe. The seat took it at face value, fixed it, AND wrote a fixture asserting the truncation.
+Round 2 **refuted its own round-1 finding**: `%%|*` / `##*|` isolate the FIRST and LAST fields, so
+pipes in the middle one survive — a two-line repro confirms the two forms are byte-identical. There
+was no bug, and the fixture "pinning" it passed on base — a vacuous pin dressed as a regression
+test. Two things to carry: **a bot finding is evidence, not a verdict — reproduce a correctness
+claim before building on it** (the same rule the responder brief already gives its own sessions
+about a predecessor's triage); and the simplification still shipped, on a DIFFERENT and true reason
+found while checking — the old idiom was robust only because `id` and `until` structurally cannot
+contain a pipe, which was unstated and load-bearing, so emitting the sentence from jq removes the
+invariant instead of documenting it. The fixture is re-declared a WITNESS, not a pin.
+
+**End-state checks run (the routing filter, after ArgoCD synced):** the live Alertmanager config
+carries `severity!="info"` + `triage!="none"` on the `agent-responder` route; Prometheus has the
+five new `triage: none` labels loaded; the respond WorkflowTemplate carries all four `AGENT_TS_*`
+env vars; the FU-249 Sensor filter is still `__paused-FU-249__`. Reach, measured over the 7 d to
+2026-09-17 (338 firing series total): ~51 denied by the `triage:none` set (22 of them newly
+labelled, i.e. arrivals that would have been SESSIONS), 6 more by `severity:info`, and 69 in the
+classes a declared window covers while one is open.
+
+## 2026-09-17 ~08:30–09:00Z — KubeJobFailed reads a Job OBJECT, not a schedule (operator catch → PR#1751)
+
+Operator, on the alert my own #1748 had just decided NOT to deny: *"Who cares about a single job
+failing? … It did it on the next try? … And should I go and clean up all Error pods manually to
+clear the Error? meta rotation has actual alerts when disk is full?"* All three right, and the
+middle one names the defect.
+
+**`kube_job_failed > 0` reads a Job OBJECT.** On a CronJob that is a latch pointing the wrong way:
+the failed object leaves only when `failedJobsHistoryLimit` rotates it out, which requires the job
+to FAIL MORE — so the healthier the schedule, the longer the alert stands, and the only remedy on
+offer is `kubectl delete job` to silence a detector. Measured live: `garage-write-probe` runs every
+MINUTE, failed twice on 09-16 at 18:39/18:44Z, **succeeded 776 times since**, and was still firing
+13.5 h later needing three more failures to clear. `garage-meta-rotation`: one failure, ~54
+successes, needing five more. Both also carry purpose-built self-clearing belts
+(`GarageWriteProbe{Failing,Slow,Silent}`, `GarageMetaRotation{Failed,ControllerSilent,
+NotReclaiming}`, `GarageDiskFillingUp`) — the stock rule was noise ON TOP of coverage.
+
+⚠ **This reverses #1748's reading**, which kept the rule on the grounds that it is the only generic
+signal for a Job with no purpose-built belt. The premise was wrong: a detector that clears by
+failing more is not coverage. But a routing deny would still have been the wrong instrument — it
+hides the alert from the responder and leaves the operator the same broken rule. **Replaced, not
+denied**, which is what this repo's own route comment says to prefer: `defaultRules.disabled` (the
+NodeSystemSaturation precedent, #477) + `argocd/resources/job-health/` with the health question
+split three ways — `CronJobNotSucceeding` (the SCHEDULE is not completing; **threshold is
+cadence-derived**, `next_schedule_time - last_schedule_time` IS one interval, verified against all
+21 live CronJobs at 60s/900s/21600s/43200s/86400s/604800s, so one rule spans per-minute to weekly
+with no per-job table to rot; self-clears on the next success), `CronJobNeverSucceeded` (the series
+is ABSENT when nothing ever succeeded — the `unsuspended ≠ ever ran` class), and `KubeJobFailed`
+narrowed to Jobs no CronJob owns, where a persisting failure IS the open item.
+
+**End-state, watched rather than assumed:** app-of-apps synced 5ec4a676 → `job-health`
+Synced/Healthy → Prometheus dropped the stock `kubernetes-apps` copy → the three stale alerts aged
+out of Alertmanager by themselves at 08:56Z. **No Job objects were deleted.** That was the point.
+
+**Method note (the same lesson as PR#1750, applied on purpose this time):** the regression fixture
+was run against the rule it replaces BEFORE being committed — the stock expr fires at 2h50m on the
+identical input, the new rules are silent. A pin that passes pre-fix asserts nothing, and this
+session had already shipped one.
+
+## 2026-09-17 ~09:30Z — codeowner read on the parked #1738 (model_id strip hoist), then wind-down
+
+The one PR sitting on the codeowner gate. ADR-110 read, corpus loaded, verdict landed rather than
+left parked — a read that produces no verdict is the BLOCKPARK the platform measures.
+
+**Verified independently of the PR body**, which is the ride's own account of its own work: the
+hoist is verbatim (`normalize_model(...)` → `parse(...)["model"]` is what `normalize_model` WAS);
+the two parser copies are `cmp`-clean at 175 lines; `router.py` already imports `model_id` (line
+38), so `strip_routing_suffix` at `record_provider_event` is not a latent `NameError` on the data
+plane — the one thing in the diff that could have been quietly fatal; and the one-home acceptance
+holds on the branch tree (zero `removesuffix(":exacto")`, `rpartition(":")` only at line 99 of each
+parser plus the test's FORBIDDEN list, and the scan is an actual scan).
+
+**The ride's judgement call was right and is worth keeping as a pattern.** The issue said the three
+functions move verbatim; the ride added a fourth (`strip_routing_suffix` + a closed
+`ROUTING_SUFFIXES`) because the issue's own phrasing — "truncated at its last `:`" — is refuted by
+this repo's gate: a `:free` pick is a chain id the `/route` eligibility loop filters on, so a
+bookkeeping key that truncates ANY suffix keys a cooldown under an id nothing matches. It SHOWED
+the failure (a `router-self-test` KeyError) rather than asserting it. Two questions, two functions:
+a pricing lookup retries on a MISS, a bookkeeping key must equal the chain id. It also turned the
+router self-test's expectation into a LITERAL rather than a re-derivation through the function
+under test — the vacuous-pin class, caught by the author, in the same session the seat shipped one.
+
+Closed **#1737** on evidence while reading it: the `diff-ci` `agentstack-rbac-lint` map row exists
+on master now (`scripts/diff-ci.sh:37`) and `diff-ci` exited 0 on four branches today. It was a
+real gap when the #1738 ride hit it on 09-16.
+
+**Session totals:** six PRs merged (#1748 routing filter · #1749 §A1 capture · #1750 decide-once ·
+#1751 KubeJobFailed replaced · #1752 replay hermeticity · #1738 read+merged), two of my own
+readings reversed on operator/reviewer evidence (KubeJobFailed's coverage, the pipe-join "bug"),
+both recorded above rather than quietly corrected. Wind-down at ~950k ctx.

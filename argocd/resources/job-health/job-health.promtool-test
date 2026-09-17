@@ -1,0 +1,166 @@
+rule_files:
+  - job-health.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── THE REGRESSION THIS WHOLE CHANGE EXISTS FOR ──────────────────────────────────────────────
+  # The 2026-09-16 shape, replayed: garage-write-probe runs every MINUTE, fails twice, then
+  # succeeds forever. Under the stock `kube_job_failed > 0` the alert was still firing 13.5 h and
+  # 776 successes later, because the rule reads a Job OBJECT that only ages out after three MORE
+  # failures. Here the series that matters is the schedule's last success, so the two failures
+  # move nothing and the alert never fires at all.
+  - interval: 1m
+    name: "a per-minute CronJob that fails twice and then succeeds never alerts"
+    input_series:
+      # last_successful_time advances by 60 every minute: a schedule that is completing.
+      - series: 'kube_cronjob_status_last_successful_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "0+60x180"
+      - series: 'kube_cronjob_status_last_schedule_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "0+60x180"
+      - series: 'kube_cronjob_next_schedule_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "60+60x180"
+      # …and the two failed Job objects the stock rule latched on, still sitting there the whole
+      # time. Present in the fixture precisely to prove they now contribute NOTHING.
+      - series: 'kube_job_failed{job="kube-state-metrics",namespace="garage",job_name="garage-write-probe-29826399"}'
+        values: "1+0x180"
+      - series: 'kube_job_failed{job="kube-state-metrics",namespace="garage",job_name="garage-write-probe-29826404"}'
+        values: "1+0x180"
+      - series: 'kube_job_owner{job="kube-state-metrics",namespace="garage",job_name="garage-write-probe-29826399",owner_kind="CronJob",owner_name="garage-write-probe"}'
+        values: "1+0x180"
+      - series: 'kube_job_owner{job="kube-state-metrics",namespace="garage",job_name="garage-write-probe-29826404",owner_kind="CronJob",owner_name="garage-write-probe"}'
+        values: "1+0x180"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CronJobNotSucceeding
+        exp_alerts: []
+      - eval_time: 170m
+        alertname: CronJobNotSucceeding
+        exp_alerts: []
+      # The narrowed KubeJobFailed must stay silent too: both objects are CronJob-owned.
+      - eval_time: 170m
+        alertname: KubeJobFailed
+        exp_alerts: []
+
+  # ── …and it still DETECTS, which is the other half of not being noise ───────────────────────
+  # Same per-minute CronJob, but the schedule stops completing: last_successful_time freezes while
+  # the clock runs on. The 600s floor + 3 intervals = 1800s, plus `for: 15m`, so it fires at 45m
+  # and not before.
+  - interval: 1m
+    name: "a per-minute CronJob that stops succeeding fires at 3 intervals (600s floor) + for"
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "0+0x180"
+      - series: 'kube_cronjob_status_last_schedule_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "0+60x180"
+      - series: 'kube_cronjob_next_schedule_time{namespace="garage",cronjob="garage-write-probe"}'
+        values: "60+60x180"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: CronJobNotSucceeding
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: CronJobNotSucceeding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: garage
+              cronjob: garage-write-probe
+            exp_annotations:
+              summary: "CronJob garage/garage-write-probe has not succeeded in 3 scheduled runs"
+              description: >-
+                Three consecutive scheduled runs produced no successful completion (50m 0s since
+                the last success). SYMPTOM ONLY, and the per-CronJob belt usually says more: check
+                that one first if it exists (Garage*, NodeFstrim*, RegistryGCMirrors*). Then
+                `kubectl -n garage get jobs -l batch.kubernetes.io/cronjob-name=garage-write-probe`
+                and the newest pod's log. Unlike the stock KubeJobFailed this replaced, the alert
+                CLEARS on the next success — deleting failed Job objects is never the remedy.
+
+  # ── the threshold is CADENCE-DERIVED, not a constant ────────────────────────────────────────
+  # The same "no success for 50 minutes" input on a WEEKLY CronJob must stay silent: for it, fifty
+  # minutes is the middle of a normal gap. A flat threshold cannot express both this and the row
+  # above, which is why the interval is read off the schedule rather than written down.
+  - interval: 5m
+    name: "a weekly CronJob is not alerted on for a 50-minute gap"
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}'
+        values: "0+0x40"
+      - series: 'kube_cronjob_status_last_schedule_time{namespace="registry-cache",cronjob="gc-mirrors"}'
+        values: "0+0x40"
+      - series: 'kube_cronjob_next_schedule_time{namespace="registry-cache",cronjob="gc-mirrors"}'
+        values: "604800+0x40"
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: CronJobNotSucceeding
+        exp_alerts: []
+
+  # ── a bare Job keeps the stock semantics, because there they are right ───────────────────────
+  # A one-shot has no next try, so the failed object persisting IS the open item rather than a
+  # latch. The CronJob-owned twin in the same evaluation must stay silent — that contrast is the
+  # whole point of the `unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}`.
+  - interval: 1m
+    name: "KubeJobFailed fires for a bare Job and never for a CronJob-owned one"
+    input_series:
+      - series: 'kube_job_failed{job="kube-state-metrics",namespace="infisical",job_name="infisical-bootstrap-1"}'
+        values: "1+0x40"
+      - series: 'kube_job_failed{job="kube-state-metrics",namespace="garage",job_name="garage-meta-rotation-29826405"}'
+        values: "1+0x40"
+      - series: 'kube_job_owner{job="kube-state-metrics",namespace="garage",job_name="garage-meta-rotation-29826405",owner_kind="CronJob",owner_name="garage-meta-rotation"}'
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KubeJobFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: KubeJobFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: infisical
+              job_name: infisical-bootstrap-1
+              job: kube-state-metrics
+            exp_annotations:
+              summary: "Job infisical/infisical-bootstrap-1 failed to complete"
+              description: >-
+                A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed
+                condition. Read the pod's log, then decide: re-run it, or delete the Job once the
+                outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert —
+                their schedule's health is CronJobNotSucceeding, which self-clears.
+
+  # ── never-succeeded: the `unsuspended ≠ ever ran` class ─────────────────────────────────────
+  # `last_successful_time` is ABSENT for a CronJob that has never completed one, so the rule above
+  # is structurally blind to it. A day of grace, then it is a finding; a sibling created an hour
+  # ago is not.
+  - interval: 5m
+    name: "CronJobNeverSucceeded fires only past the one-day grace"
+    input_series:
+      # created 10 days ago (epoch seconds), never a success
+      - series: 'kube_cronjob_created{namespace="monitoring",cronjob="never-ran"}'
+        values: "-864000+0x40"
+      # created 1h ago — inside the grace, must stay silent
+      - series: 'kube_cronjob_created{namespace="monitoring",cronjob="just-applied"}'
+        values: "-3600+0x40"
+      # …and one that HAS succeeded must never appear, whatever its age
+      - series: 'kube_cronjob_created{namespace="monitoring",cronjob="healthy"}'
+        values: "-864000+0x40"
+      - series: 'kube_cronjob_status_last_successful_time{namespace="monitoring",cronjob="healthy"}'
+        values: "0+300x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CronJobNeverSucceeded
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CronJobNeverSucceeded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: monitoring
+              cronjob: never-ran
+            exp_annotations:
+              summary: "CronJob monitoring/never-ran has never completed successfully"
+              description: >-
+                This CronJob was created over a day ago and has no recorded successful completion
+                — it may have never run, or every run so far has failed. Existing is not running:
+                check `kubectl -n monitoring describe cronjob never-ran` for a suspend flag, a
+                schedule that has not come round, or jobs failing at admission (image pull, RBAC,
+                quota).

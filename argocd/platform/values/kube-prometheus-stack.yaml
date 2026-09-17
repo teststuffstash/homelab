@@ -20,6 +20,15 @@
 defaultRules:
   disabled:
     NodeSystemSaturation: true
+    # KubeJobFailed reads a Job OBJECT, not a schedule, so on a CronJob it is a latch pointing the
+    # wrong way: it clears only when the job fails ENOUGH MORE TIMES to rotate the failed object out
+    # of `failedJobsHistoryLimit`, or when a human deletes it by hand. Measured 2026-09-17 —
+    # garage-write-probe (every minute) failed twice on 09-16, succeeded 776 times since, and was
+    # still firing 13.5 h later. Replaced, not merely denied, by argocd/resources/job-health/:
+    # CronJobNotSucceeding (cadence-derived, self-clearing) + CronJobNeverSucceeded + a KubeJobFailed
+    # narrowed to Jobs no CronJob owns, where a persisting failure IS the open item. Same
+    # disable-and-re-add shape as NodeSystemSaturation above (homelab#477).
+    KubeJobFailed: true
 additionalPrometheusRulesMap:
   cilium:
     groups:
@@ -275,9 +284,39 @@ alertmanager:
         # deliberate — distinct subjects that share an alertname (three degraded Longhorn volumes)
         # are distinct problems and must keep their own issues. Grouping reduces deliveries and
         # workflow spawns; the ledgers reduce sessions and issues.
+        # ── THE TRIAGE-ROUTING FILTER (2026-09-17) — what the responder never sees ──────────
+        # Three tiers, cheapest first, and this route is tier 0:
+        #   0. NOT ROUTED — the matchers below. Costs nothing: no Sensor trigger, no Argo
+        #      workflow, no pod, no clone. The alert still reaches ha-webhook and Grafana.
+        #   1. ROUTED, NEVER A SESSION — the in-pod `triage:none` belt in
+        #      agents/coordinator/responder-argo.yaml (ledger marker, no LLM, no daily-cap spend).
+        #      It stays as the belt under matcher 2, not as the mechanism.
+        #   2. A SESSION — everything else.
+        # Matcher 1 — `severity != info`. An `info` alert is by definition not actionable now
+        # (the stock InfoInhibitor already mutes it whenever a warning is up in the same
+        # namespace, so it was only ever routed on quiet namespaces). Named classes today:
+        # KubeNodeEviction, KubeNodePressure, CPUThrottlingHigh, HomeAssistantSensorStale.
+        # Matcher 2 — `triage != none`, the RULE AUTHOR's own do-not-investigate declaration
+        # (roles.md §responder; the pairing with platform_machinery is asserted in
+        # responder-behaviour-test.sh §#239). It was honoured only INSIDE the pod, so a
+        # self-describing alert still bought a workflow + a git clone — 154 of the ledger's
+        # entries are that marker. Honouring it here makes the declaration free.
+        # ⚠ Both matchers are also read by agents/meta-alert-crosscheck.sh, which must not
+        # report a deliberately-unrouted alert as UNTRIAGED machinery. Change one, change both.
+        # ⚠ A stock chart rule cannot carry `triage` (no per-alert label hook; `defaultRules`
+        # only offers disable + fleet-wide labels). The escape hatch for one of those is an
+        # `alertname!~` matcher HERE, with its reason — but prefer scoping or replacing the rule.
+        # KubeJobFailed is the worked example and it ended in a REPLACEMENT (defaultRules.disabled
+        # above + argocd/resources/job-health/, 2026-09-17): its 48 firing series in 7d were name
+        # churn, and underneath them the rule read a Job OBJECT rather than a schedule, so it could
+        # only be cleared by failing more or by hand. A deny would have hidden that from this lane
+        # and left the operator the same broken detector; fixing the rule fixed it for every reader.
         - continue: true
           group_by:
             - alertname
+          matchers:
+            - severity != "info"
+            - triage != "none"
           receiver: agent-responder
         - receiver: ha-webhook
   service:

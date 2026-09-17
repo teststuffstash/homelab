@@ -222,3 +222,129 @@ hand that way on 2026-09-14, each with its target narrowed in the comment; no Go
 alert-born fixes are the maintenance stream, not a theme (ADR-126); (6) #1456's incomplete fix —
 closed by #1547/PR#1576.
 
+
+## The 2026-09-16 pass — a second week measured, and the four legs that shipped (#1733)
+
+Operator, 2026-09-16: *"it still does mostly noise. Either turn it off completely or do the build
+that was planned."* This section is the second measurement and what it changed about the plan; the
+§Design read above is still the direction, and two of its three legs are still open on purpose.
+
+### The window — 2026-09-11 → 2026-09-16
+
+**40 triage sessions · 20 homelab issues · 32 alerts DROPPED unread at the FU-149 daily cap**
+(25 on 09-14, 7 by midday on 09-16). Sessions per day: 1 · 7 · 8 · 12 (cap hit) · 1 · 11.
+Roughly 8 of the 20 issues were genuinely actionable — #1594 (master red on stale footprint
+fixtures), #1661/#1664/#1672/#1675 (all fixed, `agent/done`), #1687 (cp-01 undersized),
+#1730/#1731 (nx-01 missing the kata runtime handler, found within 20 min of the condition). The
+lane's catch rate is real. What it costs to get is what moved.
+
+### The four generators, each measured rather than inferred
+
+1. **The machine undoes the operator's own closes.** The reopen belt (FU-133 subject + `alert-fp`)
+   restores a closed thread so a FLAPPING alert does not churn new issues — a good rule with no
+   opinion about WHO closed the thread. Read off the close/reopen event streams 2026-09-16:
+
+   | thread | history |
+   |---|---|
+   | **#103** | closed by the operator and reopened by the lane **5×** (2026-08-05 → 09-10) |
+   | #100, #121 | 3× each |
+   | #542, #811 | closed by the operator 09-14 10:25Z → **reopened by the lane 09-16** |
+   | #241, #538 | reopened after an operator close |
+
+   Each reopen also spends a triage session and posts a comment. Untracked before this pass
+   (grep negative on FU/ADR).
+
+2. **Standing conditions are re-triaged every UTC day, forever.** The subject ledger keys on
+   `triaged-<TODAY>`, so a condition that outlives a midnight buys a fresh session daily. The
+   sessions say so in their own words: #1598 carries five — *"Re-fired with identical state —
+   confirming, not re-deriving"*, *"Re-fired again … same continuous instance"* — and #1663
+   *"Same signature as the last two triages"*. ~40 % of the window's sessions. Untracked.
+
+3. **The resolve leg's auto-close has been dead since it was written.** It tested
+   `.author.login | test("\[bot\]$")` against `gh issue view --json body,comments`, and its own
+   comment asserted *"gh renders App logins with a [bot] suffix HERE (REST)"*. That endpoint is
+   **GraphQL**, which returns a Bot's bare login (`homelab-agents-1234`); REST returns both the
+   suffix and a `.user.type` of `Bot`. So every machine comment counted as a human, the leg took
+   its "someone owns it" branch on its OWN prior comment, and the bots-only close could only fire
+   on a thread with zero comments. Live count: **24 open 🚨 issues, 17 whose alert had already
+   cleared, 13 carrying the leg's own `A human is engaged` line.** The same REST-vs-GraphQL
+   mismatch the reviewer hit (FU-069) — which the dead comment named as the reason it did not
+   apply here. Untracked.
+
+4. **FU-232's graft, still live and now corrupting the dedup key.** #1644's subject was
+   `workload:arc-runners/kube-prometheus-stack-kube-state-metrics`; #1663's was written with
+   backticks and a trailing comma, so its marker matched nothing.
+
+FU-230's class — seat-driven change invisible — produced **one** of the twenty (#1600, the m70s
+window). Leg (a) is holding; the 09-16 `nx-01` wipe leaked only the `KubeDaemonSetRolloutStuck`
+class, as FU-230 already records.
+
+### What the measurement changed about the plan
+
+**FU-231 was aimed at the destination and the binding cost was the DECISION.** Routing report-only
+findings to a bucket would have moved generators 1–3 rather than removing them — the seat would
+get a `triage` meta-event every morning reading "nothing is different". It is also blocked: FU-210
+is open, responder sessions leave no transcript, and the bucket has no `homelab/alert-<fp>/` prefix
+to write beside (verified empty). So the order flipped, and the principle the evidence points at is:
+
+> **The responder decides once per (subject, condition); re-confirmation is a body line, not a
+> session — and a human's close is final.**
+
+### The four legs, as built (all deterministic shell in `agents/coordinator/responder-argo.yaml`)
+
+| leg | what | pinned by |
+|---|---|---|
+| **R1** | the pre-snapshot reads each reopen candidate's newest `closed` event actor; the post-session belt re-closes any reopen of a User-closed thread, with one comment that is also the last word. The session is TOLD which threads those are, so it spends no turns on a reopen that gets reverted | `responder-reopen/human-closed`; `responder-behaviour-test.sh` §#1733 |
+| **R2** | DECIDED-ONCE: an OPEN issue whose title names THIS alert and whose body carries a `fix-verdict:` line means the condition is judged — the re-fire becomes one rewritten `still-firing:` body line and no session is spawned. Title-anchored on purpose, so a DIFFERENT alert class on one subject still triages (the #1686 shape) | `responder-decided-once/{decided,witness-different-alert}` |
+| **R3** | the engagement probe moves to REST and keys on `.user.type`; an unreadable probe never closes (rule #6) | `responder-engagement/{bots-only,human-engaged,probe-failed}` |
+| **R4** | FU-232: object labels before `pod`, `pod` skipped when `job` names a monitoring scrape job, then node → `instance:` → per-class `alert:<name>` | `responder-subject/{daemonset-reporter-pod,node-exporter-instance,statefulset,witness-pod-owned}` |
+
+Two things worth carrying forward from the build itself:
+
+- **The ratchet earned its keep on a check its own author believed.** R2's predicate was written
+  `test("^fix-verdict:…"; "im")` and matched nothing: on jq 1.6 `^` is STRING-anchored and jq's
+  `"m"` flag means "dot matches newline", not "anchor at line boundaries". `(?m)` inline is
+  required. The fixture caught it before it shipped, where it would have read as "the gate simply
+  never fires".
+- **A test can assert a bug as correct.** `responder-behaviour-test.sh` §#149's graft scenario sent
+  the alert WITHOUT its `job` label and asserted
+  `subject=workload:monitoring/…node-exporter` — the graft — as the expected value. It passed
+  through the whole of FU-232's life. The scenario now carries the live payload.
+
+### What was deliberately NOT built on 2026-09-16 — and what the 09-17 sitting then built
+
+- ~~**FU-230 leg (b)** (the declared-window ConfigMap): real, re-weighed to non-binding — build it
+  when a second window class leaks.~~ **The trigger fired the same evening** (wk-03's shutdown, five
+  leaked classes, silenced by hand for 8 h) and leg (b) shipped 2026-09-17: `agents/seat-window.sh`
+  writes a `responder-window` record, `node-maintenance.sh settle/down` opens it and `up` closes it,
+  and the responder skips a session for the DECLARED NAMES only. Design home:
+  [`../agents/roles.md`](../agents/roles.md) §responder (the glossary's **declared window**).
+- ~~**FU-231's bucket**: blocked on FU-210; re-read after #1733 soaks.~~ **FU-210 shipped
+  2026-09-17** (per-alert transcript + input alert + manifest under
+  `homelab/alert-<fp>/responder-r1-<ts>/`), so the prefix exists and FU-231's PRODUCER half rides
+  it — a typed `finding.json` beside every transcript, the no-issue triage included. ⚠ The
+  SWITCH ("issues only on `fix-verdict: fix`") is **not** flipped and cannot be as sketched:
+  report-only issues are DECIDED-ONCE's anchor, and moving that anchor into the bucket needs a pod
+  READ the write-only transcripts key will never grant.
+- **The MCP server**: unchanged, no consumer (`docs/agents/README.md` §Open).
+
+### The 2026-09-17 sitting — the routing filter, and the hole #1733 left
+
+Two things the 09-16 measurement did not name, both shipped the next day:
+
+1. **The alerts that should never have reached the lane at all.** `triage: none` was honoured only
+   INSIDE the pod, so a self-describing alert still bought an Argo workflow and a git clone — 154 of
+   the ledger's 1190 entries are that marker. It is now a matcher on the responder's own
+   Alertmanager route, alongside `severity != "info"`, and five operator-queue rules gained the
+   declaration `CodeownerParkWaiting` already carried by operator ruling (2026-08-12):
+   `AgentAttentionStanding` (19 firing series in the 7 d to 09-17; the `#1546` row above is the
+   measured case), `BlockingCodeownerParkWaiting`, and the three GitHub spend/quota rules. Not
+   denied, deliberately: `KubeJobFailed`, the loudest arrival of the window at 48 firing series —
+   every one of them one genuinely broken CronJob (`fstrim-guard-wk-01`), so a deny would have
+   hidden the fault rather than the noise.
+2. **A human's close was invisible to DECIDED-ONCE.** The gate keys on an OPEN issue, so an
+   operator close — the strongest *stop* available — left the lane blind: no open record, a full
+   session, and a NEW issue filed against that close, every UTC day the condition stood. Generator
+   #1 of the 09-16 list was only half fixed: the reopen belt stops a REOPEN and the session simply
+   files a fresh issue instead. A User close now decides for 14 days, and nothing is written on a
+   thread a person ended.

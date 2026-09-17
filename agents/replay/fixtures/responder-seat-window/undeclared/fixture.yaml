@@ -1,0 +1,24 @@
+# FU-230 leg (b) — an alert OUTSIDE the declared set still triages. The witness.
+#
+# CONDITION UNDER REPLAY. The same live `wk-03` window as the declared twin, and
+# `GarageClusterFlapping` fires.
+#
+# WHAT IT REDS ON. A window that suppressed by NODE or by NAMESPACE would eat this: garage-2
+# flapping and the write-probe 400s were REAL during the rf=3 rollout, and muting them is exactly
+# the failure the operator ruled out when this leg was designed. Without this row the declared twin
+# would pass just as happily against a gate that suppressed everything while a window is open — the
+# "assert the bug as correct" shape this lane already shipped once (the §#149 graft scenario
+# asserted the graft as the expected value and passed through the whole of FU-232's life).
+#
+# THE CONTRACT: the gate does NOT fire, no marker is written, and the alert falls through to an
+# ordinary triage — `reached.sh` printing IS the assertion.
+pins:
+  - IL-T03
+name: responder-seat-window-undeclared
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

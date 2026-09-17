@@ -1,0 +1,22 @@
+# homelab#1733 — a real person on the thread means no comment and no close.
+#
+# CONDITION UNDER REPLAY. The same #1723 world with one comment added by a User — the live shape of
+# homelab#1600, where the operator explained the cause and the lane later re-commented under it.
+#
+# THE CONTRACT:
+#   1. One human comment is enough; the count is reported so the log says why it held.
+#   2. NO comment is posted. The thread stays OPEN, so a comment here is never anyone`s last word
+#      and repeats once per flap cycle — 27 of homelab`s 80 issue comments on 2026-08-08 were that
+#      leg, #63 taking four in ~2h (#148). The clear becomes ONE rewritten `last-cleared:` body
+#      line instead, and `_record_clear` is shimmed here to assert THAT path is the one taken.
+#   3. The guard passed to the helper is the `alert-fp:` marker — what the firing path finds (and
+#      reopens) this issue by, so a body that lost it is left untouched rather than half-written.
+pins:
+  - IL-T03
+name: responder-engagement-human-engaged
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-engagement
+  - file:post.sh

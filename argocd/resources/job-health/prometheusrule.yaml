@@ -1,0 +1,97 @@
+# Job health — the scoped replacement for the stock `KubeJobFailed` (disabled in
+# argocd/platform/values/kube-prometheus-stack.yaml `defaultRules.disabled`, the NodeSystemSaturation
+# precedent of homelab#477).
+#
+# ⚠ WHY THE STOCK RULE HAD TO GO: `kube_job_failed > 0` READS A JOB OBJECT, NOT A SCHEDULE.
+# For a CronJob that makes it a latch pointing the wrong way — it clears only when the job fails
+# ENOUGH MORE TIMES to rotate the failed object out of `failedJobsHistoryLimit`, or when a human
+# deletes the object by hand. Measured on 2026-09-17, 13.5 h after the FU-248 VM-replacement
+# incident:
+#
+#   garage/garage-write-probe    runs EVERY MINUTE, failed twice at 18:39/18:44Z on 09-16,
+#                                succeeded 776 times since — still firing, and would keep firing
+#                                until 3 MORE failures aged the objects out (failedJobsHistoryLimit: 3)
+#   garage/garage-meta-rotation  runs every 15 min, failed once, ~54 successes since — still firing,
+#                                waiting on 5 more failures (failedJobsHistoryLimit: 5)
+#
+# So the healthier the schedule, the longer the alert stands, and the only offered remedy is
+# `kubectl delete job` to silence a detector. Both of those CronJobs also carry purpose-built,
+# self-clearing belts that say something true about the condition — GarageWriteProbe{Failing,Slow,
+# Silent}, GarageMetaRotation{Failed,ControllerSilent,NotReclaiming} plus GarageDiskFillingUp — so
+# the stock rule was contributing noise on top of coverage, not coverage.
+#
+# THE SPLIT: a CronJob's health is "the schedule is completing", which self-clears on the next
+# success; a bare Job's health is "it failed", which SHOULD persist, because a one-shot has no next
+# try and the object sitting there IS the open item.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: job-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: job-health
+      rules:
+        # The schedule is not completing. THRESHOLD IS CADENCE-DERIVED, not a constant: a fleet
+        # whose CronJobs range from every-minute to weekly has no single right number, and a
+        # per-job table would rot. `next_schedule_time - last_schedule_time` IS one interval —
+        # verified against all 21 live CronJobs on 2026-09-17, resolving exactly 60s / 900s /
+        # 21600s / 43200s / 86400s / 604800s. Three intervals without a success = "three scheduled
+        # runs in a row produced nothing", which is the sentence this alert is for.
+        # The 600s floor stops a per-minute job from paging after three minutes; its own belt is
+        # the fast path there (GarageWriteProbeFailing is `for: 10m`).
+        # SELF-CLEARING by construction: one success moves last_successful_time and the alert ends.
+        - alert: CronJobNotSucceeding
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time)
+              > 3 * clamp_min(kube_cronjob_next_schedule_time - kube_cronjob_status_last_schedule_time, 600)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in 3 scheduled runs"
+            description: >-
+              Three consecutive scheduled runs produced no successful completion ({{ $value |
+              humanizeDuration }} since the last success). SYMPTOM ONLY, and the per-CronJob belt
+              usually says more: check that one first if it exists (Garage*, NodeFstrim*,
+              RegistryGCMirrors*). Then `kubectl -n {{ $labels.namespace }} get jobs -l
+              batch.kubernetes.io/cronjob-name={{ $labels.cronjob }}` and the newest pod's log.
+              Unlike the stock KubeJobFailed this replaced, the alert CLEARS on the next success —
+              deleting failed Job objects is never the remedy.
+        # A CronJob that has never succeeded at all. `last_successful_time` is simply ABSENT then,
+        # so the rule above cannot see it — the `unsuspended ≠ ever ran` class, which this platform
+        # has paid for before (the retro lane sat "enabled" for 8 days having never completed a
+        # single run, FU-058). One day of grace so a freshly-applied CronJob is not alerted on
+        # before its first schedule.
+        - alert: CronJobNeverSucceeded
+          expr: |
+            (kube_cronjob_created < time() - 86400)
+              unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has never completed successfully"
+            description: >-
+              This CronJob was created over a day ago and has no recorded successful completion —
+              it may have never run, or every run so far has failed. Existing is not running:
+              check `kubectl -n {{ $labels.namespace }} describe cronjob {{ $labels.cronjob }}`
+              for a suspend flag, a schedule that has not come round, or jobs failing at admission
+              (image pull, RBAC, quota).
+        # The stock rule's semantics, kept for the case they are RIGHT: a Job nobody schedules.
+        # A one-shot (a bootstrap, an ArgoCD PostSync smoke hook) has no next try, so the failed
+        # object persisting until someone deals with it is the correct behaviour rather than a
+        # latch. Live set on 2026-09-17: infisical/infisical-bootstrap-1 and
+        # sleep-tracking/sleep-ingester-smoke — exactly that class.
+        - alert: KubeJobFailed
+          expr: |
+            kube_job_failed{job="kube-state-metrics"} > 0
+              unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete"
+            description: >-
+              A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed
+              condition. Read the pod's log, then decide: re-run it, or delete the Job once the
+              outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert —
+              their schedule's health is CronJobNotSucceeding, which self-clears.

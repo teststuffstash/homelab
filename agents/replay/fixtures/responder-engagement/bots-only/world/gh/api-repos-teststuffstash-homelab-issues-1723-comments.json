@@ -1,0 +1,4 @@
+[
+  {"id": 1, "user": {"login": "homelab-agents-1234[bot]", "type": "Bot"},
+   "body": "Re-triaged from a fresh alert delivery. Nothing is different this time."}
+]

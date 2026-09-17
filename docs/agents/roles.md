@@ -217,13 +217,55 @@ never harder posture on quiet ones.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
-  `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136);
+  `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136),
+  **filtered in THREE TIERS, cheapest first (2026-09-17)**: tier 0 = the route's own matchers
+  `severity != "info"` ∧ `triage != "none"` — a denied alert costs no Sensor trigger, no workflow,
+  no clone, and still reaches Home Assistant and Grafana; tier 1 = the in-pod `triage:none` belt
+  (ledger marker, no session, no daily-cap spend) which is now the belt UNDER tier 0 rather than
+  the mechanism; tier 2 = a session. **The test for tier 0 is `could a bounded in-cluster
+  investigation change what anyone does about this?`** — `info` fails it by definition, and
+  `triage: none` is the rule AUTHOR asserting the same thing where they know it, exactly as
+  `platform_machinery` is declared at the rule site (the two compose: `triage: none` = *do not
+  investigate*, `platform_machinery` = *investigate, but a human merges the fix*). The
+  OPERATOR-QUEUE class is what the 2026-09-17 pass added — an alert whose remedy is an act only
+  the operator can take by construction, so a session can only re-state the annotation:
+  `CodeownerParkWaiting` (ruled 2026-08-12), `BlockingCodeownerParkWaiting`,
+  `AgentAttentionStanding` (every class it counts is `who=operator` by definition), and the three
+  GitHub spend/quota rules. ⚠ Two readers of the tier-0 predicate exist and must agree — the route
+  and `agents/meta-alert-crosscheck.sh`, which would otherwise report every denied alert as stuck
+  machinery; the pairing is asserted in `responder-behaviour-test.sh` §routing, which also pins
+  two counterexamples so `triage: none` stays a judgment rather than a habit. ⚠ A STOCK
+  kube-prometheus-stack rule cannot carry the label (the chart has no per-alert label hook), so its
+  only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or replace
+  the rule instead. **`KubeJobFailed` is the worked example, and it ended in a replacement**
+  (`argocd/resources/job-health/`, 2026-09-17): 48 firing series in the 7 d to that date read like
+  the loudest thing on the board, and the volume was name churn — a CronJob mints a new `job_name`
+  per run, so one broken schedule bills one series per tick. The real defect was worse than volume:
+  `kube_job_failed > 0` reads a Job OBJECT, not a schedule, so on a CronJob it clears only when the
+  job fails ENOUGH MORE TIMES to age the object out of `failedJobsHistoryLimit` — or when a human
+  deletes it. `garage-write-probe` runs every minute, failed twice, succeeded 776 times, and was
+  still firing 13.5 h later. A routing deny would have hidden that from the lane while leaving the
+  operator the same broken detector and the same hand-cleanup; replacing the rule fixed it for every
+  reader. **The lesson is the order: read arrivals per SUBJECT before per series, then ask whether
+  the rule says anything true — a deny is the last resort, not the first;**
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
   — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)
   → ONE inert issue on the stack's -iac/app repo → homelab only for platform namespaces or
   needs-platform (routing = alert namespace → stacks.json); backstop = none (alerts refire
-  ≤3h); key = 24h fp ledger (`responder-seen` cm, namespaced RBAC) + fp-issue search belt;
+  ≤3h); key = 24h fp ledger (`responder-seen` cm, namespaced RBAC) + fp-issue search belt
+  + **DECIDED-ONCE** (2026-09-16, homelab#1733): an OPEN issue whose title names THIS alert and
+  whose body carries a `fix-verdict:` line means the condition is already judged, so the re-fire
+  lands as one rewritten `still-firing:` body line and spawns NO session. The ledger keys are
+  per-UTC-day and so re-armed every midnight, which made a standing condition cost a judgment
+  session daily — ~40% of the 2026-09-11→16 window's sessions, while 32 other alerts were dropped
+  unread at the daily cap. Title-anchored, so a DIFFERENT alert class on one subject still triages.
+  Two siblings in the same change: the REOPEN belt no longer undoes a HUMAN's close (#103 had been
+  operator-closed and lane-reopened five times since 08-05), and the resolve leg's engagement test
+  moved to REST `.user.type` — it had been testing the `[bot]` suffix against GraphQL, which omits
+  it, so the bots-only auto-close could never fire on a thread carrying any comment (13 of 24 open
+  🚨 issues were held open by it). Evidence + the build:
+  [`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md) §The 2026-09-16 pass;
   capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
   cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
   (inert, breaker #1), loop-smell → report-only stop.
@@ -297,6 +339,41 @@ never harder posture on quiet ones.
   verdict or say why it is wrong), and **compose issue bodies with `--body-file`, never an
   interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own body
   and ate every inline code span, deleting exactly the identifiers a fixer needs.
+  **THE DECLARED WINDOW (FU-230 leg b, 2026-09-17)** — the [glossary](../glossary.md) term, and
+  this section is its home. Leg (a)'s Alertmanager silences (`scripts/node-maintenance.sh`) match
+  `node`, `instance`, the node's pod names and, on a zone node, the Garage health set. One class is
+  beyond all four **structurally**: a rollout alert labelled by namespace + daemonset carries
+  neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence, so the
+  pod-name arm holds only its predecessors. Live twice on 2026-09-16 — an `nx-01` reinstall leaked
+  `KubeDaemonSetRolloutStuck` with all four arms armed, and wk-03's shutdown leaked
+  `CiliumUnreachableNodes` ×11, DaemonSet rollout/misschedule ×8, `KubeNodeUnreachable`,
+  `KubeletInstanceUnreachable` and `KubePodNotReady` ×4, silenced by hand for 8 h. Enumerating
+  `daemonset=~…` arms per alert name is the losing game that sighting demonstrates, so the seat
+  DECLARES the names instead (`agents/seat-window.sh` → the `responder-window` ConfigMap, opened and
+  closed by `node-maintenance.sh settle/down` and `up`). Three properties are the design: it is a
+  ConfigMap, so it OUTLIVES a monitoring restart, which silences do not (FU-195); it scopes by alert
+  NAME and never by namespace, because a namespace-wide mute would have hidden the rf=3 rollout's
+  REAL findings (garage-2 flapping, the write-probe 400s); and it suppresses the TRIAGE only — the
+  alert still fires, still notifies, still shows in Grafana. An alert OUTSIDE the declared set
+  triages as usual, which is the other half of FU-230: 7 of the 9 confidently-wrong writes in the
+  09-04→11 audit had a cause the seat made outside the cluster's view.
+  **A PERSON'S CLOSE DECIDES TOO (2026-09-17).** DECIDED-ONCE (#1733) keyed only on an OPEN issue,
+  which left the worst hole of the pair: the operator closes a standing condition's issue — the
+  strongest possible *I have decided, stop* — and the next UTC day finds no open record, runs a
+  full session and files a NEW issue against that close, daily, for as long as the condition stands.
+  The reopen belt does not help; it stops the closed thread being REOPENED, so the session files a
+  fresh one instead. The 7-day-lookback reboot rules are the shape (`NodeRebootingRepeatedly`,
+  `changes(node_boot_time_seconds[7d]) >= 3` — it fires for a week after two reboots and nothing
+  about it changes). So the same title-anchored + `fix-verdict:` predicate runs over CLOSED threads,
+  a close by a **User** (REST `.actor.type`) decides the condition, and NOTHING is written — the
+  thread is the human's and it ends closed. Shelf life `RESPONDER_HUMAN_CLOSE_DAYS` (14): past the
+  longest lookback any rule here uses, short enough that a re-emergence buys its session back.
+  **CAPTURE (FU-210/FU-231, 2026-09-17):** the lane was the one role outside §A1 — a triage that
+  filed no issue left NOTHING, and the 2026-09-03 forgejo-pg-1 session is the measured cost (subject
+  marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).
+  Every session now writes `homelab/alert-<fp>/responder-r1-<ts>/` — input alert, `triage.log`,
+  the transcript, an A1 manifest and a typed `finding.json` — with the write-only bucket key, before
+  the post-session belts, degrading loudly rather than failing.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).

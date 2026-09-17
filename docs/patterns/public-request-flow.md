@@ -88,7 +88,7 @@ a platform-map edit that changes the picture reds CI until the example is regene
 | S3 | **Three rejection grammars on one URL**: edge 429 = Cloudflare envelope + `Retry-After: 10` (verified 2026-09-03); app 429 = `{"error"}` + `Retry-After: 60`; body-cap/timeout = HTTP 200 JSON-RPC frames — two `Retry-After` values from one host | `CTR-ERRORS` — GAP in the example |
 | S4 | **DDoS L7 is outside the never-challenge Skip**: `ddos_l7` mitigations can be challenge-shaped; whether Free allows an action override is unverified | `PRF-DDOS` — ☐ verify (cloudflare.md completion table) |
 | S5 | **The Skip drops the Free managed WAF**: listing `http_request_firewall_managed` in the Skip's phases removes block-shaped WAF rules for the api host, not just challenges | `PRF-WAF` — ☐ decide (cloudflare.md completion table) |
-| S6 | **Operational paths are public** until the composition blocks them (ADR-123) | `PRF-CUSTOM` — ☐ FU-206 |
+| S6 | ~~**Operational paths are public** until the composition blocks them (ADR-123)~~ — CLOSED 2026-09-17 (FU-206): refused at the connector on every claim, and at the edge for the claim owning the zone's custom phase | `PRF-OPSPATH` + `PRF-CUSTOM` |
 | S7 | **A silent origin is cached for two hours**: the consumer profile respects the origin and falls back to Cloudflare's default TTL; nginx sends no `Cache-Control`; no token we hold can purge | `CTR-CACHE` — GAP in the static-site example |
 | S8 | **Cross-map calls were invisible**: the apex page depends on the api host's `/status` (its CORS answer, its claim being live) and no row said so | `depends_on` — closed in the schema (v2); the static-site example draws the edge |
 

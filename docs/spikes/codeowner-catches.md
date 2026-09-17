@@ -1,5 +1,7 @@
 # Spike — codeowner-catches census, 2026-08-04 → 2026-09-11
 
+**Tracked by:** FU-233 (the ADR-128 trial week; re-read 2026-09-18 against this baseline).
+
 **Question (operator, verbatim):** "find how many times have we found problems in codeowner
 review and what types of problems they were. I'm thinking of ways to reduce their amount anyway,
 let some things go more free and hope the loop itself heals some problems even if they come up."

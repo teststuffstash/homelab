@@ -79,10 +79,22 @@ variable "cluster_name" {
   default     = "homelab"
 }
 
-variable "talos_version" {
-  description = "Talos Linux version (also selects the Image Factory image)."
+# Two Talos versions, by ROLE (operator, 2026-09-16): control planes move as one deliberate act
+# (the three-CP program, ADR-133/FU-243), workers roll one node at a time — metal via
+# `talosctl upgrade`, VMs via the image.tf recreate — so a rollout always shows a declared-vs-live
+# gap for the nodes not yet done; that gap is the rollout's progress bar, not drift. The secrets
+# bundle follows the control-plane version. First use: FU-246 (the page_table_check reboots —
+# workers must be ≥ v1.13.4).
+variable "talos_version_controlplane" {
+  description = "Talos Linux version for control-plane nodes (secrets bundle, CP machine configs, the plain nocloud image)."
   type        = string
   default     = "v1.13.2"
+}
+
+variable "talos_version_worker" {
+  description = "Talos Linux version for worker nodes (worker machine configs, metal installer images, the longhorn nocloud image)."
+  type        = string
+  default     = "v1.13.10"
 }
 
 variable "kubernetes_version" {
@@ -193,6 +205,8 @@ variable "nodes" {
     # (file_id change), which is fine: the node is cattle by design.
     # serial=true (2026-09-14): five silent self-reboots in a week with the qemu process untouched
     # (#882, NodeRebootingRepeatedly) — the serial console is the instrument that catches the panic.
+    # Cause found 2026-09-16: the kernel page_table_check bug under ARC jobs, fixed by Talos ≥ v1.13.4
+    # (docs/incidents/2026-09-16-page-table-check-reboots.md, FU-246) — not the pve overcommit.
     # 16Gi/12c → 8Gi/6c (2026-09-14, operator): the pve host sat at 0.5–1 GiB MemAvailable with
     # 64.5 GiB dedicated across five VMs (no balloon in Talos guests, KSM ~6 GiB), 30 vCPU on 28
     # threads; and wk-03's RAM was what packed ~4 concurrent dind runners onto its one 40 G thin

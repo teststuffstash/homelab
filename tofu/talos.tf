@@ -21,7 +21,7 @@ locals {
 }
 
 resource "talos_machine_secrets" "this" {
-  talos_version = var.talos_version
+  talos_version = var.talos_version_controlplane
 }
 
 data "talos_machine_configuration" "node" {
@@ -32,7 +32,7 @@ data "talos_machine_configuration" "node" {
   machine_type       = each.value.role
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
-  talos_version      = var.talos_version
+  talos_version      = each.value.role == "controlplane" ? var.talos_version_controlplane : var.talos_version_worker
 
   # hostname comes from the Proxmox nocloud datasource (the VM name); setting it
   # here too makes Talos reject the config as a conflict.

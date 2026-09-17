@@ -1,0 +1,2 @@
+OUT → KubeStatefulSetReplicasMismatch (5ff978ed0c31381e): subject=workload:loki/loki
+RC 0

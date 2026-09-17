@@ -10,6 +10,55 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-206** *(archived 2026-09-17)* — **Operational paths are non-public on every PublicRoute
+  (ADR-123).** Built after an oracle handoff showed Googlebot walking `mcp.minutark.ee` (a 404
+  `robots.txt` = crawl everything) with `/metrics` answering 8.8 KB of Prometheus exposition —
+  the risk moved from "readable" to "on course to be indexed". TWO legs, because the dry-run
+  through cf-api-proxy turned up two facts ADR-123 did not have (cloudflare.md gotcha 8): a zone
+  admits ONE ruleset per phase (20217 — observed live at last), so the edge rule can only serve
+  the single claim per zone owning `http_request_firewall_custom`; and `block` + a custom
+  response is not entitled in that phase on Free, so the body is Cloudflare's block page, not
+  ADR-123's structured JSON. Leg 1 = the claim's own tunnel config refuses
+  `^/(metrics|healthz)(/|$)` at the connector — per-claim, so it carries the default on EVERY
+  claim and zone. Leg 2 = one more `block` rule, first in the api claim's custom-phase ruleset,
+  keeping the traffic off the home connection. Opt-in: `.spec.operationalPaths.public`. Same
+  change fixed a latent defect the probe exposed — #1304's CORS preflight rule carried the same
+  illegal custom response and would have failed at apply for the first claim setting
+  `.spec.origins`. Verified live on `mcp.minutark.ee`: `/metrics`, `/healthz` + subpaths → 403,
+  `/metricsx` → origin 404, `/` → 405, in-cluster `/metrics` → 200. ADR-123 amended; the edge leg
+  goes profile-agnostic with FU-039's zone-phase aggregation. Detail: `docs/cloudflare.md`
+  §PublicRoute.
+
+- **FU-232** *(archived 2026-09-16)* — **Reporter-keyed subject collapse: fixed at the cascade.**
+  The responder's `subject:` — which IS an issue's identity under the #149 one-subject rule — was
+  the metric's EXPORTER whenever the failing object had no pod dimension of its own, so 19 of 28
+  triage comments in the 09-04→11 week grafted onto five reporter threads (#811/#882/#542
+  kube-state-metrics, #241 pushgateway, #103 node-exporter, #884 `ns:monitoring`). Shipped in
+  homelab#1733: the cascade reads the object's own labels (`daemonset`/`statefulset`/`deployment`/
+  `job_name`) BEFORE `pod`, and skips `pod` entirely when `job` names a monitoring scrape job —
+  structural rather than a pod-name regex, because kube-state-metrics is scraped with honorLabels,
+  so a metric that HAS a pod dimension legitimately keeps it. With no object label the key falls to
+  node, then `instance:` (the failing target, verbatim), then per-class `alert:<name>`. Evidence:
+  the live 2026-09-16 label sets — `KubeDaemonSetRolloutStuck` arrives carrying
+  `daemonset=runner-image-prepull-pve` AND `pod=…kube-state-metrics…`. Pinned by
+  `agents/replay/fixtures/responder-subject/{daemonset-reporter-pod,node-exporter-instance,statefulset,witness-pod-owned}`
+  and by `responder-behaviour-test.sh` §#149, whose graft scenario had been asserting the pre-fix
+  subject as correct behaviour. ⚠ The re-key RETIRES the magnet threads: each affected
+  (alert, object) files one fresh issue on its next fire and the magnets stop collecting.
+
+- **FU-213** *(archived 2026-09-14)* — **opencode.ai un-parked: the client now sends
+  `x-opencode-session`.** Parked 2026-09-04 (operator mail: our UA sent no such header, "may
+  error" from 09-06) behind `OPENCODE_RAIL_DISABLED=1`; closed by homelab#1640 acceptance 2
+  (homelab#1667). What shipped: `_forward_upstream` attaches `x-opencode-session: <the ride's
+  session ref>` on BOTH opencode legs (never to OpenRouter), the value being `_cb_session()`'s
+  opaque ref — the SAME id that keys the breaker and the (session, model) pin, so affinity is
+  bound to the ride, not the installation (the hardcoded-id trap the thread named); the Go/Zen
+  arms now compute `cb_session` (they left it `None`); `OPENCODE_RAIL_DISABLED` back to `"0"`
+  (the knob stays as the operator's kill switch). Evidence: `devbox run proxy-self-test` — Go
+  and Zen legs carry the header, a direct-key ride degrades to `direct:<hash>` (never `None`),
+  OpenRouter never sees it. Gotcha: a direct-key ride's identity is a key-hash bucket, not a
+  per-ride id — the remaining seam, not this fix. Prior art: earendil-works/pi#4847.
+
 - **FU-236** *(archived 2026-09-13)* — **`homelab-sentinel` App cutover (ADR-130), all four steps
   the same day:** App 4929271 created/installed + ESO chain (`sentinel-git.yaml`); `sentinel-argo`
   switched direct (guarded file), first status under homelab-sentinel[bot] 11:17:58Z;

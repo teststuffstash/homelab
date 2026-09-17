@@ -1,0 +1,4 @@
+CALL kubectl -n agent-coordinator patch cm responder-seen --type merge -p {"data":{"fp-7a89cabb930c2070":"window-2026-09-17"}}
+OUT → KubeDaemonSetRolloutStuck (7a89cabb930c2070): DECLARED WINDOW wk-03-1789600000 names this alert — node-maintenance window on wk-03 — planned cordon/drain/shutdown, until 2026-09-17T08:00:00Z — marker written, no session
+OUT REACHED: end
+RC 0

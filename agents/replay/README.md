@@ -106,7 +106,16 @@ follows fix-density per ADR-103, never big-bang):
    is a leak vector; prefer hard values, and add newly-evidenced vars to run.sh's unset line,
    never per-bridge fixes. The 5 non-hermetic fixtures get lines or fixes.
    **Mechanism LIVE (same PR as move 2):** `requires:` in fixture.yaml, checked before dispatch,
-   loud absence. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
+   loud absence.
+   **The RECORDED WORLD is read-only to a run (2026-09-17).** `$REPLAY_WORLD` is the fixture's own
+   `world/` dir unless a named registry world is in play, so a bridge that DERIVES a world file —
+   a timestamp relative to now, the only honest way to pin a "closed N days ago" condition — writes
+   into git on every run unless it copies first. Two new fixtures did exactly that and left
+   `git status` dirty after the suite. The bridge-side remedy is one line
+   (`_w="$(mktemp -d)"; cp -r "$REPLAY_WORLD/." "$_w/"; REPLAY_WORLD="$_w"`), and `run.sh` hashes
+   every `world/` file before and after the run and REDS if any moved — hashing rather than
+   `git status` so the gate can tell "the run changed a world" from "the author is editing a
+   fixture". `--record`/`--rerecord` return before the check: writing worlds is their job. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
    the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench-*`
    pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
@@ -317,6 +326,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
+| `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-capture/uploads` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-cause-line/absent` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/already-bound` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/cause-missing` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
@@ -324,16 +335,31 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-cause-line/issue-unreadable` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-decided-once/decided` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-decided-once/human-closed-stale` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-decided-once/human-closed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-decided-once/witness-different-alert` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-engagement/bots-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-engagement/human-engaged` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-engagement/probe-failed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-graduation/responder-graduation` | suite | - | `-` | - |
 | `responder-remediation-would/responder-remediation-would` | suite | - | `-` | - |
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-reopen/human-closed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/declared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/pipe-in-reason` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/undeclared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/daemonset-reporter-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/homelab` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/node-exporter-instance` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/statefulset` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-infra-death` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-negative-cost` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/witness-pod-owned` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-unopted-phase-slow` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-touches-classify/responder-touches-classify` | suite | - | `-` | - |

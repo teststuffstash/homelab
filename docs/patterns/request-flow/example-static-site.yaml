@@ -15,5 +15,5 @@ stages:
      value: "nginx config in chart/templates/static-site.yaml (no add_header today)", rejection: "—", verify: "curl -I https://minutark.ee/connect.html → cf-cache-status + age; cache-control absent"}
   - {seq: 120, id: SITE-STATUS-BADGE, depends_on: ["mcp.minutark.ee/status"], stage: "freshness badge — browser fetch of the api host's /status", guard: "cross-origin; relies on the api host's own Access-Control-Allow-Origin and on the api claim being LIVE",
      value: "chart/static/status.html (absolute URL); index.html + connect.html still fetch RELATIVE (bug: hits stage 100's 404)", rejection: "badge 'unavailable' when the api host is down or CORS fails", verify: "browser devtools on https://minutark.ee/status.html; curl the api host with Origin"}
-  - {seq: 130, id: SITE-ERRORS, fulfils: CTR-ERRORS, stage: "rejection grammar: nginx 404/403 HTML; edge 403 JSON (operational-path block, when FU-206 lands); edge challenge pages are LEGAL on this profile",
+  - {seq: 130, id: SITE-ERRORS, fulfils: CTR-ERRORS, stage: "rejection grammar: nginx 404/403 HTML; 403 empty body on the operational paths (connector leg, FU-206); edge challenge pages are LEGAL on this profile",
      value: "nginx defaults", rejection: "text/html error pages", verify: "curl -I https://minutark.ee/nope → 404 text/html"}

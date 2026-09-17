@@ -9,27 +9,26 @@
 # The cluster layer (talos.tf) never learns which box a node runs on — it spans all of var.nodes.
 
 resource "proxmox_download_file" "talos_nx02" {
-  provider = proxmox.nx02
-
+  for_each                = local.vm_images # the same (schematic, role-version) set as pve (image.tf)
+  provider                = proxmox.nx02
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.nx02_node
-  file_name               = "talos-${var.talos_version}-nocloud-amd64.img"
-  url                     = data.talos_image_factory_urls.this.urls.disk_image
+  file_name               = "talos-${each.value.version}-${each.value.longhorn ? "longhorn-" : ""}nocloud-amd64.img"
+  url                     = data.talos_image_factory_urls.vm[each.key].urls.disk_image
   decompression_algorithm = "zst"
   overwrite               = false
 }
 
-resource "proxmox_download_file" "talos_longhorn_nx02" {
-  provider = proxmox.nx02
+# State carry-over from the pre-split pair — remove with image.tf's `moved` blocks.
+moved {
+  from = proxmox_download_file.talos_nx02
+  to   = proxmox_download_file.talos_nx02["plain-v1.13.2"]
+}
 
-  content_type            = "iso"
-  datastore_id            = var.datastore_images
-  node_name               = var.nx02_node
-  file_name               = "talos-${var.talos_version}-longhorn-nocloud-amd64.img"
-  url                     = data.talos_image_factory_urls.longhorn.urls.disk_image
-  decompression_algorithm = "zst"
-  overwrite               = false
+moved {
+  from = proxmox_download_file.talos_longhorn_nx02
+  to   = proxmox_download_file.talos_nx02["longhorn-v1.13.10"]
 }
 
 resource "proxmox_virtual_environment_vm" "nx02_node" {
@@ -66,10 +65,11 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     # The Micron NVMe thin pool, never the WD spinner `local-lvm` — this tier hosts the
     # containerd image store and a VM root, both of which the 5400-rpm disk would throttle.
     datastore_id = var.nx02_datastore_vms
-    # Same flag semantics as proxmox.tf: `longhorn` means "this VM TOUCHES Longhorn volumes"
-    # (iscsi-tools + util-linux-tools in the image), not "it serves replicas". Flipping it on a
-    # live VM changes file_id, i.e. plans a REPLACE of the node.
-    file_id     = each.value.longhorn ? proxmox_download_file.talos_longhorn_nx02.id : proxmox_download_file.talos_nx02.id
+    # Same two axes as proxmox.tf (image.tf `local.vm_image_key`): `longhorn` means "this VM
+    # TOUCHES Longhorn volumes" (iscsi-tools + util-linux-tools in the image), not "it serves
+    # replicas"; the role picks the version. Flipping either on a live VM changes file_id, i.e.
+    # plans a REPLACE of the node.
+    file_id     = proxmox_download_file.talos_nx02[local.vm_image_key[each.key]].id
     interface   = "scsi0"
     size        = each.value.disk_gb
     file_format = "raw"

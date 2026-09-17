@@ -54,6 +54,10 @@ case "$*" in
   *agentstacks*)                     exit 1 ;;                       # denied → stacks.json belt
   *"get applications.argoproj.io"*)  printf '{"items":[]}'; exit 0 ;; # no observation window open
   *"get cm responder-seen -o json"*) printf '{"data":{}}'; exit 0 ;;  # ledger empty → budget clear
+  # FU-230 leg (b): the declared-window record. ABSENT by default — an unreadable/absent record
+  # must read as NO window, so every other scenario exercises that path and a window can only ever
+  # silence a name a person deliberately declared.
+  *"get cm responder-window -o json"*) [ -f "$H/window.json" ] && { cat "$H/window.json"; exit 0; }; exit 1 ;;
 esac
 exit 0
 EOF
@@ -77,6 +81,19 @@ if [ "$1" = "api" ]; then
     *"/issues?"*) r="${_p#repos/}"; r="${r%%/issues?*}"
                   f="$H/gh/verdict-list-$(printf '%s' "$r" | tr / _).json"
                   { [ -f "$f" ] && cat "$f" || printf '[]'; } | _emit; exit 0 ;;
+    */issues/*/events)
+                  # The human-close probe (#1733). Absent ⇒ exit 1, which the clause reads as
+                  # "close actor unreadable" and treats as machine-closed — i.e. exactly today's
+                  # reopen behaviour. The guard may only ever ADD a restore.
+                  [ -f "$H/gh/events.json" ] && { _emit < "$H/gh/events.json"; exit 0; }; exit 1 ;;
+    */issues/77/comments)
+                  # The resolve leg's engagement probe (#1733). REST is the authority here — it is
+                  # the only endpoint that types a commenter (`.user.type`), which is what the
+                  # GraphQL `gh issue view --json comments` the leg used to call cannot do. An
+                  # ABSENT recording exits 1 so the rule-#6 "never close on a failed read" branch
+                  # stays reachable, exactly as the issue read below does.
+                  [ -f "$H/gh/issue-77-comments.json" ] && { _emit < "$H/gh/issue-77-comments.json"; exit 0; }; exit 1 ;;
+    */issues/77)    [ -f "$H/gh/issue-77.json" ] && { _emit < "$H/gh/issue-77.json"; exit 0; }; exit 1 ;;
     */issues/123)   { printf '{"id":"123123"}'; } | _emit; exit 0 ;;  # cause issue
     */issues/999)   { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;  # filed issue
     */issues/*)     { cat "$H/gh/verdict-issue.json" 2>/dev/null || printf '{}'; } | _emit; exit 0 ;;
@@ -91,11 +108,21 @@ cat > "$BIN/claude" <<'EOF'
 # and EGRESS_NOTE the real script built can be asserted on.
 printf '%s\n' "claude $*" >> "$H/calls.log"
 for a in "$@"; do case "$a" in -*) ;; *) printf '%s' "$a" > "$H/brief.txt"; break;; esac; done
+# A real session prints its report; the §A1 capture tees that into triage.log, and an EMPTY file
+# is deliberately not uploaded — so the stub must speak or the capture assertions pass vacuously.
+echo "triage report (stub): diagnosis and verdict would be here"
 exit 0
 EOF
 cat > "$BIN/curl" <<'EOF'
 #!/bin/bash
 printf '%s\n' "curl $*" >> "$H/calls.log"; exit 0
+EOF
+# §A1 capture (FU-210): the bucket write recorder. Present ALWAYS, so the difference between the
+# two capture paths is the KEY, never the binary — which is the real production shape (the Secret
+# is `optional: true`, the image always carries s5cmd).
+cat > "$BIN/s5cmd" <<'EOF'
+#!/bin/bash
+printf '%s\n' "s5cmd $*" >> "$H/calls.log"; exit 0
 EOF
 cat > "$BIN/git" <<'EOF'
 #!/bin/bash
@@ -122,6 +149,17 @@ go() {
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
 }
+# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately leaves it unset,
+# so every other scenario exercises the degrade path (`optional: true` Secret absent) and the
+# capture can never be load-bearing for a triage.
+go_ts() {
+  AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s \
+  AGENT_TS_BUCKET=agent-transcripts AGENT_TS_ENDPOINT=http://garage.garage.svc:3900 \
+  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
+  PUSHGATEWAY="" PATH="$BIN:$PATH" \
+    bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
+  OUT="$(cat "$H/out.txt")"
+}
 want()      { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
 wantnot()   { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout has: $2" || ok "$1"; }
 wantbrief() { grep -qF -- "$2" "$H/brief.txt" 2>/dev/null && ok "$1" || bad "$1" "brief lacks: $2"; }
@@ -130,7 +168,13 @@ wantnocall(){ grep -qF -- "$2" "$H/calls.log" 2>/dev/null && bad "$1" "unexpecte
 alert()     { printf '{"alerts":[{"status":"firing","fingerprint":"%s","labels":%s}]}' "$1" "$2"; }
 resolved()  { printf '{"alerts":[{"status":"resolved","fingerprint":"%s","labels":{"alertname":"%s"}}]}' "$1" "$2"; }
 searchhit() { printf '[{"repository":{"nameWithOwner":"%s"},"number":%s}]' "$1" "$2" > "$H/gh/search.json"; }
-issuebody() { jq -n --arg b "$1" --argjson c "$2" '{body:$b, comments:$c}' > "$H/gh/issue-77.json"; }
+# `$2` is the REST comments payload — `[{"user":{"login":…,"type":"Bot"|"User"}}]`. The TYPE is
+# what the engagement probe reads (#1733): GraphQL returns a Bot's bare login while REST returns
+# both the `[bot]` suffix AND the type, and the leg used to test the suffix against the GraphQL
+# endpoint, so every machine comment counted as a human for two months. Writing the type at each
+# call site is deliberate — it keeps the distinction visible in the scenario rather than hidden in
+# a helper.
+issuebody() { jq -n --arg b "$1" '{body:$b}' > "$H/gh/issue-77.json"; printf '%s' "$2" > "$H/gh/issue-77-comments.json"; }
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "LEG 1 — AgentWorkerEgressDropped: source IS the namespace, so subject + route recover"
@@ -319,6 +363,79 @@ v="$(stampval GithubWorkflowRunFailed argocd/resources/github-exporter/prometheu
 [ "$v" = "unset" ] && ok "GithubWorkflowRunFailed stays dispatchable (not stamped)" \
                    || bad "GithubWorkflowRunFailed unstamped" "got '${v:-alert not found}'"
 
+# ── THE ROUTING FILTER: what never reaches the lane at all (2026-09-17) ─────────────────────────
+# Tier 0 of the three routing tiers. The responder's Alertmanager child route carries
+# `severity != "info"` and `triage != "none"`, so a denied alert costs no Sensor trigger, no
+# workflow, no clone. Nothing downstream can catch a regression here: the route is in a values
+# file kubeconform SKIPs, and the in-pod `triage:none` belt would silently absorb a dropped
+# matcher while the workflow cost came back. Two readers exist and must agree — the route and
+# agents/meta-alert-crosscheck.sh, which would otherwise report every denied alert as stuck
+# machinery. So: assert the matchers ARE on the route, assert the crosscheck applies the same
+# two predicates, and assert the declarations on the rules the filter is FOR.
+section "routing — the tier-0 filter (route matchers ⟷ the crosscheck ⟷ the rule-site labels)"
+VALUES="$REPO/argocd/platform/values/kube-prometheus-stack.yaml"
+RMATCH="$(yq -r '.alertmanager.config.route.routes[] | select(.receiver == "agent-responder") | .matchers[]' "$VALUES" 2>/dev/null | tr '\n' ' ')"
+case "$RMATCH" in
+  *'severity != "info"'*) ok "the responder route denies severity:info" ;;
+  *) bad "responder route denies severity:info" "matchers are: ${RMATCH:-<none>}" ;;
+esac
+case "$RMATCH" in
+  *'triage != "none"'*) ok "the responder route honours triage:none (tier 0, not just the in-pod belt)" ;;
+  *) bad "responder route honours triage:none" "matchers are: ${RMATCH:-<none>}" ;;
+esac
+# The crosscheck's predicate, asserted on the SOURCE rather than by running it: its Alertmanager
+# read needs the LAN and this harness is hermetic. A dropped `select` here is the loud-but-wrong
+# failure (every denied alert reported UNTRIAGED), which is how a belt teaches its reader to
+# ignore it — so it is worth a grep-level pin.
+XCHK="$REPO/agents/meta-alert-crosscheck.sh"
+grep -qF 'select((.labels.triage // "") != "none")' "$XCHK" \
+  && ok "meta-alert-crosscheck excludes triage:none (reader 2 agrees with the route)" \
+  || bad "crosscheck excludes triage:none" "predicate missing from $XCHK"
+grep -qF 'select((.labels.severity // "") != "info")' "$XCHK" \
+  && ok "meta-alert-crosscheck excludes severity:info (reader 2 agrees with the route)" \
+  || bad "crosscheck excludes severity:info" "predicate missing from $XCHK"
+grep -qF 'routing-denied' "$XCHK" \
+  && ok "…and names the denied set once, so a denied alert is quiet but not invisible" \
+  || bad "crosscheck names the denied set" "no routing-denied summary line in $XCHK"
+# The same rule one level up: a PAUSED lane (FU-249's never-matching Sensor filter) is a deliberate
+# stop, and without this the crosscheck reports every firing alert as stuck machinery — observed
+# live during the 2026-09-17 pause. A belt that cries wolf through a planned stand-down is one its
+# reader learns to skip.
+grep -qF 'responder PAUSED at the Sensor' "$XCHK" \
+  && ok "…and a PAUSED lane reads as a deliberate stop, not as stuck machinery" \
+  || bad "crosscheck sees a paused lane" "no pause line in $XCHK"
+
+# The rule-site declarations the filter is FOR. Same shape as the #239 stamp assertions above and
+# the same reason: a rule edit that drops one makes the alert dispatchable again in silence, and
+# no schema has an opinion about labels. Each entry here is an OPERATOR-QUEUE alert — its remedy
+# is an act only the operator can take, so a session could only re-conclude the annotation.
+triageval() { # <alertname> <file> → "none" | "unset" | "" (alert not found)
+  A="$1" yq -r '.spec.groups[].rules[] | select(.alert == strenv(A)) | .labels.triage // "unset"' \
+    "$REPO/$2" 2>/dev/null | head -1
+}
+notriage() { # <alertname> <file>
+  local v; v="$(triageval "$1" "$2")"
+  [ "$v" = "none" ] && ok "$1 declares triage:none (${2##*/resources/})" \
+                    || bad "$1 declares triage:none in $2" "got '${v:-alert not found}'"
+}
+notriage CodeownerParkWaiting         argocd/resources/github-exporter/prometheusrule.yaml
+notriage BlockingCodeownerParkWaiting argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubVendorOutage           argocd/resources/github-exporter/prometheusrule.yaml
+notriage AnthropicVendorDegraded      argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubPaidUsage              argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubActionsMinutesHigh     argocd/resources/github-exporter/prometheusrule.yaml
+notriage GithubStorageHeldHigh        argocd/resources/github-exporter/prometheusrule.yaml
+notriage AgentAttentionStanding       argocd/resources/pushgateway/prometheusrule.yaml
+# …and the counterexamples, so `triage: none` stays a JUDGMENT rather than a habit. Both are
+# alerts whose cause lives inside something the lane can read, so both must keep costing a
+# session: a red master CI run in a claimed repo, and a rate-limit pool that a loop can drain
+# (the FU-084 shape).
+for pair in "GithubWorkflowRunFailed" "GithubRateLimitLow"; do
+  v="$(triageval "$pair" argocd/resources/github-exporter/prometheusrule.yaml)"
+  [ "$v" = "unset" ] && ok "$pair stays triage-eligible (investigable from in-cluster reads)" \
+                     || bad "$pair stays triage-eligible" "got '${v:-alert not found}'"
+done
+
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#125 — the two brief rules that ride EVERY triage, not just egress drops"
 # Both are 2026-08-08 failures with no schema that could catch them: a session that re-derived from
@@ -350,9 +467,20 @@ section "#149 — subject identity: a related-but-different subject files FRESH 
 # its own, and (b) instruct filing fresh + linking whenever the thread found does not already carry
 # it. A regression that deleted the boundary would fail here even though no issue is ever touched.
 
+# ⚠ UPDATED 2026-09-16 (#1733, FU-232). This scenario used to send the alert WITHOUT its `job`
+# label and assert `subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter` —
+# i.e. it asserted the GRAFT as correct behaviour, because the shape it sent could not reach the
+# reporter discriminator. The payload below is the live one, read off Alertmanager 2026-09-16:
+# `job=node-exporter` (the scrape job, which is what declares the pod a REPORTER) and
+# `instance=192.168.2.182:9100` (the failing node, the only label that names the object at all).
+# The #149 boundary the rest of this scenario asserts is unchanged and is the reason it still
+# exists — FU-232 makes the subject name the right thing, #149 keeps one subject per thread, and
+# they are independent.
 scenario subject-identity-graft
-go "$(alert f15 '{"alertname":"NodeMemoryMajorPagesFaults","namespace":"monitoring","pod":"kube-prometheus-stack-prometheus-node-exporter-x7k2p"}')"
-want      "the grafted alert computes its OWN subject (not #103's node/workload one)" \
+go "$(alert f15 '{"alertname":"NodeMemoryMajorPagesFaults","namespace":"monitoring","pod":"kube-prometheus-stack-prometheus-node-exporter-x7k2p","job":"node-exporter","instance":"192.168.2.182:9100"}')"
+want      "the reporter's pod is NOT the subject — the failing target is (FU-232)" \
+          "subject=instance:192.168.2.182:9100"
+wantnot   "…and the node-exporter workload key that made #103 a magnet is gone" \
           "subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter"
 wantbrief "comment ONLY where the alert's own subject marker is already on the thread" \
           "is ALREADY a marker on that thread"
@@ -400,7 +528,7 @@ scenario resolve-report-only
 searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r2
-fix-verdict: report-only' '[{"author":{"login":"homelab-agents-1234[bot]"}}]'
+fix-verdict: report-only' '[{"user":{"login":"homelab-agents-1234[bot]","type":"Bot"}}]'
 go "$(resolved r2 PVCNearFull)"
 want     "report-only, bots only → commented + CLOSED (unchanged)" "commented + CLOSED"
 wantcall "report-only, bots only → the ✅ comment is still posted" "issue comment"
@@ -414,7 +542,7 @@ scenario resolve-report-only-human
 searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r3
-fix-verdict: report-only' '[{"author":{"login":"RasmusSoot"}}]'
+fix-verdict: report-only' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r3 PVCNearFull)"
 want       "report-only + a human → left OPEN (unchanged)" "left OPEN"
 wantnocall "report-only + a human → not closed" "issue close"
@@ -431,7 +559,7 @@ searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r3
 fix-verdict: report-only
-last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"author":{"login":"RasmusSoot"}}]'
+last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r3 PVCNearFull)"
 wantnocall "second clear on an OPEN human-engaged issue → ZERO new comments (the flap case)" "issue comment"
 n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
@@ -439,7 +567,7 @@ n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
 
 scenario resolve-report-only-human-no-marker
 searchhit teststuffstash/homelab 77
-issuebody 'a body the search matched via a COMMENT — it carries no alert-fp line of its own' '[{"author":{"login":"RasmusSoot"}}]'
+issuebody 'a body the search matched via a COMMENT — it carries no alert-fp line of its own' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r8 PVCNearFull)"
 want       "no alert-fp in the body → left untouched, never half-written" "left untouched"
 wantnocall "…and still no comment (an unguarded body is not a reason to churn)" "issue comment"
@@ -461,7 +589,7 @@ wantnocall "unreadable issue → not commented" "issue comment"
 
 scenario resolve-partial-read
 searchhit teststuffstash/homelab 77
-printf '{"body":"alert-fp:r6","comments":[' > "$H/gh/issue-77.json"   # truncated, still exit 0
+printf '{"body":"alert-fp:r6","labels":[' > "$H/gh/issue-77.json"   # truncated, still exit 0
 go "$(resolved r6 PVCNearFull)"
 want       "PARTIAL read → left alone (the jq -e parse guard)" "left alone"
 wantnocall "PARTIAL read → not closed" "issue close"
@@ -544,6 +672,131 @@ go "$(alert c4 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentv
 want       "already bound → issue filed normally" "labelled agent-fix"
 wantnocall "already bound → no /sub_issues POST" "/sub_issues"
 want       "already bound → logged as 'skip re-link'" "skip re-link"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#1733 — a HUMAN's close is a decision the session is told about"
+# The reopen belt (FU-133 subject + alert-fp) restores a closed thread so a FLAPPING alert does not
+# churn new issues — and it had no opinion about WHO closed the thread. Measured on the live board
+# 2026-09-16: homelab#103 closed by the operator and reopened by this lane FIVE times since
+# 2026-08-05; #100 and #121 three times each; #542/#811/#241/#538 all reopened after an operator
+# close, two of them within 48 h of the 2026-09-14 responder pass.
+#
+# The BELT is the guard and is pinned by `agents/replay/fixtures/responder-reopen/human-closed`
+# (it re-closes after the session, ADR-094: the LLM judges, the shell acts). What THIS section
+# asserts is the other half — that the session is TOLD, so it spends no turns on a reopen that gets
+# reverted and its own record reads honestly.
+
+scenario human-closed-note
+searchhit teststuffstash/homelab 103
+printf '[{"event":"closed","actor":{"login":"RasmusSoot","type":"User"},"created_at":"2026-08-30T20:19:41Z"}]' > "$H/gh/events.json"
+go "$(alert f20 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+want      "the human close is named in the log" "HUMAN-CLOSED"
+wantbrief "the brief names the threads the belt will restore" "HUMAN-CLOSED THREADS"
+wantbrief "…and says what to do instead of reopening" "COMMENT on it and leave it closed"
+wantbrief "…and keeps the flap case legal (machinery undoing machinery)" \
+          "Reopening is for a thread the resolve leg closed when its alert cleared"
+
+scenario machine-closed-no-note
+searchhit teststuffstash/homelab 103
+printf '[{"event":"closed","actor":{"login":"homelab-agents-1234[bot]","type":"Bot"},"created_at":"2026-08-04T10:07:11Z"}]' > "$H/gh/events.json"
+go "$(alert f21 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+wantnot   "a lane-closed thread is NOT flagged — the flap case is untouched" "HUMAN-CLOSED"
+wantbrief "…and the ordinary reopen instruction still stands" "REOPEN that one"
+
+scenario close-actor-unreadable
+searchhit teststuffstash/homelab 103
+go "$(alert f22 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
+want      "an unreadable close actor says so by name" "close actor unreadable"
+wantnot   "…and does NOT claim a human close it cannot prove" "HUMAN-CLOSED"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-230 leg (b) — the DECLARED window"
+# Leg (a)'s Alertmanager silences match `node`, `instance`, the node's pod names and the zone
+# Garage set. One class is beyond all four: a rollout alert labelled by namespace + daemonset
+# carries neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence.
+# 2026-09-16 proved it twice — an nx-01 reinstall leaked KubeDaemonSetRolloutStuck with all four
+# arms armed, and wk-03's shutdown leaked five classes the seat then silenced by hand for 8 h. So
+# the seat DECLARES the names instead, and the responder reads that record.
+
+_window() { # <alert,alert,...>
+  jq -n --arg a "$1" '{data:{"w-wk-03-1":({id:"wk-03-1", by:"node-maintenance.sh",
+      opened_at:"2026-01-01T00:00:00Z", until:"2099-01-01T00:00:00Z", node:"wk-03", note:"",
+      reason:"node-maintenance window on wk-03 — planned cordon/drain/shutdown",
+      alerts:($a|split(","))} | tojson)}}' > "$H/window.json"
+}
+
+scenario window-declared
+_window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
+go "$(alert w1 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+want     "a declared alert spawns no session" "DECLARED WINDOW wk-03-1 names this alert"
+wantnot  "…and never reaches the triage" "subject="
+wantcall "…with a ledger marker, so a deliberate stop is not a drop (FU-113a)" '"window-'
+
+scenario window-undeclared
+_window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
+go "$(alert w2 '{"alertname":"GarageClusterFlapping","namespace":"garage","pod":"garage-2"}')"
+wantnot "an UNdeclared alert is not suppressed by an open window" "DECLARED WINDOW"
+want    "…and triages normally — scoping is by alert NAME, never by node or namespace" "subject=workload:garage/garage-2"
+
+scenario window-expired
+jq -n '{data:{"w-old":({id:"wk-03-old", by:"node-maintenance.sh", opened_at:"2020-01-01T00:00:00Z",
+   until:"2020-01-01T03:00:00Z", node:"wk-03", note:"", reason:"an old window",
+   alerts:["KubeDaemonSetRolloutStuck"]} | tojson)}}' > "$H/window.json"
+go "$(alert w3 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+wantnot "an EXPIRED window suppresses nothing" "DECLARED WINDOW"
+want    "…and the alert triages" "subject=workload:kube-system/cilium"
+
+scenario window-absent
+go "$(alert w4 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+wantnot "an unreadable/absent record reads as NO window (rule #6, suppressing direction)" "DECLARED WINDOW"
+want    "…and the alert triages" "subject=workload:kube-system/cilium"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-210 / FU-231 — the §A1 transcript + finding record"
+# A triage that files nothing used to leave NOTHING: the 2026-09-03 forgejo-pg-1 session marked the
+# subject triaged, filed no issue anywhere, and the probe lane deferred to it as COVERED while the
+# alert stood 8 h. The decision was unrecoverable. So every session now writes its transcript, its
+# input alert and a typed finding to s3://agent-transcripts/homelab/alert-<fp>/responder-r1-<ts>/.
+# What the harness can hold: the prefix shape, WHICH files go up, that the verdict reaches the
+# finding record, and — the load-bearing half — that a missing key degrades instead of failing.
+
+scenario capture-degrades
+printf '[]' > "$H/gh/search.json"
+go "$(alert ts1 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want      "no S3 key → capture skipped, loudly" "no S3 key in pod"
+want      "…and the triage itself still completes" "subject=pvc:monitoring/x"
+wantnocall "…and nothing is written to the bucket" "s5cmd"
+
+scenario capture-uploads
+printf '[]' > "$H/gh/search.json"
+printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+go_ts "$(alert ts2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want     "the prefix is FU-210's: homelab/alert-<fp>/responder-r1-<ts>" "s3://agent-transcripts/homelab/alert-ts2/responder-r1-"
+wantcall "the INPUT alert is captured (the record is replayable)" "cp /tmp/alert-one.json"
+wantcall "the session's own words are captured" "cp /tmp/triage.log"
+wantcall "…with the A1 manifest beside them" "cp /tmp/ts-manifest.json"
+wantcall "…and the FU-231 typed finding record" "cp /tmp/ts-finding.json"
+want     "a triage that filed NOTHING still records a finding — the 09-03 shape" "verdict='none' issue='none'"
+
+# The verdict must REACH the record, or the finding is a list of alerts rather than of decisions.
+scenario capture-finding-verdict
+printf '[]' > "$H/gh/search.json"
+printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '[{number:42, body:"alert-fp:ts3\nfix-verdict: fix"}]' > "$H/gh/verdict-list-teststuffstash_sleep-iac.json"
+jq -n '{body:"alert-fp:ts3\nfix-verdict: fix"}' > "$H/gh/verdict-issue.json"
+go_ts "$(alert ts3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want "the finding carries the verdict and the filed issue" "verdict='fix' issue='teststuffstash/sleep-iac#42'"
+
+# The capture runs BEFORE the post-session belts, so a failure down there cannot cost the
+# transcript — that ordering IS the FU-210 property and is worth pinning rather than trusting.
+scenario capture-precedes-belts
+printf '[]' > "$H/gh/search.json"
+go_ts "$(alert ts4 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+tsline="$(grep -n 'transcripts: uploaded' "$H/out.txt" | head -1 | cut -d: -f1)"
+vline="$(grep -n 'verdict:' "$H/out.txt" | head -1 | cut -d: -f1)"
+{ [ -n "$tsline" ] && [ -n "$vline" ] && [ "$tsline" -lt "$vline" ]; } \
+  && ok "the transcript upload precedes the verdict/dispatch belts" \
+  || bad "transcript upload precedes the belts" "upload at line ${tsline:-none}, verdict at ${vline:-none}"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1)"

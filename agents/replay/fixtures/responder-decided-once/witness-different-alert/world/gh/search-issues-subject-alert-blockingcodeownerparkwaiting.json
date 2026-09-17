@@ -1,0 +1,8 @@
+[
+  {
+    "repository": {"nameWithOwner": "teststuffstash/homelab"},
+    "number": 1598,
+    "title": "🚨 CodeownerParkWaiting: PR #1576 parked (a DIFFERENT alert class on the same subject)",
+    "body": "alert-fp:0000000000000000\nfix-verdict: report-only\n"
+  }
+]
