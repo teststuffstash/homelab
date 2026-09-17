@@ -54,6 +54,10 @@ case "$*" in
   *agentstacks*)                     exit 1 ;;                       # denied → stacks.json belt
   *"get applications.argoproj.io"*)  printf '{"items":[]}'; exit 0 ;; # no observation window open
   *"get cm responder-seen -o json"*) printf '{"data":{}}'; exit 0 ;;  # ledger empty → budget clear
+  # FU-230 leg (b): the declared-window record. ABSENT by default — an unreadable/absent record
+  # must read as NO window, so every other scenario exercises that path and a window can only ever
+  # silence a name a person deliberately declared.
+  *"get cm responder-window -o json"*) [ -f "$H/window.json" ] && { cat "$H/window.json"; exit 0; }; exit 1 ;;
 esac
 exit 0
 EOF
@@ -393,6 +397,13 @@ grep -qF 'select((.labels.severity // "") != "info")' "$XCHK" \
 grep -qF 'routing-denied' "$XCHK" \
   && ok "…and names the denied set once, so a denied alert is quiet but not invisible" \
   || bad "crosscheck names the denied set" "no routing-denied summary line in $XCHK"
+# The same rule one level up: a PAUSED lane (FU-249's never-matching Sensor filter) is a deliberate
+# stop, and without this the crosscheck reports every firing alert as stuck machinery — observed
+# live during the 2026-09-17 pause. A belt that cries wolf through a planned stand-down is one its
+# reader learns to skip.
+grep -qF 'responder PAUSED at the Sensor' "$XCHK" \
+  && ok "…and a PAUSED lane reads as a deliberate stop, not as stuck machinery" \
+  || bad "crosscheck sees a paused lane" "no pause line in $XCHK"
 
 # The rule-site declarations the filter is FOR. Same shape as the #239 stamp assertions above and
 # the same reason: a rule edit that drops one makes the alert dispatchable again in silence, and
@@ -697,6 +708,48 @@ searchhit teststuffstash/homelab 103
 go "$(alert f22 '{"alertname":"NodeSystemSaturation","namespace":"monitoring","node":"wk-01"}')"
 want      "an unreadable close actor says so by name" "close actor unreadable"
 wantnot   "…and does NOT claim a human close it cannot prove" "HUMAN-CLOSED"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-230 leg (b) — the DECLARED window"
+# Leg (a)'s Alertmanager silences match `node`, `instance`, the node's pod names and the zone
+# Garage set. One class is beyond all four: a rollout alert labelled by namespace + daemonset
+# carries neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence.
+# 2026-09-16 proved it twice — an nx-01 reinstall leaked KubeDaemonSetRolloutStuck with all four
+# arms armed, and wk-03's shutdown leaked five classes the seat then silenced by hand for 8 h. So
+# the seat DECLARES the names instead, and the responder reads that record.
+
+_window() { # <alert,alert,...>
+  jq -n --arg a "$1" '{data:{"w-wk-03-1":({id:"wk-03-1", by:"node-maintenance.sh",
+      opened_at:"2026-01-01T00:00:00Z", until:"2099-01-01T00:00:00Z", node:"wk-03", note:"",
+      reason:"node-maintenance window on wk-03 — planned cordon/drain/shutdown",
+      alerts:($a|split(","))} | tojson)}}' > "$H/window.json"
+}
+
+scenario window-declared
+_window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
+go "$(alert w1 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+want     "a declared alert spawns no session" "DECLARED WINDOW wk-03-1 names this alert"
+wantnot  "…and never reaches the triage" "subject="
+wantcall "…with a ledger marker, so a deliberate stop is not a drop (FU-113a)" '"window-'
+
+scenario window-undeclared
+_window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
+go "$(alert w2 '{"alertname":"GarageClusterFlapping","namespace":"garage","pod":"garage-2"}')"
+wantnot "an UNdeclared alert is not suppressed by an open window" "DECLARED WINDOW"
+want    "…and triages normally — scoping is by alert NAME, never by node or namespace" "subject=workload:garage/garage-2"
+
+scenario window-expired
+jq -n '{data:{"w-old":({id:"wk-03-old", by:"node-maintenance.sh", opened_at:"2020-01-01T00:00:00Z",
+   until:"2020-01-01T03:00:00Z", node:"wk-03", note:"", reason:"an old window",
+   alerts:["KubeDaemonSetRolloutStuck"]} | tojson)}}' > "$H/window.json"
+go "$(alert w3 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+wantnot "an EXPIRED window suppresses nothing" "DECLARED WINDOW"
+want    "…and the alert triages" "subject=workload:kube-system/cilium"
+
+scenario window-absent
+go "$(alert w4 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
+wantnot "an unreadable/absent record reads as NO window (rule #6, suppressing direction)" "DECLARED WINDOW"
+want    "…and the alert triages" "subject=workload:kube-system/cilium"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "FU-210 / FU-231 — the §A1 transcript + finding record"

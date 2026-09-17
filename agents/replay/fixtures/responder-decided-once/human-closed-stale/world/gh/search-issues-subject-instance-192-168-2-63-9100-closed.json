@@ -1,0 +1,8 @@
+[
+  {
+    "repository": {"nameWithOwner": "teststuffstash/homelab"},
+    "number": 1663,
+    "title": "🚨 NodeRebootingRepeatedly: wk-03 booted 3 times in 7 d",
+    "body": "Guest-side reboots on wk-03; the serial console is now capturing (#882).\n\nalert-fp:9f62f04e462fde41\nfix-verdict: report-only\n"
+  }
+]

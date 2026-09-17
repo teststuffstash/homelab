@@ -1,0 +1,24 @@
+# 2026-09-17 — a human's close has a SHELF LIFE. The other side of the threshold.
+#
+# CONDITION UNDER REPLAY. The same wk-03 reboot thread, closed by the operator 400 days ago, and
+# the alert fires today.
+#
+# WHAT IT REDS ON. A close decides about the condition AS IT STOOD. Without an expiry the gate
+# would be a permanent mute keyed on a thread nobody remembers: a box that starts rebooting again
+# next year would be silently untriaged, which is the "absence looks like health" failure this
+# platform keeps paying for. RESPONDER_HUMAN_CLOSE_DAYS (14) is set past the longest lookback
+# window any rule here uses — `NodeRebootingRepeatedly` is `[7d]` — and short enough that a
+# re-emergence buys its session back.
+#
+# THE CONTRACT: the branch is NOT taken, no marker is written, the log says why in one line, and
+# the alert falls through to an ordinary triage — `reached.sh` printing IS the assertion.
+pins:
+  - IL-T03
+name: responder-decided-once-human-closed-stale
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-decided-once
+  - file:../decided/reached.sh
+  - file:../decided/post.sh

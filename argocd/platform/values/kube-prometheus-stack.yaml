@@ -296,9 +296,13 @@ alertmanager:
         # report a deliberately-unrouted alert as UNTRIAGED machinery. Change one, change both.
         # ⚠ A stock chart rule cannot carry `triage` (no per-alert label hook; `defaultRules`
         # only offers disable + fleet-wide labels). The escape hatch for one of those is an
-        # `alertname!~` matcher HERE, with its reason — but prefer scoping or replacing the rule:
-        # KubeJobFailed fired 48× in the 7d to 2026-09-17 and every one was a real broken
-        # CronJob (fstrim-guard-wk-01), so denying it would have hidden the fault, not the noise.
+        # `alertname!~` matcher HERE, with its reason — but prefer scoping or replacing the rule.
+        # KubeJobFailed is the worked example: 48 firing SERIES in the 7d to 2026-09-17 reads like
+        # the loudest thing on the board and is mostly NAME CHURN (a CronJob mints a new job_name
+        # per run, so one broken schedule bills one series per tick and the responder's subject key
+        # already collapses them). Behind it: 45 fstrim-guard runs failing through the 09-16 worker
+        # replacements, 3 live garage job failures. Denying the NAME buys quiet on a count while
+        # blinding the only generic signal a Job with no purpose-built belt has.
         - continue: true
           group_by:
             - alertname

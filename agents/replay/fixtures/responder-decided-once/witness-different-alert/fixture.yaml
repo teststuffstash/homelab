@@ -15,6 +15,12 @@
 #
 # THE CONTRACT: no match, no body write, no marker — the gate falls through and `reached.sh`
 # prints, so the alert is triaged normally.
+# ⚠ THE STREAM GAINED A SECOND SEARCH 2026-09-17 (the human-close branch). When the OPEN search
+# finds no decided record, the gate now asks the CLOSED set the same question — a person's close is
+# a decision too, and keying only on an open issue made an operator close INVISIBLE (a full session
+# and a NEW issue filed against that close, every UTC day the condition stood). The cost is one more
+# `gh search` per alert, and only on the path where nothing open was decided; the saving is whole
+# sessions. This witness still falls through to triage, which is the property it exists for.
 pins:
   - IL-T03
 name: responder-decided-once-witness-different-alert

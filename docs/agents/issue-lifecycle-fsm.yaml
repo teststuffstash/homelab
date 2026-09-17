@@ -136,6 +136,10 @@ transitions:
       - agents/replay/fixtures/responder-engagement/probe-failed
       - agents/replay/fixtures/responder-capture/uploads
       - agents/replay/fixtures/responder-capture/no-key
+      - agents/replay/fixtures/responder-seat-window/declared
+      - agents/replay/fixtures/responder-seat-window/undeclared
+      - agents/replay/fixtures/responder-decided-once/human-closed
+      - agents/replay/fixtures/responder-decided-once/human-closed-stale
     guards:
       - desc: "the label is applied by the SHELL and is a DIAGNOSIS, not a dispatch — queueing is the debouncer's"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "queueing is the debouncer" }
@@ -157,6 +161,12 @@ transitions:
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "transcripts: uploaded" }
       - desc: "…and the capture DEGRADES rather than failing: a missing key, a missing s5cmd or a refused put is one loud line, and the `|| true` on the transcript `find` is what keeps pipefail + set -e from taking down the whole alert loop when claude died before writing a session"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "capture skipped" }
+      - desc: "DECLARED WINDOW (FU-230 leg b): a seat-written ConfigMap names the alert classes a planned window produces, and those spawn no session. Matched on the alert NAME, because the class that leaks leg (a)'s label-scoped silences carries neither `node` nor `instance` — an nx-01 reinstall leaked KubeDaemonSetRolloutStuck with all four silences armed (2026-09-16). Scoped by name and never by namespace: a namespace-wide mute would have hidden the rf=3 rollout's REAL findings"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "DECLARED WINDOW" }
+      - desc: "…and an unreadable window record reads as NO window (rule #6 in the suppressing direction — a window may only ever silence a name a person deliberately declared)"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: 'SEATWIN=.\[\].' }
+      - desc: "a PERSON's close decides the condition too, for RESPONDER_HUMAN_CLOSE_DAYS (14): DECIDED-ONCE keyed only on an OPEN issue, so an operator close made the lane blind — a full session and a NEW issue filed against that close, daily, for as long as the condition stood (the 7d-lookback reboot rules are the shape). Nothing is written on a thread a human ended"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "HUMAN-DECIDED" }
 
   - id: IL-T23
     name: "fix-verdict bell → debounce → the pending SET (state is GitHub labels, nowhere else)"

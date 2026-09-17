@@ -295,7 +295,22 @@ Ready, uncordons, then waits until the Longhorn node is Schedulable and every at
 healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
 elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
 re-sync when the node returns. cp-01 is out of scope (only control plane → §Proxmox host
-maintenance window). Two lessons from the first run:
+maintenance window).
+
+**The window also declares itself to the alert path, in two halves that cover different label
+shapes** (FU-230; `SILENCE=0` opts out of both). `settle`/`down` open Alertmanager silences keyed on
+`node`, `instance`, the node's pod names and — on a zone node — the Garage health set, and `up`
+expires them; those silences live on an emptyDir, so a monitoring restart mid-window drops them
+(FU-195). They cannot reach the rollout class at all: `KubeDaemonSetRolloutStuck` and kin carry
+neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence. So the
+same acts also open a **declared window** ([`agents/seat-window.sh`](../agents/seat-window.sh) → a
+ConfigMap the responder reads, [glossary](glossary.md)) naming those alert NAMES, which suppresses
+the LLM triage for them only — they still fire, still notify, still show in Grafana. Declare one by
+hand for work this script does not drive (a Proxmox host window, a cable):
+`bash agents/seat-window.sh open --reason "…" --alerts A,B --hours 3`, then `close --node <n>`;
+`list` shows what is live.
+
+Two lessons from the first run:
 
 - **WoL does not survive an AC cut.** The NIC is armed by the previous boot and only on standby
   power — a box that was unplugged for the work needs the button once. `up` says so after 120 s

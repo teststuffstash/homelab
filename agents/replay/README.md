@@ -327,6 +327,8 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-cause-line/malformed` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/valid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-decided-once/decided` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-decided-once/human-closed-stale` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-decided-once/human-closed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-decided-once/witness-different-alert` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-engagement/bots-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-engagement/human-engaged` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -336,6 +338,8 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-reopen/fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/human-closed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/declared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/undeclared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/daemonset-reporter-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |

@@ -44,6 +44,21 @@ MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | tes
 NONE_MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^none-")) | .key' | tr '\n' ' ')"
 [ -n "$LEDGER$MARKED$NONE_MARKED" ] || echo "NOTE: responder-seen ledger empty/unreadable — every eligible alert below is unexplained"
 
+# ── A PAUSED LANE IS A DELIBERATE STOP, NOT STUCK MACHINERY (2026-09-17) ───────────────────────
+# The same rule this script applies per-alert (a marker distinguishes a deliberate skip from a
+# drop), applied to the lane as a whole. FU-249 pauses the responder by giving its Sensor's
+# `alert-dep` a never-matching data filter; nothing else changes, so from here the lane looks
+# exactly like an EventSource that died — and every firing alert reads UNTRIAGED. Observed live
+# during the 2026-09-17 pause: 3 UNTRIAGED lines and a non-zero exit for a state the operator
+# deliberately created. A belt that cries wolf through a planned stand-down is a belt its reader
+# learns to skip, which is the only failure mode it actually has.
+# Read from the Sensor itself, not from a second copy of the fact. An unreadable read says so and
+# falls through to the ordinary report — a pause it cannot prove is not a pause.
+PAUSE="$(kubectl -n agent-coordinator get sensor responder   -o jsonpath='{.spec.dependencies[*].filters.data[*].value[*]}' 2>/dev/null || true)"
+case "$PAUSE" in
+  *paused*) echo "responder PAUSED at the Sensor ('$PAUSE') — every firing alert below is untriaged BY DESIGN, not by a stuck belt; re-enable by deleting that filter (FU-249)";;
+esac
+
 CUTOFF="$(date -u -d "-${GRACE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
 FOUND=0
 while IFS=$'\t' read -r fp name started; do
