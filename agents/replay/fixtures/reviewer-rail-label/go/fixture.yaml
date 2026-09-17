@@ -1,0 +1,18 @@
+# 2026-09-17 — a review SERVED FROM THE GO RAIL must not take an Anthropic semaphore slot.
+#
+# CONDITION UNDER REPLAY. The failover has fired: the subscription is latched, the Go rail is
+# clear, and reviewer-session.sh has set MODEL=opencode-go/qwen3.7-plus. The pod that carries
+# that review draws the OpenCode windows and no Anthropic capacity at all.
+#
+# THE CONTRACT: the pod carries `homelab.teststuff.net/rail: opencode-go` and NOT
+# `subscription-session: claude`. The inversion this pins is why it matters — failover fires
+# BECAUSE the Anthropic window is latched, so a Go ride holding an Anthropic slot consumes the
+# capacity it was dispatched to route around (five would block subscription dispatch outright),
+# while OPENCODE_MAX_RUNNING counts it as zero. Found live on the first two Go-served reviews.
+name: reviewer-rail-label-go
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-rail-label
+  - file:post.sh
