@@ -9567,3 +9567,67 @@ every other path). Found while reading Workspace state: `pr-oracle-fleet-minutar
 `Synced=False` since 09-16 on a terraform state lock stale since **09-09** (held by a pod that no longer
 exists; the kubernetes backend's lease `lock-tfstate-pr-oracle-fleet-minutark-garage` was the only one in
 crossplane-system with a holder) — cleared by dropping the holder + lock-info annotation.
+
+## 2026-09-17 ~06:20–08:30Z — the responder rebuild's second half: what never reaches the lane, what it records, what it decides once
+
+Operator: *"Build Responder follow-ups that are still not done — FU-210, FU-230, FU-231 … Figure out
+which alerts are not actionable and should not be routed to the responder at all."* Corpus session
+(`/design-agents`, full load). Three PRs, all merged or armed; the lane is still PAUSED (FU-249), so
+every acceptance below is written as a thing to READ at un-pause rather than claimed.
+
+**The ask's third leg first, because it reframed the other two.** The question "which alerts should
+never reach the lane" has a testable form: *could a bounded in-cluster investigation change what
+anyone does about this?* `info` fails it by definition. The OPERATOR-QUEUE class fails it by
+construction — the remedy is an act only the operator can take, so a session can only re-state the
+annotation. `CodeownerParkWaiting` had carried `triage: none` on exactly that argument since
+2026-08-12 and nothing had generalised it; `BlockingCodeownerParkWaiting`'s own rule comment stated
+the argument verbatim and carried only the machinery cap.
+
+**PR#1748 — the routing filter (tier 0).** `triage: none` was honoured only INSIDE the pod, so a
+self-describing alert still bought an Argo workflow and a git clone: **154 of the responder ledger's
+1190 entries are that marker.** Both it and `severity != "info"` are matchers on the responder's own
+Alertmanager child route now — zero cost, and the alert still reaches Home Assistant and Grafana.
+Five rules gained the declaration (AgentAttentionStanding — 19 firing series in 7 d and the audit's
+own `#1546` row; BlockingCodeownerParkWaiting; the three GitHub spend/quota rules).
+⚠ **Two readers of a tier-0 predicate now exist** — the route and `meta-alert-crosscheck.sh`, which
+would otherwise report every denied alert as stuck machinery (loud-but-wrong, the direction that
+teaches a reader to ignore a belt). The crosscheck applies both `select`s and prints ONE trailing
+`routing-denied:` line; the pairing is asserted in `responder-behaviour-test.sh` §routing.
+NOT denied, deliberately: `CloudflareZonePlanNotFree` (its author ruled triage-runs-but-cannot-merge
+in the rule itself — flipping that quietly is not a routing change's business), and `KubeJobFailed`,
+whose 48 series looked like the loudest thing on the board and are mostly NAME CHURN — a CronJob
+mints a new `job_name` per run, so one broken schedule bills one series per tick. **Read arrivals per
+SUBJECT before reading them per series.** (The first cut of that paragraph said "one CronJob broken
+every 15 min"; a live re-read disproved it — 45 fstrim guards failing through the 09-16 worker
+replacements, 3 live garage failures — and PR#1750 corrects both texts. The conclusion held.)
+
+**PR#1749 — §A1 capture (FU-210 / FU-231 producer).** The responder was the ONE role outside the
+capture hooks, so a triage that filed no issue left nothing: the 2026-09-03 forgejo-pg-1 session
+marked the subject triaged, spent a budget slot, filed nothing, and the probe lane deferred to it as
+COVERED while the alert stood 8 h. Per alert now:
+`homelab/alert-<fp>/responder-r1-<ts>/{alert.json,triage.log,*.jsonl,manifest.json,finding.json}`.
+Two calls rather than an exit trap — the alert loop is a `while read` SUBSHELL, so a parent trap
+cannot see which alert is in flight; the capture runs BEFORE the reopen/verdict belts so a failure
+there cannot cost the record. **The harness earned its keep**: the first cut's
+`find "$HOME/.claude/projects" | while` had no `|| true`, and since that directory does not exist
+until claude writes a session, pipefail + `set -e` took down the ALERT LOOP mid-payload — every
+remaining alert silently untriaged, caused by the exhaust-upload that must never be load-bearing.
+⚠ **FU-231's switch stays OFF and cannot be flipped as sketched**: report-only issues are
+DECIDED-ONCE's anchor, and moving that anchor into the bucket needs a pod READ the write-only
+transcripts key will never grant. Recorded on the FU with two independent next legs.
+
+**PR#1750 — decide once (FU-230 leg b + the #1733 hole).** Leg (b)'s own trigger had fired twice the
+evening of 09-16, so it was built: `agents/seat-window.sh` writes a **declared window** (glossary
+row) that `node-maintenance.sh` opens and closes, naming the alert CLASSES a planned window produces
+for the ones carrying no `node`/`instance`/pod label at all. A ConfigMap, not a silence (FU-195); by
+alert NAME, never by namespace (a namespace mute would have hidden the rf=3 rollout's real findings);
+triage-only suppression. **And the hole #1733 left, which is the operator's own reboot example:**
+DECIDED-ONCE keys on an OPEN issue, so an operator CLOSE made the lane blind — no open record, a full
+session, a NEW issue filed against that close, every UTC day the condition stood
+(`NodeRebootingRepeatedly` = `changes(node_boot_time_seconds[7d]) >= 3`, both reboot rules firing
+since 09-16). A User close now decides for 14 days and nothing is written on a thread a person ended.
+Both gates fail toward TRIAGING.
+
+**Method note worth keeping:** the human-close fixtures write their close event from the BRIDGE
+rather than recording it — the condition is relative ("closed N days ago") and a frozen timestamp
+would cross the 14-day threshold on a calendar date and red for a behaviour that never changed.
