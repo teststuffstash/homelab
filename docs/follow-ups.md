@@ -838,16 +838,16 @@ the block needs pruning, not more headings.
 
 ### Models, cost & routing
 
-- [ ] **FU-251** — **opencode.ai parked until a live ride proves the new headers.** CAUSE
-      SETTLED + FIXED 2026-09-17: the vendor wants the client's OWN UA and a stable
-      per-conversation `x-opencode-session`, and every harness we ride already mints one — the
-      proxy was ERASING both at a three-name allowlist, and FU-213 synthesized a replacement from
-      the credential ref (wrong granularity). `_forward_upstream` now forwards client identity
-      behind a deny set + a credential-value tripwire; the same commit deleted ADR-087's
-      `AGENT_CRED_INJECT=0` opt-out. **Next:** one live Go ride → read the log's
-      `+oc-session[client|native|ref]:<id>` → flip `OPENCODE_RAIL_DISABLED` to `"0"`; ⚠ rides
-      reached opencode.ai WHILE parked (oracle-fleet #634/#636) — explain that first. Detail:
-      [`chainless-redesign.md`](agents/chainless-redesign.md) §The header. Relates FU-213.
+- [ ] **FU-251** — **opencode.ai: headers fixed and PROVED on the wire; the knob is an operator
+      flip.** The proxy forwards the harness's own UA + session header (PR#1760). Measured
+      2026-09-17 against the live vendor: a claude-shaped ride 200s with
+      `+oc-session[native]:<uuid>`; affinity follows the id (same id → `cache_read 2176`, a fresh
+      id on the same prefix → cold); either `x-opencode-session` or claude's native header works
+      alone; with NO session header the rail hard-fails `400 MissingSessionID` (3/3), so the
+      pre-fix allowlist would be failing today. Premise corrected: FU-213's value was never
+      rejected, only coarse. The "rides reached opencode.ai while parked" seam is closed — the
+      knob was `"0"` then (operator). **Next:** flip `OPENCODE_RAIL_DISABLED` to `"0"`. Detail:
+      [`chainless-redesign.md`](agents/chainless-redesign.md) §Proved on the wire.
 
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
       cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until
