@@ -1,0 +1,10 @@
+# job-health — the scoped replacement for the stock KubeJobFailed (see prometheusrule.yaml's
+# header for the measured reason). Rules only; the namespace is irrelevant to a PrometheusRule's
+# effect but kube-prometheus-stack's ruleSelector is cluster-wide, so it is placed with the rest
+# of the monitoring belts.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - prometheusrule.yaml

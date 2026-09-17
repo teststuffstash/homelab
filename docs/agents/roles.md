@@ -237,14 +237,17 @@ never harder posture on quiet ones.
   two counterexamples so `triage: none` stays a judgment rather than a habit. ⚠ A STOCK
   kube-prometheus-stack rule cannot carry the label (the chart has no per-alert label hook), so its
   only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or replace
-  the rule instead. `KubeJobFailed` is the worked example: 48 firing SERIES in the 7 d to
-  2026-09-17, which reads like the loudest thing on the board and is mostly name churn — a CronJob
-  mints a new `job_name` per run, so one broken schedule bills one series per tick, and the subject
-  key already collapses them (`_strip` eats the `-<digits>` suffix). Behind the churn: 45 were the
-  per-node `fstrim-guard-*` guards failing through the 2026-09-16 worker replacements, 3 are live
-  `garage` job failures. Denying the NAME would have bought quiet on an arrival count while blinding
-  the one generic signal a Job in a namespace with no purpose-built belt has — read arrivals per
-  SUBJECT before reading them per series;
+  the rule instead. **`KubeJobFailed` is the worked example, and it ended in a replacement**
+  (`argocd/resources/job-health/`, 2026-09-17): 48 firing series in the 7 d to that date read like
+  the loudest thing on the board, and the volume was name churn — a CronJob mints a new `job_name`
+  per run, so one broken schedule bills one series per tick. The real defect was worse than volume:
+  `kube_job_failed > 0` reads a Job OBJECT, not a schedule, so on a CronJob it clears only when the
+  job fails ENOUGH MORE TIMES to age the object out of `failedJobsHistoryLimit` — or when a human
+  deletes it. `garage-write-probe` runs every minute, failed twice, succeeded 776 times, and was
+  still firing 13.5 h later. A routing deny would have hidden that from the lane while leaving the
+  operator the same broken detector and the same hand-cleanup; replacing the rule fixed it for every
+  reader. **The lesson is the order: read arrivals per SUBJECT before per series, then ask whether
+  the rule says anything true — a deny is the last resort, not the first;**
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
   — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)
