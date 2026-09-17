@@ -9698,3 +9698,35 @@ out of Alertmanager by themselves at 08:56Z. **No Job objects were deleted.** Th
 was run against the rule it replaces BEFORE being committed — the stock expr fires at 2h50m on the
 identical input, the new rules are silent. A pin that passes pre-fix asserts nothing, and this
 session had already shipped one.
+
+## 2026-09-17 ~09:30Z — codeowner read on the parked #1738 (model_id strip hoist), then wind-down
+
+The one PR sitting on the codeowner gate. ADR-110 read, corpus loaded, verdict landed rather than
+left parked — a read that produces no verdict is the BLOCKPARK the platform measures.
+
+**Verified independently of the PR body**, which is the ride's own account of its own work: the
+hoist is verbatim (`normalize_model(...)` → `parse(...)["model"]` is what `normalize_model` WAS);
+the two parser copies are `cmp`-clean at 175 lines; `router.py` already imports `model_id` (line
+38), so `strip_routing_suffix` at `record_provider_event` is not a latent `NameError` on the data
+plane — the one thing in the diff that could have been quietly fatal; and the one-home acceptance
+holds on the branch tree (zero `removesuffix(":exacto")`, `rpartition(":")` only at line 99 of each
+parser plus the test's FORBIDDEN list, and the scan is an actual scan).
+
+**The ride's judgement call was right and is worth keeping as a pattern.** The issue said the three
+functions move verbatim; the ride added a fourth (`strip_routing_suffix` + a closed
+`ROUTING_SUFFIXES`) because the issue's own phrasing — "truncated at its last `:`" — is refuted by
+this repo's gate: a `:free` pick is a chain id the `/route` eligibility loop filters on, so a
+bookkeeping key that truncates ANY suffix keys a cooldown under an id nothing matches. It SHOWED
+the failure (a `router-self-test` KeyError) rather than asserting it. Two questions, two functions:
+a pricing lookup retries on a MISS, a bookkeeping key must equal the chain id. It also turned the
+router self-test's expectation into a LITERAL rather than a re-derivation through the function
+under test — the vacuous-pin class, caught by the author, in the same session the seat shipped one.
+
+Closed **#1737** on evidence while reading it: the `diff-ci` `agentstack-rbac-lint` map row exists
+on master now (`scripts/diff-ci.sh:37`) and `diff-ci` exited 0 on four branches today. It was a
+real gap when the #1738 ride hit it on 09-16.
+
+**Session totals:** six PRs merged (#1748 routing filter · #1749 §A1 capture · #1750 decide-once ·
+#1751 KubeJobFailed replaced · #1752 replay hermeticity · #1738 read+merged), two of my own
+readings reversed on operator/reviewer evidence (KubeJobFailed's coverage, the pipe-join "bug"),
+both recorded above rather than quietly corrected. Wind-down at ~950k ctx.
