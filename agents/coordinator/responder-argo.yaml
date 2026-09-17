@@ -620,12 +620,24 @@ spec:
               # alert still fired, still reached Home Assistant and Grafana, and a person still
               # sees it; what this skips is the LLM triage that would spend a budget slot to
               # conclude that a person did this.
+              # jq emits the FINISHED sentence, not fields for the shell to re-split. `reason` is
+              # free text the seat types (`seat-window.sh open --reason "…"`) and this line is the
+              # record of why a triage did not happen, so the shell should not have to be right
+              # about punctuation in it at all.
+              # ⚠ The `id|reason|until` join it replaced was NOT broken, and the first cut of this
+              # comment said it was (bot review round 1 flagged a truncation, round 2 refuted its
+              # own finding, and a two-line repro confirmed the outputs are byte-identical). The
+              # `%%|*` / `##*|` idiom isolates the FIRST and LAST fields, so any number of pipes in
+              # the middle one survives — which holds only because `id` (`<node>-<epoch>`) and
+              # `until` (ISO-8601) structurally cannot contain one. That was true, unstated, and
+              # load-bearing; a later `--id` or a human-readable `until` would have broken it
+              # silently. Emitting the sentence removes the invariant rather than documenting it.
               SW_HIT="$(printf '%s' "$SEATWIN" | jq -r --arg n "$NAME" \
-                '[ .[] | select((.alerts // []) | index($n)) ] | first | if . == null then "" else "\(.id)|\(.reason)|\(.until)" end' 2>/dev/null || true)"
+                '[ .[] | select((.alerts // []) | index($n)) ] | first
+                 | if . == null then "" else "DECLARED WINDOW \(.id) names this alert — \(.reason), until \(.until)" end' 2>/dev/null || true)"
               if [ -n "$SW_HIT" ]; then
                 kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"window-$TODAY\"}}" >/dev/null 2>&1 || true
-                SW_REST="${SW_HIT#*|}"
-                echo "→ $NAME ($FP): DECLARED WINDOW ${SW_HIT%%|*} names this alert — ${SW_REST%|*}, until ${SW_REST##*|} — marker written, no session"; continue
+                echo "→ $NAME ($FP): $SW_HIT — marker written, no session"; continue
               fi
               # <<<REPLAY:responder-seat-window<<<
 

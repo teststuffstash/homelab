@@ -138,6 +138,7 @@ transitions:
       - agents/replay/fixtures/responder-capture/no-key
       - agents/replay/fixtures/responder-seat-window/declared
       - agents/replay/fixtures/responder-seat-window/undeclared
+      - agents/replay/fixtures/responder-seat-window/pipe-in-reason
       - agents/replay/fixtures/responder-decided-once/human-closed
       - agents/replay/fixtures/responder-decided-once/human-closed-stale
     guards:

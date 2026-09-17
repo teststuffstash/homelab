@@ -339,6 +339,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-reopen/human-closed` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen/report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-seat-window/declared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-seat-window/pipe-in-reason` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-seat-window/undeclared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
