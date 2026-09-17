@@ -418,12 +418,46 @@ proxy is configured, and a real key is rendered only when there is no proxy at a
 proxy-outage break-glass). Nothing set the flag; it survived as a hypothetical that the egress
 boundary was contorting itself around.
 
-**What remains (FU-251):** the knob is still `OPENCODE_RAIL_DISABLED="1"`. Flipping it needs a
-live ride showing the new headers on the wire — the proxy log line carries both the id and its
-source (`+oc-session[client|native|ref]:<id>`), so one ride's log is the evidence. Two seams
-recorded, not fixed: a claude-code older than v2.1.86 sends the session id only in
-`metadata.user_id` (body parse, not done), and a client that identifies nothing still falls back
-to the credential ref.
+### Proved on the wire (2026-09-17)
+
+The merged proxy code was run locally against the REAL `opencode.ai/zen/go` with the wallet's
+`opencode-go-api-key`, and the vendor probed directly. Five things are now measured, not argued:
+
+1. **A claude-shaped ride lands 200** and the proxy note reads
+   `+oc-session[native]:<the claude session uuid>` — the ride's own conversation id, not the
+   credential ref.
+2. **What we send** (capture with `OPENCODE_GO_BASE` pointed at a local sink), by client kind:
+   - claude-code → `User-Agent: claude-cli/2.1.259 …`, `X-Claude-Code-Session-Id` forwarded AND
+     mirrored into `X-Opencode-Session`; `anthropic-beta` stripped; auth = the rail key alone
+     (the inbound `ref:` never leaves);
+   - opencode/goose → their own UA and their own `x-opencode-session`, untouched;
+   - a client that identifies nothing → `x-opencode-session` falls back to the ride's ref.
+3. **Affinity is real and follows the header.** Same session id + identical 2.4k-token prefix:
+   first ride `cache_read_input_tokens: 0`, repeat `2176`. A DIFFERENT session id with the same
+   prefix goes cold again (`0`), then the first id is warm once more. The id — not the prompt —
+   is what routes a request to the provider holding the warm cache.
+4. **Either header works, alone.** `X-Claude-Code-Session-Id` only → cold then warm.
+   `x-opencode-session` only → cold then warm. The validated-client table's "Go recognizes its
+   native session header" is true as written.
+5. **"May error" is now "does error".** With NO session header at all, three tries, three
+   failures: `HTTP 400 {"type":"MissingSessionID","message":"Error from provider (Console Go):
+   Request is missing x-opencode-session and cannot be routed efficiently…"}` — and a ride WITH
+   either header, run between them, 200s. The allowlist-era proxy would be hard-failing on this
+   rail today.
+
+One correction this forces on the 09-17 re-park's premise: the FU-213 value was never *rejected*
+— any stable id clears the 400 gate. It was **inefficient**: one bucket per session-key/project
+(and a single `direct:<hash>` bucket for every direct-key ride), so rides shared an affinity key
+whose prefixes differ and missed the cache they were meant to hit. The park cost nothing to hold
+and the fix is still the right one; the defect was granularity, not rejection.
+
+**What remains (FU-251):** the knob is still `OPENCODE_RAIL_DISABLED="1"` — an operator flip,
+now with the evidence behind it. Seams recorded, not fixed: a claude-code older than v2.1.86
+sends the session id only in `metadata.user_id` (no body parse), a client that identifies nothing
+still falls back to the credential ref (which clears the 400 but buckets coarsely), and a caller
+whose UA is a generic library name (`curl/…`, an SDK default) has it forwarded as-is — the
+proxy's own UA substitutes only for a caller that sends NO UA, which is narrower than the
+vendor's rule 2 asks for.
 
 ### What the probing settled (2026-08-13; the numbers live in the matrix spike)
 
