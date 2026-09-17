@@ -78,10 +78,11 @@ ZEN_PREFIX = "opencode/"
 # from this proxy's client (`User-Agent: homelab-openrouter-proxy`, the UA both legs send —
 # set because Cloudflare 1010-blocks python-urllib's own) carry no `x-opencode-session` header
 # and "may error" from 2026-09-06. The park was the holding pattern; the header question is now
-# ANSWERED (Goal #1640 acceptance 2, 2026-09-14): `_forward_upstream` attaches
-# `x-opencode-session: <the ride's session ref>` on both opencode legs, so the deployment's
-# `OPENCODE_RAIL_DISABLED` is back to "0". The knob STAYS as the operator's kill switch — BOTH
-# legs by default, because they share the account, the key and the UA:
+# NOT settled after all: `_forward_upstream` attaches `x-opencode-session: <the ride's session
+# ref>` on both opencode legs (Goal #1640 acceptance 2, 2026-09-14), but that is not the header
+# the vendor asked for, so the deployment is RE-PARKED at `OPENCODE_RAIL_DISABLED=1` (operator,
+# 2026-09-17, FU-251). The knob is the operator's kill switch — BOTH legs by default, because
+# they share the account, the key and the UA:
 #   OPENCODE_RAIL_DISABLED=1|all|both  → Go + Zen off
 #   OPENCODE_RAIL_DISABLED=go|zen      → that leg only (comma/space list accepted)
 #   unset|0|false|no                   → live (the default; nothing changes for a normal deploy)

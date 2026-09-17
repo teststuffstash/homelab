@@ -329,10 +329,14 @@ migrate through).
 > shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
 > the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
 >
-> **UN-PARKED 2026-09-14 (FU-213 closed, homelab#1640 acceptance 2 / #1667):** the header
-> question is settled — the proxy now attaches `x-opencode-session: <the ride's session ref>`
-> on both legs, so `OPENCODE_RAIL_DISABLED` is back to `"0"` and the rail is live again
-> (posture unchanged; the knob stays as the operator's kill switch).
+> **UN-PARKED 2026-09-14 (FU-213 closed, homelab#1640 acceptance 2 / #1667):** the proxy
+> attaches `x-opencode-session: <the ride's session ref>` on both legs, so
+> `OPENCODE_RAIL_DISABLED` went back to `"0"` and the rail was live again (posture unchanged;
+> the knob stays as the operator's kill switch).
+>
+> **RE-PARKED 2026-09-17 (operator, FU-251):** that header is still not the one the vendor
+> wants, so the un-park's premise does not hold — `OPENCODE_RAIL_DISABLED` is back to `"1"`
+> (both legs). See §The `x-opencode-session` header below for what remains to establish.
 
 ### The `x-opencode-session` header (the park's cause, 2026-09-04)
 
@@ -364,11 +368,19 @@ fixed 2026-05-22):
   only), and a direct-key ride degrades to `direct:<key-hash>` — one bucket for every ride sharing
   that key, i.e. the hardcoded-id trap by another route.
 
-**CLOSED 2026-09-14 (homelab#1640 acceptance 2 / #1667):** both gaps are shut — `cb_session` is
-computed once for every arm (the Go/Zen arms no longer leave it `None`) and `_forward_upstream`
-attaches `x-opencode-session: <that ref>` on both legs, so the rail is un-parked
-(`OPENCODE_RAIL_DISABLED="0"`). The direct-key `direct:<key-hash>` bucket remains the one seam
-(one bucket per key, not per ride) — recorded, not fixed here.
+**Both gaps shut 2026-09-14 (homelab#1640 acceptance 2 / #1667):** `cb_session` is computed
+once for every arm (the Go/Zen arms no longer leave it `None`) and `_forward_upstream` attaches
+`x-opencode-session: <that ref>` on both legs. The direct-key `direct:<key-hash>` bucket remains
+one seam (one bucket per key, not per ride) — recorded, not fixed there.
+
+**RE-OPENED 2026-09-17 (operator, FU-251) — the rail is parked again.** The operator's read is
+that what we send is *not* the correct session header, and Go-rail rides kept reaching
+opencode.ai regardless (oracle-fleet #634/#636, `opencode-go/deepseek-v4-flash`), so
+`OPENCODE_RAIL_DISABLED="1"` again — both legs, one account/key/UA. What the 09-14 work did NOT
+establish, and what FU-251 must: the header **name** OpenCode actually reads, and the **value**
+shape it expects (our value is the injected credential's opaque ref — per session/project, not
+an opencode-issued session id; the pi fix passed the client's own conversation id). Settle that
+against the vendor, fix `_forward_upstream`, prove it on a live ride, then flip the knob.
 
 ### What the probing settled (2026-08-13; the numbers live in the matrix spike)
 

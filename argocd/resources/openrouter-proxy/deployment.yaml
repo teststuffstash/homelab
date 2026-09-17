@@ -86,13 +86,15 @@ spec:
             # leg, "0" = live. While set, /opencode-limit serves limited=true
             # reason="rail-disabled" (so --pick-rail skips Go and the worker gate degrades to the
             # subscription fallback) and both legs refuse 503 without calling out.
-            # FLIPPED BACK TO LIVE 2026-09-14 (Goal #1640 acceptance 2): the proxy now attaches
-            # `x-opencode-session: <the ride's session ref>` on both legs (openrouter-proxy.py
-            # `_forward_upstream`), which is the header the vendor asked for — so FU-213 closes
-            # and the rail's posture (janitorial/failover) is unchanged. The knob STAYS as the
-            # operator's kill switch: set "1" to re-park without a code change.
+            # Flipped back to live 2026-09-14 (Goal #1640 acceptance 2) on the strength of
+            # `_forward_upstream` attaching `x-opencode-session: <the ride's session ref>`.
+            # RE-PARKED 2026-09-17 (operator, FU-251): what we send is NOT the session header
+            # the vendor asked for, so the premise of that un-park does not hold — rides were
+            # still reaching opencode.ai on the Go rail (oracle-fleet #634/#636). Both legs
+            # again, for FU-213's reason: one account, one key, one UA. Back to "0" only when
+            # the header is verified against what OpenCode actually expects (FU-251).
             - name: OPENCODE_RAIL_DISABLED
-              value: "0"
+              value: "1"
             # ADR-107 chunk C (homelab#423): the OpenCode Go API key, consumed by the Go leg
             # (PR#429). optional: true — the pod must keep serving the Anthropic/OpenRouter legs
             # even if ESO hasn't materialized the Secret; the code fails closed per-request.
