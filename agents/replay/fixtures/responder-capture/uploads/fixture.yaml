@@ -1,0 +1,39 @@
+# FU-210 / FU-231 — a responder triage leaves a transcript and a typed finding.
+#
+# CONDITION UNDER REPLAY. One triage has just finished. The §A1 capture runs with the write-only
+# `agent-transcripts-s3` key present (the production shape once the Secret exists), and the verdict
+# read-back found the filed issue.
+#
+# WHAT IT REDS ON. Before this leg the responder was the ONE role outside the A1 capture hooks
+# (worker / reviewer / coordinator), so a triage that filed no issue left NOTHING: on 2026-09-03 a
+# session received CNPGInstanceNotReady/ExporterDown for forgejo-pg-1 — a real pg_rewind divergence
+# — marked the subject triaged, spent a budget slot, filed nothing anywhere in the org, and the
+# probe lane deferred to it as COVERED while the alert stood 8 h. The decision was unrecoverable,
+# and every later read of this lane had to be reconstructed from GitHub artifacts, which by
+# construction cannot see a triage that produced none.
+#
+# THE CONTRACT:
+#   1. The PREFIX is FU-210's own: `homelab/alert-<fp>/responder-r1-<ts>` — the §A1
+#      `<project>/<task>/<role>-r<round>-<ts>` shape with task = the fingerprint. `project` is
+#      `homelab` for every alert regardless of where the triage routes its issue: the SESSION is
+#      the platform's, the ISSUE is the stack's.
+#   2. FOUR files, and each earns its place: `alert.json` (the INPUT, so the record is replayable),
+#      `triage.log` (the session's own words), `manifest.json` (the A1 shape) and, from the second
+#      call, `finding.json` (FU-231's typed record).
+#   3. The finding carries the VERDICT and the filed issue — a record of DECISIONS, not of alerts.
+#   4. An EMPTY file is never uploaded (`_ts_put`'s `-s` test), so a session that printed nothing
+#      cannot manufacture an empty `triage.log` in the bucket.
+pins:
+  - IL-T03
+name: responder-capture-uploads
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-capture
+  - file:post.sh
+scrub:
+  # The run timestamp is the one volatile component of the prefix.
+  - s#responder-r1-[0-9TZ]\{1,\}#responder-r1-<ts>#g
+  # …and the fixture-local HOME, which is a mktemp dir so no artifact is left in the repo tree.
+  - s#/tmp/tmp\.[A-Za-z0-9]\{1,\}#<fixhome>#g

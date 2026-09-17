@@ -1,0 +1,9 @@
+CALL s5cmd --endpoint-url http://garage.garage.svc.cluster.local:3900 cp /tmp/alert-one.json s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/alert.json
+CALL s5cmd --endpoint-url http://garage.garage.svc.cluster.local:3900 cp /tmp/triage.log s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/triage.log
+CALL s5cmd --endpoint-url http://garage.garage.svc.cluster.local:3900 cp /tmp/ts-manifest.json s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/manifest.json
+CALL s5cmd --endpoint-url http://garage.garage.svc.cluster.local:3900 cp <fixhome>/.claude/projects/session-abc.jsonl s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/session-abc.jsonl
+CALL s5cmd --endpoint-url http://garage.garage.svc.cluster.local:3900 cp /tmp/ts-finding.json s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/finding.json
+OUT transcripts: uploaded → s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>
+OUT finding: recorded verdict='fix' issue='teststuffstash/homelab#1751' → s3://agent-transcripts/homelab/alert-5f9b1c0a77d31e42/responder-r1-<ts>/finding.json
+OUT REACHED: end
+RC 0

@@ -134,6 +134,8 @@ transitions:
       - agents/replay/fixtures/responder-engagement/bots-only
       - agents/replay/fixtures/responder-engagement/human-engaged
       - agents/replay/fixtures/responder-engagement/probe-failed
+      - agents/replay/fixtures/responder-capture/uploads
+      - agents/replay/fixtures/responder-capture/no-key
     guards:
       - desc: "the label is applied by the SHELL and is a DIAGNOSIS, not a dispatch — queueing is the debouncer's"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "queueing is the debouncer" }
@@ -151,6 +153,10 @@ transitions:
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "REST is the authority" }
       - desc: "…and an unreadable comments probe never closes (rule #6 — never fail INTO a write; the probe-failed replay pins it)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "never close on a failed read" }
+      - desc: "§A1 CAPTURE (FU-210/FU-231): the session's transcript, its input alert and a typed finding land in `homelab/alert-<fp>/responder-r1-<ts>/` — a triage that files nothing used to leave nothing at all (the 2026-09-03 forgejo-pg-1 session, 8 h). Captured BEFORE the reopen/verdict belts, so a failure there cannot cost the record"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "transcripts: uploaded" }
+      - desc: "…and the capture DEGRADES rather than failing: a missing key, a missing s5cmd or a refused put is one loud line, and the `|| true` on the transcript `find` is what keeps pipefail + set -e from taking down the whole alert loop when claude died before writing a session"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "capture skipped" }
 
   - id: IL-T23
     name: "fix-verdict bell → debounce → the pending SET (state is GitHub labels, nowhere else)"

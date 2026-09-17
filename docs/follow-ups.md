@@ -923,16 +923,15 @@ the block needs pruning, not more headings.
       retro's window? everything, and a bigger claim?) and implement it as an S3 lifecycle rule or a
       sync-job sweep — the design question belongs to `docs/agents/observability-and-retro.md`.
       Sibling: `allure-reports` at 89 % of 10Gi is oracle-iac's (their alert, their retention).
-- [ ] **FU-210** — **Responder sessions leave no transcript — a triage that files nothing is
-      unrecoverable.** 2026-09-03 22:29Z `CNPGInstanceNotReady`/`ExporterDown` fired for
-      forgejo-pg-1 (a real pg_rewind divergence after the incident failover); the responder
-      received them (sensor payloads), marked `workload:forgejo/forgejo-pg-1` triaged on 09-04
-      (ledger + 1/12 budget), filed NO issue anywhere in the org, and the probe lane deferred to it
-      ("COVERED"). The alert stood 8 h until the seat applied the runbook recipe. Why: the A1
-      capture hooks (`docs/agents/observability-and-retro.md`) cover worker/reviewer/coordinator
-      only — the bucket has no responder prefix, Loki has no agent-coordinator pod streams.
-      **Next:** upload the respond session's `~/.claude/projects` + a manifest like the reviewer's
-      exit trap (`homelab/alert-<fp>/responder-r1-<ts>/`); then the decision is readable.
+- [ ] **FU-210** — **Responder transcripts: POINTER.** A triage that filed nothing used to leave
+      nothing — the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed no issue, and
+      the probe lane deferred to it as COVERED while the alert stood 8 h. The lane was the one role
+      outside §A1. Mechanism, layout and the write-only-key ceiling:
+      [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §A1 (responder row +
+      hook point); gate = `responder-behaviour-test.sh` §FU-210. Shipped PR#1749.
+      **Next — the acceptance, which cannot run while the lane is paused:** at FU-249's un-pause,
+      read one prefix end-to-end and confirm a report-only session that files no issue still leaves
+      a readable decision. Relates FU-231, FU-249.
 - [ ] **FU-187** — **Quiet-stall detection: a Running agent pod with a silent rail is invisible
       to every belt** (issue-272-r1, 2026-08-26: opencode slept ~3h on a black-holed proxy IP,
       0-byte run.log, until the 4h activeDeadline reap — which ALSO skips finalize: no strike,
@@ -1017,15 +1016,16 @@ the block needs pruning, not more headings.
       `CiliumUnreachableNodes` ×11 (fires on every OTHER node's agent), `KubeDaemonSetRolloutStuck/MisScheduled` ×8,
       `KubeNodeUnreachable`/`KubeletInstanceUnreachable`, `KubePodNotReady` ×4 — none carry node=/instance=, so the
       window silence covered none; seat silenced by hand for 8 h. The FU's own build trigger has fired.**
-- [ ] **FU-231** — **Responder report-only findings land as GitHub comments; route them to the
-      bucket first, issues only for actionable verdicts** (operator direction 2026-09-11: issues =
-      actionable, history = git/S3). ⚠ **BLOCKED on FU-210** (no responder transcripts exist, so
-      there is no `homelab/alert-<fp>/` prefix to write beside — verified empty 2026-09-16) and
-      **re-scoped by #1733**: the binding cost was the lane RE-DECIDING settled conditions, not
-      where a finding landed, and the decided-once gate removed that without a bucket.
-      **Next:** re-read once #1733 has soaked and FU-210 has landed — is the residual comment
-      volume still worth re-routing? Mechanism, evidence and the MCP exclusion:
-      `docs/spikes/responder-week-audit.md` §Design read + §The 2026-09-16 pass.
+- [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
+      (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
+      `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage
+      included. ⚠ **The SWITCH stays OFF and cannot be flipped as sketched:** report-only issues
+      are DECIDED-ONCE's anchor (#1733), and moving that anchor into the bucket needs a pod read
+      the write-only transcripts key will never grant. **Next, two independent legs:** (a) the
+      CONSUMER — a `triage` source in `meta-events.sh` over new `homelab/alert-*/` prefixes, using
+      the jail-side READER key; (b) re-read the switch after FU-249's un-pause, against an anchor
+      that does not need an open issue. Evidence + the MCP exclusion:
+      [`../spikes/responder-week-audit.md`](spikes/responder-week-audit.md) §Design read.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 

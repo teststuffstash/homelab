@@ -1,0 +1,24 @@
+# FU-210 — the capture DEGRADES; it is never load-bearing for a triage.
+#
+# CONDITION UNDER REPLAY. The same triage, with no transcripts key in the pod. That is not a
+# hypothetical: the `agent-transcripts-s3` Secret is mounted `optional: true`, exactly as the
+# reviewer mounts it, so a rebuild that has not yet run the Crossplane Workspace leaves it absent.
+#
+# WHAT IT REDS ON. Uploading exhaust must never be able to break the lane it is recording. The
+# first cut of this leg proved how easy that is to get wrong in the other direction: its
+# `find "$HOME/.claude/projects" … | while` carried no `|| true`, and since that directory does not
+# exist until claude has written a session, `pipefail` + `set -e` took down the ALERT LOOP
+# mid-payload — every remaining alert in the group silently untriaged, caused by the upload.
+#
+# THE CONTRACT: one loud line naming WHICH half is missing, no bucket write at all, and the caller
+# continues. The `REACHED: end` line is the assertion that matters — it is the rest of the
+# iteration, and it must still run.
+pins:
+  - IL-T03
+name: responder-capture-no-key
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-capture
+  - file:../uploads/post.sh
