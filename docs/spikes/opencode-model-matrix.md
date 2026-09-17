@@ -75,6 +75,22 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
+⚠⚠ **SUPERSEDED 2026-09-17 — the 08-17 measurement was taken through a BROKEN CACHE, and
+read the symptom as the rule (operator).** Until the session-header fix (FU-251, 2026-09-17)
+the proxy sent NO `x-opencode-session` and one fleet-wide User-Agent, so affinity fell back to
+client IP, requests scattered across providers, and **there were no cache reads to discount** —
+every call re-paid fresh input. "The window draws at list on RAW tokens" was therefore an
+artifact of our own defect, not a property of the vendor's accounting. Measured again once
+affinity worked, on two reviewer rides (2026-09-17): the vendor's dashboard billed **$0.148**
+for 1.57M input / 14.8k output at ~89% cache-read, and its three window readings — 1.4% of the
+5h $12, 0.5% of the weekly $30, 0.3% of the monthly $60 — independently imply **$0.15–0.18**.
+List-on-raw would have been $0.65 (5.4% / 2.2% / 1.1%). So **the window draws at per-kind LIST
+prices: cache reads draw at the cR rate**, which is what `gometer.window_draw` already computes
+(the homelab#540 amendment). Three windows agreeing on one spend also confirms the $12/$30/$60
+budget constants. Consequence for capacity: a review of this shape costs ~$0.074, so the monthly
+pool is ~800 reviews, not the ~180 list-on-raw predicted. The block below is kept as the
+historical reading it was — do not price from it.
+
 ⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (a console usage dump — transient jail upload,
 not retained; the durable record is the gometer draw-pricing commit + TICK-LOG 2026-08-17 —
 reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
