@@ -221,6 +221,9 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
 | `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
+| `cred-inject-unconditional/claude-opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
+| `cred-inject-unconditional/no-proxy-breakglass` | actions | - | `agents/agent-session.sh` | - |
+| `cred-inject-unconditional/opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |

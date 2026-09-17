@@ -838,17 +838,16 @@ the block needs pruning, not more headings.
 
 ### Models, cost & routing
 
-- [ ] **FU-251** — **opencode.ai RE-PARKED: the session header we send is not the one the
-      vendor wants.** FU-213 (archived 2026-09-14) closed on `_forward_upstream` attaching
-      `x-opencode-session: <the ride's session ref>`; the operator's read 2026-09-17 is that this
-      is still not the correct header, and Go-rail rides were reaching opencode.ai anyway
-      (oracle-fleet #634/#636, both on `opencode-go/deepseek-v4-flash`). `OPENCODE_RAIL_DISABLED`
-      is back to `"1"` (both legs — one account, one key, one UA), so `--pick-rail` skips Go and
-      the Go arm takes the M12 rail degrade. **Next:** establish what OpenCode actually expects
-      (header name AND value shape — per-installation vs per-ride), fix `_forward_upstream`,
-      prove it with a live ride, then flip the knob back. Detail:
-      [`chainless-redesign.md`](agents/chainless-redesign.md) §The `x-opencode-session` header.
-      Relates FU-213.
+- [ ] **FU-251** — **opencode.ai parked until a live ride proves the new headers.** CAUSE
+      SETTLED + FIXED 2026-09-17: the vendor wants the client's OWN UA and a stable
+      per-conversation `x-opencode-session`, and every harness we ride already mints one — the
+      proxy was ERASING both at a three-name allowlist, and FU-213 synthesized a replacement from
+      the credential ref (wrong granularity). `_forward_upstream` now forwards client identity
+      behind a deny set + a credential-value tripwire; the same commit deleted ADR-087's
+      `AGENT_CRED_INJECT=0` opt-out. **Next:** one live Go ride → read the log's
+      `+oc-session[client|native|ref]:<id>` → flip `OPENCODE_RAIL_DISABLED` to `"0"`; ⚠ rides
+      reached opencode.ai WHILE parked (oracle-fleet #634/#636) — explain that first. Detail:
+      [`chainless-redesign.md`](agents/chainless-redesign.md) §The header. Relates FU-213.
 
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
       cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until

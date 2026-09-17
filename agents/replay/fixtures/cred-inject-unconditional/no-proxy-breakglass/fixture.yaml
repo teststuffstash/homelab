@@ -1,0 +1,15 @@
+# FU-251 — the ONE path that still renders a real key: no proxy at all.
+#
+# CONDITION UNDER REPLAY. `AGENT_OPENROUTER_PROXY=""` — the documented break-glass for a proxy
+# outage (a `ref:` has nothing to resolve it there). This row exists so the deletion of the
+# AGENT_CRED_INJECT opt-out cannot be read as "real keys are unreachable": the escape hatch is
+# still here, and it is keyed on the proxy's absence, not on a flag anyone can export.
+#
+# THE CONTRACT: no proxy ⇒ a real secretKeyRef and no broker URL.
+name: cred-inject-unconditional-no-proxy-breakglass
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:cred-inject
+  - file:post.sh
