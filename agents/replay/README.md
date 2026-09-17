@@ -106,7 +106,16 @@ follows fix-density per ADR-103, never big-bang):
    is a leak vector; prefer hard values, and add newly-evidenced vars to run.sh's unset line,
    never per-bridge fixes. The 5 non-hermetic fixtures get lines or fixes.
    **Mechanism LIVE (same PR as move 2):** `requires:` in fixture.yaml, checked before dispatch,
-   loud absence. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
+   loud absence.
+   **The RECORDED WORLD is read-only to a run (2026-09-17).** `$REPLAY_WORLD` is the fixture's own
+   `world/` dir unless a named registry world is in play, so a bridge that DERIVES a world file —
+   a timestamp relative to now, the only honest way to pin a "closed N days ago" condition — writes
+   into git on every run unless it copies first. Two new fixtures did exactly that and left
+   `git status` dirty after the suite. The bridge-side remedy is one line
+   (`_w="$(mktemp -d)"; cp -r "$REPLAY_WORLD/." "$_w/"; REPLAY_WORLD="$_w"`), and `run.sh` hashes
+   every `world/` file before and after the run and REDS if any moved — hashing rather than
+   `git status` so the gate can tell "the run changed a world" from "the author is editing a
+   fixture". `--record`/`--rerecord` return before the check: writing worlds is their job. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
    the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench-*`
    pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
