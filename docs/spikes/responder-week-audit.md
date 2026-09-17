@@ -311,9 +311,40 @@ Two things worth carrying forward from the build itself:
   `subject=workload:monitoring/…node-exporter` — the graft — as the expected value. It passed
   through the whole of FU-232's life. The scenario now carries the live payload.
 
-### What is deliberately NOT built
+### What was deliberately NOT built on 2026-09-16 — and what the 09-17 sitting then built
 
-- **FU-230 leg (b)** (the declared-window ConfigMap): real, re-weighed to non-binding — build it
-  when a second window class leaks.
-- **FU-231's bucket**: blocked on FU-210; re-read after #1733 soaks.
+- ~~**FU-230 leg (b)** (the declared-window ConfigMap): real, re-weighed to non-binding — build it
+  when a second window class leaks.~~ **The trigger fired the same evening** (wk-03's shutdown, five
+  leaked classes, silenced by hand for 8 h) and leg (b) shipped 2026-09-17: `agents/seat-window.sh`
+  writes a `responder-window` record, `node-maintenance.sh settle/down` opens it and `up` closes it,
+  and the responder skips a session for the DECLARED NAMES only. Design home:
+  [`../agents/roles.md`](../agents/roles.md) §responder (the glossary's **declared window**).
+- ~~**FU-231's bucket**: blocked on FU-210; re-read after #1733 soaks.~~ **FU-210 shipped
+  2026-09-17** (per-alert transcript + input alert + manifest under
+  `homelab/alert-<fp>/responder-r1-<ts>/`), so the prefix exists and FU-231's PRODUCER half rides
+  it — a typed `finding.json` beside every transcript, the no-issue triage included. ⚠ The
+  SWITCH ("issues only on `fix-verdict: fix`") is **not** flipped and cannot be as sketched:
+  report-only issues are DECIDED-ONCE's anchor, and moving that anchor into the bucket needs a pod
+  READ the write-only transcripts key will never grant.
 - **The MCP server**: unchanged, no consumer (`docs/agents/README.md` §Open).
+
+### The 2026-09-17 sitting — the routing filter, and the hole #1733 left
+
+Two things the 09-16 measurement did not name, both shipped the next day:
+
+1. **The alerts that should never have reached the lane at all.** `triage: none` was honoured only
+   INSIDE the pod, so a self-describing alert still bought an Argo workflow and a git clone — 154 of
+   the ledger's 1190 entries are that marker. It is now a matcher on the responder's own
+   Alertmanager route, alongside `severity != "info"`, and five operator-queue rules gained the
+   declaration `CodeownerParkWaiting` already carried by operator ruling (2026-08-12):
+   `AgentAttentionStanding` (19 firing series in the 7 d to 09-17; the `#1546` row above is the
+   measured case), `BlockingCodeownerParkWaiting`, and the three GitHub spend/quota rules. Not
+   denied, deliberately: `KubeJobFailed`, the loudest arrival of the window at 48 firing series —
+   every one of them one genuinely broken CronJob (`fstrim-guard-wk-01`), so a deny would have
+   hidden the fault rather than the noise.
+2. **A human's close was invisible to DECIDED-ONCE.** The gate keys on an OPEN issue, so an
+   operator close — the strongest *stop* available — left the lane blind: no open record, a full
+   session, and a NEW issue filed against that close, every UTC day the condition stood. Generator
+   #1 of the 09-16 list was only half fixed: the reopen belt stops a REOPEN and the session simply
+   files a fresh issue instead. A User close now decides for 14 days, and nothing is written on a
+   thread a person ended.

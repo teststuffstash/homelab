@@ -23,9 +23,14 @@
 #         transient pods keep re-holding (the coordinator's RWX transcripts volume: back-to-back
 #         runs, 2026-09-09) is moved the same way once it has blocked for MOVE_AFTER (600 s).
 #   bash scripts/node-maintenance.sh move <node> <volume>   # that move, by hand, for one volume
-#   bash scripts/node-maintenance.sh silence-open  <node>   # declare the window to Alertmanager by hand
-#   bash scripts/node-maintenance.sh silence-close <node>   # expire it (both are done for you by
-#                                                             settle/down and up — FU-230 leg (a));
+#   bash scripts/node-maintenance.sh silence-open  <node>   # declare the window by hand — BOTH the
+#   bash scripts/node-maintenance.sh silence-close <node>   # Alertmanager silences (leg a) and the
+#                                                             responder's declared-window record
+#                                                             (leg b, agents/seat-window.sh, for the
+#                                                             alert classes that carry no node /
+#                                                             instance / pod label at all); expire
+#                                                             both (all four are done for you by
+#                                                             settle/down and up — FU-230);
 #                                                             SILENCE=0 opts the whole window out
 #   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
@@ -248,6 +253,38 @@ $(silence_ids '#pods')"
   ok "expired $n window silence(s) for $NODE"
 }
 
+# ------------------------------------------------------- the DECLARED window (FU-230 leg b)
+# The silences above cover every alert that carries `node`, `instance` or one of this node's pod
+# names. One class is beyond ALL of them, structurally: a rollout alert labelled by namespace +
+# daemonset carries none of those keys, and the pod that goes Pending is minted AFTER the silence.
+# 2026-09-16 proved it twice in a day — an nx-01 reinstall leaked `KubeDaemonSetRolloutStuck` with
+# all four matchers armed, and wk-03's shutdown leaked CiliumUnreachableNodes ×11, DaemonSet
+# rollout/misschedule ×8, KubeNodeUnreachable, KubeletInstanceUnreachable and KubePodNotReady ×4,
+# which the seat then silenced by hand for 8 h. Enumerating `daemonset=~…` arms per alert name is
+# the losing game that sighting demonstrates.
+#
+# So the window DECLARES those names to the responder instead (agents/seat-window.sh → a ConfigMap
+# the triage reads). It suppresses only the LLM triage: the alerts still fire, still reach Home
+# Assistant and Grafana, and a person still sees them. The list is the classes a node-maintenance
+# window structurally produces and the label taxonomy structurally cannot reach.
+DECLARED_ALERTS="${DECLARED_ALERTS:-KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,KubeNodeUnreachable,KubeletInstanceUnreachable,KubeNodeNotReady,KubePodNotReady,CiliumUnreachableNodes,CiliumAgentScrapeDown,TargetDown}"
+
+declare_open() {
+  [ "$SILENCE" = 1 ] || return 0
+  SEAT_WINDOW_BY="node-maintenance.sh" SEAT_WINDOW_HOURS="$SILENCE_HOURS" \
+    bash "$(dirname "$0")/../agents/seat-window.sh" open \
+      --reason "node-maintenance window on $NODE — planned cordon/drain/shutdown" \
+      --node "$NODE" --alerts "$DECLARED_ALERTS" \
+      --note "closed by \`node-maintenance.sh up $NODE\`; the Alertmanager silences cover the node/instance/pod-keyed alerts, this record covers the classes that carry none of those labels" \
+    || warn "could not declare the window to the responder — those alert classes will draw a triage session (FU-230 leg b)"
+}
+
+declare_close() {
+  [ "$SILENCE" = 1 ] || return 0
+  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" \
+    || warn "could not close the declared window — it self-expires at its \`until\` (${SILENCE_HOURS}h)"
+}
+
 # ---------------------------------------------------------------- preflight
 preflight() {
   echo "preflight: $NODE"
@@ -392,7 +429,7 @@ settle() {
   local t=0 lr rides moved="" seen="" since v state pvc consumer kind blocking last_report=-1000
   if [ "$DRY" = 1 ]; then log "DRY=1: reporting only, no cordon / move / silence"; else
     log "cordon $NODE (nothing new lands here while we wait; Longhorn follows the cordon)"; kubectl cordon "$NODE" >/dev/null
-    silence_open; fi
+    silence_open; declare_open; fi
   while :; do
     lr="$(last_replicas)"; rides="$(rides_running)"
     while read -r v state pvc consumer locality; do
@@ -493,6 +530,7 @@ up() {
   done
   log "Longhorn: $NODE schedulable, 0 degraded attached volumes. Window closed."
   silence_close
+  declare_close
   kubectl get node "$NODE" -o wide
   # Replicas that failed during the window get REPLACED (rebuilt elsewhere after
   # replica-replenishment-wait-interval); their directories stay on the returning disk as
@@ -521,7 +559,7 @@ case "$cmd" in
   power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
-  silence-open) silence_open ;;
-  silence-close) silence_close ;;
+  silence-open) silence_open; declare_open ;;
+  silence-close) silence_close; declare_close ;;
   *) usage ;;
 esac

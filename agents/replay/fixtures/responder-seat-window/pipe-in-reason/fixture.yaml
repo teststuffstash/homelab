@@ -1,0 +1,29 @@
+# The reason is FREE TEXT and must read back verbatim, pipes included. A WITNESS, not a pin.
+#
+# ⚠ THIS ROW IS DELIBERATELY NOT A PIN, and saying so is the point (ADR-103 addendum, homelab#1489:
+# a changed fixture that passes on base is a `::notice`, not a verdict — the PR's pin is the
+# declared/undeclared/human-closed set, which does red on base). It passes against the PRE-jq
+# `id|reason|until` join too, because `%%|*` / `##*|` isolate the FIRST and LAST fields and any
+# number of pipes in the middle one survives.
+#
+# WHAT IT IS FOR. That robustness was real, unstated, and load-bearing: it held ONLY because `id`
+# (`<node>-<epoch>`) and `until` (ISO-8601) structurally cannot contain a pipe. A later `--id`
+# flag, or a human-readable `until`, would have broken the line silently. The clause now has jq
+# emit the finished sentence, which removes the invariant instead of documenting it — and this row
+# is the standing assertion that free text survives the path, so the next person who reaches for a
+# delimiter here has something that reds.
+#
+# (The honest history: bot review round 1 claimed a truncation, this author took it at face value
+# and wrote a fixture asserting a bug; round 2 refuted its own finding and a two-line repro
+# confirmed the two forms are byte-identical. The simplification stands on its own; the causal
+# claim did not.)
+pins:
+  - IL-T03
+name: responder-seat-window-pipe-in-reason
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

@@ -236,10 +236,15 @@ never harder posture on quiet ones.
   machinery; the pairing is asserted in `responder-behaviour-test.sh` §routing, which also pins
   two counterexamples so `triage: none` stays a judgment rather than a habit. ⚠ A STOCK
   kube-prometheus-stack rule cannot carry the label (the chart has no per-alert label hook), so its
-  only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or
-  replace the rule instead: `KubeJobFailed` was the loudest arrival in the 7d to 2026-09-17 (48)
-  and every one of them was one genuinely broken CronJob, so denying it would have hidden the
-  fault rather than the noise;
+  only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or replace
+  the rule instead. `KubeJobFailed` is the worked example: 48 firing SERIES in the 7 d to
+  2026-09-17, which reads like the loudest thing on the board and is mostly name churn — a CronJob
+  mints a new `job_name` per run, so one broken schedule bills one series per tick, and the subject
+  key already collapses them (`_strip` eats the `-<digits>` suffix). Behind the churn: 45 were the
+  per-node `fstrim-guard-*` guards failing through the 2026-09-16 worker replacements, 3 are live
+  `garage` job failures. Denying the NAME would have bought quiet on an arrival count while blinding
+  the one generic signal a Job in a namespace with no purpose-built belt has — read arrivals per
+  SUBJECT before reading them per series;
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
   — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)
@@ -331,6 +336,35 @@ never harder posture on quiet ones.
   verdict or say why it is wrong), and **compose issue bodies with `--body-file`, never an
   interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own body
   and ate every inline code span, deleting exactly the identifiers a fixer needs.
+  **THE DECLARED WINDOW (FU-230 leg b, 2026-09-17)** — the [glossary](../glossary.md) term, and
+  this section is its home. Leg (a)'s Alertmanager silences (`scripts/node-maintenance.sh`) match
+  `node`, `instance`, the node's pod names and, on a zone node, the Garage health set. One class is
+  beyond all four **structurally**: a rollout alert labelled by namespace + daemonset carries
+  neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence, so the
+  pod-name arm holds only its predecessors. Live twice on 2026-09-16 — an `nx-01` reinstall leaked
+  `KubeDaemonSetRolloutStuck` with all four arms armed, and wk-03's shutdown leaked
+  `CiliumUnreachableNodes` ×11, DaemonSet rollout/misschedule ×8, `KubeNodeUnreachable`,
+  `KubeletInstanceUnreachable` and `KubePodNotReady` ×4, silenced by hand for 8 h. Enumerating
+  `daemonset=~…` arms per alert name is the losing game that sighting demonstrates, so the seat
+  DECLARES the names instead (`agents/seat-window.sh` → the `responder-window` ConfigMap, opened and
+  closed by `node-maintenance.sh settle/down` and `up`). Three properties are the design: it is a
+  ConfigMap, so it OUTLIVES a monitoring restart, which silences do not (FU-195); it scopes by alert
+  NAME and never by namespace, because a namespace-wide mute would have hidden the rf=3 rollout's
+  REAL findings (garage-2 flapping, the write-probe 400s); and it suppresses the TRIAGE only — the
+  alert still fires, still notifies, still shows in Grafana. An alert OUTSIDE the declared set
+  triages as usual, which is the other half of FU-230: 7 of the 9 confidently-wrong writes in the
+  09-04→11 audit had a cause the seat made outside the cluster's view.
+  **A PERSON'S CLOSE DECIDES TOO (2026-09-17).** DECIDED-ONCE (#1733) keyed only on an OPEN issue,
+  which left the worst hole of the pair: the operator closes a standing condition's issue — the
+  strongest possible *I have decided, stop* — and the next UTC day finds no open record, runs a
+  full session and files a NEW issue against that close, daily, for as long as the condition stands.
+  The reopen belt does not help; it stops the closed thread being REOPENED, so the session files a
+  fresh one instead. The 7-day-lookback reboot rules are the shape (`NodeRebootingRepeatedly`,
+  `changes(node_boot_time_seconds[7d]) >= 3` — it fires for a week after two reboots and nothing
+  about it changes). So the same title-anchored + `fix-verdict:` predicate runs over CLOSED threads,
+  a close by a **User** (REST `.actor.type`) decides the condition, and NOTHING is written — the
+  thread is the human's and it ends closed. Shelf life `RESPONDER_HUMAN_CLOSE_DAYS` (14): past the
+  longest lookback any rule here uses, short enough that a re-emergence buys its session back.
   **CAPTURE (FU-210/FU-231, 2026-09-17):** the lane was the one role outside §A1 — a triage that
   filed no issue left NOTHING, and the 2026-09-03 forgejo-pg-1 session is the measured cost (subject
   marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).

@@ -1,0 +1,34 @@
+# 2026-09-17 — a PERSON'S CLOSE is a decision too, and the #1733 gate could not see it.
+#
+# CONDITION UNDER REPLAY. `NodeRebootingRepeatedly` on wk-03 has been firing since the operator
+# power-cycled the box. Its issue carries a verdict, and the OPERATOR CLOSED IT three days ago —
+# the strongest possible "I have decided, stop". The alert fires again on the next UTC day.
+#
+# WHAT IT REDS ON, and it is the worst hole of the pair. DECIDED-ONCE keys on an OPEN issue, so a
+# human close made the lane BLIND: no open record, a full session, and a NEW issue filed against
+# that close — daily, for as long as the condition stands. The reopen belt does not help; it only
+# stops the closed thread being REOPENED, so the session files a fresh one instead. This is the
+# operator's own reboot example: `changes(node_boot_time_seconds[7d]) >= 3` keeps firing for a week
+# after two reboots, and nothing about it changes on any of those days.
+#
+# THE CONTRACT:
+#   1. NO SESSION, and NOTHING WRITTEN. The thread is the human's and it ends closed — a body edit
+#      here would be the machine having the last word on a decision that was not its own. That is
+#      the difference from the open-issue branch, which rewrites one `still-firing:` line.
+#   2. A `humandecided-` ledger marker, per FU-113(a): a deliberate stop must be distinguishable
+#      from a drop.
+#   3. The ACTOR TYPE decides, read over REST (`.actor.type`) — the `[bot]` suffix is a rendering
+#      GraphQL omits, and testing the suffix against a GraphQL endpoint is what made every machine
+#      comment count as a human for two months (homelab#1733, the same mistake one lane over).
+#      A Bot close is the resolve leg's own auto-close, i.e. the flap case the reopen belt exists
+#      for, and falls through to an ordinary triage.
+pins:
+  - IL-T03
+name: responder-decided-once-human-closed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-decided-once
+  - file:../decided/reached.sh
+  - file:../decided/post.sh

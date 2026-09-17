@@ -1001,21 +1001,16 @@ the block needs pruning, not more headings.
       first tick; oracle's probe.md stays #289 (parked with the stack); then the
       sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
-- [ ] **FU-230** — **The responder cannot see seat-driven change** — 7 of 9 confidently-wrong
-      writes in the 09-04→11 week had a cause the seat made outside the cluster's view.
-      **Leg (a) DONE 2026-09-12 (PR#1601)**: `node-maintenance.sh settle/down` silence the window,
-      `up` expires it. ⚠ It still leaks the DaemonSet-rollout class (2026-09-16, #542 r3 — that
-      alert carries neither `node` nor `instance`); leg (b) is the general fix, not more arms.
-      ⚖ **Re-weighed 2026-09-16 (#1733): real, no longer binding** — one of twenty filed issues,
-      against seven operator-close reversals and nine daily re-confirmations that #1733 fixed
-      deterministically. **Next:** leg (b) — a seat-written ConfigMap window record the brief
-      prints like the ArgoCD observation-window line (durability caveat = FU-195) — when a SECOND
-      window class leaks. Detail: `docs/spikes/responder-week-audit.md` §The 2026-09-16 pass.
-
-      **Third sighting 2026-09-16 ~18:00Z (a SECOND window class): wk-03 shut down under a `node-maintenance` window;
-      `CiliumUnreachableNodes` ×11 (fires on every OTHER node's agent), `KubeDaemonSetRolloutStuck/MisScheduled` ×8,
-      `KubeNodeUnreachable`/`KubeletInstanceUnreachable`, `KubePodNotReady` ×4 — none carry node=/instance=, so the
-      window silence covered none; seat silenced by hand for 8 h. The FU's own build trigger has fired.**
+- [ ] **FU-230** — **The responder cannot see seat-driven change: POINTER.** 7 of 9
+      confidently-wrong writes in the 09-04→11 week had a cause the seat made outside the cluster's
+      view. Leg (a) (node/instance/pod-scoped Alertmanager silences) shipped PR#1601; **leg (b)
+      shipped PR#1750** after its own trigger fired twice on 2026-09-16 — a seat-written
+      **declared window** ([`glossary.md`](glossary.md)) naming the alert CLASSES a planned window
+      produces, for the ones carrying no `node`/`instance`/pod label at all — a ConfigMap, so the
+      FU-195 durability caveat is retired. Mechanism: [`agents/roles.md`](agents/roles.md)
+      §responder; evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md).
+      **Next:** at FU-249's un-pause, run one real `node-maintenance` window and confirm the
+      DaemonSet-rollout class costs no triage session.
 - [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
       (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
       `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage

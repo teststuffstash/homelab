@@ -564,6 +564,39 @@ spec:
             kubectl -n agent-coordinator get cm responder-seen >/dev/null 2>&1 \
               || kubectl -n agent-coordinator create cm responder-seen >/dev/null 2>&1 || true
 
+            # ── THE DECLARED SEAT WINDOW (FU-230 leg b) ──────────────────────────────────────
+            # Leg (a) — node-maintenance.sh's Alertmanager silences — matches on `node`,
+            # `instance`, the node's pod names and the zone Garage set. It leaks one class
+            # STRUCTURALLY, and no additional arm can close it: on 2026-09-16 08:08:46Z an nx-01
+            # wipe+reinstall silenced all four arms and `KubeDaemonSetRolloutStuck` fired anyway —
+            # that alert is labelled by namespace + daemonset, carries NEITHER `node` NOR
+            # `instance`, and the pod that went Pending was minted AFTER the silence, so the
+            # pod-name arm held only its predecessors. The same evening wk-03's shutdown leaked
+            # CiliumUnreachableNodes ×11, DaemonSet rollout/misschedule ×8, KubeNodeUnreachable,
+            # KubeletInstanceUnreachable and KubePodNotReady ×4, all silenced by hand for 8 h.
+            #
+            # So this leg matches on the DECLARED WINDOW rather than on labels the alert does not
+            # carry: the seat writes what it is doing and WHICH ALERT NAMES to expect
+            # (agents/seat-window.sh → this ConfigMap), and the match is by alertname alone.
+            # Scoped by NAME, never by namespace — a namespace-wide mute would have hidden the
+            # REAL findings of the rf=3 rollout (garage-2 flapping, the write-probe 400s).
+            # A ConfigMap rather than a silence because it OUTLIVES a monitoring restart, which
+            # silences do not (FU-195, the alertmanager-db emptyDir) — and because it carries the
+            # seat's own words, which is the other half of FU-230: 7 of the 9 confidently-wrong
+            # writes in the 09-04→11 audit had a cause the seat made outside the cluster's view.
+            #
+            # Read ONCE per workflow: a window does not meaningfully change mid-payload, and the
+            # alternative is one kubectl call per alert. Unreadable ⇒ EMPTY ⇒ everything triages,
+            # i.e. exactly today's behaviour (rule #6 — a window may only ever suppress a name a
+            # person deliberately declared).
+            SEATWIN="$(kubectl -n agent-coordinator get cm responder-window -o json 2>/dev/null \
+              | jq -c --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                  '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty
+                     | select((.until // "") > $now) ]' 2>/dev/null || true)"
+            [ -n "${SEATWIN:-}" ] || SEATWIN='[]'
+            SEATWIN_N="$(printf '%s' "$SEATWIN" | jq 'length' 2>/dev/null || echo 0)"
+            [ "${SEATWIN_N:-0}" -gt 0 ] && echo "→ $SEATWIN_N declared seat window(s) open: $(printf '%s' "$SEATWIN" | jq -r '[.[] | "\(.id) (\(.reason)) until \(.until)"] | join("; ")')"
+
             # </dev/null on the claude call below: a piped while-read loop's stdin IS the
             # remaining alerts — claude eats them and a multi-alert group triages only its
             # first member (found live 2026-07-27 by meta-alert-crosscheck.sh, run 1).
@@ -580,6 +613,33 @@ spec:
                 kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"none-$TODAY\"}}" >/dev/null 2>&1 || true
                 echo "→ $NAME ($FP): triage:none (self-describing by rule author) — marker written, skip"; continue
               fi
+
+              # >>>REPLAY:responder-seat-window>>>
+              # The declared-window gate (FU-230 leg b). Keyed on the ALERT NAME alone — see the
+              # SEATWIN read above for why node/instance scoping is the losing game here. The
+              # alert still fired, still reached Home Assistant and Grafana, and a person still
+              # sees it; what this skips is the LLM triage that would spend a budget slot to
+              # conclude that a person did this.
+              # jq emits the FINISHED sentence, not fields for the shell to re-split. `reason` is
+              # free text the seat types (`seat-window.sh open --reason "…"`) and this line is the
+              # record of why a triage did not happen, so the shell should not have to be right
+              # about punctuation in it at all.
+              # ⚠ The `id|reason|until` join it replaced was NOT broken, and the first cut of this
+              # comment said it was (bot review round 1 flagged a truncation, round 2 refuted its
+              # own finding, and a two-line repro confirmed the outputs are byte-identical). The
+              # `%%|*` / `##*|` idiom isolates the FIRST and LAST fields, so any number of pipes in
+              # the middle one survives — which holds only because `id` (`<node>-<epoch>`) and
+              # `until` (ISO-8601) structurally cannot contain one. That was true, unstated, and
+              # load-bearing; a later `--id` or a human-readable `until` would have broken it
+              # silently. Emitting the sentence removes the invariant rather than documenting it.
+              SW_HIT="$(printf '%s' "$SEATWIN" | jq -r --arg n "$NAME" \
+                '[ .[] | select((.alerts // []) | index($n)) ] | first
+                 | if . == null then "" else "DECLARED WINDOW \(.id) names this alert — \(.reason), until \(.until)" end' 2>/dev/null || true)"
+              if [ -n "$SW_HIT" ]; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"window-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "→ $NAME ($FP): $SW_HIT — marker written, no session"; continue
+              fi
+              # <<<REPLAY:responder-seat-window<<<
 
               # ── subject: key (FU-133) — the resource this alert is ABOUT ────────────────────
               # The lane deduped on FINGERPRINT, which is per-alert-instance: homelab#94 and #98
@@ -774,6 +834,65 @@ spec:
                   continue
                 fi
                 echo "→ $NAME ($FP): $DEC_HIT matched subject $SUBJ but its body could not be read — falling through to triage"
+              fi
+
+              # ── …AND A PERSON'S CLOSE IS ALSO A DECISION (2026-09-17) ────────────────────────
+              # The gate above keys on an OPEN issue, which leaves the worst hole in the pair: the
+              # operator CLOSES a standing condition's issue — the strongest possible "I have
+              # decided, stop" — and the next UTC day finds no open record, runs a full session and
+              # files a NEW issue against that close. The reopen belt below does not help: it only
+              # prevents REOPENING the closed thread, so the session dutifully files a fresh one
+              # instead. Daily. That is the operator's own reboot example: with a 7 d lookback
+              # window (`NodeRebootingRepeatedly`, `changes(node_boot_time_seconds[7d]) >= 3`) the
+              # alert keeps firing for a week after two reboots, and nothing about it changes.
+              #
+              # So the same title-anchored + `fix-verdict:` predicate runs over CLOSED threads, and
+              # a close by a USER (REST `.actor.type` — the suffix is a rendering, the type is the
+              # fact, #1733) decides the condition. NOTHING is written: the thread is the human's
+              # and ends closed, so a body edit here would be the machine having the last word on a
+              # decision that was not its own.
+              #
+              # SHELF LIFE, because a decision is about the condition as it stood: the close
+              # decides for RESPONDER_HUMAN_CLOSE_DAYS (14 — comfortably past the longest lookback
+              # window any rule here uses, short enough that a re-emergence next month triages
+              # again). Past it the condition is new and buys its session back.
+              #
+              # Rule #6 in the suppressing direction: only a POSITIVELY read User close inside the
+              # window suppresses. An unreadable actor, an unparsable date, a Bot close (the
+              # resolve leg's own auto-close — the flap case the reopen belt exists for) all fall
+              # through to an ordinary triage, which is exactly today's behaviour.
+              if [ -z "$DEC_HIT" ] && [ -n "${DEC_RAW:-}" ]; then
+                DECC_HIT="$(printf '%s' "$(gh search issues --owner "$ORG" --match body "subject:$SUBJ" --state closed \
+                                --json repository,number,title,body --limit 10 2>/dev/null || printf '[]')" \
+                  | jq -r --arg t "🚨 $NAME:" '
+                      [ .[]
+                        | select((.title // "") | startswith($t))
+                        | select((.body // "") | test("(?im)^fix-verdict:[ \t]*(fix|report-only)[ \t]*$"))
+                        | "\(.repository.nameWithOwner)#\(.number)" ] | first // empty' 2>/dev/null || true)"
+                if [ -n "$DECC_HIT" ]; then
+                  HC_REPO="${DECC_HIT%#*}"; HC_NUM="${DECC_HIT#*#}"
+                  HC_EV="$(gh api "repos/$HC_REPO/issues/$HC_NUM/events" --paginate \
+                             --jq '[.[] | select(.event == "closed")] | last | "\(.actor.type // "?")|\(.created_at // "")"' 2>/dev/null \
+                           | tail -1 || true)"
+                  HC_TYPE="${HC_EV%%|*}"; HC_AT="${HC_EV#*|}"
+                  HC_AGE=-1
+                  if [ -n "$HC_AT" ] && [ "$HC_AT" != "$HC_EV" ]; then
+                    HC_EPOCH="$(date -u -d "$HC_AT" +%s 2>/dev/null || echo 0)"
+                    [ "${HC_EPOCH:-0}" -gt 0 ] && HC_AGE=$(( ( $(date -u +%s) - HC_EPOCH ) / 86400 ))
+                  fi
+                  HC_MAX="${RESPONDER_HUMAN_CLOSE_DAYS:-14}"
+                  case "$HC_TYPE" in
+                    Bot|""|"?"|null) : ;;
+                    *)
+                      if [ "$HC_AGE" -ge 0 ] && [ "$HC_AGE" -le "$HC_MAX" ]; then
+                        kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"humandecided-$TODAY\"}}" >/dev/null 2>&1 || true
+                        echo "→ $NAME ($FP): HUMAN-DECIDED — $DECC_HIT was closed by a person ${HC_AGE}d ago and carries a verdict for $SUBJ; no session, nothing written (re-triages after ${HC_MAX}d)"
+                        continue
+                      fi
+                      echo "→ $NAME ($FP): $DECC_HIT was human-closed but ${HC_AGE}d ago (> ${HC_MAX}d) — the condition is new again, triaging"
+                      ;;
+                  esac
+                fi
               fi
               # <<<REPLAY:responder-decided-once<<<
 
