@@ -1,0 +1,24 @@
+# job-health — replaces the stock kube-prometheus-stack `KubeJobFailed`, which is disabled in this
+# repo's chart values (`defaultRules.disabled`). Raw manifests in argocd/resources/job-health/;
+# the reason the stock rule had to go is in that PrometheusRule's header.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: job-health
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/job-health
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

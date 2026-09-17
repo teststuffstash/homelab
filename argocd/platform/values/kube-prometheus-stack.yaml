@@ -20,6 +20,15 @@
 defaultRules:
   disabled:
     NodeSystemSaturation: true
+    # KubeJobFailed reads a Job OBJECT, not a schedule, so on a CronJob it is a latch pointing the
+    # wrong way: it clears only when the job fails ENOUGH MORE TIMES to rotate the failed object out
+    # of `failedJobsHistoryLimit`, or when a human deletes it by hand. Measured 2026-09-17 —
+    # garage-write-probe (every minute) failed twice on 09-16, succeeded 776 times since, and was
+    # still firing 13.5 h later. Replaced, not merely denied, by argocd/resources/job-health/:
+    # CronJobNotSucceeding (cadence-derived, self-clearing) + CronJobNeverSucceeded + a KubeJobFailed
+    # narrowed to Jobs no CronJob owns, where a persisting failure IS the open item. Same
+    # disable-and-re-add shape as NodeSystemSaturation above (homelab#477).
+    KubeJobFailed: true
 additionalPrometheusRulesMap:
   cilium:
     groups:
@@ -297,12 +306,11 @@ alertmanager:
         # ⚠ A stock chart rule cannot carry `triage` (no per-alert label hook; `defaultRules`
         # only offers disable + fleet-wide labels). The escape hatch for one of those is an
         # `alertname!~` matcher HERE, with its reason — but prefer scoping or replacing the rule.
-        # KubeJobFailed is the worked example: 48 firing SERIES in the 7d to 2026-09-17 reads like
-        # the loudest thing on the board and is mostly NAME CHURN (a CronJob mints a new job_name
-        # per run, so one broken schedule bills one series per tick and the responder's subject key
-        # already collapses them). Behind it: 45 fstrim-guard runs failing through the 09-16 worker
-        # replacements, 3 live garage job failures. Denying the NAME buys quiet on a count while
-        # blinding the only generic signal a Job with no purpose-built belt has.
+        # KubeJobFailed is the worked example and it ended in a REPLACEMENT (defaultRules.disabled
+        # above + argocd/resources/job-health/, 2026-09-17): its 48 firing series in 7d were name
+        # churn, and underneath them the rule read a Job OBJECT rather than a schedule, so it could
+        # only be cleared by failing more or by hand. A deny would have hidden that from this lane
+        # and left the operator the same broken detector; fixing the rule fixed it for every reader.
         - continue: true
           group_by:
             - alertname

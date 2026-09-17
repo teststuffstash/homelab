@@ -1,0 +1,40 @@
+# Hand copy of the job-health group from prometheusrule.yaml.
+# Regenerate after every expr edit with:
+#
+#   yq -o=json '{"groups": [{"name": "job-health", "rules": [.spec.groups[].rules[]]}]}' argocd/resources/job-health/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — re-add this header BY HAND after every
+# regenerate. Drift-pinned by scripts/prometheus-rules-lint.sh (expr+for equality per alert name).
+groups:
+  - name: job-health
+    rules:
+      - alert: CronJobNotSucceeding
+        expr: |
+          (time() - kube_cronjob_status_last_successful_time)
+            > 3 * clamp_min(kube_cronjob_next_schedule_time - kube_cronjob_status_last_schedule_time, 600)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in 3 scheduled runs
+          description: 'Three consecutive scheduled runs produced no successful completion ({{ $value | humanizeDuration }} since the last success). SYMPTOM ONLY, and the per-CronJob belt usually says more: check that one first if it exists (Garage*, NodeFstrim*, RegistryGCMirrors*). Then `kubectl -n {{ $labels.namespace }} get jobs -l batch.kubernetes.io/cronjob-name={{ $labels.cronjob }}` and the newest pod''s log. Unlike the stock KubeJobFailed this replaced, the alert CLEARS on the next success — deleting failed Job objects is never the remedy.'
+      - alert: CronJobNeverSucceeded
+        expr: |
+          (kube_cronjob_created < time() - 86400)
+            unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has never completed successfully
+          description: 'This CronJob was created over a day ago and has no recorded successful completion — it may have never run, or every run so far has failed. Existing is not running: check `kubectl -n {{ $labels.namespace }} describe cronjob {{ $labels.cronjob }}` for a suspend flag, a schedule that has not come round, or jobs failing at admission (image pull, RBAC, quota).'
+      - alert: KubeJobFailed
+        expr: |
+          kube_job_failed{job="kube-state-metrics"} > 0
+            unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete
+          description: 'A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed condition. Read the pod''s log, then decide: re-run it, or delete the Job once the outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert — their schedule''s health is CronJobNotSucceeding, which self-clears.'
