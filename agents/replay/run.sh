@@ -535,8 +535,29 @@ else
 fi
 [ ${#DIRS[@]} -gt 0 ] || { echo "clause-replay: no fixtures found under $FIXROOT" >&2; exit 2; }
 
+# ── recorded worlds are READ-ONLY to a run ──────────────────────────────────────────────────────
+# A bridge that derives a world file (a timestamp relative to now, say) has to write it somewhere,
+# and `$REPLAY_WORLD` is the fixture's OWN `world/` dir unless a named registry world is in play —
+# so the obvious spelling rewrites a COMMITTED file on every run. Found 2026-09-17: two new
+# fixtures left `git status` dirty after the suite, which is a test mutating the repo it reads.
+# The remedy at the fixture is one line (`cp -r "$REPLAY_WORLD/." "$(mktemp -d)"` and re-point);
+# this is the gate that makes forgetting it visible instead of silent. Hashing before/after
+# isolates "the RUN changed a world" from "the author is editing a fixture", which a bare
+# `git status` could not. `--record`/`--rerecord` return before this point by design — writing
+# worlds is their whole job.
+_world_sum() { find "$FIXROOT" -path '*/world/*' -type f -exec sha256sum {} + 2>/dev/null | sort; }
+WORLDS_BEFORE="$(_world_sum)"
+
 printf '\033[1mclause-replay\033[0m — %s fixture(s) under %s\n' "${#DIRS[@]}" "${FIXROOT#$ROOT/}"
 for d in "${DIRS[@]}"; do run_fixture "$d"; done
+
+if [ "$WORLDS_BEFORE" != "$(_world_sum)" ]; then
+  printf '\n\033[31m✗ a fixture WROTE INTO ITS RECORDED WORLD\033[0m — the run mutated files it should only read:\n'
+  diff <(printf '%s\n' "$WORLDS_BEFORE") <(_world_sum) | grep '^[<>]' | awk '{print "    " $NF}' | sort -u
+  printf '  Copy the world out in the bridge before writing to it:\n'
+  printf '    _w="$(mktemp -d)"; cp -r "$REPLAY_WORLD/." "$_w/"; REPLAY_WORLD="$_w"\n'
+  FAIL=$((FAIL+1)); FAILED+=("recorded worlds were modified by the run")
+fi
 # index currency rides the FULL run only — a single-fixture invocation is an author's inner loop
 [ $# -eq 0 ] && index_check
 [ $# -eq 0 ] && families_currency_check

@@ -12,10 +12,16 @@ for _ in 1; do
 # The close EVENT is written here rather than recorded, because the condition under test is
 # RELATIVE ("a person closed it N days ago") and a frozen `created_at` would silently cross the
 # 14-day threshold twelve days from now — the fixture would flip branch on a calendar date and red
-# for a behaviour that never changed. `$REPLAY_WORLD` is the runner's materialized overlay
-# (agents/replay/README.md §the runner contract), so this is a recorded world with one derived
-# field, not a stub.
-mkdir -p "$REPLAY_WORLD/gh"
+# for a behaviour that never changed. The result is a recorded world with one derived field, not
+# a stub — the recording is everything except the moment.
+# ⚠ COPY THE WORLD OUT FIRST. `run.sh` points $REPLAY_WORLD at the fixture's OWN `world/` dir
+# unless a named registry world is in play, so writing the derived event straight into it rewrites
+# a COMMITTED file on every run — `git status` came back dirty after the suite, which is a fixture
+# mutating the repo it is supposed to be reading. The recorded world stays read-only; the overlay
+# is where the one derived field lands.
+_w="$(mktemp -d)"
+cp -r "$REPLAY_WORLD/." "$_w/"
+REPLAY_WORLD="$_w"
 printf '[{"event":"closed","actor":{"login":"RasmusSoot","type":"User"},"created_at":"%s"}]\n' \
   "$(date -u -d '-3 days' +%Y-%m-%dT%H:%M:%SZ)" \
   > "$REPLAY_WORLD/gh/api-repos-teststuffstash-homelab-issues-1663-events.json"
