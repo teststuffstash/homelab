@@ -9572,7 +9572,7 @@ crossplane-system with a holder) — cleared by dropping the holder + lock-info 
 
 Operator: *"Build Responder follow-ups that are still not done — FU-210, FU-230, FU-231 … Figure out
 which alerts are not actionable and should not be routed to the responder at all."* Corpus session
-(`/design-agents`, full load). Three PRs, all merged or armed; the lane is still PAUSED (FU-249), so
+(`/design-agents`, full load). Three PRs, all merged (#1748, #1749, #1750); the lane is still PAUSED (FU-249), so
 every acceptance below is written as a thing to READ at un-pause rather than claimed.
 
 **The ask's third leg first, because it reframed the other two.** The question "which alerts should
@@ -9631,3 +9631,31 @@ Both gates fail toward TRIAGING.
 **Method note worth keeping:** the human-close fixtures write their close event from the BRIDGE
 rather than recording it — the condition is relative ("closed N days ago") and a frozen timestamp
 would cross the 14-day threshold on a calendar date and red for a behaviour that never changed.
+
+**Found while verifying #1748 live, folded into #1750:** `meta-alert-crosscheck.sh` cannot see a
+PAUSED lane. FU-249 pauses the responder with a never-matching Sensor filter and changes nothing
+else, so from the crosscheck the lane is indistinguishable from an EventSource that died — every
+firing alert reads UNTRIAGED and the script exits non-zero (3 lines and a red exit, observed, for a
+state the operator deliberately created). It is the same marker-vs-drop rule the script applies per
+ALERT, missing one level up. It reads the Sensor now.
+
+**A review lesson worth more than the code it was about (PR#1750, rounds 1–3).** Round 1 flagged the
+declared-window log line's `id|reason|until` join as truncating a free-text reason containing a
+pipe. The seat took it at face value, fixed it, AND wrote a fixture asserting the truncation.
+Round 2 **refuted its own round-1 finding**: `%%|*` / `##*|` isolate the FIRST and LAST fields, so
+pipes in the middle one survive — a two-line repro confirms the two forms are byte-identical. There
+was no bug, and the fixture "pinning" it passed on base — a vacuous pin dressed as a regression
+test. Two things to carry: **a bot finding is evidence, not a verdict — reproduce a correctness
+claim before building on it** (the same rule the responder brief already gives its own sessions
+about a predecessor's triage); and the simplification still shipped, on a DIFFERENT and true reason
+found while checking — the old idiom was robust only because `id` and `until` structurally cannot
+contain a pipe, which was unstated and load-bearing, so emitting the sentence from jq removes the
+invariant instead of documenting it. The fixture is re-declared a WITNESS, not a pin.
+
+**End-state checks run (the routing filter, after ArgoCD synced):** the live Alertmanager config
+carries `severity!="info"` + `triage!="none"` on the `agent-responder` route; Prometheus has the
+five new `triage: none` labels loaded; the respond WorkflowTemplate carries all four `AGENT_TS_*`
+env vars; the FU-249 Sensor filter is still `__paused-FU-249__`. Reach, measured over the 7 d to
+2026-09-17 (338 firing series total): ~51 denied by the `triage:none` set (22 of them newly
+labelled, i.e. arrivals that would have been SESSIONS), 6 more by `severity:info`, and 69 in the
+classes a declared window covers while one is open.

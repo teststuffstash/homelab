@@ -9,6 +9,35 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-17 corpus session — the responder rebuild's second half; arc in TICK-LOG).**
+  Three PRs: **#1748** (the triage-routing filter), **#1749** (§A1 capture) and **#1750**
+  (declared window + human-close + the crosscheck's pause line) — ALL MERGED. The lane is still PAUSED (FU-249), so
+  NOTHING below has been observed live — each item is a read to run at un-pause.
+  (1) **At FU-249's un-pause (≈09-23), in this order:** delete the never-matching `alert-dep` filter
+  in `responder-argo.yaml` (one revert); then (a) `responder_triage_sessions_today` for a day — it
+  should sit well under the 11–12/day ceiling of the 09-11→16 window; (b) `kubectl -n
+  agent-coordinator get cm responder-seen -o json | jq '[.data|to_entries[]|select(.value|
+  startswith("none-") or startswith("window-") or startswith("humandecided-"))]|length'` — the
+  three new deliberate-stop markers; (c) ONE prefix end-to-end
+  (`devbox run garage-s3 s3 ls s3://agent-transcripts/homelab/ --recursive` — the `homelab/`
+  prefix does not exist yet, verified 2026-09-17, which is FU-231's own blocker restated) — **that is FU-210's acceptance**,
+  and specifically: a report-only session that files no issue must still leave a readable decision;
+  (d) run one real `node-maintenance` window and confirm the DaemonSet-rollout class costs no
+  session — **FU-230 leg (b)'s acceptance**.
+  (2) **FU-231's switch is NOT flipped and one finding says it cannot be as sketched** — report-only
+  issues are DECIDED-ONCE's anchor, and moving that anchor into the bucket needs a pod READ the
+  write-only transcripts key will never grant. Two independent next legs on the FU: the jail-side
+  `triage` meta-events source (reader key), and re-reading the switch with finding records in hand.
+  (3) **Standing local branch residue:** `fix/responder-decide-once` is a stale local branch from the
+  PR#1733 session (merged by squash, never pushed) and holds a worktree at another session's
+  scratchpad path — it blocked a branch name this session. Prune at the next hygiene pass
+  (meta-state §Hygiene already lists stale agent branches).
+  (4) Not acted on, worth one read: `KubeJobFailed` fired 45 series in `node-maintenance` during the
+  09-16 worker replacements (the per-node `fstrim-guard-*` CronJobs failing while their nodes were
+  down) — expected during a window, but it is the class a declared window does NOT cover, and adding
+  `KubeJobFailed` to `DECLARED_ALERTS` was rejected as too broad (it would mute every Job failure
+  fleet-wide for the window). The narrower fix, unbuilt: the guard should skip a cordoned node.
+
 - **⚑ FU-206 (operational paths) — PR#1747 in flight; the hand-applied interim does NOT hold.** Both
   legs were applied to `mcp.minutark.ee` through cf-api-proxy to close the exposure early, and the
   Workspace reverted both within the hour (observed 2026-09-17 ~06:10Z) — expected: it is drift against
