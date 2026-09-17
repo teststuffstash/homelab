@@ -87,8 +87,9 @@ its anchor and its evidence:
   - anchor: `router.py:_shadow_ladder`, written by `router.py:record_shadow_decision`.
   - evidence: `/router-status` → `ladder_cells`, `shadow_24h`; `router_shadow_decisions_total{agrees="0"}`
     (the divergence the soak reviews), `router_shadow_start_tier`.
-  - **`unenforced`** for the *served* pick — the P4 flip discipline owns it; no child is assigned
-    yet (proposed, no owner).
+  - **`unenforced`** for the *served* pick — the P4 flip discipline owns it, and the owning
+    concern is NAMED: FU-095, whose recorded next step is the flip child — "the ladder promotion
+    into the served path" ([`../follow-ups.md`](../follow-ups.md)). No child minted yet.
 
 ### Class rules
 
@@ -182,8 +183,12 @@ its anchor and its evidence:
     slug.
 - **Latency is an ordering dimension, tie-broken on measured decode tokens/sec per
   `(model, provider)` inside the band** — never the model page's advertised percentiles.
-  - **`unenforced`** — needs the `/generation` `generation_time` harvest (homelab#22 build); no
-    owner beyond that FU.
+  - anchor (the harvest half — LANDED, homelab#22): `router.py:record_generation` (the
+    `generations.generation_ms` column) exported by `router.py:metrics_lines`.
+  - evidence: `router_observed_decode_tps{model=…}`.
+  - **`unenforced`** for the ORDERING half — nothing reads the series: `model-classes.json` →
+    `selection.rule` is `cheapest-effective-jitter` (price only) and no pin or route sort key
+    consults decode tokens/sec. **Proposed, no owner.**
 
 ## The strike ladder
 
@@ -267,8 +272,11 @@ scope.
   fine sub-type for a goose tool-call truncation (the class a cap death used to hide in); two
   sightings in 24 h on the SAME cell are one cell's problem, not a fleet event — unlike the
   `unknown` latch below, which is deliberately fleet-level until the vocabulary child lands.
-  - **`unenforced`** — operator direction 2026-09-14; the class exists in no branch. **Proposed, no
-    owner** (a Goal #1640 follow-up; the interim `unknown` latch below still applies).
+  - **`unenforced`** — operator direction 2026-09-14: the class is no vocabulary member
+    (`router.py:SERVING_CLASSES` carries no entry for it) and nothing counts sightings per cell —
+    the launcher's `-32602` branch reports the COARSE class (`agents/agent-session.sh`,
+    `ERR_CLASS=harness-death`), as does agent-finalize. **Proposed, no owner** (a Goal #1640
+    follow-up; the interim `unknown` latch below still applies).
 - **The producer-side half of the vocabulary lives in agent-runtime.** `agent-finalize` is the
   component that must report a member of `STRIKE_CLASSES`, and the storm watchdog must kill a
   block repetition (N consecutive identical tool calls with identical results, read from the goose
@@ -406,13 +414,18 @@ owner per fact; every other consumer ASKS:
 ## Unenforced rules and their owners
 
 Every rule above that this doc cannot anchor names its owner here, so the post-theme refresh is a
-grep rather than a re-read (Goal #1640 acceptance numbers are the goal's own):
+grep rather than a re-read (Goal #1640 acceptance numbers are the goal's own). **Audited against
+master 2026-09-17 (homelab#1709 — the post-theme-1 flip pass): the theme-1 rules carry anchors in
+the body above and have no row here** — the strike vocabulary (`router.py:STRIKE_CLASSES` /
+`SERVING_CLASSES`), per-task enforcement + cell pricing (`router.py:route`), the per-session pin
+(`openrouter-proxy.py:pin_for`) and the pair cooldown (`router.py:pair_cooldowns`) assembled with
+homelab#1665/#1666 via PR#1734. The rows below are the residue:
 
 | rule | owner |
 |---|---|
-| across-rails cost ladder decides the SERVED pick (shadow today) | proposed, no owner — the P4 flip discipline |
+| across-rails cost ladder decides the SERVED pick (shadow today) | FU-095 — its recorded next step IS the flip child ("the ladder promotion into the served path", [`../follow-ups.md`](../follow-ups.md)); no child minted yet |
 | `pin-v2` for the priced classes (quality tie-break, benchmark floor, live tool-error floor) | Goal #1640 acceptance 8 (evidence base) |
-| latency tie-break on measured decode tokens/sec | homelab#22 (`/generation` `generation_time` harvest) |
+| latency tie-break on measured decode tokens/sec | proposed, no owner — homelab#22's harvest half LANDED (`generations.generation_ms`, `router_observed_decode_tps`); the ordering lever (nothing reads the series) is what is unbuilt |
 | `goose-32602-truncation` as a per-cell signal | proposed, no owner (operator direction 2026-09-14) |
 | the finalizer/watchdog producer half of the strike vocabulary, and the storm-watchdog kill | Goal #1640 acceptance 1 (agent-runtime half) |
 | launcher retry at worker-terminal | Goal #1640 acceptance 4 |
