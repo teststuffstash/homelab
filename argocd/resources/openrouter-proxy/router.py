@@ -21,6 +21,7 @@ import needs no packaging). `--self-test` runs the in-memory round-trip; CI runs
 `devbox run router-self-test`.
 """
 
+import calendar
 import copy
 import json
 import math
@@ -2290,34 +2291,79 @@ def self_test() -> int:
     w60d = go_usage_window(60 * 86400)  # 60d window
     assert w60d["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted"
     assert w60d["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained"
-    # ── gometer WINDOW DRAW pricing (2026-08-17 defect): list price on raw tokens, badged ──
+    # ── gometer WINDOW DRAW pricing (2026-08-17 defect): list price on raw tokens ──────────
     import gometer  # shared home (ADR-108) — the semantics under test
-    # Console reconciliation (uploads/opencode-go.txt): a 5h window of 50.56M in / 0.488M out of
-    # badged deepseek-v4-flash drew ≈ $4.32 (console) while the old cache-priced meter read
-    # $0.145 (~30× low). LIST prices: flash in $0.14/M, out $0.28/M, half=True.
-    #   input  50.56M × 0.14 = 7.0784  → ÷2 = 3.5392
-    #   output  0.488M × 0.28 = 0.13664 → ÷2 = 0.06832
-    #   draw = 3.60752  (NOT the ~$0.14 cents a cache-read interpretation gives)
+    # Deterministic clocks for the TIME-VARYING DeepSeek rows (2026-09-17 refresh): every
+    # price assertion below pins `now`, or it would flip with the wall clock.
+    _T_OFF = calendar.timegm((2026, 9, 19, 12, 0, 0, 0, 0, 0))  # Sat 12:00Z → OFF-PEAK
+    _T_PEAK = calendar.timegm((2026, 9, 17, 7, 0, 0, 0, 0, 0))  # Thu 07:00Z → PEAK
+    assert gometer.is_peak(_T_PEAK) and not gometer.is_peak(_T_OFF), "peak clock fixtures"
+    # Console reconciliation (uploads/opencode-go.txt, 2026-08-17): a 5h window of 50.56M in /
+    # 0.488M out of deepseek-v4-flash drew DOLLARS at list on RAW tokens, while the old
+    # cache-priced meter read $0.145 (~30× low). That invariant is what this pins; the absolute
+    # number moved with the 2026-09-17 price refresh (0.14/0.28 + a now-ungrounded 2x badge →
+    # 0.15/0.60 off-peak, no badge):
+    #   input  50.56M × 0.15 = 7.584
+    #   output  0.488M × 0.60 = 0.2928
+    #   draw = 7.8768  (NOT the ~$0.15 cents a cache-read interpretation gives)
     _raw_merge = {"input_tokens": 50560000, "output_tokens": 488000}
-    _cal = gometer.window_draw("deepseek-v4-flash", _raw_merge)
-    assert 3.5 <= _cal <= 3.75, f"window_draw calibration: {_cal} (expected ≈3.61 from list prices)"
-    # ── homelab#540: price() is BILLED = list ×1, badge models included, NO halving ──
-    # The matrix's console-verified ruling (docs/spikes/opencode-model-matrix.md): billed Cost =
-    # list ×1 for EVERY model, badged included; the badge halving is the WINDOW-DRAW
-    # (limit-side) effect only. deepseek-v4-flash (half=True) 1M in + 1M out:
-    #   billed = 1e6×0.14/1e6 + 1e6×0.28/1e6 = 0.14 + 0.28 = $0.42  (NOT $0.21)
+    _cal = gometer.window_draw("deepseek-v4-flash", _raw_merge, now=_T_OFF)
+    assert abs(_cal - 7.8768) < 1e-6, f"window_draw calibration: {_cal} (expected 7.8768 from list prices)"
+    assert _cal > 50 * gometer.price("deepseek-v4-flash",
+                                     {"input_tokens": 0, "cache_read_input_tokens": 50560000,
+                                      "output_tokens": 0}, now=_T_OFF)[0], \
+        "the 2026-08-17 invariant: raw-token list draw ≫ the cache-read-priced view"
+    # ── homelab#540: price() is BILLED = list ×1 with cache discounts; window_draw() is LIST
+    # on raw tokens. deepseek-v4-flash 1M in + 1M out, OFF-PEAK:
+    #   billed = 1e6×0.15/1e6 + 1e6×0.60/1e6 = 0.15 + 0.60 = $0.75
     _bill_merge = {"input_tokens": 1000000, "output_tokens": 1000000}
-    _bill = gometer.price("deepseek-v4-flash", _bill_merge)[0]
-    assert abs(_bill - 0.42) < 1e-9, f"price() must bill badge models at list ×1: {_bill} != 0.42"
-    # and the DRAW of the SAME physical completion IS badge-halved: 0.42 × 0.5 = $0.21.
-    _draw_same = gometer.window_draw("deepseek-v4-flash", _bill_merge)
-    assert abs(_draw_same - 0.21) < 1e-9, f"window_draw must badge-halve the same completion: {_draw_same}"
+    _bill = gometer.price("deepseek-v4-flash", _bill_merge, now=_T_OFF)[0]
+    assert abs(_bill - 0.75) < 1e-9, f"price() off-peak list ×1: {_bill} != 0.75"
+    # 2026-09-17: NO row sets half=True any more (the vendor dropped the 2x badge column), so
+    # the draw of the same completion is NOT halved — it equals the raw-token list price. This
+    # assertion is the regression guard against silently re-introducing an ungrounded halving.
+    _draw_same = gometer.window_draw("deepseek-v4-flash", _bill_merge, now=_T_OFF)
+    assert abs(_draw_same - 0.75) < 1e-9, f"no badge halving is grounded today: {_draw_same} != 0.75"
+    assert not any(r[4] for r in gometer.GO_PRICES.values()), \
+        "half=True must stay UNSET until a badge is re-grounded (it makes the latch optimistic)"
+    # ── PEAK / OFF-PEAK (2026-09-17): both sides of the boundary, pinned ───────────────────
+    # Vendor: peak = Mon-Fri 01:00-04:00 and 06:00-10:00 UTC; everything else off-peak. Peak is
+    # exactly 2× off-peak for the four DeepSeek rows.
+    _peak_draw = gometer.window_draw("deepseek-v4-flash", _bill_merge, now=_T_PEAK)
+    assert abs(_peak_draw - 1.50) < 1e-9, f"peak draw must be 2× off-peak: {_peak_draw} != 1.50"
+    #   deepseek-v4-pro peak: 1M×1.32 + 1M×3.96 = $5.28 (off-peak 0.66 + 1.98 = $2.64)
+    assert abs(gometer.price("deepseek-v4-pro", _bill_merge, now=_T_PEAK)[0] - 5.28) < 1e-9, \
+        "deepseek-v4-pro peak row"
+    assert abs(gometer.price("deepseek-v4-pro", _bill_merge, now=_T_OFF)[0] - 2.64) < 1e-9, \
+        "deepseek-v4-pro off-peak row"
+    # boundary hours: 01:00Z in, 04:00Z out, 06:00Z in, 10:00Z out (half-open [lo, hi)).
+    _wed = lambda h, m=0: calendar.timegm((2026, 9, 16, h, m, 0, 0, 0, 0))  # a Wednesday
+    assert gometer.is_peak(_wed(1)) and not gometer.is_peak(_wed(0, 59)), "01:00Z opens peak"
+    assert gometer.is_peak(_wed(3, 59)) and not gometer.is_peak(_wed(4)), "04:00Z closes peak"
+    assert gometer.is_peak(_wed(6)) and not gometer.is_peak(_wed(5, 59)), "06:00Z opens peak"
+    assert gometer.is_peak(_wed(9, 59)) and not gometer.is_peak(_wed(10)), "10:00Z closes peak"
+    # weekends are off-peak even inside the peak HOURS
+    assert not gometer.is_peak(calendar.timegm((2026, 9, 19, 7, 0, 0, 0, 0, 0))), "Sat 07:00Z off-peak"
+    assert not gometer.is_peak(calendar.timegm((2026, 9, 20, 7, 0, 0, 0, 0, 0))), "Sun 07:00Z off-peak"
+    # a NON-peak model is unaffected by the clock
+    assert gometer.window_draw("kimi-k3", _bill_merge, now=_T_PEAK) == \
+        gometer.window_draw("kimi-k3", _bill_merge, now=_T_OFF), "clock must not move a flat row"
+    # the half MECHANISM is retained for a future GROUNDED badge — prove it still halves
+    gometer.GO_PRICES["_synthetic-badged"] = (1.00, 1.00, None, None, True)
+    try:
+        assert abs(gometer.window_draw("_synthetic-badged", _bill_merge) - 1.00) < 1e-9, \
+            "half mechanism must still halve a badged row (2.00 list → 1.00 draw)"
+    finally:
+        del gometer.GO_PRICES["_synthetic-badged"]
+    # qwen3.5-plus is DEAD (400 "Model is unavailable", 3/3, 2026-09-17) and must stay out of
+    # the table — /v1/models still lists it, so the model list is not a liveness signal.
+    assert "qwen3.5-plus" not in gometer.GO_PRICES, "qwen3.5-plus is dead — keep it deleted"
     # The OLD meter's view — the same physical input reported as cache-read (the "assumes
-    # cache-read pricing" bug): 50.56M at the cR rate 0.0028/M → cents, not dollars. The billed
-    # side is now list ×1, so the cache-read view prices at the cR rate ×1 (no halving).
+    # cache-read pricing" bug): 50.56M at the cR rate 0.003/M → cents, not dollars. The billed
+    # side is list ×1.
     _old_view = {"input_tokens": 0, "cache_read_input_tokens": 50560000,
                  "output_tokens": 488000}
-    _billed_old = gometer.price("deepseek-v4-flash", _old_view)[0]
+    _billed_old = gometer.price("deepseek-v4-flash", _old_view, now=_T_OFF)[0]
     assert _billed_old < 0.5, f"the cache-read-meter view must still read cents, got {_billed_old}"
     # ── homelab#540: the cache-split formula (2026-08-18 reconciliation shape, clean numbers) ──
     # kimi-k3 rates in $/M: in 3.00, out 15.00, cR 0.30. A synthetic split row:
