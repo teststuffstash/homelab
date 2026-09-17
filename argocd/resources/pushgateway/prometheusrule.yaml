@@ -375,6 +375,12 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # …and BECAUSE every class it counts is `who=operator` BY DEFINITION, no LLM should
+            # even look: `triage: "none"` (the CodeownerParkWaiting precedent, operator
+            # 2026-08-12). A triage session can only restate the annotation — the 2026-09-04→11
+            # audit's #1546 row is the measured case (report-only, "issue-metadata / codeowner
+            # call, not a PR"). The alert still notifies and meta-events still wakes the seat.
+            triage: "none"
           annotations:
             summary: "Operator-attention items (who=operator) have been standing >4h on {{ $labels.repo }}"
             description: "SYMPTOM ONLY — the board's who=operator class contains items that need the operator's attention (strike-held, footprint-held, cap-held, blockpark, queued-held-by-ghost, phantom). An active seat drains the board long before 4h; this alert exists for the no-seat case. Check the BIG PICTURE at the Grafana attention table (board.teststuff.net once leg 6 lands). Deploy silences the `for:` window — a pushgateway redeploy during an active standing resets the timer, accepted because the design is slow enough that a reset window is tolerable."
