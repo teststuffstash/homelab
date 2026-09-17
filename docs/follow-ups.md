@@ -458,6 +458,9 @@ six OVERSIZE items pointer-ized into
       not the runner. Mitigated: `mgmt_clone`'s dirty check ignores the lock. **Next:** pin the
       same devbox version on both sides (the closure's `devbox` package ↔ claude-jail's image) and
       drop the exclusion. Relates ADR-129, FU-237.
+      **+2026-09-17: the JAIL's own devbox (0.18.1) does it too** (nodejs_22 0.0.5→0.0.4) and it
+      dirties the operator's SHARED working tree, where no exclusion exists — skip `git status`
+      and a session commits the downgrade. Reverted by hand.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
