@@ -109,7 +109,7 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
 
 ### scout (model-scout)
 
-- **brief**: scout probe (model-routing.md §M7 — v3 redesign 2026-08-10: variant filter,
+- **brief**: scout probe (model-routing-history.md §M7 — v3 redesign 2026-08-10: variant filter,
   benchmark cross-check, typed cell-keyed canary verdicts, and the §M13 pool-curation duty;
   FU-161/FU-162)
 - **boundary**: ephemeral only-free capped keys (canary)

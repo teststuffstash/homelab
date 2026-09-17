@@ -106,7 +106,7 @@ TL = TICK-LOG. "Bot CR before" = the bot had itself requested changes on an earl
 | homelab#800 | 08-23 | doc-currency | HR (APPROVED) | yes (1) | `agents/README.md` "--recipe (goose + claude; opencode uses --run)" line stale after the change | seat direct-to-master |
 | homelab#841 | 08-24 | in-diff-defect | HR (APPROVED note) | no | `clause_files` is a hand copy of the ci.yaml ratchet regex — drift hazard | fix round #858 (its parity check found #841's list already stale by one file) |
 | homelab#862 | 08-24 | wrong-target | HR (CHANGES_REQUESTED) | no | diagnosis refuted by Loki: real bug is `local a=… b=${a}` expansion under `set -u`, not the S3 write guard | fix round 3; seat approved 13:06Z |
-| homelab#864 | 08-24 | doc-currency | CM (pre-read) | yes (1) | the fix reverses a recorded doctrine sentence (model-routing.md §M10 override rule) not updated in-diff | seat direct-to-master one-liner at merge time |
+| homelab#864 | 08-24 | doc-currency | CM (pre-read) | yes (1) | the fix reverses a recorded doctrine sentence (model-routing-history.md §M10 override rule) not updated in-diff | seat direct-to-master one-liner at merge time |
 | homelab#879 | 08-24 | in-diff-defect | HR (APPROVED) + TL | no | `ledger.py:313 retry_storms` exact-membership drops the new `budget-403-*` subclasses — consumer the sweep missed | seat direct-to-master quickfix `2bda99b8` |
 | homelab#890 | 08-24 | doc-currency | HR (APPROVED) | yes (1) | two one-token errors: wrong repo in an issue ref, wrong description of the fallback's source | seat direct-to-master |
 | homelab#894 | 08-25 | in-diff-defect | HR (APPROVED) + TL | yes (3) | emitter: per-item pushgateway POST clobbers sibling series; since-timestamp re-stamped every push | follow-up #913 → fix round PR#915 |
