@@ -215,6 +215,11 @@ evaluate() {
     if [ -f "$exc" ]; then
       kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" --exceptions "$exc" 2>&1)"
     else
+      # Say it. A missing exceptions file is not an error (a repo may legitimately need no
+      # waivers) but it CHANGES THE VERDICT, and saying nothing is what made the worktree
+      # defect above cost a debugging session: the run looked like it worked and returned 35
+      # authentic-looking violations.
+      log "[$repo] no exceptions file at $exc — kyverno running with NO exceptions"
       kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" 2>&1)"
     fi
     krc=$?
@@ -291,7 +296,26 @@ fi
 if [ "${1:-}" = "--smoke" ]; then
   SMOKE_SRC="$(cd "${2:-$HERE/..}" && pwd)"
   export SMOKE_SRC
-  smoke_repo="$(basename "$(git -C "$SMOKE_SRC" rev-parse --show-toplevel 2>/dev/null || echo "$SMOKE_SRC")")"
+  # The repo IDENTITY, not the checkout's directory name. Every other path is HANDED the repo
+  # name ($SENTINEL_REPOS, or a CLI arg) and spends it on both `gh pr list --repo ORG/<repo>`
+  # and exceptions/<repo>.yaml; --smoke is the only caller whose input is a DIRECTORY, so it is
+  # the only one that must reconstruct it. This was `basename $(rev-parse --show-toplevel)`,
+  # correct for a clone or actions/checkout — but a linked WORKTREE's toplevel is named after
+  # the branch/agent, so the name came out `agent-<id>`/`wt-<slug>`, no exceptions file of that
+  # name exists, and the branch below then ran kyverno with NO exceptions AT ALL, silently
+  # reporting all 35 baseline namespaces/ClusterRoles as violations. The worktree is the
+  # STANDARD seat/subagent lane (the shared checkout must never branch-switch), so that was
+  # every worktree session's smoke. Prefer the remote — it names the GitHub repo, which is what
+  # the other paths mean by $repo — then the COMMON git dir, which is worktree-invariant.
+  smoke_remote="$(git -C "$SMOKE_SRC" remote get-url origin 2>/dev/null || true)"
+  smoke_common="$(git -C "$SMOKE_SRC" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [ -n "$smoke_remote" ]; then
+    smoke_repo="$(basename -s .git "$smoke_remote")"
+  elif [ -n "$smoke_common" ]; then
+    smoke_repo="$(basename "$(dirname "$smoke_common")")"
+  else
+    smoke_repo="$(basename "$SMOKE_SRC")"
+  fi
   if ! evaluate "$smoke_repo" "local" "-" "-"; then
     log "SMOKE: tree build failed"; exit 2
   fi
