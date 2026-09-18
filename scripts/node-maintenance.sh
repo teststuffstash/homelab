@@ -90,6 +90,8 @@ INSTALL_TARGETS="${INSTALL_TARGETS:-}"   # path to a `tofu output -json node_ins
 TARGET_IMAGE="${TARGET_IMAGE:-}"         # last-resort explicit --image; skips the declaration read
 ENDPOINT="${ENDPOINT:-}"                 # the CP the upgrade is endpointed at (pick_cp_endpoint)
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
+PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (the Garage fleet floor reads it)
+GARAGE_SYNC_TIMEOUT="${GARAGE_SYNC_TIMEOUT:-900}" # s — wait for cluster_healthy after a window
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
@@ -633,14 +635,53 @@ assert_wip1() {
 }
 
 # The fleet floor (ADR-132 §4): no window while the storage fabric is already down one leg.
-# Longhorn's degraded check is preflight's; this is the Garage half — one serving pod per zone,
-# and rf=3 across three physical zones means losing a second is the outage.
+# Longhorn's degraded check is preflight's; this is the Garage half, and pod-Ready is NOT the
+# right test. rf=3 over three physical zones, quorum 2: with one zone down every partition it
+# holds sits at 2/3 — available, but the NEXT zone down takes those partitions to 1/3 and writes
+# fail. So the binding condition is Garage's own `cluster_healthy`, which is exactly "every
+# partition has ALL of its replica nodes up" (`cluster_available` is the weaker quorum-only
+# twin). Both are scraped from the admin port already; neither had a consumer before this.
+prom() { curl -sS --max-time 15 --data-urlencode "query=$1" "$PROM/api/v1/query"; }
+prom_min() {  # min value of a metric across every garage instance; "" if the query fails
+  local r; r="$(prom "$1")" || return 1
+  jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
+  jq -r '[.data.result[].value[1]|tonumber]|min // empty' <<<"$r"
+}
+garage_zone_node() {  # is $NODE one of the Garage zones? the zone label IS the node name
+  local r; r="$(prom "count by (role_zone) (cluster_layout_node_connected)")" || return 1
+  jq -e --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' >/dev/null <<<"$r"
+}
 assert_fleet_floor() {
-  local notready
+  local notready healthy
   notready="$(kubectl -n garage get pods -l 'app.kubernetes.io/name=garage,garage.teststuff.net/serve-s3=true' -o json \
               | jq -r '.items[] | select(any(.status.conditions[]?; .type=="Ready" and .status=="True") | not) | .metadata.name')"
-  [ -z "$notready" ] && { ok "fleet floor: every Garage zone serving"; return 0; }
-  fail "fleet floor: Garage pod(s) not Ready — $(tr '\n' ' ' <<<"$notready")"; return 1
+  [ -n "$notready" ] && { fail "fleet floor: Garage pod(s) not Ready — $(tr '\n' ' ' <<<"$notready")"; return 1; }
+  # Rule #6: an unreadable gate is a REFUSAL, never a pass — we must not fail into a window.
+  healthy="$(prom_min 'cluster_healthy')" || { fail "fleet floor: Prometheus at $PROM unreadable — refusing"; return 1; }
+  [ -n "$healthy" ] || { fail "fleet floor: cluster_healthy returned no series — refusing"; return 1; }
+  if [ "$healthy" != "1" ]; then
+    fail "fleet floor: Garage cluster_healthy=$healthy — a partition is missing a replica, so a"
+    fail "  second zone down would drop it below quorum. Wait for the previous node to rejoin."
+    return 1
+  fi
+  ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue $(prom_min 'block_resync_queue_length')"
+}
+
+# After the window: membership whole again. This is the gate that lets the NEXT node start, which
+# is why it belongs to the upgrade and not to the operator's patience. The resync queue is
+# reported but not blocked on — it never reaches zero in steady state (a background scrubber keeps
+# ~40 queued here), so an absolute-zero gate would deadlock; cluster_healthy is the real signal.
+wait_garage_back() {
+  garage_zone_node || { log "$NODE holds no Garage zone — no sync gate"; return 0; }
+  log "waiting for Garage cluster_healthy=1 (≤${GARAGE_SYNC_TIMEOUT}s)"
+  local t=0 h
+  while :; do
+    h="$(prom_min 'cluster_healthy' || true)"
+    [ "$h" = "1" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: Garage cluster_healthy=${h:-?} after ${t}s"; return 1; }
+  done
+  ok "Garage cluster_healthy=1 after ~${t}s (resync queue $(prom_min 'block_resync_queue_length'), errored $(prom_min 'block_resync_errored_blocks'))"
 }
 
 # Version sanity + the gates that are written down rather than computable.
@@ -734,6 +775,7 @@ upgrade() {
   # Talos uncordons itself on rejoin; make sure, because a half-finished window is invisible.
   [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
   wait_storage_back || return 1
+  wait_garage_back  || return 1
   if [ -n "$version" ]; then
     log "verifying the node came back as DECLARED"
     verify_installed "$version" "$schematic" || { fail "post-check FAILED — window left OPEN"; return 1; }
