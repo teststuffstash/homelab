@@ -85,8 +85,10 @@ never a bullet the harvest would mint into a standalone inert issue that no cont
   they did instead; it is not acceptable dressed up as "CI green".
 - **Documentation is load-bearing here.** `docs/` carries the FU tracker, the ADRs and the incident
   record — the things the next session reads as ground truth. A doc change that contradicts what
-  shipped is a real defect, not a nit. `docs/follow-ups.md` is single-writer (operator/meta): a
-  worker appending to it is blocking.
+  shipped is a real defect, not a nit. `docs/follow-ups.md` is single-writer (operator/meta): ANY
+  worker write to it is blocking — appending, editing, or ARCHIVING an item. The verb matters: the
+  ADR-128 trial week's one real cost was a worker PR archiving FU-213 on a premise refuted three
+  days later, and the rule as worded ("appending") did not cover the removal.
 - **Path tier decides who merges, and the PR should say so.** During the ADR-128 trial week
   (2026-09-11 → 09-18) only `agents/**`, `policy/**`, `tofu/github/**` and the governance dotdirs
   need a human; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/` and `docs/`

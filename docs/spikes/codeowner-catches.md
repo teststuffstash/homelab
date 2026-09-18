@@ -1,6 +1,8 @@
 # Spike — codeowner-catches census, 2026-08-04 → 2026-09-11
 
-**Tracked by:** FU-233 (the ADR-128 trial week; re-read 2026-09-18 against this baseline).
+**Origin:** FU-233 (archived 2026-09-18) — the ADR-128 trial week. The re-read landed below; the
+operator ruled the trial state stays as is, so this doc is now the standing baseline for the NEXT
+codeowner-scope question rather than a tracked item.
 
 **Question (operator, verbatim):** "find how many times have we found problems in codeowner
 review and what types of problems they were. I'm thinking of ways to reduce their amount anyway,

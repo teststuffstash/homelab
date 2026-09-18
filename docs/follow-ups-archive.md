@@ -10,6 +10,14 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-233** *(archived 2026-09-18)* — **Codeowner-gate trial week (ADR-128): re-read done, ruled.**
+  Measurement: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md) §Re-read — 6
+  freed-path-only machine PRs, 0 human touches, one real cost (worker PR#1700 archived FU-213 on a
+  premise refuted 3 days later → FU-251). **Ruling (operator): leave the trial state AS IS and let
+  it run** — the freed tier-2 paths are low-change and the management box moves them on its own once
+  commit == rollout (FU-237/ADR-131). The residue landed with the ruling: the rubric's single-writer
+  verb now blocks ANY worker write to the tracker, not only an append.
+
 - **FU-206** *(archived 2026-09-17)* — **Operational paths are non-public on every PublicRoute
   (ADR-123).** Built after an oracle handoff showed Googlebot walking `mcp.minutark.ee` (a 404
   `robots.txt` = crawl everything) with `/metrics` answering 8.8 KB of Prometheus exposition —
