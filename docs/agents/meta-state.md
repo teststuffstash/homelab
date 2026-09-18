@@ -208,12 +208,10 @@ never the session's arc — that is TICK-LOG's.)
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
 - **⚑ PICKUP (2026-09-14 evening handoff/board session — no corpus load; arc in TICK-LOG).**
-  (1) **#1692 / PR#1699 fix round** — changes-requested (bare-`§M` sweep, recipe on #1692);
-  dispatch is blocked by the fleet-strike reader re-applying `agent/error` until **2026-09-15
-  16:45Z** (or #1712 landing) — strip after that if the reader has not stopped; then close
-  **#1707** (kept open as the dedup anchor). After the merge: the one-word docstring pointer in
-  `scripts/claude-model-shim.py` (`model-routing.md §M11` → `model-routing-history.md §M11`)
-  lands operator-direct; #1710 closes with it. (2) **PR#1698 codeowner read** (#1670,
+  (1) **#1692 DONE** — PR#1699 abandoned (the bare-`§M` over-match), split into PR#1753 (the
+  rewrite, merged 09-17) + #1710/PR#1755 (the pointer sweep, OPEN). The shim's docstring pointer
+  landed operator-direct 2026-09-18 with the check-#4b ratchet below; #1710 closes when PR#1755
+  merges. (2) **PR#1698 codeowner read** (#1670,
   bot-approved after two rounds, CI green, BEHIND) — the corpus-loaded seat merges it; #1697
   unparks by itself. (3) **#1713** pin-only-lint's merge-ref two-dot (operator lane, sibling of
   fadb0ff6). (4) **oracle-fleet#605** (ErtPipeline rules on the Argo counter) in the oracle

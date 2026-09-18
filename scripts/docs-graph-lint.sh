@@ -143,5 +143,50 @@ for code in $anchor_refs; do
   fi
 done
 
+# --- 4b) FILE-QUALIFIED §-code refs: the named file must be the DEFINING file ---
+# Check #4 resolves a §CODE against every living .md, so it is satisfied the moment the code is
+# defined ANYWHERE. That is deliberately loose — a bare `§M12` in prose should not have to name a
+# file — but it means a ref that DOES name a file is unchecked on the one thing it asserts. Live
+# proof of the gap: homelab#1692/PR#1699 moved fourteen `§M*` sections out of
+# `docs/agents/model-routing.md` into `docs/spikes/model-routing-history.md`, and check #4 stayed
+# GREEN on master with 45 refs still naming the old file (homelab#1710 → PR#1755 is the manual
+# sweep; this is its ratchet, so the 46th does not happen at the next doc move).
+#
+# ⚠ SHADOW until that sweep lands. Master carries the 42 refs PR#1755 fixes, so enforcing now
+# would red every PR for a defect none of them introduced — the same shadow→enforce rollout the
+# IAC-G04 sentinel used. FLIP: set DOCS_GRAPH_MISFILED_ENFORCE=1 below (one line) once
+# `git grep -c 'model-routing\.md §M'` is 0 on master.
+DOCS_GRAPH_MISFILED_ENFORCE="${DOCS_GRAPH_MISFILED_ENFORCE:-0}"
+misfiled=0
+while IFS= read -r ref; do
+  [ -n "$ref" ] || continue
+  named="${ref%% *}"; code="${ref##*§}"
+  # The defining file(s) for this code — same predicate as check #4 above.
+  defs=$(git grep -lE "^#{1,6} +${code}[^A-Za-z0-9]|^- \*\*${code}[^A-Za-z0-9]" -- '*.md' \
+      ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
+      ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
+      ":(exclude)docs/follow-ups-archive.md" 2>/dev/null)
+  [ -n "$defs" ] || continue          # unresolved is check #4's finding, not this one
+  # Compare on BASENAME: a ref may name the full path or the bare filename, both legal shapes.
+  # ⚠ Never write a file-qualified §-code EXAMPLE anywhere in this script — the grep below scans
+  # *.sh and would report its own comment (caught in the first run of this check).
+  if ! printf '%s\n' "$defs" | while IFS= read -r d; do [ "$(basename "$d")" = "$(basename "$named")" ] && echo hit; done | grep -q hit; then
+    echo "ANCHOR-MISFILED (check #4b): §${code} is referenced as \`${named} §${code}\` but defined in $(printf '%s\n' "$defs" | tr '\n' ' ')"
+    misfiled=$((misfiled + 1))
+  fi
+done <<EOF2
+$(git grep -hoE "[A-Za-z0-9._/-]+\.md §${CODE_RE}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' \
+    ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
+    ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
+    ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | sort -u)
+EOF2
+if [ "$misfiled" -gt 0 ]; then
+  if [ "$DOCS_GRAPH_MISFILED_ENFORCE" = 1 ]; then
+    status=1
+  else
+    echo "docs-graph: ${misfiled} DISTINCT misfiled §-code ref(s) above (one per named-file/code pair, not per site) — SHADOW (check #4b, homelab#1710); flip DOCS_GRAPH_MISFILED_ENFORCE=1 when the sweep lands"
+  fi
+fi
+
 [ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete, ⚓ terms linked"
 exit "$status"

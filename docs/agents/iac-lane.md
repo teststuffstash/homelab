@@ -61,7 +61,20 @@ stops being a memory.
 
 **The pile (dated candidates, NOT decided):**
 - required reviews = 2 on some tier (2026-08-12).
-- a second review identity for parts of `docs/` (2026-08-12).
+- a second review identity for parts of `docs/` (2026-08-12). **RESHAPED 2026-09-18 (operator):
+  NOT a second code reviewer — a lightweight design-docs + big-picture reviewer.** The reasoning is
+  a capability bound: a second reviewer App has the FIRST reviewer's capability (diff, rubric, repo
+  clone) and not the corpus that [ADR-110](../adr.md) makes constitutive of the human read, so as a
+  second *code* reviewer its ceiling is diff-local findings — the class the first reviewer already
+  covers. Its value is the context a diff reviewer lacks, on a deliberately SMALL surface that needs
+  no full corpus. **Not built; likely piloted in the STACK repos first.** Consequence for the
+  evidence: the shadow-re-review route (homelab#923/#946, closed 2026-09-18) measured a code
+  reviewer against recorded diffs and therefore cannot measure this candidate at all — it is
+  retired, not satisfied. ⚠ Independent of capability, a SECOND ruling the same day bounds any cheap
+  arm here: **the loop has machinery for bad WORKERS (rounds, strikes, arbitrate) and none for bad
+  REVIEWERS**, so a reviewer that blocks wrongly or waves work through injects a failure mode
+  nothing in the lane detects — the #946 cells measured exactly that (one free arm returned opposite
+  verdicts on byte-identical input).
 - drop the tier-1 `/argocd/resources/` scaffold line — its own condition: IAC-G04 enforcing on
   homelab (shadow coverage shipped 2026-08-12, A5 leg 1) or the operator's trust call.
 - docs/ split: release per-service docs, keep the memory core (`follow-ups*.md`, `adr.md`,
