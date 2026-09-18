@@ -1394,6 +1394,11 @@ fast_unit_dispatch() {
     fi
     jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
       && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
+    # agent/blocked on the PR is the main path's own PR-label exclusion, beside major/awaiting-human,
+    # agent/error and agent/arbitrate (the `prsjson` selector, homelab#1097) — a HUMAN gate the
+    # doorbell edge could not see (homelab#1772). Free here: it rides the probe already fetched.
+    jq -e '.labels|map(.name)|index("agent/blocked")' >/dev/null <<<"${fprjson:-null}" \
+      && { echo "unit fast-path: agent/blocked on the PR — human-waiting"; return 0; }
   fi
   if ! FAST_RAIL="$(coordinator_rail)"; then
     echo "unit fast-path: capacity limited (FU-088, BOTH rails) — no dispatch (cron sweep re-checks)"
@@ -1403,9 +1408,14 @@ fast_unit_dispatch() {
   # WIP probe, same shape as the main loop (null-strip is load-bearing — issue-96):
   # probe failure pins wip=1 (belt-only), never blocks the in-flight fix round.
   fwip=1
-  fpr_issue=""   # PR#480 review: assigned only inside the probe's success block below — an
-                 # unguarded read after a FAILED probe is an unbound-variable death for the
-                 # WHOLE scan under set -u; initialized here so every later read is safe.
+  # The PR's linked issue (its `Fixes #N` trailer), read ONCE here for BOTH the FU-146 per-item
+  # hold below and the blocked-source hold further down. PR#480 review: this assignment used to
+  # sit INSIDE the pod probe's success block, so a failed probe left every later read unbound
+  # under `set -u` — a whole-scan death for a routine probe failure. It depends on nothing but
+  # fprjson, so it is computed unconditionally (empty for the goal clauses — fprjson is unset).
+  fpr_issue="$(jq -r '(.body // "")
+      | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' \
+      <<<"$fprjson" 2>/dev/null)" || fpr_issue=""
   if FPODS="$("$KUBECTL" $KUBE -n "$frepo" get pods -l app=agent-session,project="$frepo" \
         --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
      && jq -e . >/dev/null 2>&1 <<<"${FPODS:-null}"; then
@@ -1424,9 +1434,7 @@ fast_unit_dispatch() {
     # This function's contract is "only ever cheaper, never weaker" (rule #6) — it was weaker.
     # Same predicate and same fail-safes as the main path: no link or no pod probe → fall through
     # unchanged, and the hold needs a LIVE pod so it self-releases and cannot wedge.
-    fpr_issue="$(jq -r '(.body // "")
-        | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' \
-        <<<"$fprjson" 2>/dev/null)" || fpr_issue=""
+    # (fpr_issue is read from the hoisted extraction above, not re-derived here.)
     if [ -n "$fpr_issue" ] \
        && jq -e --arg pat "issue-${fpr_issue}-" \
             '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1 <<<"$FPODS"; then
@@ -1458,6 +1466,45 @@ fast_unit_dispatch() {
     fi
   else
     echo "unit fast-path: ⚠ coordinator session-pod probe FAILED — FU-146 session belt off this tick; the launcher atomic gate is the backstop" >&2
+  fi
+  # ── BLOCKED-SOURCE + BLOCKED-ON holds, ported from the MAIN path 2026-09-18 (homelab#1772) ────
+  # Both predicates landed in the MAIN scan path — the `agent/blocked` source-issue hold
+  # (2026-08-07) and the `blocked-on` terminal-ruling hold (#1188/#1427) — and neither got the
+  # port the FU-146 per-item hold above records (fc606e2): the doorbell takes THIS path, so both
+  # were bypassed on exactly the high-volume edge they were written for. Receipt (homelab#1755):
+  # a terminal ruling posted `blocked-on: human` at 16:30:13Z and a coordinator pod spawned 3m17s
+  # later on `changes-requested|homelab|pr-1755`, while the full scan's own predicate returns
+  # `blocked|human` on that PR. This function's contract is "only ever cheaper, never weaker"
+  # (rule #6) — it was weaker. Placed with the session belt (the main path's order: item hold,
+  # session belt, blocked-source, blocked-on) and guarded on fprjson so the goal clauses above
+  # never pay for a PR-shaped read.
+  if [ -n "$fprjson" ]; then
+    # BLOCKED-SOURCE hold: an `agent/blocked` source issue is a HUMAN gate (budget refusal, design
+    # decision) — re-judging its PR cannot move it. One read, only when the body carries a closing
+    # link; an unreadable probe falls through unchanged, exactly as the main path's does. The OPEN
+    # conjunct is the main path's: it reads `openall` (the repo's OPEN issues), so a CLOSED issue
+    # wearing a stale label is not a hold there and must not become one here.
+    if [ -n "$fpr_issue" ]; then
+      fisjson="$(gh issue view "$fpr_issue" --repo "${ORG}/${frepo}" --json state,labels 2>/dev/null)" || fisjson=''
+      if printf '%s' "${fisjson:-null}" | jq -e '(.state == "OPEN") and ([.labels[]?.name] | index("agent/blocked") != null)' >/dev/null 2>&1; then
+        echo "unit fast-path: held — source issue #${fpr_issue} is agent/blocked (human-gated); PR ${fitem#pr-}"
+        return 0
+      fi
+    fi
+    # BLOCKED-ON hold (homelab#1188): a terminal ruling that recorded `blocked-on: <kind>` holds
+    # until its blocker resolves. The marker grammar, the fail-closed blocker-state reads and the
+    # resolution rule are the SAME shared helper the main path calls — never a re-implementation.
+    # The read is scoped to the dispatch path (not folded into the PR probe above): a ring that
+    # settles at the state/head/author/breaker gates never pays for it, and the minimal probe
+    # stays minimal.
+    fboc_probe="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json comments,reviews 2>/dev/null)" || fboc_probe=''
+    fboc="$(pr_blocked_on_check "${ORG}/${frepo}" "${fitem#pr-}" "$fboc_probe")"
+    case "$fboc" in
+      blocked|blocked\|*)
+        echo "unit fast-path: held — ${frepo} ${fitem} blocked-on: ${fboc#blocked|} (a terminal ruling's own predicate, homelab#1188); no ride re-derives the same answer"
+        return 0
+        ;;
+    esac
   fi
   frepos="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
