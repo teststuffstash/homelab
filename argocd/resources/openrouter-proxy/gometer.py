@@ -137,6 +137,26 @@ _USAGE_RE = re.compile(r'"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})')
 def extract_usage(head: bytes, tail: bytes) -> dict:
     """Extract token usage from a Go-leg response.
 
+    ⚠ **The LAST block wins for the input/cache fields; only `output_tokens` max-merges.**
+    A streamed Anthropic-compat response carries TWO usage blocks, and they mean different
+    things (captured live off `…/zen/go/v1/messages`, qwen3.7-plus, 2026-09-17):
+
+        message_start:  {"input_tokens":3210,"output_tokens":0}
+        message_delta:  {"input_tokens":408,"output_tokens":601,"cache_read_input_tokens":2816}
+
+    The first is the PROMPT SIZE — a per-session constant, repeated on every call of a
+    conversation and carrying no cache split. The second is the BILLING block: what was
+    actually fresh, and what came from cache. `max()` across both took the constant (3210)
+    for `input_tokens` AND added the 2816 cache reads — double-counting the cached prefix at
+    the fresh rate (10× the cache-read price). Measured on the two 2026-09-17 reviewer rides:
+    `/opencode-limit` read $0.5671 where the vendor's own dashboard billed ~$0.16, a 3.4×
+    over-count, with a 34,681-token constant sitting in the fresh slot on every call while
+    the vendor billed zero fresh. Windows and prices were both correct — only this split was
+    wrong.
+
+    `output_tokens` still max-merges: it grows monotonically across deltas, and the tail
+    window can clip the final block.
+
     Args:
         head: First 16KB of the response (for JSON with usage at start).
         tail: Last 16KB of the response (for JSON with usage at end).
@@ -152,15 +172,29 @@ def extract_usage(head: bytes, tail: bytes) -> dict:
         "cache_creation_input_tokens": 0,
     }
     text = (head + tail).decode("utf-8", errors="replace")
+    _json = __import__("json")
+    blocks = []
     for m in _USAGE_RE.finditer(text):
         try:
-            u = __import__("json").loads(m.group(1))
-            for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
-                      "cache_creation_input_tokens"):
-                if k in u:
-                    merged[k] = max(merged.get(k, 0), u[k])
-        except (__import__("json").JSONDecodeError, KeyError):
+            blocks.append(_json.loads(m.group(1)))
+        except (_json.JSONDecodeError, KeyError):
             pass
+    if not blocks:
+        return merged
+    # head+tail may overlap on a small response, so the same block can appear twice — taking
+    # the LAST occurrence is still the authoritative one either way.
+    for u in blocks:
+        if "output_tokens" in u:
+            merged["output_tokens"] = max(merged["output_tokens"], int(u["output_tokens"] or 0))
+    # The authoritative block: the last one carrying a cache split, else simply the last one
+    # (a non-streamed body has a single block; an older surface without cache keys keeps its
+    # input priced as fresh, which is the conservative direction).
+    final = next((u for u in reversed(blocks)
+                  if "cache_read_input_tokens" in u or "cache_creation_input_tokens" in u),
+                 blocks[-1])
+    for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+        if k in final:
+            merged[k] = int(final[k] or 0)
     return merged
 
 
@@ -199,7 +233,11 @@ def price(bare_model: str, merged: dict, now: float | None = None) -> tuple[floa
     model, badge models included, with cache-read/cache-creation tokens at their discounted
     rates. This is the LEDGER/COST-REPORTING number, NOT the window draw.
 
-    Contrast with `window_draw()`: the subscription window draws at LIST price on raw tokens
+    Contrast with `window_draw()`: the subscription window draws at LIST price PER KIND — raw
+    input and output at their list rates, and cache tokens at their own list cache rates when
+    the split is known (homelab#540; confirmed against the vendor dashboard 2026-09-17, see
+    that function). The older "raw tokens, no cache discount" reading was measured while the
+    proxy sent no session header, i.e. through a cache that never hit
     and badge-halves EVERYTHING (draw = list on raw, badge-halved); the BILLED estimate here is
     list ×1 with cache discounts and NO badge halving. NOTE (2026-09-17): NO row sets
     `half=True` any more — the vendor dropped the badge column — so the two numbers now differ

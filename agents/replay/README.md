@@ -409,6 +409,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-rail-label/go` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-rail-label/subscription` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |
