@@ -667,6 +667,36 @@ assert_fleet_floor() {
   ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue $(prom_min 'block_resync_queue_length')"
 }
 
+# The CNPG half of the same idea. Every cluster here is 2 instances, and infisical-pg and
+# grafana-pg each keep one on hp-01 and one on m70s — the two heaviest nodes. WIP 1 stops them
+# going down together, but nothing stopped the SECOND node starting before the first instance had
+# rejoined and caught up, which is the Garage mistake in another fabric. readyInstances == instances
+# is the condition; an unreadable answer refuses (rule #6).
+cnpg_unhealthy() {
+  kubectl get clusters.postgresql.cnpg.io -A -o json \
+    | jq -r '.items[] | select((.status.readyInstances // 0) < .spec.instances)
+             | "\(.metadata.namespace)/\(.metadata.name) \(.status.readyInstances // 0)/\(.spec.instances)"'
+}
+assert_cnpg_floor() {
+  local bad
+  bad="$(cnpg_unhealthy)" || { fail "fleet floor: cannot read CNPG clusters — refusing"; return 1; }
+  [ -z "$bad" ] && { ok "fleet floor: every CNPG cluster at full instances"; return 0; }
+  fail "fleet floor: CNPG cluster(s) short an instance — $(tr '\n' ' ' <<<"$bad")"
+  fail "  a second node down could take the last healthy instance with it. Wait for the rejoin."
+  return 1
+}
+wait_cnpg_back() {
+  log "waiting for every CNPG cluster back to full instances (≤${GARAGE_SYNC_TIMEOUT}s)"
+  local t=0 bad
+  while :; do
+    bad="$(cnpg_unhealthy || true)"
+    [ -z "$bad" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: CNPG still short — $(tr '\n' ' ' <<<"$bad")"; return 1; }
+  done
+  ok "CNPG: every cluster at full instances after ~${t}s"
+}
+
 # After the window: membership whole again. This is the gate that lets the NEXT node start, which
 # is why it belongs to the upgrade and not to the operator's patience. The resync queue is
 # reported but not blocked on — it never reaches zero in steady state (a background scrubber keeps
@@ -750,6 +780,7 @@ upgrade() {
   [ "$rc" = 2 ] && [ "$FORCE" != 1 ] && { fail "preflight refused"; return 2; }
   assert_wip1   || [ "$FORCE" = 1 ] || return 2
   assert_fleet_floor || [ "$FORCE" = 1 ] || return 2
+  assert_cnpg_floor  || [ "$FORCE" = 1 ] || return 2
   # NOT FORCE-able, deliberately: a downgrade is impossible, a skipped minor is untested config
   # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot". FORCE exists for
   # preflight's WARN class and the two operational gates above, not for these.
@@ -776,6 +807,7 @@ upgrade() {
   [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
   wait_storage_back || return 1
   wait_garage_back  || return 1
+  wait_cnpg_back    || return 1
   if [ -n "$version" ]; then
     log "verifying the node came back as DECLARED"
     verify_installed "$version" "$schematic" || { fail "post-check FAILED — window left OPEN"; return 1; }
