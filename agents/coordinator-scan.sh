@@ -46,7 +46,27 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ORG="${ORG:-teststuffstash}"
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"   # ADR-097 hard ceiling: concurrent workers per repo. TRACKS rule 1 counts armed PRs per base; was binary WIP=1 until meta-8 proved two dispatchers race inside one scan window (2026-07-21 #55). 3 allows slack for a second worker without unbounded concurrency.
 SCAN_AGING_N="${SCAN_AGING_N:-3}"   # #829 / ADR-125 (3): a NEW-WORK unit that has lost this many consecutive LANE dispatches escalates to the front of its lane's walk. 3 = the smallest count that is not one unlucky tick: the #818 evening lost ~45 min, which at the measured ride length is four to five recovery rides, so two losses is ordinary contention and three is a pattern.
-ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
+ISSUE_LIST_LIMIT="${ISSUE_LIST_LIMIT:-200}"
+# ── the coordinator's rail ladder (homelab#439 leg 3, 2026-09-18) ──────────────────────────────
+# The COORDINATOR lane was the last boolean-latch consumer: review-reflex.sh, agent-session.sh,
+# responder-argo.yaml and fix-debounce-argo.yaml have all used `--pick-rail` since #439, so on
+# 2026-09-18 — Anthropic 7d at 0.95, Go 7d at 0.03 — every other role failed over to the Go rail
+# while the coordinator alone deferred, and a coordinator that never spawns stops dispatch for the
+# WHOLE loop (PR#1755 sat CHANGES_REQUESTED with CI green and no fix round). Same ladder, and the
+# Go model id keeps its ONE home in agents/subscription-latch.sh — no model literal enters here.
+# In THIS block, not beside the dispatch sites, for the reason stated above: run.sh prepends it to
+# every composition, so the extracted clauses get the helpers without a per-fixture copy.
+#
+# coordinator_rail: echoes "anthropic" or an `opencode-go/<model>` id; exit 1 = BOTH rails latched.
+coordinator_rail() {
+  SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh" --pick-rail
+}
+# rail_model: $1 = the picked rail, $2 = the stack's coordinatorModel. A Go pick REPLACES the
+# model (the session is dispatched with --model, so the launcher owns the choice — ADR-094);
+# "anthropic" leaves the stack's own coordinatorModel standing.
+rail_model() {
+  case "$1" in opencode-go/*) printf '%s' "$1";; *) printf '%s' "$2";; esac
+}   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # ── the ONE issue-body parser (ADR-122 (3), homelab#1431) ──────────────────────────────────────
 # Every body-grammar READ in this file goes through `agents/issue_body.py`; no reader here carries
 # its own line-anchored regex any more (`Touches:` alone had four spellings in this file). The
@@ -1093,6 +1113,7 @@ FANOUT_LATCH=""; FANOUT_LATCH_SAID=""
 fanout_clear() {   # seam: the FU-088 latch probe (fail-open by the script's own design)
   SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh" 2>/dev/null
 }
+
 fanout_eligible() {   # the gates common to both call sites; caller passes nothing
   [ -n "$SPAWN" ] || return 1
   [ -z "${SCAN_STACK:-}" ] || return 1                       # per-stack instances never fan out
@@ -1363,8 +1384,8 @@ fast_unit_dispatch() {
     jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
       && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
   fi
-  if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
-    echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"
+  if ! FAST_RAIL="$(coordinator_rail)"; then
+    echo "unit fast-path: capacity limited (FU-088, BOTH rails) — no dispatch (cron sweep re-checks)"
     item_class_push "$frepo" "$fitem" "deferred-capacity" "machine"
     return 0
   fi
@@ -1430,6 +1451,8 @@ fast_unit_dispatch() {
   frepos="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+  fmodel="$(rail_model "${FAST_RAIL:-anthropic}" "$fmodel")"
+  case "${FAST_RAIL:-}" in opencode-go/*) echo "  unit fast-path: Anthropic latched — dispatching on the Go rail (${FAST_RAIL})";; esac
   echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
@@ -5012,11 +5035,12 @@ EOF_GTHEMES_OPEN
       echo "  janitor: coordinator.enabled=false for ${name} — skipped."
       continue
     fi
-    if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
-      echo "  janitor: capacity limited (FU-088) — skipped this day (tomorrow's cron retries)."
+    if ! JANITOR_RAIL="$(coordinator_rail)"; then
+      echo "  janitor: capacity limited (FU-088, BOTH rails) — skipped this day (tomorrow's cron retries)."
       continue
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    cmodel="$(rail_model "$JANITOR_RAIL" "$cmodel")"
     echo "→ spawning janitor tick for ${name} (report-only, model ${cmodel})…"
     dispatch_phase "$mainrepo"   # FU-160
     scan_phase dispatch   # FU-145
@@ -5059,10 +5083,13 @@ EOF_GTHEMES_OPEN
     # FU-088 gates are the belt), the session JUDGES one item. Priority finishes in-flight work
     # before starting new: c4c5 > changes-requested > merge-conflict > unarmed-major > queued.
     # SCAN_ITEM_MODE=0 = rollback to the whole-stack tick (also the janitor/manual path).
-    if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
-      echo "  capacity: subscription limited (FU-088) — no dispatch this pass (level-triggered; next scan re-checks)."
+    if ! DISPATCH_RAIL="$(coordinator_rail)"; then
+      echo "  capacity: BOTH rails limited (FU-088) — no dispatch this pass (level-triggered; next scan re-checks)."
       continue
     fi
+    case "$DISPATCH_RAIL" in
+      opencode-go/*) echo "  capacity: Anthropic latched — this pass dispatches on the Go rail (${DISPATCH_RAIL})";;
+    esac
     if [ "${SCAN_ITEM_MODE:-1}" = "0" ]; then
       echo "→ spawning headless coordinator tick for ${name} (SCAN_ITEM_MODE=0 whole-stack mode)…"
       dispatch_phase "$mainrepo"   # FU-160
@@ -5249,6 +5276,7 @@ EOF
       fi
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    cmodel="$(rail_model "${DISPATCH_RAIL:-anthropic}" "$cmodel")"
     # The stack's WORKER model — not this session's model. It is the sizing input the goal-budget
     # estimator needs (a cap is per-ride, and the rides a goal funds are worker rides), read here
     # beside cmodel so the harvest-disposition block below stays free of claim lookups.
@@ -5488,10 +5516,17 @@ EOF
       # `dispatches_done` counts pods this pass actually CREATED, so an FU-146 exit-3 does not
       # arm it: that refusal means a racing dispatcher's pod already exists and OUR pass spent
       # nothing, so charging it a latch probe would defer real work on someone else's spend.
-      if [ "$dispatches_done" -gt 0 ] && ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
-        echo "  capacity: subscription limited (FU-088) — the fleet ceiling ends this pass; remaining lanes are not walked (level-triggered; next scan re-checks)."
-        latch_limited=1; lane_done=1
-        continue
+      if [ "$dispatches_done" -gt 0 ]; then
+        # #439 leg 3: re-ASK the ladder, not the Anthropic boolean — a pass that started on the
+        # subscription may continue on Go (or vice versa), and only BOTH-latched ends it. The
+        # re-pick re-derives cmodel, so a rail change between lanes reaches the dispatch below.
+        if ! DISPATCH_RAIL="$(coordinator_rail)"; then
+          echo "  capacity: BOTH rails limited (FU-088) — the fleet ceiling ends this pass; remaining lanes are not walked (level-triggered; next scan re-checks)."
+          latch_limited=1; lane_done=1
+          continue
+        fi
+        cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+        cmodel="$(rail_model "$DISPATCH_RAIL" "$cmodel")"
       fi
       echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
       # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
