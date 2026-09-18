@@ -89,6 +89,10 @@ UPGRADE_DRAIN_TIMEOUT="${UPGRADE_DRAIN_TIMEOUT:-5m}"  # talosctl's own client-si
 INSTALL_TARGETS="${INSTALL_TARGETS:-}"   # path to a `tofu output -json node_install_targets` dump
 TARGET_IMAGE="${TARGET_IMAGE:-}"         # last-resort explicit --image; skips the declaration read
 ENDPOINT="${ENDPOINT:-}"                 # the CP the upgrade is endpointed at (pick_cp_endpoint)
+# An upgrade whose image carries a DIFFERENT schematic is a re-image, not a version move: it adds
+# or removes system extensions. Refused by default; pick one deliberately.
+KEEP_SCHEMATIC="${KEEP_SCHEMATIC:-0}"          # upgrade at the declared VERSION on the LIVE schematic
+ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared schematic, extensions and all
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
 PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (the Garage fleet floor reads it)
 GARAGE_SYNC_TIMEOUT="${GARAGE_SYNC_TIMEOUT:-900}" # s — wait for cluster_healthy after a window
@@ -622,6 +626,39 @@ pick_cp_endpoint() {
 }
 
 live_version() { kubectl get node "$NODE" -o jsonpath='{.status.nodeInfo.osImage}' 2>/dev/null | sed -n 's/.*(\(v[0-9.]*\)).*/\1/p'; }
+live_schematic() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6=="schematic"{print $7}'; }
+live_extensions() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6!="schematic" && NR>1 {print $6}' | tr '\n' ' '; }
+
+# Changing the schematic during an upgrade adds or removes EXTENSIONS. It is a legitimate act
+# (that is how a node gains kata, or loses it) but it is never what "upgrade the version" means,
+# and it is silent: the wrong schematic stripped iscsi-tools off wk-03 on 2026-09-18 and only the
+# crashlooping longhorn-manager said so. It also collides with deliberate, documented divergence —
+# wk-metal-01 declares plain metal while running the kata image, and machines.yaml says in as many
+# words "Do not fix that drift". So: refuse, and make the operator pick which they meant.
+# ⚠ stdout is this function's RETURN CHANNEL (the image). Every human-readable line must go to
+# stderr or it lands in the caller's variable instead of the terminal.
+resolve_schematic() {
+  local declared_img="$1" declared_s="$2" live_s
+  live_s="$(live_schematic)"
+  [ -n "$live_s" ] || { fail "cannot read $NODE's live schematic"; return 1; }
+  [ -z "$declared_s" ] || [ "$live_s" = "$declared_s" ] && { printf '%s' "$declared_img"; return 0; }
+  log "SCHEMATIC DIVERGENCE on $NODE"
+  log "  live:     $live_s   ($(live_extensions))"
+  log "  declared: $declared_s"
+  if [ "$KEEP_SCHEMATIC" = 1 ]; then
+    warn "KEEP_SCHEMATIC=1 — moving the VERSION only, on the live schematic (declared drift preserved)" >&2
+    printf '%s' "$(printf '%s' "$declared_img" | sed "s|/${declared_s}:|/${live_s}:|")"
+    return 0
+  fi
+  if [ "$ALLOW_SCHEMATIC_CHANGE" = 1 ]; then
+    warn "ALLOW_SCHEMATIC_CHANGE=1 — RE-IMAGING to the declared schematic; extensions will change" >&2
+    printf '%s' "$declared_img"; return 0
+  fi
+  fail "refusing: this upgrade would also change the schematic (extensions added/removed)" >&2
+  fail "  KEEP_SCHEMATIC=1        version only, keep the live schematic  (the drift-preserving choice)" >&2
+  fail "  ALLOW_SCHEMATIC_CHANGE=1  re-image to the declaration          (a deliberate extension change)" >&2
+  return 1
+}
 vminor() { printf '%s' "${1#v}" | cut -d. -f1,2; }
 
 # WIP 1 (ADR-132 §4): never a second window before the first node is back. Any other node
@@ -773,6 +810,12 @@ upgrade() {
       fail "declaration inconsistent: installer tag '${image##*:}' != version '$version'"; return 2; }
   fi
   ENDPOINT="$(pick_cp_endpoint)" || return 2
+  # Resolve the schematic BEFORE anything else: it can rewrite the image, and the post-check must
+  # verify against what we actually install, not against what the declaration happened to say.
+  if [ -z "$TARGET_IMAGE" ]; then
+    image="$(resolve_schematic "$image" "$schematic")" || return 2
+    schematic="${image##*/}"; schematic="${schematic%%:*}"
+  fi
   log "$NODE ($class) -> $version, endpoint $ENDPOINT"
   log "  image: $image"
   [ "$class" = vm ] && log "  NOTE: a nocloud VM upgrades in place ONLY with this image (ADR-014 as amended 2026-09-18);
