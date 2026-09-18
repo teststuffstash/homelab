@@ -9801,3 +9801,46 @@ the truncation, so that history is gone. Pro for minutark priced and DECLINED: $
 `available_plans`) buys `botScore` on NEITHER plan — refused on our own Pro zone too — and its
 full WAF would land in the phase the api profile already skips. Also offered an FU for the
 one-line sentinel fix against the seat card's own ≲5-minute rule; operator caught it.
+
+## 2026-09-18 — the coordinator was the last boolean-latch role; Zen parked; the rail-policy Goal launched
+
+**Condition (measured, not inferred):** `/anthropic-limit?tier=dispatch` → `limited: true,
+reason: utilization-7d, 7d: 0.95`; `/opencode-limit` → `limited: false`, Go 7d at 0.03 of its $30
+budget. `review-*` workflows were landing every few minutes; `coordinate-*` finished clean and
+dispatched nothing. PR#1755 sat CHANGES_REQUESTED, CI green, BEHIND, with no fix round.
+
+**Why:** `--pick-rail` (homelab#439) had reached `review-reflex.sh`, `agent-session.sh`,
+`responder-argo.yaml` and `fix-debounce-argo.yaml`. The coordinator lane still asked the Anthropic
+BOOLEAN at four sites — janitor, per-stack spawn, the ADR-125 per-dispatch re-probe, the FU-143
+unit fast path — so every other role failed over and the one role that schedules the loop deferred.
+Fixed the same way, in the config-defaults block so compositions inherit the helpers
+(`coordinator_rail` / `rail_model`), plus the pod rail label: a Go ride labelled
+`subscription-session: claude` consumes the Anthropic slot it fired to free and is invisible to
+`OPENCODE_MAX_RUNNING` — the identical inversion the reviewer's template carried until 09-17.
+
+**Zen parked** (`OPENCODE_RAIL_DISABLED` `"0"` → `"zen"`, e92d9410; operator). It works, which is
+the hazard: pay-per-token USD with no pricing table, no meter (gometer covers the GO windows only)
+and no ledger bucket — `ledger.py:_model_rail` folds every non-`claude/*`/non-`opencode-go/*` id
+into "openrouter", so Zen spend would have billed silently against the OpenRouter dollar line. Go
+spend tracking (FU-170 b+c) closes before Zen earns membership. ⚠ Proxy-side only: the jail shim
+routes `opencode/` ids on its own path.
+
+**Verified live, not from the diff:** `opencode-go/deepseek-v4-flash` through the proxy on the
+coordinator's own `ref:agent-coordinator/coordinator-claude` → HTTP 200 before the commit; the
+Deployment env and the running pod both read `zen` after the ArgoCD sync.
+
+**What the corpus sitting found, recorded because none of it is visible from a diff:**
+`router.py` derives a candidate's rail with a TWO-way split (`:494`, `:1516`, `:3444`) while
+`model_id.py` — imported at `:39` and called at `:1688` for the response's `resolved` field — has
+owned the three-way parse since FU-127; so no class can name `opencode-go` and the rail lives in
+shell. Five class knobs in `model-classes.json` have ZERO readers repo-wide (`decorrelate`,
+`min_tier_rule`, `dual_model`, `never_roles`, `chain_source`) — which means the "a family must not
+review its own worker's work" rule holds today only by luck of three hand-picked constants.
+`resolve-model.sh` sends three fields of thirteen, and `cell` is read by nobody. The Sensor review
+path (`review-argo.yaml:272`) passes no `--decorrelate-from` at all. And the scan passes `--model`
+at every coordinator dispatch site, which sets `MODEL_SET_EXPLICIT` and skips `/route` — the
+coordinator lane has never actually routed.
+
+**Filed:** #1768 `theme: launcher` (Goal #1640's theme 2, overdue since #1641 closed — it owns
+acceptance 6, the platform chainless flip, which blocks everything below); Goal #1769 with theme 1
+#1770 `theme: rails`, Budget 20, branches cut. Both goal-lint 0 FAIL.
