@@ -20,4 +20,8 @@ echo "REACHED: the linked source issue #19 is agent/blocked (the main path's BLO
 fast_unit_dispatch "changes-requested|circles|pr-400"
 printf 'RETURN %s\n' "$?"
 
+echo "REACHED: the linked issue #20 is CLOSED with a stale agent/blocked label — the main path reads OPEN issues, so this dispatches"
+fast_unit_dispatch "changes-requested|circles|pr-401"
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

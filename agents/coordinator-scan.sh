@@ -1481,10 +1481,12 @@ fast_unit_dispatch() {
   if [ -n "$fprjson" ]; then
     # BLOCKED-SOURCE hold: an `agent/blocked` source issue is a HUMAN gate (budget refusal, design
     # decision) — re-judging its PR cannot move it. One read, only when the body carries a closing
-    # link; an unreadable probe falls through unchanged, exactly as the main path's does.
+    # link; an unreadable probe falls through unchanged, exactly as the main path's does. The OPEN
+    # conjunct is the main path's: it reads `openall` (the repo's OPEN issues), so a CLOSED issue
+    # wearing a stale label is not a hold there and must not become one here.
     if [ -n "$fpr_issue" ]; then
-      fisjson="$(gh issue view "$fpr_issue" --repo "${ORG}/${frepo}" --json labels 2>/dev/null)" || fisjson=''
-      if printf '%s' "${fisjson:-null}" | jq -e '[.labels[]?.name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+      fisjson="$(gh issue view "$fpr_issue" --repo "${ORG}/${frepo}" --json state,labels 2>/dev/null)" || fisjson=''
+      if printf '%s' "${fisjson:-null}" | jq -e '(.state == "OPEN") and ([.labels[]?.name] | index("agent/blocked") != null)' >/dev/null 2>&1; then
         echo "unit fast-path: held — source issue #${fpr_issue} is agent/blocked (human-gated); PR ${fitem#pr-}"
         return 0
       fi

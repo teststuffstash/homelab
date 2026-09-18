@@ -20,6 +20,10 @@
 #                  in its `prsjson` selector. The edge now reads the same label off the same probe.
 #   source-blocked pr-400 — its `Fixes #19` source issue carries `agent/blocked`. The main path's
 #                  BLOCKED-SOURCE hold (2026-08-07: a human gate, re-judging its PR cannot move it).
+#   source-closed  pr-401 — its `Fixes #20` source issue carries a STALE `agent/blocked` on a
+#                  CLOSED issue. The main path reads the repo's OPEN issues (`openall`), so this is
+#                  not a hold there and must not become one here: the leg DISPATCHES, and the
+#                  ported predicate's OPEN conjunct is pinned by that dispatch.
 #
 # THE CONTRACT: both holds are the MAIN path's predicates, reached through the SAME shared helper
 # (`pr_blocked_on_check` — never a re-implementation of the marker grammar or its fail-closed
