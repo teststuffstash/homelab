@@ -43,6 +43,7 @@ context-prefetch/fix-round-unreadable	context-prefetch
 coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail
+coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-token-clone/set	deploy-revert-token-clone
 deploy-revert-token-clone/unset	deploy-revert-token-clone

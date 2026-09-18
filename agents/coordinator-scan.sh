@@ -66,6 +66,17 @@ coordinator_rail() {
 # "anthropic" leaves the stack's own coordinatorModel standing.
 rail_model() {
   case "$1" in opencode-go/*) printf '%s' "$1";; *) printf '%s' "$2";; esac
+}
+# goal_lane_clause: TRUE for the clauses whose class policy pins a SPECIFIC subscription model.
+# `model-classes.json` → classes.goal-decompose is `claude/fable` for a recorded reason — "the
+# design-agents corpus has only ever been written/read by fable, and the decompose is the
+# load-bearing corpus read" — so substituting the Go rail there is the quality regression the class
+# policy exists to prevent. Caught live 2026-09-18: the first latched tick after the ladder landed
+# put a flash model on the decompose of Goal #1769, minutes after it was filed. These clauses
+# therefore DEFER while Anthropic is latched, exactly as before the ladder — a late decompose beats
+# a cheap one, and the goal lane is the one place in this scan where that trade is not close.
+goal_lane_clause() {
+  case "${1:-}" in goal-decompose|goal-checkpoint) return 0;; *) return 1;; esac
 }   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # ── the ONE issue-body parser (ADR-122 (3), homelab#1431) ──────────────────────────────────────
 # Every body-grammar READ in this file goes through `agents/issue_body.py`; no reader here carries
@@ -1451,8 +1462,17 @@ fast_unit_dispatch() {
   frepos="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+  case "${FAST_RAIL:-anthropic}" in
+    opencode-go/*)
+      if goal_lane_clause "$fclause"; then
+        echo "unit fast-path: ${frepo} ${fitem} (${fclause}) NOT dispatched on the Go rail — its class pins claude/fable; deferring on capacity"
+        item_class_push "$frepo" "$fitem" "deferred-capacity" "machine"
+        return 0
+      fi
+      echo "  unit fast-path: Anthropic latched — dispatching on the Go rail (${FAST_RAIL})"
+      ;;
+  esac
   fmodel="$(rail_model "${FAST_RAIL:-anthropic}" "$fmodel")"
-  case "${FAST_RAIL:-}" in opencode-go/*) echo "  unit fast-path: Anthropic latched — dispatching on the Go rail (${FAST_RAIL})";; esac
   echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
@@ -5275,6 +5295,16 @@ EOF
         continue
       fi
     fi
+    case "${DISPATCH_RAIL:-anthropic}" in
+      opencode-go/*)
+        if goal_lane_clause "$uclause"; then
+          echo "  goal lane: ${urepo} ${uitem} (${uclause}) NOT dispatched on the Go rail — its class pins claude/fable (model-classes.json goal-decompose); deferring on capacity until the subscription clears"
+          item_class_push "$urepo" "$uitem" "deferred-capacity" "machine"
+          tried_units="${tried_units} ${unit}"
+          continue
+        fi
+        ;;
+    esac
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
     cmodel="$(rail_model "${DISPATCH_RAIL:-anthropic}" "$cmodel")"
     # The stack's WORKER model — not this session's model. It is the sizing input the goal-budget
@@ -5527,6 +5557,16 @@ EOF
         fi
         cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
         cmodel="$(rail_model "$DISPATCH_RAIL" "$cmodel")"
+        case "$DISPATCH_RAIL" in
+          opencode-go/*)
+            if goal_lane_clause "$uclause"; then
+              echo "  goal lane: ${urepo} ${uitem} (${uclause}) NOT dispatched on the Go rail — its class pins claude/fable; deferring on capacity"
+              item_class_push "$urepo" "$uitem" "deferred-capacity" "machine"
+              tried_units="${tried_units} ${unit}"
+              continue
+            fi
+            ;;
+        esac
       fi
       echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
       # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
