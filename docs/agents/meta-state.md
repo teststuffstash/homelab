@@ -9,21 +9,27 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-18 — the management-apply residue is YOURS to apply; the detector is built).**
-  `mgmt-apply` has refused `main` since **Sep 14 11:42Z** and still does — **8 addresses** outside
-  the apply allowlist: FU-246's seven `talos_machine_configuration_apply.metal["…"]` (hp-01, m70s,
-  nx-01, wk-metal-01..04, from the v1.13.10 worker split, PR#1740) plus the FU-235
-  `kubernetes_node_taint.ephemeral["nx-01"]`. **Next: `devbox run mgmt-tf -- plan`, read it, then
-  `apply` — never `-target` on the main root (FU-248).** It ratchets while it waits (2 → 8 in four
-  days), so the plan only gets bigger. The DETECTOR shipped this session and needs nothing from
-  you: `collect_mgmt_apply` in the github-exporter reads the commit STATUS off master (the only
-  signal that leaves an unscraped, out-of-cluster box) and publishes
-  `github_mgmt_apply_refused{,_since_timestamp,_outside_addresses,_since_floored}`;
-  `MgmtApplyResidueStanding` fires at >24h standing, `for: 1h`. It will fire on THIS residue once
-  ArgoCD rolls the exporter — that is correct, and it clears when you apply. Detail: FU-252 →
-  [`management-box.md`](../management-box.md) §"A standing refusal is a THIRD verdict shape".
-  ⚠ The trap that hid it for four days: a commit STATUS is not a check-run, so
-  `gh api …/commits/<sha>/check-runs` reads master GREEN. Ask `/commits/<sha>/status`.
+- **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
+  The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
+  cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
+  `scripts/node-maintenance.sh upgrade <node>` exists and is PROVEN on `wk-metal-03` and
+  `wk-metal-01` (both v1.13.2 → v1.13.10, schematic verified after). **Next: `wk-metal-04`, then
+  `m70s`, then `hp-01`** — but never from that list, run `devbox run node-maintenance order`, which
+  computes the ranking from live placement (hard-coded orders rot; operator, 2026-09-18).
+  Three things a fresh session must know before continuing:
+  (1) **`INSTALL_TARGETS=<file>` is required until the PR merges** — the verb reads
+      `tofu output node_install_targets`, which lands with it. A fixture is in the session
+      scratchpad; rebuild it from `tofu/outputs.tf` if it is gone.
+  (2) **Do `hp-01` last and only after the eventbus change is live** — `eventbus-default-js` runs
+      2 of its 3 JetStream replicas there, so draining it today costs quorum, not a replica. The
+      required anti-affinity + `minAvailable: 2` PDB are in the PR and apply via ArgoCD on merge.
+  (3) **`wk-metal-01` converged off the kata schematic on purpose** (operator: the box no longer
+      needs kata — rides there were starving garage-2). The verb refuses a schematic change by
+      default; `ALLOW_SCHEMATIC_CHANGE=1` was the deliberate choice, `KEEP_SCHEMATIC=1` is the
+      other one. Do not read that convergence as drift.
+  Unfiled and wanted: a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`. Proven
+  necessary this session — a Garage zone was down ~10 min and NOTHING alerted; `cluster_healthy`
+  and `cluster_available` are scraped and, before the verb, had zero consumers.
 
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
   (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in

@@ -9844,3 +9844,66 @@ coordinator lane has never actually routed.
 **Filed:** #1768 `theme: launcher` (Goal #1640's theme 2, overdue since #1641 closed — it owns
 acceptance 6, the platform chainless flip, which blocks everything below); Goal #1769 with theme 1
 #1770 `theme: rails`, Budget 20, branches cut. Both goal-lint 0 FAIL.
+
+## 2026-09-18 evening seat — the Talos upgrade verb, built from two probes
+
+**Condition:** the management box had refused `main` for four days (FU-252's ratchet, 2 → 8
+addresses). **Command:** `devbox run mgmt-tf apply -auto-approve` of `origin/master` — 0 add, 8
+change, 0 destroy, all in-place (7 metal `install.image` `v1.13.2 → v1.13.10`, the nx-01 taint's
+field-manager rename). Baseline stamped, `refused-rev` cleared, verified live on three nodes.
+
+**Then two probes, because ADR-014 and siderolabs/talos#9882 both shaped the design and neither
+had been tested here.** Target `wk-03` (the disposable ephemeral VM), one variable each.
+
+*#9882 — does Talos's drain respect PodDisruptionBudgets?* Fixture: a 1-replica Deployment pinned
+to the node under a `minAvailable: 1` PDB (`disruptionsAllowed=0`). Control: `kubectl drain` errors.
+Probe: `talosctl reboot --drain=true` retried the blocked pod, then **exited 1 without rebooting**.
+So PDBs ARE respected on v1.13.10 and the drain FAILS CLOSED — #9882 describes the legacy node-side
+path, still reachable via `--legacy`, which we must never pass. Consequence: a Longhorn last replica
+is a STUCK upgrade, not data loss, and `settle` is what makes the upgrade possible rather than safe.
+
+*ADR-014 — does an upgrade ghost a nocloud VM?* With the generic
+`ghcr.io/siderolabs/installer` (talosctl's own default when `--image` is omitted): **yes** — the
+node rejoined as `talos-24w-v8j` on DHCP. But `get platformmetadata` said **`platform: metal`** and
+the machine config had SURVIVED (node labels carried over), so the 2026-06 reading of this as a
+wiped STATE partition was wrong. Re-running with
+`factory.talos.dev/nocloud-installer/<schematic>:<v>` restored `platform: nocloud`, the hostname and
+the static IP **in place** — no recreate. ADR-014 amended: the hazard is the IMAGE, not the VM.
+
+**Then the schematic bit, twice, from opposite directions.** Probe 1b used the PLAIN schematic on a
+`longhorn = true` VM and silently stripped iscsi-tools; the only symptom was longhorn-manager
+crashlooping on `nsenter … iscsiadm: No such file or directory`. Fixed by re-upgrading with the
+longhorn schematic. Later, `wk-metal-01` declared plain metal while running the kata image — the
+deliberate 2026-09-16 divergence — and the verb would have converged it silently. Both produced the
+same guard: an upgrade that changes the schematic is REFUSED, and the operator names
+`KEEP_SCHEMATIC=1` or `ALLOW_SCHEMATIC_CHANGE=1`.
+
+**What got built.** `tofu/outputs.tf` `node_install_targets` (the declared half, also FU-235's) and
+`node-maintenance.sh upgrade` — the gate and the queue, not the upgrader, since talosctl already
+cordons, drains, installs, reboots, rejoins and uncordons. Gates: preflight+settle, WIP 1, the
+Garage floor, the CNPG floor, version path (no downgrade, no skipped minor), FU-033, declaration
+consistency, the schematic guard; post-check on version AND schematic. Plus `order`, which RANKS
+the fleet from live placement instead of carrying a list.
+
+**The Garage floor is `cluster_healthy`, not pod-Ready** — rf=3 over three zones at quorum 2 means
+one zone down leaves every partition it holds at 2/3, available and pod-Ready, while the next zone
+takes it to 1/3. Watched live during the `wk-metal-01` window: `cluster_healthy` 1 → **0** while
+`cluster_available` stayed 1, and the node reached `Ready` while it was still 0 — which is exactly
+the moment a Ready-based rollout would start the next zone. ⚠ Recorded honestly: the gate VERIFIED
+rather than BLOCKED on that run, because `wait_storage_back` ran ahead of it and absorbed the time.
+It has not yet been exercised under load.
+
+**Alerts through both windows:** nothing new fired. The window silences caught PodSigkilled ×4 and
+NodeRebooted; the one unsilenced node alert was `NodeRebootingRepeatedly` on nx-01, `startsAt`
+2026-09-16T18:59Z — the 7-day lookback tail of the pre-fix reboots, FU-246's stated soak, clears
+~09-23. **And the gap: a Garage zone was down ~10 minutes and NOTHING alerted** — `cluster_healthy`
+had zero consumers before the verb.
+
+**Ruled (operator):** Renovate on class 6 waits for the automated ROLLOUT — an automatic bump PR
+buys nothing while landing it still costs a manual sitting (ROADMAP G-D). And rollout order must be
+COMPUTED, never listed.
+
+**Filed:** FU-253 (every VM declares a generic, stale `install.image` — what an upgrade controller
+would use, and it would ghost all five), FU-254 (nothing detects a substrate going stale or EOL;
+Talos 1.13 left community support at the 1.14.0 release, 2026-09-03). FU-033 grew into the whole
+1.14 gate set with the checks that came back clean.
