@@ -1,0 +1,10 @@
+# coordinator-pick-rail-go-goal-lane (homelab#439 leg 3) — the goal lane opts OUT of the ladder.
+#
+# CONDITION: Anthropic latched, Go clear, and the unit's clause is goal-shaped.
+# EXPECTED: goal-decompose / goal-checkpoint DEFER rather than ride a substituted model; every
+# other clause takes the Go pick as usual. A late decompose beats a cheap one.
+name: coordinator-pick-rail-go-goal-lane
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh

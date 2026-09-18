@@ -1,0 +1,10 @@
+# coordinator-pick-rail-both (homelab#439 leg 3) — both rails latched.
+#
+# CONDITION: the ladder exits 1.
+# EXPECTED: the caller DEFERS and dispatches nothing — the ladder widens where work can run, it
+# never removes the ceiling. Level-triggered: the next scan re-checks.
+name: coordinator-pick-rail-both
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh

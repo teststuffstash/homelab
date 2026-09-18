@@ -1,0 +1,9 @@
+OUT REACHED: ladder
+OUT rail=opencode-go/deepseek-v4-flash
+OUT clause=goal-decompose → DEFER (class pins claude/fable; no Go substitution)
+OUT clause=goal-checkpoint → DEFER (class pins claude/fable; no Go substitution)
+OUT clause=changes-requested → dispatch model=opencode-go/deepseek-v4-flash
+OUT clause=queued-dispatch → dispatch model=opencode-go/deepseek-v4-flash
+OUT REACHED: end
+ERR → Anthropic latched — Go rail clear (opencode-go/deepseek-v4-flash)
+RC 0

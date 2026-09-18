@@ -385,12 +385,27 @@ else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
 fi
 
+# >>>REPLAY:coordinator-rail-gate>>>
 # FU-088(a): defer the tick while the subscription is 429-latched — the cron re-fires; a spawn
 # now would just die on the same limit. Fail-open from the jail (proxy unreachable = proceed).
-if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh"; then
-  echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
-  exit 0
-fi
+# homelab#439 leg 3 (2026-09-18): a GO-RAIL session is not gated by the Anthropic latch — it does
+# not draw that window at all, and gating it there is what kept the coordinator deferring while
+# every other role had already failed over. The scan picked the rail seconds ago
+# (coordinator-scan.sh `coordinator_rail`) and handed it down as --model, so re-probing here would
+# only re-ask a question already answered. A manual/jail run with an explicit Go --model takes the
+# same branch, deliberately.
+case "${MODEL:-}" in
+  opencode-go/*)
+    echo "→ coordinator tick on the Go rail (${MODEL}) — the Anthropic FU-088 latch does not gate it"
+    ;;
+  *)
+    if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh"; then
+      echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
+      exit 0
+    fi
+    ;;
+esac
+# <<<REPLAY:coordinator-rail-gate<<<
 
 # ── DISPATCH PHASE TIMINGS — the coordinator's own two rows (FU-160, homelab#319) ───────────────
 # The other half of `agent_dispatch_phase_seconds`; the design note (own metric name, per-stack
@@ -472,13 +487,26 @@ if [ -n "$ITEM" ]; then
 else
   CREATE_CMD="apply"
 fi
+# >>>REPLAY:coordinator-rail-label>>>
+# A coordinator served from the Go rail draws the OPENCODE windows, not the Anthropic
+# subscription — so it must NOT carry the FU-088 semaphore's label (that selector counts
+# Anthropic slots, agents/subscription-latch.sh) and MUST carry the rail label the Go
+# semaphore counts (OPENCODE_MAX_RUNNING, openrouter-proxy.py GO_SESSION_SELECTOR). Same
+# inversion the reviewer's pod template shipped until 2026-09-17 (reviewer-rail-label): the
+# failover fires precisely BECAUSE the Anthropic window is latched, so a mislabelled ride
+# consumes the slot it was meant to free — and is invisible to the Go bound.
+case "${MODEL:-}" in
+  opencode-go/*) COORD_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+  *)             COORD_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
+esac
+# <<<REPLAY:coordinator-rail-label<<<
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" "$CREATE_CMD" -f - \
   || { echo "PREFLIGHT REFUSED (atomic): ${CREATE_CMD} of ${POD} failed — a racing dispatcher won the (repo, item) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-coordinator, "homelab.teststuff.net/subscription-session": claude }
+  labels: { app: agent-coordinator${COORD_RAIL_LABEL} }
 spec:
   restartPolicy: Never
   # This is a BARE pod — no Job, no controller, no owner. Without a deadline a wedge at any phase

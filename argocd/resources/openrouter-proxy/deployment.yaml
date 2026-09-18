@@ -98,11 +98,23 @@ spec:
             # `400 MissingSessionID`, so the pre-fix allowlist would be failing this rail today.
             # The 09-14 "rides reached opencode.ai while parked" seam is closed too — the knob
             # was "0" at the time (operator, 2026-09-17), not a leak past the switch.
-            # Live because the subscription's 7d window is latched at 0.95 and the reviewer's
-            # failover (reviewer-session.sh: latched + Go clear ⇒ opencode-go/qwen3.5-plus) is
-            # the sanctioned backup role for this rail — no reviews land without it.
+            # The GO leg stays live because the subscription's 7d window is latched at 0.95 and
+            # the reviewer's failover (reviewer-session.sh: latched + Go clear ⇒
+            # opencode-go/qwen3.7-plus — qwen3.5-plus is DELISTED/DEAD since 2026-09-17) is the
+            # sanctioned backup role for this rail — no reviews land without it.
+            #
+            # ZEN PARKED 2026-09-18 (operator): the Zen leg "just works" since the session-header
+            # fix, which is exactly why it needs parking — it is reachable and UNMETERED. Zen is
+            # pay-per-token USD, and the platform has no Zen pricing table, no window/spend meter
+            # (gometer covers the GO windows only) and no ledger bucket: `ledger.py:_model_rail`
+            # folds every non-`claude/*`/non-`opencode-go/*` id into "openrouter", so Zen spend
+            # would bill silently against the OpenRouter dollar line. Order of work is Go first —
+            # FU-170 (b)+(c), the jail-ingest freshness gauge and the near-threshold alert — then
+            # Zen earns rail membership. Until then the leg refuses 503 before any opencode.ai
+            # call. ⚠ Proxy-side only: the JAIL shim (scripts/claude-model-shim.py) routes
+            # `opencode/` ids on its own path and this knob does not reach it.
             - name: OPENCODE_RAIL_DISABLED
-              value: "0"
+              value: "zen"
             # ADR-107 chunk C (homelab#423): the OpenCode Go API key, consumed by the Go leg
             # (PR#429). optional: true — the pod must keep serving the Anthropic/OpenRouter legs
             # even if ESO hasn't materialized the Secret; the code fails closed per-request.
