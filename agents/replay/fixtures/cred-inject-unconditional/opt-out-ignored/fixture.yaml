@@ -1,0 +1,21 @@
+# FU-251 — ADR-087's credential injection is UNCONDITIONAL when a proxy is configured.
+#
+# CONDITION UNDER REPLAY. A goose ride with the egress proxy set and `AGENT_CRED_INJECT=0`
+# exported — the opt-out ADR-087's rollout line said to drop once default-on landed ("drop the
+# env/mount fallbacks"; the git half went with FU-020, 2026-07-26). Before the fix the flag
+# won: the pod was rendered a REAL OpenRouter key via secretKeyRef and no git-cred broker URL.
+# That vestigial branch was the whole basis of the "but a ride might hold a credential"
+# reasoning the egress proxy's header allowlist was built on (FU-251) — so it is gone, and this
+# row pins that the flag can no longer resurrect it.
+#
+# THE CONTRACT: proxy configured ⇒ the pod holds `ref:<ns>/<secret>` and GIT_CRED_BROKER_URL,
+# whatever AGENT_CRED_INJECT says.
+name: cred-inject-unconditional-opt-out-ignored
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:cred-inject
+  - file:post.sh
+env:
+  - AGENT_CRED_INJECT=0

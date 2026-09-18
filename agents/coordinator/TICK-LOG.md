@@ -9730,3 +9730,74 @@ real gap when the #1738 ride hit it on 09-16.
 #1751 KubeJobFailed replaced · #1752 replay hermeticity · #1738 read+merged), two of my own
 readings reversed on operator/reviewer evidence (KubeJobFailed's coverage, the pipe-join "bug"),
 both recorded above rather than quietly corrected. Wind-down at ~950k ctx.
+
+## 2026-09-17 — the opencode.ai rails re-parked (operator, FU-251)
+
+**Condition:** the operator read two oracle-fleet rides still going out on the Go rail
+(oracle-fleet #634 at 12:42, #636 at 12:23, both `opencode-go/deepseek-v4-flash`) and said the
+rail was supposed to be disabled already — we are not sending the correct session header yet.
+The live deploy had `OPENCODE_RAIL_DISABLED=0`: FU-213's un-park on 09-14 (Goal #1640 acceptance
+2) rested on `_forward_upstream` attaching `x-opencode-session: <the ride's session ref>`, and
+that premise does not hold.
+
+**Command:** the same one-flip choke point FU-213 built — `OPENCODE_RAIL_DISABLED` back to `"1"`
+in `argocd/resources/openrouter-proxy/deployment.yaml` (both legs: one account, one key, one UA),
+pushed to master, ArgoCD hard-refreshed, pod rolled. No launcher knob, no claim edit: the gate
+does the work. FU-251 filed with what the next un-park must establish (the header NAME OpenCode
+reads and the VALUE shape it expects — ours is the injected credential's opaque ref, not an
+opencode-issued session id); `chainless-redesign.md` §the header section re-opened, its 09-14
+"CLOSED" downgraded to "both gaps shut", and the proxy's own comment block corrected.
+
+**Verified live, not from the diff:** `/opencode-limit` → `{"limited": true, "reason":
+"rail-disabled"}` (so `--pick-rail` can never return Go and the Go arm takes the M12 degrade);
+the Go forward leg answers `503 the OpenCode Go rail is disabled`, the Zen leg 503 likewise; no
+pod carries `homelab.teststuff.net/rail=opencode-go`, so nothing was in flight at the flip.
+
+## 2026-09-17 — the edge series were never counters; Prometheus was holding 11 days, not 90
+
+**Condition:** the operator asked what the `oracle-gateway` dashboard was telling them, and
+whether oracle-fleet#626's Search Console findings were visible in Cloudflare. Three answers came
+out of the reads. (1) The free zone DOES answer per-path: `/favicon.ico` 404s 25× in 8 days to
+Googlebot, DuckDuckBot and real browsers — plus `/apple-touch-icon.png`, which #626 does not
+cover. (2) `mcp.minutark.ee` has real third-party users — `openai-mcp/1.0.0 (Codex)` from three
+Azure regions and `Claude-User` from GCP, ~148 calls against the operator's own 72%; the
+discriminator is User-Agent, never unique IP (per-host uniques do not exist on free —
+`httpRequests1dGroups` cannot filter by host and `httpRequestsAdaptiveGroups` has no `uniq`).
+(3) The four Edge panels were dead: `sum by (route)` on a series labelled `host`, and `rate()`
+over a `_total` that re-published each 5-minute window's count.
+
+**Command:** three PRs, no direct pushes. **#1757** — the probe keeps cumulative totals, deduped
+per bucket by the row's own `datetime`, and emits every label set ever seen; one change fixed the
+false counter resets, the 2.5× window overlap AND the churn. `cache_hit_ratio` →
+`cached_requests_total`, so the ratio is the consumer's division. Four self-test property cases,
+each MUTATION-TESTED, plus one existing vacuous assertion un-vacuumed (it compared against
+`samples_of()`, which only captures zone-only series and so could never have matched).
+**#1756** — `retention: 90d` + `retentionSize: 16GB` was truncating at ~11 days (11,155
+samples/s, 359,680 series, 1.32 B/sample = 1.19 GiB/day), silently starving the chart's own
+`increase30d` recording rules; now 31d / 45GB / PVC 55Gi, no writers dropped by operator ruling.
+**#1759** — `--smoke` derived the repo name from `basename $(rev-parse --show-toplevel)`, which in
+a WORKTREE is the branch name, so `exceptions/<repo>.yaml` never loaded and the `:214`
+else-branch ran kyverno with NO exceptions — 35 false violations in every worktree session, the
+standard seat lane. Consumer half → oracle-fleet#642 (the `by (route)` panel plus the
+`is_edge_panel` e2e carve-out whose acceptance rows read "query parses" and therefore cannot fail).
+
+**Verified live, not from the diff:** the counter fix in production — series appeared 3 min after
+the pod roll, then held FLAT for 7 minutes with no traffic, where the old emitter dropped them at
+5 (an instant query had found them on only 26% of hourly steps, which is what led #572's author
+to assert merely that the query parses). #1759 re-run from a fresh worktree off MERGED master:
+`[homelab#-@local] … violations=0`. And **#1756's operator did NOT expand the PVC** — it
+recreated the StatefulSet and left the PVC at 20Gi, so a 45 GiB cap sat on a 19.52 GiB disk with
+5.4 GiB free (~4.5 days to disk-full); patched to 55Gi by hand, Longhorn expanded,
+`FileSystemResizePending` cleared on a pod restart, now 55Gi / 53.96 GiB usable.
+
+**Readings corrected mid-sitting, recorded rather than quietly fixed:** "the zone's bot/AI
+settings are drift" — WRONG: 147 audit entries since before the zone existed carry no
+`bot_management` action at all; they are Cloudflare defaults, and the operator's "everything we
+configure is declared" is the right reading (this also withdrew `is_robots_txt_managed` as the
+explanation for the www/robots.txt 200→301 flip on 09-15, which is unexplained again).
+"prometheus-operator v0.91.0 auto-expands PVCs" — asserted from the version number, refuted by
+the live PVC. "The edge series were absent at #572's authoring" — unprovable: the TSDB floor IS
+the truncation, so that history is gone. Pro for minutark priced and DECLINED: $25/mo/zone (from
+`available_plans`) buys `botScore` on NEITHER plan — refused on our own Pro zone too — and its
+full WAF would land in the phase the api profile already skips. Also offered an FU for the
+one-line sentinel fix against the seat card's own ≲5-minute rule; operator caught it.

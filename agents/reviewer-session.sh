@@ -1045,9 +1045,17 @@ elif [ -z "${_router_adopted:-}" ]; then
     if [ "$go_limited" = "false" ]; then
       # Go rail is available — use it for this review (only when no explicit --model was passed).
       if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
-        MODEL="opencode-go/qwen3.5-plus"
+        # 2026-09-17: qwen3.5-plus is DEAD — the vendor still lists it in /v1/models but every
+        # call returns `400 … Model is unavailable` (3/3 probes), and it left the published
+        # pricing table. Its listing is not a liveness signal. The replacement is its own lane's
+        # successor, qwen3.7-plus: tool_use round-trip probed the same day (4.3s,
+        # thinking+tool_use), $0.40/$1.60/cR $0.04 and a **$60/mo** pool — where the first pick
+        # (qwen3.8-max, also tool-verified) carried only $15, i.e. ~22 rounds at the measured ≈$1
+        # draw. Failover duty wants POOL, not tier: a max-tier reviewer that runs out mid-latch
+        # reviews nothing. qwen3.6-plus is the same pool at a higher output price (0.50/3.00).
+        MODEL="opencode-go/qwen3.7-plus"
         GO_SERVED=1
-        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.5-plus)"
+        echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/qwen3.7-plus)"
       else
         echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
         exit 0
@@ -1075,13 +1083,29 @@ case "$EXISTING_PHASE" in
     echo "REVIEW REFUSED: pod ${POD} already ${EXISTING_PHASE} — this (pr, head) is under review (FU-092 key)." >&2
     exit 3;;
 esac
+# >>>REPLAY:reviewer-rail-label>>>
+# A review served from the Go rail draws the OPENCODE windows, not the Anthropic subscription —
+# so it must not carry the FU-088 semaphore's label (that selector counts Anthropic slots) and
+# must carry the rail label the Go semaphore counts (OPENCODE_MAX_RUNNING). The worker launcher
+# has decided this since 2026-08-17 (agent-session.sh, the `opencode-go/*` case); the reviewer's
+# pod template hardcoded the subscription label, so every Go-rail failover ride took an Anthropic
+# slot it could not use and was invisible to the Go bound. Found live 2026-09-17 on the two
+# qwen3.7-plus reviews: both labelled subscription-session=claude, neither labelled rail.
+# The inversion is what makes it worth a guard: failover fires precisely BECAUSE the Anthropic
+# window is latched, so the rides routing around it were consuming the slots they were meant to
+# free — five of them would have blocked subscription dispatch outright.
+case "${MODEL:-}" in
+  opencode-go/*) REVIEW_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+  *)             REVIEW_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
+esac
+# <<<REPLAY:reviewer-rail-label<<<
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
   || { echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}", "homelab.teststuff.net/subscription-session": claude }
+  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}"${REVIEW_RAIL_LABEL} }
 spec:
   serviceAccountName: ${POD_SA}
   restartPolicy: Never

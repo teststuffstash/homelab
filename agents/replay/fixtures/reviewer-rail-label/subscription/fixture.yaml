@@ -1,0 +1,15 @@
+# 2026-09-17 — the ordinary subscription review keeps the FU-088 semaphore label.
+#
+# CONDITION UNDER REPLAY. No failover: the reviewer runs its normal sonnet-class model on the
+# Anthropic subscription. This row exists so the Go branch above cannot be read as "drop the
+# label" — the semaphore's selector must keep counting every ride that really does draw the
+# Anthropic windows.
+#
+# THE CONTRACT: `subscription-session: claude`, exactly as before.
+name: reviewer-rail-label-subscription
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-rail-label
+  - file:post.sh

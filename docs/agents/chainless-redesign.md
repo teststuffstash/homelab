@@ -329,46 +329,139 @@ migrate through).
 > shadow re-reviews homelab#923, the G-E fan-out arm; matrix row has the caveats). FU-181 holds
 > the post-reset hygiene legs; the P4 flip is DE-GATED from Sep-13 by the same ruling.
 >
-> **UN-PARKED 2026-09-14 (FU-213 closed, homelab#1640 acceptance 2 / #1667):** the header
-> question is settled — the proxy now attaches `x-opencode-session: <the ride's session ref>`
-> on both legs, so `OPENCODE_RAIL_DISABLED` is back to `"0"` and the rail is live again
-> (posture unchanged; the knob stays as the operator's kill switch).
+> **UN-PARKED 2026-09-14 (FU-213 closed, homelab#1640 acceptance 2 / #1667):** the proxy
+> attaches `x-opencode-session: <the ride's session ref>` on both legs, so
+> `OPENCODE_RAIL_DISABLED` went back to `"0"` and the rail was live again (posture unchanged;
+> the knob stays as the operator's kill switch).
+>
+> **RE-PARKED 2026-09-17 (operator, FU-251):** that header is still not the one the vendor
+> wants, so the un-park's premise does not hold — `OPENCODE_RAIL_DISABLED` is back to `"1"`
+> (both legs). The cause was settled the same day and the proxy fixed (§The `x-opencode-session`
+> header below): the proxy was ERASING the harness's own identity, and the FU-213 header was a
+> synthetic replacement for it. The knob stays at `"1"` until a live ride proves the new headers
+> on the wire — that last step is FU-251's remaining action.
 
-### The `x-opencode-session` header (the park's cause, 2026-09-04)
+### The `x-opencode-session` header (the park's cause, 2026-09-04 — settled 2026-09-17)
 
 OpenCode mailed that this platform's client — `User-Agent: homelab-openrouter-proxy`, which BOTH
-legs send (python-urllib's own UA is Cloudflare-1010'd, probed above) — sends no
+legs sent (python-urllib's own UA is Cloudflare-1010'd, probed above) — sends no
 `x-opencode-session`, and that such requests "may error" from 2026-09-06.
 
-What the header IS, from the one public account of the same defect —
-[earendil-works/pi#4847](https://github.com/earendil-works/pi/issues/4847) (filed 2026-05-21,
-fixed 2026-05-22):
+**What the vendor actually asks for** — their own docs page, `opencode.ai/docs/go` §"Where can I
+use it?" (source: `anomalyco/opencode:packages/web/src/content/docs/go.mdx`, readable without a
+browser via `gh api repos/anomalyco/opencode/contents/<path> --jq .content | base64 -d`). Three
+rules for a client: send coding-agent-shaped traffic; **identify itself with its own user agent**
+("rather than a generic SDK or HTTP-library name"); and **send a stable session ID in
+`x-opencode-session` for each CONVERSATION** so they can pin it to one provider and keep the
+prompt cache warm. Absent it, affinity falls back to CLIENT IP — which is why nothing broke here:
+the whole fleet egresses one address. That fallback is not a plan.
 
-- It is a **provider-affinity key, not auth**: opencode routes requests carrying the same id to
-  the same upstream provider so the prompt cache hits. One stable id **per conversation**.
-- **Absent, opencode falls back to CLIENT-IP affinity** (issue thread) — which is why nothing has
-  broken here yet: the whole fleet egresses one IP. That fallback is also the reason the mail
-  reads "may error" rather than "does error"; do not treat the IP path as a plan.
-- pi's fix attaches two headers in the same SDK path that sets its other provider defaults:
-  `x-opencode-session: <session id>` and `x-opencode-client: pi` (the second is courtesy/stats,
-  and pi changed no User-Agent). Explicit configured headers still win.
-- ⚠ The trap named in that thread: a **hardcoded** id pins every request from the installation to
-  one provider — affinity bound to the client instead of the conversation. Ours is a FLEET behind
-  one proxy, so a constant would be strictly worse than the IP fallback it replaces: the id must
-  be the RIDE's.
-- Where the id would come from: `_cb_session(self.headers)` already computes exactly that
-  granularity for the breaker — the injected credential's opaque ref (the per-session/per-project
-  secret name) — and `_forward_upstream` already carries a `cb_session` argument into the same
-  leg-header allowlist that sets the UA. Two gaps to close, both in that function's callers:
-  the Go/Zen arms leave `cb_session` **None** (it is computed on the OpenRouter/breaker arms
-  only), and a direct-key ride degrades to `direct:<key-hash>` — one bucket for every ride sharing
-  that key, i.e. the hardcoded-id trap by another route.
+Two rows of the same page's validated-client table decide the design:
 
-**CLOSED 2026-09-14 (homelab#1640 acceptance 2 / #1667):** both gaps are shut — `cb_session` is
-computed once for every arm (the Go/Zen arms no longer leave it `None`) and `_forward_upstream`
-attaches `x-opencode-session: <that ref>` on both legs, so the rail is un-parked
-(`OPENCODE_RAIL_DISABLED="0"`). The direct-key `direct:<key-hash>` bucket remains the one seam
-(one bucket per key, not per ride) — recorded, not fixed here.
+- **Claude Code** — "Go recognizes its **native** session header. No custom-header wrapper is
+  needed."
+- **Codex** — "Some versions and **proxy setups still omit it; preserve the session header when
+  forwarding requests**."
+
+**Every harness this platform rides already mints one.** Verified, not assumed:
+
+| harness | what it sends | evidence |
+|---|---|---|
+| claude-code | `X-Claude-Code-Session-Id: <uuid>` + `metadata.user_id.session_id` (same uuid, stable across turns) | live capture of `claude-cli/2.1.259` against a local sink, 2026-09-17 |
+| opencode | `x-opencode-session`, by construction | vendor's own client |
+| goose | its session id on the provider's configured header name — `x-opencode-session` for opencode | `crates/goose/src/session_context.rs` (`session_id_request_builder_with_header_override`) |
+
+`coder/coder:aibridge/session.go` is the useful cross-check: a third-party implementation of the
+same recognition, header-first with a `metadata.user_id` body fallback, for every harness.
+
+**So the defect was ours, and it predated the header work.** The proxy's third-party legs
+(go/zen/or) forwarded an **allowlist of three** — `content-type`, `anthropic-version`, `accept` —
+and substituted one `User-Agent` for the whole fleet. Both the client's UA and its session header
+died at that boundary; FU-213/#1640 then answered the vendor's mail by **synthesizing** a
+replacement, `x-opencode-session: <the ride's credential ref>`. That value is per session-key and
+project — one `direct:<key-hash>` bucket for every direct-key ride — i.e. the wrong granularity,
+and the hardcoded-id trap this section already warned about, reached by another route. The
+launcher-side reading is in the proxy's own comment: one identity served three consumers (the
+breaker key, the pin cache key, this header). The first two want the credential; only this one
+wants the conversation.
+
+**The fix (2026-09-17) is subtraction.** In `_forward_upstream`:
+
+- the allowlist is gone. Third-party legs forward everything except hop-by-hop (`_DROP_REQ`) and
+  a four-name credential deny set, `_DENY_THIRD_PARTY` = `authorization`, `x-api-key`, `api-key`,
+  `cookie` (`authorization` exempt on the or-leg, where it is the `ref:` to resolve);
+- the client's **User-Agent rides through**; the proxy's own is the fallback for a caller that
+  sent none;
+- `x-opencode-session` precedence: the client's own → claude-code's native id (mirrored into
+  `x-opencode-session`, and the native header forwarded too, so either recognition path lands) →
+  the credential ref, only for a client that identified nothing;
+- a **value tripwire** replaces the allowlist's security claim: any forwarded header whose value
+  is credential-shaped (`sk-ant-oat`, `sk-or-v1-`, an anchored `ref:`) refuses 502 before egress.
+  A name list cannot catch a renamed carrier; this can.
+
+**Why the allowlist was never the boundary it read as.** Under ADR-087 a ride holds no
+credential: its `Authorization` is `Bearer ref:<ns>/<name>`, a k8s Secret NAME ("worthless
+outside the cluster", the launcher's own words), and the go/zen legs never resolve it — they
+overwrite auth with the rail's env key. The one leg where a real credential exists is the or-leg,
+and the proxy itself materializes it. The allowlist's stated fear — case variants slipping past a
+case-sensitive strip — had no case-sensitive strip to slip past (every comparison in that file is
+`.lower()`ed). Meanwhile the **body** was always forwarded verbatim, so the header allowlist was
+never an exfiltration boundary; it only ever caught accidents, which the deny set and the
+tripwire catch too. The contrast that settles it: the JAIL rail, where the CLI really does hold
+the live subscription oauth, has always protected itself with a two-name deny list
+(`claude-model-shim.py`'s `_AUTH`) and forwards everything else verbatim — the path with the
+crown jewels already did the right thing.
+
+The same commit finished ADR-087's rollout line ("drop the env/mount fallbacks") by deleting the
+`AGENT_CRED_INJECT=0` opt-out from `agent-session.sh`: injection is unconditional whenever a
+proxy is configured, and a real key is rendered only when there is no proxy at all (the
+proxy-outage break-glass). Nothing set the flag; it survived as a hypothetical that the egress
+boundary was contorting itself around.
+
+### Proved on the wire (2026-09-17)
+
+The merged proxy code was run locally against the REAL `opencode.ai/zen/go` with the wallet's
+`opencode-go-api-key`, and the vendor probed directly. Five things are now measured, not argued:
+
+1. **A claude-shaped ride lands 200** and the proxy note reads
+   `+oc-session[native]:<the claude session uuid>` — the ride's own conversation id, not the
+   credential ref.
+2. **What we send** (capture with `OPENCODE_GO_BASE` pointed at a local sink), by client kind:
+   - claude-code → `User-Agent: claude-cli/2.1.259 …`, `X-Claude-Code-Session-Id` forwarded AND
+     mirrored into `X-Opencode-Session`; `anthropic-beta` stripped; auth = the rail key alone
+     (the inbound `ref:` never leaves);
+   - opencode/goose → their own UA and their own `x-opencode-session`, untouched;
+   - a client that identifies nothing → `x-opencode-session` falls back to the ride's ref.
+3. **Affinity is real and follows the header.** Same session id + identical 2.4k-token prefix:
+   first ride `cache_read_input_tokens: 0`, repeat `2176`. A DIFFERENT session id with the same
+   prefix goes cold again (`0`), then the first id is warm once more. The id — not the prompt —
+   is what routes a request to the provider holding the warm cache.
+4. **Either header works, alone.** `X-Claude-Code-Session-Id` only → cold then warm.
+   `x-opencode-session` only → cold then warm. The validated-client table's "Go recognizes its
+   native session header" is true as written.
+5. **"May error" is now "does error".** With NO session header at all, three tries, three
+   failures: `HTTP 400 {"type":"MissingSessionID","message":"Error from provider (Console Go):
+   Request is missing x-opencode-session and cannot be routed efficiently…"}` — and a ride WITH
+   either header, run between them, 200s. The allowlist-era proxy would be hard-failing on this
+   rail today.
+
+One correction this forces on the 09-17 re-park's premise: the FU-213 value was never *rejected*
+— any stable id clears the 400 gate. It was **inefficient**: one bucket per session-key/project
+(and a single `direct:<hash>` bucket for every direct-key ride), so rides shared an affinity key
+whose prefixes differ and missed the cache they were meant to hit. The park cost nothing to hold
+and the fix is still the right one; the defect was granularity, not rejection.
+
+**The knob went back to `"0"` the same evening** (operator, 2026-09-17 18:35Z, `c5138ed0` — the
+direct lane, cluster-consumed): the header question the park existed for was answered on the wire,
+and the subscription's 7d window sat at 0.95, so the reviewer's sanctioned Go failover was the only
+path a review could land on. Live-verified `OPENCODE_RAIL_DISABLED=0` on the running pod.
+
+**What remains (FU-251)** are the seams recorded, not fixed: a claude-code older than v2.1.86
+sends the session id only in `metadata.user_id` (no body parse), a client that identifies nothing
+still falls back to the credential ref (which clears the 400 but buckets coarsely), and a caller
+whose UA is a generic library name (`curl/…`, an SDK default) has it forwarded as-is — the
+proxy's own UA substitutes only for a caller that sends NO UA, which is narrower than the
+vendor's rule 2 asks for.
 
 ### What the probing settled (2026-08-13; the numbers live in the matrix spike)
 
@@ -399,7 +492,10 @@ What stands here is the doctrine the probe produced:
   fits or busts a weekly window.
 - **The Zen sibling** (`…/zen/v1`, the same key) is opencode's pay-per-token gateway with a free
   tier — never route `claude-*` there (the Anthropic subscription exists), and canary any free
-  model before a slot: first probes 400'd on tools.
+  model before a slot: first probes 400'd on tools. ⚠ Its FREE ids admit **no API client at all**
+  — CLI-only by vendor policy, stated in the error body (2026-09-18); the 2026-08-31 "free usage
+  quota" reading was that gate in rate-limit costume. Evidence and the consequence for
+  instruments: [the matrix spike](../spikes/opencode-model-matrix.md) §OpenCode Zen free tier.
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
 

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-251** (2026-09-17: FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-252** (2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -458,6 +458,9 @@ six OVERSIZE items pointer-ized into
       not the runner. Mitigated: `mgmt_clone`'s dirty check ignores the lock. **Next:** pin the
       same devbox version on both sides (the closure's `devbox` package ↔ claude-jail's image) and
       drop the exclusion. Relates ADR-129, FU-237.
+      **+2026-09-17: the JAIL's own devbox (0.18.1) does it too** (nodejs_22 0.0.5→0.0.4) and it
+      dirties the operator's SHARED working tree, where no exclusion exists — skip `git status`
+      and a session commits the downgrade. Reverted by hand.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
@@ -630,15 +633,6 @@ the block needs pruning, not more headings.
       a newer arbitration ruling on a LANDING PR (state-fp mutates every tick post-approval,
       3 sessions/5min) — fixed via #868 → PR#873 (SELECT excludes APPROVED+armed, "gated on
       fresh evidence"). **Next:** one CLEAN organic fire on a genuine no-op round post-#873.
-- [ ] **FU-233** — **Codeowner-gate trial week (ADR-128): re-read on 2026-09-18.** CODEOWNERS
-      narrowed 2026-09-11 to the governance core (`agents/**`, `policy/**`, `tofu/github/**`, the
-      dotdirs); `docs/**`, `argocd/platform/**`, `tofu/`, `ansible/**`, `opnsense/**`, `machines/**`
-      merge on CI + bot for the week. Baseline: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md)
-      (13.9 % finding rate on human reads, 6 outage-class of 38 — none on the freed paths).
-      **Next (2026-09-18):** count the week's catches / incidents / post-merge quickfixes on the
-      freed paths vs the baseline; revert = un-comment the five CODEOWNERS lines (one commit), or
-      promote and start ADR-100's owner→rule replacement for `docs/` currency + `argocd/platform`
-      prunes. Relates ADR-100, ADR-110, ADR-127.
 - [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
@@ -834,6 +828,23 @@ the block needs pruning, not more headings.
       post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 
 ### Models, cost & routing
+
+- [ ] **FU-251** — **opencode.ai: headers fixed and PROVED on the wire; the knob is an operator
+      flip.** The proxy forwards the harness's own UA + session header (PR#1760). Measured
+      2026-09-17 against the live vendor: a claude-shaped ride 200s with
+      `+oc-session[native]:<uuid>`; affinity follows the id (same id → `cache_read 2176`, a fresh
+      id on the same prefix → cold); either `x-opencode-session` or claude's native header works
+      alone; with NO session header the rail hard-fails `400 MissingSessionID` (3/3), so the
+      pre-fix allowlist would be failing today. Premise corrected: FU-213's value was never
+      rejected, only coarse. The "rides reached opencode.ai while parked" seam is closed — the
+      knob was `"0"` then (operator). **Flipped back to `"0"` the same evening** (2026-09-17
+      18:35Z, `c5138ed0`; live-verified on the pod) — the 7d subscription window sat at 0.95 and the
+      reviewer's Go failover was the only path a review could land on. **Next:** the three seams the
+      fix left standing — the proxy's UA substitution is narrower than the vendor's rule 2 (a caller
+      whose UA is a generic library name rides through as-is), a claude-code older than v2.1.86
+      sends the session id only in `metadata.user_id` (no body parse), and a client that identifies
+      nothing still buckets coarsely on the credential ref. Detail:
+      [`chainless-redesign.md`](agents/chainless-redesign.md) §Proved on the wire.
 
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless
       cost-rethink directions 3–4).** Goal budgets on the platform stack stay CAP-PHANTOM until

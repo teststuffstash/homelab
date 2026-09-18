@@ -1,0 +1,18 @@
+# FU-251 — the claude leg of the same contract (the subscription tier).
+#
+# CONDITION UNDER REPLAY. A claude ride with the proxy set and `AGENT_CRED_INJECT=0` exported.
+# The claude tier holds no OpenRouter key at all — its only credential is the `ref:` the proxy
+# resolves — so the observable here is the git broker: before the fix the flag suppressed
+# GIT_CRED_BROKER_URL and the ride cloned tokenless (the FU-089 class, issue-135 r1).
+#
+# THE CONTRACT: proxy configured ⇒ GIT_CRED_BROKER_URL is set and no OpenRouter key is rendered,
+# whatever AGENT_CRED_INJECT says.
+name: cred-inject-unconditional-claude-opt-out-ignored
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:cred-inject
+  - file:post.sh
+env:
+  - AGENT_CRED_INJECT=0

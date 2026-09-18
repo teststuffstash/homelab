@@ -520,8 +520,8 @@ prometheus:
       requests:
         cpu: 300m
         memory: 1200Mi
-    retention: 90d
-    retentionSize: 16GB
+    retention: 31d
+    retentionSize: 45GB
     ruleSelectorNilUsesHelmValues: false
     scrapeInterval: 60s
     secrets:
@@ -534,7 +534,7 @@ prometheus:
             - ReadWriteOnce
           resources:
             requests:
-              storage: 20Gi
+              storage: 55Gi
           storageClassName: longhorn
   service:
     annotations:

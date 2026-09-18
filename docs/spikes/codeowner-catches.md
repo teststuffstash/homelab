@@ -1,6 +1,8 @@
 # Spike — codeowner-catches census, 2026-08-04 → 2026-09-11
 
-**Tracked by:** FU-233 (the ADR-128 trial week; re-read 2026-09-18 against this baseline).
+**Origin:** FU-233 (archived 2026-09-18) — the ADR-128 trial week. The re-read landed below; the
+operator ruled the trial state stays as is, so this doc is now the standing baseline for the NEXT
+codeowner-scope question rather than a tracked item.
 
 **Question (operator, verbatim):** "find how many times have we found problems in codeowner
 review and what types of problems they were. I'm thinking of ways to reduce their amount anyway,
@@ -211,3 +213,88 @@ The remaining ~60 hits are gate reads recorded as executed with no finding ("all
 - **Volume.** 263 homelab human reads in 39 days (≈6.7/day) produced 34 findings; 199 of the reads
   are recorded as an APPROVED review body, 69 of which say only "read → merging". agent-runtime's
   40 bot-approved machine PRs were never human-read in the window (0 catches, 0 clean reads).
+
+## Re-read — the trial week measured, 2026-09-11 → 2026-09-18 (FU-233)
+
+Same scope as the census above: machine-authored PRs (`homelab-agents-1234[bot]`,
+`homelab-renovate-1234[bot]`) on `teststuffstash/homelab`, created in the window; seat-authored PRs
+excluded; `homelab-deploy-1234[bot]` (4 PRs, all auto-merged) noted only. Commands as run: the same
+REST `pulls?state=all` list, per-PR `pulls/<n>/files` for the path split, `gh pr view --json
+reviews,comments,commits,mergedBy` for the human-touch test, `git log --since=2026-09-11` over the
+freed paths for post-merge corrections, and `docs/incidents/` for the window's postmortems.
+
+### Population — and why it is too thin to settle the volume question
+
+25 machine PRs in 7 days (**3.6/day** against the baseline's 11.6/day):
+
+| class | PRs | numbers |
+|---|---|---|
+| **freed paths ONLY — what the trial actually un-read** | **6** | #1645, #1695, #1700, #1734, #1753, #1754 |
+| still gated (touch `agents/**` / `.claude/**`) | 10 | #1658, #1676, #1694, #1698, #1699, #1715, #1738, #1743, #1755, #1758 |
+| neither (tier 1: `argocd/resources`, `devbox.lock`, `docker/`) | 9 | |
+
+All 6 freed-only PRs were bot-approved, bot-merged, with **zero human touches** — no `RasmusSoot`
+review, comment, or branch commit on any of them. Catches: **0**. Human reads: **0**, so the catch
+RATE is undefined here rather than improved.
+
+⚠ **At the baseline's 13.9 %, six reads predict ~0.8 findings — "zero catches" over six is
+consistent with the baseline and settles nothing by itself.** Only ONE machine PR touched the
+tier-2 families at all (#1695, `tofu/longhorn.tf`), and only one touched `argocd/platform/**` as a
+freed-only diff (the same PR). The week's informative datum is the post-merge correction below, not
+the zero.
+
+### The one substantive cost — and it is the risk `CODEOWNERS` predicted verbatim
+
+**#1700** (worker PR, `docs/` + `argocd/resources`) **archived FU-213**: removed the item from
+`docs/follow-ups.md`, wrote the archive entry, asserting the `x-opencode-session` fix had shipped.
+Three days later the operator read two oracle-fleet rides still egressing on the supposedly-parked
+rail; the premise was refuted, `23cbfd7d` re-parked the rails, PR#1760 shipped the real fix, and
+FU-251 was minted to re-open the same concern. **For three days the tracker asserted done about
+something that was not.** That is this file's own §docs comment: *"an agent merging there rewrites
+the record the next session reads as ground truth, and unlike a bad manifest nothing reconciles it
+back."* Class: `in-diff-defect` (a premise error carried by a doc write).
+
+Two qualifiers, both against the finding:
+
+- The premise was the operator's own Goal #1640 design, so a codeowner read of the CODE would
+  plausibly have re-blessed it. What a read plausibly catches is the **archival** — closing an item
+  demands an isolated end-state check, and the operator's 09-17 probe is exactly that check.
+- One instance in six reads is ~17 %, i.e. **at** the baseline rate, not below it.
+
+**The rubric's delegation did not hold.** `.agents/review.md` carries the rule
+(*"`docs/follow-ups.md` is single-writer (operator/meta): a worker appending to it is blocking"*)
+and the bot approved #1700 regardless. The rule names **appending**; the damaging act was a
+**removal**. The trial's only cost came through the exact verb the rule does not cover — a wording
+defect, not a bot failure.
+
+### Incidents — none attributable to a freed-path merge, and the one outage-class event indicts the APPLY
+
+Three postmortems in the window: `2026-08-31-argo-semaphore-leak.md` (cause predates the trial),
+`2026-09-16-page-table-check-reboots.md` (an upstream Talos kernel bug), and
+`2026-09-16-targeted-apply-replaced-three-vms.md` — **the seat's own `tofu apply`** (FU-248). That
+last one is the week's only outage-class event on a tier-2 path, and the codeowner gate never
+protected against it: the read gates the MERGE, while the apply was always a separate seat act.
+Direct-to-master commits touching freed paths in the window are otherwise the ordinary bookkeeping
+class plus the seat's own router/dnsmasq/metal work — neither is a trial signal.
+
+### Per-family reading (measurement; the ruling is the operator's)
+
+| family | freed-only machine PRs | evidence | reading |
+|---|---|---|---|
+| `docs/**` | 5 | the FU-213 mis-archival + the rubric verb gap | **do not simply promote** — the cost landed in the memory core |
+| `argocd/platform/**` | 1 (#1695) | no prune-without-a-data-story, sentinel + belts quiet | promote, on thin but clean evidence; the baseline's 3 findings here are now covered by `prometheus-rules-lint`, `manifest-lint` and the enforcing IAC-G04 sentinel |
+| `tofu/*.tf`, `ansible/**`, `opnsense/**`, `machines/**` | 1 (`tofu/longhorn.tf`) | no evidence either way | **extend, do not decide** — these never waited on a READER; they wait on commit == rollout ([the management box](../management-box.md), ADR-131, FU-237) so the apply stops being the seat's separate act |
+
+Two ADR-100-shaped options for `docs/**`, in preference order:
+
+1. **Replace the owner with a rule** — a governance lint that reds any non-seat author whose diff
+   touches `docs/follow-ups*.md`, `docs/adr.md` or `docs/incidents/`. Stricter than the review it
+   stands in for (a regex cannot be talked past), which is what ADR-100 requires of an un-gating.
+2. **Re-own only the memory core** (`/docs/follow-ups*.md`, `/docs/adr.md`, `/docs/incidents/`),
+   leaving per-service docs and spikes free — the A5 pile's "docs/ split" candidate, now with
+   evidence behind it.
+
+Either way the rubric's single-writer clause wants its verb widened from *appending* to *any write*.
+
+Also on the record: `/nixos/` was ADDED as an owned path mid-trial (`bd74bdd4`, ADR-129 amended —
+the box applies from master), which is the opposite direction and deliberate.

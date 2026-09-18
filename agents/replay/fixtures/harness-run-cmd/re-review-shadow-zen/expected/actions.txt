@@ -1,0 +1,6 @@
+CALL opencode run -m opencode/big-pickle Test prompt for shadow re-review.
+OUT → re-review: zen model — invoking `opencode run -m opencode/big-pickle` (the free tier admits no API client)
+OUT claude_reply: {
+OUT   "result": "{\"verdict\": \"REQUEST_CHANGES\", \"findings\": \"Zen shadow findings.\"}"
+OUT }
+RC 0

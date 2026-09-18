@@ -1,0 +1,5 @@
+OUT → cred-inject: pod holds ref:oracle-fleet/oracle-fleet-openrouter; git tokens fetched per-op from the proxy (ADR-087)
+OUT OR_KEY: ref (ref:oracle-fleet/oracle-fleet-openrouter)
+OUT GIT_BROKER: set
+OUT OC_INJECT: unset
+RC 0

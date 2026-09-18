@@ -9,6 +9,19 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
+  (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in
+  `scripts/docs-graph-lint.sh`, one line, operator-lane (`scripts/**`). It is in SHADOW only because
+  master still carries the 42 misfiled `§M` refs that **PR#1755** fixes; the moment that merges,
+  `git grep -c 'model-routing\.md §M'` on master hits 0 and the flip is safe. Leaving it in shadow
+  is the failure mode the check exists to prevent. #1710 closes with PR#1755.
+  (2) **Monday re-check: the reviewer's first-round deferral** — the defect where sonnet reports a
+  PR's first-diff blocking findings in round 3 or 5 instead of round 1. Came up in the retro and was
+  partly fixed there; the operator's read (2026-09-18) is that it should REAPPEAR, so the Monday
+  board is the observation. No tracker item by design — the retro owns it. If it reappears, that is
+  the second sighting, and the reshaped second-reviewer candidate in the A5 pile is where it would
+  pay ([`iac-lane.md`](iac-lane.md), the governance-checkpoint section).
+
 - **⚑ PICKUP (2026-09-17 corpus session — the responder rebuild's second half; arc in TICK-LOG).**
   Six PRs, all MERGED: **#1748** (the triage-routing filter), **#1749** (§A1 capture), **#1750**
   (declared window + human-close + the crosscheck's pause line), **#1751** (KubeJobFailed replaced
@@ -208,12 +221,10 @@ never the session's arc — that is TICK-LOG's.)
   `exacto:no-pin`); fleet un-latched; #1237 re-home question at the next sweep; oracle-fleet
   PR#591/#395 human-directive path; #1651 unqueued.
 - **⚑ PICKUP (2026-09-14 evening handoff/board session — no corpus load; arc in TICK-LOG).**
-  (1) **#1692 / PR#1699 fix round** — changes-requested (bare-`§M` sweep, recipe on #1692);
-  dispatch is blocked by the fleet-strike reader re-applying `agent/error` until **2026-09-15
-  16:45Z** (or #1712 landing) — strip after that if the reader has not stopped; then close
-  **#1707** (kept open as the dedup anchor). After the merge: the one-word docstring pointer in
-  `scripts/claude-model-shim.py` (`model-routing.md §M11` → `model-routing-history.md §M11`)
-  lands operator-direct; #1710 closes with it. (2) **PR#1698 codeowner read** (#1670,
+  (1) **#1692 DONE** — PR#1699 abandoned (the bare-`§M` over-match), split into PR#1753 (the
+  rewrite, merged 09-17) + #1710/PR#1755 (the pointer sweep, OPEN). The shim's docstring pointer
+  landed operator-direct 2026-09-18 with the check-#4b ratchet below; #1710 closes when PR#1755
+  merges. (2) **PR#1698 codeowner read** (#1670,
   bot-approved after two rounds, CI green, BEHIND) — the corpus-loaded seat merges it; #1697
   unparks by itself. (3) **#1713** pin-only-lint's merge-ref two-dot (operator lane, sibling of
   fadb0ff6). (4) **oracle-fleet#605** (ErtPipeline rules on the Argo counter) in the oracle

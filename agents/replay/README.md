@@ -221,6 +221,9 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
 | `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
+| `cred-inject-unconditional/claude-opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
+| `cred-inject-unconditional/no-proxy-breakglass` | actions | - | `agents/agent-session.sh` | - |
+| `cred-inject-unconditional/opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
@@ -278,6 +281,10 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-empty` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-malformed` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-prose` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `hermeticity-audit` | table | - | `~` | - |
@@ -402,6 +409,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-rail-label/go` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-rail-label/subscription` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/resolved-adopted` | actions | - | `agents/reviewer-session.sh` | - |

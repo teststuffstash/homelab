@@ -5,8 +5,11 @@ This module is the SINGLE HOME for Go-rail pricing, usage extraction, and the su
 WINDOW semantics (budgets + epoch anchors), consumed by BOTH the openrouter-proxy pod
 (cluster-side metering, /opencode-limit) and the jail shim (scripts/claude-model-shim.py).
 
-Matrix snapshot date: 2026-08-13 (docs/spikes/opencode-model-matrix.md). Curated from console
-billing — there is no pricing API on this rail. Edits here are the only place prices change.
+Price snapshot date: 2026-09-17 (register: docs/spikes/opencode-model-matrix.md), taken from
+the VENDOR'S published table (opencode go.mdx §"Usage limits") — there is still no pricing API
+on this rail, so the doc page is the source. Edits here are the only place prices change.
+Pricing is TIME-VARYING since 2026-09-17: the four DeepSeek rows have peak/off-peak rates, so
+every price entrypoint takes an injectable `now` (default time.time()).
 """
 import calendar
 import os
@@ -14,43 +17,116 @@ import re
 import sys
 import time
 
-# GO_PRICES: OpenCode Go model pricing matrix (snapshot: docs/spikes/opencode-model-matrix.md 2026-08-13).
+# GO_PRICES: OpenCode Go model pricing matrix — REFRESHED 2026-09-17 from the VENDOR'S OWN
+# published table (opencode go.mdx §"Usage limits"), which is now the grounding source; the
+# 2026-08-13 console-curated snapshot had rotted (wrong prices, dead + missing models).
 # Keys are bare model ids (prefix/suffix stripped); values: $/M tokens for in/out/cR/cW + half flag.
-# "half=True" = (2x usage) badge models — they draw subscription windows at HALF list price
-# (community-confirmed: "double the api worth" / "50 percent discounted").
-# Prices curated from console billing (2026-08-13); no pricing API exists on this rail.
+#
+# ── The `half` flag is NO LONGER SET ON ANY ROW (2026-09-17) ───────────────────────────────
+# `half=True` meant "(2x usage) badge model — draws its subscription windows at HALF list
+# price". THE VENDOR'S TABLE HAS NO BADGE COLUMN ANY MORE: promotions are now expressed as an
+# explicitly RAISED monthly limit (DeepSeek V4.1 Flash reads "~~$15~~ $60 · 4x · Ends Sep 20").
+# The flags that sat on deepseek-v4-flash and gpt-5.6-luna are therefore UNGROUNDED, and are
+# removed rather than carried silently. Consequence, stated loudly because it is the most
+# consequential line of the refresh: those two models now meter at 2× their previous WINDOW
+# DRAW. That is the CONSERVATIVE side — the draw feeds the capacity latch, and an unproven
+# halving makes the latch OPTIMISTIC (it keeps dispatching past the real limit). The mechanism
+# is deliberately kept (window_draw() still halves a half=True row, and the self-tests still
+# pin that behaviour) so a future, GROUNDED badge is a one-word data edit.
+#
+# ── Peak/off-peak ─────────────────────────────────────────────────────────────────────────
+# The four DeepSeek rows carry the OFF-PEAK price; GO_PRICES_PEAK holds their peak row and
+# _price_row() selects by REQUEST TIMESTAMP. See GO_PEAK_HOURS_UTC below.
+#
+# ── "$NN pool" = the vendor's per-model MONTHLY LIMIT ─────────────────────────────────────
+# DOCUMENTATION ONLY — nothing in this repo reads it. The latch runs ONE global $12/$30/$60
+# window triple (_GO_WINDOW_DEFAULTS), i.e. it assumes the $60 pool for every model; models on
+# a $15/$30 pool are correspondingly under-metered by the latch. Recorded, not fixed here.
 GO_PRICES = {
-    # model              in       out      cR       cW       half
-    "qwen3.5-plus":    (0.25,   1.00,   0.025,   None,  False),  # console-derived (2026-08-13)
-    "kimi-k3":         (3.00,  15.00,   0.30,    None,  False),  # $15 pool
-    "qwen3.8-max":     (2.00,   6.00,   0.25,    2.50,  False),  # $15 pool
-    "glm-5.2":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
-    "glm-5.1":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
-    "deepseek-v4-flash": (0.14, 0.28,  0.0028,  None,  True),   # $60 pool, 2x badge
-    "deepseek-v4-pro": (0.435,  0.87,  0.003625, None,  False),  # $15 pool
-    "mimo-v2.5":       (0.14,   0.28,   0.0028,  None,  False),  # $60 pool
-    "mimo-v2.5-pro":   (0.435,  0.87,  0.003625, None,  False),  # $15 pool
-    "kimi-k2.7-code":  (0.95,   4.00,   0.19,    None,  False),  # $60 pool
-    "kimi-k2.6":       (0.95,   4.00,   0.16,    None,  False),  # $60 pool
-    "minimax-m3":      (0.30,   1.20,   0.06,    None,  False),  # $60 pool
-    "minimax-m2.7":    (0.30,   1.20,   0.06,    0.375, False),  # $60 pool
-    "qwen3.7-max":     (2.50,   7.50,   0.50,    3.125, False),  # $60 pool
-    "qwen3.7-plus":    (0.40,   1.60,   0.04,    0.50,  False),  # <=256k; >256k = 1.20/4.80/0.12/1.50
-    "qwen3.6-plus":    (0.50,   3.00,   0.05,    0.625, False),  # <=256k; >256k = 2.00/6.00/0.20/2.50
-    "gpt-5.6-luna":    (0.20,   1.20,   0.02,    0.25,  True),   # <=272k; 2x badge
-    "grok-4.5":        (2.00,   6.00,   0.30,    None,  False),  # $15 pool
-    "hy3":             (0.14,   0.58,   0.035,   None,  False),  # $60 pool
+    # model                         in       out      cR         cW       half
+    "glm-5.3-flash":               (0.15,    0.50,    0.03,      None,    False),  # $60 pool
+    "glm-5.3":                     (1.40,    4.40,    0.26,      None,    False),  # $15 pool
+    "glm-5.2":                     (1.40,    4.40,    0.26,      None,    False),  # $60 pool
+    "glm-5.1":                     (1.40,    4.40,    0.26,      None,    False),  # $60 pool
+    "kimi-k3":                     (3.00,   15.00,    0.30,      None,    False),  # $15 pool
+    "kimi-k2.7-code":              (0.95,    4.00,    0.19,      None,    False),  # $60 pool
+    "kimi-k2.6":                   (0.95,    4.00,    0.16,      None,    False),  # $60 pool
+    "longcat-2.0":                 (0.30,    1.20,    0.006,     None,    False),  # $60 pool
+    "mimo-v2.5":                   (0.14,    0.28,    0.0028,    None,    False),  # $60 pool
+    "mimo-v2.5-pro":               (0.435,   0.87,    0.003625,  None,    False),  # $15 pool
+    "minimax-m3":                  (0.30,    1.20,    0.06,      None,    False),  # $60 pool
+    "minimax-m2.7":                (0.30,    1.20,    0.06,      0.375,   False),  # $60 pool
+    "minimax-m2.5":                (0.30,    1.20,    0.06,      0.375,   False),  # $60 pool
+    "muse-spark-1.3-contributor":  (0.10,    0.20,    0.002,     None,    False),  # $60 pool
+    "muse-spark-1.2-contributor":  (0.10,    0.20,    0.002,     None,    False),  # $60 pool
+    "qwen3.8-max":                 (2.00,    6.00,    0.25,      2.50,    False),  # $15 pool
+    "qwen3.8-flash":               (0.15,    0.47,    0.016,     0.20,    False),  # $30 pool
+    "qwen3.7-max":                 (2.50,    7.50,    0.50,      3.125,   False),  # $30 pool (was mis-commented $60)
+    "qwen3.7-plus":                (0.40,    1.60,    0.04,      0.50,    False),  # $60 pool; >256k in GO_PRICES_LONG
+    "qwen3.6-plus":                (0.50,    3.00,    0.05,      0.625,   False),  # $60 pool; >256k in GO_PRICES_LONG
+    # The four DeepSeek rows are OFF-PEAK; peak rows live in GO_PRICES_PEAK (exactly 2×).
+    "deepseek-v4.1-flash":         (0.15,    0.60,    0.003,     None,    False),  # $15 pool, promo-raised to $60 (4x, ends Sep 20)
+    "deepseek-v4-pro":             (0.66,    1.98,    0.022,     None,    False),  # $15 pool (was 0.435/0.87/0.003625)
+    "deepseek-v4-flash":           (0.15,    0.60,    0.003,     None,    False),  # $30 pool (was 0.14/0.28/0.0028 + half; both wrong)
+    "deepseek-v4-flash-vision-exp": (0.15,   0.60,    0.003,     None,    False),  # $15 pool
+    "hy4-preview":                 (0.834,   2.501,   0.042,     None,    False),  # $30 pool
+    "hy3":                         (0.14,    0.58,    0.035,     None,    False),  # $60 pool
+    # ⚠ union-alpha is priced FREE/unlimited and is therefore the FIRST pick any price-ordered
+    # candidate list would make — and it went DEAD one day after it was published: 2026-09-18,
+    # 7 attempts / 3 paths, `400 Model is unavailable.` on the Go surface and `500` on Zen, while
+    # both catalogs still LIST it (the qwen3.5-plus trap, inside 24h). The row stays so the meter
+    # prices it correctly if it returns; nothing may CHAIN it without a fresh probe.
+    "union-alpha":                 (0.0,     0.0,     0.0,       None,    False),  # FREE, unlimited — "limited time" (2026-09-17); dead 09-18
+    "grok-4.6":                    (2.00,    6.00,    0.50,      None,    False),  # $15 pool; >200k in GO_PRICES_LONG
+    "gpt-5.6-luna":                (0.20,    1.20,    0.02,      0.25,    False),  # $15 pool; >272k in GO_PRICES_LONG (half removed, see above)
+    # ── Removed 2026-09-17 ────────────────────────────────────────────────────────────────
+    # qwen3.5-plus: DEAD. Probed 3/3 → 400 {"type":"api_error", ... "Model is unavailable."},
+    #   and gone from the vendor's published table. TRAP WORTH REMEMBERING: /v1/models STILL
+    #   LISTS IT — THE MODEL LIST IS NOT A LIVENESS SIGNAL. Probe, never enumerate.
+    # grok-4.5: dropped — no longer published, so its 2.00/6.00/0.30 row was ungrounded. It is
+    #   still SERVED, so it now takes the _GO_MAX_PRICE fallback below, exactly like the other
+    #   served-but-unpriced ids (deepseek-flash, glm-5, hy3-preview, kimi-k2.5, mimo-v2-omni,
+    #   mimo-v2-pro, omen-alpha) — the conservative, uniform treatment.
 }
 # Fallback: use the most expensive known row when a model is unseen (fail conservative).
 _GO_MAX_PRICE = max((p[0] + p[1] for p in GO_PRICES.values()), default=10.0)
 _GO_PRICED_MODELS = frozenset(GO_PRICES.keys())
-# Long-context price tiers (matrix #long-context; trigger = input_tokens threshold per pricing pages).
-# qwen3.7-plus >256k: 1.20/4.80/0.12/1.50, qwen3.6-plus >256k: 2.00/6.00/0.20/2.50,
-# gpt-5.6-luna >272k: 0.40/1.80/0.04/0.50. Half flag inherited from base row.
+
+# ── Peak / off-peak: a TIME-VARYING pricing axis (new 2026-09-17) ──────────────────────────
+# Vendor doc, verbatim: "DeepSeek V4.1 Flash / V4 Pro / V4 Flash / V4 Flash Vision Exp: Peak
+# hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including
+# weekends, are Off-Peak." Peak is exactly 2× off-peak for all four, but the peak rows are
+# spelled out rather than derived so a change to the RATIO stays a data edit.
+GO_PEAK_HOURS_UTC = ((1, 4), (6, 10))          # half-open [lo, hi) UTC hours
+GO_PEAK_WEEKDAYS = frozenset((0, 1, 2, 3, 4))  # Mon..Fri, per time.gmtime().tm_wday
+GO_PRICES_PEAK = {
+    # model                          in      out     cR       cW
+    "deepseek-v4.1-flash":          (0.30,   1.20,   0.006,   None),
+    "deepseek-v4-pro":              (1.32,   3.96,   0.044,   None),
+    "deepseek-v4-flash":            (0.30,   1.20,   0.006,   None),
+    "deepseek-v4-flash-vision-exp": (0.30,   1.20,   0.006,   None),
+}
+
+
+def is_peak(now: float | None = None) -> bool:
+    """True when `now` (epoch seconds; defaults to time.time(), the module's injectable-now
+    convention) falls inside a Go PEAK hour — Mon-Fri, 01:00-04:00 or 06:00-10:00 UTC. Pure:
+    no I/O, no globals beyond the two tables above, so the self-tests can pin both sides."""
+    gt = time.gmtime(time.time() if now is None else now)
+    if gt.tm_wday not in GO_PEAK_WEEKDAYS:
+        return False
+    return any(lo <= gt.tm_hour < hi for lo, hi in GO_PEAK_HOURS_UTC)
+
+
+# Long-context price tiers (matrix #long-context; trigger = input_tokens threshold per the
+# vendor table's "(> NNNK tokens)" rows). Half flag inherited from the base row.
+#   qwen3.7-plus >256k: 1.20/4.80/0.12/1.50 · qwen3.6-plus >256k: 2.00/6.00/0.20/2.50
+#   gpt-5.6-luna >272k: 0.40/1.80/0.04/0.50 · grok-4.6     >200k: 4.00/12.00/1.00/-
 GO_PRICES_LONG = {
     "qwen3.7-plus": (256000, (1.20, 4.80, 0.12, 1.50)),
     "qwen3.6-plus": (256000, (2.00, 6.00, 0.20, 2.50)),
     "gpt-5.6-luna": (272000, (0.40, 1.80, 0.04, 0.50)),
+    "grok-4.6":     (200000, (4.00, 12.00, 1.00, None)),
 }
 
 # Usage extraction regex — matches both SSE (message_start/message_delta) and non-stream JSON.
@@ -60,6 +136,26 @@ _USAGE_RE = re.compile(r'"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})')
 
 def extract_usage(head: bytes, tail: bytes) -> dict:
     """Extract token usage from a Go-leg response.
+
+    ⚠ **The LAST block wins for the input/cache fields; only `output_tokens` max-merges.**
+    A streamed Anthropic-compat response carries TWO usage blocks, and they mean different
+    things (captured live off `…/zen/go/v1/messages`, qwen3.7-plus, 2026-09-17):
+
+        message_start:  {"input_tokens":3210,"output_tokens":0}
+        message_delta:  {"input_tokens":408,"output_tokens":601,"cache_read_input_tokens":2816}
+
+    The first is the PROMPT SIZE — a per-session constant, repeated on every call of a
+    conversation and carrying no cache split. The second is the BILLING block: what was
+    actually fresh, and what came from cache. `max()` across both took the constant (3210)
+    for `input_tokens` AND added the 2816 cache reads — double-counting the cached prefix at
+    the fresh rate (10× the cache-read price). Measured on the two 2026-09-17 reviewer rides:
+    `/opencode-limit` read $0.5671 where the vendor's own dashboard billed ~$0.16, a 3.4×
+    over-count, with a 34,681-token constant sitting in the fresh slot on every call while
+    the vendor billed zero fresh. Windows and prices were both correct — only this split was
+    wrong.
+
+    `output_tokens` still max-merges: it grows monotonically across deltas, and the tail
+    window can clip the final block.
 
     Args:
         head: First 16KB of the response (for JSON with usage at start).
@@ -76,29 +172,52 @@ def extract_usage(head: bytes, tail: bytes) -> dict:
         "cache_creation_input_tokens": 0,
     }
     text = (head + tail).decode("utf-8", errors="replace")
+    _json = __import__("json")
+    blocks = []
     for m in _USAGE_RE.finditer(text):
         try:
-            u = __import__("json").loads(m.group(1))
-            for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
-                      "cache_creation_input_tokens"):
-                if k in u:
-                    merged[k] = max(merged.get(k, 0), u[k])
-        except (__import__("json").JSONDecodeError, KeyError):
+            blocks.append(_json.loads(m.group(1)))
+        except (_json.JSONDecodeError, KeyError):
             pass
+    if not blocks:
+        return merged
+    # head+tail may overlap on a small response, so the same block can appear twice — taking
+    # the LAST occurrence is still the authoritative one either way.
+    for u in blocks:
+        if "output_tokens" in u:
+            merged["output_tokens"] = max(merged["output_tokens"], int(u["output_tokens"] or 0))
+    # The authoritative block: the last one carrying a cache split, else simply the last one
+    # (a non-streamed body has a single block; an older surface without cache keys keeps its
+    # input priced as fresh, which is the conservative direction).
+    final = next((u for u in reversed(blocks)
+                  if "cache_read_input_tokens" in u or "cache_creation_input_tokens" in u),
+                 blocks[-1])
+    for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+        if k in final:
+            merged[k] = int(final[k] or 0)
     return merged
 
 
-def _price_row(bare_model: str, in_tokens: int) -> tuple:
+def _price_row(bare_model: str, in_tokens: int, now: float | None = None) -> tuple:
     """The (in_p, out_p, cr_p, cw_p, half, warning) row for a bare model at the given input
-    size — the ONE place prices resolve, shared by the billed-style `price()` and the
-    window-draw `window_draw()` so the two cannot drift. Unknown model → the most expensive
-    known row (fail conservative) with a warning."""
+    size AND request time — the ONE place prices resolve, shared by the billed-style `price()`
+    and the window-draw `window_draw()` so the two cannot drift. Unknown model → the most
+    expensive known row (fail conservative) with a warning.
+
+    `now` (epoch seconds, default time.time()) selects the PEAK or OFF-PEAK row for the four
+    time-varying DeepSeek models (2026-09-17); it is inert for every other model."""
     row = GO_PRICES.get(bare_model)
     warning = None
     if row is None:
         warning = f"Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M"
         row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
     in_p, out_p, cr_p, cw_p, half = row
+    # Peak/off-peak override: the base row is OFF-PEAK; during a peak hour the four DeepSeek
+    # models bill at their GO_PRICES_PEAK row (exactly 2× today). Applied BEFORE the
+    # long-context override — no model currently carries both, and if one ever does the
+    # published long-context row is the more specific of the two.
+    if bare_model in GO_PRICES_PEAK and is_peak(now):
+        in_p, out_p, cr_p, cw_p = GO_PRICES_PEAK[bare_model]
     # Long-context tier override: input_tokens > threshold -> use long-context rates
     if bare_model in GO_PRICES_LONG:
         threshold, long_rates = GO_PRICES_LONG[bare_model]
@@ -108,21 +227,29 @@ def _price_row(bare_model: str, in_tokens: int) -> tuple:
     return in_p, out_p, cr_p, cw_p, half, warning
 
 
-def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
+def price(bare_model: str, merged: dict, now: float | None = None) -> tuple[float, str | None]:
     """Compute the BILLED-STYLE USD estimate for a Go-leg completion — the number the PROVIDER
     CONSOLE BILLS (homelab#540, 2026-08-18 console reconciliation): list price ×1 for every
     model, badge models included, with cache-read/cache-creation tokens at their discounted
     rates. This is the LEDGER/COST-REPORTING number, NOT the window draw.
 
-    Contrast with `window_draw()`: the subscription window draws at LIST price on raw tokens
+    Contrast with `window_draw()`: the subscription window draws at LIST price PER KIND — raw
+    input and output at their list rates, and cache tokens at their own list cache rates when
+    the split is known (homelab#540; confirmed against the vendor dashboard 2026-09-17, see
+    that function). The older "raw tokens, no cache discount" reading was measured while the
+    proxy sent no session header, i.e. through a cache that never hit
     and badge-halves EVERYTHING (draw = list on raw, badge-halved); the BILLED estimate here is
-    list ×1 with cache discounts and NO badge halving. The two numbers differ by design and
+    list ×1 with cache discounts and NO badge halving. NOTE (2026-09-17): NO row sets
+    `half=True` any more — the vendor dropped the badge column — so the two numbers now differ
+    only by the cache-discount treatment. The mechanism is retained; see GO_PRICES. The two numbers differ by design and
     must not be conflated (the 2026-08-17 pricing defect fix split them; homelab#540 corrected
     the billed side to list ×1).
 
     Args:
         bare_model: The model id without prefix/suffix (e.g. "deepseek-v4-flash").
         merged: Usage dict from extract_usage() with token counts.
+        now: Request timestamp (epoch seconds, default time.time()) — selects the peak or
+            off-peak row for the time-varying DeepSeek models; inert for the rest.
 
     Returns:
         A tuple (usd, warning_or_None). warning is set when an unknown model triggers
@@ -132,7 +259,7 @@ def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
     out_tokens = merged.get("output_tokens", 0)
     cr_tokens = merged.get("cache_read_input_tokens", 0)
     cw_tokens = merged.get("cache_creation_input_tokens", 0)
-    in_p, out_p, cr_p, cw_p, _half, warning = _price_row(bare_model, in_tokens)
+    in_p, out_p, cr_p, cw_p, _half, warning = _price_row(bare_model, in_tokens, now)
 
     # BILLED = list price ×1 for every token class at its own rate (cache reads/writes at their
     # discounted rates). NO badge halving here — the matrix's console-verified ruling is that
@@ -149,7 +276,7 @@ def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
 
 
 def window_draw(bare_model: str, merged: dict, cache_read: int | None = None,
-                cache_creation: int | None = None) -> float:
+                cache_creation: int | None = None, now: float | None = None) -> float:
     """The price OpenCode's subscription window DRAWS against for one completion: LIST price on
     RAW tokens, halved for badge models — the limit-side number the window utilization (the
     latch, /opencode-limit) MUST use. Reconciliation 2026-08-17 (uploads/opencode-go.txt): a 5h
@@ -161,12 +288,15 @@ def window_draw(bare_model: str, merged: dict, cache_read: int | None = None,
     rates, badge-halved like the rest — the old docstring claim that "the usage blocks on these
     surfaces carry no cache split" is FALSE for the Anthropic-compat surface. Tokens WITHOUT a
     split keep pricing as RAW INPUT (the conservative status quo for HISTORICAL rows, which
-    predate the cache columns — recomputation only improves NEW rows)."""
+    predate the cache columns — recomputation only improves NEW rows).
+
+    `now` (epoch seconds, default time.time()) is the REQUEST TIMESTAMP, used only to pick the
+    peak/off-peak row for the four time-varying DeepSeek models (2026-09-17)."""
     in_tokens = int(merged.get("input_tokens") or 0)
     out_tokens = int(merged.get("output_tokens") or 0)
     cr_tokens = int(cache_read if cache_read is not None else merged.get("cache_read_input_tokens") or 0)
     cw_tokens = int(cache_creation if cache_creation is not None else merged.get("cache_creation_input_tokens") or 0)
-    in_p, out_p, cr_p, cw_p, half, _warning = _price_row(bare_model, in_tokens)
+    in_p, out_p, cr_p, cw_p, half, _warning = _price_row(bare_model, in_tokens, now)
     # Raw input+output at LIST, plus cache-read/creation at their LIST rates when the split is
     # present. Note: rows WITHOUT the split price cache tokens as raw input — the conservative
     # status quo for historical rows.

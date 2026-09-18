@@ -1,0 +1,11 @@
+CALL opencode run -m opencode/big-pickle Test prompt for shadow re-review.
+CALL opencode run -m opencode/big-pickle Test prompt for shadow re-review.
+OUT → re-review: zen model — invoking `opencode run -m opencode/big-pickle` (the free tier admits no API client)
+OUT   attempt 1: empty completion — retrying once
+OUT   attempt 2: empty completion — retrying once
+OUT   ERROR: opencode/big-pickle returned no completion in 2 attempts
+OUT claude_reply: {
+OUT   "result": ""
+OUT }
+ERR $TMP/harness-run-cmd-re-review-shadow-zen-empty.clause.sh: line N: continue: only meaningful in a `for', `while', or `until' loop
+RC 0
