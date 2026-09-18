@@ -75,22 +75,6 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
-⚠⚠ **SUPERSEDED 2026-09-17 — the 08-17 measurement was taken through a BROKEN CACHE, and
-read the symptom as the rule (operator).** Until the session-header fix (FU-251, 2026-09-17)
-the proxy sent NO `x-opencode-session` and one fleet-wide User-Agent, so affinity fell back to
-client IP, requests scattered across providers, and **there were no cache reads to discount** —
-every call re-paid fresh input. "The window draws at list on RAW tokens" was therefore an
-artifact of our own defect, not a property of the vendor's accounting. Measured again once
-affinity worked, on two reviewer rides (2026-09-17): the vendor's dashboard billed **$0.148**
-for 1.57M input / 14.8k output at ~89% cache-read, and its three window readings — 1.4% of the
-5h $12, 0.5% of the weekly $30, 0.3% of the monthly $60 — independently imply **$0.15–0.18**.
-List-on-raw would have been $0.65 (5.4% / 2.2% / 1.1%). So **the window draws at per-kind LIST
-prices: cache reads draw at the cR rate**, which is what `gometer.window_draw` already computes
-(the homelab#540 amendment). Three windows agreeing on one spend also confirms the $12/$30/$60
-budget constants. Consequence for capacity: a review of this shape costs ~$0.074, so the monthly
-pool is ~800 reviews, not the ~180 list-on-raw predicted. The block below is kept as the
-historical reading it was — do not price from it.
-
 ⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (a console usage dump — transient jail upload,
 not retained; the durable record is the gometer draw-pricing commit + TICK-LOG 2026-08-17 —
 reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
@@ -134,7 +118,7 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 | muse-spark-1.2-contributor | 0.10/0.20/0.002/– | $60 | — | untested (the 1.3 opt-in gate is expected to apply) | untested | NEW in the 09-17 table |
 | hy4-preview | 0.834/2.501/0.042/– | $30 | — | untested | untested | NEW in the 09-17 table |
 | hy3 / hy3-preview | hy3: 0.14/0.58/0.035/– · preview unpriced | $60/? | — | hy3: ⚠ **UNKNOWN — HTTP 500 at probe time** (raw 2026-09-17); re-probe | untested | hy3 = retro-proven audit tier upstream |
-| **union-alpha** | **FREE / FREE / FREE** — unlimited, *"limited time"* | Unlimited | — | ✅ `tool_use` (raw 2026-09-17, 3.9s) | untested | NEW in the 09-17 table. A **free, unlimited, tool-capable** row on the Go rail — priced 0.0 in `gometer`, so it draws nothing against the windows. The "limited time" wording is the risk: re-check before leaning on it |
+| **union-alpha** | **FREE / FREE / FREE** — unlimited, *"limited time"* | Unlimited | — | ✅ `tool_use` (raw 2026-09-17, 3.9s) → ✗ **DEAD ONE DAY LATER** | ✗ (same) | NEW in the 09-17 table. A **free, unlimited, tool-capable** row on the Go rail — priced 0.0 in `gometer`, so it draws nothing against the windows. ⚠ **2026-09-18, 7 attempts / 3 paths: `400 Model is unavailable.` on the Go surface (raw ×2 + through the jail shim), `500 Internal server error` on the Zen surface, `UnknownError` from the opencode CLI ×3.** Still LISTED in both catalogs — the qwen3.5-plus trap again, inside 24h. The "limited time" wording was the risk and it fired: a $0-unlimited row would sort FIRST on any price-ordered pick, so nothing may chain it until a probe says otherwise |
 | grok-4.6 | ≤200k: 2.00/6.00/0.50/– · >200k: 4.00/12.00/1.00/– | $15 | — | untested | untested | NEW in the 09-17 table |
 | ~~grok-4.5~~ | **unpriced** (delisted from the published table 09-17) | ? | — | untested | untested | Still SERVED, so it now takes the `_GO_MAX_PRICE` fallback like the other served-but-unpriced ids — its old 2.00/6.00/0.30 row was ungrounded and was dropped rather than carried |
 | gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | — (2x badge REMOVED 09-17) | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table; the translator (shim, #448 — closed 2026-08-17) serves it from claude-code lanes via the OpenAI surface. Its ungrounded `half=True` was removed 09-17 → its window draw DOUBLED |
@@ -143,6 +127,18 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 
 Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Zen paid carries
 `claude-*` — never route claude there; the Anthropic subscription exists.
+
+⚠ **THE FREE TIER ADMITS NO API CLIENT — it is reachable only from the opencode CLI.** The
+vendor says so in the error body: `Error from provider (Console): OpenCode's free tier can only
+be used from within OpenCode` (probed 2026-09-18 through the shim's translator leg, every free
+id, ~0.4s). The CLI serves the same ids from the same jail and the same IP, anonymously. This
+retires the "small per-account free **usage quota**" reading recorded on homelab#946 on
+2026-08-31: the 18 straight `429 Rate limit exceeded` / `FreeUsageLimitError` responses that
+killed that seed run were this gate wearing a rate-limit costume, which is why replicating UA,
+`stream` and `max_tokens` never helped and why the CLI sustained three 16–36 KB review prompts
+back-to-back an hour later. Consequence for instruments: an evidence run over these ids invokes
+`opencode run -m <id>` (`agents/re-review.sh` does, since 2026-09-18) — the API path for a free
+id cannot be made to work and is not worth a retry ladder.
 
 | model | anthropic-compat tools | notes |
 |---|---|---|

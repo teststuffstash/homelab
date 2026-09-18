@@ -21,6 +21,9 @@
 #   --since YYYYMMDD  Only snapshots after this date (UTC)
 #   --dry-run         Do discovery + fetch + assembly, print the claude command + prompt skeleton instead of invoking
 #   --model <m>       Model to use for re-review (default: sonnet). Full model id parsed via model_id.py for rail derivation.
+#                     `opencode-go/<id>` rides the jail shim (Anthropic-compat); `opencode/<id>`
+#                     (Zen) is invoked through the opencode CLI — the free tier admits no API
+#                     client at all (homelab#946, vendor-stated 2026-09-18).
 #   --shadow          Advisory-only mode: NEVER posts to the PR. Writes report to stdout with shadow-re-review marker.
 #
 # Idempotency: Posts comparison as PR comment with <!-- re-review:<headsha8>-<ts> --> tag; skips snapshots whose tag already exists.
@@ -84,14 +87,18 @@ echo "→ re-review: model=$MODEL rail=$MODEL_RAIL harness=$MODEL_HARNESS resolv
 
 # Pin-by-DECLARATION, not pin-to-anthropic (homelab#946's first run, 2026-08-30): the unset
 # block above strips INHERITED plumbing — right for the default sonnet duty, but an explicit
-# opencode-rail --model (the A5 shadow instrument, `opencode/big-pickle`) then has no rail at
-# all and plain claude 404s it against api.anthropic.com on every snapshot, with stderr
-# discarded. For an explicitly-declared opencode/* or opencode-go/* model, the jail shim
-# (scripts/claude-model-shim.py — routes by body model id, credential per rail) IS the rail:
-# require a live listener and point claude at it deliberately. Fail loudly, never fall back —
-# a shadow report silently produced by the wrong model is worse than no report (#515 class).
+# opencode-rail --model then has no rail at all and plain claude 404s it against
+# api.anthropic.com on every snapshot, with stderr discarded. For an explicitly-declared
+# opencode-go/* model, the jail shim (scripts/claude-model-shim.py — routes by body model id,
+# credential per rail) IS the rail: require a live listener and point claude at it deliberately.
+# Fail loudly, never fall back — a shadow report silently produced by the wrong model is worse
+# than no report (#515 class).
+# ZEN ids (`opencode/<id>`) are NOT in this arm: no API client of any kind reaches the free
+# tier (2026-09-18 probe — the vendor's own error body says so), so they take the opencode-CLI
+# invocation path below instead of the shim, and requiring a listener here would only refuse a
+# run that never needed one.
 case "$MODEL" in
-  opencode/*|opencode-go/*)
+  opencode-go/*)
     SHIM_PORT="${SHIM_PORT:-18091}"
     if ! curl -fsS -m 2 -o /dev/null "http://127.0.0.1:${SHIM_PORT}/" 2>/dev/null && \
        ! (exec 3<>"/dev/tcp/127.0.0.1/${SHIM_PORT}") 2>/dev/null; then
@@ -385,7 +392,13 @@ EOF
     echo "=== DRY-RUN MODE ==="
     # BOT REVIEW R4 #7: Print real invocation (claude -p "<prompt>" not @file)
     echo "Would run:"
-    echo "  claude -p \"<prompt content: $prompt_words words, $prompt_bytes bytes>\" --model $MODEL --output-format json"
+    case "$MODEL" in
+      # A zen id does not go through claude at all (the free tier admits no API client) — printing
+      # a claude command here would send a reader down the path that cannot work, which is how
+      # the 2026-08-30 seed run lost two hours (homelab#946).
+      opencode/*) echo "  ${OPENCODE_RUN:-opencode run} -m $MODEL \"<prompt content: $prompt_words words, $prompt_bytes bytes>\"";;
+      *) echo "  claude -p \"<prompt content: $prompt_words words, $prompt_bytes bytes>\" --model $MODEL --output-format json";;
+    esac
     [ $prompt_truncated -eq 1 ] && echo "  (prompt would be truncated for argv ceiling)"
     echo ""
     echo "Comparison comment skeleton:"
@@ -448,11 +461,71 @@ EOF
   # The model id is passed through verbatim — no transformation, no alias resolution.
   # In shadow mode, no verdict-posting call (gh pr comment) is made.
   # Reasoning-model accommodation: no tight output cap is inherited (max_tokens headroom).
-  claude_reply=$(claude -p "$PROMPT_CONTENT" --model "$MODEL" --output-format json 2>/dev/null) || {
-    echo "  ERROR: claude invocation failed"
-    # In replay, the bridge provides a valid prompt and claude stub; this is a test failure.
-    continue
-  }
+  #
+  # TWO invocation paths, chosen by the model's own prefix:
+  #
+  #   claude -p        — the default duty (sonnet) and every anthropic / openrouter /
+  #                      opencode-go id. An opencode-go/* id rides the jail shim pinned above:
+  #                      the Go rail's Anthropic-compat surface speaks claude natively.
+  #   opencode run     — an `opencode/<id>` ZEN model. NOT a preference: the vendor gates its
+  #                      free tier to its own client and says so in the error body — `Error from
+  #                      provider (Console): OpenCode's free tier can only be used from within
+  #                      OpenCode` (probed 2026-09-18 through the shim's translator leg, every
+  #                      free id). That gate is what homelab#946's 2026-08-30 seed run actually
+  #                      died on — 18 attempts read as `429 Rate limit exceeded`, and an account
+  #                      quota was inferred; the CLI served the same ids from the same jail and
+  #                      IP the next evening, which is why the seed completed by hand. The API
+  #                      path for these ids has never worked and cannot be made to.
+  case "$MODEL" in
+    opencode/*)
+      # Resolve the CLI once, here: a replay clause runs self-contained, so a helper defined at
+      # the top of the script is invisible to it (RC-127, the agent-session.sh lesson).
+      # `opencode` on PATH wins (the replay stub, and any pinned install); otherwise npx fetches
+      # it. ⚠ the npx fallback is UNPINNED — set OPENCODE_RUN to pin a version for an evidence
+      # run you intend to cite.
+      if [ -z "${OPENCODE_RUN:-}" ]; then
+        if command -v opencode >/dev/null 2>&1; then OPENCODE_RUN="opencode run"
+        else OPENCODE_RUN="npx --yes opencode-ai@latest run"; fi
+      fi
+      echo "→ re-review: zen model — invoking \`$OPENCODE_RUN -m $MODEL\` (the free tier admits no API client)"
+      # ONE bounded retry, and a tolerant read of what comes back. Measured over the #946 seed's
+      # big-pickle cells: 1 empty completion (clean on the retry), 1 malformed verdict, 2 clean —
+      # a strict single shot throws away usable signal.
+      # The retry predicate is EMPTINESS OF THE REPLY, not unparseability of it. A model that
+      # answers in prose has answered: that cell is UNKNOWN/INCOMPARABLE evidence about the
+      # model, and re-rolling it would launder a real measurement into a second sample. Only a
+      # reply with no bytes at all is a non-event worth one more attempt.
+      oc_raw=""; oc_text=""
+      for oc_try in 1 2; do
+        oc_raw="$($OPENCODE_RUN -m "$MODEL" "$PROMPT_CONTENT" 2>/dev/null)" || oc_raw=""
+        [ -n "$(printf '%s' "$oc_raw" | tr -d '[:space:]')" ] && break
+        echo "  attempt $oc_try: empty completion — retrying once"
+      done
+      if [ -z "$(printf '%s' "$oc_raw" | tr -d '[:space:]')" ]; then
+        echo "  ERROR: $MODEL returned no completion in 2 attempts"
+        continue
+      fi
+      # Strip ANSI SGR/OSC sequences, then take the outermost brace span — the CLI frames the
+      # completion with a `> build · <model>` header and colour codes. No brace span leaves
+      # oc_text empty ON PURPOSE: the parse below reports UNKNOWN and prints the raw reply.
+      oc_text="$(printf '%s' "$oc_raw" \
+        | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\x1b\][^\x07]*\x07//g' \
+        | awk '/\{/{f=1} f{print}' \
+        | sed -e 's/^```json$//' -e 's/^```$//')"
+      # Hand downstream the same envelope `claude --output-format json` produces, so the parse,
+      # the comparison and the report stay one code path for both invocation paths.
+      claude_reply="$(jq -n --arg r "$oc_text" '{result: $r}')"
+      RAW_REPLY="$oc_raw"
+      ;;
+    *)
+      claude_reply=$(claude -p "$PROMPT_CONTENT" --model "$MODEL" --output-format json 2>/dev/null) || {
+        echo "  ERROR: claude invocation failed"
+        # In replay, the bridge provides a valid prompt and claude stub; this is a test failure.
+        continue
+      }
+      RAW_REPLY="$claude_reply"
+      ;;
+  esac
   # <<<REPLAY:re-review-shadow<<<
 
   # Parse claude response: the --output-format json ENVELOPE carries the model text in .result
@@ -463,6 +536,43 @@ EOF
   sonnet_verdict=$(printf '%s' "$result_json" | jq -r '.verdict // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
   sonnet_findings=$(printf '%s' "$result_json" | jq -r '.findings // ""' 2>/dev/null || echo "")
   [ -n "$sonnet_verdict" ] || sonnet_verdict="UNKNOWN"
+  # An UNKNOWN is a MEASUREMENT, and a measurement with no evidence is unreadable: the model
+  # either answered in prose, fenced something unparseable, or emitted malformed JSON, and which
+  # one it was decides whether the cell is the model's fault or the parser's. homelab#946's
+  # 2026-08-31 malformed-verdict cell was only diagnosable because the operator had run the CLI
+  # by hand; an instrument that discards the raw reply makes its own INCOMPARABLE rows dead ends.
+  verdict_parse="strict"
+  if [ "$sonnet_verdict" = "UNKNOWN" ]; then
+    echo "  UNPARSEABLE verdict — raw reply, first 600 bytes:"
+    printf '%s' "${RAW_REPLY:-(none)}" | head -c 600 | sed 's/^/  | /'
+    echo ""
+    # RECOVER THE TOKEN, never infer the verdict. The measured failure is a well-formed verdict
+    # inside malformed JSON — a `findings` value carrying literal newlines or unescaped quotes,
+    # which jq refuses whole (homelab#946: 2 of the first 11 cells, both APPROVE). Reading the
+    # `"verdict": "<TOKEN>"` pair out of the raw text is EXTRACTION: the token vocabulary is
+    # closed, so there is nothing to guess. Two distinct tokens in one reply is genuine ambiguity
+    # and stays UNKNOWN — a model that names both has not voted. The row is LABELLED `recovered`
+    # either way, because "the model agreed" and "the model emitted valid JSON" are two different
+    # measurements and A5 needs both (#515 class: never launder one into the other).
+    # `|| true` on BOTH: grep exits 1 on no match, and under `set -euo pipefail` a failing
+    # pipeline inside an assignment or a `case` word aborts the whole script — the same trap this
+    # file's S3 guard documents. A reply with no verdict token is the ORDINARY case here, not an
+    # error, and it must reach the NOT RECOVERABLE arm rather than kill the run.
+    recovered_tokens="$(printf '%s' "${RAW_REPLY:-}" \
+      | grep -oE '"verdict"[[:space:]]*:[[:space:]]*"(APPROVE|REQUEST_CHANGES)"' \
+      | grep -oE 'APPROVE|REQUEST_CHANGES' | sort -u || true)"
+    n_recovered="$(printf '%s' "$recovered_tokens" | grep -c . || true)"
+    case "${n_recovered:-0}" in
+      1) sonnet_verdict="$recovered_tokens"
+         verdict_parse="recovered"
+         echo "  RECOVERED verdict token: $sonnet_verdict (malformed JSON — findings not parseable)"
+         sonnet_findings="(malformed JSON: the verdict token was recovered from the raw reply, the findings were not)"
+         ;;
+      *) echo "  NOT RECOVERABLE: ${n_recovered:-0} distinct verdict tokens in the reply"
+         verdict_parse="unrecoverable"
+         ;;
+    esac
+  fi
 
   # Step 7: Compare verdicts — normalize the recorded GitHub .state vocabulary (APPROVED /
   # CHANGES_REQUESTED) onto the prompt's (APPROVE / REQUEST_CHANGES) or equality never holds.
@@ -535,6 +645,7 @@ EOF
     echo "recorded_model: ${recorded_model}"
     echo "recorded_verdict: ${recorded_verdict}"
     echo "re-review_verdict: ${sonnet_verdict}"
+    echo "verdict_parse: ${verdict_parse}"
     echo "compare_result: ${compare_result}"
     echo ""
     echo "--- findings ---"

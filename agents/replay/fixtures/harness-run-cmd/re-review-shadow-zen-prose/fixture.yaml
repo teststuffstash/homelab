@@ -1,0 +1,21 @@
+
+# homelab#946 — a zen model that answers in PROSE: the verdict is UNKNOWN and it carries evidence.
+#
+# CONDITION UNDER REPLAY. A shadow re-review with --model opencode/big-pickle where the CLI
+# returns a prose answer with no brace span. Measured shape, not hypothetical: of the four
+# big-pickle cells the #946 seed ran, one returned malformed JSON and one an empty completion.
+#
+# THE CONTRACT:
+#   1. An unparseable reply is UNKNOWN / INCOMPARABLE — never a guessed verdict (#515 class).
+#   2. The UNKNOWN row carries its EVIDENCE: the raw reply's first 600 bytes are printed, so an
+#      INCOMPARABLE cell can be read afterwards without re-running the model by hand.
+#   3. Shadow mode still posts nothing.
+name: harness-run-cmd-re-review-shadow-zen-prose
+mode: actions
+source: agents/re-review.sh
+env:
+  - STUB_OPENCODE=prose
+parts:
+  - file:bridge.sh
+  - block:re-review-shadow-skip-tag
+  - file:post.sh
