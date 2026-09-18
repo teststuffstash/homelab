@@ -488,7 +488,10 @@ What stands here is the doctrine the probe produced:
   fits or busts a weekly window.
 - **The Zen sibling** (`…/zen/v1`, the same key) is opencode's pay-per-token gateway with a free
   tier — never route `claude-*` there (the Anthropic subscription exists), and canary any free
-  model before a slot: first probes 400'd on tools.
+  model before a slot: first probes 400'd on tools. ⚠ Its FREE ids admit **no API client at all**
+  — CLI-only by vendor policy, stated in the error body (2026-09-18); the 2026-08-31 "free usage
+  quota" reading was that gate in rate-limit costume. Evidence and the consequence for
+  instruments: [the matrix spike](../spikes/opencode-model-matrix.md) §OpenCode Zen free tier.
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
 

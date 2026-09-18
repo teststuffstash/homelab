@@ -1,0 +1,26 @@
+
+# homelab#946 — a zen model that returns NOTHING: one bounded retry, then a loud skip.
+#
+# CONDITION UNDER REPLAY. A shadow re-review with --model opencode/big-pickle where the CLI
+# exits 0 with an empty completion — the failure mode the #946 seed hit once in four cells (and
+# which a retry cleared). The free rail does not fail loudly, so the instrument must.
+#
+# THE CONTRACT:
+#   1. An empty completion is retried EXACTLY once — not zero times (the seed's own retry
+#      produced a clean verdict) and not in a loop (a free model that is starving stays starving).
+#   2. After the second empty reply the snapshot is skipped LOUDLY, never recorded as a verdict.
+name: harness-run-cmd-re-review-shadow-zen-empty
+mode: actions
+source: agents/re-review.sh
+# The block ends in `continue`, which has no enclosing loop in a composed clause, so bash reports
+# it with the COMPOSED file's line number — volatile by construction (any comment edit inside the
+# extracted block moves it). Scrub the number, keep the line: that bash message is the observable
+# proof the skip path was taken.
+scrub:
+  - s/clause.sh: line [0-9][0-9]*:/clause.sh: line N:/
+env:
+  - STUB_OPENCODE=empty
+parts:
+  - file:bridge.sh
+  - block:re-review-shadow
+  - file:post.sh

@@ -1,0 +1,25 @@
+
+# homelab#946 — a well-formed verdict inside malformed JSON: the token is RECOVERED, and the row
+# says so.
+#
+# CONDITION UNDER REPLAY. A shadow re-review whose reply carries `"verdict": "APPROVE"` but a
+# `findings` string with literal newlines in it, so jq refuses the object whole. Measured shape:
+# 2 of the first 11 cells of the 2026-09-18 seed run, both APPROVE, both lost to the strict parse
+# before this path existed.
+#
+# THE CONTRACT:
+#   1. The verdict TOKEN is extracted from the raw reply — the vocabulary is closed, so this is
+#      extraction and not inference (#515 class).
+#   2. `verdict_parse: recovered` is in the report, because "the model agreed" and "the model
+#      emitted valid JSON" are two measurements and A5 needs both.
+#   3. The findings are NOT reconstructed — the row says they were not parseable.
+#   4. The raw reply is still printed, so the row can be read afterwards.
+name: harness-run-cmd-re-review-shadow-zen-malformed
+mode: actions
+source: agents/re-review.sh
+env:
+  - STUB_OPENCODE=malformed
+parts:
+  - file:bridge.sh
+  - block:re-review-shadow-skip-tag
+  - file:post.sh

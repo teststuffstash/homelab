@@ -1,0 +1,23 @@
+
+# homelab#946 — the ZEN invocation path: an `opencode/<id>` re-review rides the opencode CLI.
+#
+# CONDITION UNDER REPLAY. A shadow re-review with --model opencode/big-pickle. The vendor gates
+# its free tier to its own client ("OpenCode's free tier can only be used from within OpenCode",
+# probed 2026-09-18 — the API path answers 502 through the shim and 429 direct, which is what the
+# 2026-08-30 seed run died on for 18 straight attempts). So the instrument must invoke the CLI,
+# and must read its framed, coloured output back.
+#
+# THE CONTRACT:
+#   1. `opencode run -m <id>` is the invocation — NOT `claude -p` (that arm stays for the
+#      sonnet duty and the opencode-go/Anthropic-compat rail).
+#   2. The model id is passed through verbatim.
+#   3. The CLI's framing is stripped and the brace span extracted, so the verdict JSON reaches
+#      the downstream parse in the claude `--output-format json` envelope shape.
+#   4. No verdict-posting call (gh pr comment) is made.
+name: harness-run-cmd-re-review-shadow-zen
+mode: actions
+source: agents/re-review.sh
+parts:
+  - file:bridge.sh
+  - block:re-review-shadow
+  - file:post.sh

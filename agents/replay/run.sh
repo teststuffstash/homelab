@@ -230,7 +230,8 @@ run_actions() {   # run_actions <fixture-dir> <name>
   local dir="$1" name="$2" src part comp bin act rc detail nparts=0
   comp="$TMP/$name.clause.sh"; act="$TMP/$name.actions"; bin="$TMP/$name.bin"
   mkdir -p "$bin"
-  cp "$STUBS/gh" "$STUBS/kubectl" "$STUBS/claude" "$bin/" && chmod +x "$bin/gh" "$bin/kubectl" "$bin/claude"
+  cp "$STUBS/gh" "$STUBS/kubectl" "$STUBS/claude" "$STUBS/opencode" "$bin/" \
+    && chmod +x "$bin/gh" "$bin/kubectl" "$bin/claude" "$bin/opencode"
 
   src="$(fx_scalar source)"
 

@@ -1,0 +1,29 @@
+#!/bin/sh
+# Fixture-backed `opencode`, installed on $PATH ahead of the real one by agents/replay/run.sh.
+#
+# Returns a canned completion in the CLI's OWN framing — ANSI SGR codes plus the `> build ·
+# <model>` header and a ```json fence — so a fixture driving the zen invocation path exercises
+# re-review.sh's strip + brace-span extraction rather than a pre-cleaned string.
+#
+# $STUB_OPENCODE selects the shape, because the shapes ARE the contract (homelab#946 measured
+# 1 malformed verdict and 1 empty completion in four big-pickle cells):
+#   (unset)  a clean fenced verdict
+#   prose    a prose answer with no brace span — the UNKNOWN/INCOMPARABLE path and its raw-reply
+#            diagnostic
+#   empty    nothing on stdout, exit 0 — the bounded-retry path (the CLI does not fail loudly
+#            when a free model returns no completion)
+#   malformed a well-formed verdict inside JSON that jq refuses (a `findings` value carrying
+#            literal newlines) — the verdict-token recovery path, measured in 2 of the first 11
+#            homelab#946 cells
+set -u
+_RP_TOOL=opencode
+. "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
+
+_rp_record "$@"
+case "${STUB_OPENCODE:-}" in
+  empty) exit 0 ;;
+  malformed) printf '\033[0m\n> build \302\267 nemotron-3.5-lightning-free\n\033[0m\n{\n  "verdict": "APPROVE",\n  "findings": "Line one of the findings.\n\n  Line two, and the raw newline above is what jq refuses."\n}\n' ;;
+  prose) printf '\033[0m\n> build \302\267 big-pickle\n\033[0m\nThe diff looks fine to me overall.\n' ;;
+  *)     printf '\033[0m\n> build \302\267 big-pickle\n\033[0m\n```json\n{"verdict": "REQUEST_CHANGES", "findings": "Zen shadow findings."}\n```\n' ;;
+esac
+exit 0

@@ -281,6 +281,10 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/re-review-shadow-skip-tag` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-empty` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-malformed` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen-prose` | actions | - | `agents/re-review.sh` | - |
+| `harness-run-cmd/re-review-shadow-zen` | actions | - | `agents/re-review.sh` | - |
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `hermeticity-audit` | table | - | `~` | - |

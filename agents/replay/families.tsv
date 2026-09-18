@@ -66,6 +66,10 @@ harness-run-cmd-goose	harness-run-cmd
 harness-run-cmd-goose-mcp	harness-run-cmd
 harness-run-cmd-re-review-shadow	harness-run-cmd
 harness-run-cmd-re-review-shadow-skip-tag	harness-run-cmd
+harness-run-cmd-re-review-shadow-zen	harness-run-cmd
+harness-run-cmd-re-review-shadow-zen-empty	harness-run-cmd
+harness-run-cmd-re-review-shadow-zen-malformed	harness-run-cmd
+harness-run-cmd-re-review-shadow-zen-prose	harness-run-cmd
 harvest-deep-sprout	harvest
 harvest-goal-closed	harvest
 harvest-goal-open-exhausted	harvest

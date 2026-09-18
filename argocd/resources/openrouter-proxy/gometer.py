@@ -71,7 +71,12 @@ GO_PRICES = {
     "deepseek-v4-flash-vision-exp": (0.15,   0.60,    0.003,     None,    False),  # $15 pool
     "hy4-preview":                 (0.834,   2.501,   0.042,     None,    False),  # $30 pool
     "hy3":                         (0.14,    0.58,    0.035,     None,    False),  # $60 pool
-    "union-alpha":                 (0.0,     0.0,     0.0,       None,    False),  # FREE, unlimited — "limited time" (2026-09-17)
+    # ⚠ union-alpha is priced FREE/unlimited and is therefore the FIRST pick any price-ordered
+    # candidate list would make — and it went DEAD one day after it was published: 2026-09-18,
+    # 7 attempts / 3 paths, `400 Model is unavailable.` on the Go surface and `500` on Zen, while
+    # both catalogs still LIST it (the qwen3.5-plus trap, inside 24h). The row stays so the meter
+    # prices it correctly if it returns; nothing may CHAIN it without a fresh probe.
+    "union-alpha":                 (0.0,     0.0,     0.0,       None,    False),  # FREE, unlimited — "limited time" (2026-09-17); dead 09-18
     "grok-4.6":                    (2.00,    6.00,    0.50,      None,    False),  # $15 pool; >200k in GO_PRICES_LONG
     "gpt-5.6-luna":                (0.20,    1.20,    0.02,      0.25,    False),  # $15 pool; >272k in GO_PRICES_LONG (half removed, see above)
     # ── Removed 2026-09-17 ────────────────────────────────────────────────────────────────

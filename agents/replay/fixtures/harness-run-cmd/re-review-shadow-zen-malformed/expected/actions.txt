@@ -1,0 +1,37 @@
+CALL opencode run -m opencode/nemotron-3.5-lightning-free Test prompt for shadow re-review with existing tag.
+OUT → invoking claude for re-review...
+OUT → re-review: zen model — invoking `opencode run -m opencode/nemotron-3.5-lightning-free` (the free tier admits no API client)
+OUT   UNPARSEABLE verdict — raw reply, first 600 bytes:
+OUT   | [0m
+OUT   | > build · nemotron-3.5-lightning-free
+OUT   | [0m
+OUT   | {
+OUT   |   "verdict": "APPROVE",
+OUT   |   "findings": "Line one of the findings.
+OUT   | 
+OUT   |   Line two, and the raw newline above is what jq refuses."
+OUT   | }
+OUT   RECOVERED verdict token: APPROVE (malformed JSON — findings not parseable)
+OUT   sonnet: APPROVE → AGREE
+OUT 
+OUT === shadow-re-review ===
+OUT snapshot: /tmp/test-snapshot
+OUT project: test-project
+OUT pr: 42
+OUT headsha: abc12345
+OUT model: opencode/nemotron-3.5-lightning-free
+OUT rail: openrouter
+OUT recorded_model: claude-sonnet-4-20250514
+OUT recorded_verdict: APPROVED
+OUT re-review_verdict: APPROVE
+OUT verdict_parse: recovered
+OUT compare_result: AGREE
+OUT 
+OUT --- findings ---
+OUT (malformed JSON: the verdict token was recovered from the raw reply, the findings were not)
+OUT --- end findings ---
+OUT === end shadow-re-review ===
+OUT claude_reply: {
+OUT   "result": "{\n  \"verdict\": \"APPROVE\",\n  \"findings\": \"Line one of the findings.\n\n  Line two, and the raw newline above is what jq refuses.\"\n}"
+OUT }
+RC 0
