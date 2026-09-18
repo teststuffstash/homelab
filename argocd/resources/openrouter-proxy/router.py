@@ -87,7 +87,7 @@ RETAIN_REPORTS_D = 90  # run_reports, strikes
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS strikes(
   ts REAL, task TEXT, stack TEXT, model TEXT, error_class TEXT, round INTEGER, session TEXT,
-  provider TEXT);
+  provider TEXT, error_subclass TEXT);
 CREATE INDEX IF NOT EXISTS ix_strikes ON strikes(stack, task, model);
 CREATE TABLE IF NOT EXISTS provider_events(
   ts REAL, model TEXT, provider TEXT, status INTEGER, class TEXT, session TEXT);
@@ -223,7 +223,11 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                 # Goal #1640 acceptance 1 (reader half, 2026-09-17): strikes grew
                 # error_subclass — the FINE producer sub-type (`http-401-storm`,
                 # `goose-32602-truncation`), kept as evidence now that `error_class` holds a
-                # vocabulary MEMBER. Same LAST-column discipline.
+                # vocabulary MEMBER. Same LAST-column discipline — and the CREATE TABLE above
+                # carries it since 2026-09-18: it shipped with the ALTER alone, which left a
+                # fresh store's column order dependent on this migration running rather than on
+                # the schema declaring it (found by a $0 shadow re-review of PR#1763, homelab#946
+                # — the recorded review had read the discipline as already satisfied).
                 try:
                     conn.execute("ALTER TABLE strikes ADD COLUMN error_subclass TEXT")
                 except sqlite3.OperationalError:
