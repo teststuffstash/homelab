@@ -9,6 +9,22 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-18 — the management-apply residue is YOURS to apply; the detector is built).**
+  `mgmt-apply` has refused `main` since **Sep 14 11:42Z** and still does — **8 addresses** outside
+  the apply allowlist: FU-246's seven `talos_machine_configuration_apply.metal["…"]` (hp-01, m70s,
+  nx-01, wk-metal-01..04, from the v1.13.10 worker split, PR#1740) plus the FU-235
+  `kubernetes_node_taint.ephemeral["nx-01"]`. **Next: `devbox run mgmt-tf -- plan`, read it, then
+  `apply` — never `-target` on the main root (FU-248).** It ratchets while it waits (2 → 8 in four
+  days), so the plan only gets bigger. The DETECTOR shipped this session and needs nothing from
+  you: `collect_mgmt_apply` in the github-exporter reads the commit STATUS off master (the only
+  signal that leaves an unscraped, out-of-cluster box) and publishes
+  `github_mgmt_apply_refused{,_since_timestamp,_outside_addresses,_since_floored}`;
+  `MgmtApplyResidueStanding` fires at >24h standing, `for: 1h`. It will fire on THIS residue once
+  ArgoCD rolls the exporter — that is correct, and it clears when you apply. Detail: FU-252 →
+  [`management-box.md`](../management-box.md) §"A standing refusal is a THIRD verdict shape".
+  ⚠ The trap that hid it for four days: a commit STATUS is not a check-run, so
+  `gh api …/commits/<sha>/check-runs` reads master GREEN. Ask `/commits/<sha>/status`.
+
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
   (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in
   `scripts/docs-graph-lint.sh`, one line, operator-lane (`scripts/**`). It is in SHADOW only because

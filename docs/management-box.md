@@ -159,6 +159,35 @@ lets it change the verdict; with `PUSHGATEWAY` unset it does not publish at all.
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
 work), but the spike's "alerts leave by two independent paths" has no second path yet.
 
+### A standing refusal is a THIRD verdict shape, and nothing detects it
+
+*Tracked by: FU-252.*
+
+The shape above has two states — alive, and wedged. The apply loop has a third: **alive, correct,
+and saying no for days.** Measured 2026-09-18: `mgmt-apply` refused `main` continuously from
+**Sep 14 11:42Z** (`7d9949ee`, 2 addresses outside the allowlist) to `e63b0073` (**8**), restating
+*"was REFUSED — waiting for a new commit or a human apply"* **1101 times**. Every tick ran
+perfectly. A verdict-plus-`_last_run_timestamp` alert stays GREEN through all of it, because the
+verdict is not an error and the timestamp is fresh.
+
+Two properties make it worth its own detector rather than a louder log line:
+
+- **It ratchets.** A refusal writes `refused-rev` and deliberately does not stamp the apply
+  baseline, so every later master commit touching the root joins its residue to the same pending
+  apply: 2 → 4 → … → 8 in four days. The human apply grows monotonically and gets less reviewable
+  the longer it stands — the cost of tolerating it is not flat.
+- **Its only surfaces are unwatched.** No `mgmt_*` series exists; nothing scrapes 192.168.2.53 at
+  all (`up{instance=~".*2\.53.*"}` = 0 series, 2026-09-18); no alert rule names the box loops. What
+  remains is journald on an unscraped box and a red commit **status** on master — and a status is
+  not a check-run: `GET /commits/<sha>/check-runs` does not return it, which is exactly how a jail
+  session read master as green on 2026-09-18 while four days of refusal sat on HEAD. A reader that
+  wants the truth asks `GET /commits/<sha>/status`.
+
+So the metric the loop actually needs is **age of the oldest unapplied residue** (and its address
+count), not liveness. The transport decision above still gates it: this box is out-of-cluster, so
+the series needs either a deliberate Pushgateway exposure or a different sink before any alert can
+read it.
+
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 
 The decision: [`adr.md`](adr.md) ADR-131. The tofu lane has no L1 today ([`agents/iac-lane.md`](agents/iac-lane.md)
