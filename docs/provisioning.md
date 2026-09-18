@@ -115,23 +115,46 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a
   **bad NIC cable** (100Mbps + link flapping), replaced 2026-06-11; it PXE-onboards fine now.
 
-## Upgrading a metal node's Talos
+## Upgrading a node's Talos — metal AND nocloud VM
 
-Metal nodes (unlike nocloud VMs) upgrade in place with the factory installer image that carries the
-extensions:
+`talosctl upgrade` cordons the node, drains it, installs, reboots, then rejoins and uncordons
+itself. What you must get right is `--image`, on three axes — **platform, schematic, version**:
+
 ```bash
-devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> -e 192.168.2.51 \
-  upgrade --image <factory installer URL — see below>
+devbox run -- talosctl --talosconfig tofu/talosconfig -n <node ip> -e <a healthy CP ip> \
+  upgrade --image <factory installer URL>
 ```
-The URL is what `tofu/metal.tf` would install: `local.talos_install_image` (defined at the top of
-`tofu/metal.tf` as `data.talos_image_factory_urls.metal.urls.installer`, whose schematic lives in
-`tofu/image.tf`). A node flagged `kata: true` in `machines/machines.yaml` gets the **`metal_kata`**
-installer instead (`data.talos_image_factory_urls.metal_kata`) — pass that one, or the upgrade
-quietly swaps the node back to the plain-metal schematic.
 
-Point `-e` at a control-plane node (`.51`), not the worker itself — otherwise the post-install drain
-step can't fetch kubeconfig and errors (the install still succeeds, but the node may not reboot;
-a manual `talosctl reboot` then boots the staged version).
+| Node | Installer URL comes from |
+|---|---|
+| metal | `data.talos_image_factory_urls.metal.urls.installer` (= `local.talos_install_image`, top of `tofu/metal.tf`) |
+| metal with `kata: true` (`machines/machines.yaml`) | `data.talos_image_factory_urls.metal_kata` — pass THIS one |
+| VM (nocloud) | `data.talos_image_factory_urls.vm["<longhorn\|plain>-<role version>"].urls.installer` — the `longhorn` flag in `variables.tf` picks the schematic, the ROLE picks the version (`tofu/image.tf`) |
+
+⚠ **Never the generic `ghcr.io/siderolabs/installer`** — which is exactly what `talosctl upgrade`
+defaults to when `--image` is omitted. On a nocloud VM it installs the **metal** platform, so the
+nocloud datasource is never read again and the node rejoins as a DHCP-addressed `talos-xxxxx`
+ghost. That is ADR-014's failure, root-caused 2026-09-18. The pinned talosctl also trails the
+fleet by a patch, so the default would downgrade as well. **Always pass `--image`.**
+
+⚠ **The schematic is part of the node's identity.** Upgrading with the wrong one silently strips
+extensions: probed 2026-09-18 on `wk-03` (a `longhorn = true` VM) upgraded with the PLAIN
+schematic — iscsi-tools vanished and longhorn-manager crashlooped on
+`nsenter … iscsiadm: No such file or directory`. The same trap on metal is the `metal_kata` row
+above (and FU-076's reverse case). `talosctl get extensions` reports the live schematic id —
+compare it after every upgrade, not just the version.
+
+Point `-e` at a control-plane node, never the worker itself: talosctl performs the drain
+**client-side** and fetches kubeconfig over `MachineService/Kubeconfig`, which is control-plane
+only. (Symptom when you get this wrong: the install succeeds but the node may not reboot; a
+manual `talosctl reboot` then boots the staged version.)
+
+**The drain respects PodDisruptionBudgets and fails closed.** Probed 2026-09-18 on v1.13.10: a
+`minAvailable: 1` PDB over a 1-replica pod made `talosctl … --drain` retry the eviction, then exit
+1 **without rebooting** — while `kubectl drain` errored the same way. So a Longhorn last replica
+on the node is a *stuck upgrade*, not data loss; clear it first with
+`scripts/node-maintenance.sh settle <node>`. Never pass `--legacy`: that forces the old node-side
+drain, the one siderolabs/talos#9882 reported ignoring PDBs.
 
 ## Firmware reality (why USB sometimes)
 
