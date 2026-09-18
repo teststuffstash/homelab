@@ -103,7 +103,9 @@ fail() { printf '  \033[31mFAIL\033[0m %s\n' "$*"; FAILS=$((FAILS+1)); }
 usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 64; }
 
 cmd="${1:-}"; NODE="${2:-}"
-[ -n "$cmd" ] && [ -n "$NODE" ] || usage
+[ -n "$cmd" ] || usage
+# `order` ranks the whole fleet and takes no node argument.
+[ -n "$NODE" ] || [ "$cmd" = order ] || usage
 WARNS=0; FAILS=0
 
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -817,6 +819,80 @@ upgrade() {
   kubectl get node "$NODE" -o wide
 }
 
+# ---------------------------------------------------------------- order
+# Which node to upgrade NEXT — COMPUTED, never a list. A hard-coded order is correct exactly once:
+# it rots the moment a workload is rescheduled, a Garage zone moves, or a node joins. This ranks
+# every node that is not at its declared version/schematic by what draining it would actually cost,
+# from live placement, so the answer follows the fleet instead of the other way round.
+#
+#   SOLO   workloads whose every running pod is on this node -> they go down for the window
+#   QUORUM workloads where the survivors would fall below majority -> not degraded, BROKEN
+#   GARAGE this node is a Garage zone -> rf=3 of 3 zones, the sync gate applies
+#   LH     Longhorn replicas living here -> `settle` has work to do before the drain
+#
+# A PDB changes SOLO/QUORUM from an outage into a serialized roll (Talos honours them), so the
+# counts are an upper bound on harm, not a prediction — read them as "how much this node is load
+# bearing", which is what an ordering wants.
+order() {
+  # A report must not hard-fail on the declaration read: without it the DECLARED column is blank
+  # and every other number — which is what the ranking is actually made of — is still true.
+  load_targets || { warn "no declared targets (box unreachable?) — DECLARED column will be blank"; TARGETS_JSON='{}'; }
+  # The dumps are megabytes — they go through FILES, never argv (a --argjson of the pod list is an
+  # "Argument list too long" the moment the cluster is real).
+  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
+  local zones
+  log "ranking the fleet by what a drain would cost (live placement)"
+  kubectl get pods -A -o json > "$d/p.json"
+  kubectl get replicasets -A -o json > "$d/r.json"
+  kubectl -n longhorn-system get replicas.longhorn.io -o json 2>/dev/null > "$d/lh.json" || echo '{"items":[]}' > "$d/lh.json"
+  kubectl get nodes -o json > "$d/n.json"
+  printf '%s' "$TARGETS_JSON" > "$d/t.json"
+  zones="$(prom 'count by (role_zone) (cluster_layout_node_connected)' 2>/dev/null \
+           | jq -c '[.data.result[].metric.role_zone]' 2>/dev/null)" || zones='[]'
+  [ -n "$zones" ] || zones='[]'
+  printf '%s' "$zones" > "$d/z.json"
+
+  jq -rn --slurpfile P "$d/p.json" --slurpfile R "$d/r.json" --slurpfile Z "$d/z.json" \
+         --slurpfile LH "$d/lh.json" --slurpfile N "$d/n.json" --slurpfile T "$d/t.json" '
+    ($P[0]) as $p | ($R[0]) as $r | ($Z[0]) as $z | ($LH[0]) as $lh | ($N[0]) as $n | ($T[0]) as $t |
+    ($r.items | map({key:(.metadata.namespace+"/"+.metadata.name),
+                     value:((.metadata.ownerReferences//[])[0].name // "")}) | from_entries) as $own
+    | [ $p.items[]
+        | select(.status.phase=="Running" and .spec.nodeName != null)
+        | . as $pod | (($pod.metadata.ownerReferences // [])[0] // null) as $o
+        | select($o != null and (($o.kind // "") | test("DaemonSet|Job|Workflow") | not))
+        | { name: (if $o.kind=="ReplicaSet"
+                   then ($own[$pod.metadata.namespace+"/"+$o.name] // "") else ($o.name // "") end),
+            ns: $pod.metadata.namespace, kind: $o.kind, node: $pod.spec.nodeName } ]
+      | map(select(.name != ""))
+      | group_by(.kind+"|"+.ns+"|"+.name)
+      | map({ total: length,
+              nodes: (group_by(.node) | map({key: .[0].node, value: length}) | from_entries) }) as $w
+    | ($lh.items | map(.spec.nodeID) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $lhn
+    | [ $n.items[] | .metadata.name ] as $allnodes
+    | $allnodes
+      | map( . as $nd
+        | ($t[$nd] // null) as $decl
+        | ([ $p.items[] | select(.spec.nodeName==$nd) ] | length) as $podcount
+        | { node: $nd,
+            declared: ($decl.version // "-"),
+            solo:   ([ $w[] | select((.nodes[$nd] // 0) > 0 and .total == (.nodes[$nd] // 0)) ] | length),
+            quorum: ([ $w[] | select(.total >= 3 and (.nodes[$nd] // 0) > 0
+                                      and ((.total - (.nodes[$nd] // 0)) < ((.total/2|floor)+1))) ] | length),
+            garage: (if ($z | index($nd)) then 1 else 0 end),
+            lh:     ($lhn[$nd] // 0) } )
+      | map(. + { risk: (.solo*2 + .quorum*10 + .garage*3 + (if .lh>0 then 2 else 0 end)) })
+      | sort_by(.risk, .node)
+      | .[]
+      | [ .risk, .node, .declared, .solo, .quorum, (if .garage==1 then "yes" else "-" end), .lh ]
+      | @tsv' | awk -F'\t' '
+        BEGIN{printf "%-5s %-14s %-10s %5s %7s %7s %4s\n","RISK","NODE","DECLARED","SOLO","QUORUM","GARAGE","LH"}
+        {printf "%-5s %-14s %-10s %5s %7s %7s %4s\n",$1,$2,$3,$4,$5,$6,$7}'
+  echo
+  log "lowest risk first. A node already at its declared version is still listed — 'behind or not'"
+  log "is the verb's own check (it refuses a same-version reinstall with a WARN, not this ranking)."
+}
+
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
@@ -825,6 +901,7 @@ case "$cmd" in
   down) down ;;
   up) up ;;
   upgrade) upgrade ;;
+  order) order ;;
   silence-open) silence_open; declare_open ;;
   silence-close) silence_close; declare_close ;;
   *) usage ;;
