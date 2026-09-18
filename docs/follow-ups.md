@@ -846,7 +846,13 @@ the block needs pruning, not more headings.
       alone; with NO session header the rail hard-fails `400 MissingSessionID` (3/3), so the
       pre-fix allowlist would be failing today. Premise corrected: FU-213's value was never
       rejected, only coarse. The "rides reached opencode.ai while parked" seam is closed — the
-      knob was `"0"` then (operator). **Next:** flip `OPENCODE_RAIL_DISABLED` to `"0"`. Detail:
+      knob was `"0"` then (operator). **Flipped back to `"0"` the same evening** (2026-09-17
+      18:35Z, `c5138ed0`; live-verified on the pod) — the 7d subscription window sat at 0.95 and the
+      reviewer's Go failover was the only path a review could land on. **Next:** the three seams the
+      fix left standing — the proxy's UA substitution is narrower than the vendor's rule 2 (a caller
+      whose UA is a generic library name rides through as-is), a claude-code older than v2.1.86
+      sends the session id only in `metadata.user_id` (no body parse), and a client that identifies
+      nothing still buckets coarsely on the credential ref. Detail:
       [`chainless-redesign.md`](agents/chainless-redesign.md) §Proved on the wire.
 
 - [ ] **FU-180** — **Subscription budgets + fair-scheduling window shares (chainless

@@ -451,8 +451,12 @@ One correction this forces on the 09-17 re-park's premise: the FU-213 value was 
 whose prefixes differ and missed the cache they were meant to hit. The park cost nothing to hold
 and the fix is still the right one; the defect was granularity, not rejection.
 
-**What remains (FU-251):** the knob is still `OPENCODE_RAIL_DISABLED="1"` — an operator flip,
-now with the evidence behind it. Seams recorded, not fixed: a claude-code older than v2.1.86
+**The knob went back to `"0"` the same evening** (operator, 2026-09-17 18:35Z, `c5138ed0` — the
+direct lane, cluster-consumed): the header question the park existed for was answered on the wire,
+and the subscription's 7d window sat at 0.95, so the reviewer's sanctioned Go failover was the only
+path a review could land on. Live-verified `OPENCODE_RAIL_DISABLED=0` on the running pod.
+
+**What remains (FU-251)** are the seams recorded, not fixed: a claude-code older than v2.1.86
 sends the session id only in `metadata.user_id` (no body parse), a client that identifies nothing
 still falls back to the credential ref (which clears the 400 but buckets coarsely), and a caller
 whose UA is a generic library name (`curl/…`, an SDK default) has it forwarded as-is — the
