@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-253** (2026-09-18: FU-252 the management-apply refusal has no detector — it stood four days and 1101 ticks unseen. 2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-255** (2026-09-18: FU-254 no detector for a substrate version going stale or EOL, FU-253 the VMs' generic+stale declared `install.image` — both from the upgrade-verb probes; FU-252 the management-apply refusal has no detector — it stood four days and 1101 ticks unseen. 2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -1196,6 +1196,24 @@ the block needs pruning, not more headings.
       unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
       metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
       metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
+- [ ] **FU-253** — **Every VM declares a GENERIC, STALE `install.image`.** Live on all five nocloud
+      VMs: `machine.install.image = ghcr.io/siderolabs/installer:v1.13.0` — wrong platform AND two
+      patches behind — because `tofu/talos.tf` sets no `install.image` for VMs (only `install.disk`),
+      so the provider's bundled default lands. Harmless today (a VM boots the nocloud DISK image, and
+      the metal nodes carry a correct factory URL), but it is a loaded gun for anything that upgrades
+      a node to its DECLARED image — the natural design, and exactly what an upgrade controller does
+      (tuppr's `syncNodeInstallImage`): it would ghost all five (ADR-014 as amended). **Next:** set
+      `install.image` from `data.talos_image_factory_urls.vm[...].urls.installer` in `talos.tf`'s
+      config patches, so declared == what the upgrade verb passes. Relates FU-076, FU-235, ADR-014.
+- [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
+      left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
+      conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"
+      auto-deploy and Renovate opens no homelab PRs at all — `dependency-upgrades.md` §Monitoring
+      already records the sibling hole ("Renovate liveness ❌"). **Next:** a check comparing
+      `var.talos_version_{controlplane,worker}` / `var.kubernetes_version` / `var.cilium_version`
+      against the upstream support matrix, firing on "a newer minor exists" and on "ours is EOL" —
+      a natural belt job for the management box once §MB2's metric transport is decided (FU-252).
+      Relates FU-033, FU-097, ROADMAP G-D.
 - [ ] **FU-252** — **A standing `management-apply` refusal has no detector — POINTER.** The box
       refused `main` from Sep 14 11:42Z (2 addresses) to 2026-09-18 (8), 1101 restatements, with
       zero surfacing: no `mgmt_*` series, nothing scrapes the box, no alert names the loops. The
@@ -1239,8 +1257,16 @@ the block needs pruning, not more headings.
       existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
       v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
       in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
-- [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
-      `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
+- [ ] **FU-033** — **The Talos 1.14 gate set.** (a) apply the `VolumeConfig` `mount: {secure: false}`
+      patch to EVERY node FIRST or `noexec` on `/var` breaks Longhorn v1 (instance-manager exec's
+      engine binaries under `/var/lib/longhorn/engine-binaries/`); (b) `SecurityProfileConfig.
+      workloadIsolation` stays OFF — upgrades don't add it, but a cluster rebuilt from git on 1.14+
+      isolates by default and loses the host `iscsid` Longhorn v1 needs. Both written at
+      `tofu/longhorn.tf`. **Checked clean 2026-09-18:** k8s 1.36.1 is inside 1.14's 1.33–1.37 range
+      (no k8s move needed); etcd's metrics port 2379→2383 — we scrape neither; `apply-config
+      --mode=reboot` removal — unused. ⚠ 1.13 left community support at the 1.14.0 release
+      (2026-09-03), so this is a clock, not a nice-to-have. The rollout order and the installer
+      rules are ADR-014 (amended) and the recipe it links. Relates FU-246, FU-253, ROADMAP G-D.
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
