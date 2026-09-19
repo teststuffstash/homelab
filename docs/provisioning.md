@@ -149,6 +149,21 @@ Point `-e` at a control-plane node, never the worker itself: talosctl performs t
 only. (Symptom when you get this wrong: the install succeeds but the node may not reboot; a
 manual `talosctl reboot` then boots the staged version.)
 
+For a control-plane node, run the dedicated wrapper from [the management box](management-box.md):
+
+```bash
+devbox run cp-upgrade -- cp-01
+```
+
+It requires at least three Ready control planes, selects a healthy endpoint other than the target,
+checks that etcd has an odd membership of at least three, takes an etcd snapshot under
+`/var/lib/mgmt/etcd-snapshots/`, and then enters the same WIP-1 maintenance path workers use. It
+verifies the declared version and schematic plus unchanged etcd membership after the node rejoins.
+The full path was rehearsed on 2026-09-19 with a separate one-node cluster on a disposable nx-02
+VM: Talos v1.13.2 → v1.13.10 preserved the nocloud IP, hostname, schematic and etcd identity. The
+reproducible lab installer is `scripts/controlplane-lab-install.sh`; its generated credentials are
+ephemeral and must never be committed.
+
 **The drain respects PodDisruptionBudgets and fails closed.** Probed 2026-09-18 on v1.13.10: a
 `minAvailable: 1` PDB over a 1-replica pod made `talosctl … --drain` retry the eviction, then exit
 1 **without rebooting** — while `kubectl drain` errored the same way. So a Longhorn last replica

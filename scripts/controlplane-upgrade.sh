@@ -18,7 +18,7 @@ export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
 LAB="${LAB:-0}"
 SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/var/lib/mgmt/etcd-snapshots}"
-if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-$REPO/.tmp/etcd-snapshots}"; fi
+if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/tmp/controlplane-upgrade-snapshots}"; fi
 
 die() { echo "FAIL: $*" >&2; exit 2; }
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -31,8 +31,8 @@ etcd_members() {
   talosctl --talosconfig "$TALOSCONFIG" -n "$1" -e "$2" etcd members 2>/dev/null
 }
 
-role="$(kubectl get node "$NODE" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' 2>/dev/null || true)"
-[ -n "$role" ] || die "$NODE is not a control-plane node"
+role="$(kubectl get node "$NODE" -o json | jq -r '.metadata.labels | has("node-role.kubernetes.io/control-plane")')"
+[ "$role" = true ] || die "$NODE is not a control-plane node"
 ip="$(node_ip)"; [ -n "$ip" ] || die "cannot resolve $NODE's InternalIP"
 
 if [ "$LAB" = 1 ]; then

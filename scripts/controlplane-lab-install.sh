@@ -29,5 +29,9 @@ until talosctl --talosconfig "$OUT/talosconfig" -n "$IP" -e "$IP" version --shor
 talosctl --talosconfig "$OUT/talosconfig" -n "$IP" -e "$IP" bootstrap
 until talosctl --talosconfig "$OUT/talosconfig" -n "$IP" -e "$IP" kubeconfig "$OUT/kubeconfig" --force >/dev/null 2>&1; do sleep 5; done
 chmod 600 "$OUT/kubeconfig"
+# kubeconfig is served before kube-apiserver necessarily has its socket open. Treat API reachability
+# as its own asynchronous boot condition instead of letting the first kubectl connection refuse end
+# the install (caught by the 2026-09-19 nx-02 rehearsal).
+until kubectl --kubeconfig "$OUT/kubeconfig" get node cp-upgrade-lab >/dev/null 2>&1; do sleep 5; done
 kubectl --kubeconfig "$OUT/kubeconfig" wait --for=condition=Ready "node/cp-upgrade-lab" --timeout=10m
 echo "OK: isolated control plane is Ready; credentials: $OUT"
