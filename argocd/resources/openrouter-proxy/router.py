@@ -2884,7 +2884,14 @@ def self_test() -> int:
                     [{"model": "poolside/laguna-s-2.1:free", "canary_verdict": "broken"}])
     dv = route(dict(base, chain=[]), {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
-    assert dv["model"] == "tencent/hy3", dv
+    # homelab#1783: `coding` now carries a chain_head (v4-flash → v4.1-flash), and
+    # _rotation_candidates puts the head AHEAD of the ranked rotation — that IS the class's
+    # ordering policy on a chainless stack, so the old `tencent/hy3` (rank 1) expectation is
+    # deliberately repinned. The ranked rotation still FEEDS (hy3 is in the pool) and both the
+    # broken canary and the ungraded model are still excluded, which is what this fixture is for.
+    assert dv["model"] == "deepseek/deepseek-v4-flash", dv
+    assert dv["jitter_pool"] == ["deepseek/deepseek-v4-flash",
+                                 "deepseek/deepseek-v4.1-flash", "tencent/hy3"], dv
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
