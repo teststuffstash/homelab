@@ -9907,3 +9907,51 @@ COMPUTED, never listed.
 would use, and it would ghost all five), FU-254 (nothing detects a substrate going stale or EOL;
 Talos 1.13 left community support at the 1.14.0 release, 2026-09-03). FU-033 grew into the whole
 1.14 gate set with the checks that came back clean.
+
+## 2026-09-19 — #1774 was red on two gates; one was a record, the other was the sentinel's own blind spot
+
+Both reds on the upgrade-verb PR, neither the PR's fault.
+
+**CI, the ADR-103 ratchet.** `agents/coordinator/review-argo.yaml` is a clause path (the review
+reflex's Sensor and WorkflowTemplate live in it), so the eventbus anti-affinity + PDB tripped
+"clause files changed with NO replay fixture change". Both added objects are scheduler and
+eviction inputs — the Sensor, EventSource and WorkflowTemplate are byte-identical, no action
+stream in the tree moves, and a fixture could only assert that a manifest the harness never
+applies contains the fields it plainly contains: the cosmetic fixture the ratchet exists to
+prevent. Took the escape the gate names — a record in `agents/replay/fixtures/README.md`, the
+fourth of that shape. Its evidence is the measured PRE-state, not a promise: `-js-1` and `-js-2`
+both on **hp-01** and `get pdb` empty, i.e. the defect still live, with the post-merge reading of
+the same two commands as the check.
+
+**management-sentinel: an output-only plan read as the silent zero (#1777).** The verb's declared
+half is a new `output` (`node_install_targets`), and a plan that adds one exits **2 with every
+RESOURCE a no-op** — "save these new output values … without changing any real infrastructure".
+The sentinel modelled a plan as its resource changes alone, so that is exit-2-with-an-empty-
+summary: the INCONSISTENT verdict the 2026-09-13 false negative installed against a silent zero
+(#1629), firing on the first PR ever to add an output. **The same read would have wedged
+`management-apply` into a standing refusal after merge — the FU-252 shape, four days unseen.**
+Fix: `mgmt_plan_changes` writes a second side channel (`$out.outputs` — output NAMES and actions
+from `.output_changes`, never values, the #1635 rule); INCONSISTENT is exit 2 with NEITHER; and
+the apply loop APPLIES such a plan instead of skipping it, because outputs live in the state and
+an unapplied one leaves §MB2's drift belt (the same `plan`, rc 2 = alarm) reporting `main` as
+drifted forever. No address is touched, so the allowlist is not consulted — it has nothing to judge.
+
+**The re-judge is a head bump, and that is worth knowing.** The sentinel dedups by the presence of
+its OWN status on the sha (`verdicted()`, not the `done/` ledger — clearing the marker does
+nothing), so a verdict posted by broken code cannot be re-judged in place. Sequence that worked:
+merge #1777 → `systemctl start mgmt-pull` on the box (the units run the SYSTEM checkout, hourly by
+itself) → empty-commit bump → `main: +0 ~0 -0 ⇢1 output`, green, with the output named in its own
+table.
+
+Verified before commit, on the box against the real head: plan rc=2, resource summary empty,
+output channel `node_install_targets create`. Review finding on #1777 (doc named the
+`.output_changes` JSON key where a reader looks for the `$out.outputs` file) fixed in the PR.
+
+**Both halves then ran for real on the merge** (#1774 merged 07:51Z). Apply loop 07:52:43:
+`main: +0 ~0 -0 ⇢1 output — all inside the apply allowlist` → `APPLIED`, `management-apply=success`,
+baseline advanced to e5934fd1, no refusal. End-state check: `mgmt-tf -- plan` of master is **"No
+changes"** — the output reached the state, so the drift belt is clean rather than alarming forever,
+which was the whole argument for applying instead of skipping. And ArgoCD took the eventbus
+change: `-js-2` moved off hp-01 to wk-02, one replica per node (wk-04 / hp-01 / wk-02), `get pdb
+eventbus-default-js` → `ALLOWED DISRUPTIONS 1`. hp-01's drain — last in the upgrade order — now
+costs the bus one replica instead of its quorum.
