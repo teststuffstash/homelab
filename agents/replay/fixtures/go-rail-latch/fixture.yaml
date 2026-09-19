@@ -7,7 +7,7 @@
 # TRANSIENT — defer, report-only, exit 0 (the #158 inversion: a Go ride must never burn
 # subscription capacity on a condition that resolves in minutes). A CAPACITY reason
 # (`window-<span>`, homelab#600's observed-429/observed-402) instead REROUTES through the M12
-# degrade path (docs/agents/model-routing.md §M12): dispatch AGENT_SUBSCRIPTION_FALLBACK_MODEL
+# degrade path (docs/spikes/model-routing-history.md §M12): dispatch AGENT_SUBSCRIPTION_FALLBACK_MODEL
 # (claude/haiku) on the subscription, with the SAME bounds as the Anthropic-side block — class=fix
 # only (reroute-nonfix), subscriptionFallback:false / AGENT_SUBSCRIPTION_FALLBACK=0 opt-outs
 # (reroute-optout / reroute-envoptout), modelDeny binds over the fallback (reroute-deny) — and the
