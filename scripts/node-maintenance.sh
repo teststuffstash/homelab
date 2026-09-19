@@ -12,6 +12,17 @@
 #                                                        (settle also SILENCES the node's alerts in
 #                                                         Alertmanager; `up` expires the silence)
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
+#   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → settle → talosctl upgrade → wait
+#                                                        Ready + Longhorn healthy → VERIFY version
+#                                                        AND schematic against the declaration
+#
+# `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl already cordons, drains
+# (client-side, respecting PodDisruptionBudgets — probed 2026-09-18), installs, reboots, rejoins
+# and uncordons. What this adds is everything talosctl does not know about — the Longhorn
+# last-replica move, the fleet floor, WIP 1, the FU-033 gate, and the post-check that the node
+# came back running the schematic it declares. The target image is READ FROM THE DECLARATION
+# (`tofu output node_install_targets`), never typed: it must match on three axes — platform,
+# schematic, version — or the node loses its identity (ADR-014, amended) or its extensions.
 #
 # `down` does as much as it can before it lets a drain block (operator direction 2026-09-09):
 #   WAIT  a ride / Argo Workflow / coordinator pod / ARC runner with a job assigned, or a last
@@ -71,7 +82,20 @@ SETTLE_TIMEOUT="${SETTLE_TIMEOUT:-3600}" # s — rides / transient consumers to 
 MOVE_TIMEOUT="${MOVE_TIMEOUT:-1800}"     # s — per volume: the extra replica's rebuild elsewhere
 MOVE_AFTER="${MOVE_AFTER:-600}"          # s — a last replica still held by TRANSIENT pods after this long gets moved too
 DRY="${DRY:-0}"                          # settle: report what it would wait on / move, change nothing
+UPGRADE_DRAIN_TIMEOUT="${UPGRADE_DRAIN_TIMEOUT:-5m}"  # talosctl's own client-side drain
+# Where the declared install targets come from. Default: the management box, which holds main's
+# state (ADR-131/FU-012) and reads a COMMITTED ref — so the declaration is what master says, not
+# what the working tree says. Override with a pre-fetched file for an offline/dry run.
+INSTALL_TARGETS="${INSTALL_TARGETS:-}"   # path to a `tofu output -json node_install_targets` dump
+TARGET_IMAGE="${TARGET_IMAGE:-}"         # last-resort explicit --image; skips the declaration read
+ENDPOINT="${ENDPOINT:-}"                 # the CP the upgrade is endpointed at (pick_cp_endpoint)
+# An upgrade whose image carries a DIFFERENT schematic is a re-image, not a version move: it adds
+# or removes system extensions. Refused by default; pick one deliberately.
+KEEP_SCHEMATIC="${KEEP_SCHEMATIC:-0}"          # upgrade at the declared VERSION on the LIVE schematic
+ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared schematic, extensions and all
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
+PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (the Garage fleet floor reads it)
+GARAGE_SYNC_TIMEOUT="${GARAGE_SYNC_TIMEOUT:-900}" # s — wait for cluster_healthy after a window
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
@@ -83,7 +107,9 @@ fail() { printf '  \033[31mFAIL\033[0m %s\n' "$*"; FAILS=$((FAILS+1)); }
 usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 64; }
 
 cmd="${1:-}"; NODE="${2:-}"
-[ -n "$cmd" ] && [ -n "$NODE" ] || usage
+[ -n "$cmd" ] || usage
+# `order` ranks the whole fleet and takes no node argument.
+[ -n "$NODE" ] || [ "$cmd" = order ] || usage
 WARNS=0; FAILS=0
 
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -481,6 +507,32 @@ down() {
   log "node condition Ready=$(node_ready) — pull the power when the box is dark. Wake with: $0 up $NODE"
 }
 
+# ------------------------------------------------- storage is back (shared by up + upgrade)
+# Ready is NOT enough for a volume to come back: the Longhorn CSI plugin registers on the node
+# SECONDS-to-MINUTES after Ready, and until it does every attach fails with "CSINode <node> does
+# not contain driver driver.longhorn.io". The healthy test below cannot see that — a strict-local
+# zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
+# vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
+# at 13:30:22, attach kept failing until the plugin registered ~13:32).
+wait_storage_back() {
+  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
+  local t=0
+  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
+    sleep 10; t=$((t+10))
+    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
+  done
+  ok "Longhorn CSI driver registered on $NODE"
+  log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
+  local bad sched; t=0
+  while :; do
+    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
+    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
+    [ "$sched" = True ] && [ "$bad" = 0 ] && break
+    sleep 15; t=$((t+15)); [ $t -ge "$HEALTHY_TIMEOUT" ] && { log "TIMEOUT: longhorn schedulable=$sched degraded=$bad after ${HEALTHY_TIMEOUT}s"; return 1; }
+  done
+  ok "Longhorn: $NODE schedulable, 0 degraded attached volumes"
+}
+
 # ---------------------------------------------------------------- up
 up() {
   local ip; ip="$(node_ip)"
@@ -513,22 +565,8 @@ up() {
   # zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
   # vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
   # at 13:30:22, attach kept failing until the plugin registered ~13:32).
-  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
-  local t=0
-  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
-    sleep 10; t=$((t+10))
-    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
-  done
-  ok "Longhorn CSI driver registered on $NODE"
-  log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
-  local bad sched; t=0
-  while :; do
-    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
-    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
-    [ "$sched" = True ] && [ "$bad" = 0 ] && break
-    sleep 15; t=$((t+15)); [ $t -ge "$HEALTHY_TIMEOUT" ] && { log "TIMEOUT: longhorn schedulable=$sched degraded=$bad after ${HEALTHY_TIMEOUT}s"; return 1; }
-  done
-  log "Longhorn: $NODE schedulable, 0 degraded attached volumes. Window closed."
+  wait_storage_back || return 1
+  log "Window closed."
   silence_close
   declare_close
   kubectl get node "$NODE" -o wide
@@ -552,6 +590,352 @@ up() {
   fi
 }
 
+# ---------------------------------------------------------------- upgrade
+# The DECLARED install target for a node: tofu's node_install_targets output (tofu/outputs.tf).
+# Read from the management box by default, because that is where main's state lives and it reads a
+# COMMITTED ref — so "declared" means what master says, not what this working tree says.
+TARGETS_JSON=""
+load_targets() {
+  [ -n "$TARGETS_JSON" ] && return 0
+  if [ -n "$INSTALL_TARGETS" ]; then
+    TARGETS_JSON="$(cat "$INSTALL_TARGETS")"
+  else
+    log "reading the declared install targets from the management box (mgmt-tf output)"
+    TARGETS_JSON="$(bash "$REPO/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
+      fail "could not read node_install_targets from the box — is the output on master yet?"
+      fail "  INSTALL_TARGETS=<file> $0 upgrade $NODE  to use a pre-fetched dump instead"
+      return 1; }
+  fi
+  jq -e . >/dev/null 2>&1 <<<"$TARGETS_JSON" || { fail "node_install_targets is not JSON"; return 1; }
+}
+declared() { jq -r --arg n "$NODE" --arg f "$1" '.[$n][$f] // ""' <<<"$TARGETS_JSON"; }
+
+# talosctl performs the drain CLIENT-side and fetches kubeconfig over MachineService/Kubeconfig,
+# which is control-plane only — so a worker upgrade MUST be endpointed at a control plane. Never
+# at one that is itself mid-window: pick a Ready, uncordoned CP that is not the target.
+pick_cp_endpoint() {
+  local cp
+  cp="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o json \
+        | jq -r --arg n "$NODE" '.items[]
+            | select(.metadata.name != $n)
+            | select(.spec.unschedulable != true)
+            | select(any(.status.conditions[]; .type=="Ready" and .status=="True"))
+            | .status.addresses[] | select(.type=="InternalIP") | .address' | head -1)"
+  [ -n "$cp" ] || { fail "no healthy control plane to endpoint the upgrade at"; return 1; }
+  printf '%s' "$cp"
+}
+
+live_version() { kubectl get node "$NODE" -o jsonpath='{.status.nodeInfo.osImage}' 2>/dev/null | sed -n 's/.*(\(v[0-9.]*\)).*/\1/p'; }
+live_schematic() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6=="schematic"{print $7}'; }
+live_extensions() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6!="schematic" && NR>1 {print $6}' | tr '\n' ' '; }
+
+# Changing the schematic during an upgrade adds or removes EXTENSIONS. It is a legitimate act
+# (that is how a node gains kata, or loses it) but it is never what "upgrade the version" means,
+# and it is silent: the wrong schematic stripped iscsi-tools off wk-03 on 2026-09-18 and only the
+# crashlooping longhorn-manager said so. It also collides with deliberate, documented divergence —
+# wk-metal-01 declares plain metal while running the kata image, and machines.yaml says in as many
+# words "Do not fix that drift". So: refuse, and make the operator pick which they meant.
+# ⚠ stdout is this function's RETURN CHANNEL (the image). Every human-readable line must go to
+# stderr or it lands in the caller's variable instead of the terminal.
+resolve_schematic() {
+  local declared_img="$1" declared_s="$2" live_s
+  live_s="$(live_schematic)"
+  [ -n "$live_s" ] || { fail "cannot read $NODE's live schematic"; return 1; }
+  [ -z "$declared_s" ] || [ "$live_s" = "$declared_s" ] && { printf '%s' "$declared_img"; return 0; }
+  log "SCHEMATIC DIVERGENCE on $NODE"
+  log "  live:     $live_s   ($(live_extensions))"
+  log "  declared: $declared_s"
+  if [ "$KEEP_SCHEMATIC" = 1 ]; then
+    warn "KEEP_SCHEMATIC=1 — moving the VERSION only, on the live schematic (declared drift preserved)" >&2
+    printf '%s' "$(printf '%s' "$declared_img" | sed "s|/${declared_s}:|/${live_s}:|")"
+    return 0
+  fi
+  if [ "$ALLOW_SCHEMATIC_CHANGE" = 1 ]; then
+    warn "ALLOW_SCHEMATIC_CHANGE=1 — RE-IMAGING to the declared schematic; extensions will change" >&2
+    printf '%s' "$declared_img"; return 0
+  fi
+  fail "refusing: this upgrade would also change the schematic (extensions added/removed)" >&2
+  fail "  KEEP_SCHEMATIC=1        version only, keep the live schematic  (the drift-preserving choice)" >&2
+  fail "  ALLOW_SCHEMATIC_CHANGE=1  re-image to the declaration          (a deliberate extension change)" >&2
+  return 1
+}
+vminor() { printf '%s' "${1#v}" | cut -d. -f1,2; }
+
+# WIP 1 (ADR-132 §4): never a second window before the first node is back. Any other node
+# NotReady or cordoned means one is open — including one somebody opened by hand.
+assert_wip1() {
+  local busy
+  busy="$(kubectl get nodes -o json | jq -r --arg n "$NODE" '.items[]
+            | select(.metadata.name != $n)
+            | select(.spec.unschedulable == true or (any(.status.conditions[]; .type=="Ready" and .status=="True") | not))
+            | .metadata.name')"
+  [ -z "$busy" ] && { ok "WIP 1: no other node cordoned or NotReady"; return 0; }
+  fail "WIP 1: another window looks open — $(tr '\n' ' ' <<<"$busy")"; return 1
+}
+
+# The fleet floor (ADR-132 §4): no window while the storage fabric is already down one leg.
+# Longhorn's degraded check is preflight's; this is the Garage half, and pod-Ready is NOT the
+# right test. rf=3 over three physical zones, quorum 2: with one zone down every partition it
+# holds sits at 2/3 — available, but the NEXT zone down takes those partitions to 1/3 and writes
+# fail. So the binding condition is Garage's own `cluster_healthy`, which is exactly "every
+# partition has ALL of its replica nodes up" (`cluster_available` is the weaker quorum-only
+# twin). Both are scraped from the admin port already; neither had a consumer before this.
+prom() { curl -sS --max-time 15 --data-urlencode "query=$1" "$PROM/api/v1/query"; }
+prom_min() {  # min value of a metric across every garage instance; "" if the query fails
+  local r; r="$(prom "$1")" || return 1
+  jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
+  jq -r '[.data.result[].value[1]|tonumber]|min // empty' <<<"$r"
+}
+garage_zone_node() {  # is $NODE one of the Garage zones? the zone label IS the node name
+  local r; r="$(prom "count by (role_zone) (cluster_layout_node_connected)")" || return 1
+  jq -e --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' >/dev/null <<<"$r"
+}
+assert_fleet_floor() {
+  local notready healthy
+  notready="$(kubectl -n garage get pods -l 'app.kubernetes.io/name=garage,garage.teststuff.net/serve-s3=true' -o json \
+              | jq -r '.items[] | select(any(.status.conditions[]?; .type=="Ready" and .status=="True") | not) | .metadata.name')"
+  [ -n "$notready" ] && { fail "fleet floor: Garage pod(s) not Ready — $(tr '\n' ' ' <<<"$notready")"; return 1; }
+  # Rule #6: an unreadable gate is a REFUSAL, never a pass — we must not fail into a window.
+  healthy="$(prom_min 'cluster_healthy')" || { fail "fleet floor: Prometheus at $PROM unreadable — refusing"; return 1; }
+  [ -n "$healthy" ] || { fail "fleet floor: cluster_healthy returned no series — refusing"; return 1; }
+  if [ "$healthy" != "1" ]; then
+    fail "fleet floor: Garage cluster_healthy=$healthy — a partition is missing a replica, so a"
+    fail "  second zone down would drop it below quorum. Wait for the previous node to rejoin."
+    return 1
+  fi
+  ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue $(prom_min 'block_resync_queue_length')"
+}
+
+# The CNPG half of the same idea. Every cluster here is 2 instances, and infisical-pg and
+# grafana-pg each keep one on hp-01 and one on m70s — the two heaviest nodes. WIP 1 stops them
+# going down together, but nothing stopped the SECOND node starting before the first instance had
+# rejoined and caught up, which is the Garage mistake in another fabric. readyInstances == instances
+# is the condition; an unreadable answer refuses (rule #6).
+cnpg_unhealthy() {
+  kubectl get clusters.postgresql.cnpg.io -A -o json \
+    | jq -r '.items[] | select((.status.readyInstances // 0) < .spec.instances)
+             | "\(.metadata.namespace)/\(.metadata.name) \(.status.readyInstances // 0)/\(.spec.instances)"'
+}
+assert_cnpg_floor() {
+  local bad
+  bad="$(cnpg_unhealthy)" || { fail "fleet floor: cannot read CNPG clusters — refusing"; return 1; }
+  [ -z "$bad" ] && { ok "fleet floor: every CNPG cluster at full instances"; return 0; }
+  fail "fleet floor: CNPG cluster(s) short an instance — $(tr '\n' ' ' <<<"$bad")"
+  fail "  a second node down could take the last healthy instance with it. Wait for the rejoin."
+  return 1
+}
+wait_cnpg_back() {
+  log "waiting for every CNPG cluster back to full instances (≤${GARAGE_SYNC_TIMEOUT}s)"
+  local t=0 bad
+  while :; do
+    bad="$(cnpg_unhealthy || true)"
+    [ -z "$bad" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: CNPG still short — $(tr '\n' ' ' <<<"$bad")"; return 1; }
+  done
+  ok "CNPG: every cluster at full instances after ~${t}s"
+}
+
+# After the window: membership whole again. This is the gate that lets the NEXT node start, which
+# is why it belongs to the upgrade and not to the operator's patience. The resync queue is
+# reported but not blocked on — it never reaches zero in steady state (a background scrubber keeps
+# ~40 queued here), so an absolute-zero gate would deadlock; cluster_healthy is the real signal.
+wait_garage_back() {
+  garage_zone_node || { log "$NODE holds no Garage zone — no sync gate"; return 0; }
+  log "waiting for Garage cluster_healthy=1 (≤${GARAGE_SYNC_TIMEOUT}s)"
+  local t=0 h
+  while :; do
+    h="$(prom_min 'cluster_healthy' || true)"
+    [ "$h" = "1" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: Garage cluster_healthy=${h:-?} after ${t}s"; return 1; }
+  done
+  ok "Garage cluster_healthy=1 after ~${t}s (resync queue $(prom_min 'block_resync_queue_length'), errored $(prom_min 'block_resync_errored_blocks'))"
+}
+
+# Version sanity + the gates that are written down rather than computable.
+assert_upgrade_sane() {
+  local from to fmin tmin
+  from="$(live_version)"; to="$1"
+  [ -n "$from" ] || { fail "cannot read $NODE's running Talos version"; return 1; }
+  [ "$from" = "$to" ] && { warn "$NODE already runs $to — the upgrade will reinstall the same version"; }
+  fmin="$(vminor "$from")"; tmin="$(vminor "$to")"
+  # Refuse a downgrade outright: Talos has no downgrade path.
+  if [ "$(printf '%s\n%s\n' "${from#v}" "${to#v}" | sort -V | tail -1)" = "${from#v}" ] && [ "$from" != "$to" ]; then
+    fail "$to is OLDER than $from — Talos does not downgrade"; return 1
+  fi
+  # One minor at a time: config migrations are only tested between adjacent minors.
+  if [ "$fmin" != "$tmin" ]; then
+    local fm tm; fm="${fmin#*.}"; tm="${tmin#*.}"
+    [ $((tm - fm)) -gt 1 ] && { fail "$from -> $to skips a minor; go one minor at a time"; return 1; }
+    # FU-033: 1.14+ mounts EPHEMERAL noexec, which kills Longhorn v1's instance-manager.
+    if [ "$tm" -eq "$tm" ] && [ "$tm" -ge 14 ]; then
+      local mc; mc="$(talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get machineconfig -o yaml 2>/dev/null)"
+      if ! grep -q 'kind: VolumeConfig' <<<"$mc" || ! grep -qE 'secure: *false' <<<"$mc"; then
+        fail "FU-033 gate: $NODE has no EPHEMERAL VolumeConfig with mount.secure=false, and $to mounts /var noexec"
+        fail "  -> Longhorn v1's instance-manager cannot exec its engine binaries. Land the patch on EVERY node first (tofu/longhorn.tf)."
+        return 1
+      fi
+      ok "FU-033 gate: EPHEMERAL VolumeConfig secure=false present"
+    fi
+  fi
+  ok "version path $from -> $to"
+}
+
+# The post-check that matters as much as the version: did the node come back running the
+# SCHEMATIC it declares? A wrong --image silently strips extensions (2026-09-18, wk-03).
+verify_installed() {
+  local want_v="$1" want_s="$2" got_v got_s
+  got_v="$(live_version)"
+  got_s="$(talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6=="schematic"{print $7}')"
+  [ "$got_v" = "$want_v" ] && ok "version $got_v" || fail "version is $got_v, declared $want_v"
+  [ "$got_s" = "$want_s" ] && ok "schematic $got_s" || fail "schematic is ${got_s:-<none>}, declared $want_s"
+  [ "$got_v" = "$want_v" ] && [ "$got_s" = "$want_s" ]
+}
+
+upgrade() {
+  load_targets || return 2
+  local image version schematic class
+  if [ -n "$TARGET_IMAGE" ]; then
+    image="$TARGET_IMAGE"; version=""; schematic=""; class="$(declared class)"
+    warn "TARGET_IMAGE set — using $image and SKIPPING the declaration check"
+  else
+    image="$(declared installer)"; version="$(declared version)"
+    schematic="$(declared schematic)"; class="$(declared class)"
+    [ -n "$image" ] || { fail "no declared install target for $NODE in node_install_targets"; return 2; }
+    # The gates below judge $version; talosctl installs $image. One output produces both, so a
+    # mismatch means the declaration is malformed — refuse rather than gate one thing and install
+    # another.
+    [ "${image##*:}" = "$version" ] || {
+      fail "declaration inconsistent: installer tag '${image##*:}' != version '$version'"; return 2; }
+  fi
+  ENDPOINT="$(pick_cp_endpoint)" || return 2
+  # Resolve the schematic BEFORE anything else: it can rewrite the image, and the post-check must
+  # verify against what we actually install, not against what the declaration happened to say.
+  if [ -z "$TARGET_IMAGE" ]; then
+    image="$(resolve_schematic "$image" "$schematic")" || return 2
+    schematic="${image##*/}"; schematic="${schematic%%:*}"
+  fi
+  log "$NODE ($class) -> $version, endpoint $ENDPOINT"
+  log "  image: $image"
+  [ "$class" = vm ] && log "  NOTE: a nocloud VM upgrades in place ONLY with this image (ADR-014 as amended 2026-09-18);
+           proven same-version on wk-03 — a cross-version VM upgrade is not yet proven."
+
+  local rc=0; preflight || rc=$?
+  [ "$rc" = 2 ] && [ "$FORCE" != 1 ] && { fail "preflight refused"; return 2; }
+  assert_wip1   || [ "$FORCE" = 1 ] || return 2
+  assert_fleet_floor || [ "$FORCE" = 1 ] || return 2
+  assert_cnpg_floor  || [ "$FORCE" = 1 ] || return 2
+  # NOT FORCE-able, deliberately: a downgrade is impossible, a skipped minor is untested config
+  # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot". FORCE exists for
+  # preflight's WARN class and the two operational gates above, not for these.
+  if [ -n "$version" ]; then assert_upgrade_sane "$version" || return 2; fi
+
+  settle || return $?
+  [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }
+
+  silence_open; declare_open
+  log "talosctl upgrade $NODE ($(node_ip)) — talosctl does the cordon+drain (PDB-respecting) and the reboot"
+  if ! talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" \
+        upgrade --image "$image" --drain-timeout="$UPGRADE_DRAIN_TIMEOUT"; then
+    fail "talosctl upgrade returned non-zero — a blocked drain fails CLOSED (the node did NOT reboot)."
+    fail "  check what refused eviction, clear it (settle / move), and re-run. Window left OPEN."
+    return 1
+  fi
+  log "waiting for Ready (≤${READY_TIMEOUT}s)"
+  local t=0; until [ "$(node_ready)" = True ]; do
+    sleep 10; t=$((t+10))
+    [ $t -ge "$READY_TIMEOUT" ] && { fail "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s — window left OPEN"; return 1; }
+  done
+  ok "$NODE Ready after ~${t}s"
+  # Talos uncordons itself on rejoin; make sure, because a half-finished window is invisible.
+  [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
+  wait_storage_back || return 1
+  wait_garage_back  || return 1
+  wait_cnpg_back    || return 1
+  if [ -n "$version" ]; then
+    log "verifying the node came back as DECLARED"
+    verify_installed "$version" "$schematic" || { fail "post-check FAILED — window left OPEN"; return 1; }
+  fi
+  log "Window closed."
+  silence_close; declare_close
+  kubectl get node "$NODE" -o wide
+}
+
+# ---------------------------------------------------------------- order
+# Which node to upgrade NEXT — COMPUTED, never a list. A hard-coded order is correct exactly once:
+# it rots the moment a workload is rescheduled, a Garage zone moves, or a node joins. This ranks
+# every node that is not at its declared version/schematic by what draining it would actually cost,
+# from live placement, so the answer follows the fleet instead of the other way round.
+#
+#   SOLO   workloads whose every running pod is on this node -> they go down for the window
+#   QUORUM workloads where the survivors would fall below majority -> not degraded, BROKEN
+#   GARAGE this node is a Garage zone -> rf=3 of 3 zones, the sync gate applies
+#   LH     Longhorn replicas living here -> `settle` has work to do before the drain
+#
+# A PDB changes SOLO/QUORUM from an outage into a serialized roll (Talos honours them), so the
+# counts are an upper bound on harm, not a prediction — read them as "how much this node is load
+# bearing", which is what an ordering wants.
+order() {
+  # A report must not hard-fail on the declaration read: without it the DECLARED column is blank
+  # and every other number — which is what the ranking is actually made of — is still true.
+  load_targets || { warn "no declared targets (box unreachable?) — DECLARED column will be blank"; TARGETS_JSON='{}'; }
+  # The dumps are megabytes — they go through FILES, never argv (a --argjson of the pod list is an
+  # "Argument list too long" the moment the cluster is real).
+  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
+  local zones
+  log "ranking the fleet by what a drain would cost (live placement)"
+  kubectl get pods -A -o json > "$d/p.json"
+  kubectl get replicasets -A -o json > "$d/r.json"
+  kubectl -n longhorn-system get replicas.longhorn.io -o json 2>/dev/null > "$d/lh.json" || echo '{"items":[]}' > "$d/lh.json"
+  kubectl get nodes -o json > "$d/n.json"
+  printf '%s' "$TARGETS_JSON" > "$d/t.json"
+  zones="$(prom 'count by (role_zone) (cluster_layout_node_connected)' 2>/dev/null \
+           | jq -c '[.data.result[].metric.role_zone]' 2>/dev/null)" || zones='[]'
+  [ -n "$zones" ] || zones='[]'
+  printf '%s' "$zones" > "$d/z.json"
+
+  jq -rn --slurpfile P "$d/p.json" --slurpfile R "$d/r.json" --slurpfile Z "$d/z.json" \
+         --slurpfile LH "$d/lh.json" --slurpfile N "$d/n.json" --slurpfile T "$d/t.json" '
+    ($P[0]) as $p | ($R[0]) as $r | ($Z[0]) as $z | ($LH[0]) as $lh | ($N[0]) as $n | ($T[0]) as $t |
+    ($r.items | map({key:(.metadata.namespace+"/"+.metadata.name),
+                     value:((.metadata.ownerReferences//[])[0].name // "")}) | from_entries) as $own
+    | [ $p.items[]
+        | select(.status.phase=="Running" and .spec.nodeName != null)
+        | . as $pod | (($pod.metadata.ownerReferences // [])[0] // null) as $o
+        | select($o != null and (($o.kind // "") | test("DaemonSet|Job|Workflow") | not))
+        | { name: (if $o.kind=="ReplicaSet"
+                   then ($own[$pod.metadata.namespace+"/"+$o.name] // "") else ($o.name // "") end),
+            ns: $pod.metadata.namespace, kind: $o.kind, node: $pod.spec.nodeName } ]
+      | map(select(.name != ""))
+      | group_by(.kind+"|"+.ns+"|"+.name)
+      | map({ total: length,
+              nodes: (group_by(.node) | map({key: .[0].node, value: length}) | from_entries) }) as $w
+    | ($lh.items | map(.spec.nodeID) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $lhn
+    | [ $n.items[] | .metadata.name ] as $allnodes
+    | $allnodes
+      | map( . as $nd
+        | ($t[$nd] // null) as $decl
+        | ([ $p.items[] | select(.spec.nodeName==$nd) ] | length) as $podcount
+        | { node: $nd,
+            declared: ($decl.version // "-"),
+            solo:   ([ $w[] | select((.nodes[$nd] // 0) > 0 and .total == (.nodes[$nd] // 0)) ] | length),
+            quorum: ([ $w[] | select(.total >= 3 and (.nodes[$nd] // 0) > 0
+                                      and ((.total - (.nodes[$nd] // 0)) < ((.total/2|floor)+1))) ] | length),
+            garage: (if ($z | index($nd)) then 1 else 0 end),
+            lh:     ($lhn[$nd] // 0) } )
+      | map(. + { risk: (.solo*2 + .quorum*10 + .garage*3 + (if .lh>0 then 2 else 0 end)) })
+      | sort_by(.risk, .node)
+      | .[]
+      | [ .risk, .node, .declared, .solo, .quorum, (if .garage==1 then "yes" else "-" end), .lh ]
+      | @tsv' | awk -F'\t' '
+        BEGIN{printf "%-5s %-14s %-10s %5s %7s %7s %4s\n","RISK","NODE","DECLARED","SOLO","QUORUM","GARAGE","LH"}
+        {printf "%-5s %-14s %-10s %5s %7s %7s %4s\n",$1,$2,$3,$4,$5,$6,$7}'
+  echo
+  log "lowest risk first. A node already at its declared version is still listed — 'behind or not'"
+  log "is the verb's own check (it refuses a same-version reinstall with a WARN, not this ranking)."
+}
+
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
@@ -559,6 +943,8 @@ case "$cmd" in
   power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
+  upgrade) upgrade ;;
+  order) order ;;
   silence-open) silence_open; declare_open ;;
   silence-close) silence_close; declare_close ;;
   *) usage ;;

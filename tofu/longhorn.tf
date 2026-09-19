@@ -27,6 +27,13 @@
 #     mount: { secure: false }   # re-enables exec (also drops nosuid/nodev on /var)
 # (Longhorn v2 / SPDK runs the data plane in-process and is NOT affected — moot if we migrate.)
 # Ref: Talos v1.14.0-alpha.1 release notes ("noexec on EPHEMERAL").
+#
+# ⚠️ AND: 1.14 adds SecurityProfileConfig.workloadIsolation — LEAVE IT OFF. `talosctl gen config`
+# emits it true for NEW clusters; an upgraded cluster has no such document and keeps the old
+# behaviour, so the upgrade itself is safe. With it ON the kubelet runs in its own PID+mount
+# namespace and cannot reach the host iscsid, which kills the in-tree iSCSI path Longhorn v1
+# rides. This is a BOOT-FROM-GIT hazard, not an upgrade one: a cluster rebuilt from scratch on
+# 1.14+ would isolate by default and break where this one does not (FU-033).
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string

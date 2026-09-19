@@ -50,3 +50,26 @@ A fixture that tested the guard would need to:
 This is a pure-bash operation with no external calls, so the action-stream assertion model
 (the harness's only assertion mode) has nothing to record. A future `mode: exec` or
 `mode: exit-code` extension could cover this class.
+## The eventbus anti-affinity + PDB (PR#1774)
+
+No fixture applies. The change adds a `podAntiAffinity` to the `EventBus` CR's JetStream pod
+template and a `PodDisruptionBudget` beside it in `agents/coordinator/review-argo.yaml` — a
+ratchet clause file because the review reflex's Sensor and WorkflowTemplate live there too. Both
+added objects are **scheduler and eviction** inputs: they decide which node a bus replica lands on
+and how many may be evicted at once. Neither is read by any code the harness replays — the
+`Sensor`, the `EventSource` and the reflex's WorkflowTemplate are byte-identical, so every existing
+review fixture keeps asserting exactly what it asserted before, and no action stream anywhere in
+the tree changes.
+
+There is also nothing for the action-stream model to record: the harness stubs `gh`/`kubectl` and
+replays pod-side blocks, so a fixture here could only assert that a manifest the harness never
+applies contains the fields it plainly contains — a tautology over the diff, which is the cosmetic
+fixture this ratchet exists to prevent.
+
+What pins the change is live, and the pre-state is the finding. Today (2026-09-18, ArgoCD has not
+seen this branch): `kubectl -n agent-coordinator get pods -l eventbus-name=default -o wide` puts
+`-js-1` and `-js-2` both on **hp-01**, and `get pdb` returns nothing — so a single drain of hp-01
+takes two of three JetStream replicas, i.e. the bus's quorum and with it the agent loop. The
+post-merge reading of the same two commands — one replica per node, `eventbus-default-js` with
+`ALLOWED DISRUPTIONS 1` — is the check, and the drain of hp-01 (last in the upgrade order, for
+this reason) is the real exercise.
