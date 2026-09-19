@@ -228,7 +228,8 @@ unit is a oneshot, so runs serialize by construction.
 state's shape, so it stays in the journal. What leaves: the `management-sentinel` commit status
 (the `post_status` shape of `scripts/iac-sentinel.sh`) and one PR comment listing changed resource
 ADDRESSES with add/change/destroy counts from `tofu show -json` — plus, on the same terms, the
-NAMES of the outputs whose value the plan changes (`.output_changes`) — never values, both under the
+NAMES of the outputs whose value the plan changes (that same JSON's `.output_changes` key, read
+into the summary's `$out.outputs` side channel) — never values, both under the
 `homelab-sentinel` App (ADR-130; the App row in [`github-apps.yaml`](github-apps.yaml) already
 grants `statuses`+`pull_requests` write for this). The box holds that App's private key as one more
 wallet-provisioned root-only file (§Credentials), so the key sits in two stores — Infisical for the
@@ -290,7 +291,8 @@ RESOURCE a no-op — "save these new output values … without changing any real
 through resource changes alone that is exit-2-with-an-empty-summary, which is the silent zero the
 2026-09-13 false negative installed the INCONSISTENT verdict against (§the `github` root), and it
 duly failed the first PR to add one (#1774's `node_install_targets`, 2026-09-18). So the summary
-carries a second side channel — the changed output names — and only exit 2 with NEITHER is
+carries a second side channel — `$out.outputs`, the changed output names from `.output_changes`
+in `tofu show -json` — and only exit 2 with NEITHER is
 inconsistent. The apply loop **applies** such a plan rather than skipping it: outputs live in the
 state, so an unapplied one would leave §MB2's drift belt (the same `plan`, its rc the alarm)
 reporting `main` as drifted forever. Nothing is offered to the apply allowlist because no address
