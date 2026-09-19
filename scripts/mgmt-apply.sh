@@ -75,28 +75,39 @@ fi
 git -C "$REPO" reset --hard --quiet "$sha" || { log "PROBE-FAIL: reset to $sha failed"; exit 1; }
 for root in "${apply_roots[@]}"; do
   rel="$(mgmt_root_dir "$POL" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { refuse "$sha" "$root: dir unreadable from the policy — human"; exit 0; }
-  out="$ADIR/plan-$root.bin"; rm -f "$out" "$out.log"
+  out="$ADIR/plan-$root.bin"; rm -f "$out" "$out.log" "$out.planned" "$out.outputs"
   mgmt_plan_root "$REPO" "$POL" "$root" "$out" true; rc=$?
   if [ $rc = 1 ]; then refuse "$sha" "$root: plan errored — see the box journal" "$(tail -5 "$out.log")"; exit 0; fi
   if ! changes="$(mgmt_plan_changes "$REPO" "$POL" "$root" "$out")"; then refuse "$sha" "$root: plan summary failed — see the box journal"; exit 0; fi
-  if [ $rc = 2 ] && [ -z "$changes" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
+  # An OUTPUT-ONLY plan is rc=2 with zero resource changes — legitimate, not the silent zero
+  # #1629 ruled on (#1774, the `node_install_targets` output). It must still be APPLIED: outputs
+  # live in the state, so an unapplied one leaves the drift belt (mgmt-probe's plan → rc 2)
+  # alarming on main forever. No address is touched, so the apply allowlist has nothing to judge
+  # and the apply changes no infrastructure ("save these new output values … without changing any
+  # real infrastructure").
+  outs="$(mgmt_plan_outputs "$out")"; o=0; [ -n "$outs" ] && o=$(grep -c . <<<"$outs")
+  osuf=""; [ "$o" -gt 0 ] && osuf=" ⇢$o output"   # ${o:+…} would print "⇢0 output": "0" is SET
+  if [ $rc = 2 ] && [ -z "$changes" ] && [ -z "$outs" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
-  if [ -z "$changes" ]; then log "$root: no changes"; continue; fi
-  outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
-  if [ -n "$outside" ]; then
-    n=$(wc -l <<<"$outside")
-    refuse "$sha" "$root: $n address(es) outside the apply allowlist — human apply" "$outside"; exit 0
+  if [ -z "$changes" ] && [ -z "$outs" ]; then log "$root: no changes"; continue; fi
+  if [ -n "$changes" ]; then
+    outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
+    if [ -n "$outside" ]; then
+      n=$(wc -l <<<"$outside")
+      refuse "$sha" "$root: $n address(es) outside the apply allowlist — human apply" "$outside"; exit 0
+    fi
   fi
-  log "$root: +$a ~$c -$d ${rs} — all inside the apply allowlist"
-  printf '%s\n' "$changes" | sed 's/^/    /'
+  log "$root: +$a ~$c -$d ${rs}${osuf} — all inside the apply allowlist"
+  [ -n "$changes" ] && printf '%s\n' "$changes" | sed 's/^/    /'
+  [ -n "$outs" ] && printf '%s\n' "$outs" | sed 's/^/    output /'
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then log "[shadow] would apply $root now"; continue; fi
   # ⚠ a saved plan does NOT carry the -state= override (found on the box, 2026-09-13: apply read
   # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
   stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
   # shellcheck disable=SC2086
   if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
-    log "$root: APPLIED (+$a ~$c -$d)"
-    mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d applied by the management box"
+    log "$root: APPLIED (+$a ~$c -$d${osuf})"
+    mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box"
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'
     refuse "$sha" "$root: apply errored — see the box journal (half-applied? human)"; exit 0

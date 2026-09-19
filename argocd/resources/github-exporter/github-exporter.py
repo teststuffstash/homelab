@@ -1821,6 +1821,97 @@ def collect_anthropic_status(lines):
                         ANTHROPICSTATUS_URL)
 
 
+# ── FU-252: the management box's apply loop, seen from the only signal that leaves it ──────────
+MGMT_APPLY_REPO = os.environ.get("MGMT_APPLY_REPO", "homelab")
+MGMT_APPLY_CONTEXT = os.environ.get("MGMT_APPLY_CONTEXT", "management-apply")
+MGMT_APPLY_WALK = int(os.environ.get("MGMT_APPLY_WALK", "40"))
+# Module state, deliberately: once the oldest refused commit is known it does not move until a
+# SUCCESS clears it, so a HEAD change during a standing refusal costs ONE status read, not a
+# re-walk. Without this the 2026-09-14 condition would have re-walked 40 commits per master push
+# for four days — the poll-loop rate-limit shape homelab has been bitten by twice.
+_mgmt_since_ts = None
+_mgmt_since_sha = ""
+_mgmt_floored = False
+
+
+def _mgmt_status_of(sha):
+    """The management-apply status state + description for one commit, or (None, "")."""
+    st = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits/{sha}/status")
+    for entry in st.get("statuses") or []:
+        if entry.get("context") == MGMT_APPLY_CONTEXT:
+            return entry.get("state"), entry.get("description") or ""
+    return None, ""
+
+
+def collect_mgmt_apply(lines):
+    """FU-252 — the management box refuses an apply by posting a COMMIT STATUS on master
+    (`scripts/mgmt-apply.sh` → `mgmt_post_status`), and until this collector nothing watched it:
+    no `mgmt_*` series exists, nothing scrapes 192.168.2.53, and a commit STATUS is not a
+    check-run, so `/commits/<sha>/check-runs` reads green while master carries a failure.
+
+    What needs alerting is NOT liveness. Measured 2026-09-18: the loop ran perfectly every five
+    minutes and correctly refused the same residue from Sep 14 11:42Z to Sep 18, restating itself
+    1101 times, while the address count ratcheted 2 → 8 (a refusal does not stamp the baseline, so
+    every later master commit joins its residue to the same pending apply). A verdict +
+    `_last_run_timestamp` shape stays GREEN through all of that. So the series here is the AGE of
+    the oldest unapplied residue — `..._refused_since_timestamp`, the commit that first carried the
+    standing refusal — and the alert reads `time() -` it.
+
+    `_floored=1` says the walk hit MGMT_APPLY_WALK without finding a success, i.e. the real age is
+    at least this: an under-report, never an over-report."""
+    global _mgmt_since_ts, _mgmt_since_sha, _mgmt_floored
+    labels = {"repo": MGMT_APPLY_REPO, "context": MGMT_APPLY_CONTEXT}
+    lines += [
+        "# HELP github_mgmt_apply_refused 1 while the management box is refusing to apply master (FU-252).",
+        "# TYPE github_mgmt_apply_refused gauge",
+        "# HELP github_mgmt_apply_refused_since_timestamp Commit time of the OLDEST commit carrying the standing refusal.",
+        "# TYPE github_mgmt_apply_refused_since_timestamp gauge",
+        "# HELP github_mgmt_apply_outside_addresses Addresses outside the apply allowlist, parsed from the status description.",
+        "# TYPE github_mgmt_apply_outside_addresses gauge",
+        "# HELP github_mgmt_apply_since_floored 1 when the walk found no success within MGMT_APPLY_WALK — the age is a LOWER bound.",
+        "# TYPE github_mgmt_apply_since_floored gauge",
+    ]
+    head = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits/master")
+    head_sha = head.get("sha") or ""
+    state, desc = _mgmt_status_of(head_sha)
+    if state is None:
+        # No verdict on HEAD yet (the loop has not reached this commit). Absent != zero: publish
+        # nothing rather than a green sample the alert would read as "applied".
+        return
+    if state == "success":
+        _mgmt_since_ts, _mgmt_since_sha, _mgmt_floored = None, "", False
+        lines.append(metric("github_mgmt_apply_refused", labels, 0))
+        lines.append(metric("github_mgmt_apply_outside_addresses", labels, 0))
+        return
+    lines.append(metric("github_mgmt_apply_refused", labels, 1))
+    count = 0
+    m = re.search(r"(\d+) address", desc)
+    if m:
+        count = int(m.group(1))
+    lines.append(metric("github_mgmt_apply_outside_addresses", labels, count))
+    if _mgmt_since_ts is None:
+        # First refusal seen this process: walk master back to the newest success. The commit
+        # AFTER it is the oldest refused one — that is the age the operator cares about.
+        commits = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits"
+                     f"?sha=master&per_page={min(MGMT_APPLY_WALK, 100)}")
+        prev = None
+        _mgmt_floored = True
+        for c in commits:
+            sha = c.get("sha") or ""
+            st, _ = _mgmt_status_of(sha)
+            if st == "success":
+                _mgmt_floored = False
+                break
+            prev = c
+        if prev is not None:
+            _mgmt_since_sha = prev.get("sha") or ""
+            _mgmt_since_ts = epoch(prev["commit"]["committer"]["date"])
+    if _mgmt_since_ts is not None:
+        lines.append(metric("github_mgmt_apply_refused_since_timestamp",
+                            dict(labels, since_sha=_mgmt_since_sha[:8]), _mgmt_since_ts))
+    lines.append(metric("github_mgmt_apply_since_floored", labels, 1 if _mgmt_floored else 0))
+
+
 def collect_issue_lifecycle(lines):
     """Leg 2 of #628: issue-lifecycle series (queued→done wall) per closed issue.
 
@@ -1960,7 +2051,7 @@ def poll_forever():
     collectors = (collect_open_prs, collect_workflow_runs, collect_agent_issues, collect_goals,
                   collect_issue_lifecycle, collect_billing, collect_rate_limits,
                   collect_app_permission_drift, collect_vendor_status, collect_anthropic_status,
-                  collect_graphql_partial_stats)
+                  collect_mgmt_apply, collect_graphql_partial_stats)
     while True:
         _run_poll_cycle(collectors)
         time.sleep(INTERVAL)
@@ -2054,6 +2145,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 RULE_FILE = os.path.join(_HERE, "prometheusrule.yaml")
 FIXTURE_RULES = os.path.join(_HERE, "queued-age.promtool-rules")
 GOALS_FIXTURE_RULES = os.path.join(_HERE, "agent-goals.promtool-rules")
+MGMT_FIXTURE_RULES = os.path.join(_HERE, "mgmt-apply.promtool-rules")
 QUEUED_AGE_METRIC = "github_workflow_run_queued_since_timestamp"
 _ALERT_RE = re.compile(r"^\s*-\s*alert:\s*(\S+)\s*$")
 # homelab#348: the goal registry's arithmetic is RECORDING rules, so the pin needs the same block
@@ -2634,6 +2726,23 @@ def self_test():
         "re-extract it (the yq one-liner is in queued-age.promtool-rules) and re-run "
         "`promtool test rules argocd/resources/github-exporter/queued-age.promtool-test`\n"
         f"  shipped: {shipped}\n  fixture: {fixture}")
+
+    # ── the FU-252 pin: the standing-refusal detector ────────────────────────────────────────
+    # Same contract as CiDispatchStalled above. This alert exists because the condition it watches
+    # was invisible for four days on three surfaces at once, so a fixture testing a rule nobody
+    # deployed would reproduce exactly the failure it was built for.
+    _mgmt_shipped = alert_rule(RULE_FILE, "MgmtApplyResidueStanding")
+    _mgmt_fixture = alert_rule(MGMT_FIXTURE_RULES, "MgmtApplyResidueStanding")
+    assert _mgmt_shipped, f"MgmtApplyResidueStanding is gone from {RULE_FILE}"
+    assert any("github_mgmt_apply_refused_since_timestamp" in line for line in _mgmt_shipped), \
+        "MgmtApplyResidueStanding no longer reads the residue AGE — a liveness-only rule would " \
+        "have stayed green through the whole 2026-09-14 condition"
+    assert _mgmt_fixture, f"MgmtApplyResidueStanding not found in {MGMT_FIXTURE_RULES}"
+    assert _mgmt_shipped == _mgmt_fixture, (
+        "the promtool fixture's copy of MgmtApplyResidueStanding has drifted from "
+        "prometheusrule.yaml — re-extract it (the yq one-liner is in mgmt-apply.promtool-rules) "
+        "and re-run `promtool test rules argocd/resources/github-exporter/mgmt-apply.promtool-test`\n"
+        f"  shipped: {_mgmt_shipped}\n  fixture: {_mgmt_fixture}")
 
     # ── the agent-goals pins (homelab#348) ───────────────────────────────────────────────────────
     # Same pin, RECORDING lane. #348 found goal_budget_ratio and goal_budget_remaining_usd empty

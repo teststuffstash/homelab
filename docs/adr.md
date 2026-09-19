@@ -170,12 +170,24 @@ Assistant smart plugs (hard cycle); prefer Intel vPro/AMT mini-PCs for *new* fle
 **Considered:** buying IPMI/BMC servers. **Why:** principle #8 — budget-conscious, secondhand x86 has
 no IPMI. **Consequences:** AMT is a powerful plane → must be strong-password'd, LAN-only, patched.
 
-### ADR-014 — Talos upgrades: never upgrade a nocloud VM in place
+### ADR-014 — Talos upgrades: a nocloud VM needs the nocloud installer (amended 2026-09-18 — the hazard is the IMAGE, not the VM)
 **Status:** Accepted (2026-06). **Decision:** add Talos extensions by baking them into the VM **image**
 (`image.tf` schematic) and recreating; **never** `talosctl upgrade` a Proxmox *nocloud* VM. Metal
 nodes upgrade in place fine. **Considered:** in-place upgrade everywhere (simpler).
 **Why:** a nocloud VM reboot after upgrade loses its cloud-init static IP/hostname and rejoins as a
 ghost. **Consequences:** VM extension changes are `tofu apply -replace`; documented as a hard safety rule.
+**Amended 2026-09-18 (probed, wk-03): the hazard is the INSTALLER IMAGE, not the VM.** `talosctl
+upgrade --image ghcr.io/siderolabs/installer:<v>` (the generic image — and talosctl's default when
+`--image` is omitted) flips the node to `platform: metal`, so the nocloud datasource is never read
+again: wk-03 rejoined as `talos-24w-v8j` on a DHCP address. The machine config SURVIVED (node
+labels carried over), so this was never a wiped STATE partition, which is what the 2026-06 evidence
+was assumed to mean. Re-running the upgrade with the platform-correct
+`factory.talos.dev/nocloud-installer/<schematic>:<v>` restored `platform: nocloud`, the hostname and
+the static IP **in place** — no recreate. **The rule becomes: a nocloud VM upgrades in place like
+metal, provided the installer matches (platform, schematic, version); never the generic image, never
+a schematic the node does not declare** (a plain-schematic upgrade stripped iscsi-tools from a
+`longhorn = true` VM the same day). Extension changes still recreate — the image is the declaration.
+Recipe: [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. Relates FU-076, FU-253.
 
 ---
 

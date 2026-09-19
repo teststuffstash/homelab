@@ -19,6 +19,8 @@ requires:
   - python3
 parts:
   - file:../fast-path/bridge.sh
+  - block:blocked-on-jq
+  - block:blocked-on-check
   - file:local-stubs.sh
   - block:unit-fast-path
   - file:../fast-path/drive.sh

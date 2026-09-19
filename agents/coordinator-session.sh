@@ -243,6 +243,20 @@ BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the st
 # defaultMode does NOT — anthropics/claude-code#52501). Pass `--permission-mode default` for a
 # supervised session. (rm -rf / and ~ still trip hard circuit breakers; deny rules + hooks still
 # apply, regardless of mode.)
+# opencode-go/* ids are UNKNOWN to the claude CLI: it assumes a 200k context window and
+# auto-compacts a 1M-window model ~5x early (warning observed on a Go-rail coordinator tick,
+# oracle-fleet PR#632 pod, 2026-09-18 — the same #523 class agent-session.sh fixed for worker
+# rides on 2026-08-18, never carried to this launcher). Emit the harness's own remedy for unknown
+# ids — CLAUDE_CODE_MAX_CONTEXT_TOKENS — as a command prefix. The `[1m]`-suffix alternative the
+# warning itself suggests is RULED OUT here: the shim strips only the `opencode-go/` prefix and
+# forwards the REST verbatim as the upstream model id (scripts/claude-model-shim.py), so a
+# suffixed id would 400 at the rail. An unmapped Go model emits NOTHING — the harness's
+# conservative default, never another model's window (qwen3.7-plus's real window is unprobed,
+# docs/spikes/opencode-model-matrix.md §Cross-cutting quirks).
+# ⚠ Window table DUPLICATED from agents/agent-session.sh (rationale for the copies at its
+# harness-run-cmd clause: replay clauses run self-contained).
+case "${MODEL:-}" in opencode-go/deepseek-v4-flash) GO_CTX_ENV="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) GO_CTX_ENV="";; esac
+
 COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permission-mode ${PERM_MODE}"
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
@@ -374,11 +388,11 @@ SNIP
     WRAPPED="CS_SESSION_START=\$(date -u +%s); ${PREP}
 ${UPLOAD_FN}
 ${DETACH_FN}
-set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
+set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
   else
     WRAPPED="${PREP}
 ${UPLOAD_FN}
-set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
+set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
   fi
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
@@ -703,7 +717,7 @@ else
   # attach is a separate exec that can outrun the clone). Poll for the brief file so we never attach
   # `claude --append-system-prompt-file ${BRIEF}` before the clone has written it.
   "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "until [ -f ${BRIEF_PATH} ]; do sleep 0.5; done" 2>/dev/null || true
-  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO} 2>/dev/null || cd /work/homelab; exec claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO} 2>/dev/null || cd /work/homelab; exec ${GO_CTX_ENV:+env ${GO_CTX_ENV}}claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
   echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL}${SEED:+; seeded})."
   if [ -n "$NO_ATTACH" ]; then
     echo "→ attach the interactive coordinator from a real terminal:"
@@ -711,6 +725,6 @@ else
     echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
   else
     echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
-    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"' 2>/dev/null || cd /work/homelab; exec claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"' 2>/dev/null || cd /work/homelab; exec '"${GO_CTX_ENV:+env ${GO_CTX_ENV}}"'claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
   fi
 fi

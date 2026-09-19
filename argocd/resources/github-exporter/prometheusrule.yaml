@@ -815,6 +815,37 @@ spec:
             unless on (project, role) (
               count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
             )
+        # ── FU-252: the management box's apply loop, standing-refusal detector ───────────────
+        # The box refuses an apply by posting a COMMIT STATUS on master (scripts/mgmt-apply.sh →
+        # mgmt_post_status). Until this alert NOTHING watched it: no mgmt_* series exists, nothing
+        # scrapes 192.168.2.53, and a status is not a check-run — so /commits/<sha>/check-runs
+        # reads green while master carries a failure (how a jail session called master green on
+        # 2026-09-18 with four days of refusal on HEAD).
+        #
+        # The condition is NOT liveness. Measured: the loop ran every five minutes and correctly
+        # refused from Sep 14 11:42Z to Sep 18, restating itself 1101 times, while the address
+        # count ratcheted 2 → 8 — a refusal does not stamp the baseline, so every later master
+        # commit joins its residue to the same pending apply and the human apply grows monotonically.
+        # A verdict + _last_run_timestamp alert stays GREEN through all of that, which is why this
+        # one reads the AGE of the oldest unapplied residue instead.
+        #
+        # 24h, not shorter: a refusal is the DESIGNED outcome for a non-allowlisted address, so it
+        # is normal for the hours between a merge and the operator's next session. A day of it is
+        # the thing nobody noticed for four.
+        # platform_machinery: a human applies this by construction (docs/management-box.md §The
+        # test surface) — the responder investigates, it never dispatches a fixer.
+        - alert: MgmtApplyResidueStanding
+          expr: |-
+            (github_mgmt_apply_refused == 1)
+              and on (repo, context)
+            (time() - max by (repo, context) (github_mgmt_apply_refused_since_timestamp)) > 86400
+          for: 1h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
+            description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
         - alert: AgentModelDrift
           expr: max by (project, role) (max_over_time(agent_model_drift[10m])) > 0
           for: 30m

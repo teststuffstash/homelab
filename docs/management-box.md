@@ -159,6 +159,35 @@ lets it change the verdict; with `PUSHGATEWAY` unset it does not publish at all.
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
 work), but the spike's "alerts leave by two independent paths" has no second path yet.
 
+### A standing refusal is a THIRD verdict shape, and nothing detects it
+
+*Tracked by: FU-252.*
+
+The shape above has two states — alive, and wedged. The apply loop has a third: **alive, correct,
+and saying no for days.** Measured 2026-09-18: `mgmt-apply` refused `main` continuously from
+**Sep 14 11:42Z** (`7d9949ee`, 2 addresses outside the allowlist) to `e63b0073` (**8**), restating
+*"was REFUSED — waiting for a new commit or a human apply"* **1101 times**. Every tick ran
+perfectly. A verdict-plus-`_last_run_timestamp` alert stays GREEN through all of it, because the
+verdict is not an error and the timestamp is fresh.
+
+Two properties make it worth its own detector rather than a louder log line:
+
+- **It ratchets.** A refusal writes `refused-rev` and deliberately does not stamp the apply
+  baseline, so every later master commit touching the root joins its residue to the same pending
+  apply: 2 → 4 → … → 8 in four days. The human apply grows monotonically and gets less reviewable
+  the longer it stands — the cost of tolerating it is not flat.
+- **Its only surfaces are unwatched.** No `mgmt_*` series exists; nothing scrapes 192.168.2.53 at
+  all (`up{instance=~".*2\.53.*"}` = 0 series, 2026-09-18); no alert rule names the box loops. What
+  remains is journald on an unscraped box and a red commit **status** on master — and a status is
+  not a check-run: `GET /commits/<sha>/check-runs` does not return it, which is exactly how a jail
+  session read master as green on 2026-09-18 while four days of refusal sat on HEAD. A reader that
+  wants the truth asks `GET /commits/<sha>/status`.
+
+So the metric the loop actually needs is **age of the oldest unapplied residue** (and its address
+count), not liveness. The transport decision above still gates it: this box is out-of-cluster, so
+the series needs either a deliberate Pushgateway exposure or a different sink before any alert can
+read it.
+
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 
 The decision: [`adr.md`](adr.md) ADR-131. The tofu lane has no L1 today ([`agents/iac-lane.md`](agents/iac-lane.md)
@@ -198,7 +227,9 @@ unit is a oneshot, so runs serialize by construction.
 **Verdict-only leaves the box.** The plan output can carry sensitive attribute values and the
 state's shape, so it stays in the journal. What leaves: the `management-sentinel` commit status
 (the `post_status` shape of `scripts/iac-sentinel.sh`) and one PR comment listing changed resource
-ADDRESSES with add/change/destroy counts from `tofu show -json`, never values — both under the
+ADDRESSES with add/change/destroy counts from `tofu show -json` — plus, on the same terms, the
+NAMES of the outputs whose value the plan changes (that same JSON's `.output_changes` key, read
+into the summary's `$out.outputs` side channel) — never values, both under the
 `homelab-sentinel` App (ADR-130; the App row in [`github-apps.yaml`](github-apps.yaml) already
 grants `statuses`+`pull_requests` write for this). The box holds that App's private key as one more
 wallet-provisioned root-only file (§Credentials), so the key sits in two stores — Infisical for the
@@ -254,6 +285,18 @@ not just the policy's types — with the policy's per-root `plan_exclude_note` a
 the status description carries the count. A worker, reviewer or coordinator reading a green
 `management-sentinel` on a PR that edits repo settings or the cloudflared half should read it as
 "the parts the box can see are clean", never as "applied-equivalent".
+
+**An OUTPUT-ONLY plan is a real plan.** A new `output` block gives `plan` exit code 2 with every
+RESOURCE a no-op — "save these new output values … without changing any real infrastructure". Read
+through resource changes alone that is exit-2-with-an-empty-summary, which is the silent zero the
+2026-09-13 false negative installed the INCONSISTENT verdict against (§the `github` root), and it
+duly failed the first PR to add one (#1774's `node_install_targets`, 2026-09-18). So the summary
+carries a second side channel — `$out.outputs`, the changed output names from `.output_changes`
+in `tofu show -json` — and only exit 2 with NEITHER is
+inconsistent. The apply loop **applies** such a plan rather than skipping it: outputs live in the
+state, so an unapplied one would leave §MB2's drift belt (the same `plan`, its rc the alarm)
+reporting `main` as drifted forever. Nothing is offered to the apply allowlist because no address
+is touched.
 
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
