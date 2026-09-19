@@ -1,0 +1,47 @@
+# strike-retry — Goal #1640 acceptance 4: the launcher retries a dead ride at the SAME round.
+#
+# CONDITION UNDER REPLAY. A ride that dies without producing anything used to hand back to the scan
+# for a coordinator hop. The launcher's terminal block now takes the decision itself, on a
+# four-conjunct predicate (all required):
+#
+#   (1) the run posted `AGENT_STRIKE:` — the launcher's own line (STRIKE_LINE) or the pod's
+#       (STRIKE_BY_POD, agent-finalize's in-pod strike);
+#   (2) the salvage verdict is `none` — computed exactly as agent-finalize's `resumable_branch()`
+#       does (salvaged_branch → pushed; WORK_BRANCH → resuming; salvage_undetermined → unknown;
+#       else none). A pushed/resuming/unknown verdict is NOT a "no" and never retries;
+#   (3) the strike's `error_class` is SERVING-SHAPED — a member of the router's SERVING_CLASSES
+#       (read from `/router-status`, never a second copy) or `turn-cap`;
+#   (4) attempts are under the cap — one retry per `(model, provider, class)` cell, two per task.
+#
+# THE CONTRACT, one leg each:
+#   fires-serving-timeout   a serving class (timeout) with salvage none and no prior attempt ⇒ the
+#                           clause re-runs the round: the re-run CALL carries the cell and the
+#                           incremented task counter, and the clause EXITS before the doorbell —
+#                           no scan re-queue, no coordinator session.
+#   fires-by-pod-tool-loop  the COMMON production path: the pod posted the strike (STRIKE_BY_POD),
+#                           so the class comes from the finalizer's own `error_class` in STATS.
+#   fires-turn-cap          `turn-cap` is serving-shaped by the issue's own wording, though it is
+#                           not a member of SERVING_CLASSES.
+#   no-retry-cell-seen      the same `(model, provider, class)` cell already retried once ⇒ no
+#                           second retry (the counter survives the re-run).
+#   no-retry-task-cap       two retries already spent on this task ⇒ no third.
+#   no-retry-salvage-pushed a branch was pushed this round ⇒ a retry would lose work.
+#   no-retry-salvage-resuming  the ride resumed a branch (WORK_BRANCH) ⇒ same.
+#   no-retry-salvage-unknown   salvage could not establish the branch state ⇒ NOT a "no" (#33).
+#   no-retry-nonserving     `harness-death` is not serving-shaped ⇒ the coordinator decides.
+#   no-retry-no-strike      no strike at all ⇒ nothing to retry (and no decision line).
+#   no-retry-router-unreachable  the serving set is unknown (no payload, no probe answer) ⇒
+#                           fail-closed to today's behaviour.
+#   fires-probe-fallback    the FU-088 probe payload is absent but `/router-status` answers ⇒ the
+#                           set is read from the fallback probe and the retry fires.
+#
+# The doorbell block is composed AFTER the retry clause on purpose: the clause's `exit 0` on fire
+# is what makes "no scan re-queue" observable — a fired retry never reaches the ring.
+name: strike-retry
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:strike-retry
+  - block:doorbell-ring
+  - file:post.sh
