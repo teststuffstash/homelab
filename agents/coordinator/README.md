@@ -158,10 +158,11 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   serve is the human's call (class policy in `model-classes.json` + the claim's knobs; `stacks.json`
 >   is the mirror, never the policy home).
 
-> **RAIL — the chain's rail decides whether steps 3–4 apply at all. Read it before you read them.**
-> The `workerModel` you just read tells you: a **`claude/` prefix** means this dispatch rides the
-> **subscription** rail (`kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}'` →
-> `claude/haiku` on the platform claim), and the launcher self-derives `--harness claude` from it.
+> **RAIL — the model's rail decides whether steps 3–4 apply at all. Read it before you read them.**
+> The model this dispatch will ride tells you: a **`claude/` prefix** means it rides the
+> **subscription** rail, and the launcher self-derives `--harness claude` from that prefix. There is
+> no `workerModel` field to read on a chainless claim — the router's `/route` answer names the served
+> model, and the claim's per-repo `fixer.claudeTier` is the knob that lets it serve a `claude/*` one.
 > For such a ride, **the OpenRouter key is the FALLBACK rail, never the prerequisite** — steps 3–4
 > (estimate + mint) do not apply, and a key that is absent, unminted, deferred or rate-limited must
 > **not** defer the dispatch. `agents/agent-session.sh` already encodes exactly this: it sends no
@@ -172,7 +173,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > (homelab#158). The **only** capacity condition that defers a subscription ride is the FU-088
 > latch, which the launcher probes itself — you dispatch and let it decide. Full procedure:
 > step 5 §**Claude tier**.
-> An **OpenRouter-primary** chain (any non-`claude/` `workerModel`) takes steps 3–4 as written.
+> An **OpenRouter-primary** ride (any non-`claude/` served model) takes steps 3–4 as written.
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
