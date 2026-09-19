@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single-node maintenance window for a Talos WORKER (metal or VM): the deterministic
+# Single-node maintenance window for a Talos node (metal or VM): the deterministic
 # cordon → drain → shutdown path, with the storage checks that make "safe to pull the
 # plug" a computed answer instead of a k9s glance — and the reverse (wake → Ready →
 # uncordon → Longhorn healthy again).
@@ -61,8 +61,8 @@
 #         settle waits — a drained busy runner is a cancelled CI job)
 #   WARN  a Deployment pod runs here with replicas==1 (drain = downtime for that service)
 #
-# This is a WORKER recipe. cp-01 is the only control plane — its window is the Proxmox
-# full-stop in docs/runbook.md §Proxmox host maintenance window, not this script.
+# Control-plane callers go through controlplane-upgrade.sh, which adds the etcd quorum/snapshot
+# gates before entering this shared drain/install/rejoin path.
 # Not tofu/Ansible: the whole thing is live-state orchestration with waits; tofu manages the
 # node's existence, not its power state (the `talosctl shutdown` → WoL pair is the runbook's
 # tested recipe for metal). The MAC for WoL comes from the one DHCP source of truth,
@@ -809,7 +809,9 @@ upgrade() {
     [ "${image##*:}" = "$version" ] || {
       fail "declaration inconsistent: installer tag '${image##*:}' != version '$version'"; return 2; }
   fi
-  ENDPOINT="$(pick_cp_endpoint)" || return 2
+  # An explicit endpoint is useful for the isolated one-node rehearsal and remains safe in
+  # production: controlplane-upgrade.sh validates that a live-cluster CP never endpoints itself.
+  if [ -z "$ENDPOINT" ]; then ENDPOINT="$(pick_cp_endpoint)" || return 2; fi
   # Resolve the schematic BEFORE anything else: it can rewrite the image, and the post-check must
   # verify against what we actually install, not against what the declaration happened to say.
   if [ -z "$TARGET_IMAGE" ]; then

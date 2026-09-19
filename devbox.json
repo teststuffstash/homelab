@@ -252,6 +252,9 @@
       "node-maintenance": [
         "bash scripts/node-maintenance.sh \"$@\""
       ],
+      "cp-upgrade": [
+        "bash scripts/controlplane-upgrade.sh \"$@\""
+      ],
       "opnsense": [
         "echo 'Run an OPNsense playbook with creds+httpx interpreter:' && echo '  bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml'"
       ],
