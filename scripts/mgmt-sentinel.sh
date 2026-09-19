@@ -172,11 +172,17 @@ while IFS=$'\t' read -r pr sha; do
       { echo; echo "### \`$root\` — plan SUMMARY failed (the plan ran; its summary did not — see the box journal)"; } >>"$bodyf"
       log "[#$pr] $root plan summary failed"; continue
     fi
-    if [ $rc = 2 ] && [ -z "$changes" ]; then   # the plan says "changes", the summary says none — never trust the zero
+    # OUTPUT-ONLY plans are rc=2 with zero resource changes and are NOT inconsistent (#1774, the
+    # `node_install_targets` output): a new `output` block changes state, not infrastructure. The
+    # inconsistency is rc=2 with NEITHER — that is still the silent zero #1629 ruled on.
+    outs="$(mgmt_plan_outputs "$out")"; o=0; [ -n "$outs" ] && o=$(grep -c . <<<"$outs")
+    op=s; [ "$o" = 1 ] && op=""
+    if [ $rc = 2 ] && [ -z "$changes" ] && [ -z "$outs" ]; then   # the plan says "changes", the summary says none — never trust the zero
       state=failure; failed_roots="$failed_roots $root"
       { echo; echo "### \`$root\` — INCONSISTENT: plan exit 2 (changes) but an empty summary — see the box journal"; } >>"$bodyf"
       log "[#$pr] $root inconsistent: plan rc=2, summary empty"; continue
     fi
+    os=""; oh=""; [ "$o" -gt 0 ] && { os=" ⇢$o output$op"; oh=", $o output value$op to save"; }
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
     excl_n=0; excl_types=""
     notplanned="$(mgmt_plan_not_planned "$out")"
@@ -186,17 +192,22 @@ while IFS=$'\t' read -r pr sha; do
       excl_types="$(sed -E 's/^((data\.)?[^.]+)\..*/\1/' <<<"$notplanned" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
     fi
     excl_note=""; [ "$excl_n" -gt 0 ] && excl_note=" ($excl_n not planned)"
-    desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
-    { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
+    desc="$desc$root: +$a ~$c -$d ${rs}${os}${excl_note} "
+    { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}${oh}"
       if [ "$excl_n" -gt 0 ]; then
         note="$(mgmt_root_exclude_note "$POL" "$root")" || note="(reason unreadable this run)"
         echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\`${note:+ — $note}): $excl_types."
       fi
-      if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
+      if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"
+      elif [ -n "$outs" ]; then echo; echo "No resource changes."
+      else echo; echo "No changes."; fi
+      # output NAMES and actions, never values (the #1635 rule: a value is an existence oracle)
+      if [ -n "$outs" ]; then echo; echo "| output | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$outs"; fi
       echo
       ap="$(mgmt_root_apply "$POL" "$root")" || ap=unknown   # a failed read must not print "plan only" for an apply:true root
       if [ "$ap" = unknown ]; then echo "apply: UNKNOWN — the apply flag could not be read from the policy this run; the apply loop reads it again after merge."
       elif [ "$ap" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
+      elif [ -z "$changes" ] && [ -n "$outs" ]; then echo "apply: output values only — the box applies after merge (no infrastructure changes)."
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
         outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
@@ -204,7 +215,7 @@ while IFS=$'\t' read -r pr sha; do
         else n=$(wc -l <<<"$outside"); echo "apply: $n address(es) OUTSIDE the apply allowlist — human apply: $(tr '\n' ' ' <<<"$outside" | sed 's/ $//' | sed 's/ /, /g')"; fi
       fi
     } >>"$bodyf"
-    log "[#$pr] $root: +$a ~$c -$d ${rs}"
+    log "[#$pr] $root: +$a ~$c -$d ${rs}${os}"
   done
   if [ "$state" = failure ]; then desc="plan errored:$failed_roots — see the PR comment"; [ $HUMAN = 1 ] && desc="human plan: $desc"; fi
   if [ -n "$overridden" ] && [ "$state" = success ]; then

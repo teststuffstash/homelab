@@ -331,7 +331,21 @@ mgmt_plan_changes() {
     || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
   # side channel for the verdict: every address the plan carried (no-ops included) — see mgmt_plan_root's $out.state
   printf '%s' "$json" | jq -r '.resource_changes[]?.address' | sort > "$out.planned"
+  # second side channel: the OUTPUT changes. A plan can have exit code 2 with every resource a
+  # no-op — an output-only plan ("You can apply this plan to save these new output values … without
+  # changing any real infrastructure"), which is what a new `output` block produces. Read as
+  # resource changes alone that is rc=2 with an empty summary, i.e. the INCONSISTENT verdict the
+  # #1629 rule installed against a silent zero — and it fired on the first such PR (#1774, the
+  # `node_install_targets` output, 2026-09-18). NAMES AND ACTIONS ONLY: an output's VALUE is
+  # exactly the kind of live detail the verdict never carries off the box (the #1635 rule).
+  printf '%s' "$json" | jq -r '.output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) | [.key, (.value.actions | join("+"))] | @tsv' > "$out.outputs"
   printf '%s' "$json" | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
+}
+# mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
+# changes; empty when none. Written by mgmt_plan_changes — call it first (an absent file here means
+# the summary never ran, and the caller has already failed the verdict on that).
+mgmt_plan_outputs() {
+  [ -s "$1.outputs" ] && cat "$1.outputs" || return 0
 }
 # mgmt_plan_not_planned <plan-out> → the state addresses the plan did NOT carry (explicit excludes +
 # their dependents), one per line; empty when nothing was excluded or the state list is unavailable
