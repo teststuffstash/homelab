@@ -86,6 +86,7 @@ for root in "${apply_roots[@]}"; do
   # and the apply changes no infrastructure ("save these new output values … without changing any
   # real infrastructure").
   outs="$(mgmt_plan_outputs "$out")"; o=0; [ -n "$outs" ] && o=$(grep -c . <<<"$outs")
+  osuf=""; [ "$o" -gt 0 ] && osuf=" ⇢$o output"   # ${o:+…} would print "⇢0 output": "0" is SET
   if [ $rc = 2 ] && [ -z "$changes" ] && [ -z "$outs" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ] && [ -z "$outs" ]; then log "$root: no changes"; continue; fi
@@ -96,7 +97,7 @@ for root in "${apply_roots[@]}"; do
       refuse "$sha" "$root: $n address(es) outside the apply allowlist — human apply" "$outside"; exit 0
     fi
   fi
-  log "$root: +$a ~$c -$d ${rs}${o:+ ⇢$o output} — all inside the apply allowlist"
+  log "$root: +$a ~$c -$d ${rs}${osuf} — all inside the apply allowlist"
   [ -n "$changes" ] && printf '%s\n' "$changes" | sed 's/^/    /'
   [ -n "$outs" ] && printf '%s\n' "$outs" | sed 's/^/    output /'
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then log "[shadow] would apply $root now"; continue; fi
@@ -105,8 +106,8 @@ for root in "${apply_roots[@]}"; do
   stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
   # shellcheck disable=SC2086
   if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
-    log "$root: APPLIED (+$a ~$c -$d${o:+ ⇢$o output})"
-    mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${o:+ ⇢$o output} applied by the management box"
+    log "$root: APPLIED (+$a ~$c -$d${osuf})"
+    mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box"
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'
     refuse "$sha" "$root: apply errored — see the box journal (half-applied? human)"; exit 0
