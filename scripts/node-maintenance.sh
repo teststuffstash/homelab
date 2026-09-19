@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single-node maintenance window for a Talos WORKER (metal or VM): the deterministic
+# Single-node maintenance window for a Talos node (metal or VM): the deterministic
 # cordon → drain → shutdown path, with the storage checks that make "safe to pull the
 # plug" a computed answer instead of a k9s glance — and the reverse (wake → Ready →
 # uncordon → Longhorn healthy again).
@@ -61,8 +61,8 @@
 #         settle waits — a drained busy runner is a cancelled CI job)
 #   WARN  a Deployment pod runs here with replicas==1 (drain = downtime for that service)
 #
-# This is a WORKER recipe. cp-01 is the only control plane — its window is the Proxmox
-# full-stop in docs/runbook.md §Proxmox host maintenance window, not this script.
+# Control-plane callers go through controlplane-upgrade.sh, which adds the etcd quorum/snapshot
+# gates before entering this shared drain/install/rejoin path.
 # Not tofu/Ansible: the whole thing is live-state orchestration with waits; tofu manages the
 # node's existence, not its power state (the `talosctl shutdown` → WoL pair is the runbook's
 # tested recipe for metal). The MAC for WoL comes from the one DHCP source of truth,
@@ -809,7 +809,9 @@ upgrade() {
     [ "${image##*:}" = "$version" ] || {
       fail "declaration inconsistent: installer tag '${image##*:}' != version '$version'"; return 2; }
   fi
-  ENDPOINT="$(pick_cp_endpoint)" || return 2
+  # An explicit endpoint is useful for the isolated one-node rehearsal and remains safe in
+  # production: controlplane-upgrade.sh validates that a live-cluster CP never endpoints itself.
+  if [ -z "$ENDPOINT" ]; then ENDPOINT="$(pick_cp_endpoint)" || return 2; fi
   # Resolve the schematic BEFORE anything else: it can rewrite the image, and the post-check must
   # verify against what we actually install, not against what the declaration happened to say.
   if [ -z "$TARGET_IMAGE" ]; then
@@ -819,19 +821,26 @@ upgrade() {
   log "$NODE ($class) -> $version, endpoint $ENDPOINT"
   log "  image: $image"
   [ "$class" = vm ] && log "  NOTE: a nocloud VM upgrades in place ONLY with this image (ADR-014 as amended 2026-09-18);
-           proven same-version on wk-03 — a cross-version VM upgrade is not yet proven."
+           cross-version control-plane upgrade proven v1.13.2 -> v1.13.10 on the isolated nx-02 lab."
 
-  local rc=0; preflight || rc=$?
-  [ "$rc" = 2 ] && [ "$FORCE" != 1 ] && { fail "preflight refused"; return 2; }
-  assert_wip1   || [ "$FORCE" = 1 ] || return 2
-  assert_fleet_floor || [ "$FORCE" = 1 ] || return 2
-  assert_cnpg_floor  || [ "$FORCE" = 1 ] || return 2
+  local rc=0
+  if [ "${LAB:-0}" = 1 ]; then
+    [ "$(node_ready)" = True ] || { fail "lab node is not Ready"; return 2; }
+    host_up "$(node_ip)" || { fail "lab node's Talos API is unreachable"; return 2; }
+    ok "isolated lab node Ready; production workload/storage gates do not apply"
+  else
+    preflight || rc=$?
+    [ "$rc" = 2 ] && [ "$FORCE" != 1 ] && { fail "preflight refused"; return 2; }
+    assert_wip1   || [ "$FORCE" = 1 ] || return 2
+    assert_fleet_floor || [ "$FORCE" = 1 ] || return 2
+    assert_cnpg_floor  || [ "$FORCE" = 1 ] || return 2
+  fi
   # NOT FORCE-able, deliberately: a downgrade is impossible, a skipped minor is untested config
   # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot". FORCE exists for
   # preflight's WARN class and the two operational gates above, not for these.
   if [ -n "$version" ]; then assert_upgrade_sane "$version" || return 2; fi
 
-  settle || return $?
+  if [ "${LAB:-0}" != 1 ]; then settle || return $?; fi
   [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }
 
   silence_open; declare_open
@@ -850,9 +859,11 @@ upgrade() {
   ok "$NODE Ready after ~${t}s"
   # Talos uncordons itself on rejoin; make sure, because a half-finished window is invisible.
   [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
-  wait_storage_back || return 1
-  wait_garage_back  || return 1
-  wait_cnpg_back    || return 1
+  if [ "${LAB:-0}" != 1 ]; then
+    wait_storage_back || return 1
+    wait_garage_back  || return 1
+    wait_cnpg_back    || return 1
+  fi
   if [ -n "$version" ]; then
     log "verifying the node came back as DECLARED"
     verify_installed "$version" "$schematic" || { fail "post-check FAILED — window left OPEN"; return 1; }
