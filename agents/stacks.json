@@ -19,7 +19,7 @@
       "coordinatorEnabled": true
     },
     {
-      "_migrated": "MIRROR of the claim in agents/fixer/openrouter-operator/agentstack.yaml (see _comment).",
+      "_migrated": "MIRROR of the claim in agents/fixer/openrouter-operator/agentstack.yaml — CHAINLESS since 2026-09-19 (homelab#1782, Goal #1640 acceptance 6; the fleet's LAST per-stack chain, after oracle-iac#387 and sleep-iac#77 on 2026-08-26): routerMode authoritative, no chain. The operator's ordering preference is CLASS policy now — the coding class's chain_head in argocd/resources/openrouter-proxy/model-classes.json (homelab#1783 / PR#1784, on master before this flip). The cluster claim wins at runtime; this entry is what the LAUNCHER reads (agent-session.sh resolves routerMode + the /route request body from it) and what serves the CI lint + the probe-failed belt (see _comment). Sync on claim changes.",
       "name": "platform",
       "graduated": true,
       "repos": [
@@ -30,8 +30,7 @@
       ],
       "mainRepo": "homelab",
       "coordinatorModel": "opus",
-      "workerModel": "deepseek/deepseek-v4.1-flash:exacto",
-      "workerModelFallbacks": ["claude/haiku"],
+      "routerMode": "authoritative",
       "modelDeny": [
         "deepseek/deepseek-v4-flash-0731"
       ],
