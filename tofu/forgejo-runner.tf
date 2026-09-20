@@ -36,8 +36,14 @@ locals {
 # evicts (review finding on PR#1729; the management-sentinel plan listed this resource as `update`).
 # New members belong on the `arc` flag in machines/machines.yaml, not here — this set is the legacy
 # home and should shrink to nothing as nodes move over.
+# ⚠ EMPTY since 2026-09-20 — it did. wk-metal-02 was the last member and leaves the ride pool ahead
+# of its control-plane reinstall (ADR-133 as amended, docs/controlplane-ha.md §C3); wk-metal-03 now
+# carries the pool on the `arc` flag instead. Destroying this resource REMOVES the label from
+# wk-metal-02, which is the point: ARC runners and the Forgejo runner below (node_selector on the
+# same label) stop scheduling there before the node is reset to maintenance. Kept at zero rather
+# than deleted so the next node to need the legacy path finds the explanation, not an empty file.
 resource "kubernetes_labels" "ephemeral_tier" {
-  for_each    = toset(["wk-metal-02"])
+  for_each    = toset([])
   api_version = "v1"
   kind        = "Node"
   metadata { name = each.value }
