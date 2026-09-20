@@ -10132,3 +10132,11 @@ Measured: one 10.53 GB uncompressed layer; 7.4 MB/s from the registry ⇒ ≈24 
 node per release; wk-metal-02 (126 GB `/var`, 60 free) goes over the 60 % imageGC ceiling with two
 versions resident, wk-03 marginal. kata+virtiofs on a 10 GB SQLite file stays unmeasured — the
 canary is the gate. Told oracle to build the Datasette pod on `ownServices` meanwhile.
+
+**Correction, same day (operator: "I am on wifi right now, dont measure directly from this host").**
+The 7.4 MB/s / ≈24 min cold-pull figure above was the seat host's wifi, not the registry. From wired
+nodes (curl pod, 60 s): 86.8 MB/s on wk-04 and 89.8 MB/s on wk-metal-03 through
+`registry.teststuff.net` (the kubelet path, router HAProxy), 109–111 MB/s straight to the LB VIP —
+≈2 min per node per release. Opt-in-per-ride withdrawn on #1807; a correction file sits next to the
+handoff Result in oracle's `done/`. Lesson: a throughput number names its vantage point, and the
+jail host is never a vantage point for cluster-path rates.
