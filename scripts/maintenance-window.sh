@@ -104,6 +104,8 @@ node_count() {
 # cilium agent fails intermittently, and counting a flaky exec as "backend missing" produced a
 # false ⚠ the first time this ran. An unreliable gate is a gate that gets ignored, so "could not
 # tell" is reported as itself and never as a failure. Each agent gets two attempts.
+# But "could not tell" about the WHOLE fleet is not a caveat, it is an unread check — cmd_check
+# blocks on have=0 with unknown>0, and cmd_open refuses to bank such a baseline (#1804 round 5).
 # Non-zero if the AGENT LIST itself could not be read — distinct from an individual exec failing,
 # which is what `unknown` covers. Missed on the first pass (review, #1804): a failing
 # `kubectl get pod -l k8s-app=cilium` made the loop iterate zero times, returned "0 0 0", and
@@ -214,8 +216,11 @@ cmd_open() {
   jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"' "$BASE"
   # A baseline built from failed reads is worse than no baseline: every later check compares
   # favourably against it. Refuse rather than bank one.
-  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok' >/dev/null "$BASE" || {
-    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok)"' "$BASE" >&2
+  # `cilium_have == 0 and cilium_unknown > 0` is the same thing as an unread signal: no agent
+  # answered, so the baseline knows nothing about the backend the whole tool is built around.
+  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok
+         and (.cilium_have > 0 or .cilium_unknown == 0)' >/dev/null "$BASE" || {
+    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok) cilium[have=\(.cilium_have) unknown=\(.cilium_unknown)]"' "$BASE" >&2
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
     rm -f "$BASE"; exit 1
   }
@@ -266,6 +271,14 @@ cmd_check() {
   elif [ "$cm" -gt 0 ]; then
     echo "  ⚠ cilium: $cm agent(s) have NO backend for 10.96.0.1:443 (have=$ch unknown=$cu)"
     echo "       → pods get 'connection refused' to the API. Fix: kubectl -n kube-system rollout restart ds/cilium"
+    rc=2
+  elif [ "$ch" -eq 0 ] && [ "$cu" -gt 0 ]; then
+    # unknown == the WHOLE fleet (missing is 0 here, so have+unknown is every agent): every exec
+    # failed, so this check answered nothing about a single node and must not read as `ok`. The
+    # footnote below is the right response only while SOME agent answered — then missing=0 is a
+    # real reading of the responsive ones. Review, #1804 round 5.
+    echo "  ⚠ cilium UNREADABLE — every agent's exec failed twice ($cu agent(s)); the backend check did NOT run"
+    echo "       → re-run check. If it keeps failing, the apiserver path itself is likely the problem."
     rc=2
   else
     echo "  ok  cilium apiserver backend: have=$ch missing=0 unknown=$cu"

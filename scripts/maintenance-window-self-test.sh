@@ -28,8 +28,17 @@ cat > "$TMP/bin/kubectl" <<'EOF'
 case "$*" in
   *"get nodes"*) [ "${FAKE_NODES_FAIL:-0}" = 1 ] && exit 0; printf 'n1 Ready <none> 1d v1\n' ;;
   *"get pods -A"*) [ "${FAKE_PODS_FAIL:-0}" = 1 ] && exit 1; printf 'ns p1 1/1 Running 0 1d\n' ;;
-  *"get pod -l k8s-app=cilium"*) [ "${FAKE_CILIUM_LIST_FAIL:-0}" = 1 ] && exit 1; printf 'pod/cilium-aaa\n' ;;
-  *"exec"*cilium-dbg*) printf 'ID Frontend Service Backend\n10 10.96.0.1:443/TCP ClusterIP 1 => 192.168.2.51:6443/TCP (active)\n' ;;
+  *"get pod -l k8s-app=cilium"*)
+    [ "${FAKE_CILIUM_LIST_FAIL:-0}" = 1 ] && exit 1
+    # `partial` needs two agents: one answers, one does not.
+    [ "${FAKE_CILIUM_EXEC_FAIL:-0}" = partial ] && { printf 'pod/cilium-aaa\npod/cilium-bbb\n'; exit 0; }
+    printf 'pod/cilium-aaa\n' ;;
+  *"exec"*cilium-dbg*)
+    case "${FAKE_CILIUM_EXEC_FAIL:-0}" in
+      all) exit 1 ;;
+      partial) case "$*" in *cilium-bbb*) exit 1 ;; esac ;;
+    esac
+    printf 'ID Frontend Service Backend\n10 10.96.0.1:443/TCP ClusterIP 1 => 192.168.2.51:6443/TCP (active)\n' ;;
   *) printf '' ;;
 esac
 EOF
@@ -125,6 +134,36 @@ grep -q "nodes_ok=false" <<<"$out" && ok "open names the node read in its refusa
                 || bad "open's refusal did not name nodes_ok: $out"
 [ -f "$MAINT_STATE_DIR/baseline.json" ] && bad "a zero-node baseline was left behind" \
                 || ok "no zero-node baseline left behind"
+
+# 3g. EVERY agent's exec fails => the backend check answered nothing about a single node, so it
+# must block. The three-way split's footnote ("unknown = exec did not answer twice") is the right
+# response only while some agent answered — then missing=0 is a real reading of the responsive
+# ones. have=0 with unknown>0 is an unread check wearing an `ok`. Review, #1804 round 5.
+baseline
+out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_EXEC_FAIL=all bash "$SUT" check 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "check fails when every cilium exec fails (rc=$rc)" \
+                || bad "check PASSED with the whole cilium fleet unread — rc=$rc"
+grep -qi "every agent's exec failed" <<<"$out" && ok "check names the wholly-unread cilium fleet" \
+                || bad "a fleet-wide exec failure did not surface as UNREADABLE: $out"
+grep -q "ok  cilium apiserver backend" <<<"$out" && bad "check printed cilium 'ok' with have=0 unknown>0" \
+                || ok "check does not claim cilium ok when nothing answered"
+
+# 3h. The other side of that line: SOME agent answered, so missing=0 is a real reading and the
+# unknown stays a footnote under `ok`. Pins the split itself, which had no assertion either way.
+out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_EXEC_FAIL=partial bash "$SUT" check 2>&1)"
+grep -q "ok  cilium apiserver backend: have=1 missing=0 unknown=1" <<<"$out" \
+                && ok "a partial exec failure stays ok with have>0" \
+                || bad "a partially-unknown cilium fleet was not reported as ok: $out"
+grep -q "unknown = exec did not answer twice" <<<"$out" && ok "the partial case keeps its footnote" \
+                || bad "the partial case lost its footnote: $out"
+
+# 3i. And open never banks a baseline the cilium read could not fill.
+rm -f "$MAINT_STATE_DIR/baseline.json"
+out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_EXEC_FAIL=all bash "$SUT" open --reason "self-test" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "open refuses a wholly-unread cilium baseline (rc=$rc)" \
+                || bad "open banked a baseline with have=0 unknown>0 — rc=$rc"
+grep -q "cilium\[have=0 unknown=1\]" <<<"$out" && ok "open names the unread cilium counts" \
+                || bad "open's refusal did not name the cilium counts: $out"
 
 # 4. close must not close a window while a check is failing.
 baseline
