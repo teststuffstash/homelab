@@ -2243,6 +2243,8 @@ the CP placement rule (one per chassis; never nx-01 while nx-02 hosts one) into 
 `wk-metal-03` leaves the ephemeral tier (kata pool unchanged — it never carried the label, FU-235); external
 kubectl pins to the VIP owner while KubePrism spreads in-cluster API load — verify it is on; ROADMAP §HA
 re-phased. Tracker: FU-243.
+**The endpoint step is superseded by [ADR-136](#adr-136--freeze-the-serviceaccount-issuer-in-git-the-api-endpoint-then-moves-freely-2026-09-20)**
+(2026-09-20): the cutover as ordered here 401s every ServiceAccount token — freeze the issuer first, flip last.
 **Amended 2026-09-20 (operator):** the laptop CP is **`wk-metal-02`** (X250), not `wk-metal-03`. Why: its 128 GB
 SSD is the fleet's tightest ride disk (two resident 10 GB corpus image volumes put it over the 60 % imageGC
 ceiling — homelab#1807) and ample for a workload-free CP, while `wk-metal-03`'s 256 GB stays a ride node. Either
@@ -2290,3 +2292,26 @@ two resident versions around a roll under the 60/50 imageGC — the reason `wk-m
 pool (ADR-133 amendment) and `wk-03` wants a resize; N nodes pulling a fresh digest hairpin through the router's
 HAProxy — stagger if it ever shows; a refused entry's text is prompt input and is sanitised before it reaches a
 log or a card; loop-home pods (reviewer/coordinator) are the next step, not this one.
+
+### ADR-136 — Freeze the ServiceAccount issuer in git; the API endpoint then moves freely (2026-09-20)
+
+**Status:** Accepted (operator); rehearsed on a disposable lab control plane before the live apply.
+**Decision:** `cluster.apiServer.extraArgs` pins `service-account-issuer` AND `api-audiences` to their
+CURRENT value (`https://192.168.2.51:6443`) on every control plane, so Talos stops deriving them from
+`cluster_endpoint` — after which ADR-133's cutover to the VIP is token-neutral. Order: **pin → the two
+joins → the endpoint flip at three members**, each in a declared window. **Considered:** a *dual-issuer
+transition* (kube-apiserver accepts `--service-account-issuer` repeated, but Talos `extraArgs` is a string
+map — a list is rejected outright, probed live 2026-09-20 — and the flag is a repeatable array upstream, so
+a comma-joined value reads as ONE issuer: not expressible); a *planned token rotation* (the 09-20 outage on
+purpose — every existing token 401s and recovery is recreating every pod holding one — bought for a
+cosmetically coherent string); *flipping at a cluster rebuild* (correct, indefinite); *pointing only the
+kubeconfig at the VIP* (FU-259's divergence: clients on an endpoint the cluster does not declare).
+**Why:** nothing here consumes the issuer — zero `kubernetes.io/service-account-token` Secrets, no
+OIDC/JWKS/custom-audience consumer, in-cluster API traffic already rides KubePrism — so only its STABILITY
+had value. Freezing also de-fuses `first_cp_key = sort(keys(local.controlplane))[0]`: a VM control plane
+named before `cp-01` would otherwise move the issuer, reproducing the outage as a side effect of adding a
+control plane. **Consequences:** the issuer names `.51` for this cluster's lifetime — changing it later
+needs a rebuild or a planned rotation; the pin costs one apiserver restart on cp-01 (fallout: FU-258,
+FU-260), while the endpoint flip afterwards restarts nothing (measured in the lab); client configs
+re-render after the flip (FU-259). Mechanism + evidence: [`controlplane-ha.md`](controlplane-ha.md).
+Tracker: FU-243.

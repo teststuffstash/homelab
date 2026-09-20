@@ -38,6 +38,22 @@ locals {
   # owning — machine.network was absent from the config until now and this creates it. The certSAN
   # half regenerates the apiserver cert and restarts the static pod: ~2 min of API downtime on a
   # single control plane, and none once there are three.
+  # ADR-136's issuer pin (local.sa_issuer, locals.tf). Control planes only — a worker config has
+  # no cluster.apiServer. extraArgs REPLACES Talos's derived flag rather than adding to it, which
+  # is what makes this a pin and not a second issuer (Talos cannot express two; see locals.tf).
+  # Applied at its CURRENT value, so it invalidates no token — rehearsed on the disposable nx-02
+  # lab control plane before the live apply (docs/controlplane-ha.md §C4).
+  sa_issuer_patch = yamlencode({
+    cluster = {
+      apiServer = {
+        extraArgs = {
+          "service-account-issuer" = local.sa_issuer
+          "api-audiences"          = local.sa_issuer
+        }
+      }
+    }
+  })
+
   cp_vip_patch = yamlencode({
     machine = {
       network = {
@@ -142,6 +158,8 @@ data "talos_machine_configuration" "node" {
     })] : [],
     # The endpoint VIP — control planes only (see local.cp_vip_patch).
     each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
+    # The frozen SA issuer — control planes only (see local.sa_issuer_patch).
+    each.value.role == "controlplane" ? [local.sa_issuer_patch] : [],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [

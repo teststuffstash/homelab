@@ -422,16 +422,15 @@ six OVERSIZE items pointer-ized into
       where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
-- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133).** (a) ip-plan ruling landed —
-      `192.168.2.50` (#1799). (b) etcd snapshot taken (`/var/lib/mgmt/etcd-snapshots/` on the box).
-      (c) VIP + apiserver certSANs are LIVE on cp-01 (#1801; the certSAN half was missing from this
-      list and is mandatory — kubectl fails TLS against the VIP without it). ⛔ **The `cluster_endpoint`
-      cutover is NOT done: applied and REVERTED 2026-09-20** (#1802 → 19e393e4). Talos derives
-      `--service-account-issuer` AND `--api-audiences` from it, so moving it 401s every existing
-      ServiceAccount token — cluster-wide controller outage in under a minute. The trap and the measured
-      blast radius are in `tofu/locals.tf` above `cluster_endpoint`; a real cutover needs a dual-issuer
-      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-02's
-      reinstall (ADR-133 amendment: what moves off it first) + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
+- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
+      order and the lab rehearsal: [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: the ip-plan
+      ruling `192.168.2.50` (#1799), an etcd snapshot on the box, VIP + apiserver certSANs live on cp-01
+      (#1801), a metal `controlplane:` flag (#1800), and the SA-issuer freeze decided + rehearsed on a
+      disposable lab CP (ADR-136: a pre-flip token 401s with the issuer derived, survives with it pinned).
+      ⛔ The `cluster_endpoint` cutover stays REVERTED until the pin is LIVE. **Next, in order:** (a) apply
+      the pin on cp-01 in a declared window, verifying the live apiserver flags; (b) wk-metal-02's reinstall
+      (ADR-133 amendment: what moves off it first) + the nx-02 VM, joined back to back; (c) flip the endpoint
+      to the VIP and re-render the client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
