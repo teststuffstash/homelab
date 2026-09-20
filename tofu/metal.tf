@@ -23,12 +23,23 @@ locals {
 data "talos_machine_configuration" "metal" {
   for_each = local.metal_nodes
 
-  cluster_name       = var.cluster_name
-  cluster_endpoint   = local.cluster_endpoint
-  machine_type       = "worker"
+  cluster_name     = var.cluster_name
+  cluster_endpoint = local.cluster_endpoint
+  # ADR-133: metal is no longer worker-only — `controlplane: true` in machines.yaml promotes a box
+  # to a control plane (the laptop CP). Talos bakes machine_type at INSTALL, so flipping the flag
+  # on a running node plans a config change that does nothing; the node goes back to maintenance
+  # and reinstalls (docs/provisioning.md).
+  machine_type       = each.value.controlplane ? "controlplane" : "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
-  talos_version      = var.talos_version_worker # every metal node is a worker today (ADR-133 changes that)
+  # Metal keeps the WORKER version on both roles, deliberately — unlike the VMs, whose version
+  # follows their role (image.tf `local.talos_role_version`). The reason is that the split exists
+  # to let the two planes roll independently, and metal's installer image is one factory URL for
+  # the whole fleet (`local.talos_install_image`): keying it off the role would fork the metal
+  # image per role for no gain, and would install ADR-133's brand-new CP onto whatever the VM
+  # control plane happens to trail at (v1.13.2 today — the page_table_check kernel, FU-246).
+  # A metal CP converges with the rest of the control plane via `devbox run cp-upgrade`.
+  talos_version = var.talos_version_worker
 
   # Hostname is PINNED via the HostnameConfig document (highest-priority source, overrides DHCP),
   # so a cold-booted node no longer ghosts as `talos-xxx` if it DHCP-discovers before dnsmasq.

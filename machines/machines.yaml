@@ -32,7 +32,15 @@
 #
 # Talos / cluster flags (consumed by tofu):
 #   talos_metal_node  true ⇒ tofu/metal.tf manages this node's machine config (PXE-installed
-#                     bare-metal worker). Requires `install_disk`.
+#                     bare-metal node). Requires `install_disk`.
+#   controlplane      true ⇒ this metal node is a CONTROL PLANE, not a worker (ADR-133's laptop
+#                     CP). Default false. ⚠ INSTALL-TIME: machine_type is baked at install, so
+#                     flipping it on a running node does nothing — the node must be reset to
+#                     maintenance and reinstalled (docs/provisioning.md). Flip it in the same
+#                     change that drops `ephemeral` (a CP carries no ride taint); `kata` stays,
+#                     the label is harmless and the ARC pool selects on `arc`, not on it.
+#                     ⚠ Never flip two nodes at once: joining leaves etcd at an even membership,
+#                     and two members are LESS available than one (ip-plan.md, the VIP ruling).
 #   install_disk      target disk for the Talos install (NOT any longhorn_disks entry)
 #   longhorn_disks    extra block devices formatted+mounted as ADDITIONAL Longhorn disks, one
 #                     entry per device: {device, name, tags}. Mounted UNDER /var/lib/longhorn/ on

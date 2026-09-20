@@ -41,6 +41,11 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      # ADR-133's laptop control plane. Drives machine_type in metal.tf and nothing else: a metal
+      # CP keeps the metal schematic, the metal installer image and every other per-node flag.
+      # INSTALL-TIME — Talos bakes machine_type at install, so flipping this on a running node is
+      # a no-op until it is reset to maintenance and reinstalled.
+      controlplane = try(m.controlplane, false) == true
       # ARC runner-pool membership: the homelab.io/ephemeral LABEL (the scale set's nodeSelector),
       # which is NOT the homelab.io/ephemeral taint the `ephemeral` flag drives. Opt-in per node.
       arc = try(m.arc, false) == true
