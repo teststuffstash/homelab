@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-257** (2026-09-20: FU-256 minted for the worker-rides-into-`<stack>-agents`
+  Next free id: **FU-258** (2026-09-20: FU-257 minted for the ownerless loop-CNP enforce flip;
+  FU-256 minted for the worker-rides-into-`<stack>-agents`
   question, from oracle's corpus-bucket handoff; FU-255 minted for the mirror floating-tag
   revalidation audit, homelab#1739/#1779/#1796.
   2026-09-18: FU-254 no detector for a substrate version going stale or EOL, FU-253 the VMs' generic+stale declared `install.image` — both from the upgrade-verb probes; FU-252 the management-apply refusal has no detector — it stood four days and 1101 ticks unseen. 2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
@@ -1193,6 +1194,16 @@ the block needs pruning, not more headings.
       profile, scratch quota, `agent-read-app` bindings, tenancy labels). **Next:** a
       `/design-agents` pass that inventories those surfaces and rules go/no-go — ADR-shaped.
       Relates FU-080 (archived), FU-068 (archived), ADR-093.
+- [ ] **FU-257** — **The loop-ns `agent-loop-egress` CNP is monitor-only with no owner for its
+      enforce flip, and it is NOT clean.** Hard-coded `enableDefaultDeny.egress: false`; the
+      Composition comment cites Goal #1162, which closed 2026-09-14 and excluded the flip.
+      7-day DNS read (`hubble_dns_queries_total`, 2026-09-20) — would-drop from `*-agents`:
+      `agent-loop-eventsource-svc.agent-coordinator` (the `/coordinate` doorbell — oracle,
+      platform), `mcp.minutark.ee` (oracle-agents ~1k; a worker `extraFQDNs` entry the loop CNP
+      never receives), `cafe.github.com` (all four, unclassified — no worker ns queries it).
+      DNS-only: IP-direct flows unseen. **Next:** add the doorbell leg; decide whether
+      `extraFQDNs` render loop-side; classify `cafe.github.com` from a flow capture; make
+      enforce a per-stack dial; re-harvest, flip oracle first. Relates FU-020 (archived), #1056.
 
 ## Hardware & nodes
 

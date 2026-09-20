@@ -979,7 +979,7 @@ spec:
             # FU-020/ADR-081 loop-ns egress (FU-080 loop-home). Selector hits Argo Workflow pods
             # (coordinator, reviewer, prober) via the built-in workflows.argoproj.io/workflow label.
             # MONITOR phase: rules attach (DNS visibility for the Hubble harvest) but the default
-            # deny does not. Flip to enforce after clean harvested rides (Goal #1162 acceptance 3).
+            # deny does not. FU-257: the enforce flip — not clean as of 2026-09-20 (see the item).
             apiVersion: cilium.io/v2
             kind: CiliumNetworkPolicy
             metadata:
