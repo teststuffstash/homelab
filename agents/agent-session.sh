@@ -3089,6 +3089,15 @@ if [ -n "$RUN_CMD" ]; then
   # (fed by the `/report` above). Cap reached ⇒ today's behaviour byte for byte: the strike list +
   # the doorbell, no retry, the coordinator decides. The strike comment stays the audit twin — it
   # was posted above whether or not this retry fires.
+  #
+  # The re-entry lands on the SAME (task, round) idempotency key, which is the key the scan's own
+  # post-strike re-dispatch lands on today: this ride's pod is terminal by now (the log-follow above
+  # only returns once its container has), so the atomic gate reaps it and re-creates it. Anything
+  # that still refuses the re-entry (a phase that has not flipped yet, a fresh duplicate-PR or
+  # budget guard, the `kubectl create` race) makes `retry_rerun` non-zero, and the clause then does
+  # exactly what it did before this existed — ring the doorbell and let the coordinator decide. The
+  # retry can therefore never cost the hop it was built to save; the fixture's `retry-dispatch-failed`
+  # row is that arm.
   RETRY_FIRE=""
   RETRY_CELL=""
   if [ -n "${STRIKE_APPLIES:-}" ]; then

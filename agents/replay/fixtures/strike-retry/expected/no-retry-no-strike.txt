@@ -1,0 +1,4 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"repo":"test-project","unit":"-"} http://doorbell.test/coordinate/coordinate
+OUT → coordinator doorbell rung (/coordinate {"repo":"test-project","unit":"-"})
+OUT → post: RETRY_FIRE=[] RETRY_CELL=[]
+RC 0
