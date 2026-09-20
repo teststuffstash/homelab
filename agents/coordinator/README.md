@@ -160,8 +160,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 
 > **RAIL — the model's rail decides whether steps 3–4 apply at all. Read it before you read them.**
 > The model this dispatch will ride tells you: a **`claude/` prefix** means it rides the
-> **subscription** rail, and the launcher self-derives `--harness claude` from that prefix. There is
-> no `workerModel` field to read on a chainless claim — the router's `/route` answer names the served
+> **subscription** rail, and the launcher self-derives `--harness claude` from that prefix. A
+> chainless claim carries no model field to read — the router's `/route` answer names the served
 > model, and the claim's per-repo `fixer.claudeTier` is the knob that lets it serve a `claude/*` one.
 > For such a ride, **the OpenRouter key is the FALLBACK rail, never the prerequisite** — steps 3–4
 > (estimate + mint) do not apply, and a key that is absent, unminted, deferred or rate-limited must
@@ -211,20 +211,20 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    comment names the SPECIFIC unshipped half; if the round needs more than that half, file a
    sibling issue instead of widening — **the sibling's parent is this issue (the issue you are working on),
    bound at filing** (lineage contract rule 3; use the native `sub_issues` POST edge, regardless of door).
-3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
-   next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
-   estimator:
+3. **Read + estimate — OpenRouter-primary rides only** (a `claude/` served model skips this step
+   and the next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the
+   budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
-     | python3 agents/estimate_budget.py --model <chain-model> \
+     | python3 agents/estimate_budget.py --model <served-model> \
            --project <project> --session issue-<N>-round-<r> --emit-cr
    ```
    **Read the estimator's stderr verdict.** If it prints `⚠ ESCALATE` (estimate exceeds the **top**
    tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
-4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary chains only**
-   (a `claude/` chain has no key to mint; the turn cap is its spend bound — RAIL note above) — by
+4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary rides only**
+   (a `claude/` served model has no key to mint; the turn cap is its spend bound — RAIL note above) — by
    re-running the estimate command from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
    no reset, ~4h `expiresAt` (was 2h — a laguna:free ride at ~306s/turn outlasted its key,
    sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
@@ -250,12 +250,12 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `task/*` label yourself and map the same way; no label → `fix.yaml`. Never pick a recipe on
    your own judgment of the issue's content.
    ```sh
-   bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
+   bash agents/agent-session.sh <project> --harness goose --model <served-model> \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
-   **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — this is
+   **Claude tier** (a `claude/<alias>` served model — FU-066): **skip steps 3–4 entirely** — this is
    the procedure for the rail rule stated at the head of this runbook. There
    is no OpenRouter key (auth = `ref:<project>/claude-session` via the egress proxy; the estimator
    and the budget CR have no role; the turn cap below is the spend bound), so nothing about the key
@@ -403,7 +403,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
           task being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
-       **step 3** with a fresh pod + fresh session key (on a `claude/` chain, steps 3–4 are skipped
+       **step 3** with a fresh pod + fresh session key (on a `claude/` served model, steps 3–4 are skipped
        as always and you re-enter at **step 5**), **passing the reviewer's comments to the
        fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
        **Widen the footprint first when the review names paths outside the issue's `Touches`
@@ -1297,7 +1297,7 @@ harness-death rounds across 9 of 40 ledger rows, clustering hard (openrouter-ope
 strikes, 4 issues, 2h15m, one day — each triaged and model-swapped independently). So: when
 the same `error_class=` appears in `AGENT_STRIKE:` comments on **≥2 distinct ISSUES inside
 24h** (match on the structured `error_class=` field of the comment, never on log excerpts),
-stop swapping the chain per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
+stop swapping the model per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
 error_class=<c>` comment listing the issues, apply the `agent/error` label per affected item
 (the breaker stays per-item), and make the human ask ONCE. **That comment carries the same
 un-latch marker as the ci-red sibling** — `<!-- fleet-fault cause=<owner/repo>#<n> prs=<items> -->`
