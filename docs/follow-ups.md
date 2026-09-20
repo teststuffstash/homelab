@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-258** (2026-09-20: FU-257 minted for the ownerless loop-CNP enforce flip;
+  Next free id: **FU-259** (2026-09-20: FU-258 minted for Cilium dropping the `kubernetes` Service
+  backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
   FU-256 minted for the worker-rides-into-`<stack>-agents`
   question, from oracle's corpus-bucket handoff; FU-255 minted for the mirror floating-tag
   revalidation audit, homelab#1739/#1779/#1796.
@@ -1204,6 +1205,18 @@ the block needs pruning, not more headings.
       DNS-only: IP-direct flows unseen. **Next:** add the doorbell leg; decide whether
       `extraFQDNs` render loop-side; classify `cafe.github.com` from a flow capture; make
       enforce a per-stack dial; re-harvest, flip oracle first. Relates FU-020 (archived), #1056.
+- [ ] **FU-258** — **Cilium drops the `kubernetes` Service backend on an apiserver restart and does
+      not re-sync — POINTER.** Reproduced twice on 2026-09-20 (2 of 12 agents kept it, then 0 of 12):
+      pods get `connection refused` to `10.96.0.1:443` while the API is healthy and every node reads
+      `Ready`. Recovery is `rollout restart ds/cilium`. Findings, the survivor anomaly that breaks the
+      obvious explanation, prior art and the settling experiment:
+      [`docs/spikes/cilium-apiserver-restart-backend-loss.md`](spikes/cilium-apiserver-restart-backend-loss.md).
+      **PARKED by operator ruling (2026-09-20):** characterising it on 1.19.1 describes a version we
+      should not run, and reproducing it costs a deliberate live-cluster outage — so the prerequisite
+      is the upgrade to **1.20.2** (k8s 1.33–1.36 e2e tested, our 1.36.1 is in range), behind Renovate
+      per ROADMAP §G-D. **Next:** nothing until Renovate is live and the fleet is current; the
+      mitigation (a post-rejoin backend check in `cp-upgrade`, shared with `maintenance-window.sh`)
+      carries it meanwhile. Relates FU-246, FU-253.
 
 ## Hardware & nodes
 
