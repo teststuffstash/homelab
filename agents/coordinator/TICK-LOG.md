@@ -10140,3 +10140,24 @@ nodes (curl pod, 60 s): 86.8 MB/s on wk-04 and 89.8 MB/s on wk-metal-03 through
 ≈2 min per node per release. Opt-in-per-ride withdrawn on #1807; a correction file sits next to the
 handoff Result in oracle's `done/`. Lesson: a throughput number names its vantage point, and the
 jail host is never a vantage point for cluster-path rates.
+
+### 2026-09-20, later — the kata canary passed, `fixer.imageVolumes` built (PR #1808, ADR-135); ADR-133 amended
+
+**Canary** (operator: "run the kata virtiofs sqlite canary"), wk-metal-03, inside `maint open/close`
+(baseline 151 targets / 8 alerts / 12 nodes, identical after; alert Monitor armed for the window):
+one pod with the served `ert-corpus` digest as an `image:` volume, runc then kata. Cold pull+unpack
+3m21s; kata mounts it as virtiofs `ro`; count(17.4 M) 8.4 s vs 9.1 s, full LIKE scan 26.7 s vs
+21.5 s, FTS top-20 3.2 s vs 2.3 s, sequential 475 vs 1296 MB/s, RSS 35 MiB. Table on #1807.
+
+**Build** (operator: "if it comes back good then implement it. Use sub-agents if it makes sense"):
+XRD knob + launcher resolver (`REPLAY:image-volumes`) + the loop-CNP registry-host leg + two
+fixtures + ADR-135 + the stack docs section. The one subagent that made sense was an adversarial
+reviewer over the staged diff BEFORE the PR — it found six real defects the green fixtures did not:
+`/mnt/../work/repo` through the path fence, `a//b` through the grammar AND the probe (`curl -f`
+passes the registry's 301), one object-valued field silently dropping the whole list, an empty
+name shifting columns under tab-IFS, a silent duplicate arm, and a duplicate of a probe-failed
+entry mounting under its name. All fixed, each now a fixture row; the 301 case re-verified live.
+
+**ADR-133 amended** (operator, same session): the laptop CP is `wk-metal-02` (its 126 GB disk is
+the ride pool's tightest and ample for a CP); `wk-metal-03` stays a ride node. The amendment lists
+what moves off -02 before its reinstall.
