@@ -153,6 +153,13 @@ stranded_ci() {
 $out
 EOF
   done
+  # UNCONDITIONAL. Without it the function's exit status is whatever the last
+  # `[ "$age" -gt "$grace" ] && echo` left behind — so a LAST repo whose newest queued run is
+  # younger than the grace period (an ordinary, healthy state) returned 1, and `ci_all="$(…)"`
+  # is a bare assignment, so `set -e` killed cmd_check before the CI line ever printed: no ⚠, no
+  # message, just a dead process. `close` survived the same input only by accident (it calls
+  # cmd_check under `||`, which suspends -e). Review, #1804 round 3.
+  return 0
 }
 
 snapshot() {

@@ -36,6 +36,9 @@ EOF
 cat > "$TMP/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 [ "${FAKE_GH_FAIL:-0}" = 1 ] && { echo "gh: auth expired" >&2; exit 1; }
+# A FRESH queued run (age well under the grace period) — i.e. healthy, not stranded. This is the
+# path that had zero coverage and that killed cmd_check outright (review, #1804 round 3).
+[ "${FAKE_GH_FRESH:-0}" = 1 ] && { printf '%s 123 CI [main]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; exit 0; }
 printf ''
 EOF
 chmod +x "$TMP/bin/kubectl" "$TMP/bin/gh"
@@ -85,6 +88,13 @@ grep -qi "CI status UNREADABLE" <<<"$out" && ok "check reports unreadable CI sta
                 || bad "a failed gh did not surface as UNREADABLE: $out"
 grep -qi "no CI runs stranded" <<<"$out" && bad "check printed 'no CI runs stranded' when gh FAILED" \
                 || ok "check does not claim 'no CI runs stranded' when gh failed"
+
+# 3d. A LAST repo with a fresh (non-stranded) queued run must not kill cmd_check. The bug: the
+# function's exit status was the last `[ age -gt grace ] && echo`, so a healthy repo returned 1 and
+# `set -e` aborted the script before the CI line printed — no warning, no message, just dead.
+out="$(PROM_URL="$DEAD_PROM" MAINT_REPOS="homelab sleep-iac" FAKE_GH_FRESH=1 bash "$SUT" check 2>&1)"
+grep -qiE "no CI runs stranded|CI runs stranded" <<<"$out" && ok "check reaches the CI line with a fresh queued run" \
+                || bad "check died before the CI line on a healthy fresh run: $out"
 
 # 4. close must not close a window while a check is failing.
 out="$(PROM_URL="$DEAD_PROM" bash "$SUT" close 2>&1)"; rc=$?
