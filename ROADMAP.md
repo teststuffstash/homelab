@@ -108,7 +108,7 @@ work survivable.
 0. **The management box as reconciler** (ADR-132, [`docs/management-box.md`](docs/management-box.md) §MB4):
    the declared-vs-live diff (FU-235) → the controller-substrate spike (FU-242) → the pre-merge impact line →
    `reconcile: auto` on the compute tier, one node at a time. Transient PXE flags leave git (FU-244).
-1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133, FU-243): `cp-01` (pve), `wk-metal-03`
+1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133 as amended 2026-09-20, FU-243): `cp-01` (pve), `wk-metal-02`
    (laptop — a battery is a UPS for etcd), a VM on `nx-02` once its drives are in. VIP first on cp-01, then
    both joins back to back; single OPNsense stays. The Nutanix twin pays the ride-pool bill counted below.
 2. **Router HA — OPNsense CARP pair** across two nodes (anti-affinity, never co-located).

@@ -2243,6 +2243,14 @@ the CP placement rule (one per chassis; never nx-01 while nx-02 hosts one) into 
 `wk-metal-03` leaves the ephemeral tier (kata pool unchanged — it never carried the label, FU-235); external
 kubectl pins to the VIP owner while KubePrism spreads in-cluster API load — verify it is on; ROADMAP §HA
 re-phased. Tracker: FU-243.
+**Amended 2026-09-20 (operator):** the laptop CP is **`wk-metal-02`** (X250), not `wk-metal-03`. Why: its 128 GB
+SSD is the fleet's tightest ride disk (two resident 10 GB corpus image volumes put it over the 60 % imageGC
+ceiling — homelab#1807) and ample for a workload-free CP, while `wk-metal-03`'s 256 GB stays a ride node. Either
+laptop costs the kata pool one node (live pool is 4 — the "unchanged" above was the FU-235 drift talking). What
+moves OFF `wk-metal-02` before its reinstall: the large-ARC-runner preference (`arc-runners-large.yaml` — to
+`wk-metal-03`, the other laptop with no Garage zone), the legacy `ephemeral_tier` label set + Forgejo runner
+(`tofu/forgejo-runner.tf`), and the `arc` flag lands on `wk-metal-03`. etcd fsync latency on its SanDisk SATA
+SSD is unmeasured — measure before the join.
 
 ### ADR-134 — The stack owns its definition of done: `merged-closeout` reads `<mainRepo>/.agents/closeout.md` (2026-09-20)
 

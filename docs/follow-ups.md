@@ -430,8 +430,8 @@ six OVERSIZE items pointer-ized into
       `--service-account-issuer` AND `--api-audiences` from it, so moving it 401s every existing
       ServiceAccount token — cluster-wide controller outage in under a minute. The trap and the measured
       blast radius are in `tofu/locals.tf` above `cluster_endpoint`; a real cutover needs a dual-issuer
-      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-03's
-      reinstall + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
+      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-02's
+      reinstall (ADR-133 amendment: what moves off it first) + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:

@@ -31,7 +31,7 @@ never the session's arc — that is TICK-LOG's.)
   **Next session, in order:** (a) the `cp-upgrade` post-rejoin Cilium backend check — the agreed
   first task, now UNBLOCKED: #1804 merged 2026-09-20 (`ed9940d2`, five review rounds) so the check
   has its home in `scripts/maintenance-window.sh`; (b) the issuer-migration design; (c) only then
-  wk-metal-03's reinstall. The `maint-self-test` CI step landed operator-direct afterwards
+  wk-metal-02's reinstall (ADR-133 amended 2026-09-20). The `maint-self-test` CI step landed operator-direct afterwards
   (`aa6644d4`, master CI green with the step reporting `success`), so a fail-open probe in that
   script now reds its own PR.
   **Use `/maintenance-window` for every live change from now on** — this session's whole arc is why.
@@ -164,8 +164,8 @@ never the session's arc — that is TICK-LOG's.)
   the reviewer + auto-merge (squash armed); the box loop refuses until a human applies — apply by
   target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
   is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
-  FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
-  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts. **Upgrade-path
+  FU-243) is deferred to its own session by the operator; the laptop CP is `wk-metal-02`
+  (SETTLED 2026-09-20, ADR-133 amendment — `wk-metal-03` stays a ride node). **Upgrade-path
   update (2026-09-20):** PR#1778 merged `devbox run cp-upgrade -- <node>` on the management box;
   an isolated nx-02 one-node lab proved Talos v1.13.2→v1.13.10, then was destroyed. FU-243 now
   carries the post-join one-member-at-a-time convergence step; `controlplane-lab-install.sh` is
