@@ -1,0 +1,13 @@
+# fleet-reader-rekey — the decision table (family contract in fixture.yaml; Goal #1640 acceptance 5).
+# The `env` column carries the row's declared ROUTER STATE (`ROUTER_STATUS_JSON`, compact JSON — the
+# psv delimiter is `|` and the env column is space-separated) or the unreadable-router condition
+# (`CURL_RC=1`). The `world` column names the family-local strike world.
+#
+# id                  | world  | patch | env                                                                                                                              | expect              | params
+provider-latch        | pair   |       | ROUTER_STATUS_JSON={"serving_classes":["auth-storm","provider-5xx","timeout","tool-loop"],"pair_cooldowns":[{"model":"deepseek/deepseek-v4-flash","provider":"open-inference","until":1788290000,"remaining_s":4400,"streak":1}],"generations_24h":[]} | provider-latch      |
+model-nomination      | across |       |                                                                                                                                  | model-nomination    |
+us-case-labels        | spread |       |                                                                                                                                  | us-case-labels      |
+us-case-unknown       | unknown|       |                                                                                                                                  | us-case-unknown     |
+us-case-pair          | pair   |       |                                                                                                                                  | us-case-pair        |
+clean-retry-refutes   | pair   |       | ROUTER_STATUS_JSON={"serving_classes":["auth-storm","provider-5xx","timeout","tool-loop"],"pair_cooldowns":[],"generations_24h":[{"model":"deepseek/deepseek-v4-flash","provider":"open-inference","n":3,"cost_usd":0.01}]} | clean-retry-refutes |
+router-unreadable     | pair   |       | CURL_RC=1                                                                                                                        | router-unreadable   |

@@ -1,0 +1,22 @@
+CALL curl -fsS --max-time 5 http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status
+CALL gh api repos/teststuffstash/homelab/issues/401/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/402/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/403/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/404/comments?per_page=100
+CALL gh issue list --repo teststuffstash/homelab --state closed --limit 50 --json number,title,closedAt
+CALL gh issue list --repo teststuffstash/homelab --state open --limit 50 --json number,title --jq [.[] | select(.title | startswith("fleet-strike: error_class=timeout"))] | first | .number // ""
+CALL gh issue edit 401 --repo teststuffstash/homelab --add-label agent/error
+CALL gh issue edit 402 --repo teststuffstash/homelab --add-label agent/error
+CALL gh issue edit 403 --repo teststuffstash/homelab --add-label agent/error
+CALL gh issue edit 404 --repo teststuffstash/homelab --add-label agent/error
+CALL date -u +%Y-%m-%dT%H:%M:%SZ
+CALL gh api repos/teststuffstash/homelab/issues/401/comments?per_page=100
+CALL gh issue comment 401 --repo teststuffstash/homelab --body fleet-strike-fp: error_class=timeout issues=401,402,403,404\n\n🤖 **Fleet strike detected** — `error_class=timeout` on ≥2 distinct issues within 24h (FU-200).\n\nAffected issues:\n- #401\n- #402\n- #403\n- #404\nEach has been labelled `agent/error` (human-first, report-only).\n\n**What this means.** The same error class appeared across multiple independent rides. This is a platform-level pattern, not an isolated worker fault — a human should investigate the root cause before any of these issues are re-dispatched.\n\nAudit, as of `2026-09-01T18:00:00Z`:\n\n- `error_class=timeout` on 4 distinct issues.\n- All within a 24h window.\n\nTo re-enable dispatch on any issue, strip `agent/error` by hand after the root cause is resolved.
+CALL date -u +%Y-%m-%dT%H:%M:%SZ
+CALL gh issue create --repo teststuffstash/homelab --title fleet-strike: error_class=timeout --label agent-fix --body 🤖 **Fleet strike filing** — inert platform issue (FU-200).\n\n**error_class:** `timeout`\n\n**Affected issues:** 401 402 403 404 \n\n**Detected at:** `2026-09-01T18:00:00Z`\n\nThis is a DEDUPED filing: one per error_class per 24h window. The affected issues carry `agent/error` and are human-first, report-only until the root cause is resolved.\n\n**What to do.** Investigate the platform-level pattern behind `timeout`. Each affected issue's ride transcript is in `s3://agent-transcripts/`. Once the root cause is fixed, strip `agent/error` from each affected issue to re-enable dispatch.
+OUT PROVIDER-LATCHES <empty>
+OUT MODEL-NOMINATIONS <empty>
+OUT US-CASE timeout=401,402,403,404 
+OUT ORPHAN [homelab] ⚠ FLEET STRIKE (us): error_class=timeout on issues #401 #402 #403 #404 — our recipe/repo/task; applying agent/error, commenting, filing
+OUT REACHED: end
+RC 0

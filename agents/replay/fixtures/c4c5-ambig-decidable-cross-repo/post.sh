@@ -4,8 +4,17 @@
 # return 1 and take the whole composition down under `set -e`.)
 #
 # `RESUMABLE` is printed too, because the resumable set is the clause's own answer to "which issues
-# had a strike + resumable branch" and every downstream dispatch keys off it.
-printf 'RESUMABLE %s\n' "${resumable_branches:-<empty>}"
+# had a strike + resumable branch" and every downstream dispatch keys off it. The set is
+# NEWLINE-separated (FU-199, folded in 2026-09-20 — the dispatch loop reads it with `IFS= read -r`
+# so a value carrying whitespace or a glob character can neither word-split nor expand), so each
+# entry lands on its own line.
+if [ -n "${resumable_branches:-}" ]; then
+  printf '%b' "$resumable_branches" | while IFS= read -r l; do
+    if [ -n "$l" ]; then printf 'RESUMABLE %s\n' "$l"; fi
+  done
+else
+  printf 'RESUMABLE <empty>\n'
+fi
 printf '%b' "$units" | while IFS= read -r l; do
   if [ -n "$l" ]; then printf 'UNIT %s\n' "$l"; fi
 done
