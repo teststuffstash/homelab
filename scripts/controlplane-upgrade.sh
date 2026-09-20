@@ -30,6 +30,19 @@ ready_cps() {
 etcd_members() {
   talosctl --talosconfig "$TALOSCONFIG" -n "$1" -e "$2" etcd members 2>/dev/null
 }
+assert_etcd_status() {
+  local table="$1" expected="$2" ips status rows
+  ips="$(printf '%s\n' "$table" | awk 'NR>1 && NF {gsub("https://", "", $5); sub(":2379$", "", $5); print $5}' | paste -sd, -)"
+  [ -n "$ips" ] || die "cannot derive etcd member addresses"
+  status="$(talosctl --talosconfig "$TALOSCONFIG" -n "$ips" -e "$ENDPOINT" etcd status 2>/dev/null)" \
+    || die "cannot read every etcd member's status"
+  rows="$(printf '%s\n' "$status" | awk 'NR>1 && NF {n++} END{print n+0}')"
+  [ "$rows" -eq "$expected" ] || die "etcd status returned $rows of $expected members"
+  # With an empty ERRORS column the current table has 14 whitespace fields. Any member error is
+  # appended after STORAGE; fail closed rather than beginning a CP window with an etcd alarm.
+  printf '%s\n' "$status" | awk 'NR>1 && NF>14 {exit 1}' \
+    || die "etcd reports a member error"
+}
 
 role="$(kubectl get node "$NODE" -o json | jq -r '.metadata.labels | has("node-role.kubernetes.io/control-plane")')"
 [ "$role" = true ] || die "$NODE is not a control-plane node"
@@ -53,6 +66,7 @@ if [ "$LAB" = 1 ]; then
 else
   [ "$member_count" -ge 3 ] && [ $((member_count % 2)) -eq 1 ] || die "etcd membership must be odd and >=3 (got $member_count)"
 fi
+assert_etcd_status "$members" "$member_count"
 
 mkdir -p "$SNAPSHOT_DIR"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -65,8 +79,13 @@ if [ "$LAB" = 1 ]; then
   export FORCE=1 SILENCE=0
 fi
 bash "$REPO/scripts/node-maintenance.sh" upgrade "$NODE"
+if [ "${DRY:-0}" = 1 ]; then
+  echo "OK: dry run complete; no control-plane upgrade was attempted"
+  exit 0
+fi
 
 post="$(etcd_members "$ip" "$ENDPOINT")" || die "post-upgrade etcd membership unreadable"
 post_count="$(printf '%s\n' "$post" | awk 'NR>1 && NF {n++} END{print n+0}')"
 [ "$post_count" -eq "$member_count" ] || die "etcd member count changed: $member_count -> $post_count"
+assert_etcd_status "$post" "$post_count"
 echo "OK: $NODE upgraded; etcd membership is whole ($post_count members); snapshot: $snapshot"
