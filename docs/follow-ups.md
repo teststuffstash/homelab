@@ -430,8 +430,8 @@ six OVERSIZE items pointer-ized into
       `--service-account-issuer` AND `--api-audiences` from it, so moving it 401s every existing
       ServiceAccount token — cluster-wide controller outage in under a minute. The trap and the measured
       blast radius are in `tofu/locals.tf` above `cluster_endpoint`; a real cutover needs a dual-issuer
-      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-03's
-      reinstall + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
+      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-02's
+      reinstall (ADR-133 amendment: what moves off it first) + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
@@ -460,16 +460,15 @@ six OVERSIZE items pointer-ized into
       drop the default exclude. Alternative if it never does: hard-code the id list (rejected
       2026-08-12 as a frozen catalog) or `ignore_changes` (loses the widening signal).
       `docs/cloudflare.md` gotcha 3 addendum. Relates FU-156, FU-157.
-- [ ] **FU-240** — **devbox version skew, box ↔ jail (2026-09-13):** the management box's devbox
-      (the NixOS closure's) rewrites `devbox.lock`'s `plugin_version` fields on every `devbox run`
-      (0.0.4→0.0.2, 0.0.5→0.0.4 in the apply clone), so the loops' clones are permanently dirty
-      and "one toolchain pin for the jail and the box" (ADR-129) is only true for the packages,
-      not the runner. Mitigated: `mgmt_clone`'s dirty check ignores the lock. **Next:** pin the
-      same devbox version on both sides (the closure's `devbox` package ↔ claude-jail's image) and
-      drop the exclusion. Relates ADR-129, FU-237.
-      **+2026-09-17: the JAIL's own devbox (0.18.1) does it too** (nodejs_22 0.0.5→0.0.4) and it
-      dirties the operator's SHARED working tree, where no exclusion exists — skip `git status`
-      and a session commits the downgrade. Reverted by hand.
+- [ ] **FU-240** — **devbox version skew rewrites `devbox.lock` (2026-09-13; root cause 09-20):**
+      `plugin_version` is baked per devbox RELEASE (nodejs 0.0.4 ≤0.18.1, 0.0.5 ≥0.18.2) and any
+      `devbox run` rewrites it, so disagreeing runners flip-flop the lock: the ARC image pinned
+      0.17.5 (it writes the committed lock), the jail's install-script LAUNCHER and the host float
+      (0.18.3, dirtying the SHARED tree), the box runs nixpkgs', agent-base rides upstream's image.
+      Mitigated: `mgmt_clone`'s dirty check ignores the lock. 09-20: converge on **0.18.3** — PR#1809
+      (ARC ARG + the lock) and claude-jail `ENV DEVBOX_USE_VERSION` (6f90815, live on rebuild).
+      **Next:** the box closure overrides `devbox` to it, then drop the exclusion; agent-base's base
+      tag. Upgrades = ONE change: ARC ARG + jail ENV + host + the lock. Relates ADR-129, FU-237.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content

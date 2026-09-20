@@ -10112,3 +10112,61 @@ because nothing executed the script.
 
 `maintenance-window-G1` extended with the resight — the count claim ("three reads", "all five now")
 was wrong three rounds running.
+
+## 2026-09-20 — oracle handoffs: the stack's definition of done (ADR-134) + the corpus image-volume ask
+
+**Closeout handoff (`20260920-1358`).** `merged-closeout` closed oracle-fleet#637 `COMPLETED` four
+minutes after PR #647 merged, marking an "after the next regen" acceptance item done from the PR's
+`agent-acceptance` fixture reproduction; the sibling #644 was left open 16 minutes earlier on the
+same class. Read both closeout comments from the seat — session judgment, not a keyword. Shipped
+as PR #1806 (brief-only): a LIVE acceptance item is never satisfied from the PR; the play reads
+`<mainRepo>/.agents/closeout.md` from the default-branch clone (tightens only); the IL-G06 open leg
+now says when it closes. Checked rather than assumed: OPEN+`agent/done` is a quiet scan state (every
+C6 candidate set needs `in-progress|review`), and the coordinator pod already clones every claim
+repo, so delivery is free. Corrections sent back: the coordinator holds NO stack MCP (their rule 2
+assumed one), and `git merge-base` needs history the `--depth 1` clones lack. Created the
+`awaiting-regen` label on oracle-fleet (named by their file, absent on the repo).
+
+**Corpus-mount handoff (`20260920-1524`).** Verdict yes-but-opt-in, nothing built, homelab#1807.
+Measured: one 10.53 GB uncompressed layer; 7.4 MB/s from the registry ⇒ ≈24 min cold pull per
+node per release; wk-metal-02 (126 GB `/var`, 60 free) goes over the 60 % imageGC ceiling with two
+versions resident, wk-03 marginal. kata+virtiofs on a 10 GB SQLite file stays unmeasured — the
+canary is the gate. Told oracle to build the Datasette pod on `ownServices` meanwhile.
+
+**Correction, same day (operator: "I am on wifi right now, dont measure directly from this host").**
+The 7.4 MB/s / ≈24 min cold-pull figure above was the seat host's wifi, not the registry. From wired
+nodes (curl pod, 60 s): 86.8 MB/s on wk-04 and 89.8 MB/s on wk-metal-03 through
+`registry.teststuff.net` (the kubelet path, router HAProxy), 109–111 MB/s straight to the LB VIP —
+≈2 min per node per release. Opt-in-per-ride withdrawn on #1807; a correction file sits next to the
+handoff Result in oracle's `done/`. Lesson: a throughput number names its vantage point, and the
+jail host is never a vantage point for cluster-path rates.
+
+### 2026-09-20, later — the kata canary passed, `fixer.imageVolumes` built (PR #1808, ADR-135); ADR-133 amended
+
+**Canary** (operator: "run the kata virtiofs sqlite canary"), wk-metal-03, inside `maint open/close`
+(baseline 151 targets / 8 alerts / 12 nodes, identical after; alert Monitor armed for the window):
+one pod with the served `ert-corpus` digest as an `image:` volume, runc then kata. Cold pull+unpack
+3m21s; kata mounts it as virtiofs `ro`; count(17.4 M) 8.4 s vs 9.1 s, full LIKE scan 26.7 s vs
+21.5 s, FTS top-20 3.2 s vs 2.3 s, sequential 475 vs 1296 MB/s, RSS 35 MiB. Table on #1807.
+
+**Build** (operator: "if it comes back good then implement it. Use sub-agents if it makes sense"):
+XRD knob + launcher resolver (`REPLAY:image-volumes`) + the loop-CNP registry-host leg + two
+fixtures + ADR-135 + the stack docs section. The one subagent that made sense was an adversarial
+reviewer over the staged diff BEFORE the PR — it found six real defects the green fixtures did not:
+`/mnt/../work/repo` through the path fence, `a//b` through the grammar AND the probe (`curl -f`
+passes the registry's 301), one object-valued field silently dropping the whole list, an empty
+name shifting columns under tab-IFS, a silent duplicate arm, and a duplicate of a probe-failed
+entry mounting under its name. All fixed, each now a fixture row; the 301 case re-verified live.
+
+**ADR-133 amended** (operator, same session): the laptop CP is `wk-metal-02` (its 126 GB disk is
+the ride pool's tightest and ample for a CP); `wk-metal-03` stays a ride node. The amendment lists
+what moves off -02 before its reinstall.
+
+**#1808 merged (`23ebfe88`)** after one review round: the only block was procedural — #1807 declared
+no `Touches:`, so `agents/agent-session.sh` read as a governance escape (ADR-097). Declared through
+`issue_body.py`, stale verdict dismissed with an audit message, reflex rung ONCE. Live end state:
+XRD carries `imageVolumes`; CompositionRevision 73 `ValidPipeline=True`; all four AgentStacks
+Synced/Ready; oracle's loop CNP unchanged (no claim declares the knob yet). The swap threw one burst
+of `does not have a valid function pipeline: pipeline status unknown` warnings on all four XRs at
+revision creation — transient (none recurred in the next reconcile), worth knowing as the normal
+shape of a Composition roll. Claim snippet left for oracle as a SHIPPED file in their `done/`.
