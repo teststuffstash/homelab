@@ -10161,3 +10161,12 @@ entry mounting under its name. All fixed, each now a fixture row; the 301 case r
 **ADR-133 amended** (operator, same session): the laptop CP is `wk-metal-02` (its 126 GB disk is
 the ride pool's tightest and ample for a CP); `wk-metal-03` stays a ride node. The amendment lists
 what moves off -02 before its reinstall.
+
+**#1808 merged (`23ebfe88`)** after one review round: the only block was procedural — #1807 declared
+no `Touches:`, so `agents/agent-session.sh` read as a governance escape (ADR-097). Declared through
+`issue_body.py`, stale verdict dismissed with an audit message, reflex rung ONCE. Live end state:
+XRD carries `imageVolumes`; CompositionRevision 73 `ValidPipeline=True`; all four AgentStacks
+Synced/Ready; oracle's loop CNP unchanged (no claim declares the knob yet). The swap threw one burst
+of `does not have a valid function pipeline: pipeline status unknown` warnings on all four XRs at
+revision creation — transient (none recurred in the next reconcile), worth knowing as the normal
+shape of a Composition roll. Claim snippet left for oracle as a SHIPPED file in their `done/`.
