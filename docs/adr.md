@@ -2262,3 +2262,23 @@ same kind of rule with stack content — policy = stack, mechanism = platform (A
 play layer is unreplayed by design, so the guard is the two IL-T09 brief anchors; the coordinator holds no stack
 MCP, so "verify live" mostly resolves to "leave open" until a stack closes by its own release machinery
 (oracle-fleet#655); the `-iac` paragraph stays in the brief (it is platform-universal, not one stack's).
+
+### ADR-135 — `fixer.imageVolumes`: a ride mounts the stack's published data read-only, digest-pinned and probed (2026-09-20)
+
+**Status:** Accepted (operator: "if the canary comes back good, implement it"; canary + numbers on homelab#1807).
+**Decision:** the FU-096 devbox-cache mount becomes a claim knob — `repos[].fixer.imageVolumes[] {name, reference,
+mountPath}` — read by the LAUNCHER off the claim (the `fixer.docker` read; the Composition renders only the loop
+CNP's registry-host leg). Three fences, enforced in the XRD pattern AND again in the launcher: references are
+**digest-pinned** and **allow-listed** (`registry.teststuff.net/…`, `ghcr.io/teststuffstash/…`); `mountPath` lives
+under `/corpus|/data|/mnt`; and **probe-then-mount** — a manifest not anonymously served degrades loudly to an
+unmounted ride whose env card says so. Always-mount when declared (no per-issue switch). Worker rides only in v1.
+**Considered:** a Datasette/SQL door via `egress.ownServices` (answers counting, never "run my branch against the
+real database"); a Longhorn ROX PVC (crosses the ride's namespace boundary; 10 GB of rebuildable data on replicated
+storage); opt-in per issue (argued from a 24-min cold pull that was the seat host's wifi — wired nodes pull at
+87–110 MB/s, 3m21s cold for 10.5 GB); tags instead of digests (a moving mount under a running fleet, and
+`pullPolicy: Always` registry traffic per ride). **Why:** oracle-fleet#658 shipped a ranking fix proven on a 2-row
+fixture that fails at 17 M rows — nothing in a ride's reach had the real corpus. **Consequences:** node disk carries
+two resident versions around a roll under the 60/50 imageGC — the reason `wk-metal-02` (126 GB) leaves the ride
+pool (ADR-133 amendment) and `wk-03` wants a resize; N nodes pulling a fresh digest hairpin through the router's
+HAProxy — stagger if it ever shows; a refused entry's text is prompt input and is sanitised before it reaches a
+log or a card; loop-home pods (reviewer/coordinator) are the next step, not this one.

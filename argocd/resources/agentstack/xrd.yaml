@@ -615,6 +615,52 @@ spec:
                                   ENFORCED. Flip only after clean monitored rides; drops
                                   manifest as worker HANGS, watch
                                   hubble_drop_total{reason=POLICY_DENIED}.
+                          imageVolumes:
+                            type: array
+                            maxItems: 4
+                            description: >-
+                              Stack-owned OCI artifacts mounted READ-ONLY into this repo's worker
+                              rides as native k8s image volumes (ADR-135 — the FU-096 devbox-cache
+                              mechanism as a claim knob; first consumer: the oracle served corpus,
+                              one ~10 GB SQLite file, so a ride can count and run its branch's code
+                              against the real database). The LAUNCHER reads this straight off the
+                              claim (agent-session.sh, the same read as fixer.docker); the
+                              Composition renders only the loop CNP's registry-host leg for it. The image is pulled once per
+                              ride-hosting NODE and shared by the pods on it — measured 2026-09-20:
+                              3m21s cold for 10.5 GB on a laptop, kata/virtiofs reads within
+                              0-40% of runc (homelab#1807). Budget node disk for TWO resident
+                              versions around a digest roll (kubelet imageGC is 60/50). References
+                              are DIGEST-PINNED and registry-allow-listed by the pattern below — a
+                              claim cannot mount an arbitrary image into a ride; the stack's
+                              release automation bumps the digest in its -iac repo. A digest the
+                              registry no longer serves degrades LOUDLY to an unmounted ride
+                              (probe-then-mount), never a pod stuck at image pull. NO default on
+                              this array ON PURPOSE (the claudeTier OutOfSync lesson above): omit
+                              it for no volumes.
+                            items:
+                              type: object
+                              required: [name, reference, mountPath]
+                              properties:
+                                name:
+                                  type: string
+                                  pattern: '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$'
+                                  description: >-
+                                    Short id, unique in the list — becomes the pod volume
+                                    `iv-<name>` and the env-card line's label.
+                                reference:
+                                  type: string
+                                  pattern: '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$'
+                                  description: >-
+                                    Digest-pinned image reference on the LAN registry or the
+                                    org's ghcr namespace, anonymously pullable (ride pods carry
+                                    no imagePullSecrets). A tag is refused by the pattern.
+                                mountPath:
+                                  type: string
+                                  pattern: '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                                  description: >-
+                                    Absolute mount point under /corpus, /data or /mnt, no dot-led
+                                    segment (`..` is a traversal), not nested in another entry's — never a
+                                    path the ride itself lives on (/work, /nix, /home, /stack-cache).
                           readOnlyGrants:
                             type: array
                             default: []

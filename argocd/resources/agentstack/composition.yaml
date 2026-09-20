@@ -1064,6 +1064,27 @@ spec:
                 {{- end }}
                 {{- end }}
                 {{- end }}
+                # fixer.imageVolumes (ADR-135) — the LAUNCHER probes each declared reference's
+                # manifest from a loop pod before mounting it (probe-then-mount), so the registry
+                # HOSTS ride this policy. Rendered while it is still MONITOR so the enforce flip
+                # cannot turn every declared volume into a loudly-unmounted one.
+                {{- $ivhosts := dict }}
+                {{- range $rr := $xr.spec.repos }}
+                {{- if $rr.fixer }}
+                {{- range $iv := default (list) (get $rr.fixer "imageVolumes") }}
+                {{- $_ := set $ivhosts (index (splitList "/" $iv.reference) 0) true }}
+                {{- end }}
+                {{- end }}
+                {{- end }}
+                {{- if $ivhosts }}
+                - toFQDNs:
+                    {{- range $h := keys $ivhosts | sortAlpha }}
+                    - { matchName: {{ $h | quote }} }
+                    {{- end }}
+                  toPorts:
+                    - ports:
+                        - { port: "443", protocol: TCP }
+                {{- end }}
                 # Baseline FQDNs — git over TLS + nix upstream fallback
                 - toFQDNs:
                     - { matchName: github.com }
