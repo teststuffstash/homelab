@@ -462,13 +462,13 @@ six OVERSIZE items pointer-ized into
       `docs/cloudflare.md` gotcha 3 addendum. Relates FU-156, FU-157.
 - [ ] **FU-240** — **devbox version skew rewrites `devbox.lock` (2026-09-13; root cause 09-20):**
       `plugin_version` is baked per devbox RELEASE (nodejs 0.0.4 ≤0.18.1, 0.0.5 ≥0.18.2) and any
-      `devbox run` rewrites it, so four disagreeing runners flip-flop the lock: the ARC image pins
-      0.17.5 (it writes the committed lock), the jail's install-script LAUNCHER floated (0.18.1 →
-      0.18.3, dirtying the operator's SHARED tree), the box runs nixpkgs', the host floats.
-      Mitigated: `mgmt_clone`'s dirty check ignores the lock. Done 09-20: claude-jail pins
-      `DEVBOX_USE_VERSION=0.17.5` (575599e, live on rebuild; verified clean lock). **Next:** the host
-      profile gets the same env; the box closure overrides `devbox` to it; then drop the exclusion.
-      Upgrades = ONE change bumping the ARC ARG + the jail ENV + the lock. Relates ADR-129, FU-237.
+      `devbox run` rewrites it, so disagreeing runners flip-flop the lock: the ARC image pinned
+      0.17.5 (it writes the committed lock), the jail's install-script LAUNCHER and the host float
+      (0.18.3, dirtying the SHARED tree), the box runs nixpkgs', agent-base rides upstream's image.
+      Mitigated: `mgmt_clone`'s dirty check ignores the lock. 09-20: converge on **0.18.3** — PR#1809
+      (ARC ARG + the lock) and claude-jail `ENV DEVBOX_USE_VERSION` (6f90815, live on rebuild).
+      **Next:** the box closure overrides `devbox` to it, then drop the exclusion; agent-base's base
+      tag. Upgrades = ONE change: ARC ARG + jail ENV + host + the lock. Relates ADR-129, FU-237.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
