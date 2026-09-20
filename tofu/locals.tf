@@ -22,25 +22,34 @@ locals {
   # the endpoint below.
   cp_vip = "192.168.2.50"
 
-  # The Kubernetes API endpoint. STILL cp-01's own address — the VIP cutover was applied and
-  # REVERTED on 2026-09-20 (incident below). FU-243 step (c) is NOT done; see the incident doc
-  # before attempting it again.
+  # ADR-136: the ServiceAccount issuer, FROZEN — declared here instead of derived from the
+  # endpoint below. Talos otherwise computes BOTH --service-account-issuer and --api-audiences
+  # from cluster_endpoint, and a token carries the `iss`/`aud` it was minted with: moving the
+  # endpoint therefore 401s every ServiceAccount token already in the cluster, at once, with no
+  # grace period. Measured live 2026-09-20 11:34Z — a cluster-wide control-plane outage within
+  # one minute of the apply: cilium-operator, crossplane, cnpg-operator, longhorn csi-provisioner
+  # and kube-state-metrics all CrashLoopBackOff; ARC runners stuck at Init:0/2 so CI stopped;
+  # every kubelet, scheduler and controller-manager scrape 401 (48 -> 0 targets up). The data
+  # plane never noticed and every node stayed Ready, which is why a node-health rehearsal passed
+  # it — the check that catches it is a TOKEN-authenticated call, not a Ready column.
   #
-  # ⚠⚠ DO NOT point this at local.cp_vip without an issuer migration first. Talos derives BOTH
-  # --service-account-issuer AND --api-audiences from this value. Changing it re-issues neither
-  # the tokens nor a grace period: every ServiceAccount token already in the cluster carries the
-  # OLD `iss`/`aud`, so the apiserver 401s all of them the moment the flag moves. Measured live
-  # 2026-09-20 11:34Z — a cluster-wide control-plane outage within one minute of the apply:
-  # cilium-operator, crossplane, cnpg-operator, longhorn csi-provisioner and kube-state-metrics
-  # all CrashLoopBackOff; ARC runners stuck at Init:0/2 so CI stopped; every kubelet, scheduler
-  # and controller-manager scrape 401 (48 -> 0 targets up). Reverting this line restored it.
+  # kube-apiserver can carry two issuers across a rotation; Talos cannot express two (extraArgs is
+  # a string map, a list is rejected), so the way out is for the value to stop moving at all —
+  # extraArgs REPLACES the derived flag (local.sa_issuer_patch, talos.tf).
   #
-  # The data plane never noticed — running pods and the nodes stayed Ready — which is exactly
-  # why a node-health rehearsal (wk-03, --mode=try) passed it. The check that would have caught
-  # it is a TOKEN-authenticated call, not a Ready column.
-  #
-  # The real cutover needs the apiserver to accept both issuers across the transition, or a
-  # planned rotation of every SA token. Tracked by FU-243.
+  # ⚠⚠ THIS STRING IS FROZEN AND MUST NOT FOLLOW cluster_endpoint. It is what the live cluster has
+  # minted tokens with since bootstrap; nothing dials it (no OIDC/JWKS consumer, no custom-audience
+  # token, zero legacy service-account-token Secrets — checked 2026-09-20), so only its stability
+  # ever had value. "Tidying" it to match the endpoint IS the outage above. Changing it for real
+  # needs a cluster rebuild or a planned rotation of every token.
+  sa_issuer = "https://192.168.2.51:6443"
+
+  # The Kubernetes API endpoint. Still cp-01's own address: the VIP cutover was applied and
+  # REVERTED on 2026-09-20, and it resumes only once (a) the issuer pin above is LIVE on every
+  # control plane — verify with `kubectl -n kube-system get pod -l component=kube-apiserver -o
+  # jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep service-account-issuer`
+  # — and (b) there are three etcd members, so the apiserver restarts roll instead of taking the
+  # API down. Order and the rest of the mechanism: docs/controlplane-ha.md. Tracked by FU-243.
   cluster_endpoint = "https://${local.first_cp_ip}:6443"
 
   controlplane_ips = sort([for k, n in local.controlplane : local.node_ip[k]])

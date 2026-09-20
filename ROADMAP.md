@@ -110,7 +110,9 @@ work survivable.
    `reconcile: auto` on the compute tier, one node at a time. Transient PXE flags leave git (FU-244).
 1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133 as amended 2026-09-20, FU-243): `cp-01` (pve), `wk-metal-02`
    (laptop — a battery is a UPS for etcd), a VM on `nx-02` once its drives are in. VIP first on cp-01, then
-   both joins back to back; single OPNsense stays. The Nutanix twin pays the ride-pool bill counted below.
+   the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
+   back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
+   [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
 2. **Router HA — OPNsense CARP pair** across two nodes (anti-affinity, never co-located).
    `pfsync` = stateful failover; `hasync` = config sync; bonus = rolling firewall updates. After the CPs:
    it rewrites every HAProxy VIP and both BGP peers.

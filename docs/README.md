@@ -42,6 +42,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
 | [tofu-state.md](tofu-state.md) | **Where each tofu root's state lives** — the encrypted-Garage backend ruling, the cone table, the migration runbook (FU-012) |
+| [controlplane-ha.md](controlplane-ha.md) | **Control-plane HA mechanism** (ADR-133/-136) — what `cluster_endpoint` decides, why the ServiceAccount issuer is frozen, the pin → join → flip order, and the lab-CP rehearsal |
 | [ip-plan.md](ip-plan.md) | **The address-plan authority** (ADR-088) — which range a new IP/VIP comes from |
 | [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
 | [power-measurements.md](power-measurements.md) | Node max-power (stress) + perf/watt benchmarks |
