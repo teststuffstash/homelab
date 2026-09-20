@@ -9,10 +9,10 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810**
-  (arc-runner pin → `2026.9.20-gd4aab3d8146a`, devbox 0.18.3) was OPEN/auto-merge at wind-down —
-  confirm it merged. If Monday's 03:00Z `devbox-update` ran on the OLD image it opens a PR flipping
-  `nodejs_22` `plugin_version` back to 0.0.4: CLOSE it, do not merge (FU-240). claude-jail `6f90815`
+- **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
+  arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
+  should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was
+  still on the old image — close it, do not merge (FU-240). claude-jail `6f90815`
   (`DEVBOX_USE_VERSION=0.18.3`) is committed locally there, unpushed beside the operator's own
   commits — needs their push + a jail rebuild; the host profile wants the same export.
   (2) `fixer.imageVolumes` is LIVE (#1808, ADR-135) but NO claim declares it — oracle adds it in
