@@ -466,6 +466,11 @@ machines:
     kata: true
     avx2: true
     ephemeral: true
+    # Takes the ride/ARC pool membership over from wk-metal-02, which leaves it ahead of its
+    # control-plane reinstall (ADR-133 as amended 2026-09-20; docs/controlplane-ha.md §C3). As a
+    # FLAG, not the imperative `kubectl label` this node has carried until now — that one does not
+    # survive a reinstall, which is how it silently left the pool once already.
+    arc: true
     notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
 
   - name: wk-metal-04
