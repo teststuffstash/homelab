@@ -802,8 +802,9 @@ images — complements node pulls someday, useless for inner-docker/VM consumers
 cache costs a re-fill, and no new always-on host). **Consequences:** docker.io CI-gate pulls are
 LAN-speed (alpine cold 2s / warm 1s from a kata ride, E2E 2026-07-14); dockerd's
 `registry-mirrors` is Hub-only so dind's own ghcr pulls (k3d-proxy/tools) keep the `ghcr.io`
-FQDN until gate configs route ghcr per-tool; **Talos node-level `machine.registries.mirrors` +
-ci-runner-01 + ARC wiring deferred** (FU-073 carries the remainder). Gotcha for every future
+FQDN until gate configs route ghcr per-tool; **Talos node-level `machine.registries.mirrors`,
+ci-runner-01 and ARC wiring all shipped** (FU-073, archived 2026-07-26 — this line understated it
+for weeks). Gotcha for every future
 VIP-consuming netpol: pod→LB-VIP flows are policy-evaluated **post-DNAT against the backend
 identity** (Hubble-verified, even from kata) — allow with `toEndpoints`, not a VIP CIDR.
 _Update 2026-08-30 (FU-196 v0):_ `mirror-ghcr` gains **optional upstream credentials**
@@ -816,6 +817,20 @@ can read become LAN-readable unauthenticated through the cache — scope it with
 granted per-package read (the mint script prints both routes). ghcr TTL 168h→720h (corpus-class
 re-pulls cost what a wipe costs). Policy-retention ("keep 2 latest prod releases") remains
 inexpressible in a pull-through cache — that is FU-196 v1 (hosted registry), not this update.
+_Update 2026-09-20 (homelab#1739):_ neither mirror bounds its own upstream fetch — no
+`REGISTRY_PROXY_*` timeout is set against `REGISTRY_PROXY_REMOTEURL` on either Deployment — and a
+**tag** pull (not a digest) always revalidates live against the real upstream on every request
+(distribution's proxy mode never serves a tag manifest from cache alone; only digest-addressed
+pulls are). Measured on `mirror-docker-io` via its own `registry_http_request_duration_seconds`:
+manifest-HEAD sits at a ~1s p99 floor ALL day regardless of traffic (that's the live round-trip,
+not load), and blob-GET p99 randomly spikes to 9–52s against a normal 0.2–0.9s baseline. Three
+master `ci` reds on 2026-09-16 were exactly this: `crossplane composition render`'s fixed 3m
+budget blew on an ordinary docker.io slowdown reached through a floating tag. Fix shipped as
+digest pins on the specific consumers (#1779, #1796), not a mirror change — pulling by digest is
+already this platform's convention everywhere else and sidesteps the revalidation entirely with
+no risk to the homelab#116 GC design (digest-addressed content is exactly what that design
+already assumes). **Any other floating-tag consumer of either mirror carries the same latent
+exposure** — FU-255 is the audit.
 
 ### ADR-092 — Per-stack subdomain delegation: `*.<stack>.teststuff.net` → an in-cluster gateway
 **Status:** Accepted (2026-07-15). Executes the **HTTPS-names leg of FU-039** (the "homelab as

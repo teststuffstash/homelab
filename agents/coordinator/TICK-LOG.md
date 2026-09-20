@@ -9955,3 +9955,50 @@ which was the whole argument for applying instead of skipping. And ArgoCD took t
 change: `-js-2` moved off hp-01 to wk-02, one replica per node (wk-04 / hp-01 / wk-02), `get pdb
 eventbus-default-js` → `ALLOWED DISRUPTIONS 1`. hp-01's drain — last in the upgrade order — now
 costs the bus one replica instead of its quorum.
+
+## 2026-09-19/20 — homelab#1739: master `ci` reds were a mirror with no upstream timeout, not a break
+
+Filed inert by #1712's merged-closeout (three `publicroute-tf-validate` reds on 2026-09-16, two
+with no log blob at all). Queued it `agent-fix`+`agent/queued` first, then reversed: the likely
+fix lands in `scripts/publicroute-tf-validate.sh`, a worker-lane NEVER-TOUCH governance path
+(ADR-106 (4)), and the fixer boundary has no kubectl/cluster access to diagnose it anyway
+(`docs/agents/roles.md` — repo-scoped git token + OpenRouter key + egress CNP only). Unqueued,
+picked it up seat-side.
+
+**Root cause, verified live, not guessed:** `crossplane composition render --crossplane-image
+docker.io/crossplane/crossplane:v2.3.2 --timeout 3m` pulls a *tag*. distribution's proxy mode
+(`mirror-docker-io`, ADR-091) always revalidates a tag manifest against the real upstream — its
+own `registry_http_request_duration_seconds` shows a ~1s p99 floor on manifest-HEAD ALL day, not
+just 2026-09-16 — and neither mirror sets a `REGISTRY_PROXY_*` upstream timeout, so blob-GET p99
+randomly spikes to 9–52s (measured, same day) against a normal 0.2–0.9s baseline. Every CI job
+gets a fresh per-job dind (no carried cache), so the render's fixed 3m timeout is genuinely at the
+mercy of docker.io's live latency on every run. One red got a log ("context deadline exceeded" —
+crossplane's own `--timeout` firing mid-read); the other two hung past the job's ~10-13m kill with
+no log blob at all — same cause, the underlying HTTP read not unwinding cleanly on cancel.
+
+**Fix: digest-pin, not a mirror change.** A digest pull is content-addressed — pure cache serve,
+no live check — and it's already this platform's convention everywhere else (`provider.yaml`'s
+FU-011 pin was the direct precedent, not a new pattern). #1779 pinned the crossplane engine image
+(`crossplane.io/engine-image-digest.<targetRevision>` annotation on `argocd/platform/crossplane.yaml`,
+keyed by version so a bump with no matching entry fails the gate loud instead of silently
+rendering stale); #1796 pinned both composition function packages the same way `provider.yaml`
+already does (`tag@sha256:digest` in `functions.yaml` directly — that file is BOTH the render's
+source and what ArgoCD actually applies, so no separate CI-only copy to keep in sync). All digests
+cross-verified three ways before writing them: the mirror, the real upstream (docker.io / ghcr.io
+directly, bypassing the mirror), and — for the functions — the live pod's `imageID`. Zero content
+drift; ArgoCD sync left both Function revisions unchanged.
+
+**Reviewer hit #1779 with a real TOUCHES-ESCAPE** (`.agents/review.md`): #1739 was filed inert
+with no `Touches:`, and `scripts/publicroute-tf-validate.sh` is a governance path. Its own review
+called the fix correct and merge-ready otherwise. Widened #1739's footprint (`Touches:` added to
+its machine block) and pushed an empty round-2 commit to give the reflex new content to
+re-evaluate against — editing the issue alone doesn't retrigger review (MP-T04 keys on
+`newest_commit_at`, a non-merge commit since the verdict, not on the referenced issue changing).
+Re-reviewed clean, merged. #1796 (`argocd/resources/**`, CI-gated only, no CODEOWNERS) never hit
+the block at all. Master `ci` green on both merge commits (67c80d5, 2cfb085f).
+
+**Wind-down:** ADR-091 got an `_Update 2026-09-20_` (the no-timeout + tag-revalidation facts, so
+the next reader evaluating tag-vs-digest through either mirror doesn't have to re-derive this) plus
+a stale-line fix (it still claimed ci-runner-01/ARC mirror wiring "deferred" — FU-073 archived that
+complete 2026-07-26). FU-255 filed for the residual: every OTHER floating-tag consumer of either
+mirror carries the same latent exposure, unaudited.
