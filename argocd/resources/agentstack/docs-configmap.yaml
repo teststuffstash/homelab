@@ -134,6 +134,10 @@ data:
        allowlist. Verdicts are three-valued: ALLOWED / WOULD-DROP / PROBE-FAILED — an empty
        harvest is a failed probe (github.com flows MUST appear; every ride clones), never "no
        misses". Add missing legit destinations to `egress.extraFQDNs`.
+       A destination INSIDE the repo's own namespace (e.g. a keyless data proxy the stack
+       runs for its rides) is `egress.ownServices: [{podLabels: {app: …}, port: N}]` instead —
+       it also lands in the loop-ns CNP so the reviewer reaches it. Other namespaces are not
+       expressible here.
     3. After ~3 consecutive clean rides, flip `enforce: true` (one-line PR in the -iac repo).
        A blocked flow under enforcement manifests as a worker HANG, not an error — watch
        `hubble_drop_total{reason=POLICY_DENIED}` for the namespace.
