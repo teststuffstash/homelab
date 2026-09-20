@@ -10,16 +10,27 @@ locals {
   # IP (without CIDR mask) per node.
   node_ip = { for k, n in var.nodes : k => split("/", n.ip_cidr)[0] }
 
-  # Deterministic pick of the bootstrap control-plane (lowest key).
+  # Deterministic pick of the bootstrap control-plane (lowest key). This is a REAL node address
+  # and stays one: talos_machine_bootstrap and talos_cluster_kubeconfig both have to talk to a
+  # specific machine, not to the floating endpoint.
   first_cp_key = sort(keys(local.controlplane))[0]
   first_cp_ip  = local.node_ip[local.first_cp_key]
 
   # ADR-133's control-plane endpoint VIP, ruled in docs/ip-plan.md: a single address reserved in
-  # 2.0/24 and assignable to no real host. It is NOT yet the cluster_endpoint — the VIP has to
-  # exist and the apiserver cert has to name it before anything is pointed at it (FU-243 step c).
+  # 2.0/24 and assignable to no real host. Live on the control planes since #1801 (talos.tf
+  # local.cp_vip_patch), with the apiserver cert naming it — which is what makes it safe to be
+  # the endpoint below.
   cp_vip = "192.168.2.50"
 
-  cluster_endpoint = "https://${local.first_cp_ip}:6443"
+  # The Kubernetes API endpoint (FU-243 step c). Was cp-01's own address, which made every
+  # kubeconfig in the fleet depend on one VM being up; it is now the etcd-elected VIP, so the
+  # endpoint survives losing whichever control plane currently holds it.
+  #
+  # ⚠ Until ADR-133's two joins land there is exactly ONE control plane, so this buys a stable
+  # NAME, not availability — the address cannot move while there is nowhere to move it to. What
+  # it does buy today is that the two joins arrive into a cluster whose endpoint is already
+  # final: a CP joined against the old .51 endpoint would have to be re-patched afterwards.
+  cluster_endpoint = "https://${local.cp_vip}:6443"
 
   controlplane_ips = sort([for k, n in local.controlplane : local.node_ip[k]])
 
