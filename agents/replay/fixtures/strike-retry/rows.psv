@@ -1,0 +1,21 @@
+# strike-retry — the decision table (the family contract is in fixture.yaml; Goal #1640 acceptance 4).
+# The `env` column carries the row's declared CONDITION in the bridge's RT_* vocabulary (bridge.sh's
+# header says what each knob stands for); every row leaves `world` and `patch` empty because the
+# condition is entirely in the launcher's variables, never in a recorded API response.
+#
+# id                         | world | patch | env                                          | expect                     | params
+fires-serving-timeout        |       |       |                                              | fires-serving-timeout      |
+fires-by-pod-tool-loop       |       |       | RT_STRIKE=pod RT_CLASS=tool-loop RT_PROVIDER= | fires-by-pod-tool-loop     |
+fires-turn-cap               |       |       | RT_CLASS=turn-cap                            | fires-turn-cap             |
+fires-probe-fallback         |       |       | RT_STATUS_MODE=blank CURL_BODY={"serving_classes":["timeout"]} | fires-probe-fallback |
+retry-dispatch-failed        |       |       | RETRY_RERUN_RC=1                             | retry-dispatch-failed      |
+no-retry-cell-seen           |       |       | RT_PRIOR_CLASS=timeout                       | no-retry-cell-seen         |
+no-retry-task-cap            |       |       | RT_PRIOR_N=2                                 | no-retry-task-cap          |
+no-retry-salvage-pushed      |       |       | RT_SALVAGE=pushed                            | no-retry-salvage-pushed    |
+no-retry-salvage-resuming    |       |       | RT_SALVAGE=resuming                          | no-retry-salvage-resuming  |
+no-retry-salvage-unknown     |       |       | RT_SALVAGE=unknown                           | no-retry-salvage-unknown   |
+no-retry-nonserving          |       |       | RT_CLASS=harness-death                       | no-retry-nonserving        |
+no-retry-no-strike           |       |       | RT_STRIKE=none                               | no-retry-no-strike         |
+no-retry-router-unreachable  |       |       | RT_STATUS_MODE=blank                         | no-retry-router-unreachable|
+no-retry-chained-stack       |       |       | RT_STACK_MODE=chained                        | no-retry-chained-stack     |
+no-retry-shadow-mode         |       |       | RT_ROUTER_MODE=shadow                        | no-retry-shadow-mode       |

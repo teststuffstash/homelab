@@ -1,0 +1,4 @@
+CALL curl -fsS --max-time 5 http://router.test/router-status
+CALL retry_rerun ARGV=[test-project] AGENT_RETRY_CELLS=[deepseek/deepseek-v4-flash|openrouter|timeout] AGENT_RETRY_TASK_N=[1]
+OUT → retry: strike on deepseek/deepseek-v4-flash|openrouter|timeout with salvage=none — re-routing and re-running round 1 (attempt 1/2, no coordinator hop)
+RC 0
