@@ -63,6 +63,9 @@ data "talos_machine_configuration" "metal" {
       }
     })],
     [local.registry_mirrors_patch],
+    # The endpoint VIP — metal control planes only (talos.tf, local.cp_vip_patch). A metal CP is
+    # an etcd member like any other, so it campaigns for the address on the same terms.
+    each.value.controlplane ? [local.cp_vip_patch] : [],
     # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }

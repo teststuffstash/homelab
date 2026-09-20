@@ -14,6 +14,11 @@ locals {
   first_cp_key = sort(keys(local.controlplane))[0]
   first_cp_ip  = local.node_ip[local.first_cp_key]
 
+  # ADR-133's control-plane endpoint VIP, ruled in docs/ip-plan.md: a single address reserved in
+  # 2.0/24 and assignable to no real host. It is NOT yet the cluster_endpoint — the VIP has to
+  # exist and the apiserver cert has to name it before anything is pointed at it (FU-243 step c).
+  cp_vip = "192.168.2.50"
+
   cluster_endpoint = "https://${local.first_cp_ip}:6443"
 
   controlplane_ips = sort([for k, n in local.controlplane : local.node_ip[k]])
