@@ -430,7 +430,8 @@ machines:
     # ride disk and ample for a workload-free CP, so the laptop swaps ride duty for etcd. It gets
     # no `ephemeral` flag — Talos's own node-role.kubernetes.io/control-plane:NoSchedule keeps it
     # workload-free, and the ride taint would be a second, redundant repellent. `kata` stays: the
-    # label costs nothing and the ARC pool selects on `arc`, which moved to wk-metal-03 (#1814).
+    # label costs nothing and the ARC pool selects on `arc`, which moved to wk-metal-03 in #1814
+    # (merged 2026-09-20, 9b978367 — this node's ephemeral label is gone, verified live).
     # ⚠ machine_type is baked at INSTALL — this flag only takes effect through a reinstall.
     # etcd fsync measured BEFORE the join (the ADR amendment asked for it): etcd's own dd probe,
     # 1000 × 2300B oflag=dsync, ran in 1.60 s = ~1.6 ms per sync write — well inside the 10 ms
