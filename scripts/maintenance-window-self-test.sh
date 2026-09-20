@@ -28,12 +28,14 @@ cat > "$TMP/bin/kubectl" <<'EOF'
 case "$*" in
   *"get nodes"*) printf 'n1 Ready <none> 1d v1\n' ;;
   *"get pods -A"*) [ "${FAKE_PODS_FAIL:-0}" = 1 ] && exit 1; printf 'ns p1 1/1 Running 0 1d\n' ;;
-  *"get pod -l k8s-app=cilium"*) printf '' ;;
+  *"get pod -l k8s-app=cilium"*) [ "${FAKE_CILIUM_LIST_FAIL:-0}" = 1 ] && exit 1; printf 'pod/cilium-aaa\n' ;;
+  *"exec"*cilium-dbg*) printf 'ID Frontend Service Backend\n10 10.96.0.1:443/TCP ClusterIP 1 => 192.168.2.51:6443/TCP (active)\n' ;;
   *) printf '' ;;
 esac
 EOF
 cat > "$TMP/bin/gh" <<'EOF'
 #!/usr/bin/env bash
+[ "${FAKE_GH_FAIL:-0}" = 1 ] && { echo "gh: auth expired" >&2; exit 1; }
 printf ''
 EOF
 chmod +x "$TMP/bin/kubectl" "$TMP/bin/gh"
@@ -69,6 +71,20 @@ grep -qi "no new firing alerts" <<<"$out" && bad "check printed 'no new firing a
 out="$(PROM_URL="$DEAD_PROM" FAKE_PODS_FAIL=1 bash "$SUT" check 2>&1)"
 grep -qi "pods UNREADABLE" <<<"$out" && ok "check reports an unreadable pod list" \
                 || bad "a failed 'kubectl get pods' did not surface as UNREADABLE: $out"
+
+# 3b. A failing cilium AGENT LIST is unreadable, not "have=0 missing=0" (review, #1804 round 2).
+out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_LIST_FAIL=1 bash "$SUT" check 2>&1)"
+grep -qi "cilium UNREADABLE" <<<"$out" && ok "check reports an unreadable cilium agent list" \
+                || bad "a failed cilium list did not surface as UNREADABLE: $out"
+grep -qi "ok  cilium apiserver backend" <<<"$out" && bad "check printed cilium 'ok' on a FAILED list read" \
+                || ok "check does not claim cilium ok on a failed list read"
+
+# 3c. A failing `gh` is unreadable, not "no CI runs stranded".
+out="$(PROM_URL="$DEAD_PROM" MAINT_REPOS="homelab" FAKE_GH_FAIL=1 bash "$SUT" check 2>&1)"
+grep -qi "CI status UNREADABLE" <<<"$out" && ok "check reports unreadable CI status" \
+                || bad "a failed gh did not surface as UNREADABLE: $out"
+grep -qi "no CI runs stranded" <<<"$out" && bad "check printed 'no CI runs stranded' when gh FAILED" \
+                || ok "check does not claim 'no CI runs stranded' when gh failed"
 
 # 4. close must not close a window while a check is failing.
 out="$(PROM_URL="$DEAD_PROM" bash "$SUT" close 2>&1)"; rc=$?

@@ -104,9 +104,18 @@ node_count() {
 # cilium agent fails intermittently, and counting a flaky exec as "backend missing" produced a
 # false ⚠ the first time this ran. An unreliable gate is a gate that gets ignored, so "could not
 # tell" is reported as itself and never as a failure. Each agent gets two attempts.
+# Non-zero if the AGENT LIST itself could not be read — distinct from an individual exec failing,
+# which is what `unknown` covers. Missed on the first pass (review, #1804): a failing
+# `kubectl get pod -l k8s-app=cilium` made the loop iterate zero times, returned "0 0 0", and
+# cmd_check printed `ok  cilium apiserver backend: have=0 missing=0 unknown=0` — a false pass on
+# the one check this whole tool exists for, and likeliest during exactly the apiserver
+# instability that makes the list call flaky in the first place.
 cilium_backends() {
-  local have=0 missing=0 unknown=0 p out ok
-  for p in $(kubectl -n kube-system get pod -l k8s-app=cilium -o name 2>/dev/null); do
+  local have=0 missing=0 unknown=0 p out ok pods
+  pods="$(kubectl -n kube-system get pod -l k8s-app=cilium -o name 2>/dev/null)" || return 1
+  # A cluster running Cilium always has agents; an empty list means the read, not the fleet.
+  [ -n "$pods" ] || return 1
+  for p in $pods; do
     ok=0; out=""
     for _ in 1 2; do
       if out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
@@ -120,13 +129,19 @@ cilium_backends() {
 }
 
 # Runs stuck in `queued` for longer than the grace period — the ARC-stranded class.
+# Prints stranded runs as plain lines and any repo whose read FAILED as `UNREADABLE:<repo>`.
+# The second half was missing (review, #1804): `gh … || true` plus `[ -n "$out" ] || continue`
+# swallowed an auth failure, a rate limit or a network blip as "nothing stranded" — and a GitHub
+# token problem during an incident is precisely when that lie costs something.
 stranded_ci() {
   local grace="${1:-600}" now r out
   now="$(date -u +%s)"
   for r in $MAINT_REPOS; do
-    out="$(gh run list --repo "teststuffstash/$r" --limit 30 \
+    if ! out="$(gh run list --repo "teststuffstash/$r" --limit 30 \
             --json status,createdAt,databaseId,name,headBranch \
-            -q '.[]|select(.status=="queued")|"\(.createdAt) \(.databaseId) \(.name) [\(.headBranch)]"' 2>/dev/null || true)"
+            -q '.[]|select(.status=="queued")|"\(.createdAt) \(.databaseId) \(.name) [\(.headBranch)]"' 2>/dev/null)"; then
+      echo "UNREADABLE:$r"; continue
+    fi
     [ -n "$out" ] || continue
     while read -r line; do
       [ -n "$line" ] || continue
@@ -145,7 +160,7 @@ snapshot() {
   # baseline that every later `check` would compare favourably against.
   local n; n="$(node_count)"
   [ "${n:-0}" -gt 0 ] || { echo "maintenance-window: kubectl returned 0 nodes — refusing to snapshot" >&2; exit 1; }
-  local cil; cil="$(cilium_backends)"
+  local cil cilium_ok=true; cil="$(cilium_backends)" || { cil="0 0 0"; cilium_ok=false; }
   # Each read carries an *_ok flag. A false flag is never "0" or "clean" — cmd_check reports it
   # as unreadable and fails, because "we did not look" must not be indistinguishable from "fine".
   local alerts alerts_ok=true up up_ok=true pods pods_ok=true pods_out
@@ -160,10 +175,10 @@ snapshot() {
         --arg up "$up" --argjson up_ok "$up_ok" \
         --arg pods "$pods" --argjson pods_ok "$pods_ok" \
         --arg have "${cil%% *}" --arg missing "$(cut -d' ' -f2 <<<"$cil")" \
-        --arg unknown "${cil##* }" --arg nodes "$n" \
+        --arg unknown "${cil##* }" --arg nodes "$n" --argjson cilium_ok "$cilium_ok" \
         --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '{at:$at, alerts:$alerts, alerts_ok:$alerts_ok, up:($up|tonumber), up_ok:$up_ok,
-          pods_bad:($pods|tonumber), pods_ok:$pods_ok,
+          pods_bad:($pods|tonumber), pods_ok:$pods_ok, cilium_ok:$cilium_ok,
           cilium_have:($have|tonumber), cilium_missing:($missing|tonumber),
           cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber)}'
 }
@@ -186,8 +201,8 @@ cmd_open() {
   jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"' "$BASE"
   # A baseline built from failed reads is worse than no baseline: every later check compares
   # favourably against it. Refuse rather than bank one.
-  jq -e '.alerts_ok and .up_ok and .pods_ok' >/dev/null "$BASE" || {
-    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok)"' "$BASE" >&2
+  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok' >/dev/null "$BASE" || {
+    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok)"' "$BASE" >&2
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
     rm -f "$BASE"; exit 1
   }
@@ -223,7 +238,9 @@ cmd_check() {
   fi
 
   local ch cm cu; ch="$(jq -r .cilium_have <<<"$now")"; cm="$(jq -r .cilium_missing <<<"$now")"; cu="$(jq -r .cilium_unknown <<<"$now")"
-  if [ "$cm" -gt 0 ]; then
+  if [ "$(jq -r .cilium_ok <<<"$now")" != true ]; then
+    echo "  ⚠ cilium UNREADABLE — could not list the cilium agents; the backend check did NOT run"; rc=2
+  elif [ "$cm" -gt 0 ]; then
     echo "  ⚠ cilium: $cm agent(s) have NO backend for 10.96.0.1:443 (have=$ch unknown=$cu)"
     echo "       → pods get 'connection refused' to the API. Fix: kubectl -n kube-system rollout restart ds/cilium"
     rc=2
@@ -243,13 +260,18 @@ cmd_check() {
     else echo "  ok  hard-failed pods: $p0 -> $p1"; fi
   fi
 
-  local ci; ci="$(stranded_ci 600)"
-  if [ -n "$ci" ]; then
+  local ci_all ci ci_unread; ci_all="$(stranded_ci 600)"
+  ci_unread="$(printf '%s\n' "$ci_all" | sed -n 's/^UNREADABLE://p' | tr '\n' ' ' | sed 's/ *$//')"
+  ci="$(printf '%s\n' "$ci_all" | grep -v '^UNREADABLE:' || true)"
+  if [ -n "$ci_unread" ]; then
+    echo "  ⚠ CI status UNREADABLE for: $ci_unread — gh did not answer; those repos were NOT checked"; rc=2
+  fi
+  if [ -n "$(printf '%s' "$ci" | tr -d '[:space:]')" ]; then
     echo "  ⚠ CI runs stranded in queued (ARC listeners do not re-claim across a restart):"
     echo "$ci"
     echo "       → gh run cancel <id> --repo teststuffstash/<r>; wait for completed/cancelled; gh run rerun <id>"
     rc=2
-  else echo "  ok  no CI runs stranded in queued"; fi
+  elif [ -z "$ci_unread" ]; then echo "  ok  no CI runs stranded in queued"; fi
 
   return $rc
 }
