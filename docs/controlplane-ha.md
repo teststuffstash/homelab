@@ -10,7 +10,7 @@ The mechanism behind [ADR-133](adr.md) (three control planes behind a Talos shar
 `cluster_endpoint` actually decides, why moving it was an outage, and the order that makes the
 rest of the program boring.**
 
-## C1. What `cluster_endpoint` decides
+## CP1. What `cluster_endpoint` decides
 
 `local.cluster_endpoint` (`tofu/locals.tf`) is one string doing three unrelated jobs:
 
@@ -30,7 +30,7 @@ wedged so CI stopped, `sum(up)` 48 → 0 — a cluster-wide control-plane outage
 which is why a node-health rehearsal passed it and why the operator, not the session, found it. The
 check that catches this class is a **token-authenticated call**, never a `Ready` column.
 
-## C2. Why the issuer is frozen rather than migrated
+## CP2. Why the issuer is frozen rather than migrated
 
 Kubernetes supports issuer rotation: `--service-account-issuer` may be given more than once, the
 first minting and all of them validating. **Talos cannot express that.** `cluster.apiServer.extraArgs`
@@ -56,7 +56,7 @@ opaque identifier whose only valuable property was ever stability.
 ⚠ The corollary is a rule: **the pinned value must never be "tidied" to match the endpoint.** That
 sync is the outage above.
 
-## C3. The order — pin, join, flip
+## CP3. The order — pin, join, flip
 
 1. **Pin the issuer.** One apiserver restart per control plane; tokens survive because the value is
    unchanged. **Applied on cp-01 2026-09-20 19:08Z and it played out as rehearsed:** the apiserver
@@ -80,7 +80,7 @@ the `10.96.0.1:443` backend fleet-wide and does not re-sync
 (FU-260), and SA tokens die if the issuer moves (C1). Open a window first:
 [`/maintenance-window`](../.claude/skills/maintenance-window/SKILL.md).
 
-## C4. The rehearsal — what a disposable lab control plane settles
+## CP4. The rehearsal — what a disposable lab control plane settles
 
 The 2026-09-20 rehearsal was run on a *worker*, where the flag that broke the cluster does not
 exist. A one-node throwaway **control plane** answers it completely. On the second hypervisor:

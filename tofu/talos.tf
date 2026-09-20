@@ -42,7 +42,7 @@ locals {
   # no cluster.apiServer. extraArgs REPLACES Talos's derived flag rather than adding to it, which
   # is what makes this a pin and not a second issuer (Talos cannot express two; see locals.tf).
   # Applied at its CURRENT value, so it invalidates no token — rehearsed on the disposable nx-02
-  # lab control plane before the live apply (docs/controlplane-ha.md §C4).
+  # lab control plane before the live apply (docs/controlplane-ha.md §CP4).
   sa_issuer_patch = yamlencode({
     cluster = {
       apiServer = {

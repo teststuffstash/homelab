@@ -20,41 +20,25 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-20 — the three-CP program: VIP LIVE, endpoint cutover REVERTED, program PAUSED).**
-  **Do not resume the CP rollout without reading `tofu/locals.tf` above `cluster_endpoint`.** ADR-133's
-  step list is WRONG in two ways, both paid for live today.
-  (1) **The endpoint flip is not a safe runtime change.** Talos derives `--service-account-issuer`
-  AND `--api-audiences` from `cluster_endpoint`, so moving it 401s every ServiceAccount token already
-  in the cluster. Applied 11:34Z, cluster-wide controller outage inside a minute (cilium-operator,
-  crossplane, cnpg-operator, longhorn csi-provisioner, kube-state-metrics all CrashLoopBackOff; ARC
-  runners wedged so CI stopped; `up` 48 → 0). Reverted 12:06Z; git matched to live in `19e393e4`.
-  A real cutover needs a dual-issuer transition or a planned token rotation — **neither is designed**,
-  and `apiServer.extraArgs` cannot express two issuers (Talos REPLACES the derived flag; a list value
-  is rejected: `unexpected type for yaml sequence: v1alpha1.ArgValue`). FU-243 carries it.
-  (2) **certSANs is missing from the step list and is mandatory** — the apiserver cert must name the
-  VIP or kubectl fails TLS against it. It rides the VIP patch in #1801 and is LIVE.
-  **What IS live and good:** VIP `192.168.2.50` on cp-01 with the cert naming it (#1801), the ip-plan
-  ruling (#1799), a metal-CP `controlplane:` flag in machines.yaml (#1800, no node flagged), an etcd
-  snapshot on the box. `cluster_endpoint` is back to `.51` and `tofu plan` is clean.
-  **Second live lesson, independent of the issuer:** every apiserver restart drops Cilium's
-  `10.96.0.1:443` backend fleet-wide and it does NOT re-sync — seen twice, fixed both times with
-  `kubectl -n kube-system rollout restart ds/cilium`. Nothing guards this yet. FU-258 + spike.
-  **Next session, in order:** (a) the `cp-upgrade` post-rejoin Cilium backend check — the agreed
-  first task, now UNBLOCKED: #1804 merged 2026-09-20 (`ed9940d2`, five review rounds) so the check
-  has its home in `scripts/maintenance-window.sh`; (b) the issuer-migration design; (c) only then
-  wk-metal-02's reinstall (ADR-133 amended 2026-09-20). The `maint-self-test` CI step landed operator-direct afterwards
-  (`aa6644d4`, master CI green with the step reporting `success`), so a fail-open probe in that
-  script now reds its own PR.
-  **Use `/maintenance-window` for every live change from now on** — this session's whole arc is why.
-  **(3) A THIRD unguarded consequence of an apiserver restart, found by a parallel session:** the
-  Argo Workflows controller (v4.0.7) hot-loops on a closed ConfigMap watch and floods Loki —
-  ~110 MB/s at the pod, 96% of all ingest, a burnt core, no self-recovery. Its five triggers were
-  THIS session's cp-01 applies (the live container's `startedAt` is 12:42:48Z, matching the
-  extraArgs probe removal). Fixed by `rollout restart deploy/argo-workflows-workflow-controller`;
-  FU-260 carries the chart bump and the alert-latency question (the belt took ~50 min to fire).
-  So an apiserver restart now has three known unguarded fallouts: SA-token invalidation only if
-  the issuer moves (FU-243), the Cilium backend loss every time (FU-258), and this (FU-260).
-  **Weigh that before the next control-plane apply** — and open a window first.
+- **⚑ PICKUP (2026-09-20 night — the three-CP program: the Cilium guard shipped, the issuer FROZEN by
+  design, the pin is the next apply).** Replaces the morning's paused-program bullet; the outage arc it
+  carried is in TICK-LOG, the mechanism is now a doc: **[`../controlplane-ha.md`](../controlplane-ha.md)**
+  — read it before touching `cluster_endpoint`.
+  (1) **#1811 MERGED** — `cp-upgrade` gates the Cilium apiserver backend either side of the reboot and rolls
+  `ds/cilium` only on a genuinely missing one; the reading is shared as `devbox run maint cilium-check`
+  (exit 0 clean / 2 missing / 3 unread). FU-258's near-term guard is done; every OTHER apiserver restart is
+  still unguarded — run that check by hand after one.
+  (2) **ADR-136 (PR#1812)** — the endpoint cutover's blocker is solved by NOT migrating: Talos cannot express
+  two issuers, so `cluster.apiServer.extraArgs` pins `service-account-issuer` + `api-audiences` at today's
+  `https://192.168.2.51:6443` and `cluster_endpoint` stops being token identity. Rehearsed on a disposable
+  nx-02 lab CP (destroyed; recipe in the doc §CP4): unpinned flip 401s a pre-flip token, pinned flip does not —
+  and does not even restart the apiserver. Box plan of the branch: **1 to change**, cp-01 only.
+  **Next, in order:** (a) apply the pin on cp-01 in a declared window — verify the LIVE flags and a
+  token-authenticated call, expect the FU-258 backend drop (roll `ds/cilium`) and watch FU-260's Argo flood;
+  (b) wk-metal-02's prep (machines.yaml `controlplane: true`, drop `ephemeral`/`kata`; the `arc` flag to
+  wk-metal-03; `forgejo-runner.tf`'s legacy `ephemeral_tier` set → empty; the large-ARC preference comment)
+  then its reinstall + the nx-02 VM joined back to back; (c) the endpoint flip + re-rendered client configs
+  (FU-259); (d) `cp-upgrade` ×3.
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
