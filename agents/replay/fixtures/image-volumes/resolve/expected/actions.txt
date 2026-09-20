@@ -1,0 +1,41 @@
+CALL iv_probe registry.teststuff.net oracle-fleet/ert-corpus sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0
+CALL iv_probe registry.teststuff.net oracle-fleet/ert-corpus sha256:0000000000000000000000000000000000000000000000000000000000000000
+CALL iv_probe ghcr.io teststuffstash/oracle-fleet/other sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0
+OUT → image volume corpus: mounting registry.teststuff.net/oracle-fleet/ert-corpus@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0 at /corpus (read-only, ADR-135)
+OUT WARN: image volume 'dangling' NOT mounted — registry.teststuff.net/oracle-fleet/ert-corpus@sha256:0000000000000000000000000000000000000000000000000000000000000000 is not anonymously served (HTTP 200) by its registry (dangling digest? private package?); cold ride without it (ADR-135 probe-then-mount)
+OUT WARN: image volume 'tagged' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'foreign' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'workpath' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'corpus' at /mnt/dup REFUSED — duplicate name (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry
+OUT WARN: image volume 'x' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT → image volume cache: mounting ghcr.io/teststuffstash/oracle-fleet/other@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0 at /mnt/cache (read-only, ADR-135)
+OUT WARN: image volume 'traverse' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'slashes' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'objfield' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'unnamed' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it
+OUT WARN: image volume 'nested' at /corpus/inner REFUSED — duplicate path (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry
+OUT WARN: image volume 'dangling' at /data/again REFUSED — duplicate name (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry
+OUT IV_MOUNT:
+OUT         - { name: iv-corpus, mountPath: /corpus, readOnly: true }
+OUT         - { name: iv-cache, mountPath: /mnt/cache, readOnly: true }
+OUT IV_VOLUME:
+OUT     - name: iv-corpus
+OUT       image: { reference: "registry.teststuff.net/oracle-fleet/ert-corpus@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0", pullPolicy: IfNotPresent }
+OUT     - name: iv-cache
+OUT       image: { reference: "ghcr.io/teststuffstash/oracle-fleet/other@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0", pullPolicy: IfNotPresent }
+OUT IV_CARD:
+OUT - **Data volume `corpus`: mounted READ-ONLY at `/corpus`** (OCI image `registry.teststuff.net/oracle-fleet/ert-corpus@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0`). It is the stack's published artifact, not a checkout — never try to write there; list it (`ls -R /corpus`) to find the files. For a SQLite file open it immutable: `sqlite3.connect("file:<path>?immutable=1", uri=True)`.
+OUT - **Data volume `dangling`: declared, NOT mounted** (the registry did not serve its digest at launch). Do not look for `/data/old`; say so if the task needed it.
+OUT - **Data volume `tagged`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `foreign`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `workpath`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **A second claim entry (`corpus` at `/mnt/dup`) was IGNORED** — its name collides with an earlier entry. Only the earlier entry's line above describes what is mounted.
+OUT - **Data volume `x`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `cache`: mounted READ-ONLY at `/mnt/cache`** (OCI image `ghcr.io/teststuffstash/oracle-fleet/other@sha256:d0e86892e2ded179be6588904a20ed0131ce89669e536f4fddcd6fe990bea3f0`). It is the stack's published artifact, not a checkout — never try to write there; list it (`ls -R /mnt/cache`) to find the files. For a SQLite file open it immutable: `sqlite3.connect("file:<path>?immutable=1", uri=True)`.
+OUT - **Data volume `traverse`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `slashes`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `objfield`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **Data volume `unnamed`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it.
+OUT - **A second claim entry (`nested` at `/corpus/inner`) was IGNORED** — its path collides with an earlier entry. Only the earlier entry's line above describes what is mounted.
+OUT - **A second claim entry (`dangling` at `/data/again`) was IGNORED** — its name collides with an earlier entry. Only the earlier entry's line above describes what is mounted.
+RC 0

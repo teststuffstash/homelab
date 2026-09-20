@@ -292,6 +292,8 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `hermeticity-audit` | table | - | `~` | - |
+| `image-volumes/absent` | actions | - | `agents/agent-session.sh` | - |
+| `image-volumes/resolve` | actions | - | `agents/agent-session.sh` | - |
 | `issue-body/issue-body` | suite | - | `-` | - |
 | `issue-derivation` | suite | - | `-` | - |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |

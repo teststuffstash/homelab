@@ -420,7 +420,7 @@ work-map scheduling is what lifted the let-it-pile-up gate. The map, as now buil
 
 | Context class | One source | Delivered by | Reaches |
 |---|---|---|---|
-| **1 — environment** (dynamic per-ride facts: docker, egress, proxies, round, write scope, base, goal card) | AgentStack claim knobs + launch state | `render_env_card()` (launcher, ADR-094) | every ride, both harnesses |
+| **1 — environment** (dynamic per-ride facts: docker, egress, mounted data volumes — ADR-135, proxies, round, write scope, base, goal card) | AgentStack claim knobs + launch state | `render_env_card()` (launcher, ADR-094) | every ride, both harnesses |
 | **2 — task + service facts** | the ISSUE (author-injected — the worker clones only `/work/repo`) | issue body — DELIVERY via the launcher's prefetch bundle (`/work/context/` with index, homelab#1175, #1205; the "prefetch, don't fetch" rule above) | every ride |
 | **3 — universal ground rules** (devbox-only installs, prior-art, machine markers) | [`agents/ground-rules.md`](../../agents/ground-rules.md) — **built #763**: the env card's static sibling, injected verbatim by the launcher; a missing file degrades LOUDLY (replay `env-card-ground-rules/missing`) | `render_env_card()` prepends the file | every ride, both harnesses |
 | task rules (how to approach this class) | stack repo `.agents/<class>.yaml` | launcher `--recipe` (L2/L3, [fixer-context.md](fixer-context.md)) | the ride |
