@@ -51,16 +51,53 @@ MAINT_REPOS="${MAINT_REPOS:-homelab oracle-fleet oracle-iac sleep-tracking snore
 # DECLARED_ALERTS plus the control-plane names the 2026-09-20 apply produced.
 DEFAULT_ALERTS="KubeAPIDown,KubeletInstanceUnreachable,KubeNodeNotReady,KubeNodeUnreachable,KubePodNotReady,KubeSchedulerInstanceUnreachable,KubeControllerManagerInstanceUnreachable,KubeAggregatedAPIDown,KubeDeploymentReplicasMismatch,KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,CiliumUnreachableNodes,CiliumAgentScrapeDown,TargetDown"
 
-q() { curl -s --max-time 20 --data-urlencode "query=$1" "$PROM/api/v1/query" 2>/dev/null; }
-firing() { curl -s --max-time 20 "$PROM/api/v1/alerts" 2>/dev/null | jq -r '[.data.alerts[]|select(.state=="firing")|.labels.alertname]|unique'; }
-targets_up() { q 'sum(up)' | jq -r '.data.result[0].value[1] // "0"'; }
+# EVERY read distinguishes "queried and found nothing" from "the query failed" — and returns
+# non-zero for the latter. Caught in review (#1804): the first cut piped `curl … 2>/dev/null` into
+# jq, and on a failed curl jq iterates an empty stream, exits 0 and prints nothing. That empty
+# result flowed through as "no new firing alerts" — `ok`. Same for a transient `kubectl get pods`
+# failure. So a network hiccup to Prometheus mid-maintenance, exactly when this runs, silently
+# downgraded a check to a false pass and `close` (which gates purely on check's exit) would let
+# the window close on a signal nobody ever read. That is this script's own stated failure class —
+# "a check that passes because it measured NOTHING" — so all three reads now fail loudly instead.
+
+# Prometheus JSON, validated for shape. Non-zero if the read failed or the answer is not an
+# `{"status":"success"}` envelope — an HTML error page or a truncated body must never parse as data.
+prom_get() {
+  local out
+  out="$(curl -sS --max-time 20 "$@" 2>/dev/null)" || return 1
+  [ -n "$out" ] || return 1
+  jq -e '.status == "success"' >/dev/null 2>&1 <<<"$out" || return 1
+  printf '%s' "$out"
+}
+firing() {
+  local out; out="$(prom_get "$PROM/api/v1/alerts")" || return 1
+  jq -e 'has("data") and (.data|has("alerts"))' >/dev/null 2>&1 <<<"$out" || return 1
+  jq -r '[.data.alerts[]|select(.state=="firing")|.labels.alertname]|unique' <<<"$out"
+}
+targets_up() {
+  local out; out="$(prom_get --data-urlencode 'query=sum(up)' "$PROM/api/v1/query")" || return 1
+  # An empty result vector is a real answer (nothing is up) and stays 0; a failed read returned above.
+  jq -r '.data.result[0].value[1] // "0"' <<<"$out"
+}
+
 # Only HARD-failed pods. Deliberately not "everything that is not Running": a cluster with an
 # agent loop in it always has pods in ContainerCreating/Init/Pending, and a gate that cries wolf
 # on normal churn is a gate people stop reading. The states below do not clear on their own.
 POD_BAD_STATES='CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerError|InvalidImageName|^Error$|Init:Error|Init:CrashLoopBackOff'
-pods_bad_list() { kubectl get pods -A --no-headers 2>/dev/null | awk -v re="$POD_BAD_STATES" '$4 ~ re {print $1"/"$2" ("$4")"}'; }
-pods_bad() { pods_bad_list | wc -l | tr -d ' '; }
-node_count() { kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' '; }
+pods_bad_list() {
+  local out
+  out="$(kubectl get pods -A --no-headers 2>/dev/null)" || return 1
+  # A cluster with zero pods is not a thing; an empty body here means the read, not the cluster.
+  [ -n "$out" ] || return 1
+  awk -v re="$POD_BAD_STATES" '$4 ~ re {print $1"/"$2" ("$4")"}' <<<"$out"
+}
+node_count() {
+  local out
+  out="$(kubectl get nodes --no-headers 2>/dev/null)" || { echo 0; return 0; }
+  # awk, not `grep -c`: grep EXITS 1 on a zero count, which under `set -e` aborted the whole
+  # snapshot mid-way and left a truncated baseline behind (caught by the self-test).
+  printf '%s\n' "$out" | awk 'NF{n++} END{print n+0}'
+}
 
 # How many cilium agents still hold a backend for the in-cluster apiserver Service.
 # Prints "<have> <missing> <unknown>". The three-way split is deliberate: a `kubectl exec` into a
@@ -109,12 +146,24 @@ snapshot() {
   local n; n="$(node_count)"
   [ "${n:-0}" -gt 0 ] || { echo "maintenance-window: kubectl returned 0 nodes — refusing to snapshot" >&2; exit 1; }
   local cil; cil="$(cilium_backends)"
-  jq -n --argjson alerts "$(firing)" \
-        --arg up "$(targets_up)" --arg pods "$(pods_bad)" \
+  # Each read carries an *_ok flag. A false flag is never "0" or "clean" — cmd_check reports it
+  # as unreadable and fails, because "we did not look" must not be indistinguishable from "fine".
+  local alerts alerts_ok=true up up_ok=true pods pods_ok=true pods_out
+  alerts="$(firing)" || { alerts='[]'; alerts_ok=false; }
+  up="$(targets_up)" || { up=0;        up_ok=false; }
+  if pods_out="$(pods_bad_list)"; then
+    pods="$(printf '%s\n' "$pods_out" | awk 'NF{n++} END{print n+0}')"
+  else
+    pods=0; pods_ok=false
+  fi
+  jq -n --argjson alerts "$alerts" --argjson alerts_ok "$alerts_ok" \
+        --arg up "$up" --argjson up_ok "$up_ok" \
+        --arg pods "$pods" --argjson pods_ok "$pods_ok" \
         --arg have "${cil%% *}" --arg missing "$(cut -d' ' -f2 <<<"$cil")" \
         --arg unknown "${cil##* }" --arg nodes "$n" \
         --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        '{at:$at, alerts:$alerts, up:($up|tonumber), pods_bad:($pods|tonumber),
+        '{at:$at, alerts:$alerts, alerts_ok:$alerts_ok, up:($up|tonumber), up_ok:$up_ok,
+          pods_bad:($pods|tonumber), pods_ok:$pods_ok,
           cilium_have:($have|tonumber), cilium_missing:($missing|tonumber),
           cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber)}'
 }
@@ -133,7 +182,15 @@ cmd_open() {
   [ -n "$reason" ] || { echo "open: --reason is required (it is what the responder reads)" >&2; exit 64; }
   mkdir -p "$STATE_DIR"
   echo "== baseline =="
-  snapshot | tee "$BASE" | jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"'
+  snapshot > "$BASE"
+  jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"' "$BASE"
+  # A baseline built from failed reads is worse than no baseline: every later check compares
+  # favourably against it. Refuse rather than bank one.
+  jq -e '.alerts_ok and .up_ok and .pods_ok' >/dev/null "$BASE" || {
+    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok)"' "$BASE" >&2
+    echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
+    rm -f "$BASE"; exit 1
+  }
   local args=(open --reason "$reason" --alerts "$alerts" --hours "$hours"
               --note "opened by scripts/maintenance-window.sh; baseline in $BASE")
   [ -n "$node" ] && args+=(--node "$node")
@@ -147,13 +204,23 @@ cmd_check() {
   local rc=0
   echo "== check vs baseline ($(jq -r .at <<<"$b")) =="
 
-  local new; new="$(jq -r --argjson b "$b" '[.alerts[]|select(. as $a | ($b.alerts|index($a))|not)]|join(", ")' <<<"$now")"
-  if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
+  # An unreadable probe fails the check. It is NOT "ok", and it is NOT "0" — the whole point is
+  # that "we could not look" is a distinct, blocking answer (review, #1804).
+  if [ "$(jq -r .alerts_ok <<<"$now")" != true ]; then
+    echo "  ⚠ alerts UNREADABLE — Prometheus $PROM/api/v1/alerts did not answer; the new-alert check did NOT run"; rc=2
+  else
+    local new; new="$(jq -r --argjson b "$b" '[.alerts[]|select(. as $a | ($b.alerts|index($a))|not)]|join(", ")' <<<"$now")"
+    if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
+  fi
 
-  local u0 u1; u0="$(jq -r .up <<<"$b")"; u1="$(jq -r .up <<<"$now")"
-  if [ "$(printf '%.0f' "$u1")" -lt "$(printf '%.0f' "$u0")" ]; then
-    echo "  ⚠ scrape targets DOWN: $u0 -> $u1"; rc=2
-  else echo "  ok  scrape targets: $u0 -> $u1"; fi
+  if [ "$(jq -r .up_ok <<<"$now")" != true ]; then
+    echo "  ⚠ scrape targets UNREADABLE — Prometheus query failed; the target count was NOT compared"; rc=2
+  else
+    local u0 u1; u0="$(jq -r .up <<<"$b")"; u1="$(jq -r .up <<<"$now")"
+    if [ "$(printf '%.0f' "$u1")" -lt "$(printf '%.0f' "$u0")" ]; then
+      echo "  ⚠ scrape targets DOWN: $u0 -> $u1"; rc=2
+    else echo "  ok  scrape targets: $u0 -> $u1"; fi
+  fi
 
   local ch cm cu; ch="$(jq -r .cilium_have <<<"$now")"; cm="$(jq -r .cilium_missing <<<"$now")"; cu="$(jq -r .cilium_unknown <<<"$now")"
   if [ "$cm" -gt 0 ]; then
@@ -165,12 +232,16 @@ cmd_check() {
     [ "$cu" -gt 0 ] && echo "       (unknown = exec did not answer twice; re-run check rather than acting on it)"
   fi
 
-  local p0 p1; p0="$(jq -r .pods_bad <<<"$b")"; p1="$(jq -r .pods_bad <<<"$now")"
-  if [ "$p1" -gt "$p0" ]; then
-    echo "  ⚠ hard-failed pods: $p0 -> $p1"
-    pods_bad_list | sed 's/^/       /'
-    rc=2
-  else echo "  ok  hard-failed pods: $p0 -> $p1"; fi
+  if [ "$(jq -r .pods_ok <<<"$now")" != true ]; then
+    echo "  ⚠ pods UNREADABLE — 'kubectl get pods -A' failed; the pod check did NOT run"; rc=2
+  else
+    local p0 p1; p0="$(jq -r .pods_bad <<<"$b")"; p1="$(jq -r .pods_bad <<<"$now")"
+    if [ "$p1" -gt "$p0" ]; then
+      echo "  ⚠ hard-failed pods: $p0 -> $p1"
+      pods_bad_list 2>/dev/null | sed 's/^/       /'
+      rc=2
+    else echo "  ok  hard-failed pods: $p0 -> $p1"; fi
+  fi
 
   local ci; ci="$(stranded_ci 600)"
   if [ -n "$ci" ]; then
