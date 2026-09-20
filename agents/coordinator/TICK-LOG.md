@@ -10203,3 +10203,37 @@ the apiserver at all**. PR#1812 carries the tofu pin (VM + metal CPs), ADR-136, 
 and `docs/controlplane-ha.md` — the design doc ADR-133 never had, which is why the trap lived in a
 code comment. Box plan of the branch: **1 to change**, cp-01 only.
 
+
+### 2026-09-20, night (cont.) — the pin landed, the laptop did not
+
+**Applied the ADR-136 pin on cp-01 (19:08Z, declared window).** It behaved exactly as the lab said:
+a token minted BEFORE the apply still authenticated after, `tofu plan` clean. Collateral was the
+known list and nothing else — FU-258 took the `10.96.0.1:443` backend off **10 of 12** agents (one
+`ds/cilium` roll restored all 12, verified per node), kube-scheduler/kube-controller-manager on cp-01
+crashlooped while the API was down and self-recovered in ~6 min, three scrape targets followed them
+down and back. FU-260's Argo flood did NOT recur. #1813 records it.
+
+**Then the laptop.** #1814 (ride pool → wk-metal-03) + #1815 (`controlplane: true`) + #1816 (cp-02
+declared) + #1817 (Forgejo unpinned, operator ask) all merged; #1815 and #1817 each took a review
+round — the first for stating an unmerged sibling PR's effect as fact, the second for leaving three
+artifacts asserting the tier the diff removes. Both fair; both fixed in-PR.
+
+**wk-metal-02 is stuck and needs a human at the box.** The arc, because every step of it is a trap
+worth knowing: (1) `talosctl reset --wipe-mode all` WEDGED — stage `resetting` for 45 min with ~88 KB
+of disk writes in 10 s, i.e. not wiping, and neither `reset --reboot` nor `reboot --mode powercycle`
+moved it (uptime kept climbing). (2) The smart plug cannot cycle a laptop — it ran on battery at
+0 W from mains. Operator power-cycled it by hand. (3) It then booted **off disk** three times: PXE
+was attempted and fell through, because **`/srv/tftp/undionly.kpxe` was missing** — the BIOS
+chainload file — while `ansible/matchbox-ipxe-tftp.yml` has been failing at its last task
+(*Enable tftpd-hpa*, masked by the proxydhcp role) for long enough that nobody noticed the copy
+before it was unverified. FU-261. Re-running the playbook restored the file and TFTP served it.
+(4) The way out of needing PXE at all: `reset --system-labels-to-wipe STATE --system-labels-to-wipe
+EPHEMERAL` — a config-less Talos boots into MAINTENANCE off its own disk. That worked first try.
+(5) The CP config applied cleanly to the maintenance node (`1 changed`), Matchbox was unflagged, and
+the node then went off the network entirely: no ARP on `.183`, 7.3 W at the plug. Powered, not
+booting a NIC. That is where it sits.
+
+**Left deliberately at ONE etcd member.** cp-02 is declared and merged but NOT created: resting at
+two members is worse than one (ip-plan §VIP), so the third join waits for the second. Cluster at
+wind-down: 11/11 Ready, cilium 11/11, one etcd member, window closed `--force` with the two known
+deltas named.

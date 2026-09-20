@@ -20,25 +20,26 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-20 night — the three-CP program: the Cilium guard shipped, the issuer FROZEN by
-  design, the pin is the next apply).** Replaces the morning's paused-program bullet; the outage arc it
-  carried is in TICK-LOG, the mechanism is now a doc: **[`../controlplane-ha.md`](../controlplane-ha.md)**
-  — read it before touching `cluster_endpoint`.
-  (1) **#1811 MERGED** — `cp-upgrade` gates the Cilium apiserver backend either side of the reboot and rolls
-  `ds/cilium` only on a genuinely missing one; the reading is shared as `devbox run maint cilium-check`
-  (exit 0 clean / 2 missing / 3 unread). FU-258's near-term guard is done; every OTHER apiserver restart is
-  still unguarded — run that check by hand after one.
-  (2) **ADR-136 (PR#1812)** — the endpoint cutover's blocker is solved by NOT migrating: Talos cannot express
-  two issuers, so `cluster.apiServer.extraArgs` pins `service-account-issuer` + `api-audiences` at today's
-  `https://192.168.2.51:6443` and `cluster_endpoint` stops being token identity. Rehearsed on a disposable
-  nx-02 lab CP (destroyed; recipe in the doc §CP4): unpinned flip 401s a pre-flip token, pinned flip does not —
-  and does not even restart the apiserver. Box plan of the branch: **1 to change**, cp-01 only.
-  **Next, in order:** (a) apply the pin on cp-01 in a declared window — verify the LIVE flags and a
-  token-authenticated call, expect the FU-258 backend drop (roll `ds/cilium`) and watch FU-260's Argo flood;
-  (b) wk-metal-02's prep (machines.yaml `controlplane: true`, drop `ephemeral`/`kata`; the `arc` flag to
-  wk-metal-03; `forgejo-runner.tf`'s legacy `ephemeral_tier` set → empty; the large-ARC preference comment)
-  then its reinstall + the nx-02 VM joined back to back; (c) the endpoint flip + re-rendered client configs
-  (FU-259); (d) `cp-upgrade` ×3.
+- **⚑ PICKUP (2026-09-21 ~00:45 — the three-CP program: pin LIVE, `wk-metal-02` STUCK MID-REINSTALL,
+  cp-02 deliberately NOT created).** Mechanism doc: **[`../controlplane-ha.md`](../controlplane-ha.md)**
+  (§CP5 is the promotion recipe this session wrote and then executed).
+  **Done and live:** #1811 the `cp-upgrade` cilium gate · #1812 ADR-136 the SA-issuer pin, APPLIED on
+  cp-01 19:08Z (a pre-apply token survived; FU-258 dropped 10/12 backends, one `ds/cilium` roll fixed
+  it) · #1813 the evidence · #1814 the ride pool moved to wk-metal-03 · #1815 `controlplane: true` for
+  wk-metal-02 · #1816 cp-02 DECLARED (VM not created) · #1817 the Forgejo runner unpinned (+4Gi DinD cap).
+  **⛔ THE BLOCKER — needs eyes on the box.** `wk-metal-02` is wiped (STATE+EPHEMERAL), was installed
+  with the CP config (tofu apply clean), unflagged in Matchbox — and then went **off the network**:
+  `.183` answers no ARP while the plug reads 7.3 W, so it is powered but not booting into anything with
+  a NIC. No console here. First move on the box: power-cycle and WATCH the screen (bootloader present?
+  "no bootable device"?). Its Node object is deleted and etcd is back to ONE member (cp-01), which is
+  the safe resting state — the cluster is 11/11 Ready, cilium 11/11, nothing else degraded.
+  **Do NOT create cp-02 until wk-metal-02 is back:** two etcd members is the one state worse than one
+  (ip-plan §VIP). Everything for it is merged — `devbox run mgmt-tf -- apply` creates and joins it.
+  **Also found and filed:** FU-261 — `/srv/tftp/undionly.kpxe` was missing, so BIOS PXE clients
+  silently fell back to disk; the `matchbox-ipxe-tftp` role has been failing at its last task
+  (tftpd-hpa masked by proxydhcp) which is why nobody saw it. File restored live.
+  **Window:** closed with `--force` at 00:45Z — knowingly open: nodes 12→11 and targets 151→143 are
+  wk-metal-02 being out; `AgentWorkerEgressDropped` is an oracle-fleet ride (FU-257 class), not this work.
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-261** (2026-09-20: FU-260 minted for the Argo controller's apiserver-restart
+  Next free id: **FU-262** (2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
   backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
@@ -1238,6 +1238,16 @@ the block needs pruning, not more headings.
       `LokiNamespaceLogVolumeHigh` (~50 min to fire: `for: 30m` on a 30m rate window). Relates FU-258.
 
 ## Hardware & nodes
+
+- [ ] **FU-261** — **The BIOS PXE chainload was silently broken, and the role that serves it has
+      been failing for months.** `/srv/tftp/undionly.kpxe` was MISSING on the Matchbox LXC (only the
+      two UEFI binaries there), so a legacy PXE client got a filename it could not fetch and fell back
+      to disk — three reboots of `wk-metal-02` read as "PXE just doesn't take" (2026-09-20). Why nobody
+      saw it: `ansible/matchbox-ipxe-tftp.yml` ends with *Enable tftpd-hpa*, which `matchbox-proxydhcp`
+      MASKS (dnsmasq owns :69), so every run fails at the last task and the copy before it went
+      unverified. Re-running restored the file (74 KB, TFTP-served). **Next:** guard/drop the
+      tftpd-hpa tasks (the role header already says dnsmasq owns TFTP) + probe that all three boot
+      files are served — onboarding depends on it, nothing tests it. Relates FU-244.
 
 
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
