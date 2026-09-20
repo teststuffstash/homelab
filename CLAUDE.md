@@ -51,7 +51,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
 | `m70s` (Lenovo ThinkCentre M70s SFF, PXE) | 192.168.2.56 | k8s worker + Longhorn (third physical Garage zone — ADR-114) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, compute tier (tainted, 8GB) + Longhorn bulk tier + the garage-2 zone — NO rides |
-| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) |
+| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s control plane (ADR-133 — one CP per chassis, laptop battery = a UPS for etcd) |
 | `wk-metal-03` (ThinkPad X260, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
 | `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
 | `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn |

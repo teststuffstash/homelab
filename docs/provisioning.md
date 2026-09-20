@@ -90,7 +90,11 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
 
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
   ⚠ kata node AND a **Longhorn BULK zone** (ADR-089) — a wipe destroys bulk replicas; drain first.
-- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE; kata node.
+- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), legacy PXE; kata node.
+  **CONTROL PLANE since 2026-09-20** (ADR-133; left the ride pool in #1814, merged 9b978367 —
+  the prerequisite §CP5 step 1 names): reinstalled rather than
+  flipped, because `machine_type` is baked at install — recipe in
+  [`controlplane-ha.md`](controlplane-ha.md) §CP5. etcd sync-write ~1.6 ms (etcd's dd probe).
 - `wk-metal-03` — laptop i5-6200U, .184, `/dev/sda`, ephemeral tier, **kata node** (`kata: true`
   → the `metal_kata` install image + `homelab.io/kata` label).
 - `wk-metal-04` — desktop i5-3570K/16GB, .186, `/dev/sda`, ephemeral tier, **kata node**. The roomy
