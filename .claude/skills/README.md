@@ -12,7 +12,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (pipeline: board-sweep → this → docs-cleanup) |
 | [meta-coordinate](meta-coordinate/SKILL.md) | Resume the meta-coordinator role in a fresh session |
 | [handoff](handoff/SKILL.md) | Process the stack-jail → mono-jail work queue |
-| [maintenance-window](maintenance-window/SKILL.md) | Wrap ANY live change in a declared window + baseline + alert watch — the others run inside it |
+| [maintenance-window](maintenance-window/SKILL.md) | Wrap ANY live change in a [declared window](../../docs/agents/roles.md) + baseline + alert watch — the others run inside it |
 | [onboard-metal-node](onboard-metal-node/SKILL.md) | PXE-onboard a bare-metal Talos worker |
 | [opnsense-as-code](opnsense-as-code/SKILL.md) | Router changes as code (Unbound/HAProxy/ACME/BGP/DHCP) |
 | [tofu-apply](tofu-apply/SKILL.md) | Run tofu correctly (secrets, `-chdir`, plan-first) |
