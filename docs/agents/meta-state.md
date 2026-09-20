@@ -130,7 +130,11 @@ never the session's arc — that is TICK-LOG's.)
   target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
   is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
   FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
-  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts.
+  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts. **Upgrade-path
+  update (2026-09-20):** PR#1778 merged `devbox run cp-upgrade -- <node>` on the management box;
+  an isolated nx-02 one-node lab proved Talos v1.13.2→v1.13.10, then was destroyed. FU-243 now
+  carries the post-join one-member-at-a-time convergence step; `controlplane-lab-install.sh` is
+  only the independent rehearsal-cluster installer, not the production join path.
 
 
 - **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**

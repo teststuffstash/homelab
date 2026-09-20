@@ -422,7 +422,9 @@ six OVERSIZE items pointer-ized into
       is a ruling, not an exception; (b) etcd snapshot; (c) the VIP on cp-01's machine config + `cluster_endpoint`
       cutover (runtime apply, no pve maintenance); (d) kubeconfig/talosconfig/jail/box/loop endpoints. Then
       the laptop (wk-metal-03) reinstall to maintenance, the nx-02 VM, both joins back to back — never rest at
-      two members; nx-02 is not CP-production-ready until its drives are in. Relates FU-235, FU-097.
+      two members; nx-02 is not CP-production-ready until its drives are in. Once all three are Ready, converge
+      Talos one member at a time with `devbox run cp-upgrade -- <node>` (proven by PR#1778); its lab installer is an independent test
+      cluster and is not the production join path. Relates FU-235, FU-097.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
