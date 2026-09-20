@@ -78,6 +78,9 @@ talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd snapshot "$sn
 if [ "$LAB" = 1 ]; then
   export FORCE=1 SILENCE=0
 fi
+# This is deliberately set only after the CP-specific endpoint, quorum, health, and snapshot
+# gates above have all passed. The shared maintenance preflight otherwise refuses CP nodes.
+export CONTROLPLANE_GUARDED=1
 bash "$REPO/scripts/node-maintenance.sh" upgrade "$NODE"
 if [ "${DRY:-0}" = 1 ]; then
   echo "OK: dry run complete; no control-plane upgrade was attempted"

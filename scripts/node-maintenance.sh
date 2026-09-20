@@ -320,8 +320,13 @@ preflight() {
   if [ "$ready" = True ]; then ok "node Ready ($ip)"; else fail "node not Ready ($ready)"; fi
   if talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" version --short >/dev/null 2>&1; then
     ok "Talos API reachable at $ip"; else fail "Talos API unreachable at $ip (shutdown would not be possible)"; fi
-  if kubectl get node "$NODE" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' | grep -q .; then
-    fail "control-plane node — use the Proxmox full-stop window (runbook), not this script"; fi
+  if kubectl get node "$NODE" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+    if [ "${CONTROLPLANE_GUARDED:-0}" = 1 ]; then
+      ok "control-plane node admitted by controlplane-upgrade.sh after CP-specific gates"
+    else
+      fail "control-plane node — use controlplane-upgrade.sh, not this script"
+    fi
+  fi
 
   # --- Longhorn: the whole point ---------------------------------------------------------
   local vols reps
