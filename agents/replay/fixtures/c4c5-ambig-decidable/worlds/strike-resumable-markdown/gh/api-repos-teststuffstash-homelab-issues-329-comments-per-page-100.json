@@ -1,0 +1,16 @@
+[
+  {
+    "id": 100,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "<!-- agent-summary -->\n\ud83e\udd16 **Agent activity** \u2014 picking this up (round 1)."
+  },
+  {
+    "id": 101,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: error_class=unknown\n\nThe worker went terminal without pushing. The issue is still actionable \u2014 the deliverable is unchanged.\n\n**Resumable branch pushed:** `fix/issue-329-loop` \u2014 the next round can resume from it with --work-branch fix/issue-329-loop instead of starting over."
+  }
+]

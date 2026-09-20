@@ -14,3 +14,16 @@ block-class-wins | strike-resumable |       |      | block-class-wins
 #                     unit, a ⛔ orphan line, a strike-held class row (rule #6; PR#1503's review found
 #                     this sibling loop dispatching on the label instead). #330 keeps its ordinary unit.
 block-class-malformed | strike-resumable |       |      | block-class-malformed
+# strike-resumable-markdown = the SAME strike-resumable world, but #329's comment carries the
+#                     finalizer's LIVE markdown shape: `**Resumable branch pushed:** \`<branch>\``
+#                     + trailing prose. The extraction must anchor the match, strip the backticks
+#                     and cut at the first whitespace — the bare branch name and nothing else
+#                     (the pre-fix `sub(".*Resumable branch pushed:[ \t]*"; "")` was greedy up to
+#                     the opening `**`, so the value was `** \`agent/<branch>\` — …` and word-split
+#                     in the dispatch loop: the #1780 dispatch arrived carrying `work-branch=**`).
+#                     Same expected stream as strike-resumable: the markdown is not the value.
+strike-resumable-markdown | strike-resumable-markdown |       |      | strike-resumable
+# strike-no-resumable = the SAME world, but #329's AGENT_STRIKE comment carries NO
+#                     `Resumable branch pushed:` line at all: the extraction yields an EMPTY
+#                     work-branch (no partial match, no `**`) and the issue is held as today.
+strike-no-resumable | strike-no-resumable |       |      | no-strike
