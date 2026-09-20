@@ -10027,3 +10027,14 @@ said "NOT into the loop-ns CNP" (#1283 changed that).
 **Found:** the infeasible-terminal clause draws candidates through `C4C5_SEL`, which drops
 `agent/error` — a ride that declares infeasible and then dies on the same wall is never parked.
 Filed homelab#1797. Handoff asks 5/6 not acted on (6 is stack-side; 5 is one sighting).
+
+**Wind-down:** operator asked for a quick would-be-blocked read before filing anything for the
+ownerless loop-CNP enforce flip — `sum by (source, query) (increase(hubble_dns_queries_total{source=~".*-agents"}[7d]))`
+diffed against the `agent-loop-egress` allowlist. NOT clean: the `/coordinate` doorbell
+(`agent-loop-eventsource-svc.agent-coordinator`), `mcp.minutark.ee` (a worker `extraFQDNs` entry
+the loop CNP never receives) and an unclassified `cafe.github.com` → **FU-257**; the Composition
+comment citing closed Goal #1162 repointed to it. Seen, not pursued: `agent-coordinator` resolves
+a far wider set (`api.segment.io`, `openrouter.ai`, `ghcr.io`) and is outside the claim-composed
+policy; enforced `oracle-fleet` workers drop `mcp.minutark.ee` despite the `extraFQDNs` entry.
+Handoff closed to `done/`. Session worked from scratchpad worktrees throughout — the shared
+checkout sat on `docs/controlplane-program-upgrade-note` (not this session's) and was left there.
