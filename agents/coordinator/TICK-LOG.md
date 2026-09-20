@@ -10002,3 +10002,28 @@ the next reader evaluating tag-vs-digest through either mirror doesn't have to r
 a stale-line fix (it still claimed ci-runner-01/ARC mirror wiring "deferred" — FU-073 archived that
 complete 2026-07-26). FU-255 filed for the residual: every OTHER floating-tag consumer of either
 mirror carries the same latent exposure, unaudited.
+
+## 2026-09-20 — oracle handoff: rides cannot read the stack's own corpus bucket → `fixer.egress.ownServices`
+
+**Condition:** oracle's design handoff (`20260920-0704-worker-reviewer-rides-cannot-read-…`):
+oracle-fleet#636/PR#640 invented a wire shape for six rounds because no ride can read
+`ert-snapshots`; #637 declared `AGENT_INFEASIBLE` and sat `agent/in-progress`+`agent/error`.
+Operator asked whether agents were not already in their own namespace — half: FU-080 moved the
+LOOP to `<stack>-agents`, workers stayed in the repo ns by design (README role table), and no
+FU/ADR planned moving them.
+
+**Ruling (operator):** option D (keyless signing proxy, built in oracle-iac) + the network leg as
+a claim knob, not a stack-authored additive CNP. Namespace move deferred → **FU-256**.
+
+**Shipped:** PR #1798 (`c0c5bcbd`) — `fixer.egress.ownServices [{podLabels, port}]`, namespace
+pinned to the repo's own by the Composition (the handoff's free `namespace` field dropped), no XRD
+default (stamping lesson), rendered into the worker CNP AND the loop-ns CNP. Proven by rendering
+the go-template under helm against oracle's claim (`.observed.composite.resource` → values):
+no-knob render identical bar a comment, sample entry lands in both CNPs. Live after sync: XRD +
+Composition carry the knob, four AgentStacks SYNCED/READY. Not yet exercised by a ride — oracle's
+acceptance rides are the live proof. Stale doc fixed in passing: the egress-dial MCP row still
+said "NOT into the loop-ns CNP" (#1283 changed that).
+
+**Found:** the infeasible-terminal clause draws candidates through `C4C5_SEL`, which drops
+`agent/error` — a ride that declares infeasible and then dies on the same wall is never parked.
+Filed homelab#1797. Handoff asks 5/6 not acted on (6 is stack-side; 5 is one sighting).
