@@ -9,6 +9,17 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810**
+  (arc-runner pin → `2026.9.20-gd4aab3d8146a`, devbox 0.18.3) was OPEN/auto-merge at wind-down —
+  confirm it merged. If Monday's 03:00Z `devbox-update` ran on the OLD image it opens a PR flipping
+  `nodejs_22` `plugin_version` back to 0.0.4: CLOSE it, do not merge (FU-240). claude-jail `6f90815`
+  (`DEVBOX_USE_VERSION=0.18.3`) is committed locally there, unpushed beside the operator's own
+  commits — needs their push + a jail rebuild; the host profile wants the same export.
+  (2) `fixer.imageVolumes` is LIVE (#1808, ADR-135) but NO claim declares it — oracle adds it in
+  oracle-iac (SHIPPED note in their `done/`); first real ride with `/corpus` mounted is unobserved.
+  (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
+  `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
+  oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
 - **⚑ PICKUP (2026-09-20 — the three-CP program: VIP LIVE, endpoint cutover REVERTED, program PAUSED).**
   **Do not resume the CP rollout without reading `tofu/locals.tf` above `cluster_endpoint`.** ADR-133's
   step list is WRONG in two ways, both paid for live today.
