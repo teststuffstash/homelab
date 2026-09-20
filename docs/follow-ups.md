@@ -460,16 +460,15 @@ six OVERSIZE items pointer-ized into
       drop the default exclude. Alternative if it never does: hard-code the id list (rejected
       2026-08-12 as a frozen catalog) or `ignore_changes` (loses the widening signal).
       `docs/cloudflare.md` gotcha 3 addendum. Relates FU-156, FU-157.
-- [ ] **FU-240** — **devbox version skew, box ↔ jail (2026-09-13):** the management box's devbox
-      (the NixOS closure's) rewrites `devbox.lock`'s `plugin_version` fields on every `devbox run`
-      (0.0.4→0.0.2, 0.0.5→0.0.4 in the apply clone), so the loops' clones are permanently dirty
-      and "one toolchain pin for the jail and the box" (ADR-129) is only true for the packages,
-      not the runner. Mitigated: `mgmt_clone`'s dirty check ignores the lock. **Next:** pin the
-      same devbox version on both sides (the closure's `devbox` package ↔ claude-jail's image) and
-      drop the exclusion. Relates ADR-129, FU-237.
-      **+2026-09-17: the JAIL's own devbox (0.18.1) does it too** (nodejs_22 0.0.5→0.0.4) and it
-      dirties the operator's SHARED working tree, where no exclusion exists — skip `git status`
-      and a session commits the downgrade. Reverted by hand.
+- [ ] **FU-240** — **devbox version skew rewrites `devbox.lock` (2026-09-13; root cause 09-20):**
+      `plugin_version` is baked per devbox RELEASE (nodejs 0.0.4 ≤0.18.1, 0.0.5 ≥0.18.2) and any
+      `devbox run` rewrites it, so four disagreeing runners flip-flop the lock: the ARC image pins
+      0.17.5 (it writes the committed lock), the jail's install-script LAUNCHER floated (0.18.1 →
+      0.18.3, dirtying the operator's SHARED tree), the box runs nixpkgs', the host floats.
+      Mitigated: `mgmt_clone`'s dirty check ignores the lock. Done 09-20: claude-jail pins
+      `DEVBOX_USE_VERSION=0.17.5` (575599e, live on rebuild; verified clean lock). **Next:** the host
+      profile gets the same env; the box closure overrides `devbox` to it; then drop the exclusion.
+      Upgrades = ONE change bumping the ARC ARG + the jail ENV + the lock. Relates ADR-129, FU-237.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
