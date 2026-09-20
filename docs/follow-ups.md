@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-260** (2026-09-20: FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
+  Next free id: **FU-261** (2026-09-20: FU-260 minted for the Argo controller's apiserver-restart
+  hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
   backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
   FU-256 minted for the worker-rides-into-`<stack>-agents`
@@ -1225,6 +1226,16 @@ the block needs pruning, not more headings.
       kubernetes provider is configured from that kubeconfig and goes unconfigured mid-apply.
       **Next:** endpoint in the resource's replace triggers, or `devbox run kubeconfig` verifies
       against `cluster_endpoint` and refuses on mismatch. Relates FU-243, FU-253.
+- [ ] **FU-260** — **The Argo Workflows controller hot-loops and floods Loki when the apiserver
+      goes away (2026-09-20).** v4.0.7's `configmap_watcher` never re-establishes a closed watch:
+      it logs `invalid config map object received in config watcher` forever — 1.43M lines / 220 MB
+      in 2s (~110 MB/s at the pod, 1141m CPU), 96% of all Loki ingest. No self-recovery;
+      `kubectl -n argo rollout restart deploy/argo-workflows-workflow-controller` fixed it.
+      Workflows kept reconciling, so the damage is log volume + a burnt core. **Trigger CONFIRMED:
+      an apiserver restart** — this session's cp-01 applies (09:33/09:38/09:49/12:06/12:42; the live
+      container's `startedAt` is 12:42:48Z). Same trigger as FU-258, different victim. **Next:**
+      check upstream for a fix and bump the chart; decide whether a FAST strap belongs beside
+      `LokiNamespaceLogVolumeHigh` (~50 min to fire: `for: 30m` on a 30m rate window). Relates FU-258.
 
 ## Hardware & nodes
 
