@@ -212,7 +212,9 @@ declared-vs-live diff on the box's belt — FU-235; **(b)** the controller-subst
 — FU-242 ([`docs/spikes/tofu-controller-on-the-box.md`](docs/spikes/tofu-controller-on-the-box.md));
 **(c)** the impact line in the sentinel verdict + box-run maintenance verbs, first human-ordered; **(d)**
 `reconcile: auto` on the compute tier, WIP 1; **(e)** the control-plane endpoint VIP — FU-243 — then the two
-joins. Design: [`docs/management-box.md`](docs/management-box.md) §MB4; §HA model above carries the order.
+joins. The management-box rolling control-plane upgrade verb is now built and rehearsal-proven
+(PR#1778); after the three members are Ready it converges them one at a time. Design:
+[`docs/management-box.md`](docs/management-box.md) §MB4; §HA model above carries the order.
 
 ### Platform self-service via Crossplane — "homelab as AWS/Civo" (FU-039)
 
