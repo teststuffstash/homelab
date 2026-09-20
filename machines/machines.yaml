@@ -199,6 +199,16 @@ machines:
                          # is the RIDE pool's requirement), and reclaiming the RAM later is
                          # drain + tofu destroy of this one VM (nothing stateful lands here).
 
+  - name: cp-02
+    kind: vm
+    zone: nx-02        # same chassis caveat as wk-04 below — storage-free, so harmless today
+    label: "`cp-02` (VM on nx-02)"
+    role: k8s control plane (ADR-133 — the third CP, second hypervisor)
+    hardware: Talos VM on nx-02
+    ip: 192.168.2.65
+    # avx2 unset for the same reason as cp-01: the label targets AVX2-only workload scheduling and
+    # a control plane carries none.
+
   - name: wk-04
     kind: vm
     zone: nx-02        # the nx-02 BOX is the failure domain. ⚠ nx-01 and nx-02 are the two nodes
