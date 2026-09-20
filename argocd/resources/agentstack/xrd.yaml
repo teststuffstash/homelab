@@ -568,6 +568,41 @@ spec:
                                   (no wildcards; a wildcard need = extend the Composition).
                                   Earn each entry from a monitor-phase harvest, not
                                   speculation.
+                              ownServices:
+                                type: array
+                                # NO schema default: a defaulted field is API-server-stamped onto
+                                # every claim that omits it and OutOfSyncs them all (the
+                                # 2026-07-16 lesson); the Composition treats absent as empty.
+                                description: >-
+                                  Pods in THIS repo's own namespace that agent pods may
+                                  reach (2026-09-20 — first consumer: oracle-fleet's
+                                  keyless signing proxy in front of its corpus bucket, so a
+                                  ride can read the stack's data without holding a key).
+                                  Each entry renders one toEndpoints leg into this repo's
+                                  worker CNP AND the stack's loop-ns agent-loop-egress CNP
+                                  (reviewer/coordinator verify against the same bytes). The
+                                  namespace is never a field: a claim cannot express a leg
+                                  into another namespace, so the platform's deny-all widens
+                                  only toward the stack's own workloads. The target pod's
+                                  INGRESS policy stays the stack's to write.
+                                items:
+                                  type: object
+                                  required: [podLabels, port]
+                                  properties:
+                                    podLabels:
+                                      type: object
+                                      minProperties: 1
+                                      additionalProperties:
+                                        type: string
+                                      description: >-
+                                        Label selector for the target pods — at least one
+                                        label (an empty selector would open the whole
+                                        namespace, prod database included).
+                                    port:
+                                      type: integer
+                                      minimum: 1
+                                      maximum: 65535
+                                      description: TCP port on the target pods.
                               enforce:
                                 type: boolean
                                 default: false
