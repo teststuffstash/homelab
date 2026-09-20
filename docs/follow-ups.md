@@ -423,14 +423,15 @@ six OVERSIZE items pointer-ized into
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order and the lab rehearsal: [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: the ip-plan
-      ruling `192.168.2.50` (#1799), an etcd snapshot on the box, VIP + apiserver certSANs live on cp-01
-      (#1801), a metal `controlplane:` flag (#1800), and the SA-issuer freeze decided + rehearsed on a
-      disposable lab CP (ADR-136: a pre-flip token 401s with the issuer derived, survives with it pinned).
-      ⛔ The `cluster_endpoint` cutover stays REVERTED until the pin is LIVE. **Next, in order:** (a) apply
-      the pin on cp-01 in a declared window, verifying the live apiserver flags; (b) wk-metal-02's reinstall
-      (ADR-133 amendment: what moves off it first) + the nx-02 VM, joined back to back; (c) flip the endpoint
-      to the VIP and re-render the client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258.
+      order, live results: [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: ip-plan ruling `.50`
+      (#1799), etcd snapshot, VIP + certSANs on cp-01 (#1801), metal `controlplane:` flag (#1800), and
+      **the SA-issuer pin is LIVE on cp-01** (ADR-136, #1812, applied 2026-09-20 19:08Z — a pre-apply
+      token survived; FU-258 dropped 10/12 cilium backends and one `ds/cilium` roll fixed it).
+      ⛔ The `cluster_endpoint` cutover stays reverted until there are three members. **Next, in order:**
+      (a) wk-metal-02's prep — `controlplane: true`, drop `ephemeral`/`kata`, the `arc` flag to
+      wk-metal-03, `forgejo-runner.tf`'s legacy `ephemeral_tier` set → empty — then its reinstall;
+      (b) the nx-02 VM, joined back to back (never rest at two etcd members); (c) the endpoint flip +
+      re-rendered client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
