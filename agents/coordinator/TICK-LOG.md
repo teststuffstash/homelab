@@ -10170,3 +10170,36 @@ Synced/Ready; oracle's loop CNP unchanged (no claim declares the knob yet). The 
 of `does not have a valid function pipeline: pipeline status unknown` warnings on all four XRs at
 revision creation — transient (none recurred in the next reconcile), worth knowing as the normal
 shape of a Composition roll. Claim snippet left for oracle as a SHIPPED file in their `done/`.
+### 2026-09-20, night — the three-CP program resumes: the Cilium guard, then the issuer frozen
+
+Operator: "continue with 3 control plane build". Picked up the paused program at the step list the
+morning session left (meta-state), in its order.
+
+**(a) #1811 — `cp-upgrade` gates the Cilium apiserver backend, both sides of the reboot.** FU-258's
+only near-term work, unblocked by #1804's merge. Refuses to START on a fleet already missing the
+`10.96.0.1:443` backend; after the rejoin rolls `ds/cilium` ONLY on a genuinely missing one, waits
+for the rollout, re-reads, and fails hard if it is still gone (not this bug) or if the reading
+itself failed (a blind roll during exactly the apiserver instability that makes the read flaky).
+The reading has ONE home — `maintenance-window.sh cilium-check`, exit 0/2/3 — which is the spike's
+mitigation §2. `maint-self-test` 28 → 46 assertions: the exit-code contract plus the CP verb's five
+branches, run against a stub repo (real `maintenance-window.sh`, stub `node-maintenance` that only
+marks the reboot, so the cilium answer can differ before and after it).
+
+**(b) ADR-136 — the endpoint cutover's blocker, solved by NOT migrating.** `/design` on FU-243's
+"dual-issuer transition vs planned token rotation". Findings: the dual-issuer path is **not
+expressible** (Talos `extraArgs` is a string map, a list is rejected, and the upstream flag is a
+repeatable array so a comma value reads as one issuer); nothing in this cluster consumes the issuer
+(zero legacy `service-account-token` Secrets, no OIDC/JWKS/custom-audience consumer, in-cluster API
+traffic on KubePrism); therefore only its STABILITY is worth anything → freeze it and pin it in git,
+and `cluster_endpoint` stops being token identity. Also de-fuses `first_cp_key = sort(...)[0]`: a VM
+CP named before `cp-01` would silently move the issuer.
+
+**Rehearsed on a disposable one-node lab CP on nx-02** (VMID 8199, `.65`, destroyed after; the
+creation recipe was undocumented and is now in `docs/controlplane-ha.md` §CP4) — the surface the
+morning's worker rehearsal structurally could not be. Control case first: endpoint flip with the
+issuer derived 401s a pre-flip token; with the pin it authenticates; and the apiserver's `startedAt`
+did not move across the pinned flip or a flip back — **pinned, an endpoint change does not restart
+the apiserver at all**. PR#1812 carries the tofu pin (VM + metal CPs), ADR-136, FU-243 as a pointer,
+and `docs/controlplane-ha.md` — the design doc ADR-133 never had, which is why the trap lived in a
+code comment. Box plan of the branch: **1 to change**, cp-01 only.
+
