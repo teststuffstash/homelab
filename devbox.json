@@ -252,6 +252,9 @@
       "node-maintenance": [
         "bash scripts/node-maintenance.sh \"$@\""
       ],
+      "maint": [
+        "bash scripts/maintenance-window.sh \"$@\""
+      ],
       "cp-upgrade": [
         "bash scripts/controlplane-upgrade.sh \"$@\""
       ],

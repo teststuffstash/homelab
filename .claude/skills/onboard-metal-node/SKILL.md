@@ -12,6 +12,10 @@ description: >
 > **Glance first**: [`../GAPS.md`](../GAPS.md) §onboard-metal-node — unpromoted sightings
 > apply until closed (contract: [`../README.md`](../README.md)).
 
+> ⚠ **Onboarding runs inside a [maintenance window](../maintenance-window/SKILL.md)** — a wipe,
+> a PXE boot and a join all restart things other nodes are watching. `node-maintenance.sh` opens
+> the node-scoped silences; the window covers the classes that carry no `node` label at all.
+
 Full reference: `docs/provisioning.md`. Nodes are declared in `machines/machines.yaml`
 (`talos_metal_node: true` + `install_disk`); `tofu/locals.tf` derives `local.metal_nodes` from it
 and `tofu/metal.tf` consumes that — there is no `var.metal_nodes` map any more.
