@@ -59,7 +59,13 @@ sync is the outage above.
 ## C3. The order — pin, join, flip
 
 1. **Pin the issuer.** One apiserver restart per control plane; tokens survive because the value is
-   unchanged. Verify live before moving on:
+   unchanged. **Applied on cp-01 2026-09-20 19:08Z and it played out as rehearsed:** the apiserver
+   restarted once, a token minted *before* the apply still authenticated afterwards, and `tofu plan`
+   went clean. The restart's collateral was the known list and nothing else — FU-258 dropped the
+   backend on **10 of 12** agents (one `rollout restart ds/cilium` restored all 12), `kube-scheduler`
+   and `kube-controller-manager` on cp-01 crashlooped while the API was down and recovered on their
+   own within ~6 min, and three scrape targets followed them down and back. The Argo controller did
+   **not** flood this time (FU-260 stayed quiet at ~2 lines/s). Verify live before moving on:
    `kubectl -n kube-system get pod -l component=kube-apiserver -o jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep -E 'service-account-issuer|api-audiences'`
 2. **Join `wk-metal-02` and the nx-02 VM, back to back.** Never rest at two etcd members —
    [`ip-plan.md`](ip-plan.md) §VIP: at two the VIP is *less* available than at one.
