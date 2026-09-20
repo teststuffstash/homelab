@@ -1,8 +1,9 @@
 # Forgejo Actions runner (act_runner) — self-hosted CI. SLSA Build L2 / Phase-1 (docs/slsa.md):
-# a hosted (not-a-laptop) build engine; cosign-signed provenance + SBOM come next. Runs on the
-# ephemeral laptop tier (homelab.io/ephemeral) per the SLSA doc. A DinD sidecar gives job
-# containers a Docker daemon (Talos has no host Docker socket); that needs a privileged pod, so
-# the namespace is opted up to PodSecurity=privileged (same as monitoring).
+# a hosted (not-a-laptop) build engine; cosign-signed provenance + SBOM come next. Placement is
+# UNCONSTRAINED since 2026-09-20 (see the pod spec) — one idle fallback runner does not need a
+# tier. A DinD sidecar gives job containers a Docker daemon (Talos has no host Docker socket);
+# that needs a privileged pod, so the namespace is opted up to PodSecurity=privileged (same as
+# monitoring).
 #
 # ⚠ Two-phase bootstrap (Actions must be ENABLED — tofu/forgejo.tf — and applied first):
 #   1. Forgejo Actions are on in argocd/platform/forgejo.yaml (gitea.config.actions.ENABLED)
@@ -79,8 +80,15 @@ resource "kubernetes_deployment" "forgejo_runner" {
     template {
       metadata { labels = { app = "forgejo-runner" } }
       spec {
-        # --- pin to the ephemeral laptop tier (label above) + tolerate its taint ---
-        node_selector = { "homelab.io/ephemeral" = "true" }
+        # --- placement: ANYWHERE (operator, 2026-09-20) ---
+        # It used to pin to the ephemeral laptop tier, from the SLSA reading that a build engine
+        # belongs on disposable hardware. That reason has expired from both ends: the tier's label
+        # is now a per-node `arc` flag that just moved off wk-metal-02 for its control-plane
+        # reinstall (#1814), and Forgejo itself is the GitHub-outage FALLBACK, not a live read path
+        # — one mostly-idle runner, not a pool. So no node_selector: it lands wherever the
+        # scheduler has room.
+        # The toleration STAYS, and that is what makes "anywhere" true: without it the tainted ride
+        # nodes — a good chunk of the fleet — would be the one place it could not go.
         toleration {
           key      = "homelab.io/ephemeral"
           operator = "Exists"
