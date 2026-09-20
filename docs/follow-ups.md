@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-259** (2026-09-20: FU-258 minted for Cilium dropping the `kubernetes` Service
+  Next free id: **FU-260** (2026-09-20: FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
+  endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
   backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
   FU-256 minted for the worker-rides-into-`<stack>-agents`
   question, from oracle's corpus-bucket handoff; FU-255 minted for the mirror floating-tag
@@ -420,16 +421,16 @@ six OVERSIZE items pointer-ized into
       where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
-- [ ] **FU-243** — **Control-plane endpoint = a Talos shared L2 VIP; first deliverable of the three-CP program
-      (ADR-133), AFTER the box program (operator ordering 2026-09-16).** Today `cluster_endpoint` is cp-01's
-      IP and every kubeconfig points at it. Steps: (a) the ip-plan ruling — an L2 VIP must sit in the CPs'
-      subnet and `docs/ip-plan.md` says no NEW VIPs in `.2–.49`, so a reserved address/sub-range
-      is a ruling, not an exception; (b) etcd snapshot; (c) the VIP on cp-01's machine config + `cluster_endpoint`
-      cutover (runtime apply, no pve maintenance); (d) kubeconfig/talosconfig/jail/box/loop endpoints. Then
-      the laptop (wk-metal-03) reinstall to maintenance, the nx-02 VM, both joins back to back — never rest at
-      two members; nx-02 is not CP-production-ready until its drives are in. Once all three are Ready, converge
-      Talos one member at a time with `devbox run cp-upgrade -- <node>` (proven by PR#1778); its lab installer is an independent test
-      cluster and is not the production join path. Relates FU-235, FU-097.
+- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133).** (a) ip-plan ruling landed —
+      `192.168.2.50` (#1799). (b) etcd snapshot taken (`/var/lib/mgmt/etcd-snapshots/` on the box).
+      (c) VIP + apiserver certSANs are LIVE on cp-01 (#1801; the certSAN half was missing from this
+      list and is mandatory — kubectl fails TLS against the VIP without it). ⛔ **The `cluster_endpoint`
+      cutover is NOT done: applied and REVERTED 2026-09-20** (#1802 → 19e393e4). Talos derives
+      `--service-account-issuer` AND `--api-audiences` from it, so moving it 401s every existing
+      ServiceAccount token — cluster-wide controller outage in under a minute. The trap and the measured
+      blast radius are in `tofu/locals.tf` above `cluster_endpoint`; a real cutover needs a dual-issuer
+      transition or a planned token rotation, neither designed yet. **Next:** that design, then wk-metal-03's
+      reinstall + the nx-02 VM joined back to back, then `cp-upgrade` ×3. Relates FU-235, FU-258, FU-259.
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
@@ -1214,6 +1215,16 @@ the block needs pruning, not more headings.
       describes a version we should not run, and reproducing costs a live outage. ⚠ **Nothing
       guards this today.** **Next:** a post-rejoin backend check in `cp-upgrade` (the only
       near-term work); the spike waits on Renovate. Relates FU-246, FU-253.
+- [ ] **FU-259** — **`talos_cluster_kubeconfig` renders a STALE endpoint and `plan` never notices
+      (2026-09-20).** It captures the kubeconfig at creation and never refreshes, so after a
+      `cluster_endpoint` change `tofu output -raw kubeconfig` keeps serving the OLD server URL while
+      `plan` reports `No changes`. Hit twice in one session, both directions — the jail and the box
+      were left on an endpoint the cluster no longer declared, and only kept working because the VIP
+      was assigned and the cert named both. Recovery is
+      `apply -replace=talos_cluster_kubeconfig.this -target=…`; the UNSCOPED replace fails, since the
+      kubernetes provider is configured from that kubeconfig and goes unconfigured mid-apply.
+      **Next:** endpoint in the resource's replace triggers, or `devbox run kubeconfig` verifies
+      against `cluster_endpoint` and refuses on mismatch. Relates FU-243, FU-253.
 
 ## Hardware & nodes
 

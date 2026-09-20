@@ -168,3 +168,15 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `scripts/node-maintenance.sh settle` (or `down`) first — the reboot itself is fine, doing it
       undrained is not.
 
+- [ ] maintenance-window-G1 — **a fix that addresses only the instances in view, then reports the
+      CLASS as closed.** Three separate review rounds in one session caught the same shape: the
+      `client-configs.sh` write-order race (#1803) landed after the local/box split had been
+      "handled"; #1804's first fix hardened three of five read paths and its commit message said
+      "all three reads now distinguish 'queried and found nothing' from 'the query failed'" — the
+      tool has FIVE checks, and the two left untouched had the identical fail-open bug, one of them
+      the cilium backend check the whole tool exists for. The reviewer found each by enumerating
+      the call sites; the seat found none of them. Sighted 2026-09-20 (seat, homelab#1803/#1804).
+      Next: when a fix names a failure CLASS, the skill should require enumerating every call site
+      of that class and stating the count — "5 reads, 5 guarded" — before the class may be called
+      closed; and a mechanical test per site, since the self-test added here initially pinned 3 of
+      5 while its own docstring claimed the set.

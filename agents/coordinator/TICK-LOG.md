@@ -10038,3 +10038,49 @@ a far wider set (`api.segment.io`, `openrouter.ai`, `ghcr.io`) and is outside th
 policy; enforced `oracle-fleet` workers drop `mcp.minutark.ee` despite the `extraFQDNs` entry.
 Handoff closed to `done/`. Session worked from scratchpad worktrees throughout — the shared
 checkout sat on `docs/controlplane-program-upgrade-note` (not this session's) and was left there.
+
+## 2026-09-20 — the three-CP program: VIP live, endpoint cutover reverted, two self-inflicted outages
+
+Operator brought a GPU for the pve box, which needs cp-01's hypervisor down — so the three-CP
+program (ADR-133) got its session. Order agreed: ip-plan ruling → metal CP flag → VIP → endpoint →
+joins → failover test → `cp-upgrade` ×3 → GPU. Operator settled the open questions: nx-02 takes a CP
+now (reinstall later), noise verdict solved, `wk-metal-03` as the laptop CP, rehearsal lab skipped.
+
+**Landed:** #1799 the `192.168.2.50` ip-plan ruling · #1800 a `controlplane:` flag for metal
+(mechanism only) · #1801 the VIP + apiserver certSANs, LIVE on cp-01 · #1803 `devbox run kubeconfig`
+reading the BOX's state (it was reading a Sep-12 leftover `terraform.tfstate` in the jail and would
+have silently reverted the cutover) · #1805 FU-258 + the Cilium spike.
+
+**Reverted:** #1802, the `cluster_endpoint` cutover. Talos derives `--service-account-issuer` and
+`--api-audiences` from that value, so every pre-existing ServiceAccount token 401'd. Cluster-wide
+controller outage within a minute (11:34Z); `up` 48 → 0; ARC runners wedged, CI stopped. Reverted
+live at 12:06Z, git matched to live in `19e393e4`, wedged pods recycled. **The operator found it, not
+the session** — nodes read 12/12 `Ready` throughout and the session had reported success.
+
+A second, smaller disruption followed at 12:41Z: a `--mode=try` probe of `apiServer.extraArgs` to
+test a dual-issuer migration. It answered the question (Talos REPLACES the derived flag; a list value
+is rejected outright) but **try-mode did not revert** — the patch was still live seven minutes later
+and needed `$patch: delete` by hand. Operator caught that one too.
+
+**Found underneath both:** every apiserver restart drops Cilium's `10.96.0.1:443` backend
+fleet-wide and it does not re-sync — twice, fixed twice with `rollout restart ds/cilium`. Prior-art
+searched; not unique in class, no matching upstream issue. Parked behind the 1.20.2 upgrade by
+operator ruling: characterising 1.19.1 describes a version we should not run, and reproducing costs
+a deliberate live outage. FU-258 + `docs/spikes/cilium-apiserver-restart-backend-loss.md`.
+
+**Process outcome (operator-ordered):** `/maintenance-window` — the parts existed (`seat-window.sh`,
+`node-maintenance.sh`'s silences) but were wired for NODE maintenance only, and `tofu-apply/SKILL.md`
+had no mention of window, silence, alert or monitor. Now a skill + `devbox run maint` with a
+baseline/diff gate and a required background alert watch; `tofu-apply`, `onboard-metal-node` and
+`opnsense-as-code` all route through it. #1804, three review rounds, still open at wind-down.
+
+**The session's own recurring failure, filed as `maintenance-window-G1`:** fixing the instances in
+view and then declaring the CLASS closed. The reviewer caught it three times — the write-order race,
+then "all three reads" when the tool has five checks, then the two that were still fail-open. Each
+was the same shape the previous fix claimed to have eliminated.
+
+Also filed: FU-259 (`talos_cluster_kubeconfig` renders a stale endpoint while `plan` reads clean —
+hit twice, both directions). ADR-133's step list is missing certSANs entirely.
+
+Cluster at wind-down: 12/12 Ready, 151 scrape targets, cilium 12/12, `tofu plan` clean, no windows
+open. CP program PAUSED at the endpoint step; next session starts with the `cp-upgrade` Cilium check.

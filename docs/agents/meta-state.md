@@ -9,6 +9,33 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-20 — the three-CP program: VIP LIVE, endpoint cutover REVERTED, program PAUSED).**
+  **Do not resume the CP rollout without reading `tofu/locals.tf` above `cluster_endpoint`.** ADR-133's
+  step list is WRONG in two ways, both paid for live today.
+  (1) **The endpoint flip is not a safe runtime change.** Talos derives `--service-account-issuer`
+  AND `--api-audiences` from `cluster_endpoint`, so moving it 401s every ServiceAccount token already
+  in the cluster. Applied 11:34Z, cluster-wide controller outage inside a minute (cilium-operator,
+  crossplane, cnpg-operator, longhorn csi-provisioner, kube-state-metrics all CrashLoopBackOff; ARC
+  runners wedged so CI stopped; `up` 48 → 0). Reverted 12:06Z; git matched to live in `19e393e4`.
+  A real cutover needs a dual-issuer transition or a planned token rotation — **neither is designed**,
+  and `apiServer.extraArgs` cannot express two issuers (Talos REPLACES the derived flag; a list value
+  is rejected: `unexpected type for yaml sequence: v1alpha1.ArgValue`). FU-243 carries it.
+  (2) **certSANs is missing from the step list and is mandatory** — the apiserver cert must name the
+  VIP or kubectl fails TLS against it. It rides the VIP patch in #1801 and is LIVE.
+  **What IS live and good:** VIP `192.168.2.50` on cp-01 with the cert naming it (#1801), the ip-plan
+  ruling (#1799), a metal-CP `controlplane:` flag in machines.yaml (#1800, no node flagged), an etcd
+  snapshot on the box. `cluster_endpoint` is back to `.51` and `tofu plan` is clean.
+  **Second live lesson, independent of the issuer:** every apiserver restart drops Cilium's
+  `10.96.0.1:443` backend fleet-wide and it does NOT re-sync — seen twice, fixed both times with
+  `kubectl -n kube-system rollout restart ds/cilium`. Nothing guards this yet. FU-258 + spike.
+  **Next session, in order:** (a) the `cp-upgrade` post-rejoin Cilium backend check — the agreed
+  first task, waiting on #1804 so the check has one home; (b) the issuer-migration design; (c) only
+  then wk-metal-03's reinstall. ⚠ **#1804 (the /maintenance-window skill) was still OPEN at
+  wind-down** — three review rounds, all findings fixed, re-review pending; check it before building
+  on it. `.github/workflows/ci.yaml` needs an operator-direct push to add the
+  `maint-self-test` step (the script and devbox verb land with #1804 — push the step AFTER it merges
+  or master CI reds on a missing file).
+  **Use `/maintenance-window` for every live change from now on** — this session's whole arc is why.
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
