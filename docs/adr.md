@@ -2243,3 +2243,22 @@ the CP placement rule (one per chassis; never nx-01 while nx-02 hosts one) into 
 `wk-metal-03` leaves the ephemeral tier (kata pool unchanged — it never carried the label, FU-235); external
 kubectl pins to the VIP owner while KubePrism spreads in-cluster API load — verify it is on; ROADMAP §HA
 re-phased. Tracker: FU-243.
+
+### ADR-134 — The stack owns its definition of done: `merged-closeout` reads `<mainRepo>/.agents/closeout.md` (2026-09-20)
+
+**Status:** Accepted (operator, via the oracle handoff). **Decision:** the `merged-closeout` play reads
+`<mainRepo>/.agents/closeout.md` when present and applies it as the stack's definition of done — location is the
+whole contract, content is stack policy (the `.agents/review.md` / `<class>.yaml` / `probe.md` shape). It is read
+from the coordinator pod's **default-branch clone only** (merged, codeowner-gated text) and it **tightens only**:
+it may say what verifies an item, hold an issue open, name a label for the flip; breakers, harvest rules and
+rule #6 outrank it. Platform-side regardless of the file: **a live / post-deploy acceptance item is never satisfied
+from a PR-local reproduction** — it waits, the issue stays OPEN at `agent/done` (a quiet scan state: every C6
+candidate set requires a non-terminal label), and the closing comment names it. **Considered:** a platform
+hold-label constant (one stack's word in the platform); a claim knob (`closeout.holdLabel` — a schema field per
+policy nuance, and the XRD cannot carry "which paths are corpus-side"); nothing, i.e. prose judgment per session
+(oracle-fleet#637 vs #644: same fix class, 16 minutes apart, opposite outcomes). **Why:** the brief already
+hard-codes one per-repo-class definition of done (`-iac` = reconciled-and-healthy, IAC-G03); the next is the
+same kind of rule with stack content — policy = stack, mechanism = platform (ADR-085). **Consequences:** the
+play layer is unreplayed by design, so the guard is the two IL-T09 brief anchors; the coordinator holds no stack
+MCP, so "verify live" mostly resolves to "leave open" until a stack closes by its own release machinery
+(oracle-fleet#655); the `-iac` paragraph stays in the brief (it is platform-universal, not one stack's).
