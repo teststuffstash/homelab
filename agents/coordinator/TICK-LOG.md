@@ -10112,3 +10112,23 @@ because nothing executed the script.
 
 `maintenance-window-G1` extended with the resight — the count claim ("three reads", "all five now")
 was wrong three rounds running.
+
+## 2026-09-20 — oracle handoffs: the stack's definition of done (ADR-134) + the corpus image-volume ask
+
+**Closeout handoff (`20260920-1358`).** `merged-closeout` closed oracle-fleet#637 `COMPLETED` four
+minutes after PR #647 merged, marking an "after the next regen" acceptance item done from the PR's
+`agent-acceptance` fixture reproduction; the sibling #644 was left open 16 minutes earlier on the
+same class. Read both closeout comments from the seat — session judgment, not a keyword. Shipped
+as PR #1806 (brief-only): a LIVE acceptance item is never satisfied from the PR; the play reads
+`<mainRepo>/.agents/closeout.md` from the default-branch clone (tightens only); the IL-G06 open leg
+now says when it closes. Checked rather than assumed: OPEN+`agent/done` is a quiet scan state (every
+C6 candidate set needs `in-progress|review`), and the coordinator pod already clones every claim
+repo, so delivery is free. Corrections sent back: the coordinator holds NO stack MCP (their rule 2
+assumed one), and `git merge-base` needs history the `--depth 1` clones lack. Created the
+`awaiting-regen` label on oracle-fleet (named by their file, absent on the repo).
+
+**Corpus-mount handoff (`20260920-1524`).** Verdict yes-but-opt-in, nothing built, homelab#1807.
+Measured: one 10.53 GB uncompressed layer; 7.4 MB/s from the registry ⇒ ≈24 min cold pull per
+node per release; wk-metal-02 (126 GB `/var`, 60 free) goes over the 60 % imageGC ceiling with two
+versions resident, wk-03 marginal. kata+virtiofs on a 10 GB SQLite file stays unmeasured — the
+canary is the gate. Told oracle to build the Datasette pod on `ownServices` meanwhile.
