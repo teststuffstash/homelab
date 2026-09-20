@@ -37,6 +37,9 @@ AGENT_LOOP_WEBHOOK="http://doorbell.test/coordinate"
 PROXY_URL=""
 # The serving set EXACTLY as router.py serves it on /router-status (sorted(SERVING_CLASSES)).
 OR_STATUS_SERVING='{"serving_classes":["auth-storm","provider-5xx","timeout","tool-loop"]}'
+# ORIG_ARGS simulates the launcher's command line. The --model and --openrouter-secret flags
+# will be stripped by retry_rerun; we use deepseek as the model for testing.
+ORIG_ARGS=(test-project --model deepseek/deepseek-v4-flash --openrouter-secret test-secret --harness goose)
 
 # ── the row's declared condition ───────────────────────────────────────────────────────────────
 RT_STRIKE="${RT_STRIKE:-launcher}"
@@ -46,11 +49,22 @@ RT_SALVAGE="${RT_SALVAGE:-none}"
 RT_PRIOR_CLASS="${RT_PRIOR_CLASS:-}"
 RT_PRIOR_N="${RT_PRIOR_N:-0}"
 RT_STATUS_MODE="${RT_STATUS_MODE:-serving}"
+RT_STACK_MODE="${RT_STACK_MODE:-chainless}"  # chainless = no workerModel, for authoritative retries; chained = has workerModel
+RT_ROUTER_MODE="${RT_ROUTER_MODE:-authoritative}"  # shadow or authoritative
 
 case "$RT_STATUS_MODE" in
   blank) _or_status="";;
   *)     _or_status="$OR_STATUS_SERVING";;
 esac
+
+# Set up the stack row for the retry predicate. The chainless check reads _srow.workerModel.
+case "$RT_STACK_MODE" in
+  chainless) _srow='{"workerModel":""}' ;;  # Empty workerModel means chainless
+  chained)   _srow='{"workerModel":"deepseek/deepseek-v4-flash"}' ;;  # Has a workerModel, so chained
+esac
+
+# Set the router mode so the retry predicate can check it.
+AGENT_ROUTER="$RT_ROUTER_MODE"
 
 _stats_merge() {   # _stats_merge <key> <json-literal> — fold one field into the STATS line
   STATS="$(jq -cn --argjson s "${STATS:-null}" --arg k "$1" --argjson v "$2" '$s + {($k): $v}')"
@@ -88,13 +102,29 @@ AGENT_RETRY_TASK_N="$RT_PRIOR_N"
 
 # ── the two seams ─────────────────────────────────────────────────────────────────────────────
 # retry_rerun — the callee the clause calls on fire. STUBBED: the re-run itself is the launcher's
-# own /route consult (the route-request fixtures pin that), so what this fixture pins is the CALL
-# and the counters it carries — which is the whole acceptance-4 contract (same round, cell
-# excluded by the router's strike store, attempt counted). RETRY_RERUN_RC=1 is the re-dispatch that
-# did not complete.
+# own /route consult (the route-request fixtures pin that), so what this fixture pins is the CALL,
+# the ASSEMBLED ARGV (proving --model was stripped), and the counters it carries — which is the
+# whole acceptance-4 contract. RETRY_RERUN_RC=1 is the re-dispatch that did not complete.
 retry_rerun() {
-  printf 'CALL retry_rerun AGENT_RETRY_CELLS=[%s] AGENT_RETRY_TASK_N=[%s]\n' \
-    "${AGENT_RETRY_CELLS:-}" "${AGENT_RETRY_TASK_N:-}" >> "$REPLAY_ACTIONS"
+  local _rr_argv_str=""; _rr_i=0; local _rr_model_next=0
+  # Rebuild argv string with --model and rail flags stripped, matching the real implementation.
+  local _rr_argv=()
+  for (( _rr_i=0; _rr_i < ${#ORIG_ARGS[@]}; _rr_i++ )); do
+    case "${ORIG_ARGS[$_rr_i]}" in
+      --model) (( _rr_i++ )); continue;;
+      --openrouter-secret) (( _rr_i++ )); continue;;
+      --harness)
+        if [ $(( _rr_i + 1 )) -lt ${#ORIG_ARGS[@]} ] && [ "${ORIG_ARGS[$(( _rr_i + 1 ))]}" = "goose" ]; then
+          (( _rr_i++ )); continue
+        fi
+        _rr_argv+=("${ORIG_ARGS[$_rr_i]}")
+        ;;
+      *) _rr_argv+=("${ORIG_ARGS[$_rr_i]}");;
+    esac
+  done
+  _rr_argv_str="$(printf '%q ' "${_rr_argv[@]}")"
+  printf 'CALL retry_rerun ARGV=[%s] AGENT_RETRY_CELLS=[%s] AGENT_RETRY_TASK_N=[%s]\n' \
+    "${_rr_argv_str% }" "${AGENT_RETRY_CELLS:-}" "${AGENT_RETRY_TASK_N:-}" >> "$REPLAY_ACTIONS"
   return "${RETRY_RERUN_RC:-0}"
 }
 

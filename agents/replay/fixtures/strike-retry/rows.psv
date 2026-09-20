@@ -17,3 +17,5 @@ no-retry-salvage-unknown     |       |       | RT_SALVAGE=unknown               
 no-retry-nonserving          |       |       | RT_CLASS=harness-death                       | no-retry-nonserving        |
 no-retry-no-strike           |       |       | RT_STRIKE=none                               | no-retry-no-strike         |
 no-retry-router-unreachable  |       |       | RT_STATUS_MODE=blank                         | no-retry-router-unreachable|
+no-retry-chained-stack       |       |       | RT_STACK_MODE=chained                        | no-retry-chained-stack     |
+no-retry-shadow-mode         |       |       | RT_ROUTER_MODE=shadow                        | no-retry-shadow-mode       |

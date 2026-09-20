@@ -3059,9 +3059,30 @@ if [ -n "$RUN_CMD" ]; then
 
   # Goal #1640 acceptance 4: the retry's re-run. A FUNCTION so the clause-replay fixture can stub
   # the callee and assert the CALL (the "stub the callee, assert the assembled string" doctrine) —
-  # the re-run itself is this launcher's own `/route` consult, pinned by the route-request fixtures.
-  # In production it re-enters the launcher with the SAME argv, so the round does not advance.
-  retry_rerun() { bash "$0" "${ORIG_ARGS[@]}"; }
+  # the re-run itself is this launcher's own `/route` consult. In production it re-enters the launcher
+  # with a rebuilt argv: strip the --model pin (so /route can actually pick a different cell), strip
+  # rail-specific flags if a claude/* model lands (harness/key minted for OpenRouter), and verify the
+  # stack is chainless + authoritative (else the stripped pin is a no-op and the default model rides in).
+  retry_rerun() {
+    local _rr_argv=() _rr_i=0 _rr_model_next=0
+    # Rebuild argv with --model and rail flags stripped. Walk ORIG_ARGS and drop both elements of
+    # the --model pair; drop --openrouter-secret <name> and --harness goose (harness=claude is ok).
+    for (( _rr_i=0; _rr_i < ${#ORIG_ARGS[@]}; _rr_i++ )); do
+      case "${ORIG_ARGS[$_rr_i]}" in
+        --model) (( _rr_i++ )); continue;;  # skip both --model and its value
+        --openrouter-secret) (( _rr_i++ )); continue;;  # skip both --openrouter-secret and its value
+        --harness)
+          # Only skip --harness if it's "goose" (minted for OpenRouter). --harness claude is OK.
+          if [ $(( _rr_i + 1 )) -lt ${#ORIG_ARGS[@]} ] && [ "${ORIG_ARGS[$(( _rr_i + 1 ))]}" = "goose" ]; then
+            (( _rr_i++ )); continue
+          fi
+          _rr_argv+=("${ORIG_ARGS[$_rr_i]}")
+          ;;
+        *) _rr_argv+=("${ORIG_ARGS[$_rr_i]}");;
+      esac
+    done
+    bash "$0" "${_rr_argv[@]}"
+  }
   # >>>REPLAY:strike-retry>>>
   # ── Goal #1640 acceptance 4: RETRY A DEAD RIDE AT THE SAME ROUND ─────────────────────────────
   # A ride that died without producing anything used to hand back to the scan for a coordinator hop
@@ -3145,12 +3166,25 @@ if [ -n "$RUN_CMD" ]; then
     case "$_rt_task_n" in ''|*[!0-9]*) _rt_task_n=0;; esac
     _rt_cell_seen=""
     case " ${_rt_cells} " in *" ${_rt_cell} "*) _rt_cell_seen=1;; esac
+    # CHAINLESS + AUTHORITATIVE guard: the retry only makes sense when the stack is chainless (no
+    # hardcoded model pin) and the router is authoritative (so /route will actually be consulted for
+    # the re-run). A chained stack in shadow mode does not benefit from a retry — it will re-dispatch
+    # the same struck model verbatim. A chainless stack in shadow mode falls through to today's
+    # behaviour (the chainless guard at L509-515 will exit 1). For non-chainless stacks or shadow
+    # mode, we do not retry — the coordinator is the right place for that decision. This is the
+    # ADR-096 override rule being explicit: an explicit --model wins, which means the retry's
+    # stripped --model only changes the dispatch when there was no explicit pin to strip.
+    _rt_chainless="$(printf '%s' "$_srow" | jq -r '.workerModel // ""' 2>/dev/null || echo '')"
+    _rt_can_retry=""
+    if [ -z "$_rt_chainless" ] && [ "$AGENT_ROUTER" = "authoritative" ]; then
+      _rt_can_retry=1
+    fi
     if [ -n "$_rt_struck" ] && [ "$_rt_salvage" = "none" ] && [ -n "$_rt_serving_member" ] \
-       && [ -z "$_rt_cell_seen" ] && [ "$_rt_task_n" -lt 2 ]; then
+       && [ -z "$_rt_cell_seen" ] && [ "$_rt_task_n" -lt 2 ] && [ -n "$_rt_can_retry" ]; then
       RETRY_FIRE=1
       RETRY_CELL="$_rt_cell"
     elif [ -n "$_rt_struck" ]; then
-      echo "→ no retry: strike on ${_rt_cell} — salvage=${_rt_salvage} serving=${_rt_serving_member:-no} cell_seen=${_rt_cell_seen:-no} task_attempts=${_rt_task_n}/2 (the coordinator decides, as today)"
+      echo "→ no retry: strike on ${_rt_cell} — salvage=${_rt_salvage} serving=${_rt_serving_member:-no} cell_seen=${_rt_cell_seen:-no} task_attempts=${_rt_task_n}/2 can_retry=${_rt_can_retry:-no} (the coordinator decides, as today)"
     fi
   fi
   if [ -n "$RETRY_FIRE" ]; then

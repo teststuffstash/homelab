@@ -1,4 +1,4 @@
-CALL retry_rerun AGENT_RETRY_CELLS=[deepseek/deepseek-v4-flash|openrouter|timeout] AGENT_RETRY_TASK_N=[1]
+CALL retry_rerun ARGV=[test-project] AGENT_RETRY_CELLS=[deepseek/deepseek-v4-flash|openrouter|timeout] AGENT_RETRY_TASK_N=[1]
 CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"repo":"test-project","unit":"-"} http://doorbell.test/coordinate/coordinate
 OUT → retry: strike on deepseek/deepseek-v4-flash|openrouter|timeout with salvage=none — re-routing and re-running round 1 (attempt 1/2, no coordinator hop)
 OUT → retry dispatch did not complete — falling through to the doorbell (today's behaviour)
