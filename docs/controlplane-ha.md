@@ -113,3 +113,37 @@ Two further readings from phase 3, both load-bearing: the apiserver's flags stil
 `.65` issuer (Talos really does replace, not merge), and the kube-apiserver container's `startedAt`
 did **not** move across the flip or a second flip back — **with the issuer pinned, moving the
 endpoint does not restart the apiserver at all**, so step 3 above carries none of the C3 fallout.
+
+## CP5. Promoting a running worker to a control plane
+
+`machine_type` is baked at install, so the `controlplane: true` flag is only half of it: the node
+must be **reset to maintenance and reinstalled**. Landing the flag on a running worker and applying
+would push a control-plane config at a worker instead — which is why the flag and the reinstall
+belong in one sitting. The whole sequence runs inside a
+[declared window](glossary.md) (`/maintenance-window`); the generic onboarding steps it reuses are
+the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill's.
+
+1. **Take it out of the ride pool first**, as its own change (#1814's shape), so nothing new lands
+   on the node while you are draining it.
+2. **Measure etcd fsync before the join** — etcd's own probe, on the node, through a pod:
+   `dd if=/dev/zero of=/tmp/etcdtest bs=2300 count=1000 oflag=dsync`. Under ~10 ms per write is
+   what etcd wants. A CP that cannot fsync quickly is a cluster-wide latency problem, and this
+   costs three minutes *before* the box is load-bearing (wk-metal-02's X250: 1.60 s ⇒ ~1.6 ms).
+3. `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data`.
+4. **Flag the MAC** in `tofu/provisioning/matchbox.tf` and apply that root (its own S3 backend —
+   `keepass-env.sh` *and* `tofu-state-env.sh`, per the onboarding skill's step 1).
+5. `kubectl delete node <name>` — the join recreates the object; the worker-era one would otherwise
+   carry stale labels and taints into its CP life.
+6. `talosctl reset --graceful=false --reboot --wipe-mode all` → it PXE-boots into maintenance.
+7. `devbox run mgmt-tf -- apply -target='talos_machine_configuration_apply.metal["<name>"]'` —
+   installs with `machine_type: controlplane`, and `metal.tf` conditions the VIP patch and the
+   issuer pin on the same flag, so the new CP gets both at birth.
+8. **Unflag** (destroy the matchbox group) so the post-install reboot comes off disk.
+9. **Post-install, none of which `Ready` gates:** re-apply the zone label
+   (`kubernetes_labels.node_zone` — the Node object is new), confirm `cilium bgp peers` is
+   `established`, and confirm etcd membership grew by exactly one.
+10. Finish with a **full** `mgmt-tf apply`: a targeted apply does not stamp the box's apply-loop
+    baseline.
+
+⚠ **Do not stop here.** Two etcd members is the one state worse than one — go straight on to the
+next join.

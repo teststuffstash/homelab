@@ -52,7 +52,14 @@ locals {
   # API down. Order and the rest of the mechanism: docs/controlplane-ha.md. Tracked by FU-243.
   cluster_endpoint = "https://${local.first_cp_ip}:6443"
 
-  controlplane_ips = sort([for k, n in local.controlplane : local.node_ip[k]])
+  # Both kinds of control plane: the VM ones in var.nodes and the metal ones flagged in
+  # machines.yaml (ADR-133's laptop CP). This feeds the talosconfig's endpoint list, so leaving
+  # the metal CPs out would hand every client a talosconfig that only knows the VM members —
+  # exactly the single-point dependency the three-CP program exists to remove.
+  controlplane_ips = sort(concat(
+    [for k, n in local.controlplane : local.node_ip[k]],
+    [for k, n in local.metal_nodes : n.ip if n.controlplane],
+  ))
 
   # ---- machines/machines.yaml: the ONE inventory -----------------------------------------------
   # The repo-root inventory is the single source of truth for what boxes exist and how the metal
