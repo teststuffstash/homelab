@@ -12,6 +12,10 @@ description: >
 > **Glance first**: [`../GAPS.md`](../GAPS.md) §tofu-apply — unpromoted sightings apply until
 > closed (contract: [`../README.md`](../README.md)).
 
+> ⚠ **An `apply` runs inside a [maintenance window](../maintenance-window/SKILL.md)** — baseline
+> first, alert watch armed, compared after. A clean plan is not a safe change: the 2026-09-20
+> control-plane outage came from a one-line apply whose plan was `12 to change, 0 to destroy`.
+
 **Use the devbox wrappers — never wire secrets by hand.** `scripts/tf.sh` (invoked by the
 wrappers) resolves the cred dir (jail `~/.claude` or host `~/Projects/.claude-data`), sources all
 required `TF_VAR_*` from the KeePass wallet + cred files (`scripts/keepass-env.sh`), runs `init`,

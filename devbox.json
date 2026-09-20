@@ -252,6 +252,12 @@
       "node-maintenance": [
         "bash scripts/node-maintenance.sh \"$@\""
       ],
+      "maint": [
+        "bash scripts/maintenance-window.sh \"$@\""
+      ],
+      "maint-self-test": [
+        "bash scripts/maintenance-window-self-test.sh"
+      ],
       "cp-upgrade": [
         "bash scripts/controlplane-upgrade.sh \"$@\""
       ],
