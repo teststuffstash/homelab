@@ -189,10 +189,11 @@ pair lands on wk-metal-04 (FU-234); registration is `scripts/longhorn-register-o
 the mounts come from that node's `longhorn_disks` in `machines/machines.yaml` (`tofu/metal.tf`
 only consumes it).
 
-- ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM** — the reboot loses the cloud-init static
-  IP/hostname and it rejoins as a DHCP/default-name ghost. Add extensions by baking them into the
-  VM image (`image.tf` `talos_longhorn` schematic) and recreating (`tofu apply -replace=...`).
-  **Metal nodes upgrade fine** (see provisioning doc).
+- ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM without its exact Image Factory nocloud
+  installer** — a generic installer loses the cloud-init static IP/hostname and it rejoins as a
+  DHCP/default-name ghost. `scripts/node-maintenance.sh upgrade` reads the platform, schematic and
+  version from tofu and refuses an implicit extension change; control planes use
+  `devbox run cp-upgrade -- <node>`. See `docs/provisioning.md` for the complete recipe.
 - Longhorn disk mounts must be **under `/var/lib/longhorn`** — longhorn-manager only host-mounts
   that path. A disk with a pre-existing filesystem wedges Talos boot → `talosctl wipe disk` first.
 - Stuck `instance-manager`/`longhorn-manager` after node churn → `kubectl delete` the pod (the
@@ -378,14 +379,14 @@ fails when you skip it" property applies, so it is a checklist. First run: `thin
    row for the eviction), `SERVICES.md` (if a tier or service changed), `ROADMAP.md`. The
    power/benchmark rows STAY — the box still draws watts.
 
-### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
-Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
-WITHOUT a reset/reinstall: `talosctl -n <ip> -e <ip> upgrade --image <factory installer>` then
-`talosctl -n <ip> -e <ip> reboot`. ⚠ On a **worker** the upgrade installs to the B partition then
-errors `kubeconfig is only available on control plane nodes` at its auto-drain step and does NOT
-reboot — that's why the explicit `reboot` follows (switches to B). Verify with `talosctl get
-extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
-(iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
+### Re-imaging a node (change install extensions)
+
+Metal nodes and nocloud VMs upgrade in place when passed their exact declared installer. Use
+`scripts/node-maintenance.sh upgrade <node>`; it handles the control-plane endpoint, drain and
+reboot, and verifies both version and schematic after rejoin. A schematic change is refused unless
+`ALLOW_SCHEMATIC_CHANGE=1` explicitly makes the operation a re-image. The current metal schematic
+is `image.tf` `talos_image_factory_schematic.metal` (iscsi-tools + util-linux-tools, no
+qemu-guest-agent — the latter hung the boot on bare metal).
 
 ### Reclaiming thin-pool space from a Talos VM
 Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
