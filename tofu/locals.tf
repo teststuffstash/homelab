@@ -22,15 +22,26 @@ locals {
   # the endpoint below.
   cp_vip = "192.168.2.50"
 
-  # The Kubernetes API endpoint (FU-243 step c). Was cp-01's own address, which made every
-  # kubeconfig in the fleet depend on one VM being up; it is now the etcd-elected VIP, so the
-  # endpoint survives losing whichever control plane currently holds it.
+  # The Kubernetes API endpoint. STILL cp-01's own address — the VIP cutover was applied and
+  # REVERTED on 2026-09-20 (incident below). FU-243 step (c) is NOT done; see the incident doc
+  # before attempting it again.
   #
-  # ⚠ Until ADR-133's two joins land there is exactly ONE control plane, so this buys a stable
-  # NAME, not availability — the address cannot move while there is nowhere to move it to. What
-  # it does buy today is that the two joins arrive into a cluster whose endpoint is already
-  # final: a CP joined against the old .51 endpoint would have to be re-patched afterwards.
-  cluster_endpoint = "https://${local.cp_vip}:6443"
+  # ⚠⚠ DO NOT point this at local.cp_vip without an issuer migration first. Talos derives BOTH
+  # --service-account-issuer AND --api-audiences from this value. Changing it re-issues neither
+  # the tokens nor a grace period: every ServiceAccount token already in the cluster carries the
+  # OLD `iss`/`aud`, so the apiserver 401s all of them the moment the flag moves. Measured live
+  # 2026-09-20 11:34Z — a cluster-wide control-plane outage within one minute of the apply:
+  # cilium-operator, crossplane, cnpg-operator, longhorn csi-provisioner and kube-state-metrics
+  # all CrashLoopBackOff; ARC runners stuck at Init:0/2 so CI stopped; every kubelet, scheduler
+  # and controller-manager scrape 401 (48 -> 0 targets up). Reverting this line restored it.
+  #
+  # The data plane never noticed — running pods and the nodes stayed Ready — which is exactly
+  # why a node-health rehearsal (wk-03, --mode=try) passed it. The check that would have caught
+  # it is a TOKEN-authenticated call, not a Ready column.
+  #
+  # The real cutover needs the apiserver to accept both issuers across the transition, or a
+  # planned rotation of every SA token. Tracked by FU-243.
+  cluster_endpoint = "https://${local.first_cp_ip}:6443"
 
   controlplane_ips = sort([for k, n in local.controlplane : local.node_ip[k]])
 
