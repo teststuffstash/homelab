@@ -29,12 +29,11 @@ never the session's arc — that is TICK-LOG's.)
   `10.96.0.1:443` backend fleet-wide and it does NOT re-sync — seen twice, fixed both times with
   `kubectl -n kube-system rollout restart ds/cilium`. Nothing guards this yet. FU-258 + spike.
   **Next session, in order:** (a) the `cp-upgrade` post-rejoin Cilium backend check — the agreed
-  first task, waiting on #1804 so the check has one home; (b) the issuer-migration design; (c) only
-  then wk-metal-03's reinstall. ⚠ **#1804 (the /maintenance-window skill) was still OPEN at
-  wind-down** — three review rounds, all findings fixed, re-review pending; check it before building
-  on it. `.github/workflows/ci.yaml` needs an operator-direct push to add the
-  `maint-self-test` step (the script and devbox verb land with #1804 — push the step AFTER it merges
-  or master CI reds on a missing file).
+  first task, now UNBLOCKED: #1804 merged 2026-09-20 (`ed9940d2`, five review rounds) so the check
+  has its home in `scripts/maintenance-window.sh`; (b) the issuer-migration design; (c) only then
+  wk-metal-03's reinstall. The `maint-self-test` CI step landed operator-direct afterwards
+  (`aa6644d4`, master CI green with the step reporting `success`), so a fail-open probe in that
+  script now reds its own PR.
   **Use `/maintenance-window` for every live change from now on** — this session's whole arc is why.
   **(3) A THIRD unguarded consequence of an apiserver restart, found by a parallel session:** the
   Argo Workflows controller (v4.0.7) hot-loops on a closed ConfigMap watch and floods Loki —

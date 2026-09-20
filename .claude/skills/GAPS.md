@@ -176,6 +176,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       tool has FIVE checks, and the two left untouched had the identical fail-open bug, one of them
       the cilium backend check the whole tool exists for. The reviewer found each by enumerating
       the call sites; the seat found none of them. Sighted 2026-09-20 (seat, homelab#1803/#1804).
+      RESIGHT, same day, same PR: rounds 4 and 5 found two MORE fail-open sites after the round-3
+      fix had again claimed the set ("all five now") — `snapshot()`'s zero-node `exit`, which the
+      call site turned into a silent death, and cilium `have=0 unknown=N` reading as `ok`. The
+      count claim was wrong three times running; a claimed count is worth nothing without the
+      enumeration and a test per site behind it.
       Next: when a fix names a failure CLASS, the skill should require enumerating every call site
       of that class and stating the count — "5 reads, 5 guarded" — before the class may be called
       closed; and a mechanical test per site, since the self-test added here initially pinned 3 of

@@ -10084,3 +10084,31 @@ hit twice, both directions). ADR-133's step list is missing certSANs entirely.
 
 Cluster at wind-down: 12/12 Ready, 151 scrape targets, cilium 12/12, `tofu plan` clean, no windows
 open. CP program PAUSED at the endpoint step; next session starts with the `cp-upgrade` Cilium check.
+
+### 2026-09-20, later — #1804 through rounds 4–5, merged; the CI step landed
+
+A follow-on seat session took #1804 the rest of the way. Two more review rounds, both the same
+fail-open class the round-3 fix had claimed to close:
+
+- **round 4** — `snapshot()` refused a zero-node read with a script-level `exit`. `cmd_open` calls
+  it by redirection (fine); `cmd_check` calls it in a command substitution, where the `exit` kills
+  only the subshell and `set -e` then kills the script on the bare assignment: one stderr line, no
+  header, none of the four probes that were still reading fine — while `close` printed the full
+  breakdown for the identical cluster, because it calls `cmd_check` under `||`. Same call-site
+  accident as round 3's `stranded_ci`, on the worst input there is. Now a `nodes_ok` flag.
+- **round 5** — cilium `have=0 missing=0 unknown=N` (every agent's exec failed) printed `ok` with a
+  footnote; `close` gates on check's exit, so a window could close clean on the signal the tool
+  exists for. Blocks below `have > 0`; the footnote is correct only while some agent answered.
+
+Merged `ed9940d2`. Self-test 14 → 28 assertions; both rounds' paths had no coverage at all (the
+fake `kubectl` always returned a healthy node and a succeeding exec). Live-verified after each
+round: nodes 12, targets 151, cilium have=12 missing=0 unknown=0.
+
+Then the operator-direct half: `.github/workflows/ci.yaml` runs `devbox run maint-self-test` after
+`sentinel-smoke` (`aa6644d4`; master CI green, the step itself `success`). Direct because the
+reviewer executes the PR branch's own workflows — a PR gating a change to its own gate is not a
+gate. The gap that step closes is literal: every finding above landed in a diff whose CI was green
+because nothing executed the script.
+
+`maintenance-window-G1` extended with the resight — the count claim ("three reads", "all five now")
+was wrong three rounds running.
