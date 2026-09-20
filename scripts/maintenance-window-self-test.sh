@@ -26,7 +26,7 @@ mkdir -p "$TMP/bin"
 cat > "$TMP/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-  *"get nodes"*) printf 'n1 Ready <none> 1d v1\n' ;;
+  *"get nodes"*) [ "${FAKE_NODES_FAIL:-0}" = 1 ] && exit 0; printf 'n1 Ready <none> 1d v1\n' ;;
   *"get pods -A"*) [ "${FAKE_PODS_FAIL:-0}" = 1 ] && exit 1; printf 'ns p1 1/1 Running 0 1d\n' ;;
   *"get pod -l k8s-app=cilium"*) [ "${FAKE_CILIUM_LIST_FAIL:-0}" = 1 ] && exit 1; printf 'pod/cilium-aaa\n' ;;
   *"exec"*cilium-dbg*) printf 'ID Frontend Service Backend\n10 10.96.0.1:443/TCP ClusterIP 1 => 192.168.2.51:6443/TCP (active)\n' ;;
@@ -58,10 +58,14 @@ grep -qi "UNREADABLE" <<<"$out" && ok "open says UNREADABLE" || bad "open did no
 
 # 2. A hand-made GOOD baseline + unreachable Prometheus => check FAILS and says so.
 mkdir -p "$MAINT_STATE_DIR"
-cat > "$MAINT_STATE_DIR/baseline.json" <<'EOF'
+cat > "$TMP/baseline.fixture.json" <<'EOF'
 {"at":"2026-01-01T00:00:00Z","alerts":[],"alerts_ok":true,"up":100,"up_ok":true,
- "pods_bad":0,"pods_ok":true,"cilium_have":1,"cilium_missing":0,"cilium_unknown":0,"nodes":1}
+ "pods_bad":0,"pods_ok":true,"cilium_have":1,"cilium_missing":0,"cilium_unknown":0,
+ "nodes":1,"nodes_ok":true}
 EOF
+# Re-laid before every case: some cases run `open`, which deletes the baseline when it refuses.
+baseline() { cp "$TMP/baseline.fixture.json" "$MAINT_STATE_DIR/baseline.json"; }
+baseline
 out="$(PROM_URL="$DEAD_PROM" bash "$SUT" check 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && ok "check fails when the alert read fails (rc=$rc)" \
                 || bad "check PASSED with Prometheus down — the regression is back (rc=$rc)"
@@ -96,7 +100,34 @@ out="$(PROM_URL="$DEAD_PROM" MAINT_REPOS="homelab sleep-iac" FAKE_GH_FRESH=1 bas
 grep -qiE "no CI runs stranded|CI runs stranded" <<<"$out" && ok "check reaches the CI line with a fresh queued run" \
                 || bad "check died before the CI line on a healthy fresh run: $out"
 
+# 3e. Zero nodes — the apiserver fully unreachable, the worst case this tool exists for. `check`
+# run DIRECTLY (the way SKILL.md documents for mid-window) must report it like any other probe and
+# still print the rest of the breakdown. The bug: snapshot() `exit`ed, which in cmd_check's command
+# substitution killed only the subshell, then `set -e` killed the script on the bare assignment —
+# one stderr line, no header, no probe lines — while `close` (cmd_check under `||`) printed the
+# full breakdown for the identical cluster. Review, #1804 round 4.
+out="$(PROM_URL="$DEAD_PROM" FAKE_NODES_FAIL=1 bash "$SUT" check 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "check fails on zero nodes (rc=$rc)" \
+                || bad "check PASSED with an unreachable apiserver — rc=$rc"
+grep -qi "nodes UNREADABLE" <<<"$out" && ok "check names the unreadable node list" \
+                || bad "zero nodes did not surface as UNREADABLE: $out"
+grep -q "check vs baseline" <<<"$out" && ok "check prints its header on zero nodes" \
+                || bad "check died before its header on zero nodes: $out"
+grep -qE "hard-failed pods|pods UNREADABLE" <<<"$out" && ok "check still reports the other probes on zero nodes" \
+                || bad "check died before the later probes on zero nodes: $out"
+
+# 3f. Same condition through `open`: a zero-node baseline is never banked.
+rm -f "$MAINT_STATE_DIR/baseline.json"
+out="$(PROM_URL="$DEAD_PROM" FAKE_NODES_FAIL=1 bash "$SUT" open --reason "self-test" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "open refuses a zero-node baseline (rc=$rc)" \
+                || bad "open banked a baseline with 0 nodes — rc=$rc"
+grep -q "nodes_ok=false" <<<"$out" && ok "open names the node read in its refusal" \
+                || bad "open's refusal did not name nodes_ok: $out"
+[ -f "$MAINT_STATE_DIR/baseline.json" ] && bad "a zero-node baseline was left behind" \
+                || ok "no zero-node baseline left behind"
+
 # 4. close must not close a window while a check is failing.
+baseline
 out="$(PROM_URL="$DEAD_PROM" bash "$SUT" close 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && ok "close refuses while a probe is unreadable (rc=$rc)" \
                 || bad "close succeeded on an unreadable cluster — rc=$rc"

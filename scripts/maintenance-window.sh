@@ -163,10 +163,15 @@ EOF
 }
 
 snapshot() {
-  # A zero node count means kubectl answered nothing useful — refuse rather than bank an empty
-  # baseline that every later `check` would compare favourably against.
-  local n; n="$(node_count)"
-  [ "${n:-0}" -gt 0 ] || { echo "maintenance-window: kubectl returned 0 nodes — refusing to snapshot" >&2; exit 1; }
+  # A zero node count means kubectl answered nothing useful — the apiserver is unreachable, which
+  # is the WORST case this tool exists for, not a reason to say less about it. So it is a FLAG like
+  # every other read, never a script-level `exit`: the first cut exited here, and because cmd_open
+  # calls snapshot by redirection while cmd_check calls it in a command substitution, the identical
+  # cluster state produced a full five-probe breakdown under `close` and a single bare stderr line
+  # under `check` — no header, no ⚠ lines, nothing about the alerts/pods/CI reads that all still
+  # worked. Same call-site accident as round 3's `stranded_ci`. Review, #1804 round 4.
+  local n nodes_ok=true; n="$(node_count)"
+  [ "${n:-0}" -gt 0 ] || nodes_ok=false
   local cil cilium_ok=true; cil="$(cilium_backends)" || { cil="0 0 0"; cilium_ok=false; }
   # Each read carries an *_ok flag. A false flag is never "0" or "clean" — cmd_check reports it
   # as unreadable and fails, because "we did not look" must not be indistinguishable from "fine".
@@ -183,11 +188,12 @@ snapshot() {
         --arg pods "$pods" --argjson pods_ok "$pods_ok" \
         --arg have "${cil%% *}" --arg missing "$(cut -d' ' -f2 <<<"$cil")" \
         --arg unknown "${cil##* }" --arg nodes "$n" --argjson cilium_ok "$cilium_ok" \
+        --argjson nodes_ok "$nodes_ok" \
         --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '{at:$at, alerts:$alerts, alerts_ok:$alerts_ok, up:($up|tonumber), up_ok:$up_ok,
           pods_bad:($pods|tonumber), pods_ok:$pods_ok, cilium_ok:$cilium_ok,
           cilium_have:($have|tonumber), cilium_missing:($missing|tonumber),
-          cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber)}'
+          cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber), nodes_ok:$nodes_ok}'
 }
 
 cmd_open() {
@@ -208,8 +214,8 @@ cmd_open() {
   jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"' "$BASE"
   # A baseline built from failed reads is worse than no baseline: every later check compares
   # favourably against it. Refuse rather than bank one.
-  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok' >/dev/null "$BASE" || {
-    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok)"' "$BASE" >&2
+  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok' >/dev/null "$BASE" || {
+    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok)"' "$BASE" >&2
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
     rm -f "$BASE"; exit 1
   }
@@ -225,6 +231,16 @@ cmd_check() {
   local now; now="$(snapshot)"
   local rc=0
   echo "== check vs baseline ($(jq -r .at <<<"$b")) =="
+
+  # The precondition, not a sixth check: did kubectl answer at all? Reported like the probes so a
+  # dead apiserver still yields the full breakdown instead of killing the run (review, #1804 r4).
+  if [ "$(jq -r .nodes_ok <<<"$now")" != true ]; then
+    echo "  ⚠ nodes UNREADABLE — 'kubectl get nodes' returned 0 nodes; the apiserver is not answering"; rc=2
+  else
+    local n0 n1; n0="$(jq -r .nodes <<<"$b")"; n1="$(jq -r .nodes <<<"$now")"
+    if [ "$n1" -lt "$n0" ]; then echo "  ⚠ nodes LEFT the API: $n0 -> $n1"; rc=2
+    else echo "  ok  nodes: $n0 -> $n1"; fi
+  fi
 
   # An unreadable probe fails the check. It is NOT "ok", and it is NOT "0" — the whole point is
   # that "we could not look" is a distinct, blocking answer (review, #1804).

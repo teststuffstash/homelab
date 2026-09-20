@@ -43,6 +43,11 @@ the `responder-window` ConfigMap) so the responder does not burn triage sessions
 person is causing. `check` diffs live against that baseline. `close` refuses while anything is
 still off baseline.
 
+A probe that **could not be read** prints `⚠ … UNREADABLE` and blocks exactly like a regression —
+"we did not look" is never `ok`, and a dead apiserver still yields the whole breakdown rather than
+a bare error. `open` refuses to bank a baseline any probe failed to read, since every later `check`
+would compare favourably against it.
+
 ## Arm the watch — the session must SEE alerts, not be told about them
 
 `check` is a point read. Across a long window the seat also needs to be *interrupted*, so:
