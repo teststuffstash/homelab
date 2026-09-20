@@ -28,8 +28,11 @@ ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 WHICH="${1:?usage: client-configs.sh kubeconfig|talosconfig|both}"
 MGMT_HOST="${MGMT_HOST:-192.168.2.53}"
 
+# Same precedence as scripts/mgmt-tf.sh: an explicit CLAUDE_CRED_DIR wins. Inverted here at
+# first (review, #1803): with a stale homelab-pve-ssh cache under ~/.claude, an explicitly-set
+# override was silently ignored and the wrong SSH identity went to the box.
 CRED=""
-for d in "$HOME/.claude" "$HOME/Projects/.claude-data" "${CLAUDE_CRED_DIR:-}"; do
+for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; do
   [ -n "$d" ] && [ -d "$d/homelab-pve-ssh" ] && CRED="$d" && break
 done
 [ -n "$CRED" ] || { echo "client-configs: cred dir not found (homelab-pve-ssh/)" >&2; exit 1; }
@@ -44,11 +47,20 @@ fetch_one() {
   # Fail closed: a truncated or error-shaped answer must never overwrite a working config.
   head -1 "$tmp" | grep -qE '^(apiVersion|context):' \
     || { echo "client-configs: $name from the box does not look like a config — refusing to write" >&2; rm -f "$tmp"; exit 1; }
+  # THE BOX FIRST, the local copy only once it lands (review, #1803). Written the other way
+  # round at first, and `set -e` then turned an unreachable box into exactly the split state this
+  # script exists to prevent: the jail already on the new endpoint, /var/lib/mgmt/<name> still on
+  # the old one. That divergence bites hardest where it matters most — cp-upgrade and
+  # node-maintenance run against the BOX's copy — and it is likeliest mid-cutover, which is
+  # precisely when this gets run. Failing with both sides still on the old value is recoverable;
+  # failing with them disagreeing is the bug.
+  scp -q -i "$KEY" -o StrictHostKeyChecking=accept-new "$tmp" "root@$MGMT_HOST:/var/lib/mgmt/$name" \
+    || { echo "client-configs: could not write $name to the box — local copy left untouched" >&2; rm -f "$tmp"; exit 1; }
+  ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "root@$MGMT_HOST" "chmod 600 /var/lib/mgmt/$name" \
+    || { echo "client-configs: could not chmod $name on the box — local copy left untouched" >&2; rm -f "$tmp"; exit 1; }
   install -m 600 "$tmp" "$dest"
   rm -f "$tmp"
-  scp -q -i "$KEY" -o StrictHostKeyChecking=accept-new "$dest" "root@$MGMT_HOST:/var/lib/mgmt/$name"
-  ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "root@$MGMT_HOST" "chmod 600 /var/lib/mgmt/$name"
-  echo "wrote tofu/$name + $MGMT_HOST:/var/lib/mgmt/$name"
+  echo "wrote $MGMT_HOST:/var/lib/mgmt/$name + tofu/$name"
 }
 
 case "$WHICH" in
