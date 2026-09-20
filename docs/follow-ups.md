@@ -1211,10 +1211,11 @@ the block needs pruning, not more headings.
       `10.96.0.1:443` while the API is healthy and every node reads `Ready`; recovery is
       `rollout restart ds/cilium`. Evidence, the survivor anomaly, prior art and the settling
       experiment: [`docs/spikes/cilium-apiserver-restart-backend-loss.md`](spikes/cilium-apiserver-restart-backend-loss.md).
-      **PARKED (operator, 2026-09-20)** behind the **1.20.2** upgrade — characterising 1.19.1
-      describes a version we should not run, and reproducing costs a live outage. ⚠ **Nothing
-      guards this today.** **Next:** a post-rejoin backend check in `cp-upgrade` (the only
-      near-term work); the spike waits on Renovate. Relates FU-246, FU-253.
+      **PARKED (operator, 2026-09-20)** behind the **1.20.2** upgrade — 1.19.1 is a version we
+      should not run and reproducing costs an outage. Near-term guard DONE: `cp-upgrade` gates the
+      backend either side of the reboot (rolls `ds/cilium` only on a genuinely missing one, reading
+      shared as `devbox run maint cilium-check`); ⚠ every OTHER apiserver restart is still
+      unguarded — run it by hand. **Next:** the spike waits on Renovate/1.20.2. Relates FU-246, FU-253.
 - [ ] **FU-259** — **`talos_cluster_kubeconfig` renders a STALE endpoint and `plan` never notices
       (2026-09-20).** It captures the kubeconfig at creation and never refreshes, so after a
       `cluster_endpoint` change `tofu output -raw kubeconfig` keeps serving the OLD server URL while

@@ -4,6 +4,7 @@
 #   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n>]
 #   bash scripts/maintenance-window.sh check
 #   bash scripts/maintenance-window.sh close
+#   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
 #
 # WHY. `agents/seat-window.sh` declares a window to the responder and `node-maintenance.sh`
 # opens the Alertmanager silences — both only ever wired for NODE maintenance. Everything else
@@ -22,6 +23,9 @@
 #   3. cilium k8s backend  — EVERY apiserver restart drops the 10.96.0.1:443 backend on every
 #                            node and Cilium does NOT re-sync it; pods then get "connection
 #                            refused" to the API while nodes still read Ready. Seen twice.
+#                            Also callable alone (`cilium-check`) and shared with
+#                            scripts/controlplane-upgrade.sh, which restarts an apiserver by
+#                            construction — see docs/spikes/cilium-apiserver-restart-backend-loss.md.
 #   4. non-Running pods    — controllers crashlooping on a broken API path
 #   5. stranded CI         — ARC listeners restart during cluster work and do not re-claim jobs
 #                            queued during the gap; they sit in `queued` forever (CiDispatchStalled)
@@ -128,6 +132,43 @@ cilium_backends() {
     if awk '$2=="10.96.0.1:443/TCP"' <<<"$out" | grep -q '=>'; then have=$((have+1)); else missing=$((missing+1)); fi
   done
   echo "$have $missing $unknown"
+}
+
+# The VERDICT on one cilium_backends reading — ONE home, two callers: `check` below and the
+# post-rejoin gate in scripts/controlplane-upgrade.sh, which reads the exit code to decide
+# whether a `rollout restart ds/cilium` is warranted. Copying this three-way logic into the CP
+# verb is precisely what the spike's mitigation §2 says not to do: "a flaky kubectl exec must
+# never read as a missing backend" has to mean the same thing in both places, forever.
+#
+# The exit codes ARE the contract, and 2 vs 3 is the whole point:
+#   0  every responsive agent holds the backend for 10.96.0.1:443
+#   2  at least one agent is genuinely MISSING it — the known, remediable signature
+#   3  the reading says nothing (agent list unreadable, or every exec failed twice) — NOT
+#      remediable: rolling the DaemonSet on a reading nobody could take is acting blind, and
+#      the likeliest cause of an unreadable fleet is apiserver trouble a restart will not fix.
+cilium_verdict() { # <ok:true|false> <have> <missing> <unknown>
+  local ok="$1" have="$2" missing="$3" unknown="$4"
+  if [ "$ok" != true ]; then
+    echo "  ⚠ cilium UNREADABLE — could not list the cilium agents; the backend check did NOT run"
+    return 3
+  fi
+  if [ "$missing" -gt 0 ]; then
+    echo "  ⚠ cilium: $missing agent(s) have NO backend for 10.96.0.1:443 (have=$have unknown=$unknown)"
+    echo "       → pods get 'connection refused' to the API. Fix: kubectl -n kube-system rollout restart ds/cilium"
+    return 2
+  fi
+  if [ "$have" -eq 0 ] && [ "$unknown" -gt 0 ]; then
+    # unknown == the WHOLE fleet (missing is 0 here, so have+unknown is every agent): every exec
+    # failed, so this check answered nothing about a single node and must not read as `ok`. The
+    # footnote below is the right response only while SOME agent answered — then missing=0 is a
+    # real reading of the responsive ones. Review, #1804 round 5.
+    echo "  ⚠ cilium UNREADABLE — every agent's exec failed twice ($unknown agent(s)); the backend check did NOT run"
+    echo "       → re-run the check. If it keeps failing, the apiserver path itself is likely the problem."
+    return 3
+  fi
+  echo "  ok  cilium apiserver backend: have=$have missing=0 unknown=$unknown"
+  [ "$unknown" -gt 0 ] && echo "       (unknown = exec did not answer twice; re-run rather than acting on it)"
+  return 0
 }
 
 # Runs stuck in `queued` for longer than the grace period — the ARC-stranded class.
@@ -265,25 +306,10 @@ cmd_check() {
     else echo "  ok  scrape targets: $u0 -> $u1"; fi
   fi
 
-  local ch cm cu; ch="$(jq -r .cilium_have <<<"$now")"; cm="$(jq -r .cilium_missing <<<"$now")"; cu="$(jq -r .cilium_unknown <<<"$now")"
-  if [ "$(jq -r .cilium_ok <<<"$now")" != true ]; then
-    echo "  ⚠ cilium UNREADABLE — could not list the cilium agents; the backend check did NOT run"; rc=2
-  elif [ "$cm" -gt 0 ]; then
-    echo "  ⚠ cilium: $cm agent(s) have NO backend for 10.96.0.1:443 (have=$ch unknown=$cu)"
-    echo "       → pods get 'connection refused' to the API. Fix: kubectl -n kube-system rollout restart ds/cilium"
-    rc=2
-  elif [ "$ch" -eq 0 ] && [ "$cu" -gt 0 ]; then
-    # unknown == the WHOLE fleet (missing is 0 here, so have+unknown is every agent): every exec
-    # failed, so this check answered nothing about a single node and must not read as `ok`. The
-    # footnote below is the right response only while SOME agent answered — then missing=0 is a
-    # real reading of the responsive ones. Review, #1804 round 5.
-    echo "  ⚠ cilium UNREADABLE — every agent's exec failed twice ($cu agent(s)); the backend check did NOT run"
-    echo "       → re-run check. If it keeps failing, the apiserver path itself is likely the problem."
-    rc=2
-  else
-    echo "  ok  cilium apiserver backend: have=$ch missing=0 unknown=$cu"
-    [ "$cu" -gt 0 ] && echo "       (unknown = exec did not answer twice; re-run check rather than acting on it)"
-  fi
+  # The cilium reading is judged by cilium_verdict (above), shared with the CP verb. Any of its
+  # non-zero verdicts — genuinely missing (2) or unread (3) — is this gate's single rc=2.
+  cilium_verdict "$(jq -r .cilium_ok <<<"$now")" "$(jq -r .cilium_have <<<"$now")" \
+                 "$(jq -r .cilium_missing <<<"$now")" "$(jq -r .cilium_unknown <<<"$now")" || rc=2
 
   if [ "$(jq -r .pods_ok <<<"$now")" != true ]; then
     echo "  ⚠ pods UNREADABLE — 'kubectl get pods -A' failed; the pod check did NOT run"; rc=2
@@ -326,9 +352,24 @@ cmd_close() {
   rm -f "$BASE"
 }
 
+# The cilium backend probe on its own, with no baseline and no window — for a caller that has
+# just restarted an apiserver and needs the answer NOW (scripts/controlplane-upgrade.sh). It
+# reports and exits; deciding what to do about a 2 is the caller's business.
+cmd_cilium() {
+  local cil ok=true have missing unknown
+  cil="$(cilium_backends)" || { cil="0 0 0"; ok=false; }
+  read -r have missing unknown <<<"$cil"
+  echo "== cilium apiserver backend =="
+  cilium_verdict "$ok" "$have" "$missing" "$unknown"
+}
+
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
   check) shift; cmd_check ;;
   close) shift; [ "${1:-}" = "--force" ] && FORCE=1; cmd_close ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n] | check | close [--force]" >&2; exit 64 ;;
+  # `|| exit $?` so the exit CODE survives: the caller distinguishes 2 (roll the DaemonSet) from
+  # 3 (do not) — under `set -e` a bare call would exit non-zero all the same, but silently
+  # collapsing the two here is one refactor away from a verb that rolls cilium on a blind read.
+  cilium-check) shift; cmd_cilium || exit $? ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n] | check | close [--force] | cilium-check" >&2; exit 64 ;;
 esac

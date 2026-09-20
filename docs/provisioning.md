@@ -159,6 +159,10 @@ It requires at least three Ready control planes, selects a healthy endpoint othe
 checks that etcd has an odd membership of at least three, takes an etcd snapshot under
 `/var/lib/mgmt/etcd-snapshots/`, and then enters the same WIP-1 maintenance path workers use. It
 verifies the declared version and schematic plus unchanged etcd membership after the node rejoins.
+It also gates on Cilium's backend for the in-cluster apiserver Service either side of the reboot —
+restarting an apiserver drops it fleet-wide with no re-sync
+([FU-258](spikes/cilium-apiserver-restart-backend-loss.md)) — refusing to start on an already
+broken fleet and rolling `ds/cilium` after the rejoin only when an agent is genuinely missing it.
 The full path was rehearsed on 2026-09-19 with a separate one-node cluster on a disposable nx-02
 VM: Talos v1.13.2 → v1.13.10 preserved the nocloud IP, hostname, schematic and etcd identity. The
 reproducible lab installer is `scripts/controlplane-lab-install.sh`; its generated credentials are
