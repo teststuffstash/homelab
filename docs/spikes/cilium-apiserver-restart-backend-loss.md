@@ -108,10 +108,21 @@ after). Revisit once Renovate is live and the fleet is current.
 4. Either way, re-run at **three** control planes to settle whether the single-CP endpoint-set
    emptying is load-bearing.
 
-## Mitigation in place
+## Mitigation — NOT YET BUILT
 
-`scripts/controlplane-upgrade.sh` checks the backend on every agent after the upgraded node
-rejoins and rolls `ds/cilium` only when one is actually missing — the check is shared with
-`scripts/maintenance-window.sh` (`have` / `missing` / `unknown`, two attempts, so a flaky
-`kubectl exec` is never read as a missing backend). `/maintenance-window` carries the same check
-for every other live change.
+⚠ **Nothing guards this today.** As of this page landing, `scripts/controlplane-upgrade.sh` gates
+only etcd quorum, endpoint choice and the snapshot; it does not look at the Cilium backend at all.
+Do not assume a control-plane upgrade is protected from this — until the work below lands, an
+apiserver restart can drop the backend fleet-wide and the only signal is that pods start failing
+to reach `10.96.0.1:443`.
+
+Planned, in order:
+
+1. A post-rejoin backend check in `controlplane-upgrade.sh` that rolls `ds/cilium` only when an
+   agent is genuinely missing the backend.
+2. That check shared with the maintenance-window tooling rather than copied, so the
+   `have` / `missing` / `unknown` handling (a flaky `kubectl exec` must never read as a missing
+   backend) has one home.
+
+Until then the manual recovery in §Symptom is the whole mitigation: notice it, then
+`kubectl -n kube-system rollout restart ds/cilium`.
