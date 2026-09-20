@@ -36,6 +36,15 @@ never the session's arc — that is TICK-LOG's.)
   `maint-self-test` step (the script and devbox verb land with #1804 — push the step AFTER it merges
   or master CI reds on a missing file).
   **Use `/maintenance-window` for every live change from now on** — this session's whole arc is why.
+  **(3) A THIRD unguarded consequence of an apiserver restart, found by a parallel session:** the
+  Argo Workflows controller (v4.0.7) hot-loops on a closed ConfigMap watch and floods Loki —
+  ~110 MB/s at the pod, 96% of all ingest, a burnt core, no self-recovery. Its five triggers were
+  THIS session's cp-01 applies (the live container's `startedAt` is 12:42:48Z, matching the
+  extraArgs probe removal). Fixed by `rollout restart deploy/argo-workflows-workflow-controller`;
+  FU-260 carries the chart bump and the alert-latency question (the belt took ~50 min to fire).
+  So an apiserver restart now has three known unguarded fallouts: SA-token invalidation only if
+  the issuer moves (FU-243), the Cilium backend loss every time (FU-258), and this (FU-260).
+  **Weigh that before the next control-plane apply** — and open a window first.
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
