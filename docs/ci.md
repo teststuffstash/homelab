@@ -16,8 +16,11 @@ project:
 | Local copy | Forgejo **pull-mirror** (read-only DR) | n/a (already local) |
 | For | projects that want exposure / SaaS (sleep-tracking, snore-recorder) | fully-private, self-contained projects |
 
-Both runners are **in-cluster, pinned to the ephemeral laptop tier** (`homelab.io/ephemeral`, DinD,
-privileged ns) so CI noise/privilege stays off the service nodes.
+Both runners are **in-cluster, privileged (DinD) namespaces**. The **ARC** pool stays on the
+ephemeral tier (`homelab.io/ephemeral`, now a per-node `arc` flag) so CI noise and privilege stay
+off the service nodes. The **Forgejo** runner was unpinned on 2026-09-20 (operator): Forgejo is the
+GitHub-outage fallback, not a live read path, so its single mostly-idle runner does not earn a tier
+— it keeps the ephemeral toleration (so the tainted boxes stay available to it) and no selector.
 
 ## The one rule that makes this cheap: the `devbox run` seam
 
