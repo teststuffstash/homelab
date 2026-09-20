@@ -1201,7 +1201,14 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
     model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
     first, then daily-rankings rank order, then the git rotation_fallback belt. Models whose
-    canary verdict says broken are excluded."""
+    canary verdict says broken are excluded — on ALL THREE legs, chain_head included (homelab#1786).
+
+    The chain_head leg is NOT exempt. A head is a model like any other, and a broken canary is
+    exactly the evidence the head ordering should yield to: a head is human-curated POLICY, but
+    the canary verdict is the fleet's own serving evidence, and serving a known-broken head ahead
+    of everything else is the router's thesis inverted (Goal #1640 acceptance 3). The exclusion
+    removes a head from MEMBERSHIP only — the head ORDER is untouched: surviving heads still
+    precede the ranked rotation. One rule for every chain_head class, never a per-class knob."""
     tiers = _classes.get("model_tiers") or {}
     rows = _read("SELECT model, source, canary_verdict, rank FROM rotation")
     broken = {m for m, _s, v, _r in rows if v == "broken"}
@@ -1210,7 +1217,8 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     kind = "reasoning" if cinfo.get("reasoning") else "coding"
     fallback = (_classes.get("rotation_fallback") or {}).get(kind) or []
     out: list[str] = []
-    for m in (list(cinfo.get("chain_head") or []) + [m for _r, m in ranked]
+    for m in ([m for m in (cinfo.get("chain_head") or []) if m not in broken]
+              + [m for _r, m in ranked]
               + [m for m in fallback if m not in broken]):
         if m not in out:
             out.append(m)
@@ -2892,6 +2900,30 @@ def self_test() -> int:
     assert dv["model"] == "deepseek/deepseek-v4-flash", dv
     assert dv["jitter_pool"] == ["deepseek/deepseek-v4-flash",
                                  "deepseek/deepseek-v4.1-flash", "tencent/hy3"], dv
+    # homelab#1786: the broken-canary exclusion applies to the chain_head leg too — a head is a
+    # model like any other, and a broken canary is exactly the evidence the head ordering yields
+    # to (Goal #1640 acceptance 3: the exclusion surface). Mark the coding head's FIRST entry
+    # broken and the head leg must skip it, falling to the NEXT head — membership only, the head
+    # ORDER is untouched (v4.1-flash still precedes the ranked rotation). This is the fixture the
+    # pre-fix source fails: it fed only the ranked and fallback legs, so the head leg's missing
+    # exclusion stayed green.
+    record_rotation("provider-events",
+                    [{"model": "deepseek/deepseek-v4-flash", "canary_verdict": "broken"}])
+    db = route(dict(base, chain=[]),
+               {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
+    assert db["decision"] == "dispatch" and db["source"] == "rotation", db
+    assert db["model"] == "deepseek/deepseek-v4.1-flash", db
+    assert db["jitter_pool"] == ["deepseek/deepseek-v4.1-flash", "tencent/hy3"], db
+    # …and it is ONE rule for every chain_head class, not a per-class knob: the same broken verdict
+    # removes a head from the review class (claude/sonnet) too.
+    record_rotation("provider-events",
+                    [{"model": "claude/sonnet", "canary_verdict": "broken"}])
+    _rc = _rotation_candidates({"chain_head": ["claude/sonnet"], "reasoning": True})
+    assert "claude/sonnet" not in _rc, _rc
+    # cleanup: clear both broken verdicts so later fixtures see the unbroken rotation
+    record_rotation("provider-events",
+                    [{"model": "deepseek/deepseek-v4-flash", "canary_verdict": ""},
+                     {"model": "claude/sonnet", "canary_verdict": ""}])
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
