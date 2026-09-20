@@ -130,45 +130,39 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
 > `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
 
-> **MODEL — walk the stack's chain; do not freelance.** The chain's AUTHORITATIVE source is the
-> stack's **cluster claim**: `kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}
-> {.spec.workerModelFallbacks}'` — read it FRESH each dispatch (a chain redirect lands as a claim
-> change and syncs in minutes; `agents/stacks.json` is only the fallback when the claim read
-> fails, and it CAN lag — found live 2026-08-02: a #103 redispatch rode the file's stale
-> laguna-first chain two hours after the claim moved to mimo-first). `workerModel` is the
-> primary, `workerModelFallbacks` the ordered fallbacks.
-> Use the CURRENT chain model for BOTH `--model` flags below. Full design:
-> [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
 > - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
 >   max 5 since ADR-127). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
 >   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. The launcher posts the
 >   strike FOR you: a PR-less run gets one structured issue comment —
 >   `AGENT_STRIKE: model=<m> error_class=<c> round=<r> session=<pod>` (+ the log tail). That comment
->   IS the strike store (state lives in GitHub, not your head). To pick the model for any
->   (re-)dispatch, grep the issue's comments for `AGENT_STRIKE:` and take the first chain entry not
->   yet struck **for this task**, then **re-dispatch the same round immediately** with a fresh
->   session key. **Key-class errors** (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
->   marker instead of an `AGENT_STRIKE:` — skip these when walking struck entries; they are mint
->   defects, not model strikes, and the re-dispatch uses the **same model** with a fresh key.
+>   IS the strike store (state lives in GitHub, not your head) — grep it for what has already struck
+>   **for this task**; you do not pick a model from it, because there is no chain to walk: the
+>   launcher's `/route` call excludes the task's struck cells and owns the pick (ADR-094). Then
+>   **re-dispatch the same round immediately** with a fresh session key. **Key-class errors**
+>   (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
+>   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
+>   re-dispatch mints a fresh key.
 >   **Re-grade the budget label as escalation carrier**: when strikes suggest the
->   chain's model tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
+>   served model's tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
 >   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
 >   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
->   `agent/blocked` for a pure infra failure while chain entries remain;
->   only a fully-struck chain escalates (comment the strike list — that IS a human's problem).
+>   `agent/blocked` for a pure infra failure while the router still has an eligible candidate;
+>   only a `chain-exhausted` `/route` answer escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
 >   $/M — FU-062 §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
 >   provider pin. A `$1.0/M (source: default)` price means the model is *unpriced/unknown to the
 >   registry* (typo? rotated out?) — fix the model id, or pass `--price-per-mtok` if you truly know
 >   better. `:free` models are $0 → smallest tier by design.
-> - Do **not** swap in models you happen to know outside the chain (especially **reasoning** models
->   like `deepseek-r1*` — slow, verbose, pricier). Changing the chain itself is the human's call
->   (stacks.json is policy).
+> - Do **not** swap in models you happen to know outside the routed decision (especially
+>   **reasoning** models like `deepseek-r1*` — slow, verbose, pricier). Changing what the router may
+>   serve is the human's call (class policy in `model-classes.json` + the claim's knobs; `stacks.json`
+>   is the mirror, never the policy home).
 
-> **RAIL — the chain's rail decides whether steps 3–4 apply at all. Read it before you read them.**
-> The `workerModel` you just read tells you: a **`claude/` prefix** means this dispatch rides the
-> **subscription** rail (`kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}'` →
-> `claude/haiku` on the platform claim), and the launcher self-derives `--harness claude` from it.
+> **RAIL — the model's rail decides whether steps 3–4 apply at all. Read it before you read them.**
+> The model this dispatch will ride tells you: a **`claude/` prefix** means it rides the
+> **subscription** rail, and the launcher self-derives `--harness claude` from that prefix. There is
+> no `workerModel` field to read on a chainless claim — the router's `/route` answer names the served
+> model, and the claim's per-repo `fixer.claudeTier` is the knob that lets it serve a `claude/*` one.
 > For such a ride, **the OpenRouter key is the FALLBACK rail, never the prerequisite** — steps 3–4
 > (estimate + mint) do not apply, and a key that is absent, unminted, deferred or rate-limited must
 > **not** defer the dispatch. `agents/agent-session.sh` already encodes exactly this: it sends no
@@ -179,7 +173,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > (homelab#158). The **only** capacity condition that defers a subscription ride is the FU-088
 > latch, which the launcher probes itself — you dispatch and let it decide. Full procedure:
 > step 5 §**Claude tier**.
-> An **OpenRouter-primary** chain (any non-`claude/` `workerModel`) takes steps 3–4 as written.
+> An **OpenRouter-primary** ride (any non-`claude/` served model) takes steps 3–4 as written.
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
