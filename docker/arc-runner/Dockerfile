@@ -29,7 +29,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
  && rm -rf /var/lib/apt/lists/*
 
 # devbox — pinned binary, not the install script (script pulls whatever is latest)
-ARG DEVBOX_VERSION=0.17.5
+# ONE version for every runner that touches a devbox.lock (FU-240): each devbox release bakes its own
+# plugin versions and rewrites them into the lock on ANY `devbox run` (nodejs plugin 0.0.4 up to
+# 0.18.1, 0.0.5 from 0.18.2), and THIS binary writes the committed locks (the Monday devbox-update).
+# Paired with claude-jail's `ENV DEVBOX_USE_VERSION` and the operator host — bump them together, and
+# commit the lock the new version writes in the same PR.
+ARG DEVBOX_VERSION=0.18.3
 RUN curl -fsSL "https://github.com/jetify-com/devbox/releases/download/${DEVBOX_VERSION}/devbox_${DEVBOX_VERSION}_linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin devbox \
  && chmod 0755 /usr/local/bin/devbox
