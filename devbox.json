@@ -259,7 +259,10 @@
         "echo 'Run an OPNsense playbook with creds+httpx interpreter:' && echo '  bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml'"
       ],
       "kubeconfig": [
-        "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
+        "bash scripts/client-configs.sh kubeconfig"
+      ],
+      "talosconfig": [
+        "bash scripts/client-configs.sh talosconfig"
       ],
       "talos-usb": [
         "bash scripts/talos-usb.sh"
