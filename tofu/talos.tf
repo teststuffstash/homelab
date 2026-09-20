@@ -18,6 +18,39 @@ locals {
       }
     }
   })
+
+  # ADR-133's control-plane endpoint VIP (local.cp_vip, ruled in docs/ip-plan.md). Carried by
+  # EVERY control plane — VM (below) and metal (metal.tf) alike — because a Talos shared VIP is
+  # elected through etcd: the CP that wins the campaign puts the address on its own NIC and
+  # gratuitous-ARPs it, and it moves to another member when that one goes away. A worker never
+  # gets this patch; it has no vote.
+  #
+  # `deviceSelector` rather than a named interface ON PURPOSE: cp-01 (nocloud VM) is `eth0`,
+  # wk-metal-03 (ThinkPad) is `enp0s31f6`. `physical: true` matches the one real NIC on either
+  # and leaves the cilium_*/lxc*/bond0/dummy0 links alone.
+  #
+  # certSANs is here and not inferred: the kube-apiserver cert must NAME the VIP or kubectl fails
+  # TLS against it. Talos adds the endpoint host itself once cluster_endpoint points at the VIP —
+  # but the SAN has to be in place BEFORE that cutover, not with it, or the cutover is the outage.
+  #
+  # ⚠ Verified additive on cp-01 in `--mode=try` (2026-09-20): the VIP appears as a SECOND address
+  # (192.168.2.50/32) beside the platform's 192.168.2.51/24, which the nocloud datasource keeps
+  # owning — machine.network was absent from the config until now and this creates it. The certSAN
+  # half regenerates the apiserver cert and restarts the static pod: ~2 min of API downtime on a
+  # single control plane, and none once there are three.
+  cp_vip_patch = yamlencode({
+    machine = {
+      network = {
+        interfaces = [{
+          deviceSelector = { physical = true }
+          vip            = { ip = local.cp_vip }
+        }]
+      }
+    }
+    cluster = {
+      apiServer = { certSANs = [local.cp_vip] }
+    }
+  })
 }
 
 resource "talos_machine_secrets" "this" {
@@ -107,6 +140,8 @@ data "talos_machine_configuration" "node" {
     contains(local.ephemeral_nodes, each.key) ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/ephemeral" = "true" } }
     })] : [],
+    # The endpoint VIP — control planes only (see local.cp_vip_patch).
+    each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [
