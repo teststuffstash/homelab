@@ -108,21 +108,28 @@ after). Revisit once Renovate is live and the fleet is current.
 4. Either way, re-run at **three** control planes to settle whether the single-CP endpoint-set
    emptying is load-bearing.
 
-## Mitigation — NOT YET BUILT
+## Mitigation — the control-plane verb guards itself (2026-09-20)
 
-⚠ **Nothing guards this today.** As of this page landing, `scripts/controlplane-upgrade.sh` gates
-only etcd quorum, endpoint choice and the snapshot; it does not look at the Cilium backend at all.
-Do not assume a control-plane upgrade is protected from this — until the work below lands, an
-apiserver restart can drop the backend fleet-wide and the only signal is that pods start failing
-to reach `10.96.0.1:443`.
+`scripts/controlplane-upgrade.sh` restarts an apiserver by construction, so it now carries the
+gate on both sides of the reboot:
 
-Planned, in order:
+- **before**: it refuses to start when an agent is already missing the backend — a fleet that
+  cannot reach the API through the ClusterIP is not one to reboot a control plane on, and a
+  dirty pre-reading would make the post-rejoin one unattributable;
+- **after**: it re-reads and rolls `ds/cilium` **only on a genuinely missing backend**, waits for
+  the rollout, and re-reads again. A reading that *failed* (agent list unreadable, or every
+  `kubectl exec` failed twice) is refused, not rolled — a blind roll during exactly the apiserver
+  instability that makes the read flaky. Still missing after one roll is a hard failure: that is
+  not this bug, and a second restart would be superstition.
 
-1. A post-rejoin backend check in `controlplane-upgrade.sh` that rolls `ds/cilium` only when an
-   agent is genuinely missing the backend.
-2. That check shared with the maintenance-window tooling rather than copied, so the
-   `have` / `missing` / `unknown` handling (a flaky `kubectl exec` must never read as a missing
-   backend) has one home.
+The reading and its three-way verdict (`have` / `missing` / `unknown`) have **one home**,
+`scripts/maintenance-window.sh` — exposed as `devbox run maint cilium-check`, exit `0` clean /
+`2` missing / `3` unread — so the "a flaky exec is not a missing backend" rule cannot drift
+between the window tool and the CP verb. Both sides are pinned by
+`devbox run maint-self-test` (§4b and §5), which runs the real verb against a stub repo.
 
-Until then the manual recovery in §Symptom is the whole mitigation: notice it, then
-`kubectl -n kube-system rollout restart ds/cilium`.
+This is a **mitigation, not a fix**: the bug is still unexplained and unreported, every other
+apiserver restart (a `tofu apply` touching control-plane config, a manual `talosctl patch`) is
+still unguarded, and the recovery there remains the manual `rollout restart ds/cilium` from
+§Symptom — run `devbox run maint cilium-check` after any such change, which is what the
+[`/maintenance-window`](../../.claude/skills/maintenance-window/SKILL.md) `check` already does.

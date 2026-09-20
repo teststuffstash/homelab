@@ -69,7 +69,7 @@ It is not a footnote for the summary. The watch dies with the session — re-arm
 |---|---|
 | new firing alerts | the operator saw them first |
 | `sum(up)` fell | 48 → 0 scrape targets went unnoticed for ~30 min |
-| cilium holds `10.96.0.1:443` on every node | **every apiserver restart drops this backend fleet-wide and Cilium does not re-sync it** — pods get `connection refused` to the API while nodes still read `Ready`. Seen twice in one day. Fix: `kubectl -n kube-system rollout restart ds/cilium` |
+| cilium holds `10.96.0.1:443` on every node | **every apiserver restart drops this backend fleet-wide and Cilium does not re-sync it** — pods get `connection refused` to the API while nodes still read `Ready`. Seen twice in one day. Fix: `kubectl -n kube-system rollout restart ds/cilium`. Callable alone as `devbox run maint cilium-check` (exit 0 clean / 2 missing / 3 unread) — run it after ANY apiserver restart; `cp-upgrade` runs it itself, either side of the reboot |
 | non-Running pods rose | controllers crashloop on a broken API path |
 | CI stranded in `queued` | ARC listeners restart during cluster work and never re-claim jobs queued during the gap — they sit in `queued` forever and surface as `CiDispatchStalled` |
 

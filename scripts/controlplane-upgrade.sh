@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
 # Upgrade one Talos control-plane node through the same guarded maintenance verb as workers,
 # with the control-plane-only invariants added here: healthy odd etcd quorum, another healthy
-# API endpoint, and an etcd snapshot before the drain. Run from the management box checkout:
+# API endpoint, an etcd snapshot before the drain, and the Cilium apiserver-backend gate either
+# side of it. Run from the management box checkout:
 #
 #   devbox run cp-upgrade -- cp-01
 #
+# THE CILIUM GATE. Upgrading a control plane restarts an apiserver, and on this fleet every
+# apiserver restart leaves Cilium with NO backend for 10.96.0.1:443 on most or all nodes, with
+# no re-sync: pods get "connection refused" to the API while every node still reads Ready and
+# kubectl from outside works fine. Reproduced twice on 2026-09-20 (FU-258,
+# docs/spikes/cilium-apiserver-restart-backend-loss.md); the fix is a ds/cilium restart and
+# nothing else was ever needed. So this verb refuses to START on a fleet already missing the
+# backend, and after the rejoin it looks again and rolls ds/cilium ONLY when an agent is
+# genuinely missing it — never on a reading that failed, which is a blind roll during exactly
+# the apiserver instability that makes the read flaky. The reading and its three-way verdict
+# live in scripts/maintenance-window.sh (`cilium-check`), shared rather than copied.
+# Run this verb INSIDE a declared window (the /maintenance-window skill): node-maintenance's
+# own silences close with the node's rejoin, so the ds/cilium roll that may follow lands
+# outside them and would otherwise hand the responder a CiliumAgentScrapeDown to triage.
+#
 # LAB=1 is only for the disposable, separately bootstrapped one-node rehearsal cluster. It
 # requires explicit KUBECONFIG, TALOSCONFIG, INSTALL_TARGETS and ENDPOINT and cannot use homelab's
-# kubeconfig. It relaxes the three-member/other-endpoint rules, never the snapshot or post-check.
+# kubeconfig. It relaxes the three-member/other-endpoint rules and the Cilium gate (that cluster
+# is not this fleet), never the snapshot or post-check.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,6 +37,9 @@ SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/var/lib/mgmt/etcd-snapshots}"
 if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/tmp/controlplane-upgrade-snapshots}"; fi
 
 die() { echo "FAIL: $*" >&2; exit 2; }
+# 0 = every responsive agent holds the apiserver backend, 2 = one genuinely does not,
+# 3 = the reading answered nothing. The contract is maintenance-window.sh's; do not re-derive it.
+cilium_check() { bash "$REPO/scripts/maintenance-window.sh" cilium-check; }
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
 ready_cps() {
   kubectl get nodes -l node-role.kubernetes.io/control-plane -o json | jq -r '
@@ -68,6 +87,15 @@ else
 fi
 assert_etcd_status "$members" "$member_count"
 
+# BEFORE: a fleet that already cannot reach the API through the ClusterIP is not a fleet to
+# reboot a control plane on — and it would also make the post-rejoin reading unattributable.
+if [ "$LAB" = 1 ]; then
+  echo "LAB=1: skipping the cilium backend gate (the rehearsal cluster is not this fleet)"
+else
+  crc=0; cilium_check || crc=$?
+  [ "$crc" -eq 0 ] || die "cilium apiserver backend is not clean BEFORE the upgrade (verdict $crc) — fix it first (kubectl -n kube-system rollout restart ds/cilium), re-run 'devbox run maint cilium-check', then start the window"
+fi
+
 mkdir -p "$SNAPSHOT_DIR"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 snapshot="$SNAPSHOT_DIR/${NODE}-${stamp}.snapshot"
@@ -91,4 +119,24 @@ post="$(etcd_members "$ip" "$ENDPOINT")" || die "post-upgrade etcd membership un
 post_count="$(printf '%s\n' "$post" | awk 'NR>1 && NF {n++} END{print n+0}')"
 [ "$post_count" -eq "$member_count" ] || die "etcd member count changed: $member_count -> $post_count"
 assert_etcd_status "$post" "$post_count"
-echo "OK: $NODE upgraded; etcd membership is whole ($post_count members); snapshot: $snapshot"
+
+# AFTER: the apiserver restarted, so assume the backend is gone until the agents say otherwise.
+# Roll ONCE, on verdict 2 only, and re-read — a second empty reading is not this bug and must
+# not be papered over with another restart.
+if [ "$LAB" = 1 ]; then
+  echo "LAB=1: skipping the post-rejoin cilium backend check"
+else
+  crc=0; cilium_check || crc=$?
+  if [ "$crc" -eq 2 ]; then
+    echo "Rolling ds/cilium: agents lost the 10.96.0.1:443 backend — the known apiserver-restart signature (FU-258)"
+    kubectl -n kube-system rollout restart ds/cilium
+    kubectl -n kube-system rollout status ds/cilium --timeout="${CILIUM_ROLLOUT_TIMEOUT:-10m}" \
+      || die "ds/cilium rollout did not complete — the API path is still broken for in-cluster clients"
+    crc=0; cilium_check || crc=$?
+    [ "$crc" -eq 0 ] || die "cilium STILL has no usable backend reading after a ds/cilium restart (verdict $crc) — that is NOT the known signature; investigate before upgrading another control plane"
+  elif [ "$crc" -ne 0 ]; then
+    die "cilium backend state UNREADABLE after the rejoin — refusing to roll ds/cilium on a read nobody could take; re-run 'devbox run maint cilium-check' and act on what it says"
+  fi
+fi
+
+echo "OK: $NODE upgraded; etcd membership is whole ($post_count members); cilium holds the apiserver backend; snapshot: $snapshot"
