@@ -45,6 +45,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker (left the Longhorn std tier 2026-09-14 — compute-only; mounts volumes, serves none) |
 | `wk-03` (VM) | 192.168.2.63 | k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata) |
+| `cp-02` (VM on nx-02) | 192.168.2.65 | k8s control plane (ADR-133 — the third CP, second hypervisor) |
 | `wk-04` (VM on nx-02) | 192.168.2.64 | k8s worker, untainted batch compute (the second hypervisor's first VM) |
 | `thinkcentre` (metal, OUT of the cluster) | 192.168.2.53 | R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); its first apply waits on FU-012's state copy |
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |

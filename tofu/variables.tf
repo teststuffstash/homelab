@@ -229,6 +229,14 @@ variable "nodes" {
     # and the box is on a noise/idle trial (private hardware register R11) that may end with the
     # whole chassis leaving. serial stays false: the pve-serial-log Ansible role only tails pve.
     wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02" }
+    # ADR-133's THIRD control plane, on the second hypervisor — one CP per chassis (pve, the X250,
+    # the Nutanix twin), so no single box can take two of the three. Sized like cp-01 rather than
+    # smaller: a CP's footprint is its own apiserver + etcd, and cp-01's 8→12 GiB bump (#1687) was
+    # paid for exactly that. nx-02 had 26 GiB free of 62 when this landed, and the nvme-thin pool
+    # 175 GiB of 244 — read the POOL, not the guest FS, before adding a disk here.
+    # ⚠ The key must sort AFTER cp-01: local.first_cp_key is sort(keys(controlplane))[0], and it
+    # picks the bootstrap/kubeconfig host — a key sorting first would silently move it.
+    cp-02 = { role = "controlplane", vm_id = 8102, ip_cidr = "192.168.2.65/24", cores = 4, memory_mb = 12288, disk_gb = 40, hypervisor = "nx-02" }
   }
 
   validation {
