@@ -113,10 +113,19 @@ resource "kubernetes_deployment" "forgejo_runner" {
             initial_delay_seconds = 5
             period_seconds        = 5
           }
-          # FU-082: requests only — CI builds spike unpredictably, a memory limit would OOM job
-          # containers mid-build. On the dedicated ephemeral tier, this is just scheduler honesty.
+          # FU-082: requests are deliberately small — CI builds spike unpredictably and a TIGHT
+          # memory limit would OOM job containers mid-build.
+          # The limit above them is new (2026-09-20) and is a BLAST-RADIUS CAP, not a sizing
+          # statement: the old "requests only" posture was justified by this pod owning a
+          # dedicated ephemeral node, and unpinning it (see the pod spec) removed exactly that
+          # isolation — an unbounded privileged DinD sidecar can now land beside real services.
+          # 4Gi is chosen to be far above any build this fallback runner has ever done and far
+          # below what would hurt the smallest node it can land on (8 GiB). A build that
+          # legitimately needs more should RAISE this deliberately, which is the point of having
+          # a number at all.
           resources {
             requests = { cpu = "100m", memory = "256Mi" }
+            limits   = { memory = "4Gi" }
           }
         }
 
@@ -155,7 +164,7 @@ resource "kubernetes_deployment" "forgejo_runner" {
               forgejo-runner register --no-interactive \
                 --instance http://forgejo-http.forgejo.svc.cluster.local:3000 \
                 --token "$RUNNER_TOKEN" \
-                --name "k8s-ephemeral-$(hostname)" \
+                --name "k8s-$(hostname)" \
                 --labels "${local.forgejo_runner_labels}"
             fi
             exec forgejo-runner daemon
@@ -187,5 +196,5 @@ resource "kubernetes_deployment" "forgejo_runner" {
 }
 
 output "forgejo_runner" {
-  value = "act_runner in ns forgejo-runner on the ephemeral tier; verify: Forgejo → Admin → Actions → Runners"
+  value = "act_runner in ns forgejo-runner, unpinned (any schedulable node); verify: Forgejo → Admin → Actions → Runners"
 }
