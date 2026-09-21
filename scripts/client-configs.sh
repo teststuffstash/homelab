@@ -39,7 +39,18 @@ done
 KEY="$CRED/homelab-pve-ssh/id_ed25519"
 
 fetch_one() {
-  local name="$1" dest="$ROOT/tofu/$name" tmp
+  # ⚠ ONE assignment per `local`. A shell expands every argument of `local` BEFORE it assigns any
+  # of them, so the old `local name="$1" dest="$ROOT/tofu/$name"` built dest from an EMPTY name.
+  # Two different failures fell out of that, neither of them loud: under `devbox run` the local
+  # copy was never written while the script still printed "wrote ... + tofu/<name>", and under a
+  # plain `bash scripts/client-configs.sh` it died at this line with "name: unbound variable".
+  # The silent half is the dangerous one — it leaves the jail on the OLD endpoint and the box on
+  # the new one, which is precisely the split state the comment below says this script exists to
+  # prevent. Found 2026-09-21 during the ADR-133 VIP cutover: the box's talosconfig correctly
+  # listed all three control planes while tofu/talosconfig still named only cp-01, a day stale.
+  local name="$1"
+  local dest="$ROOT/tofu/$name"
+  local tmp
   tmp="$(mktemp)"
   # mgmt-tf prints its own banner line to stdout before tofu's output; drop it and the ssh notice.
   bash "$ROOT/scripts/mgmt-tf.sh" output -raw "$name" 2>/dev/null \
