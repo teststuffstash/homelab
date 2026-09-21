@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-266** (2026-09-21: FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-268** (2026-09-21: FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1379,6 +1379,16 @@ the block needs pruning, not more headings.
       still strict. A read-only parse of every metal node's `Boot####` found only this one.
       **Next:** every future `talosctl upgrade` of this box fails the same way — delete the entry in
       firmware setup and see whether it comes back; upstream issue (public — operator's call). Relates FU-246.
+- [ ] **FU-266** — **One CI runner VM, on one hypervisor: a pve outage is a CI outage.** ADR-082's
+      Docker/binfmt lane is `ci-runner-01` alone (`tofu/ci-runner.tf`, pve). The 2026-09-21 pve
+      GPU-swap window left the fleet with no VM runner (operator: fine for a day, not beyond).
+      **Next:** a second runner VM on nx-02 from the same `ci-runner.tf` shape (read nx-02's pool
+      before sizing it); same labels so jobs land on either. Relates ADR-082, FU-207.
+- [ ] **FU-267** — **cilium-agent runs at 80–87 % of its 512 Mi Guaranteed limit fleet-wide.**
+      `tofu/cilium.tf:91` requests = limits 512 Mi; 2026-09-21 reads 410–446 Mi on the busy nodes,
+      and `ContainerMemoryNearLimit` fired on hp-01 as the pve drain landed pods there. An OOM kill
+      of the agent is a node-networking blip. **Next:** raise the limit (or go Burstable — the
+      fleet-roles "request-tax" lever) after reading a week of `max_over_time` per node.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
