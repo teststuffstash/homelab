@@ -365,8 +365,11 @@ node_k8s_axes() {
   # A FILE, not --argjson: the Node list (status.images included) is past the kernel's 128 KiB
   # single-argument limit. stderr dropped, not merged (tool() merges it): a kubectl warning would
   # corrupt the JSON.
+  # --kubeconfig EXPLICIT, like --talosconfig everywhere above: devbox.json's env block sets
+  # KUBECONFIG=$PWD/tofu/kubeconfig inside `devbox run`, overriding the box's /var/lib/mgmt one —
+  # the first box run hit localhost:8080 (2026-09-21; the jail has tofu/kubeconfig, so it passed).
   live="$(mktemp)" || return 0
-  devbox run --quiet -- kubectl get nodes -o json >"$live" 2>/dev/null
+  devbox run --quiet -- kubectl --kubeconfig "${KUBECONFIG:-$REPO/tofu/kubeconfig}" get nodes -o json >"$live" 2>/dev/null
   tool jq -e '.items | type == "array"' "$live" >/dev/null 2>&1 || {
     rm -f "$live"; log "nodes: kubectl get nodes failed — registered/labels/taints axes not checked"; return 0; }
   # One row per declared node: name, present|absent, label diff, taint diff ("-" = none — bash
