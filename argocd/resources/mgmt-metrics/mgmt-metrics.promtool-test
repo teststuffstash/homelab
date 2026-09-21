@@ -171,3 +171,77 @@ tests:
         alertname: MgmtBeltMetricsAbsent
         exp_alerts:
           - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── the node reconciler (ADR-132 §MB4, scripts/mgmt-reconcile.sh) ─────────────────────────────
+  - interval: 1m
+    name: "a parked node fires after 5m; idle and pending never do"
+    input_series:
+      - series: 'mgmt_reconcile_node_state{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03",state="parked"}'
+        values: "0x10 1x20"
+      - series: 'mgmt_reconcile_node_state{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03",state="pending"}'
+        values: "1x10 0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtReconcileParked
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: MgmtReconcileParked
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: MgmtReconcileParked
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03, state: parked }
+
+  # A sync that started at t=60s: fine at 2h, stuck past 3h + 5m. The loop does not tick while it
+  # runs, so its last-run stays at the sync start — and must NOT read as a stale loop.
+  - interval: 5m
+    name: "a long sync fires SyncStuck after 3h and never LoopStale"
+    input_series:
+      - series: 'mgmt_reconcile_sync_started_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03"}'
+        values: "60x60"
+      - series: 'mgmt_reconcile_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "60x60"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts: []
+      - eval_time: 3h10m
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03 }
+      - eval_time: 4h
+        alertname: MgmtReconcileLoopStale
+        exp_alerts: []
+
+  - interval: 5m
+    name: "no sync open and no tick for over an hour → LoopStale; an idle node is not stuck"
+    input_series:
+      - series: 'mgmt_reconcile_sync_started_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03"}'
+        values: "0x40"
+      - series: 'mgmt_reconcile_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+600x6 3600x34"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: MgmtReconcileLoopStale
+        exp_alerts: []
+      - eval_time: 2h30m
+        alertname: MgmtReconcileLoopStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 3h
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts: []
+
+  - interval: 1m
+    name: "exporter up with no mgmt_reconcile series fires after 1h"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x90"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: MgmtReconcileMetricsAbsent
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: MgmtReconcileMetricsAbsent
+        exp_alerts:
+          - exp_labels: { job: mgmt-node, instance: "192.168.2.53:9100", severity: warning }

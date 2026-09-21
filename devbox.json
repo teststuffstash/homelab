@@ -138,7 +138,11 @@
         "bash scripts/mgmt-human-plan.sh \"$@\""
       ],
       "mgmt-policy-test": [
-        "bash scripts/mgmt-policy-test.sh"
+        "bash scripts/mgmt-policy-test.sh",
+        "bash scripts/mgmt-reconcile-test.sh"
+      ],
+      "mgmt-reconcile-test": [
+        "bash scripts/mgmt-reconcile-test.sh"
       ],
       "labels-handoff": [
         "bash scripts/labels-handoff.sh \"$@\""

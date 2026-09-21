@@ -139,3 +139,68 @@ spec:
               node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_probe_belt.prom
               is missing, so MgmtBeltStale and the MgmtNode* drift alerts are blind. Check the belt
               has run since the change that publishes it landed (scripts/mgmt-probe.sh publish).
+    # ADR-132 §MB4 layers 3–5 — the node reconciler (scripts/mgmt-reconcile.sh, a box loop every
+    # 10 min). mgmt_reconcile_node_state{node,state} is one-hot per `reconcile: auto` node over
+    # idle|pending|syncing|parked; mgmt_reconcile_sync_started_timestamp_seconds{node} is the
+    # running sync's start (0 = none). PENDING (a gate refused, nothing touched) has no alert of
+    # its own: a diff that never syncs is already MgmtNodeInstallDrift / TalosFleetVersionSplit at 24h.
+    - name: mgmt-reconcile
+      rules:
+        - alert: MgmtReconcileParked
+          expr: |
+            mgmt_reconcile_node_state{state="parked"} == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box's reconciler PARKED {{ $labels.node }} — its one attempt failed"
+            description: >-
+              The node reconciler ran `node-maintenance.sh upgrade {{ $labels.node }}` for its
+              declared install and it did not end in sync (the verb failed after touching the node,
+              exited 0 with the diff still non-zero, or the loop died mid-sync). One attempt per
+              declared target is the rule — a bad disk must never become a reinstall loop — so it
+              will NOT retry until the declaration changes or a human clears the state. Read the
+              node (cordoned? window open? which image?), then the reason:
+              `jq . /var/lib/mgmt/reconcile/state.json`, `journalctl -u mgmt-reconcile` on
+              192.168.2.53. Clear with `rm /var/lib/mgmt/reconcile/state.json` once the node is
+              whole. docs/management-box.md §MB4.
+        - alert: MgmtReconcileSyncStuck
+          expr: |
+            mgmt_reconcile_sync_started_timestamp_seconds > 0
+              and (time() - mgmt_reconcile_sync_started_timestamp_seconds) > 3 * 3600
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The reconciler's sync of {{ $labels.node }} has run for over 3h"
+            description: >-
+              A reconciler window on {{ $labels.node }} opened over 3 hours ago and has not
+              finished — past the upgrade verb's own bounds for a node with nothing to settle (the
+              unit's hard stop is 5h; the next tick then parks it). The node is likely cordoned,
+              draining, or waiting on a floor. `journalctl -fu mgmt-reconcile` on 192.168.2.53;
+              `kubectl get node {{ $labels.node }}`.
+        # The loop does not tick while a sync runs (a oneshot), so staleness is judged only when
+        # no sync is open — the stuck alert above owns the long-sync case.
+        - alert: MgmtReconcileLoopStale
+          expr: |
+            (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
+              unless on (instance) (max by (instance) (mgmt_reconcile_sync_started_timestamp_seconds) > 0)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box's node reconciler has not evaluated in over an hour"
+            description: >-
+              mgmt-reconcile ticks every 10 minutes and no sync is open, yet none has evaluated for
+              over an hour — it cannot read an input (the main state's node_install_targets, the
+              inventory, the node diff) or its timer stopped. Every reconcile:auto node's state is
+              frozen. `systemctl status mgmt-reconcile.timer`, `journalctl -u mgmt-reconcile -n 50`.
+        - alert: MgmtReconcileMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_reconcile_last_run_timestamp_seconds
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box is scraped but publishes no mgmt_reconcile_* metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_reconcile.prom
+              is missing, so MgmtReconcileParked / SyncStuck / LoopStale are blind. Check the
+              mgmt-reconcile timer is active (nixos/hosts/mgmt/default.nix) and has run since it landed.

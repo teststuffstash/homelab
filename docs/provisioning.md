@@ -175,6 +175,11 @@ journalctl -fu node-upgrade-behind
 `--setenv=PATH` is load-bearing: a transient unit gets systemd's bare PATH, and devbox then dies on
 "unable to source Nix profile" (2026-09-21, first real run). `DRY=1` goes in as `--setenv=DRY=1`.
 
+**A node declared `reconcile: auto`** in `machines/machines.yaml` (today: `wk-03`) needs none of this:
+the box's reconciler runs this same `upgrade` verb on it once the applied declaration moves, one
+attempt per declared target, and parks it with an alert if that attempt fails —
+[`management-box.md`](management-box.md) §MB4 (layers 3–5 as built).
+
 On the box the verbs read the declaration from the local main state and the client configs from
 `/var/lib/mgmt/` by themselves (2026-09-21 — before that, every box-side run died on
 `localhost:8080`, because `devbox run` points KUBECONFIG at a checkout path the box does not have).
