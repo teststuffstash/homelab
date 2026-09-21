@@ -20,52 +20,28 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-21 06:40 — ADR-133 IS DONE; the substrate upgrade is the open fork).**
-  Mechanism: **[`../controlplane-ha.md`](../controlplane-ha.md)** (§CP6 defect, §CP7 recovery).
-  **LIVE:** three control planes (cp-01, cp-02, wk-metal-02), three etcd members, all BGP
-  `established`, 13 nodes, 159 targets, cilium 13/13. **`cluster_endpoint` IS the `.50` VIP**
-  (#1822, applied 06:25, apply-loop baseline stamped `b43653f8`). All windows closed clean.
-  **⚠ §CP4's "the flip does not restart the apiserver" DID NOT HOLD at fleet scale.** All three
-  apiservers restarted together — a ~2 min FULL API outage (all of `.51/.65/.183/.50` refused),
-  then kube-scheduler + cnpg-operator crashlooped and self-recovered as §CP3 predicts. The lab
-  finding came from a ONE-NODE cluster; three CPs did not make the restarts roll. §CP4 should be
-  corrected to say so — not done yet, and it is the kind of claim a future session will trust.
+- **⚑ PICKUP (2026-09-21 ~10:00 — substrate + box session; arc in TICK-LOG).** ADR-133 is done (3 CPs, VIP
+  endpoint). **Merged + live today:** PKI frozen (#1825), stale-kubeconfig detector + FU-259 recovered
+  (kubeconfig dials `.50`), ADR-137 `cp-NN` naming (#1826), plan-id apply contract (#1827), the node diff
+  + fleet-split alert (#1828/#1831, belt ARMED — green 6/6 every 15 min), disk image = birth seed /
+  `install.image` declared (#1829, ADR-138 — APPLIED to all 6 VMs, no reboot), state snapshots on box +
+  wallet (#1834, verified twice, restore-drilled), ARC `maxRunners` 4→8 (direct).
   **NEXT, in order:**
-  (1) **FU-263 — the open fork, operator-ruled "stop, design it" 2026-09-21.** cp-01/cp-02 still run
-      the `page_table_check` kernel (v1.13.2) and CANNOT simply be bumped: the version change plans
-      BOTH CP VMs replaced (`disk.file_id` forces replacement) AND regenerates `talos_machine_secrets`
-      — the entire cluster PKI. Do the cheap half first: freeze `talos_machine_secrets.talos_version`
-      to a constant exactly as ADR-136 froze `sa_issuer`, so no future version edit can rotate the CA.
-      Then a `/design` pass. The abandoned branch was deleted; nothing is half-applied.
-  (2) **FU-259 — `tofu/kubeconfig` still says `.51`** after the flip, so clients do not use the VIP.
-      Recovery is a SCOPED `apply -replace=talos_cluster_kubeconfig.this -target=…` (unscoped fails).
-      Deliberately not run at 06:40 — a targeted apply on this root is what replaced three VMs in
-      September (FU-248). talosconfig is already correct (`.183/.51/.65`, #1823).
-  (3) FU-262 — wk-metal-02 still wears a worker's name; rename rides its NEXT reinstall, never its own.
-  **In flight:** PR#1823 (client-configs never wrote the jail's copy while reporting success).
-  ⚠ **Do not repeat the wrong first diagnosis** from this session: the PXE asset drift to v1.13.2 was
-  real and fixed (`19138c44`, FU-246) but caused NONE of the wk-metal-02 failure. Both kernels booted.
-- **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
-  The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
-  cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
-  `scripts/node-maintenance.sh upgrade <node>` exists and is PROVEN on `wk-metal-03` and
-  `wk-metal-01` (both v1.13.2 → v1.13.10, schematic verified after). **Next: `wk-metal-04`, then
-  `m70s`, then `hp-01`** — but never from that list, run `devbox run node-maintenance order`, which
-  computes the ranking from live placement (hard-coded orders rot; operator, 2026-09-18).
-  Three things a fresh session must know before continuing:
-  (1) **`INSTALL_TARGETS=<file>` is required until the PR merges** — the verb reads
-      `tofu output node_install_targets`, which lands with it. A fixture is in the session
-      scratchpad; rebuild it from `tofu/outputs.tf` if it is gone.
-  (2) **Do `hp-01` last and only after the eventbus change is live** — `eventbus-default-js` runs
-      2 of its 3 JetStream replicas there, so draining it today costs quorum, not a replica. The
-      required anti-affinity + `minAvailable: 2` PDB are in the PR and apply via ArgoCD on merge.
-  (3) **`wk-metal-01` converged off the kata schematic on purpose** (operator: the box no longer
-      needs kata — rides there were starving garage-2). The verb refuses a schematic change by
-      default; `ALLOW_SCHEMATIC_CHANGE=1` was the deliberate choice, `KEEP_SCHEMATIC=1` is the
-      other one. Do not read that convergence as drift.
-  Unfiled and wanted: a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`. Proven
-  necessary this session — a Garage zone was down ~10 min and NOTHING alerted; `cluster_healthy`
-  and `cluster_available` are scraped and, before the verb, had zero consumers.
+  (1) **#1836 MERGED** (`f4ceb666`, CP `talos_version_controlplane` → v1.13.10). NOT yet applied: do the
+      HUMAN apply in a `/maintenance-window` (plan → read → `apply <id>`; expect `2 add / 2 change /
+      2 destroy`, 0 replacements, 0 PKI). The box apply loop will REFUSE it meanwhile (install-time field).
+  (2) **#1837** — `node-maintenance upgrade-behind [cp|worker|all]` (code-owned → operator). Then on the
+      box, as a transient unit (recipe in `provisioning.md`): `upgrade-behind cp` (cp-01, cp-02 — the
+      reboots) and `upgrade-behind worker` (wk-metal-04 → m70s → hp-01, the 09-18 chain; hp-01's eventbus
+      prerequisite is VERIFIED live: JetStream 1 replica each on wk-04/hp-01/wk-02 + `minAvailable: 2`).
+      `TalosFleetVersionSplit` went PENDING 08:00Z on the real 5-node split — it FIRES 2026-09-22 08:00Z
+      unless both scopes are done by then.
+  (3) **FU-264** — rotate the Talos API CA (leaked `os:admin` key, incident doc) AFTER the rollout is
+      stable; spike `docs/spikes/talos-ca-rotation.md` says probe the state half on the lab CP first.
+  (4) Open question to the operator: box metrics transport = scrape it like the hypervisors (FU-252).
+  ⚠ Host-side git prunes scratchpad worktrees mid-session (twice today) and the jail's `~/.ssh/known_hosts`
+  vanished — pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
+  Unfiled and wanted (from 09-18, still true): a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`.
 
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
   (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in

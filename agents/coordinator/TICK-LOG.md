@@ -10314,3 +10314,38 @@ day stale: the exact split state the script exists to prevent (#1823). After the
 talosconfig carries all three CP endpoints; the kubeconfig is still `.51`, which is FU-259 itself.
 
 Cleared on the way: the committed `nx_01_diag` PXE flag on a RUNNING worker (#1822).
+
+## 2026-09-21 (cont.) — a leaked admin key, the substrate fork closed, and a box that had never been watching
+
+Operator handed three items (FU-263 substrate fork, FU-259 kubeconfig, FU-262 rename); the session
+widened on the operator's direction into "3 CPs stable, key rotated, management box working".
+
+**Incident first.** PR#1825's CI red was gitleaks, not the PR: the previous wind-down commit
+`17424211` had swept `tofu/nix-shell-env` — a full talosconfig, `os:admin` cert + KEY — onto PUBLIC
+master at 06:55. Removed 07:10 (`80fc47ab`); `63b69194` put gitleaks on the pushed range in
+`githooks/pre-push` (the direct lane had no secret scan). Operator: rotate the CA, but after the
+rollout is stable → FU-264 + spike. Incident doc written.
+
+**Substrate.** PKI frozen (`talos_version` constant + `prevent_destroy`, #1825). `/design` on VM
+upgrades → the disk image is a birth seed, `install.image` is the declaration (ADR-138, #1829);
+operator asked for the FU-235 belt "together, not later" → #1828. #1829 APPLIED in a window: wk-03
+first (boot time unchanged), then five (apiservers kept start times). The box apply loop's refusal
+of it cleared by the human apply (baseline 717c4d32). The CP bump (#1836) now plans 0 replacements /
+0 PKI where it used to plan both CP VMs rebuilt and a new cluster PKI.
+
+**The box.** Plan-id apply contract (#1827 — reviewer caught the stamp comparing a just-reset HEAD).
+Running the belt by hand found it had been MASKED since 09-13 (`enable = false`, "creds not here
+yet") and that the new node diff could not read its input there → #1831 armed it; green 6/6 now.
+No state snapshot existed for ANY root (main's newest copy 55 serials stale, Garage bucket
+unversioned) → #1834: box + wallet, verified twice, restore-drilled (137 = 137 addresses).
+`upgrade-behind` (#1837) after the operator's "we have node maintenance already?" — dry runs on the
+box found a false all-clear (set -e off left of `||`) and that the box path had NEVER worked
+(devbox's KUBECONFIG=$PWD/tofu/* → localhost:8080; cp-upgrade's documented box usage included).
+
+**Also:** ADR-137 `cp-NN` (operator ruling, #1826); FU-259 recovered (kubeconfig → `.50`); ARC
+maxRunners 4 → 8 (the old arithmetic counted two nodes that had left the tier; nx-01 never counted).
+
+Reviewer catches this session, all real: set -e fallback unreachable (#1825), stamp on reset HEAD
+(#1827), alert text asserting a cause (#1828), three comments made false (#1829), retry swallowing
+a renamed output (#1831), a missed sibling `moved` pair (#1836). Mine: the known_hosts vanished
+(pinned from the wallet since), worktrees pruned twice, a zsh word-split false alarm in the watch.

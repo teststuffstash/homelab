@@ -338,7 +338,7 @@ six OVERSIZE items pointer-ized into
       **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
       plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
-      stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Relates FU-097, FU-136.
+      stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
@@ -1266,15 +1266,6 @@ the block needs pruning, not more headings.
       unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
       metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
       metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
-- [ ] **FU-253** — **Every VM declares a GENERIC, STALE `install.image`.** Live on all five nocloud
-      VMs: `machine.install.image = ghcr.io/siderolabs/installer:v1.13.0` — wrong platform AND two
-      patches behind — because `tofu/talos.tf` sets no `install.image` for VMs (only `install.disk`),
-      so the provider's bundled default lands. Harmless today (a VM boots the nocloud DISK image, and
-      the metal nodes carry a correct factory URL), but it is a loaded gun for anything that upgrades
-      a node to its DECLARED image — the natural design, and exactly what an upgrade controller does
-      (tuppr's `syncNodeInstallImage`): it would ghost all five (ADR-014 as amended). **Next:** set
-      `install.image` from `data.talos_image_factory_urls.vm[...].urls.installer` in `talos.tf`'s
-      config patches, so declared == what the upgrade verb passes. Relates FU-076, FU-235, ADR-014.
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
       left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
       conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"
@@ -1290,9 +1281,9 @@ the block needs pruning, not more headings.
       designed verdict+staleness shape would not have caught it — the loop was alive and correctly
       saying no. Mechanism, the ratchet, and the status-vs-check-run trap:
       [`management-box.md`](management-box.md) §"A standing refusal is a THIRD verdict shape".
-      **Next:** the detector first — a residue-AGE metric, whose transport is the unbuilt decision
-      that section already names — then the apply. Today's 8 addresses are FU-246's 7 metal config
-      updates + the FU-235 `nx-01` taint. Relates FU-237, FU-097, FU-246, ADR-131.
+      **Next:** the detector first — a residue-AGE metric. Transport candidate with prior art (put
+      to the operator 2026-09-21, unanswered): scrape the box like the hypervisors (node_exporter +
+      textfile, a `pve-metrics` ScrapeConfig target) — no VIP decision needed. Relates FU-237, FU-097, ADR-131.
 - [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable
       and it wedges every reconcile report.** `pr-oracle-fleet-minutark` fails with
       `POST …/rum/site_info → 403 "Authentication error"` from Cloudflare (the cf-api-proxy
@@ -1318,10 +1309,9 @@ the block needs pruning, not more headings.
       **Next:** (a) runbook recipe — recreate = `apply -exclude=<every other VM> -exclude=talos_machine_configuration_apply.metal
       -exclude=kubernetes_node_taint.ephemeral`, then the fresh node's config via `tofu console` +
       `talosctl apply-config --insecure` (the `-replace` beside `-exclude` is ignored silently);
-      (b) `scripts/mgmt-tf.sh`: `apply` only from a plan file it produced (`plan -out` → `apply plan.bin`,
-      the apply loop's own shape), refuse ad-hoc `-target`/`-replace` applies. **RESIGHT 2026-09-21:**
-      `-target=kubernetes_labels.node_zone["wk-metal-02"]` — one label, one node — planned cp-02's VM
-      and config as dependencies; harmless only because creating cp-02 was next anyway. Relates FU-246, FU-235.
+      (b) LANDED 2026-09-21 (#1827): `apply` takes a plan id only; scope rides inside the plan, the
+      baseline stamp reads the plan's `.meta` (management-box.md §MB3). Still open: (a).
+      Relates FU-246, FU-235.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
       2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
@@ -1356,9 +1346,9 @@ the block needs pruning, not more headings.
       drift** (2026-09-16, nx-01): config applied in place, tofu plans clean, yet the node runs the plain
       schematic and EPHEMERAL on the SATA disk — the install half never can. (4) **ABSENT is the extreme
       case**: wk-metal-02 declared, no Node object for ~12 h, nothing fired (2026-09-21, FU-243).
-      **Next:** the DIFF on the box's probe — declared (machines.yaml + schematic ids) vs live (`talosctl get
-      extensions`/`volumestatus`, labels, taints, *presence*), one gauge per node → alert; then labels+taints
-      into the machine config, the taint resource retired. ADR-132's diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
+      **Diff LANDED 2026-09-21** (#1828/#1831): box `check_nodes` + `TalosFleetVersionSplit`.
+      **Next:** a transport for the gauge (§MB2, FU-252), then labels/taints/`volumestatus` axes.
+      [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
 - [ ] **FU-262** — **`wk-metal-02` is a control plane wearing a worker's name.** One of the three
       CPs since 2026-09-21 (ADR-133), still `wk-` in `kubectl get nodes`, etcd membership, BGP peer
@@ -1375,11 +1365,10 @@ the block needs pruning, not more headings.
       forces replacement) — while `node-maintenance.sh upgrade` upgrades a nocloud VM IN PLACE
       (ADR-014 amended, proven in the 2026-09-19 lab run) — the FU-248 landmine. (a) The PKI half
       is closed: `talos_machine_secrets.talos_version` frozen with `prevent_destroy` (#1825).
-      **Next:** (b) land the design assessed 2026-09-21 — the VM disk image is a BIRTH SEED
-      (`ignore_changes` on `disk[0].file_id`), the running version is declared by
-      `machine.install.image` (FU-253) and moved in place by the verb, as metal already works;
-      gated on FU-235's declared-vs-live belt, which is what replaces `plan` as the drift detector.
-      Relates FU-235, FU-246, FU-248, FU-253, FU-254.
+      (b) LANDED + APPLIED 2026-09-21 (#1829, ADR-138): the disk image is a birth seed, VMs declare
+      `install.image`. **Next:** merge #1836 (CP → v1.13.10; plans 0 replacements / 0 PKI), human
+      apply it, then `upgrade-behind cp` on the box (#1837) — archive when cp-01/cp-02 are on
+      v1.13.10. Relates FU-235, FU-246, FU-248, FU-254.
 
 - [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master (POINTER).**
       A stray talosconfig was pushed to this PUBLIC repo 2026-09-21 and removed 15 min later; no

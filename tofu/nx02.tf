@@ -20,16 +20,6 @@ resource "proxmox_download_file" "talos_nx02" {
   overwrite               = false
 }
 
-# State carry-over from the pre-split pair — remove with image.tf's `moved` blocks.
-moved {
-  from = proxmox_download_file.talos_nx02
-  to   = proxmox_download_file.talos_nx02["plain-v1.13.2"]
-}
-
-moved {
-  from = proxmox_download_file.talos_longhorn_nx02
-  to   = proxmox_download_file.talos_nx02["longhorn-v1.13.10"]
-}
 
 resource "proxmox_virtual_environment_vm" "nx02_node" {
   provider = proxmox.nx02

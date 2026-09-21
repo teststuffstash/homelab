@@ -10,6 +10,13 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-253** *(archived 2026-09-21)* — **VMs declared a generic, stale `install.image` — FIXED and applied.**
+  All six VMs carried the provider default `ghcr.io/siderolabs/installer:v1.13.0` (wrong platform —
+  it reinstalls a nocloud VM as `metal` and ghosts it). #1829 sets it from
+  `data.talos_image_factory_urls.vm[...]`, the URL the upgrade verb passes; applied 2026-09-21 in a
+  window, wk-03 first (boot time unchanged, image == declared), then the rest (apiservers kept their
+  start times, 0 restarts). Declared == passed == installed; ADR-138.
+
 - **FU-259** *(archived 2026-09-21)* — **`talos_cluster_kubeconfig` renders a stale endpoint and
   `plan` never notices — FIXED and recovered the same day.** It captures the kubeconfig at create
   time and never re-reads it, so the ADR-133 VIP cutover left every client dialling `.51` while
