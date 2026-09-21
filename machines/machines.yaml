@@ -348,7 +348,7 @@ machines:
     # A by-id path that stops matching fails the install loudly instead; schema-checked with
     # `talosctl validate --mode metal`. Install-time only, like every field in this block.
     install_disk: /dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364
-    kata: true   # DUMMY — throwaway draft PR proving the sentinel install-impact line; NEVER MERGE
+    # DUMMY comment — negative case of the install-impact proof; NEVER MERGE
     longhorn_default_disk: true # registered 2026-09-07; tier tag `std` since 2026-09-12, once the
     # zone's volumes moved to the PM961 below — the fleet direction's "Micron → std", and the
     # capacity that lets wk-02's pooled std disk stop taking new replicas (longhorn-tag-disks.sh).
