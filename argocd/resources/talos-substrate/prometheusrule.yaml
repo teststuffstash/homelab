@@ -1,0 +1,49 @@
+# The substrate belt (FU-235 / FU-254): does the fleet actually run what git declares?
+#
+# Two detectors exist for this, deliberately on different transports. The BOX's probe
+# (scripts/mgmt-probe.sh check_nodes) has the declaration in hand, so it compares per node on
+# three axes — reachable, version, schematic — and publishes mgmt_node_drift. It is the complete
+# one, and it is also the one whose metrics cannot reach Prometheus yet: the box is out-of-cluster
+# and Pushgateway is cluster-internal (docs/management-box.md §MB2, the transport is an unbuilt
+# ip-plan decision, not a config line).
+#
+# This rule is the half that needs NO new transport. kube_node_info is already scraped and carries
+# os_image = "Talos (vX.Y.Z)", so the cluster can see one thing on its own: the fleet is not all on
+# one version. It cannot see WHICH version is declared — that is the box's half — but every real
+# case of the class shows up here first, because a rollout that stalls leaves a split behind.
+#
+# Threshold. `for: 24h` is the "rollout in progress" filter, and it is doing real work: a node at a
+# time, with a drain and a Longhorn rebuild between, the fleet is legitimately split for hours. The
+# worked example is the one that made this rule: the workers moved to v1.13.10 on 2026-09-16 and
+# five nodes were still on v1.13.2 five days later (hp-01, m70s, wk-metal-04 waiting on their
+# windows; cp-01, cp-02 blocked on the substrate fork, FU-263). Nothing alerted — the rollout
+# simply stopped being anyone's turn, which is exactly what FU-254 says is undetected today.
+#
+# Shape. `unless topk(1, …)` leaves one series per NON-majority version, so the alert carries the
+# trailing version in its own label and the node count as its value, instead of one opaque
+# "there are 2 versions" series. A tie splits arbitrarily and fires for the other half — harmless.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: talos-substrate
+  namespace: monitoring
+  labels:
+    app: talos-substrate
+spec:
+  groups:
+    - name: talos-substrate
+      rules:
+        - alert: TalosFleetVersionSplit
+          expr: |
+            count by (os_image) (kube_node_info{os_image=~"Talos.*"})
+              unless topk(1, count by (os_image) (kube_node_info{os_image=~"Talos.*"}))
+          for: 24h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $value }} node(s) still on {{ $labels.os_image }} a day after the fleet moved on"
+            description: >-
+              The fleet has run more than one Talos version for 24 h. That is a rollout nobody
+              finished, not a rollout in progress: the declared version is in git and the per-node
+              diff is `devbox run mgmt-probe` on the management box (mgmt_node_drift). Recipe:
+              docs/provisioning.md §"Upgrading a node's Talos" — metal and nocloud VMs both upgrade
+              in place with the platform-correct installer, control planes via `devbox run cp-upgrade`.

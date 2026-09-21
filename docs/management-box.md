@@ -139,6 +139,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 |---|---|
 | `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
+| **the node diff** (`check_nodes`, 2026-09-21): DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image`) vs LIVE (`talosctl version`, the `schematic` extension), per node, three axes: reachable / version / schematic | that the fleet runs what git says. This is §MB4 layer 1's first half — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say); the "too long" judgement belongs to an alert with a `for:` |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -146,6 +147,13 @@ The metric *shape* copies the Garage write probe: the verdict **and** a `*_last_
 a staleness alert catches "the box is wedged" and not only "the box says no". This is FU-102's
 prober contract applied to its first non-stack consumer — the spike's line is that *the prober is
 the human*.
+
+The node diff's own alert is the one thing the transport hole below actually blocks, so it has a
+second, weaker detector that needs no transport: `kube_node_info` is already scraped and carries
+`os_image`, so the CLUSTER can see *that the fleet is split across Talos versions* even though it
+cannot see which version is declared. That is `TalosFleetVersionSplit`
+(`argocd/resources/talos-substrate/`, `for: 24h` to let a rollout run). The schematic and
+reachability axes have no such stand-in — they wait on the transport.
 
 ⚠ **The transport is UNBUILT, and it is a decision rather than a detail.** Pushgateway is
 "cluster-internal only … never BGP-advertised — internal exhaust plumbing"

@@ -1,0 +1,69 @@
+# Behaviour fixture for talos-substrate.promtool-rules — `devbox run prometheus-rules-lint` runs it.
+# The series are the fleet's REAL split on 2026-09-21, read from Prometheus the day the rule was
+# written: 8 nodes on Talos (v1.13.10), 5 on Talos (v1.13.2) — hp-01, m70s, wk-metal-04 waiting on
+# their upgrade windows and cp-01, cp-02 blocked on FU-263. The clock is compressed to 1 h per
+# sample so a 24 h `for:` is 24 samples.
+rule_files:
+  - talos-substrate.promtool-rules
+evaluation_interval: 1h
+
+tests:
+  # ── the real split: five nodes trail for more than a day → one alert, labelled with the
+  #    TRAILING version and valued with how many nodes are on it.
+  - interval: 1h
+    input_series:
+      - series: 'kube_node_info{node="wk-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-02",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-03",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-04",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="nx-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-metal-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-metal-02",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-metal-03",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="cp-01",os_image="Talos (v1.13.2)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="cp-02",os_image="Talos (v1.13.2)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="hp-01",os_image="Talos (v1.13.2)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="m70s",os_image="Talos (v1.13.2)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-metal-04",os_image="Talos (v1.13.2)"}'
+        values: '1x40'
+    alert_rule_test:
+      # h=12: split, but only half a day old — a rollout mid-flight must stay quiet.
+      - eval_time: 12h
+        alertname: TalosFleetVersionSplit
+        exp_alerts: []
+      # h=25: a full day of split → fires once, for the minority version only.
+      - eval_time: 25h
+        alertname: TalosFleetVersionSplit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              os_image: "Talos (v1.13.2)"
+            exp_annotations:
+              summary: "5 node(s) still on Talos (v1.13.2) a day after the fleet moved on"
+
+  # ── a fleet on ONE version never fires, however long it runs. This is the state the rule wants
+  #    the fleet to be in, and the reason the expr is a version-count and not a per-node compare.
+  - interval: 1h
+    input_series:
+      - series: 'kube_node_info{node="cp-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="wk-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+      - series: 'kube_node_info{node="hp-01",os_image="Talos (v1.13.10)"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: TalosFleetVersionSplit
+        exp_alerts: []
