@@ -506,7 +506,7 @@ never the session's arc — that is TICK-LOG's.)
   purchase. Board also has 3 SATA. ⚠ **CORRECTED 2026-09-12 (operator, board-read with the
   brackets in hand): there is NO second x4 — the `x4` silkscreen carries an x1 connector and the
   `x1` silkscreen is unpopulated, so the x16 LP is the box's ONLY x4-capable slot** (one Gembird,
-  not two; card 2 has no home — pve's x4 is under the GPU, R9). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
+  not two; card 2's home: pve's x16, free since 2026-09-21 — storage-ledger §hypervisor). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
   fleet disk's identity and health — FU-222 archived): **2% used, 3051 h, 0 media errors,
   PCIe 3.0 ×4**, near-new. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).

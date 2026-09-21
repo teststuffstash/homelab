@@ -156,7 +156,7 @@ says the third control plane falls back to "a VM on the second hypervisor, and R
 again" only **if a laptop is spent on R12** — `thinkcentre` took that job, so both laptops stay
 free and R11 is not load-bearing for the CP goal.)
 
-- **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; ⚠️ no iGPU (needs a GPU to POST) and a
+- **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; no iGPU (but POSTs headless at BIOS defaults — verified 2026-09-21) and a
   2016 120W chip — keep it a dedicated hypervisor, not part of the zero-touch fleet.
 - **Zero-touch fleet = business mini/SFF PCs with Intel vPro/AMT** (OptiPlex Micro, EliteDesk Mini,
   ThinkCentre Tiny): remote KVM + power without IPMI, iGPU, reliable Intel NICs, low idle.
