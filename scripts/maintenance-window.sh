@@ -34,6 +34,7 @@ set -euo pipefail
 ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 STATE_DIR="${MAINT_STATE_DIR:-$HOME/.claude/maintenance-window}"
 BASE="$STATE_DIR/baseline.json"
+WID="$STATE_DIR/window-id"   # the seat-window id THIS tool opened — close touches only that one
 PROM="${PROM_URL:-http://192.168.40.13:9090}"
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$ROOT/tofu/talosconfig}"
@@ -277,7 +278,9 @@ cmd_open() {
   local args=(open --reason "$reason" --alerts "$alerts" --hours "$hours"
               --note "opened by scripts/maintenance-window.sh; baseline in $BASE")
   [ -n "$node" ] && args+=(--node "$node")
-  bash "$ROOT/agents/seat-window.sh" "${args[@]}"
+  local out; out="$(bash "$ROOT/agents/seat-window.sh" "${args[@]}")"
+  printf '%s\n' "$out"
+  printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' > "$WID"
 }
 
 cmd_check() {
@@ -357,8 +360,14 @@ cmd_close() {
     echo "leaving a known-open item, and SAY SO)."
     [ "${FORCE:-0}" = 1 ] || return "$rc"
   fi
-  bash "$ROOT/agents/seat-window.sh" close --all
-  rm -f "$BASE"
+  # Close only the window this tool opened: `--all` also closed windows other sessions had
+  # declared (a spike's close removed a concurrent seat window, 2026-09-21).
+  if [ -s "$WID" ]; then
+    bash "$ROOT/agents/seat-window.sh" close --id "$(cat "$WID")"
+  else
+    echo "close: no recorded window id — closing none; 'bash agents/seat-window.sh list' to find it" >&2
+  fi
+  rm -f "$BASE" "$WID"
 }
 
 # The cilium backend probe on its own, with no baseline and no window — for a caller that has
