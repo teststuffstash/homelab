@@ -59,20 +59,6 @@ resource "proxmox_download_file" "talos" {
   overwrite               = false
 }
 
-# State carry-over from the pre-split single resources (keeps cp-01's file_id KNOWN at plan time,
-# else the VM would be planned for replacement). Remove both blocks in the PR that next moves a
-# version — a `moved` target must exist in the for_each set.
-moved {
-  from = proxmox_download_file.talos
-  to   = proxmox_download_file.talos["plain-v1.13.2"]
-}
-
-moved {
-  from = proxmox_download_file.talos_longhorn
-  to   = proxmox_download_file.talos["longhorn-v1.13.10"]
-}
-
-
 # Longhorn-ready schematic: + iscsi-tools + util-linux-tools. Picked by `local.vm_images` for VMs
 # with longhorn=true so the extensions are baked into the VM IMAGE. Do NOT add
 # extensions to a running Proxmox VM via `talosctl upgrade` — that reboot loses the

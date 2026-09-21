@@ -86,9 +86,9 @@ variable "cluster_name" {
 # bundle follows the control-plane version. First use: FU-246 (the page_table_check reboots —
 # workers must be ≥ v1.13.4).
 variable "talos_version_controlplane" {
-  description = "Talos Linux version for control-plane nodes (secrets bundle, CP machine configs, the plain nocloud image)."
+  description = "Talos Linux version for control-plane nodes (CP machine configs, the plain nocloud image). NOT the secrets bundle — that is frozen at the version it was generated with, FU-263 (a)."
   type        = string
-  default     = "v1.13.2"
+  default     = "v1.13.10"
 }
 
 variable "talos_version_worker" {

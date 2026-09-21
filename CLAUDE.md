@@ -62,7 +62,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 <!-- END GENERATED hosts -->
 
 <!-- BEGIN GENERATED versions — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
-Cluster: **Talos v1.13.2 (control plane) / v1.13.10 (workers) / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
+Cluster: **Talos v1.13.10 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
 <!-- END GENERATED versions -->
 
 (Both blocks above are generated — `machines/machines.yaml` + the `tofu/variables.tf` version
