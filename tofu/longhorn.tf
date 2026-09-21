@@ -86,7 +86,7 @@ resource "kubernetes_labels" "longhorn_storage" {
 resource "kubernetes_labels" "node_zone" {
   for_each = {
     for n, z in local.machine_zones : n => z
-    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && n != "ci-runner-01"
+    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && !startswith(n, "ci-runner-") # the runner VMs are not k8s nodes
   }
   api_version = "v1"
   kind        = "Node"
