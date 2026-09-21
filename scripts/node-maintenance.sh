@@ -43,6 +43,11 @@
 #                                                             both (all four are done for you by
 #                                                             settle/down and up — FU-230);
 #                                                             SILENCE=0 opts the whole window out
+#   bash scripts/node-maintenance.sh upgrade-behind [cp|worker|all]   # every node BEHIND its declaration,
+#         one at a time, in `order`'s ranking: control planes through controlplane-upgrade.sh, workers
+#         through `upgrade`; the fleet must be whole again (all Ready, cilium clean) before the next goes
+#         down, and the FIRST failure stops the run with nothing after it touched. DRY=1 prints the plan.
+#         Run it ON the management box (the etcd snapshots land there) — see the verb's own comment.
 #   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
 #         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
@@ -72,6 +77,15 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+# ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, not in the checkout, and
+# `devbox run` exports devbox.json's KUBECONFIG/TALOSCONFIG=$PWD/tofu/* regardless — a path that
+# does not exist there. kubectl then fell back to localhost:8080 and every box-side run of the
+# upgrade verbs failed (found 2026-09-21; the only box run before was the LAB=1 rehearsal, which
+# passed explicit paths). So a configured path that does not exist yields to the box's copy.
+# Same three lines in node-maintenance.sh, controlplane-upgrade.sh, maintenance-window.sh.
+[ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
+[ -f "$TALOSCONFIG" ] || { [ -f /var/lib/mgmt/talosconfig ] && TALOSCONFIG=/var/lib/mgmt/talosconfig; }
+export TALOSCONFIG
 PVE_SSH_KEY="${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 PVE_HOST="${PVE_HOST:-root@192.168.2.3}"
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-600s}"
@@ -108,8 +122,8 @@ usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exi
 
 cmd="${1:-}"; NODE="${2:-}"
 [ -n "$cmd" ] || usage
-# `order` ranks the whole fleet and takes no node argument.
-[ -n "$NODE" ] || [ "$cmd" = order ] || usage
+# `order` ranks the whole fleet and takes no node argument; `upgrade-behind` takes a SCOPE there.
+[ -n "$NODE" ] || [ "$cmd" = order ] || [ "$cmd" = upgrade-behind ] || usage
 WARNS=0; FAILS=0
 
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -604,6 +618,16 @@ load_targets() {
   [ -n "$TARGETS_JSON" ] && return 0
   if [ -n "$INSTALL_TARGETS" ]; then
     TARGETS_JSON="$(cat "$INSTALL_TARGETS")"
+  elif [ -r "${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}" ]; then
+    # ON the management box the state is local, so read it directly. The mgmt-tf path below
+    # ssh-es to the box with the JAIL's key — from the box itself that key is not there, which is
+    # why every box-side upgrade needed a hand-made INSTALL_TARGETS dump until 2026-09-21.
+    log "reading the declared install targets from the local main state (on the box)"
+    [ -d "$REPO/tofu/.terraform" ] || ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null ) \
+      || { fail "cannot initialise the main root in $REPO"; return 1; }
+    TARGETS_JSON="$( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu output \
+      -state="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}" -json node_install_targets )" \
+      || { fail "could not read node_install_targets from the local main state"; return 1; }
   else
     log "reading the declared install targets from the management box (mgmt-tf output)"
     TARGETS_JSON="$(bash "$REPO/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
@@ -944,12 +968,107 @@ order() {
       | sort_by(.risk, .node)
       | .[]
       | [ .risk, .node, .declared, .solo, .quorum, (if .garage==1 then "yes" else "-" end), .lh ]
-      | @tsv' | awk -F'\t' '
+      | @tsv' > "$d/ranked.tsv"
+  # ORDER_FORMAT=names: the ranked node names alone, one per line — what upgrade-behind walks, so
+  # the ranking has ONE implementation and the table below is only its human rendering.
+  # ⚠ Called as `x="$(order)" || …`, this function runs with `set -e` OFF (bash disables it for
+  # anything on the left of `||`), so a failed kubectl above does not stop it — it carries on and
+  # ranks an empty fleet. Found 2026-09-21: kubectl missing from PATH made upgrade-behind report
+  # "nothing is behind". So the names mode refuses an empty ranking explicitly.
+  if [ "${ORDER_FORMAT:-table}" = names ]; then
+    [ -s "$d/ranked.tsv" ] || { fail "the fleet ranking came back EMPTY (kubectl unreachable?) — not a result"; return 2; }
+    cut -f2 "$d/ranked.tsv"; return 0
+  fi
+  awk -F'\t' '
         BEGIN{printf "%-5s %-14s %-10s %5s %7s %7s %4s\n","RISK","NODE","DECLARED","SOLO","QUORUM","GARAGE","LH"}
-        {printf "%-5s %-14s %-10s %5s %7s %7s %4s\n",$1,$2,$3,$4,$5,$6,$7}'
+        {printf "%-5s %-14s %-10s %5s %7s %7s %4s\n",$1,$2,$3,$4,$5,$6,$7}' "$d/ranked.tsv"
   echo
   log "lowest risk first. A node already at its declared version is still listed — 'behind or not'"
   log "is the verb's own check (it refuses a same-version reinstall with a WARN, not this ranking)."
+}
+
+# ── upgrade-behind: every node that trails its declaration, one at a time ───────────────────────
+# The loop over the two verbs that already exist, nothing more: `order` decides the sequence (its
+# ranking by what a drain costs — never a hand-written list, operator 2026-09-18), `upgrade` moves a
+# worker, controlplane-upgrade.sh moves a control plane with its etcd/snapshot/cilium gates. What
+# this adds is only what a HUMAN did between nodes: skip anything already at its declared version,
+# wait for the fleet to be whole again before the next node goes down, and stop at the first
+# failure — a failed node is never followed by a second one.
+#
+# Scope (the node argument): cp | worker | all (default). Run it ON the management box:
+#   systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
+#     -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root \
+#     --setenv=KUBECONFIG=/var/lib/mgmt/kubeconfig --setenv=TALOSCONFIG=/var/lib/mgmt/talosconfig \
+#     devbox run node-maintenance -- upgrade-behind cp
+#   journalctl -fu node-upgrade-behind
+# A transient unit, not an ssh session: a control-plane upgrade that loses its terminal halfway
+# is exactly the state nobody wants to recover from. The box also holds the etcd snapshots
+# controlplane-upgrade.sh takes, and reads the declaration from its own local state.
+BETWEEN_TIMEOUT="${BETWEEN_TIMEOUT:-900}"   # s — the fleet must be whole again within this
+upgrade_behind() {
+  local scope="${NODE:-all}"
+  case "$scope" in cp|worker|all) ;; *) fail "scope must be cp, worker or all (got '$scope')"; return 64 ;; esac
+  load_targets || return 2
+  local ranked n ip dv lv role plan=()
+  command -v kubectl >/dev/null && command -v talosctl >/dev/null && command -v jq >/dev/null \
+    || { fail "kubectl/talosctl/jq not on PATH — run it through \`devbox run node-maintenance\`"; return 2; }
+  ranked="$(ORDER_FORMAT=names order)" || { fail "could not rank the fleet"; return 2; }
+  # "Could not look" must never read as "nothing is behind" — a real fleet always ranks nodes.
+  [ -n "$ranked" ] || { fail "the fleet ranking is EMPTY — refusing to treat that as 'nothing behind'"; return 2; }
+  while read -r n; do
+    [ -n "$n" ] || continue
+    dv="$(jq -r --arg n "$n" '.[$n].version // ""' <<<"$TARGETS_JSON")" || dv=""
+    [ -n "$dv" ] || continue                     # not a declared Talos node (nothing to move it to)
+    if kubectl get node "$n" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+      role=cp; else role=worker; fi
+    [ "$scope" = all ] || [ "$scope" = "$role" ] || continue
+    ip="$(jq -r --arg n "$n" '.[$n].ip // ""' <<<"$TARGETS_JSON")" || ip=""
+    # `|| lv=""` is load-bearing under `set -euo pipefail`: a bare assignment whose pipeline fails
+    # (node unreachable) would exit the script here instead of reaching the refusal below.
+    lv="$(talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" version --short 2>/dev/null \
+          | sed -e 's/\x1b\[[0-9;]*m//g' | awk '/Tag:/{print $2; exit}')" || lv=""
+    # A node whose version cannot be read is a stop, not a skip: "unknown" is not "current".
+    [ -n "$lv" ] || { fail "$n: cannot read its live Talos version at $ip — refusing to plan around it"; return 2; }
+    [ "$lv" = "$dv" ] && continue
+    plan+=("$n $role $lv $dv")
+  done <<<"$ranked"
+
+  if [ ${#plan[@]} -eq 0 ]; then ok "no node in scope '$scope' is behind its declaration — nothing to do"; return 0; fi
+  log "upgrade-behind ($scope): ${#plan[@]} node(s), in order:"
+  local e i=0
+  for e in "${plan[@]}"; do set -- $e; i=$((i+1)); log "  $i. $1 ($2)  $3 -> $4"; done
+  [ "$DRY" = 1 ] && { log "DRY=1 — nothing touched"; return 0; }
+
+  local total=${#plan[@]} rc t0
+  i=0
+  for e in "${plan[@]}"; do
+    set -- $e; i=$((i+1))
+    log "── [$i/$total] $1 ($2): $3 -> $4 ──"
+    # `|| rc=$?`, never `cmd; rc=$?`: under `set -e` the latter exits on the failure it means to
+    # report, and the STOP message below — the whole point of this loop — would never print.
+    rc=0
+    if [ "$2" = cp ]; then bash "$REPO/scripts/controlplane-upgrade.sh" "$1" || rc=$?
+    else bash "$0" upgrade "$1" || rc=$?; fi
+    if [ "$rc" != 0 ]; then
+      fail "$1: upgrade exited $rc — STOPPING. $((total-i)) node(s) after it were NOT touched."
+      return 2
+    fi
+    [ "$i" = "$total" ] && break
+    # The fleet whole again before the next node goes down: every node Ready, and Cilium holding
+    # the apiserver backend on every agent (the FU-258 class — cp-upgrade repairs it itself; this
+    # proves it held for a worker too, and that nothing else fell over meanwhile).
+    log "waiting for the fleet to be whole before the next node (≤ ${BETWEEN_TIMEOUT}s)"
+    t0=$(date +%s)
+    until [ "$(kubectl get nodes -o json | jq '[.items[] | select(any(.status.conditions[]; .type=="Ready" and .status=="True"))] | length')" \
+            = "$(kubectl get nodes -o json | jq '.items | length')" ] \
+          && bash "$REPO/scripts/maintenance-window.sh" cilium-check >/dev/null 2>&1; do
+      [ $(( $(date +%s) - t0 )) -lt "$BETWEEN_TIMEOUT" ] || {
+        fail "the fleet is not whole ${BETWEEN_TIMEOUT}s after $1 — STOPPING before the next node"; return 2; }
+      sleep 15
+    done
+    ok "fleet whole again after $1"
+  done
+  ok "upgrade-behind ($scope): all ${total} node(s) at their declared version"
 }
 
 case "$cmd" in
@@ -961,6 +1080,7 @@ case "$cmd" in
   up) up ;;
   upgrade) upgrade ;;
   order) order ;;
+  upgrade-behind) upgrade_behind ;;
   silence-open) silence_open; declare_open ;;
   silence-close) silence_close; declare_close ;;
   *) usage ;;

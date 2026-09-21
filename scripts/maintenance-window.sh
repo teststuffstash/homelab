@@ -37,6 +37,15 @@ BASE="$STATE_DIR/baseline.json"
 PROM="${PROM_URL:-http://192.168.40.13:9090}"
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$ROOT/tofu/talosconfig}"
+# ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, not in the checkout, and
+# `devbox run` exports devbox.json's KUBECONFIG/TALOSCONFIG=$PWD/tofu/* regardless — a path that
+# does not exist there. kubectl then fell back to localhost:8080 and every box-side run of the
+# upgrade verbs failed (found 2026-09-21; the only box run before was the LAB=1 rehearsal, which
+# passed explicit paths). So a configured path that does not exist yields to the box's copy.
+# Same three lines in node-maintenance.sh, controlplane-upgrade.sh, maintenance-window.sh.
+[ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
+[ -f "$TALOSCONFIG" ] || { [ -f /var/lib/mgmt/talosconfig ] && TALOSCONFIG=/var/lib/mgmt/talosconfig; }
+export TALOSCONFIG
 
 # FAIL LOUDLY on a missing kubeconfig. Caught building this script: run from a git worktree, ROOT
 # had no tofu/kubeconfig (gitignored, so a fresh worktree lacks it), kubectl fell through to

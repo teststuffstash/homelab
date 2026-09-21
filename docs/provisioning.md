@@ -159,6 +159,23 @@ For a control-plane node, run the dedicated wrapper from [the management box](ma
 devbox run cp-upgrade -- cp-01
 ```
 
+**To move every node that trails its declaration**, don't loop by hand — `upgrade-behind` walks
+`node-maintenance order`'s ranking, skips anything already at its declared version, sends control
+planes through `cp-upgrade` and workers through `upgrade`, waits for the fleet to be whole (all
+`Ready`, Cilium clean) between nodes, and stops at the first failure. `DRY=1` prints the plan. Run it
+on the box as a transient unit, so a dropped ssh session cannot strand a control plane mid-upgrade:
+
+```bash
+systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
+  -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root \
+  devbox run node-maintenance -- upgrade-behind cp        # or: worker | all
+journalctl -fu node-upgrade-behind
+```
+
+On the box the verbs read the declaration from the local main state and the client configs from
+`/var/lib/mgmt/` by themselves (2026-09-21 — before that, every box-side run died on
+`localhost:8080`, because `devbox run` points KUBECONFIG at a checkout path the box does not have).
+
 It requires at least three Ready control planes, selects a healthy endpoint other than the target,
 checks that etcd has an odd membership of at least three, takes an etcd snapshot under
 `/var/lib/mgmt/etcd-snapshots/`, and then enters the same WIP-1 maintenance path workers use. It

@@ -32,6 +32,15 @@ NODE="${1:-}"
 
 export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+# ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, not in the checkout, and
+# `devbox run` exports devbox.json's KUBECONFIG/TALOSCONFIG=$PWD/tofu/* regardless — a path that
+# does not exist there. kubectl then fell back to localhost:8080 and every box-side run of the
+# upgrade verbs failed (found 2026-09-21; the only box run before was the LAB=1 rehearsal, which
+# passed explicit paths). So a configured path that does not exist yields to the box's copy.
+# Same three lines in node-maintenance.sh, controlplane-upgrade.sh, maintenance-window.sh.
+[ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
+[ -f "$TALOSCONFIG" ] || { [ -f /var/lib/mgmt/talosconfig ] && TALOSCONFIG=/var/lib/mgmt/talosconfig; }
+export TALOSCONFIG
 LAB="${LAB:-0}"
 SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/var/lib/mgmt/etcd-snapshots}"
 if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/tmp/controlplane-upgrade-snapshots}"; fi
