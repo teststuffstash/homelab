@@ -167,10 +167,13 @@ on the box as a transient unit, so a dropped ssh session cannot strand a control
 
 ```bash
 systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
-  -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root \
+  -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root --setenv=PATH="$PATH" \
   devbox run node-maintenance -- upgrade-behind cp        # or: worker | all
 journalctl -fu node-upgrade-behind
 ```
+
+`--setenv=PATH` is load-bearing: a transient unit gets systemd's bare PATH, and devbox then dies on
+"unable to source Nix profile" (2026-09-21, first real run). `DRY=1` goes in as `--setenv=DRY=1`.
 
 On the box the verbs read the declaration from the local main state and the client configs from
 `/var/lib/mgmt/` by themselves (2026-09-21 — before that, every box-side run died on
