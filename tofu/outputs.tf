@@ -61,3 +61,48 @@ output "node_install_targets" {
     },
   )
 }
+
+# Per-node DECLARED Kubernetes-facing state — the labels/taints/EPHEMERAL axes of FU-235's
+# declared-vs-live diff (scripts/mgmt-probe.sh check_nodes, docs/management-box.md §MB2). These
+# are the fields tofu cannot see drift on: Talos `machine.nodeLabels` ride the machine config
+# (state records DELIVERY, never the Node object), the ephemeral taint's resource cannot own an
+# atomic list another manager rewrote (metal.tf), and the EPHEMERAL VolumeConfig is honoured only
+# at install. Each expression below restates the CONDITION the patch/resource it mirrors uses —
+# edit both together (the source is named on each line). The EPHEMERAL diskSelector is NOT here:
+# node_install_targets carries it (`.ephemeral`, the install-time half) and the probe reads it there.
+#   labels          only the keys tofu itself declares; the probe compares over the UNION of
+#                   keys across nodes, so a declared key missing live AND an undeclared one present
+#                   live (an imperative `kubectl label`) both read as drift
+#   taints          "key=value:effect", same union semantics
+output "node_declared_k8s" {
+  description = "node => {labels, taints} — the declared half of the belt's registered/labels/taints axes (scripts/mgmt-probe.sh check_nodes)."
+  value = merge(
+    {
+      for k, n in var.nodes : k => {
+        labels = merge(
+          contains(local.avx2_nodes, k) ? { "homelab.io/cpu-avx2" = "true" } : {},                       # talos.tf patch
+          contains(local.ephemeral_nodes, k) ? { "homelab.io/ephemeral" = "true" } : {},                 # talos.tf patch
+          can(local.machine_zones[k]) ? { "topology.kubernetes.io/zone" = local.machine_zones[k] } : {}, # longhorn.tf
+        )
+        taints = concat(
+          contains(local.ephemeral_nodes, k) ? ["homelab.io/ephemeral=true:NoSchedule"] : [],    # metal.tf taint
+          n.role == "controlplane" ? ["node-role.kubernetes.io/control-plane=:NoSchedule"] : [], # Talos default
+        )
+      }
+    },
+    {
+      for k, m in local.metal_nodes : k => {
+        labels = merge(
+          m.kata ? { "homelab.io/kata" = "true" } : {},                                                  # metal.tf patch
+          m.arc ? { "homelab.io/ephemeral" = "true" } : {},                                              # metal.tf patch
+          contains(local.avx2_nodes, k) ? { "homelab.io/cpu-avx2" = "true" } : {},                       # metal.tf patch
+          can(local.machine_zones[k]) ? { "topology.kubernetes.io/zone" = local.machine_zones[k] } : {}, # longhorn.tf
+        )
+        taints = concat(
+          contains(local.ephemeral_nodes, k) ? ["homelab.io/ephemeral=true:NoSchedule"] : [], # metal.tf taint
+          m.controlplane ? ["node-role.kubernetes.io/control-plane=:NoSchedule"] : [],        # Talos default
+        )
+      }
+    },
+  )
+}

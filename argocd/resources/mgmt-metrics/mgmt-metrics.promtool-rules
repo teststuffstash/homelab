@@ -28,3 +28,38 @@ groups:
         for: 15m
         labels:
           severity: warning
+  - name: mgmt-node-drift
+    rules:
+      - alert: MgmtNodeMissing
+        expr: |
+          mgmt_node_drift{axis=~"reachable|registered"} == 1
+        for: 2h
+        labels:
+          severity: warning
+      - alert: MgmtNodeLiveStateDrift
+        expr: |
+          mgmt_node_drift{axis=~"labels|taints"} == 1
+        for: 1h
+        labels:
+          severity: warning
+      - alert: MgmtNodeInstallDrift
+        expr: |
+          mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
+        for: 24h
+        labels:
+          severity: warning
+  - name: mgmt-belt
+    rules:
+      - alert: MgmtBeltStale
+        expr: |
+          (time() - mgmt_probe_last_run_timestamp{mode="belt"}) > 3600
+        for: 15m
+        labels:
+          severity: warning
+      - alert: MgmtBeltMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_probe_last_run_timestamp{mode="belt"}
+        for: 1h
+        labels:
+          severity: warning

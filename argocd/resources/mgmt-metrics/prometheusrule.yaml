@@ -58,3 +58,84 @@ spec:
               firewall/exporter unit failed (a NixOS activation that the gate rolled back reverts
               the exporter too). The out-of-band applier is then gone: no plan-on-PR sentinel, no
               apply loop. `ssh` it via the pinned key (docs/management-box.md §MB1).
+    # FU-235 — the declared-vs-live node diff (scripts/mgmt-probe.sh check_nodes, the belt every
+    # 15 min, docs/management-box.md §MB2). mgmt_node_drift{node,axis} is 1 when declaration and
+    # live disagree, 0 when checked and matched; a read failure publishes NO series (never a false
+    # 1). The `for:` is per axis class — how long each can legitimately differ:
+    #   reachable/registered  a reinstall window takes a node off for well under an hour
+    #   labels/taints         applied LIVE (Talos nodeLabels, the taint resource) — minutes
+    #   schematic/ephemeral_disk  install-time: only a window fixes them, and windows queue (24h,
+    #                         the TalosFleetVersionSplit reasoning)
+    # The VERSION axis has no alert here on purpose: TalosFleetVersionSplit (talos-substrate/) owns
+    # the rollout-stalled case, and a second 24h alert on the same windows would double-page.
+    - name: mgmt-node-drift
+      rules:
+        - alert: MgmtNodeMissing
+          expr: |
+            mgmt_node_drift{axis=~"reachable|registered"} == 1
+          for: 2h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} is declared but not {{ $labels.axis }} — for 2h"
+            description: >-
+              The management box's node diff finds {{ $labels.node }} declared (tofu
+              node_install_targets / node_declared_k8s) but
+              {{ if eq $labels.axis "reachable" }}not answering the Talos API{{ else }}absent from the
+              cluster as a Node object{{ end }} for 2h — longer than a reinstall window. The
+              2026-09-21 case: wk-metal-02 answered talosctl with no Node object for ~12 h and nothing
+              fired. Read `talosctl -n <ip> version` / `kubectl get node {{ $labels.node }}`; the
+              box's view is `journalctl -u mgmt-belt` on 192.168.2.53.
+        - alert: MgmtNodeLiveStateDrift
+          expr: |
+            mgmt_node_drift{axis=~"labels|taints"} == 1
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }}'s {{ $labels.axis }} differ from the declaration for 1h"
+            description: >-
+              The Node object's {{ $labels.axis }} disagree with what tofu declares
+              (node_declared_k8s in tofu/outputs.tf — only keys tofu itself sets are compared, so
+              an imperative `kubectl label` on one of those keys counts too). Both are applied live,
+              so an hour is not a rollout. The exact key and both values are in the box's belt log:
+              `journalctl -u mgmt-belt | grep '{{ $labels.node }} {{ $labels.axis }}'`. The 2026-09-12
+              case: kata declared on four laptops, live on two (FU-235).
+        - alert: MgmtNodeInstallDrift
+          expr: |
+            mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
+          for: 24h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} runs an install that differs from the declaration ({{ $labels.axis }}) for 24h"
+            description: >-
+              An install-time field differs: {{ if eq $labels.axis "schematic" }}the node's Talos
+              schematic is not the one its declaration selects{{ else }}the EPHEMERAL volume is not on
+              the disk its VolumeConfig selects{{ end }}. tofu plans clean on this class by
+              construction — Talos honours it only at the next install — so only a maintenance window
+              (reinstall or upgrade with the declared image) resolves it. The 2026-09-16 case: nx-01
+              after #1717, plain schematic and EPHEMERAL on the SATA disk. docs/management-box.md §MB4.
+    - name: mgmt-belt
+      rules:
+        # The drift alerts above are only as live as the belt that writes the series.
+        - alert: MgmtBeltStale
+          expr: |
+            (time() - mgmt_probe_last_run_timestamp{mode="belt"}) > 3600
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box drift belt has not finished a run in over an hour"
+            description: >-
+              mgmt-belt runs every 15 minutes; none has finished for over an hour, so every
+              mgmt_node_drift series is frozen at its last value. On the box:
+              `systemctl status mgmt-belt.timer`, `journalctl -u mgmt-belt -n 50`.
+        - alert: MgmtBeltMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_probe_last_run_timestamp{mode="belt"}
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box is scraped but publishes no drift-belt metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_probe_belt.prom
+              is missing, so MgmtBeltStale and the MgmtNode* drift alerts are blind. Check the belt
+              has run since the change that publishes it landed (scripts/mgmt-probe.sh publish).
