@@ -45,16 +45,12 @@ never the session's arc — that is TICK-LOG's.)
       rebooted and cilium-operator was evicted. Rerun green; VIP answered at 10:55.
   (4) Operator question still open: box metrics transport = node_exporter scraped as a static
       target like the hypervisors (FU-252) — the seat agrees, no VIP decision needed.
-  Unfiled and wanted (from 09-18, still true): a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`.
+  `GarageZoneDegraded` LIVE 2026-09-21 (#1849).
   ⚠ Host-side git prunes scratchpad worktrees mid-session and the jail's known_hosts is not durable —
   pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
 
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
-  (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in
-  `scripts/docs-graph-lint.sh`, one line, operator-lane (`scripts/**`). It is in SHADOW only because
-  master still carries the 42 misfiled `§M` refs that **PR#1755** fixes; the moment that merges,
-  `git grep -c 'model-routing\.md §M'` on master hits 0 and the flip is safe. Leaving it in shadow
-  is the failure mode the check exists to prevent. #1710 closes with PR#1755.
+  (1) ~~#4b flip~~ DONE 2026-09-21 (enforcing after #1755).
   (2) **Monday re-check: the reviewer's first-round deferral** — the defect where sonnet reports a
   PR's first-diff blocking findings in round 3 or 5 instead of round 1. Came up in the retro and was
   partly fixed there; the operator's read (2026-09-18) is that it should REAPPEAR, so the Monday
@@ -114,13 +110,6 @@ never the session's arc — that is TICK-LOG's.)
   #1733 session (squash-merged, never pushed) holding a worktree at a dead scratchpad path — prune
   with the rest of the stale-branch hygiene list.
 
-- **⚑ FU-206 (operational paths) — PR#1747 in flight; the hand-applied interim does NOT hold.** Both
-  legs were applied to `mcp.minutark.ee` through cf-api-proxy to close the exposure early, and the
-  Workspace reverted both within the hour (observed 2026-09-17 ~06:10Z) — expected: it is drift against
-  a composition that does not render them yet. **Only the merge closes it for good.** On pickup:
-  `curl -s -o /dev/null -w '%{http_code}\n' https://mcp.minutark.ee/metrics` — 403 is the goal, 200
-  means #1747 has not reached the Workspace yet (check ArgoCD synced the composition, then nudge the
-  Workspace). Nothing else is owed; FU-206 is archived and the oracle handoff answered.
 - **⚑ PICKUP (2026-09-16 ~16:25Z) — the page_table_check reboots: FIXED on the ARC metal nodes, wk-03 DOWN, PR#1740 open.**
   **Update 19:25Z:** responder PAUSED (PR#1746 → FU-249, re-enable ≈09-23); all 21 open alert issues
   closed on substance; platform back. The remaining plan on the main root = 7 metal config updates + taint
