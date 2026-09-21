@@ -31,14 +31,58 @@ exec 9>"$LOCK"; flock -w 600 9 || { log "PROBE-FAIL: lock busy for 10 min"; exit
 
 mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch failed"; exit 1; }
 sha="$(git -C "$REPO" rev-parse origin/master)" || exit 1
+trap 'emit_metrics $?' EXIT
 last=""; [ -f "$ADIR/applied-rev" ] && last="$(cat "$ADIR/applied-rev")"
 refused=""; [ -f "$ADIR/refused-rev" ] && refused="$(cat "$ADIR/refused-rev")"
 
-stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev"; }
+stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev" "$ADIR/refused-addresses"; }
 refuse() {  # <sha> <desc> <comment-lines>
   log "REFUSED ${1:0:8}: $2"; [ -n "${3:-}" ] && printf '%s\n' "$3" | sed 's/^/    /'
   mgmt_post_status "$1" "$CTX" failure "$2"
-  [ "${MGMT_SHADOW:-0}" = 1 ] || printf '%s' "$1" >"$ADIR/refused-rev"
+  [ "${MGMT_SHADOW:-0}" = 1 ] && return
+  printf '%s' "$1" >"$ADIR/refused-rev"
+  # the address count, when the refusal has one ("N address(es) outside the apply allowlist")
+  grep -o '^[^:]*: [0-9]* address' <<<"$2" | grep -o '[0-9]*' >"$ADIR/refused-addresses" || echo 0 >"$ADIR/refused-addresses"
+}
+
+# FU-252 — the metric a STANDING refusal needs (docs/management-box.md §"A standing refusal is a
+# THIRD verdict shape"): the AGE of the oldest master commit this loop has not accounted for, not
+# liveness. A commit touching no apply root is stamped on the next tick, so only a refusal (or a
+# loop that keeps failing) lets that age grow — and it ratchets exactly as the 09-14..09-18
+# refusal did. Written on EVERY exit through node_exporter's textfile collector (the box's
+# node_exporter, scraped as job mgmt-node — argocd/resources/mgmt-metrics/). A PROBE-FAIL exit
+# (rc≠0) leaves last-ok-tick alone, so a loop that cannot fetch reads as stale, not as fresh.
+TEXTDIR="${MGMT_TEXTFILE_DIR:-/var/lib/node-exporter-textfile}"
+emit_metrics() {
+  local rc=$1 a r n=0 oldest=0 isref=0 addrs=0 okt=0 tmp
+  [ -d "$TEXTDIR" ] || return 0
+  [ "$rc" = 0 ] && date +%s >"$ADIR/last-ok-tick"
+  a="$(cat "$ADIR/applied-rev" 2>/dev/null)"; r="$(cat "$ADIR/refused-rev" 2>/dev/null)"
+  [ -n "$r" ] && { isref=1; addrs="$(cat "$ADIR/refused-addresses" 2>/dev/null)"; addrs="${addrs:-0}"; }
+  okt="$(cat "$ADIR/last-ok-tick" 2>/dev/null)"; okt="${okt:-0}"
+  if [ -n "$a" ] && [ -n "${sha:-}" ] && [ "$a" != "$sha" ]; then
+    n="$(git -C "$REPO" rev-list --count "$a..$sha" 2>/dev/null)" || n=0
+    oldest="$(git -C "$REPO" log --reverse --format=%ct "$a..$sha" 2>/dev/null | sed -n 1p)"
+  fi
+  tmp="$(mktemp "$TEXTDIR/.mgmt_apply.XXXXXX")" || return 0
+  cat >"$tmp" <<PROM
+# HELP mgmt_apply_last_ok_tick_timestamp_seconds Last tick of the apply loop that completed its evaluation (any verdict).
+# TYPE mgmt_apply_last_ok_tick_timestamp_seconds gauge
+mgmt_apply_last_ok_tick_timestamp_seconds ${okt:-0}
+# HELP mgmt_apply_refused 1 while master's head is REFUSED and waits for a human apply.
+# TYPE mgmt_apply_refused gauge
+mgmt_apply_refused $isref
+# HELP mgmt_apply_refused_addresses Addresses outside the apply allowlist in the standing refusal (0 = not an allowlist refusal).
+# TYPE mgmt_apply_refused_addresses gauge
+mgmt_apply_refused_addresses ${addrs:-0}
+# HELP mgmt_apply_unapplied_commits Master commits past the last applied baseline.
+# TYPE mgmt_apply_unapplied_commits gauge
+mgmt_apply_unapplied_commits ${n:-0}
+# HELP mgmt_apply_unapplied_oldest_timestamp_seconds Commit time of the oldest master commit past the baseline (0 = none).
+# TYPE mgmt_apply_unapplied_oldest_timestamp_seconds gauge
+mgmt_apply_unapplied_oldest_timestamp_seconds ${oldest:-0}
+PROM
+  chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
 
 if [ -z "$last" ]; then
@@ -48,7 +92,7 @@ fi
 [ "$sha" = "$refused" ] && { log "master at ${sha:0:8} was REFUSED — waiting for a new commit or a human apply"; exit 0; }
 
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master
-trap 'rm -f "$POL"' EXIT
+trap 'rc=$?; rm -f "$POL"; emit_metrics $rc' EXIT
 # FAIL CLOSED, no stamp (the #1631 third round): a failed diff or classifier read must never look
 # like "touches no apply root" — that path STAMPS the sha as applied and the loop would advance its
 # baseline past a master push it never classified. `$(…) ||`, never `mapfile < <(…)` (rc discarded).
