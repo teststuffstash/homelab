@@ -62,6 +62,35 @@ def check(machines):
                 die(f"{name}: talos_metal_node needs kind: metal")
             if not m.get("install_disk"):
                 die(f"{name}: talos_metal_node needs install_disk (tofu/metal.tf would fail)")
+        check_reconcile(m)
+
+
+def vm_roles():
+    """{name: role} of the Talos VMs in `var.nodes` (tofu/variables.tf) — the VM half of the fleet
+    carries its role there, not in this YAML."""
+    with open(TOFU_VARS) as f:
+        src = f.read()
+    return dict(re.findall(r'^\s*([\w-]+)\s*=\s*\{\s*role\s*=\s*"(\w+)"', src, re.M))
+
+
+def check_reconcile(m):
+    """ADR-132 §MB4 layer 3: `reconcile: auto` hands a node to the management box's reconciler
+    (scripts/mgmt-reconcile.sh), which runs `node-maintenance.sh upgrade` on it unattended. Only a
+    Talos WORKER qualifies — control planes, hypervisors, the router and anything not Talos stay
+    manual until ADR-133's CPs and a CARP pair exist. Absent = manual."""
+    name, rec = m["name"], m.get("reconcile", "manual")
+    if rec not in ("auto", "manual"):
+        die(f"{name}: reconcile must be auto or manual, got {rec!r}")
+    if rec != "auto":
+        return
+    if m.get("talos_metal_node"):
+        if m.get("controlplane"):
+            die(f"{name}: reconcile: auto on a control plane — CPs stay manual (ADR-132)")
+        return
+    role = vm_roles().get(name) if m.get("kind") == "vm" else None
+    if role != "worker":
+        die(f"{name}: reconcile: auto needs a Talos worker (talos_metal_node, or a var.nodes VM with "
+            f"role = \"worker\"); found kind={m.get('kind')!r} role={role!r}")
 
 
 def tofu_default(var_name):

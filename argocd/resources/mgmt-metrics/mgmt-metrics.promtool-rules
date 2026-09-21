@@ -63,3 +63,32 @@ groups:
         for: 1h
         labels:
           severity: warning
+  - name: mgmt-reconcile
+    rules:
+      - alert: MgmtReconcileParked
+        expr: |
+          mgmt_reconcile_node_state{state="parked"} == 1
+        for: 5m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileSyncStuck
+        expr: |
+          mgmt_reconcile_sync_started_timestamp_seconds > 0
+            and (time() - mgmt_reconcile_sync_started_timestamp_seconds) > 3 * 3600
+        for: 5m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileLoopStale
+        expr: |
+          (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
+            unless on (instance) (max by (instance) (mgmt_reconcile_sync_started_timestamp_seconds) > 0)
+        for: 15m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_reconcile_last_run_timestamp_seconds
+        for: 1h
+        labels:
+          severity: warning

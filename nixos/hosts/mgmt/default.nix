@@ -323,8 +323,8 @@ in
   # ── the DRIFT BELT: reports, never acts ───────────────────────────────────────────────────────
   # FU-097's belt and this box's fleet-facing health check, on a timer. A failure here means
   # something OUT THERE is wrong (or genuinely drifted); it changes no generation and reboots
-  # nothing. ⚠ Publishing is unbuilt — Pushgateway is cluster-internal and never BGP-advertised,
-  # so PUSHGATEWAY stays unset until that exposure is decided (docs/management-box.md §D1).
+  # nothing. Publishes through node_exporter's textfile collector (mgmt_probe_belt.prom — the node
+  # diff's mgmt_node_drift and the belt's own liveness), scraped as job mgmt-node (FU-252).
   systemd.services.mgmt-belt = {
     description = "drift belt: tofu plan + talosctl skew + opnsense --check (report only)";
     after = [ "mgmt-checkout.service" ];
@@ -438,6 +438,40 @@ in
     timerConfig = {
       OnCalendar = "*:2/5";
       RandomizedDelaySec = "30s";
+      Persistent = true;
+    };
+  };
+
+  # ── the NODE RECONCILER (ADR-132 §MB4 layers 3–5): reconcile:auto nodes → the upgrade verb ─────
+  # For each node machines/machines.yaml declares `reconcile: auto`, diff the declared install
+  # (main's applied node_install_targets) against live (mgmt-probe.sh's check_nodes) and, on a
+  # version/schematic gap, run `node-maintenance.sh upgrade <node>` — WIP 1, the verb's floors, one
+  # attempt per declared target, then PARKED (state in /var/lib/mgmt/reconcile/, metrics via the
+  # textfile). The sync runs INSIDE this oneshot, so the unit is the window: runs serialize and
+  # the timer cannot start a second one. Two settings are load-bearing:
+  #   restartIfChanged = false — a mgmt-pull activation that changes this unit must NEVER restart
+  #     it: that would kill a window mid-install. A change takes effect at the next tick.
+  #   TimeoutStartSec = 5h — past the verb's own bounds (settle 1h + drain + install + Ready 15m +
+  #     storage/Garage/CNPG waits); a sync killed here is found "syncing" by the next tick and parked.
+  systemd.services.mgmt-reconcile = {
+    description = "node reconciler: reconcile:auto nodes to their declared install (report + one attempt)";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssh util-linux coreutils findutils gnugrep gawk gnused ];
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "5h";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/scripts/mgmt-reconcile.sh";
+  };
+  systemd.timers.mgmt-reconcile = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:4/10";
+      RandomizedDelaySec = "1m";
       Persistent = true;
     };
   };

@@ -418,7 +418,9 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    layout axes wait on `volumestatus`).
 3. **Sync policy in the declaration.** `reconcile: auto | manual` per node. Compute-tier nodes go `auto`
    first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
-   A `manual` node still shows its diff as drift; the box does nothing.
+   A `manual` node still shows its diff as drift; the box does nothing. **Built 2026-09-21** — the field in
+   `machines/machines.yaml` (absent = manual; `machines/generate.py` refuses `auto` on anything but a Talos
+   worker), and **`wk-03` is the one `auto` node** (operator: "live on one node").
 4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
    first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
    window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
@@ -429,6 +431,42 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
    flags out of the tracked tree (`flags.local.tf`, gitignored; a live flag shows as drift until unflagged).
+
+**Layers 3–5 as built (2026-09-21): `scripts/mgmt-reconcile.sh`, the `mgmt-reconcile` unit + a
+`*:4/10` timer** — hand-rolled, another box loop in the belt/apply style, because the FU-242 spike
+ruled the controller substrate out ([`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md)).
+Each tick, for the `auto` nodes only:
+
+- **Declared** = `node_install_targets` from `main`'s *applied* state — the expression the upgrade verb
+  passes as `--image`, so a merged declaration syncs once the apply path has applied it, never before.
+  **Live** = `mgmt-probe.sh`'s own `check_nodes` (`NODE_TARGETS_JSON` = the auto nodes, `DRY_RUN=1`) —
+  one diff, used as the trigger and again as the completion condition.
+- **A version or schematic gap** → `node-maintenance.sh upgrade <node>`, run INSIDE the oneshot (the
+  unit is the window). Everything the verb already refuses on stays the verb's: preflight, its WIP 1
+  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, Garage `cluster_healthy`,
+  CNPG instances), the FU-033 gate, the post-install verify. The loop adds WIP 1 across windows it did
+  not open — a live [declared window](glossary.md) (`agents/seat-window.sh`'s record) on any OTHER node refuses the tick
+  — and one sync per tick, the rest queued.
+- **One attempt per declared target** (`version/schematic`). The verb's exit 2 is a refusal with nothing
+  touched → `pending`, retried next tick. Any other failure, a zero exit that leaves the diff non-zero, or
+  a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried; a
+  new declared key, or the diff reaching zero by other means, clears it. By hand: `rm
+  /var/lib/mgmt/reconcile/state.json` once the node is whole.
+- **Not reconciled, reported only:** labels/taints (tofu's apply path owns them — `MgmtNodeLiveStateDrift`),
+  `ephemeral_disk` (reinstall-class — a human window), anything on a `manual` node. A declared
+  `controlplane` is refused even if marked `auto`. The loop never runs tofu.
+- **State** = `/var/lib/mgmt/reconcile/state.json`; **status** = `mgmt_reconcile_node_state{node,state}`
+  (idle | pending | syncing | parked) + `mgmt_reconcile_sync_started_timestamp_seconds{node}` through the
+  textfile. Alerts (`argocd/resources/mgmt-metrics/`, promtool-fixtured): `MgmtReconcileParked` (5m),
+  `MgmtReconcileSyncStuck` (a window past 3h; the unit's hard stop is 5h, after which the next tick parks),
+  `MgmtReconcileLoopStale` (no evaluation for an hour with no sync open), `MgmtReconcileMetricsAbsent`.
+  A long `pending` has no alert of its own — it is `MgmtNodeInstallDrift` / `TalosFleetVersionSplit` at 24h.
+- The state machine is fixture-tested against a fake verb: `devbox run mgmt-reconcile-test` (also run by
+  `mgmt-policy-test`, which CI runs on every `scripts/mgmt-*` change). The unit is `restartIfChanged =
+  false`: a `mgmt-pull` activation must never kill a window mid-install.
+
+Not built here: layer 5's PXE flags (FU-244 — the verb in use is an in-place upgrade, which needs none) and
+any sync of the reinstall class.
 6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
    virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
    nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
@@ -450,7 +488,7 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 
 **Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
-the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair.
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-21):** everything through `reconcile: auto` is built; the auto set is one node.
 
 ## Rollback — three layers
 

@@ -109,6 +109,14 @@
 #                     tofu/talos.tf declines it for exactly this reason). Same boot-from-git
 #                     pattern as `avx2`: the label rides the machine config and survives a
 #                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
+#   reconcile         auto | manual (default manual) — ADR-132 §MB4 layer 3. `auto` hands the node's
+#                     INSTALL (Talos version + schematic, from node_install_targets) to the management
+#                     box's reconciler (scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
+#                     declared install differs from live it runs `node-maintenance.sh upgrade` — WIP 1,
+#                     the verb's floors, ONE attempt per declared target, then PARKED + an alert. A
+#                     `manual` node's diff is drift on the belt and nothing more. Only Talos WORKERS may
+#                     be auto (generate.py refuses anything else): control planes, hypervisors and the
+#                     router stay manual until ADR-133's CPs and a CARP pair exist.
 #   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
 #                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
 #                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
@@ -198,6 +206,8 @@ machines:
     hardware: Talos VM on pve
     ip: 192.168.2.63
     avx2: true           # same host CPU as wk-01/wk-02
+    reconcile: auto      # the reconciler's first node (operator, 2026-09-21: "live on one node") —
+                         # the cattle CI tier: tainted, no Longhorn disks, no kata, removable
     ephemeral: true      # taint (metal.tf for_each) + nodeLabel (talos.tf patch) — ARC runners
                          # select on the LABEL; added 2026-08-18 to double CI runner capacity
                          # (2→4 slots). Deliberately a VM: CI needs no metal (no kata/KVM — that
