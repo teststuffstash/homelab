@@ -142,7 +142,19 @@ data "talos_machine_configuration" "node" {
   config_patches = concat(
     [yamlencode({
       machine = {
-        install = { disk = "/dev/sda" }
+        install = {
+          disk = "/dev/sda"
+          # FU-253: the VMs used to declare NOTHING here, so the provider's bundled default
+          # (`ghcr.io/siderolabs/installer:v1.13.0`) landed on all five — the GENERIC image, which
+          # reinstalls a nocloud VM as `platform: metal` and ghosts it (ADR-014, probed on wk-03).
+          # Harmless while nothing read it; a loaded gun for anything that upgrades a node to its
+          # DECLARED image, which is exactly what an upgrade controller does. Now it names the same
+          # factory URL `node_install_targets` hands `node-maintenance.sh upgrade`, so declared ==
+          # what the verb passes == what the node installs. Metal has done this since birth
+          # (metal.tf); with the disk image demoted to a seed (proxmox.tf), this is where a VM's
+          # running substrate is declared.
+          image = data.talos_image_factory_urls.vm[local.vm_image_key[each.key]].urls.installer
+        }
         # (Stateful services moved to Longhorn — the old /var/mnt/* hostPath kubelet
         # extraMounts were removed. Longhorn uses /var/lib/longhorn, not an extraMount.)
       }

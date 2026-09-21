@@ -188,6 +188,10 @@ metal, provided the installer matches (platform, schematic, version); never the 
 a schematic the node does not declare** (a plain-schematic upgrade stripped iscsi-tools from a
 `longhorn = true` VM the same day). Extension changes still recreate — the image is the declaration.
 Recipe: [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. Relates FU-076, FU-253.
+**For VMs, that last sentence is superseded by [ADR-138](#adr-138--a-vms-disk-image-is-a-birth-seed-the-running-substrate-is-installimage-moved-in-place-2026-09-21)**
+(2026-09-21): the disk image is a birth seed with `ignore_changes`, so an extension change plans
+nothing at all — it is delivered by the same in-place upgrade (a schematic is one of the three axes
+the installer must match), and a deliberate rebuild is a planned `-replace`. Metal is unchanged.
 
 ---
 
@@ -2337,3 +2341,26 @@ the hostname is pinned at install (`HostnameConfig`, provider #296) and changing
 node ghosts it and drops etcd to two members (FU-262 carries the checklist); the CP index is
 fleet-wide, so the next control plane is `cp-04` whether it is a VM or a laptop; nothing else
 renames. Tracker: FU-262.
+
+### ADR-138 — A VM's disk image is a birth seed; the running substrate is `install.image`, moved in place (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21 — "POC both changes together"), landing behind
+[FU-235](follow-ups.md)'s declared-vs-live diff. **Decision:** `disk.file_id` on the Proxmox VMs
+carries `ignore_changes`, so it means only *what a NEW VM boots the first time*; the version a node
+actually runs is declared by `machine.install.image` (now set for VMs too, FU-253) and moved by
+`node-maintenance.sh upgrade` / `cp-upgrade` **in place**, exactly as metal already works.
+**Considered:** *accept the recreate* — the pure cattle reading, and what the declaration used to
+force: two control-plane VMs destroyed and rebuilt to change a patch version, with etcd member
+churn, `-exclude`-shaped applies and the FU-248 landmine in the way; *a per-VM `seed_version`
+knob* — keeps `plan` honest with no `ignore_changes`, at the price of a second version field per VM
+that rots the first time someone forgets it (the `pin_hostname` failure mode); *status quo* —
+upgrade in place and let the declaration lie, which is what FU-254 says nothing detects. **Why:**
+the attribute was asked to mean two things at once. It is a *creation* input the provider treats as
+a *live* one, so the model disagreed with [ADR-014](#adr-014--talos-upgrades-a-nocloud-vm-needs-the-nocloud-installer-amended-2026-09-18--the-hazard-is-the-image-not-the-vm)
+as amended — which says a nocloud VM upgrades in place given a platform-, schematic- and
+version-correct installer, proven on a disposable nx-02 VM 2026-09-19. One upgrade model for the
+whole fleet is also one less thing to get wrong at 2 a.m. **Consequences:** `plan` stops seeing a
+SCHEMATIC change on a live VM (both axes live in that one string) — the detector is
+`mgmt_node_drift{axis="schematic"}`, which is why the diff landed first; a deliberate rebuild is a
+planned `-replace` read before it runs; ADR-014's "extension changes are `tofu apply -replace`"
+consequence is superseded for VMs. Tracker: FU-263, FU-253.
