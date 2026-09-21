@@ -1220,6 +1220,10 @@ Surfaces: `router_decisions_total`, `router_cooldowns_active`, cooldowns + decis
 429→cooldown→paid-fallback→half-open-re-pick→2xx-clear→escalated-re-trip cycle through the
 real data plane; live entry = the sleep free-first chain test (claim reorder, same date).
 
+**Amended by [ADR-139](#adr-139--the-egress-proxys-shape-the-git-broker-leaves-the-gateway-becomes-its-own-project-ha-waits-for-a-measured-store-2026-09-21) (2026-09-21):** the single-replica `Recreate` consequence
+stands for the router, not for everything behind it — the git credential broker leaves; and the
+"launchers already fail-open/retry" line was false for the git path (oracle-fleet#679-r2).
+
 ### ADR-097 — Dispatch parallelism keys on declared footprints, not track labels
 
 **Accepted 2026-08-03.** Closes FU-086 knob 3's design question. **Decision:** per-repo worker
@@ -2364,3 +2368,32 @@ SCHEMATIC change on a live VM (both axes live in that one string) — the detect
 `mgmt_node_drift{axis="schematic"}`, which is why the diff landed first; a deliberate rebuild is a
 planned `-replace` read before it runs; ADR-014's "extension changes are `tofu apply -replace`"
 consequence is superseded for VMs. Tracker: FU-263, FU-253.
+
+### ADR-139 — The egress proxy's shape: the git broker leaves, the gateway becomes its own project, HA waits for a measured store (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21 — after oracle-fleet#679-r2 died cloning mid-roll).
+Amends [ADR-096](#adr-096--the-egress-proxy-becomes-the-modelbilling-router-fu-095-decision-api--budgeter)'s
+single-replica consequence. **Decision:** three steps, in order. **(1)** The git credential broker
+(`/git-token`, `/loop-git-token`) leaves `openrouter-proxy` for its own stateless Deployment, ≥2
+replicas, with the Secret-read RBAC it needs — the LLM path loses that grant. **(2)** FU-127's
+structured `{rail, harness, model, routing}` claim form lands before any repo split, so
+`model_id.py` stops being shared code. **(3)** The rest — the LLM rails plus the ADR-096 router —
+becomes its own image-producing repo named **`agent-gateway`** (services are named by role,
+exporters by the system they read), deployed by pinned image so the FU-044 revert class covers it;
+`model-classes.json` stays homelab config, mounted; a compat Service keeps
+`openrouter-proxy.agent-egress` resolving until consumers move. It stays single-replica on SQLite.
+**Deferred, not decided — gateway HA** (FU-271): in-process limiters double every cap at 2
+replicas, so a session store plus a durable store are picked after a per-request measurement.
+**Considered:** splitting the LLM passthrough from the router (every request meters into router
+state — 21 Go-usage call sites — so a split is a hop plus distributed state per call); CNPG and 2
+replicas now (unmeasured on the hot path; the limiters make 2 replicas wrong regardless);
+extracting before FU-127 (a byte-identical `model_id.py` in two repos trades one coupling for
+two); status quo. **Why:** the broker is the failure that bit — stateless, 3 of
+the proxy's 57 commits since June, yet down ~30 s on every roll, and a ride cloning in that window
+gets an empty password. And the coupling is low: 30 of 44 proxy-code commits touched nothing else,
+most co-changes are additive, so extraction costs a second PR on ~1 change in 4 and buys rolls
+decoupled from homelab merges (the 09-21 roll was a comment edit), the revert class, and backend
+freedom — measurement: [change-hotspots §2026-09-21](spikes/change-hotspots.md).
+**Consequences:** agent-runtime#144's broker retry stays as defense in depth; the renames sit in
+the glossary's pending list. Tracker: FU-269 (broker), FU-127 (structured ids), FU-270 (gateway
+project), FU-271 (HA measurement).

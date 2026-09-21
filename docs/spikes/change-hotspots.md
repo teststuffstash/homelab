@@ -102,3 +102,25 @@ rule-test (`*.promtool-*`). Bot vs seat = commit author. Companion: the codeowne
   scan, and it has never produced a codeowner catch.
 - No first-party service under `argocd/resources` has a rollout gate (rung 0 smoke hook,
   iac-lane.md §IAC-G05) or a rollback path other than `git revert` + the ConfigMap re-roll.
+
+## 2026-09-21 — how coupled `openrouter-proxy` is to the rest of homelab (ADR-139's measurement)
+
+The extraction question in one number: would a proxy version bump usually ship alone?
+Measured over 2026-06-01 → 09-21, `git log` on the proxy's `*.py`:
+
+- **44 commits; 30 touched nothing outside the proxy's directory** (docs ignored). 2 of the 14
+  co-changes were noise (a docs-pointer sweep, a repo-wide import).
+- **The 12 real co-changes were mostly ADDITIVE** — a new `/route` response field (#784), the
+  provider on `/report` (#1273), strikes carrying the served provider, a new loop-intake token
+  endpoint, the capacity doorbell, a forwarded harness header (#1760): proxy first, consumer
+  after, i.e. ordering, not lockstep. Cost of extraction: a second PR on ~1 change in 4.
+- **Two genuine lockstep couplings:** `model_id.py` is byte-identical in `agents/` and the proxy
+  (FU-127's parser, drift-pinned by `model-id-test`); `model-classes.json` changes on its own
+  (15 commits, scout-curated) and must stay homelab config, or every curation becomes a release.
+- **Inside the proxy:** only `router.py` touches SQLite (55 sites); the request path calls into
+  it on every model call (21 Go-usage sites alone) and keeps per-consumer semaphores, per-session
+  breakers and in-flight maps in process memory. The git broker touches none of that, and its
+  code changed in **3 of 57** commits to the directory — yet it rolls with all of them.
+- **Runtime surface:** 10 HTTP endpoints; Kubernetes reads = TokenReview, a few Secrets, pods,
+  the OpenRouter operator's CRD. Consumers outside homelab: 1 file each in agent-runtime and
+  oracle-iac name the Service.

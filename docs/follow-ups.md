@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-269** (2026-09-21: FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-273** (2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -912,7 +912,30 @@ the block needs pruning, not more headings.
       **Next:** the structured `{rail,harness,model}` form in claims + `stacks.json` (string
       stays canonical; also where a future local-vLLM rail lands). The routed-RESPONSE carrier
       shipped as G-A child #776; the claim-field half rides the goal's checkpoint-minted claim
-      reshape. Relates FU-095, ADR-096.
+      reshape. **Gates ADR-139 step 3** (FU-270): `routing` joins as a field. Relates FU-095, ADR-096.
+- [ ] **FU-269** — **The git credential broker leaves `openrouter-proxy` (ADR-139 step 1).**
+      `/git-token` + `/loop-git-token` are stateless (read the minted `agent-git-<ns>` Secret,
+      TokenReview, short cache) yet roll with every router change — oracle-fleet#679-r2 cloned at
+      16:59:04Z mid-roll and died with an empty password (2026-09-21). **Next:** a separate
+      Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
+      grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
+      (retry) stays. Relates ADR-087, FU-089.
+- [ ] **FU-270** — **`agent-gateway`: the proxy as its own image-producing repo (ADR-139 step 3).**
+      LLM rails + the ADR-096 router, renamed by role; pinned-image deploy (FU-044 revert class);
+      `model-classes.json` stays homelab config, mounted; a compat Service keeps
+      `openrouter-proxy.agent-egress` resolving (160 refs in 52 homelab files). Stays single-replica
+      on SQLite. **Blocked on** FU-127 (one `model_id.py` home) and FU-269. **Next:** scaffold the
+      repo (agent-runtime shape) + image CI; move code with history. Glossary: pending renames.
+- [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
+      semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
+      store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
+      **Next:** measure store ops per request × RTT from a wired-node pod per candidate, against the
+      LLM budget (p50 6.4 s / p10 2.1 s, 2026-09-21); then pick, then 2 replicas. After FU-270.
+- [ ] **FU-272** — **Vendor status pages out of `github-exporter`.** 11 of its 13 collectors read
+      GitHub; `collect_vendor_status` + `collect_anthropic_status` poll vendor status pages — scope
+      creep under a source-named exporter (exporters are named by the system they read, ADR-139).
+      **Next:** a small `vendor-status` exporter owning those two (same ConfigMap-script pattern),
+      metric names unchanged so dashboards/alerts keep reading. Glossary: pending renames.
 - [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
       `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
       ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
