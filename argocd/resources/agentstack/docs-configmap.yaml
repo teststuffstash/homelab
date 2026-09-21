@@ -116,6 +116,32 @@ data:
     other than `read`. A grant cannot express a write. Every repo named must be covered by the
     `homelab-agents` installation or the whole mint 422s.
 
+    ## Read-only data volumes for rides (`fixer.imageVolumes`, ADR-135)
+
+    When a ride needs the stack's real published data — not a fixture — declare it as an OCI
+    image volume. The launcher mounts it READ-ONLY into every worker ride of that repo (kata
+    rides included), and the ride's environment card names the mount:
+
+    ```yaml
+    fixer:
+      imageVolumes:
+        - name: corpus
+          reference: registry.teststuff.net/<stack>/<artifact>@sha256:<digest>
+          mountPath: /corpus          # under /corpus, /data or /mnt
+    ```
+
+    - **Digest-pinned, allow-listed.** Only `registry.teststuff.net/…` and
+      `ghcr.io/teststuffstash/…`, only `@sha256:` — a tag is refused. Bump the digest from your
+      release automation in the -iac PR that rolls the served version, so the mount follows prod.
+    - **Anonymously pullable.** Ride pods carry no pull secret. The launcher probes the manifest
+      first: a digest the registry no longer serves gives an UNMOUNTED ride that says so on its
+      card — never a pod stuck at image pull. Keep the previous digest in the registry until the
+      claim has moved off it.
+    - **Cost is per NODE, not per ride**: pulled once per ride-hosting node and shared. Measured
+      2026-09-20 on a laptop node: 10.5 GB cold in 3m21s; SQLite over kata/virtiofs within
+      0–40 % of runc (homelab#1807). Two versions sit on disk around a roll.
+    - Max 4 per repo. Worker rides only in v1 — reviewer/coordinator pods do not mount it yet.
+
     ## Claim-owned labels (`repos[].labels` — the Issues tier, FU-068)
 
     A repo entry with a `labels:` block gets an AUTHORITATIVE `IssueLabels`: the platform
@@ -134,6 +160,10 @@ data:
        allowlist. Verdicts are three-valued: ALLOWED / WOULD-DROP / PROBE-FAILED — an empty
        harvest is a failed probe (github.com flows MUST appear; every ride clones), never "no
        misses". Add missing legit destinations to `egress.extraFQDNs`.
+       A destination INSIDE the repo's own namespace (e.g. a keyless data proxy the stack
+       runs for its rides) is `egress.ownServices: [{podLabels: {app: …}, port: N}]` instead —
+       it also lands in the loop-ns CNP so the reviewer reaches it. Other namespaces are not
+       expressible here.
     3. After ~3 consecutive clean rides, flip `enforce: true` (one-line PR in the -iac repo).
        A blocked flow under enforcement manifests as a worker HANG, not an error — watch
        `hubble_drop_total{reason=POLICY_DENIED}` for the namespace.

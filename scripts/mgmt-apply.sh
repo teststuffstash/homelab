@@ -107,6 +107,11 @@ for root in "${apply_roots[@]}"; do
   # shellcheck disable=SC2086
   if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
     log "$root: APPLIED (+$a ~$c -$d${osuf})"
+    # A dated, verified snapshot of the state this apply just wrote (docs/tofu-state.md
+    # §Snapshots). Still inside this loop's lock (fd 9), hence --lock-held. A failed snapshot is
+    # logged, never allowed to turn a successful apply into a refusal.
+    snap="${MGMT_SNAPSHOT:-/var/lib/homelab/scripts/mgmt-state-snapshot.sh}"
+    if [ -x "$snap" ]; then "$snap" --lock-held "$root" || log "$root: WARN snapshot failed — the apply itself succeeded"; fi
     mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box"
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'

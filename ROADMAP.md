@@ -108,9 +108,11 @@ work survivable.
 0. **The management box as reconciler** (ADR-132, [`docs/management-box.md`](docs/management-box.md) §MB4):
    the declared-vs-live diff (FU-235) → the controller-substrate spike (FU-242) → the pre-merge impact line →
    `reconcile: auto` on the compute tier, one node at a time. Transient PXE flags leave git (FU-244).
-1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133, FU-243): `cp-01` (pve), `wk-metal-03`
+1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133 as amended 2026-09-20, FU-243): `cp-01` (pve), `wk-metal-02`
    (laptop — a battery is a UPS for etcd), a VM on `nx-02` once its drives are in. VIP first on cp-01, then
-   both joins back to back; single OPNsense stays. The Nutanix twin pays the ride-pool bill counted below.
+   the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
+   back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
+   [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
 2. **Router HA — OPNsense CARP pair** across two nodes (anti-affinity, never co-located).
    `pfsync` = stateful failover; `hasync` = config sync; bonus = rolling firewall updates. After the CPs:
    it rewrites every HAProxy VIP and both BGP peers.
@@ -154,7 +156,7 @@ says the third control plane falls back to "a VM on the second hypervisor, and R
 again" only **if a laptop is spent on R12** — `thinkcentre` took that job, so both laptops stay
 free and R11 is not load-bearing for the CP goal.)
 
-- **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; ⚠️ no iGPU (needs a GPU to POST) and a
+- **X99 Xeon E5-2680 v4 → Proxmox host.** Great core count; no iGPU (but POSTs headless at BIOS defaults — verified 2026-09-21) and a
   2016 120W chip — keep it a dedicated hypervisor, not part of the zero-touch fleet.
 - **Zero-touch fleet = business mini/SFF PCs with Intel vPro/AMT** (OptiPlex Micro, EliteDesk Mini,
   ThinkCentre Tiny): remote KVM + power without IPMI, iGPU, reliable Intel NICs, low idle.
@@ -212,7 +214,9 @@ declared-vs-live diff on the box's belt — FU-235; **(b)** the controller-subst
 — FU-242 ([`docs/spikes/tofu-controller-on-the-box.md`](docs/spikes/tofu-controller-on-the-box.md));
 **(c)** the impact line in the sentinel verdict + box-run maintenance verbs, first human-ordered; **(d)**
 `reconcile: auto` on the compute tier, WIP 1; **(e)** the control-plane endpoint VIP — FU-243 — then the two
-joins. Design: [`docs/management-box.md`](docs/management-box.md) §MB4; §HA model above carries the order.
+joins. The management-box rolling control-plane upgrade verb is now built and rehearsal-proven
+(PR#1778); after the three members are Ready it converges them one at a time. Design:
+[`docs/management-box.md`](docs/management-box.md) §MB4; §HA model above carries the order.
 
 ### Platform self-service via Crossplane — "homelab as AWS/Civo" (FU-039)
 

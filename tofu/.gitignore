@@ -13,3 +13,9 @@ crash.*.log
 kubeconfig
 talosconfig
 *.auto.tfvars
+
+# A stray talosconfig landed here once as `nix-shell-env` and was committed to PUBLIC master
+# (2026-09-21, incident). The two names above are not enough — ignore anything in this
+# directory that is not a tracked source file is not expressible, so the belt is the gitleaks
+# pre-push hook; this line closes the exact hole.
+nix-shell-env

@@ -1,0 +1,15 @@
+# HAND COPY of the talos-substrate group in prometheusrule.yaml (this dir) — the drift pin in
+# scripts/prometheus-rules-lint.sh asserts expr+for equality per alert name against the CR.
+# Re-render with:  devbox run -- yq '.spec.groups[] | select(.name == "talos-substrate")' prometheusrule.yaml
+# Loaded by talos-substrate.promtool-test.
+groups:
+  - name: talos-substrate
+    rules:
+      - alert: TalosFleetVersionSplit
+        expr: |
+          count by (os_image) (kube_node_info{os_image=~"Talos.*"})
+            unless topk(1, count by (os_image) (kube_node_info{os_image=~"Talos.*"}))
+        for: 24h
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} node(s) have run {{ $labels.os_image }} for 24 h while the rest of the fleet is on another version"

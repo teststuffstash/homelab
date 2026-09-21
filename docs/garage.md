@@ -474,6 +474,45 @@ client-side measurement).
 - `garage:cluster_health:availability_ratio_1h` — SERVING per pod: share of the hour `/health` answered HTTP 200 (Garage's own quorum signal; Degraded serves and counts as available — a node down is the `GarageClusterDegraded`/`Flapping` belts' business, which read the same probe's "fully operational" regex instead)
 - `garage:meta_volume_used_ratio` / `:data_volume_used_ratio` — volume utilization per pod
 
+### 4 KiB range reads — the measured ceiling (2026-09-21)
+
+The oracle ERT parser's 42.2 GB ZIP exercises **4 KiB logical reads through S3 Range GETs**. A
+pre-maintenance run held at **9.4–9.7 parsed members/s** through later Garage-node restarts; the
+comparable clean 10:35Z five-minute window was 9.0 `GetObject`/s at 79.5 ms mean handler time.
+This is not a saturated CPU, disk, NIC, or Longhorn path. It is Garage's per-request metadata
+shape:
+
+| Stage (`garage-2`, clean 5m window) | Mean |
+|---|---:|
+| object-table quorum lookup | 7.1 ms |
+| version-table quorum lookup | 72.5 ms |
+| whole S3 handler, before the streamed body | 79.5 ms |
+| subsequent block read | 3.3 ms |
+
+The object has about **40,223 × 1 MiB Garage blocks**. Garage v2.3.0 stores the complete block map
+in one Version-table entry; every 4 KiB Range GET in `consistent` mode reads two copies (RF=3 read
+quorum 2), decodes them and CRDT-merges them before locating the intersecting block. In the clean
+window the local Version RPC was 4.5 ms, the healthy remote RPC 49–55 ms, and decode/merge after
+the replies accounted for the remaining ≈18–23 ms. Network accounting independently sizes the
+remote Version response: 28.6 MB/s received minus 9.34 MB/s of block data, divided by 9.24 remote
+lookups/s, is **≈2.1 MB of metadata per GET**. This is serial request latency, not resource
+saturation: Garage used 0.46 core and the NIC received 28.6 MB/s.
+
+Longhorn is not the lever for this read shape. In the same window `meta-garage-2` did 46 read IOPS
+at 188 KiB/s and 0.313 ms/read; the remote peers' meta volumes did 0 and 4 IOPS, showing that their
+repeated Version entry was page-cached. Even pessimistically serializing `garage-2`'s roughly five
+Longhorn reads per GET gives ≈1.6 ms/request. Its instance-manager used 0.068 core, had no CPU
+limit, the data PVCs showed no local reads, and the busiest physical disk was 3.7 %. Raw XFS may
+still reduce the separately measured write/fsync and resync engine tax, but would not materially
+move this 4 KiB Range GET ceiling. `longhorn-manager` throttling is also unrelated: the manager is
+the attach/reconcile plane; the unlimited instance-manager carries I/O.
+
+**Ruling:** accept these as the Garage v2.3.0/RF=3-consistent numbers; do no further Garage or
+platform tuning for this workload. In particular, do not trade away read-after-write consistency,
+re-cut storage onto raw XFS, or change the global block size for it. If this access pattern must be
+faster, either use an S3 implementation with faster small-range reads or change oracle-fleet to
+coalesce/cache its ZIP reads. There is deliberately no homelab follow-up for the accepted limit.
+
 ### Belts — what alerts on the rf=3 store (2026-09-09)
 
 Symptoms, not guessed causes; each names where to read next. In

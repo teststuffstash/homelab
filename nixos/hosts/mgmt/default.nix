@@ -316,11 +316,46 @@ in
     script = "${repoPath}/scripts/mgmt-probe.sh";
   };
   systemd.timers.mgmt-belt = {
-    enable = false; # phase A: built, not armed (the creds it probes are not here yet)
+    # ARMED 2026-09-21. It was parked at phase A "the creds it probes are not here yet" — they have
+    # been here since the 09-13 state migration, and the timer stayed masked, so the belt last ran
+    # on 2026-09-13 09:32 and nothing said so for eight days. Evidence before arming: started by
+    # hand on the box, 5 checks green in ~90 s (tofu:provisioning, tofu:github, talos skew, the
+    # OPNsense --check, creds). Report-only by construction — it changes no generation and reboots
+    # nothing (§Rollback layer 1), so the cost of arming it is one 90 s run per quarter hour.
+    enable = true;
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*:0/15";
       RandomizedDelaySec = "2m";
+      Persistent = true;
+    };
+  };
+
+  # ── state snapshots (docs/tofu-state.md §Snapshots, FU-012) ─────────────────────────────────
+  # The level backstop. mgmt-tf and mgmt-apply already snapshot the root they just wrote, inside
+  # their own lock span; this timer catches every state change made ANYWHERE else — the four
+  # Garage-backed roots are applied from the host and the jail, never from here. Idempotent by
+  # (serial, lineage), so an hour in which nothing changed costs a few jq reads and five S3 GETs.
+  # Takes the loops' lock itself (standalone run), so it can never read main mid-write.
+  systemd.services.mgmt-state-snapshot = {
+    description = "tofu state snapshots: dated, encrypted, round-trip verified (every root)";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" ];
+    path = with pkgs; [ bash git devbox nix coreutils gnugrep gnused findutils util-linux ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # TOFU_STATE_PASSPHRASE + the Garage state key
+    };
+    script = "${repoPath}/scripts/mgmt-state-snapshot.sh";
+  };
+  systemd.timers.mgmt-state-snapshot = {
+    enable = true;
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "hourly";
+      RandomizedDelaySec = "5m";
       Persistent = true;
     };
   };

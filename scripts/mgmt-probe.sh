@@ -52,11 +52,16 @@
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos ansible creds
+#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds
+#   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
+#   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
-[ -n "$REPO" ] && [ -d "$REPO/.git" ] || { echo "FATAL not a checkout: '$REPO'" >&2; exit 1; }
+# `-e`, not `-d`: in a git WORKTREE .git is a file pointing at the real gitdir, and the jail's PR
+# lane runs entirely out of worktrees (a branch is never checked out in the shared tree), so the
+# `-d` form made this script the one thing that could not be exercised before it shipped.
+[ -n "$REPO" ] && [ -e "$REPO/.git" ] || { echo "FATAL not a checkout: '$REPO'" >&2; exit 1; }
 cd "$REPO" || exit 1
 
 # ⚠ systemd does not set $HOME for a system unit without User= (systemd.exec(5)), and BOTH devbox
@@ -74,6 +79,9 @@ MODE="${MODE:-belt}"
 
 PASS=0 FAIL=0 SKIPPED=0
 declare -a RESULTS=()
+# The node diff publishes per-node gauges rather than one pass/fail, so it accumulates its own
+# (node, axis) pairs: DRIFT = declared and live disagree, DRIFT_OK = they match.
+declare -a DRIFT=() DRIFT_OK=()
 
 log()  { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 skipped() { RESULTS+=("$1 skip"); SKIPPED=$((SKIPPED+1)); log "SKIP $1 — $2"; }
@@ -175,6 +183,85 @@ check_talos() {
   else
     failed talos "MINOR skew: client=$client server=$server"
   fi
+}
+
+# ── check: declared node state vs live (FU-235, ADR-132 §MB4 layer 1) ───────────────────────────
+# `talos_machine_configuration_apply` records DELIVERY, not installation: Talos honours the
+# install-time fields (schematic, install disk, EPHEMERAL VolumeConfig) only on the next install,
+# so state is truthful, `plan` is clean, and the node still runs the wrong image. nx-01 after
+# #1717 is the worked example — `nodeLabels` took, the schematic did not. This check is the diff
+# that sees it: DECLARED (`tofu output node_install_targets`, the same expression the upgrade verb
+# passes as `--image`) vs LIVE (`talosctl version` + the `schematic` extension), one line and one
+# gauge per node per axis.
+#
+# ⚠ It reports, it never FAILS the probe. A declared-vs-live version gap is the normal state of a
+# rollout in progress ("the progress bar, not drift" — tofu/variables.tf), and a belt that reds the
+# box every time a node is mid-upgrade teaches everyone to ignore it. The judgement of "too long"
+# belongs to an alert with a `for:`, reading mgmt_node_drift — or, until this box has a metrics
+# transport (§MB2), to the fleet-split rule in argocd/resources/talos-substrate/.
+check_nodes() {
+  skip_requested nodes && { skipped nodes "SKIP requested"; return; }
+  local statef="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}"
+  local tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+  [ -f "$tc" ] || { skipped nodes "no talosconfig at $tc"; return; }
+  local declared
+  if [ -n "${NODE_TARGETS_JSON:-}" ]; then
+    # The declared half, pre-fetched. Exists so the diff can be exercised from the jail (where the
+    # main state deliberately is not) against the live fleet — `devbox run mgmt-tf -- output -json
+    # node_install_targets > /tmp/d.json` then NODE_TARGETS_JSON=/tmp/d.json.
+    declared="$(cat "$NODE_TARGETS_JSON")" || { failed nodes "cannot read $NODE_TARGETS_JSON"; return; }
+  else
+    [ -f "$statef" ] || { skipped nodes "no main state at $statef — this check runs on the box"; return; }
+    # ⚠ The box's OWN checkout has never had the main root initialised — only the apply clone
+    # (/var/lib/mgmt/apply/homelab) is, because that is where mgmt-tf and mgmt-apply run. The
+    # first real run of this check on the box therefore died with "Required plugins are not
+    # installed" (2026-09-21, found by starting mgmt-belt by hand right after #1828 merged).
+    # Decided UP FRONT from the missing directory, exactly as check_tofu does — not by retrying
+    # on any failure, which would also swallow a real regression (review, #1831): a renamed or
+    # removed `node_install_targets` must stay a loud FAIL.
+    if [ ! -d "$REPO/tofu/.terraform" ]; then
+      log "nodes: main root not initialised in this checkout — init once (-lockfile=readonly)"
+      if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
+        # The one case that is a tool problem rather than a finding (the sentinel's 2026-08-19
+        # discrimination): the probe could not read its input, so it has not seen the fleet.
+        # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
+        skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
+      fi
+    fi
+    declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
+      failed nodes "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
+  fi
+  # The output is a map node => {ip, class, installer, schematic, version}; anything else means the
+  # output moved and this check is reading a shape that no longer exists.
+  local rows
+  rows="$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, .value.ip, .value.version, .value.schematic] | @tsv' 2>/dev/null)" || true
+  [ -n "$rows" ] || { failed nodes "node_install_targets did not parse as the expected map"; return; }
+  local n=0 drift=0 node ip dver dsch live_v live_s clean
+  while IFS=$'\t' read -r node ip dver dsch; do
+    [ -n "$node" ] || continue
+    n=$((n+1))
+    clean="$(tool talosctl --talosconfig "$tc" -n "$ip" version --short | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
+    live_v="$(printf '%s' "$clean" | awk '/Tag:/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
+    if [ -z "$live_v" ]; then
+      # A declared node that does not answer at all is the EXTREME case of this diff, and the one
+      # that went unseen for ~12 h on 2026-09-21 (wk-metal-02 declared, no Node object, nothing
+      # fired). It is reported as its own axis, not folded into "version".
+      DRIFT+=("$node reachable"); drift=$((drift+1)); continue
+    fi
+    DRIFT_OK+=("$node reachable")
+    [ "$live_v" = "$dver" ] && DRIFT_OK+=("$node version") || { DRIFT+=("$node version"); drift=$((drift+1)); }
+    live_s="$(tool talosctl --talosconfig "$tc" -n "$ip" get extensions | awk '$(NF-1)=="schematic"{print $NF; exit}')"
+    if [ -z "$live_s" ]; then
+      DRIFT+=("$node schematic"); drift=$((drift+1))
+    elif [ "$live_s" = "$dsch" ]; then
+      DRIFT_OK+=("$node schematic")
+    else
+      DRIFT+=("$node schematic"); drift=$((drift+1))
+    fi
+  done <<< "$rows"
+  local detail=""
+  [ "$drift" -gt 0 ] && detail=" — $(printf '%s, ' "${DRIFT[@]}" | sed 's/, $//')"
+  passed nodes "$n declared, $drift axis-level gap(s)$detail"
 }
 
 # ── check: the OPNsense play still parses and connects (--check, no writes) ──────────────────────
@@ -313,6 +400,14 @@ publish() {
     name="${r% *}"; status="${r##* }"
     body+="mgmt_probe_check{check=\"$name\",status=\"$status\"} 1"$'\n'
   done
+  # One series per (node, axis), both states present: a 0 is a positive statement that the node
+  # was checked and matched, which "no series" cannot make.
+  if [ ${#DRIFT[@]} -gt 0 ] || [ ${#DRIFT_OK[@]} -gt 0 ]; then
+    body+="# TYPE mgmt_node_drift gauge"$'\n'
+    local d
+    for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 1"$'\n'; done
+    for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 0"$'\n'; done
+  fi
   if printf '%s' "$body" | curl -sf --max-time 10 --data-binary @- \
       "$PUSHGATEWAY/metrics/job/mgmt-probe/instance/$(uname -n)" >/dev/null; then
     log "pushed to $PUSHGATEWAY"
@@ -341,6 +436,7 @@ case "$MODE" in
     have devbox || { log "FATAL devbox not on PATH — the toolchain pin is unreachable"; exit 1; }
     check_tofu
     check_talos
+    check_nodes
     check_ansible
     check_creds
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the

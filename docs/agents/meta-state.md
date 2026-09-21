@@ -9,27 +9,45 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
-  The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
-  cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
-  `scripts/node-maintenance.sh upgrade <node>` exists and is PROVEN on `wk-metal-03` and
-  `wk-metal-01` (both v1.13.2 → v1.13.10, schematic verified after). **Next: `wk-metal-04`, then
-  `m70s`, then `hp-01`** — but never from that list, run `devbox run node-maintenance order`, which
-  computes the ranking from live placement (hard-coded orders rot; operator, 2026-09-18).
-  Three things a fresh session must know before continuing:
-  (1) **`INSTALL_TARGETS=<file>` is required until the PR merges** — the verb reads
-      `tofu output node_install_targets`, which lands with it. A fixture is in the session
-      scratchpad; rebuild it from `tofu/outputs.tf` if it is gone.
-  (2) **Do `hp-01` last and only after the eventbus change is live** — `eventbus-default-js` runs
-      2 of its 3 JetStream replicas there, so draining it today costs quorum, not a replica. The
-      required anti-affinity + `minAvailable: 2` PDB are in the PR and apply via ArgoCD on merge.
-  (3) **`wk-metal-01` converged off the kata schematic on purpose** (operator: the box no longer
-      needs kata — rides there were starving garage-2). The verb refuses a schematic change by
-      default; `ALLOW_SCHEMATIC_CHANGE=1` was the deliberate choice, `KEEP_SCHEMATIC=1` is the
-      other one. Do not read that convergence as drift.
-  Unfiled and wanted: a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`. Proven
-  necessary this session — a Garage zone was down ~10 min and NOTHING alerted; `cluster_healthy`
-  and `cluster_available` are scraped and, before the verb, had zero consumers.
+- **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
+  arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
+  should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was
+  still on the old image — close it, do not merge (FU-240). claude-jail `6f90815`
+  (`DEVBOX_USE_VERSION=0.18.3`) is committed locally there, unpushed beside the operator's own
+  commits — needs their push + a jail rebuild; the host profile wants the same export.
+  (2) `fixer.imageVolumes` is LIVE (#1808, ADR-135) but NO claim declares it — oracle adds it in
+  oracle-iac (SHIPPED note in their `done/`); first real ride with `/corpus` mounted is unobserved.
+  (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
+  `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
+  oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
+- **⚑ PICKUP (2026-09-21 ~14:00 — pve GPU swap: DONE; arc in TICK-LOG).** pve runs HEADLESS (no
+  GPU; x16 + x1 free — storage-ledger §hypervisor). Operator-only: the CMOS clear reset "Restore on
+  AC Power Loss" — read it next time a card is fitted, else pve stays dark after a power cut.
+  Unexplained, seen once: argocd-dex-server segfault (139) on hp-01, runs fine on wk-04.
+  **CNPG replica-1: DONE 2026-09-21 16:00Z** (#1843; all six platform PVCs on
+  `longhorn-local-std`, primaries now on m70s). FU-137's next = the backup CronJob. oracle-pg is
+  oracle's (stays r2 until the zone list is a label).
+- **⚑ PICKUP (2026-09-21 ~11:40 — the Talos rollout: DONE; arc in TICK-LOG).** All 13 nodes on
+  **v1.13.10** (one os_image; `TalosFleetVersionSplit` resolved before its 09-22 08:00Z fire). #1836
+  applied (0 replacements / 0 PKI); `upgrade-behind` ran on the box as transient units: cp-02, cp-01,
+  then m70s → hp-01. Three fixes landed on the way: #1838 (a pure CP has no Longhorn to wait for),
+  #1839 (**drain BEFORE the install** — each workload's PDB + controller fails itself over, CNPG
+  switched 3+2 primaries unaided; preflight WARNs informational in `upgrade`; floors never
+  FORCE-able), and the transient-unit recipe needs `--setenv=PATH` (docs/provisioning.md).
+  **NEXT:**
+  (1) **FU-264** — rotate the Talos API CA, now that the rollout is done; the spike says probe the
+      state half on the lab CP first.
+  (2) **FU-265** — wk-metal-04's firmware `Boot0008` breaks every future `talosctl upgrade` of it
+      (it finished today by a planned reboot); firmware-setup delete + the public upstream issue are
+      the operator's call.
+  (3) Observation, single sighting — detector-first if it recurs: homelab CI's crossplane render
+      failed at 10:28Z on `192.168.40.21` (ghcr mirror VIP) "no route to host", the minute cp-01
+      rebooted and cilium-operator was evicted. Rerun green; VIP answered at 10:55.
+  (4) Operator question still open: box metrics transport = node_exporter scraped as a static
+      target like the hypervisors (FU-252) — the seat agrees, no VIP decision needed.
+  Unfiled and wanted (from 09-18, still true): a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`.
+  ⚠ Host-side git prunes scratchpad worktrees mid-session and the jail's known_hosts is not durable —
+  pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
 
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
   (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in
@@ -129,8 +147,12 @@ never the session's arc — that is TICK-LOG's.)
   the reviewer + auto-merge (squash armed); the box loop refuses until a human applies — apply by
   target, one VM at a time (FU-246). FU-247 = alert on captured oopses + the console half (BMC SOL
   is `ttyS1`; the v1.13.10 metal image ships `console=tty0` only). The three-CP program (ADR-133,
-  FU-243) is deferred to its own session by the operator; ⚠ operator named `wk-metal-02` as the
-  laptop CP today, ADR-133 says `wk-metal-03` — settle before that session starts.
+  FU-243) is deferred to its own session by the operator; the laptop CP is `wk-metal-02`
+  (SETTLED 2026-09-20, ADR-133 amendment — `wk-metal-03` stays a ride node). **Upgrade-path
+  update (2026-09-20):** PR#1778 merged `devbox run cp-upgrade -- <node>` on the management box;
+  an isolated nx-02 one-node lab proved Talos v1.13.2→v1.13.10, then was destroyed. FU-243 now
+  carries the post-join one-member-at-a-time convergence step; `controlplane-lab-install.sh` is
+  only the independent rehearsal-cluster installer, not the production join path.
 
 
 - **⚑ PICKUP (2026-09-16 corpus session — the responder rebuild; arc in TICK-LOG).**
@@ -491,7 +513,7 @@ never the session's arc — that is TICK-LOG's.)
   purchase. Board also has 3 SATA. ⚠ **CORRECTED 2026-09-12 (operator, board-read with the
   brackets in hand): there is NO second x4 — the `x4` silkscreen carries an x1 connector and the
   `x1` silkscreen is unpopulated, so the x16 LP is the box's ONLY x4-capable slot** (one Gembird,
-  not two; card 2 has no home — pve's x4 is under the GPU, R9). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
+  not two; card 2's home: pve's x16, free since 2026-09-21 — storage-ledger §hypervisor). Detail in `teststuff/hardware`. Disk read via the new privileged-pod recipe (`docs/runbook.md` §Reading a
   fleet disk's identity and health — FU-222 archived): **2% used, 3051 h, 0 media errors,
   PCIe 3.0 ×4**, near-new. Supply side, incl. a specced 25 € DRAM-cached NVMe candidate that
   would also close FU-093's pool gap: private **`teststuff/hardware`** repo on Forgejo (`STATE.md`).

@@ -139,6 +139,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 |---|---|
 | `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
+| **the node diff** (`check_nodes`, 2026-09-21): DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image`) vs LIVE (`talosctl version`, the `schematic` extension), per node, three axes: reachable / version / schematic | that the fleet runs what git says. This is §MB4 layer 1's first half — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say); the "too long" judgement belongs to an alert with a `for:` |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -146,6 +147,13 @@ The metric *shape* copies the Garage write probe: the verdict **and** a `*_last_
 a staleness alert catches "the box is wedged" and not only "the box says no". This is FU-102's
 prober contract applied to its first non-stack consumer — the spike's line is that *the prober is
 the human*.
+
+The node diff's own alert is the one thing the transport hole below actually blocks, so it has a
+second, weaker detector that needs no transport: `kube_node_info` is already scraped and carries
+`os_image`, so the CLUSTER can see *that the fleet is split across Talos versions* even though it
+cannot see which version is declared. That is `TalosFleetVersionSplit`
+(`argocd/resources/talos-substrate/`, `for: 24h` to let a rollout run). The schematic and
+reachability axes have no such stand-in — they wait on the transport.
 
 ⚠ **The transport is UNBUILT, and it is a decision rather than a detail.** Pushgateway is
 "cluster-internal only … never BGP-advertised — internal exhaust plumbing"
@@ -311,6 +319,14 @@ the jail's copy frozen as a backup — so the jail's `devbox run tf-plan|tf-appl
 point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`scripts/mgmt-tf.sh`: ssh to the box, a
 COMMITTED ref — `MGMT_REF=origin/<branch>` — under the loops' flock). A human apply of main
 is therefore push-then-apply from now on; the working tree is not something the box can see.
+**And it is plan-then-apply-that-plan** (2026-09-21, FU-248): every `plan` saves itself to
+`/var/lib/mgmt/plan/<id>.bin` beside a human-readable `.txt` and a `.meta`, and prints the id;
+`apply` takes that id and nothing else — no `-target`, no `-replace`, no bare `apply`. The
+scoping lives inside the plan, so a scoped run is still one command pair, but the apply can no
+longer be typed differently from the plan a human read. Tofu refuses a plan whose state serial
+has moved, which is the "the world changed while you were reading" check that a human cannot
+perform reliably; the incident that forced this is
+[2026-09-16](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
@@ -343,9 +359,10 @@ so the review knows what the box did not judge on its own.
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
-the same hit forever. A **full** `devbox run mgmt-tf -- apply` of `origin/master` (no
-`-target`/`-exclude`/`-replace`) now stamps the baseline and clears `refused-rev` on success; a
-targeted apply does not (finish with a full one).
+the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
+`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
+rather than from the apply's own flags, which a plan-file apply no longer has.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
@@ -464,6 +481,9 @@ this section.
   and a reinstall that regenerates it silently breaks the jail's `known_hosts`. So `--extra-files`
   is not optional. The push path pins the box's host key from that same wallet entry instead of
   trusting on first use.
+- **`/var/lib/mgmt/state/` is DATA, and a reinstall wipes it.** The main root's state lives
+  nowhere else — so a reinstall restores it from a snapshot before anything plans:
+  [`tofu-state.md`](tofu-state.md) §Snapshots (the mechanism, both copies, the restore recipe).
 - **A version bump never touches a secret.** `nixos-rebuild test|boot` rebuilds the closure from
   git and leaves `/etc/ssh`, `/var/lib/mgmt` and `/root` alone; only a *reinstall* re-provisions
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential

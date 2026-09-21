@@ -38,10 +38,15 @@ Gotchas:
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
   every `devbox run`.
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
-  ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
+  ADR-129/-131): `devbox run mgmt-tf -- plan` (ssh, committed ref — `MGMT_REF=origin/<branch>`) prints a
+  **plan id**, and `devbox run mgmt-tf -- apply <plan-id>` executes that saved plan — an apply with
+  flags is refused (FU-248);
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
-  diff; a full `mgmt-tf apply` of master un-wedges the apply loop. [`management-box.md`](management-box.md) §MB3.
+  diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an
+  unscoped plan taken from `origin/master` stamps the baseline. **Every state write is snapshotted**
+  on the box and pulled into the wallet cache after an apply; `devbox run mgmt-state-pull` at session
+  wind-down catches the rest ([`tofu-state.md`](tofu-state.md) §Snapshots — restore recipe there). [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
@@ -189,10 +194,11 @@ pair lands on wk-metal-04 (FU-234); registration is `scripts/longhorn-register-o
 the mounts come from that node's `longhorn_disks` in `machines/machines.yaml` (`tofu/metal.tf`
 only consumes it).
 
-- ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM** — the reboot loses the cloud-init static
-  IP/hostname and it rejoins as a DHCP/default-name ghost. Add extensions by baking them into the
-  VM image (`image.tf` `talos_longhorn` schematic) and recreating (`tofu apply -replace=...`).
-  **Metal nodes upgrade fine** (see provisioning doc).
+- ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM without its exact Image Factory nocloud
+  installer** — a generic installer loses the cloud-init static IP/hostname and it rejoins as a
+  DHCP/default-name ghost. `scripts/node-maintenance.sh upgrade` reads the platform, schematic and
+  version from tofu and refuses an implicit extension change; control planes use
+  `devbox run cp-upgrade -- <node>`. See `docs/provisioning.md` for the complete recipe.
 - Longhorn disk mounts must be **under `/var/lib/longhorn`** — longhorn-manager only host-mounts
   that path. A disk with a pre-existing filesystem wedges Talos boot → `talosctl wipe disk` first.
 - Stuck `instance-manager`/`longhorn-manager` after node churn → `kubectl delete` the pod (the
@@ -288,7 +294,9 @@ long-lived pod holds (StatefulSet/Deployment: `numberOfReplicas`+1 → rebuild e
 the local replica → restore the count; `DRY=1` reports instead of acting). `down` runs it before
 the drain, so a drain is never left to block on Longhorn's PDB (operator direction 2026-09-09);
 no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
-and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
+and single-replica Deployments are WARNs (`FORCE=1` accepts them). `upgrade` needs no `FORCE`: it drains BEFORE the install
+(each workload's PDB + controller decides when it leaves — CNPG switches its primary over), so the
+WARNs are informational there, and the fleet floors are never forceable. `down` runs preflight, cordons,
 drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
 NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-dhcp.py`), waits
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
@@ -378,14 +386,14 @@ fails when you skip it" property applies, so it is a checklist. First run: `thin
    row for the eviction), `SERVICES.md` (if a tier or service changed), `ROADMAP.md`. The
    power/benchmark rows STAY — the box still draws watts.
 
-### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
-Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
-WITHOUT a reset/reinstall: `talosctl -n <ip> -e <ip> upgrade --image <factory installer>` then
-`talosctl -n <ip> -e <ip> reboot`. ⚠ On a **worker** the upgrade installs to the B partition then
-errors `kubeconfig is only available on control plane nodes` at its auto-drain step and does NOT
-reboot — that's why the explicit `reboot` follows (switches to B). Verify with `talosctl get
-extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
-(iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
+### Re-imaging a node (change install extensions)
+
+Metal nodes and nocloud VMs upgrade in place when passed their exact declared installer. Use
+`scripts/node-maintenance.sh upgrade <node>`; it handles the control-plane endpoint, drain and
+reboot, and verifies both version and schematic after rejoin. A schematic change is refused unless
+`ALLOW_SCHEMATIC_CHANGE=1` explicitly makes the operation a re-image. The current metal schematic
+is `image.tf` `talos_image_factory_schematic.metal` (iscsi-tools + util-linux-tools, no
+qemu-guest-agent — the latter hung the boot on bare metal).
 
 ### Reclaiming thin-pool space from a Talos VM
 Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
@@ -400,7 +408,7 @@ carries `host` / `vg` / `lv`; the pairs today are:
 | `host` | ssh | VG / pool LV | Talos VMs on it |
 |---|---|---|---|
 | `pve` | `192.168.2.3` | `pve` / `data` (Proxmox storage `local-lvm`) | cp-01, wk-01, wk-02, wk-03 (+ ci-runner-01, not a k8s node) |
-| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | wk-04 |
+| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | cp-02, wk-04 (+ ci-runner-02, not a k8s node) |
 
 Below, `<host>`, `<vg>` and `<vmid>` are that row's values; the worked numbers are pve's.
 
@@ -472,7 +480,7 @@ homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = tru
 `tofu/variables.tf` (→ `serial_device {}` in `proxmox.tf`; Talos already boots with
 `console=ttyS0`), applied at a FULL stop/start of the VM — a guest reboot keeps the qemu
 process, so pending hardware never lands that way; use `scripts/node-maintenance.sh down <node>`
-→ `devbox run mgmt-tf -- apply` (the provider starts the stopped VM) → `up <node>`. The host
+→ `devbox run mgmt-tf -- plan` then `apply <plan-id>` (the provider starts the stopped VM) → `up <node>`. The host
 side is `devbox run -- ansible-playbook ansible/pve-serial-log.yml` (vmid list in
 `ansible/group_vars/pve.yml`): a `qemu-serial-log@<vmid>` socat unit on pve appends the console
 to `/var/log/qemu-serial/<vmid>.log` (logrotate weekly ×8) — the kernel's last words on a panic

@@ -7,7 +7,15 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-255** (2026-09-18: FU-254 no detector for a substrate version going stale or EOL, FU-253 the VMs' generic+stale declared `install.image` — both from the upgrade-verb probes; FU-252 the management-apply refusal has no detector — it stood four days and 1101 ticks unseen. 2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-269** (2026-09-21: FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
+  hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
+  endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
+  backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
+  FU-256 minted for the worker-rides-into-`<stack>-agents`
+  question, from oracle's corpus-bucket handoff; FU-255 minted for the mirror floating-tag
+  revalidation audit, homelab#1739/#1779/#1796.
+  2026-09-18: FU-254 no detector for a substrate version going stale or EOL, FU-253 the VMs' generic+stale declared `install.image` — both from the upgrade-verb probes; FU-252 the management-apply refusal has no detector — it stood four days and 1101 ticks unseen. 2026-09-17: FU-251 the opencode.ai re-park after the session header proved wrong, FU-250 the RUM 403 wedging the consumer Workspace red, found at FU-206's build. 2026-09-16: FU-246 the workers' Talos version, FU-247 the kernel-oops alert, FU-248 the targeted-apply guard, FU-249 the responder pause; FU-242 the tofu-controller spike, FU-243 the CP endpoint VIP, FU-244 transient PXE flags out of git — the box-first program, ADR-132/-133. 2026-09-15: FU-241 minted for the shared pve/nx-02 SSH seed key, #1718. 2026-09-13: FU-240 minted for the box↔jail devbox version skew; FU-239 minted for the read-all token's standing group-order permutation; FU-238 minted for the box planning tofu/github; FU-237 minted for the management sentinel build, ADR-131; FU-236 minted for the sentinel-App cutover, ADR-130. 2026-09-12: FU-235 minted for the kata-label drift; FU-234 minted for the homeless Optane/`fast` tier after thinkcentre left cluster duty. Previously 2026-09-10: FU-229 minted for the Garage SLO/churn loose end; a SEVENTH mis-mint of the 09-07 shape — a grep for `\*\*FU-228\*\*` matched THIS line and the author minted 229; renumbered before merge. The counter lagged a SIXTH time — it read FU-214 while FU-215 was live; before that it read FU-209 while FU-210..212 were live — FU-200/FU-201 minted 2026-09-01 while it read 200; before that FU-190..194 / FU-183/FU-185. ⚠ 2026-09-07 was the OPPOSITE failure and is worth its own line: the counter was CORRECT at FU-223, and the author minted FU-224 anyway — having grepped `FU-[0-9]{3}` and matched this very line, reading the counter's own value as an existing entry. Caught in review, renumbered. Grep for a `**FU-NNN**` ITEM, never a bare id, and trust this line.). Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -272,16 +280,15 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired 2026-08-24
-      (meta LMDB wiped with the pve thin pool —
-      [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
-      + its addendum + the 2026-09-07 amendment answer both halves; mechanism and run numbers live
-      in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
-      three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
-      (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
-      2026-09-12** — garage-1 onto its own PM961. **Next:** CNPG replica-1 + required
-      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). Operator
-      intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** Fired 2026-08-24 (meta LMDB
+      wiped with the pve thin pool — [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md),
+      homelab#884). **ADR-114** + addendum + 2026-09-07 amendment answer both halves; mechanism and
+      numbers live in [`garage.md`](garage.md) and the [ledger](storage-ledger.md). Done: rf=3 across
+      three physical zones (09-07); the unattended rotation loop (09-09); garage-1 on its own PM961
+      (09-12); CNPG required zone anti-affinity (09-21, #1840/#1842, oracle-iac#900); CNPG replica-1
+      (09-21, #1843 — ledger §2026-09-21; stack clusters wait on a zone node label). **Next:** the
+      backup CronJob (ADR-114's logical-deletion class). Operator intent: metadata maintenance is
+      unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
@@ -330,7 +337,7 @@ six OVERSIZE items pointer-ized into
       **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
       plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
-      stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Relates FU-097, FU-136.
+      stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
@@ -415,14 +422,17 @@ six OVERSIZE items pointer-ized into
       where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
-- [ ] **FU-243** — **Control-plane endpoint = a Talos shared L2 VIP; first deliverable of the three-CP program
-      (ADR-133), AFTER the box program (operator ordering 2026-09-16).** Today `cluster_endpoint` is cp-01's
-      IP and every kubeconfig points at it. Steps: (a) the ip-plan ruling — an L2 VIP must sit in the CPs'
-      subnet and `docs/ip-plan.md` says no NEW VIPs in `.2–.49`, so a reserved address/sub-range
-      is a ruling, not an exception; (b) etcd snapshot; (c) the VIP on cp-01's machine config + `cluster_endpoint`
-      cutover (runtime apply, no pve maintenance); (d) kubeconfig/talosconfig/jail/box/loop endpoints. Then
-      the laptop (wk-metal-03) reinstall to maintenance, the nx-02 VM, both joins back to back — never rest at
-      two members; nx-02 is not CP-production-ready until its drives are in. Relates FU-235, FU-097.
+- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
+      order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
+      **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
+      wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
+      `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
+      STATE-partition wipe that §CP5 could not reach, cp-02's missing BGP neighbour, `mgmt-tf state`).
+      ⛔ The `cluster_endpoint` cutover is still reverted. **Next:** (a) flip `cluster_endpoint` to
+      the `.50` VIP — token-neutral now the issuer is pinned, and it does not restart the apiserver
+      (§CP4 phase 3) — then re-render the client configs or the jail and the box keep dialling `.51`
+      (FU-259); (b) `cp-upgrade` ×3, cp-01 still trails at v1.13.2. Relates FU-235, FU-258, FU-262.
+
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
@@ -451,16 +461,15 @@ six OVERSIZE items pointer-ized into
       drop the default exclude. Alternative if it never does: hard-code the id list (rejected
       2026-08-12 as a frozen catalog) or `ignore_changes` (loses the widening signal).
       `docs/cloudflare.md` gotcha 3 addendum. Relates FU-156, FU-157.
-- [ ] **FU-240** — **devbox version skew, box ↔ jail (2026-09-13):** the management box's devbox
-      (the NixOS closure's) rewrites `devbox.lock`'s `plugin_version` fields on every `devbox run`
-      (0.0.4→0.0.2, 0.0.5→0.0.4 in the apply clone), so the loops' clones are permanently dirty
-      and "one toolchain pin for the jail and the box" (ADR-129) is only true for the packages,
-      not the runner. Mitigated: `mgmt_clone`'s dirty check ignores the lock. **Next:** pin the
-      same devbox version on both sides (the closure's `devbox` package ↔ claude-jail's image) and
-      drop the exclusion. Relates ADR-129, FU-237.
-      **+2026-09-17: the JAIL's own devbox (0.18.1) does it too** (nodejs_22 0.0.5→0.0.4) and it
-      dirties the operator's SHARED working tree, where no exclusion exists — skip `git status`
-      and a session commits the downgrade. Reverted by hand.
+- [ ] **FU-240** — **devbox version skew rewrites `devbox.lock` (2026-09-13; root cause 09-20):**
+      `plugin_version` is baked per devbox RELEASE (nodejs 0.0.4 ≤0.18.1, 0.0.5 ≥0.18.2) and any
+      `devbox run` rewrites it, so disagreeing runners flip-flop the lock: the ARC image pinned
+      0.17.5 (it writes the committed lock), the jail's install-script LAUNCHER and the host float
+      (0.18.3, dirtying the SHARED tree), the box runs nixpkgs', agent-base rides upstream's image.
+      Mitigated: `mgmt_clone`'s dirty check ignores the lock. 09-20: converge on **0.18.3** — PR#1809
+      (ARC ARG + the lock) and claude-jail `ENV DEVBOX_USE_VERSION` (6f90815, live on rebuild).
+      **Next:** the box closure overrides `devbox` to it, then drop the exclusion; agent-base's base
+      tag. Upgrades = ONE change: ARC ARG + jail ENV + host + the lock. Relates ADR-129, FU-237.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
@@ -744,6 +753,16 @@ the block needs pruning, not more headings.
       mirrors) and nix (shared /nix). **Next:** vendor the used schema set into the repo (or bake a
       `-schema-location` cache into the warm ARC runner volume) so the lint is hermetic; grep
       showed no existing FU/ADR covers schema caching (FU-144 is the schema-BLIND-kinds half).
+- [ ] **FU-255** — **audit remaining floating-tag pulls through `mirror-docker-io`/`mirror-ghcr`
+      for the same live-revalidation exposure homelab#1739 found.** Neither mirror bounds its own
+      upstream fetch (no `REGISTRY_PROXY_*` timeout — ADR-091 update, 2026-09-20), and a *tag*
+      pull always revalidates live against the real upstream on every request (only digest pulls
+      are pure cache); measured blob-GET p99 spikes to 9–52s against a 0.2–0.9s baseline. Fixed
+      on the crossplane engine image + both composition function packages (#1779, #1796,
+      digest-pinned). **Next:** grep both mirrors' known consumers (ARC runner images, kata ride
+      base images, anything else pulling `docker.io/`/`ghcr.io/` by tag through either VIP) for
+      ones sitting on a bounded CI/render timeout the same way `publicroute-tf-validate` was —
+      those are the ones actually exposed, not every tag pull equally.
 - [ ] **FU-154** — **Closing a PR and opening a new one RESETS the anti-livelock bound.**
       `RED_ROUNDS_MAX=3` counts `Agent run stats` comments **per PR**; circles#19 consumed five
       rounds across PR#50 (2) + fresh #51 (1) after earlier rounds elsewhere. Same class as
@@ -1168,8 +1187,58 @@ the block needs pruning, not more headings.
       updater outage on its first hour); the per-TEMPLATE source (`argo_workflows_total_count`
       has no template label — a kube-state-metrics-style read of Workflow CRs or the exporter)
       stays the residue.
+- [ ] **FU-256** — **Worker rides share a namespace with the stack's prod workloads; should they
+      move into `<stack>-agents`?** FU-080 moved only the LOOP there; a fixer ride still runs in
+      the repo namespace (`NS="$PROJECT"`, `agents/agent-session.sh`), beside the database and
+      the writer-key Secret, separated by zero RBAC + the worker CNP. Operator raised it
+      2026-09-20 ("so any rules apply equally") and deferred it: a bigger rollout than oracle's
+      data-access need, which `fixer.egress.ownServices` answers in either topology. Everything
+      keyed on ns==repo moves with it (git-token scoping, TokenReview identity, per-repo egress
+      profile, scratch quota, `agent-read-app` bindings, tenancy labels). **Next:** a
+      `/design-agents` pass that inventories those surfaces and rules go/no-go — ADR-shaped.
+      Relates FU-080 (archived), FU-068 (archived), ADR-093.
+- [ ] **FU-257** — **The loop-ns `agent-loop-egress` CNP is monitor-only with no owner for its
+      enforce flip, and it is NOT clean.** Hard-coded `enableDefaultDeny.egress: false`; the
+      Composition comment cites Goal #1162, which closed 2026-09-14 and excluded the flip.
+      7-day DNS read (`hubble_dns_queries_total`, 2026-09-20) — would-drop from `*-agents`:
+      `agent-loop-eventsource-svc.agent-coordinator` (the `/coordinate` doorbell — oracle,
+      platform), `mcp.minutark.ee` (oracle-agents ~1k; a worker `extraFQDNs` entry the loop CNP
+      never receives), `cafe.github.com` (all four, unclassified — no worker ns queries it).
+      DNS-only: IP-direct flows unseen. **Next:** add the doorbell leg; decide whether
+      `extraFQDNs` render loop-side; classify `cafe.github.com` from a flow capture; make
+      enforce a per-stack dial; re-harvest, flip oracle first. Relates FU-020 (archived), #1056.
+- [ ] **FU-258** — **Cilium drops the `kubernetes` Service backend on an apiserver restart and does
+      not re-sync — POINTER.** Reproduced twice 2026-09-20: pods get `connection refused` to
+      `10.96.0.1:443` while the API is healthy and every node reads `Ready`; recovery is
+      `rollout restart ds/cilium`. Evidence, the survivor anomaly, prior art and the settling
+      experiment: [`docs/spikes/cilium-apiserver-restart-backend-loss.md`](spikes/cilium-apiserver-restart-backend-loss.md).
+      **PARKED (operator, 2026-09-20)** behind the **1.20.2** upgrade — 1.19.1 is a version we
+      should not run and reproducing costs an outage. Near-term guard DONE: `cp-upgrade` gates the
+      backend either side of the reboot (rolls `ds/cilium` only on a genuinely missing one, reading
+      shared as `devbox run maint cilium-check`); ⚠ every OTHER apiserver restart is still
+      unguarded — run it by hand. **Next:** the spike waits on Renovate/1.20.2. Relates FU-246, FU-253.
+- [ ] **FU-260** — **The Argo Workflows controller hot-loops and floods Loki when the apiserver
+      goes away (2026-09-20).** v4.0.7's `configmap_watcher` never re-establishes a closed watch:
+      it logs `invalid config map object received in config watcher` forever — 1.43M lines / 220 MB
+      in 2s (~110 MB/s at the pod, 1141m CPU), 96% of all Loki ingest. No self-recovery;
+      `kubectl -n argo rollout restart deploy/argo-workflows-workflow-controller` fixed it.
+      Workflows kept reconciling, so the damage is log volume + a burnt core. **Trigger CONFIRMED:
+      an apiserver restart** — this session's cp-01 applies (09:33/09:38/09:49/12:06/12:42; the live
+      container's `startedAt` is 12:42:48Z). Same trigger as FU-258, different victim. **Next:**
+      check upstream for a fix and bump the chart; decide whether a FAST strap belongs beside
+      `LokiNamespaceLogVolumeHigh` (~50 min to fire: `for: 30m` on a 30m rate window). Relates FU-258.
 
 ## Hardware & nodes
+
+- [ ] **FU-261** — **The BIOS PXE chainload was silently broken, and the role that serves it has
+      been failing for months.** `/srv/tftp/undionly.kpxe` was MISSING on the Matchbox LXC (only the
+      two UEFI binaries there), so a legacy PXE client got a filename it could not fetch and fell back
+      to disk — three reboots of `wk-metal-02` read as "PXE just doesn't take" (2026-09-20). Why nobody
+      saw it: `ansible/matchbox-ipxe-tftp.yml` ends with *Enable tftpd-hpa*, which `matchbox-proxydhcp`
+      MASKS (dnsmasq owns :69), so every run fails at the last task and the copy before it went
+      unverified. Re-running restored the file (74 KB, TFTP-served). **Next:** guard/drop the
+      tftpd-hpa tasks (the role header already says dnsmasq owns TFTP) + probe that all three boot
+      files are served — onboarding depends on it, nothing tests it. Relates FU-244.
 
 
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
@@ -1193,18 +1262,10 @@ the block needs pruning, not more headings.
       wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
       **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
       incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
-      unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
+      unset, kata intact where declared. **2026-09-21:** cp-01/cp-02 + wk-metal-04 (FU-265) on v1.13.10;
+      m70s + hp-01 wait on #1839 (drain before install). **Next:** the 7 metal config updates (in place) + the remaining
       metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
       metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
-- [ ] **FU-253** — **Every VM declares a GENERIC, STALE `install.image`.** Live on all five nocloud
-      VMs: `machine.install.image = ghcr.io/siderolabs/installer:v1.13.0` — wrong platform AND two
-      patches behind — because `tofu/talos.tf` sets no `install.image` for VMs (only `install.disk`),
-      so the provider's bundled default lands. Harmless today (a VM boots the nocloud DISK image, and
-      the metal nodes carry a correct factory URL), but it is a loaded gun for anything that upgrades
-      a node to its DECLARED image — the natural design, and exactly what an upgrade controller does
-      (tuppr's `syncNodeInstallImage`): it would ghost all five (ADR-014 as amended). **Next:** set
-      `install.image` from `data.talos_image_factory_urls.vm[...].urls.installer` in `talos.tf`'s
-      config patches, so declared == what the upgrade verb passes. Relates FU-076, FU-235, ADR-014.
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
       left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
       conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"
@@ -1220,9 +1281,9 @@ the block needs pruning, not more headings.
       designed verdict+staleness shape would not have caught it — the loop was alive and correctly
       saying no. Mechanism, the ratchet, and the status-vs-check-run trap:
       [`management-box.md`](management-box.md) §"A standing refusal is a THIRD verdict shape".
-      **Next:** the detector first — a residue-AGE metric, whose transport is the unbuilt decision
-      that section already names — then the apply. Today's 8 addresses are FU-246's 7 metal config
-      updates + the FU-235 `nx-01` taint. Relates FU-237, FU-097, FU-246, ADR-131.
+      **Next:** the detector first — a residue-AGE metric. Transport candidate with prior art (put
+      to the operator 2026-09-21, unanswered): scrape the box like the hypervisors (node_exporter +
+      textfile, a `pve-metrics` ScrapeConfig target) — no VIP decision needed. Relates FU-237, FU-097, ADR-131.
 - [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable
       and it wedges every reconcile report.** `pr-oracle-fleet-minutark` fails with
       `POST …/rum/site_info → 403 "Authentication error"` from Cloudflare (the cf-api-proxy
@@ -1248,8 +1309,9 @@ the block needs pruning, not more headings.
       **Next:** (a) runbook recipe — recreate = `apply -exclude=<every other VM> -exclude=talos_machine_configuration_apply.metal
       -exclude=kubernetes_node_taint.ephemeral`, then the fresh node's config via `tofu console` +
       `talosctl apply-config --insecure` (the `-replace` beside `-exclude` is ignored silently);
-      (b) `scripts/mgmt-tf.sh`: `apply` only from a plan file it produced (`plan -out` → `apply plan.bin`,
-      the apply loop's own shape), refuse ad-hoc `-target`/`-replace` applies. Relates FU-246, FU-235.
+      (b) LANDED 2026-09-21 (#1827): `apply` takes a plan id only; scope rides inside the plan, the
+      baseline stamp reads the plan's `.meta` (management-box.md §MB3). Still open: (a).
+      Relates FU-246, FU-235.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
       2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
@@ -1280,13 +1342,56 @@ the block needs pruning, not more headings.
 - [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
       true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
       (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
-      (nx-01 conflict; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3 after the
-      shared manager pruned the zone labels). (3) **install-time drift** (2026-09-16, nx-01): the machine
-      config applied in place, tofu plans clean, yet the node runs the plain schematic and EPHEMERAL on the
-      SATA disk — the runtime half landed, the install half never can. **Next:** the DIFF on the box's probe
-      — declared (machines.yaml + schematic ids) vs live (`talosctl get extensions`/`volumestatus`, labels,
-      taints), one gauge per node → alert; then labels+taints into the Talos machine config and the k8s
-      taint resource retired. It is ADR-132's reconciler diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
+      (nx-01; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3). (3) **install-time
+      drift** (2026-09-16, nx-01): config applied in place, tofu plans clean, yet the node runs the plain
+      schematic and EPHEMERAL on the SATA disk — the install half never can. (4) **ABSENT is the extreme
+      case**: wk-metal-02 declared, no Node object for ~12 h, nothing fired (2026-09-21, FU-243).
+      **Diff LANDED 2026-09-21** (#1828/#1831): box `check_nodes` + `TalosFleetVersionSplit`.
+      **Next:** a transport for the gauge (§MB2, FU-252), then labels/taints/`volumestatus` axes.
+      [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
+
+- [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
+      wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
+      beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
+      admission half, a seat `talosctl` read found flannel ([controlplane-ha.md §CP9](controlplane-ha.md)).
+      Not FU-235's drift: live matched git, git differed per CP. #1848 fixes this path; the belt
+      catches the next one. **Next:** alert on CP config divergence (the `cluster:` section's hash
+      per CP, via the box or an exporter), and/or on a `kube-system` DaemonSet/Deployment missing
+      from git. Detector-first: replay against 2026-09-21 05:50–16:20Z. Relates FU-235, FU-243, #1845.
+- [ ] **FU-262** — **`wk-metal-02` is a control plane wearing a worker's name.** One of the three
+      CPs since 2026-09-21 (ADR-133), still `wk-` in `kubectl get nodes`, etcd membership, BGP peer
+      lists and every dashboard. The convention is settled — [ADR-137](adr.md): CPs are `cp-NN`,
+      workers keep ad-hoc names — so the target name is **`cp-03`**.
+      **Why deferred:** the hostname is pinned at INSTALL (`HostnameConfig`, `metal.tf`, provider
+      #296); changing it on a running node ghosts it, and the rename drops etcd to two members
+      while it runs. It also touches machines.yaml, the dnsmasq reservation, `bgp_node_ips` and the
+      generated tables. **Next:** do it with the box's NEXT reinstall for any other reason, never
+      as its own outage. Relates FU-243.
+
+- [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master (POINTER).**
+      A stray talosconfig was pushed to this PUBLIC repo 2026-09-21 and removed 15 min later; no
+      CRL in Talos, so the identity is valid to **2027-05-29** (the CA private key did NOT leak).
+      Incident: [`incidents/2026-09-21-talosconfig-committed-to-public-master.md`](incidents/2026-09-21-talosconfig-committed-to-public-master.md).
+      Design, and the unsolved half — tofu state still holds the OLD bundle after a live rotation:
+      [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md) (#1830).
+      **Why deferred (operator, 2026-09-21):** finish the three-CP rollout and let it stabilise.
+      **Next:** probe the state-reconciliation candidates on the disposable control plane
+      (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
+
+- [ ] **FU-265** — **wk-metal-04's firmware writes a boot entry the Talos installer cannot parse.**
+      `Boot0008` "UEFI OS" (→ `\EFI\BOOT\BOOTX64.EFI`, firmware-created) carries 2 padding bytes after
+      the end-of-path node; the v1.13.10 installer's strict `UnmarshalDevicePath` fails "dangling bytes
+      at the end of device path: 0000" at the boot-entry step — AFTER it has set `LoaderEntryDefault`
+      to the new UKI. 2026-09-21: finished by a planned reboot (node now v1.13.10); upstream `main`
+      still strict. A read-only parse of every metal node's `Boot####` found only this one.
+      **Next:** every future `talosctl upgrade` of this box fails the same way — delete the entry in
+      firmware setup and see whether it comes back; upstream issue (public — operator's call). Relates FU-246.
+- [ ] **FU-267** — **cilium-agent runs at 80–87 % of its 512 Mi Guaranteed limit fleet-wide.**
+      `tofu/cilium.tf:91` requests = limits 512 Mi; 2026-09-21 reads 410–446 Mi on the busy nodes,
+      and `ContainerMemoryNearLimit` fired on hp-01 as the pve drain landed pods there. An OOM kill
+      of the agent is a node-networking blip. **Next:** raise the limit (or go Burstable — the
+      fleet-roles "request-tax" lever) after reading a week of `max_over_time` per node.
+
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 

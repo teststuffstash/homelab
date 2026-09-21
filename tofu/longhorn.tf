@@ -86,7 +86,7 @@ resource "kubernetes_labels" "longhorn_storage" {
 resource "kubernetes_labels" "node_zone" {
   for_each = {
     for n, z in local.machine_zones : n => z
-    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && n != "ci-runner-01"
+    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && !startswith(n, "ci-runner-") # the runner VMs are not k8s nodes
   }
   api_version = "v1"
   kind        = "Node"
@@ -389,6 +389,31 @@ resource "kubernetes_storage_class" "longhorn_local_xfs" {
   volume_binding_mode    = "WaitForFirstConsumer"
   parameters = {
     numberOfReplicas    = "1"
+    dataLocality        = "strict-local"
+    staleReplicaTimeout = "30"
+    fsType              = "xfs"
+  }
+  depends_on = [helm_release.longhorn]
+}
+
+# ---- Node-local std singles for CNPG (ADR-114: engines replicate, storage stores singles) ------
+# The Postgres sibling of longhorn-local-xfs: replica=1 + strict-local, but FENCED to the std tier.
+# longhorn-local-xfs has no diskSelector (the Garage pods' zone affinity is its fence), which would
+# let a CNPG volume land on m70s's untagged PM961 — the Garage zone's DEDICATED disk. Here the
+# fence is `std`, and the consumer's node affinity must name nodes that have a std disk: a pod
+# scheduled onto a diskless node (wk-01/wk-04 today) gets a volume that can never place. The
+# CNPG Clusters pin `topology.kubernetes.io/zone In [hp-01, m70s]` for exactly that reason —
+# grow the list when a std disk joins another untainted zone. Placement ruling + why r2 was
+# retired for Postgres: docs/storage-ledger.md §2026-09-21.
+resource "kubernetes_storage_class" "longhorn_local_std" {
+  metadata { name = "longhorn-local-std" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "WaitForFirstConsumer"
+  parameters = {
+    numberOfReplicas    = "1"
+    diskSelector        = "std"
     dataLocality        = "strict-local"
     staleReplicaTimeout = "30"
     fsType              = "xfs"

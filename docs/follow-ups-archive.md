@@ -10,6 +10,34 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-266** *(archived 2026-09-21)* — **Second CI runner VM — DONE.** `ci-runner-02` on nx-02
+  (`tofu/ci-runner.tf`, PR#1841, 192.168.2.66, VMID 9002), same labels as ci-runner-01; both slots
+  "Listening for Jobs" 13:42Z. A pve outage is no longer a CI outage. nx-02 got `snippets` on `local`.
+- **FU-263** *(archived 2026-09-21)* — **Nocloud VMs could not be version-bumped — CLOSED by the
+  rollout.** #1829 made the disk image a birth seed (ADR-138), #1836 declared the CPs v1.13.10
+  (applied: 0 replacements, 0 PKI), and `upgrade-behind cp` (#1837) moved cp-02 then cp-01 in place
+  on the box — etcd 3/3 throughout, cilium backend 13/13. Two defects the first real run found:
+  a pure CP has no Longhorn to wait for (#1838), and single-replica WARNs needed FORCE (#1839).
+
+- **FU-253** *(archived 2026-09-21)* — **VMs declared a generic, stale `install.image` — FIXED and applied.**
+  All six VMs carried the provider default `ghcr.io/siderolabs/installer:v1.13.0` (wrong platform —
+  it reinstalls a nocloud VM as `metal` and ghosts it). #1829 sets it from
+  `data.talos_image_factory_urls.vm[...]`, the URL the upgrade verb passes; applied 2026-09-21 in a
+  window, wk-03 first (boot time unchanged, image == declared), then the rest (apiservers kept their
+  start times, 0 restarts). Declared == passed == installed; ADR-138.
+
+- **FU-259** *(archived 2026-09-21)* — **`talos_cluster_kubeconfig` renders a stale endpoint and
+  `plan` never notices — FIXED and recovered the same day.** It captures the kubeconfig at create
+  time and never re-reads it, so the ADR-133 VIP cutover left every client dialling `.51` while
+  `plan` said `No changes`. Guards (#1825): a `check "kubeconfig_endpoint_current"` block that
+  warns on every plan while the captured host disagrees with `local.cluster_endpoint` — verified
+  firing on the live condition — and `client-configs.sh` refusing to write a mismatched kubeconfig
+  *before* it reaches the box. `replace_triggered_by` was rejected: the fix cannot be planned
+  unscoped, because the kubernetes/helm providers are configured FROM the resource. Recovery ran
+  the same morning — scoped plan read first (exactly one resource), applied, `tofu/kubeconfig` and
+  the box's copy now `https://192.168.2.50:6443`, 13 nodes Ready through it, full plan clean.
+  Mechanism and the recipe: [`controlplane-ha.md`](controlplane-ha.md) §CP8.
+
 - **FU-233** *(archived 2026-09-18)* — **Codeowner-gate trial week (ADR-128): re-read done, ruled.**
   Measurement: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md) §Re-read — 6
   freed-path-only machine PRs, 0 human touches, one real cost (worker PR#1700 archived FU-213 on a

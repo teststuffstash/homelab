@@ -88,7 +88,9 @@ spec:
                 # Longhorn engines on the same MX500 — coordinated the S3 writes; the node hit 9 %
                 # idle (system 37 %, iowait 19 %), the zone fell 12k blocks behind its own replica
                 # and dropped off the RPC mesh (GarageClusterFlapping). A preference, not a rule:
-                # if wk-metal-02 is full the job still runs, on the slower box.
+                # if the preferred laptop is full the job still runs, on the slower box.
+                # (Until 2026-09-20 the preferred box was wk-metal-02; it leaves the ride pool for
+                # control-plane duty — ADR-133 as amended — so this now resolves to wk-metal-03.)
                 preferredDuringSchedulingIgnoredDuringExecution:
                   - weight: 100
                     preference:

@@ -52,6 +52,8 @@ case_ remote-module     deny_patterns 'printf "module \"m\" { source = \"git::ht
 case_ data-external     deny_patterns 'printf "data \"external\" \"x\" {}\n" >> tofu/monitoring.tf'
 case_ data-http         deny_patterns 'printf "data \"http\" \"x\" {}\n" >> tofu/monitoring.tf'
 case_ provisioner       deny_patterns 'printf "  provisioner \"local-exec\" {}\n" >> tofu/monitoring.tf'
+# a StorageClass's storage_provisioner attribute is not a provisioner block (#1843 false positive)
+case_ storage-provisioner none        'printf "resource \"kubernetes_storage_class\" \"y\" {\n  storage_provisioner    = \"driver.longhorn.io\"\n}\n" >> tofu/monitoring.tf'
 case_ required-providers deny_patterns 'printf "terraform { required_providers { x = {} } }\n" >> tofu/monitoring.tf'
 case_ backend           deny_patterns 'printf "terraform { backend \"s3\" {} }\n" >> tofu/monitoring.tf'
 # a provider block outside providers.tf (probed 2026-09-16: passed) — endpoint + credential surface

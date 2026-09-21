@@ -172,6 +172,14 @@ jobs:
       - name: Sentinel engines smoke (devbox run sentinel-smoke)
         run: devbox run sentinel-smoke
 
+      # The maintenance-window gate decides whether a live change is safe to continue and whether
+      # a window may close, so a probe that fails OPEN is the worst bug it can have — and #1804's
+      # review found exactly that (a failed curl/kubectl printing `ok`) in a diff whose CI was
+      # green, because nothing here exercised the script at all. This pins the read-failure
+      # semantics with fake kubectl/gh and a dead Prometheus port — no cluster needed.
+      - name: Maintenance-window self-test (devbox run maint-self-test)
+        run: devbox run maint-self-test
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script

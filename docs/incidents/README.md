@@ -63,3 +63,7 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-09-03 | [pve thin pool 100% (FOURTH fill) — cp-01/wk-01/wk-02 paused on io-error, API down ~8 min; triggered by the runner-image pre-puller](2026-09-03-pve-thin-pool-fourth-fill-prepull.md) | FU-093, FU-207, FU-208 |
 | 2026-09-05 | [The updater red for 65h on a GraphQL node cap, the responder's triage dead for ≥7 days, the retro's cells dead on `set -u` — one belt fired, into a dead responder](2026-09-05-updater-node-cap-responder-dead-triage.md) | FU-227, FU-188 |
 | 2026-09-06 | [The switchboard OOMKilled 153 times in a row (doorbell-collapse listed the whole retained workflow history), and nothing alerted](2026-09-06-switchboard-oom-silent-failures.md) | FU-188, FU-219 |
+| 2026-09-09 | [A crossed smart plug cut hp-01 instead of the lamp — Longhorn degraded, Garage zone down](2026-09-09-crossed-plug-hp01-outage.md) | — |
+| 2026-09-16 | [Silent node reboots root-caused to a `page_table_check` kernel BUG (Talos < v1.13.4)](2026-09-16-page-table-check-reboots.md) | FU-246, FU-247 |
+| 2026-09-16 | [A targeted `tofu apply` for one node replaced three worker VMs](2026-09-16-targeted-apply-replaced-three-vms.md) | FU-248 |
+| 2026-09-21 | [A talosconfig (os:admin key) was committed to public master; the direct lane had no secret scan](2026-09-21-talosconfig-committed-to-public-master.md) | FU-264 |
