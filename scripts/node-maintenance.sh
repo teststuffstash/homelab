@@ -904,7 +904,7 @@ spec:
       command: [python3, -c]
       args:
         - |
-          import os, struct, fcntl, array, subprocess, sys
+          import os, re, struct, fcntl, array, subprocess, sys
           G = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
           if not os.path.isdir("/sys/firmware/efi"):
               print("no EFI firmware on this node - nothing to scrub"); sys.exit(0)
@@ -932,7 +932,10 @@ spec:
                   os.close(fd)
           bad = []
           for n in sorted(os.listdir("/efi")):
-              if not (n.startswith("Boot") and n.endswith(G) and len(n) == 9 + len(G)): continue
+              # Boot + EXACTLY 4 hex digits: BootNext/BootOrder/BootCurrent share the prefix, and
+              # BootNext even the length — its 2-byte payload would read as "too short" and a
+              # pending one-time boot override would be deleted (#1856 review).
+              if not re.fullmatch(r"Boot[0-9A-F]{4}-" + G, n): continue
               why = malformed(open("/efi/" + n, "rb").read())
               if why:
                   bad.append(n[4:8]); print("MALFORMED Boot%s: %s" % (n[4:8], why))
