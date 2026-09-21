@@ -1,9 +1,7 @@
-# Belts on the management box's apply loop (FU-252, docs/management-box.md §"A standing refusal is
-# a THIRD verdict shape"). The measured failure: `mgmt-apply` refused `main` from 2026-09-14 11:42Z
-# to 09-18, 2 → 8 addresses, 1101 correct ticks, nothing watching. A liveness belt stays GREEN
-# through that — the loop is alive and right to say no — so the primary belt is the AGE of the
-# oldest master commit the loop has not accounted for. Commits touching no apply root are stamped
-# on the next tick (≤5 min), so only a refusal or a failing loop lets that age grow.
+# Belts on the management box itself (FU-252's liveness half). The standing-refusal belt —
+# the AGE of the oldest unapplied residue, the 2026-09-14..18 failure — is `MgmtApplyResidueStanding`
+# in github-exporter, read from master's commit status. These cover the box-side blind spot: a
+# loop or box that has stopped posting leaves no status for it to read.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -14,25 +12,11 @@ spec:
   groups:
     - name: mgmt-apply
       rules:
-        # 24h: a refusal is a request for a human apply, and a seat session is at most a day away.
-        # Past that it is ratcheting — every later master commit to the root joins the same pending
-        # apply, and it gets less reviewable the longer it stands.
-        - alert: MgmtApplyResidueStale
-          expr: |
-            (time() - mgmt_apply_unapplied_oldest_timestamp_seconds) > 86400
-              and mgmt_apply_unapplied_oldest_timestamp_seconds > 0
-          for: 10m
-          labels: { severity: warning }
-          annotations:
-            summary: "Management box: master has waited {{ $value | humanizeDuration }}+ for an apply"
-            description: >-
-              The oldest master commit past the box's apply baseline is over a day old.
-              `mgmt_apply_refused` says whether it is a standing refusal (and
-              `mgmt_apply_refused_addresses` how many addresses it holds). A refusal waits for a human: read the `management-apply` commit STATUS on master's
-              head (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a status is not a
-              check-run), then `devbox run mgmt-tf -- plan` and apply by id. A full apply of
-              origin/master stamps the baseline and clears the refusal. Not refused? The loop is
-              failing before its verdict — the box journal: `journalctl -u mgmt-apply`.
+        # NO residue-age alert here: that belt already exists and has ONE home —
+        # `MgmtApplyResidueStanding` (argocd/resources/github-exporter/, cdf01961, 2026-09-18), read
+        # from master's commit status. The mgmt_apply_unapplied_* series below are data for it and
+        # for dashboards; the belts in this file cover what a status CANNOT show — a loop or box
+        # that has stopped posting at all (a dead loop leaves no status, so the exporter is silent).
         # The loop itself: ticks every 5 min, an apply may hold it up to 40 min.
         - alert: MgmtApplyLoopStale
           expr: |
@@ -57,8 +41,8 @@ spec:
             summary: "Management box is scraped but publishes no mgmt_apply_* metrics"
             description: >-
               node_exporter on the box answers, but the apply loop's textfile
-              (/var/lib/node-exporter-textfile/mgmt_apply.prom) is missing, so MgmtApplyResidueStale
-              and MgmtApplyLoopStale cannot fire. Check the dir exists and the loop has run since
+              (/var/lib/node-exporter-textfile/mgmt_apply.prom) is missing, so MgmtApplyLoopStale
+              cannot fire. Check the dir exists and the loop has run since
               the metric change landed (scripts/mgmt-apply.sh emit_metrics).
     - name: mgmt-node
       rules:
