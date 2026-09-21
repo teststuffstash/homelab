@@ -1392,15 +1392,6 @@ the block needs pruning, not more headings.
       **Next:** probe the state-reconciliation candidates on the disposable control plane
       (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
 
-- [ ] **FU-265** — **wk-metal-04's firmware re-writes a boot entry the Talos installer cannot parse.**
-      `Boot0008` "UEFI OS" (→ `\EFI\BOOT\BOOTX64.EFI`, same ESP as Talos's `Boot0000`) carries 2
-      bytes after the end-of-path node; the installer's strict `UnmarshalDevicePath` aborts on it.
-      **Probed 2026-09-21 18:17–18:37Z:** deleted via a privileged pod's own rw `efivarfs` →
-      a same-version `node-maintenance upgrade` PASSED (installer + kexec reboot); then ONE
-      firmware boot (`reboot --mode powercycle`) → the firmware RECREATED it, same 2 bytes, ahead of
-      0000 in BootOrder. Upgrades reboot by kexec, so a delete just before `talosctl upgrade` holds
-      for that upgrade. **Next:** that scrub as a pre-install step in `upgrade` (malformed entries
-      only); upstream issue (tolerant parse) is the operator's call. Relates FU-246.
 - [ ] **FU-267** — **cilium-agent runs at 80–87 % of its 512 Mi Guaranteed limit fleet-wide.**
       `tofu/cilium.tf:91` requests = limits 512 Mi; 2026-09-21 reads 410–446 Mi on the busy nodes,
       and `ContainerMemoryNearLimit` fired on hp-01 as the pve drain landed pods there. An OOM kill
