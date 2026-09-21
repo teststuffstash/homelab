@@ -73,6 +73,10 @@ data "talos_machine_configuration" "metal" {
     # The frozen SA issuer (ADR-136, talos.tf local.sa_issuer_patch) — every control plane must
     # carry the SAME issuer, so a metal CP gets it on exactly the same terms as the VM one.
     each.value.controlplane ? [local.sa_issuer_patch] : [],
+    # The cluster-scoped CP patch (talos.tf local.cp_cluster_patch: CNI none, kube-proxy off, the
+    # PodSecurity kata exemption, scheduler/controller-manager metrics binds). Missing here until
+    # homelab#1845 — wk-metal-02 deployed flannel fleet-wide and refused every kata ride.
+    each.value.controlplane ? [local.cp_cluster_patch] : [],
     # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }
