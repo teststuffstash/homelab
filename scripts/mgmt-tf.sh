@@ -146,11 +146,20 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
      echo "mgmt-tf: plan id $PLAN_ID   (scoped=$SCOPED)   apply it with: devbox run mgmt-tf -- apply $PLAN_ID" >&2
    fi
    # The stamp needs THREE things true, and the first two now come from the plan, not the apply:
-   # the plan was unscoped, it was taken from origin/master, and origin/master has not moved since.
+   # the plan was unscoped, it was taken from origin/master, and THAT COMMIT is still the tip.
+   # ⚠ The last one compares the PLAN sha, not HEAD: HEAD was just reset to $REF a few lines up,
+   # so `HEAD = origin/master` is trivially true and would stamp a commit whose diff was never
+   # applied — master moving from A to B between plan and apply (a config-only B, so tofu own
+   # state-serial staleness check never trips) would mark B reconciled and the apply loop would
+   # never revisit it: the FU-237/#1718 ratchet bug this stamp exists to prevent (review, #1827).
    if [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
-      && [ "${PLAN_REF:-}" = origin/master ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ]; then
-     mkdir -p /var/lib/mgmt/apply; git rev-parse HEAD >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
-     echo "mgmt-tf: apply loop baseline stamped at $SHA (refused-rev cleared)" >&2
+      && [ "${PLAN_REF:-}" = origin/master ] && [ -n "${PLAN_SHA:-}" ] \
+      && [ "$PLAN_SHA" = "$(git rev-parse origin/master)" ]; then
+     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
+     echo "mgmt-tf: apply loop baseline stamped at ${PLAN_SHA:0:8} (refused-rev cleared)" >&2
+   elif [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
+      && [ "${PLAN_REF:-}" = origin/master ]; then
+     echo "mgmt-tf: NOT stamping — this plan is ${PLAN_SHA:0:8}, master is now $(git rev-parse --short origin/master). Re-plan and apply that to advance the baseline." >&2
    fi
    exit $rc'
 exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
