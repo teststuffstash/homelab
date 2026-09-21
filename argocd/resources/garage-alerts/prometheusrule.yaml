@@ -129,6 +129,29 @@ spec:
               that shadowed multipart parts and stretched UploadPart p99 to 100 s on 2026-09-08
               without any sustained outage. Read the garage Loki tenant for which node id the
               peers cannot ping, then that node's disk latency (node_disk_write_time) and load.
+        # A ZONE is down: some partition has lost one of its three replicas. rf=3 across three
+        # physical zones at quorum 2 keeps serving (`cluster_available` stays 1), so every
+        # availability belt stays quiet — but the NEXT zone down takes those partitions to 1/3 and
+        # writes fail. `cluster_healthy` (every partition has ALL replicas up) is the exact
+        # predicate; `node-maintenance.sh` has gated windows on it since 2026-09-20, and on the
+        # 09-20/21 windows a zone sat down ~10 min with nothing firing. GarageClusterDegraded
+        # needs a 5m window fully failed for 10m, i.e. ≥15 min of outage. Replay 09-14..09-21: the
+        # 1-min blips (6) and the 4-5 min episodes stay quiet; the 2026-09-21 11:03–11:10Z run
+        # fires. A deliberate zone window silences it (node-maintenance.sh's Garage regex).
+        - alert: GarageZoneDegraded
+          expr: |
+            min(cluster_healthy) == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage is running with a zone down — one more zone loss stops writes"
+            description: >-
+              `cluster_healthy` has read 0 for 5m: at least one partition is missing a replica, so
+              Garage is on quorum (2 of 3 zones). Reads and writes still work; a second zone down
+              stops them. Which zone: `count by (role_zone) (cluster_layout_node_connected == 0)`,
+              or the garage pods not Ready (`kubectl -n garage get pods -o wide`). If a window is
+              open on that node, this is expected and the window should be silencing it. Do NOT
+              start another node window or a metadata rotation until it clears.
         # Deletions not propagating: a table's GC backlog. GC pushes each tombstone to EVERY
         # replica before deleting it, so an unreachable peer parks the whole queue — garage-2
         # climbed 133k → 1.77 M across the 2026-09-08 stall day and drained at ~130k/h once

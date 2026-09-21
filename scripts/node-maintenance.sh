@@ -239,7 +239,7 @@ silence_open() {
       {name:"instance", value:($ip+"(:[0-9]+)?"), isRegex:true,  isEqual:true},
       {name:"node",     value:$n,                 isRegex:false, isEqual:true}]')"
   if has_zone_volume; then
-    garage='Garage(ClusterDegraded|ClusterFlapping|PeerRpcTimeouts|QuorumMembersRestarted|AdminMetricsAbsent|TableEmpty|S3ServerErrors)'
+    garage='Garage(ZoneDegraded|ClusterDegraded|ClusterFlapping|PeerRpcTimeouts|QuorumMembersRestarted|AdminMetricsAbsent|TableEmpty|S3ServerErrors)'
     log "$NODE carries a strict-local zone volume — also silencing the Garage health alerts"
   fi
   local m
