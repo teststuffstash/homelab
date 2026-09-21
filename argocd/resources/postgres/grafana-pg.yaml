@@ -13,6 +13,11 @@ metadata:
   namespace: monitoring
 spec:
   instances: 2
+  # One instance per PHYSICAL box — zone = the chassis (the pve VMs all read `proxmox`), so a
+  # hypervisor outage never takes both. CNPG's default is `preferred` on hostname.
+  affinity:
+    podAntiAffinityType: required
+    topologyKey: topology.kubernetes.io/zone
   # FU-082: a BestEffort database is first in the OOM-kill order under node memory pressure.
   # Requests lift it to Burstable; the limit is headroom, not a tight cap (infisical-pg pattern).
   resources:
