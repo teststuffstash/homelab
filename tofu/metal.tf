@@ -70,13 +70,11 @@ data "talos_machine_configuration" "metal" {
     # The VM variant (local.cp_vip_patch) would leave a metal CP with no address at all — which is
     # what happened to wk-metal-02 on 2026-09-20 (docs/controlplane-ha.md §CP6).
     each.value.controlplane ? [local.cp_vip_patch_dhcp] : [],
-    # The frozen SA issuer (ADR-136, talos.tf local.sa_issuer_patch) — every control plane must
-    # carry the SAME issuer, so a metal CP gets it on exactly the same terms as the VM one.
-    each.value.controlplane ? [local.sa_issuer_patch] : [],
-    # The cluster-scoped CP patch (talos.tf local.cp_cluster_patch: CNI none, kube-proxy off, the
-    # PodSecurity kata exemption, scheduler/controller-manager metrics binds). Missing here until
-    # homelab#1845 — wk-metal-02 deployed flannel fleet-wide and refused every kata ride.
-    each.value.controlplane ? [local.cp_cluster_patch] : [],
+    # The patches every control plane carries on the same terms as the VMs (talos.tf
+    # local.cp_common_patches: the frozen SA issuer, ADR-136, and the cluster-scoped patch — CNI
+    # none, kube-proxy off, the PodSecurity kata exemption). One shared list since homelab#1845,
+    # when the cluster patch existed for VMs only and wk-metal-02 deployed flannel fleet-wide.
+    each.value.controlplane ? local.cp_common_patches : [],
     # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }

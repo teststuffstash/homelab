@@ -78,6 +78,12 @@ locals {
     }
   })
 
+  # Every control plane carries these — VM (below) and metal (metal.tf) consume this ONE list, so a
+  # new CP patch cannot reach one config and not the other (homelab#1845: the cluster patch lived
+  # inline in the VM config only, and the metal CP ran without it). The VIP patch stays out: it
+  # has a per-platform variant (cp_vip_patch vs cp_vip_patch_dhcp).
+  cp_common_patches = [local.sa_issuer_patch, local.cp_cluster_patch]
+
   # ADR-133's control-plane endpoint VIP (local.cp_vip, ruled in docs/ip-plan.md). Carried by
   # EVERY control plane — VM (below) and metal (metal.tf) alike — because a Talos shared VIP is
   # elected through etcd: the CP that wins the campaign puts the address on its own NIC and
@@ -267,10 +273,8 @@ data "talos_machine_configuration" "node" {
     })] : [],
     # The endpoint VIP — control planes only (see local.cp_vip_patch).
     each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
-    # The frozen SA issuer — control planes only (see local.sa_issuer_patch).
-    each.value.role == "controlplane" ? [local.sa_issuer_patch] : [],
-    # The cluster-scoped CP patch (local.cp_cluster_patch) — control planes only.
-    each.value.role == "controlplane" ? [local.cp_cluster_patch] : []
+    # The patches EVERY control plane carries, VM and metal alike (local.cp_common_patches).
+    each.value.role == "controlplane" ? local.cp_common_patches : []
   )
 }
 
