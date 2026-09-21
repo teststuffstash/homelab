@@ -92,9 +92,21 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     type = "l26"
   }
 
-  # Static IP handed to Talos via the nocloud datasource — same as the pve nodes. ⚠ Never
-  # `talosctl upgrade` one of these: the reboot loses the nocloud IP/hostname and the node
-  # rejoins as a ghost. Bake extensions into the image and recreate.
+  # ⚠ THE DISK IMAGE IS A BIRTH SEED, NOT A DECLARATION OF WHAT THE NODE RUNS (ADR-138, FU-263).
+  # Same reasoning as the pve nodes — the long version is in proxmox.tf. `file_id` names the image
+  # this disk was CLONED FROM; the running substrate is declared by `machine.install.image`
+  # (talos.tf) and moved in place by the upgrade verb. `plan` no longer sees a schematic change
+  # here either; `mgmt_node_drift{axis="schematic"}` does (FU-235).
+  lifecycle {
+    ignore_changes = [disk[0].file_id]
+  }
+
+  # Static IP handed to Talos via the nocloud datasource — same as the pve nodes. ⚠ `talosctl
+  # upgrade` one of these ONLY with the platform-correct installer: the generic
+  # ghcr.io/siderolabs/installer reinstalls it as `platform: metal`, the nocloud datasource is
+  # never read again, and the node rejoins as a DHCP-addressed ghost. With the matching
+  # nocloud-installer URL it upgrades in place, IP and hostname intact (ADR-014 as amended
+  # 2026-09-18; `devbox run node-maintenance order` picks the image for you).
   initialization {
     datastore_id = var.nx02_datastore_vms
 
