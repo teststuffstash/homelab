@@ -280,19 +280,15 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired 2026-08-24
-      (meta LMDB wiped with the pve thin pool —
-      [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
-      + its addendum + the 2026-09-07 amendment answer both halves; mechanism and run numbers live
-      in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
-      three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
-      (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
-      2026-09-12** — garage-1 onto its own PM961; **CNPG required zone anti-affinity, 2026-09-21**
-      (#1840 platform three, oracle-iac#900, card #1842); **CNPG replica-1, 2026-09-21** (#1843 —
-      platform three on `longhorn-local-std`, zones [hp-01, m70s]; ledger §2026-09-21; stack
-      clusters wait on a node label for the zone list). **Next:** the backup CronJob (ADR-114's
-      logical-deletion class). Operator
-      intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** Fired 2026-08-24 (meta LMDB
+      wiped with the pve thin pool — [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md),
+      homelab#884). **ADR-114** + addendum + 2026-09-07 amendment answer both halves; mechanism and
+      numbers live in [`garage.md`](garage.md) and the [ledger](storage-ledger.md). Done: rf=3 across
+      three physical zones (09-07); the unattended rotation loop (09-09); garage-1 on its own PM961
+      (09-12); CNPG required zone anti-affinity (09-21, #1840/#1842, oracle-iac#900); CNPG replica-1
+      (09-21, #1843 — ledger §2026-09-21; stack clusters wait on a zone node label). **Next:** the
+      backup CronJob (ADR-114's logical-deletion class). Operator intent: metadata maintenance is
+      unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
