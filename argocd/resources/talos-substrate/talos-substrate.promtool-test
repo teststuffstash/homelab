@@ -51,7 +51,7 @@ tests:
               severity: warning
               os_image: "Talos (v1.13.2)"
             exp_annotations:
-              summary: "5 node(s) still on Talos (v1.13.2) a day after the fleet moved on"
+              summary: "5 node(s) have run Talos (v1.13.2) for 24 h while the rest of the fleet is on another version"
 
   # ── a fleet on ONE version never fires, however long it runs. This is the state the rule wants
   #    the fleet to be in, and the reason the expr is a version-count and not a per-node compare.

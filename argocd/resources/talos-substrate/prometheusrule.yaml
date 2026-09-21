@@ -40,10 +40,12 @@ spec:
           for: 24h
           labels: { severity: warning }
           annotations:
-            summary: "{{ $value }} node(s) still on {{ $labels.os_image }} a day after the fleet moved on"
+            summary: "{{ $value }} node(s) have run {{ $labels.os_image }} for 24 h while the rest of the fleet is on another version"
             description: >-
-              The fleet has run more than one Talos version for 24 h. That is a rollout nobody
-              finished, not a rollout in progress: the declared version is in git and the per-node
-              diff is `devbox run mgmt-probe` on the management box (mgmt_node_drift). Recipe:
-              docs/provisioning.md §"Upgrading a node's Talos" — metal and nocloud VMs both upgrade
-              in place with the platform-correct installer, control planes via `devbox run cp-upgrade`.
+              More than one Talos version has been running in the fleet for 24 h. This is the
+              symptom only: it can be a rollout still in flight, a rollout parked on a blocker, or
+              a node that came back on an image nobody declared. What says which — the per-node
+              declared-vs-live diff on the management box (`devbox run mgmt-probe`, the
+              `mgmt_node_drift` series) and whichever tracker item owns the rollout. Upgrade
+              recipe: docs/provisioning.md §"Upgrading a node's Talos" (control planes via
+              `devbox run cp-upgrade`).

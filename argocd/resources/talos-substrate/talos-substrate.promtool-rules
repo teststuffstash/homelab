@@ -12,4 +12,4 @@ groups:
         for: 24h
         labels: { severity: warning }
         annotations:
-          summary: "{{ $value }} node(s) still on {{ $labels.os_image }} a day after the fleet moved on"
+          summary: "{{ $value }} node(s) have run {{ $labels.os_image }} for 24 h while the rest of the fleet is on another version"
