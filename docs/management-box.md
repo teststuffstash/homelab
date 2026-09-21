@@ -195,9 +195,10 @@ So the metric the loop actually needs is **age of the oldest unapplied residue**
 count), not liveness. **Transport, ruled 2026-09-21 (operator): the hypervisors' pattern** — the
 box runs node_exporter with the textfile collector (`nixos/hosts/mgmt/default.nix`, 9100 open to
 the LAN only), `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus
-scrapes it as the static job `mgmt-node`. Belts in `argocd/resources/mgmt-metrics/`:
-`MgmtApplyResidueStale` (oldest unapplied master commit > 24 h — the 09-14..18 shape, pinned in
-the fixture), `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`.
+scrapes it as the static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`**
+(github-exporter, from master's commit status, since 2026-09-18). The box-side belts in
+`argocd/resources/mgmt-metrics/` cover what a status cannot show — a loop or box that stopped
+posting: `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`.
 
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 

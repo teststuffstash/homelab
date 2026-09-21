@@ -10,10 +10,10 @@ evaluation_interval: 1m
 
 tests:
   # ── THE 2026-09-14..18 SHAPE: alive, correct, and saying no for days ──────────────────────────
-  # The loop ticks fine (last_ok_tick advances), the refusal stands, the oldest unapplied commit
-  # never moves. Liveness stays green; the residue age crosses a day and fires.
+  # The residue-age alert is github-exporter's (MgmtApplyResidueStanding); here the point is the
+  # converse — a loop that is alive and refusing must NOT trip any box-side liveness belt.
   - interval: 5m
-    name: "a standing refusal fires once the oldest unapplied commit is a day old"
+    name: "a standing refusal with a live loop trips none of the box-side belts"
     input_series:
       - series: 'mgmt_apply_unapplied_oldest_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
         values: "60x340"
@@ -24,13 +24,6 @@ tests:
       - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
         values: "1x340"
     alert_rule_test:
-      - eval_time: 23h
-        alertname: MgmtApplyResidueStale
-        exp_alerts: []
-      - eval_time: 25h
-        alertname: MgmtApplyResidueStale
-        exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
       - eval_time: 25h
         alertname: MgmtApplyLoopStale
         exp_alerts: []
@@ -39,19 +32,6 @@ tests:
         exp_alerts: []
       - eval_time: 25h
         alertname: MgmtBoxDown
-        exp_alerts: []
-
-  # ── the healthy shape: nothing pending (0), or a commit waiting one tick ───────────────────────
-  - interval: 5m
-    name: "no residue, or a residue stamped within minutes, stays quiet"
-    input_series:
-      - series: 'mgmt_apply_unapplied_oldest_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
-        values: "0x100 90000 0x100"
-      - series: 'mgmt_apply_last_ok_tick_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
-        values: "0+300x201"
-    alert_rule_test:
-      - eval_time: 16h
-        alertname: MgmtApplyResidueStale
         exp_alerts: []
 
   # ── the loop stops completing ticks ────────────────────────────────────────────────────────────

@@ -7,13 +7,6 @@
 groups:
   - name: mgmt-apply
     rules:
-      - alert: MgmtApplyResidueStale
-        expr: |
-          (time() - mgmt_apply_unapplied_oldest_timestamp_seconds) > 86400
-            and mgmt_apply_unapplied_oldest_timestamp_seconds > 0
-        for: 10m
-        labels:
-          severity: warning
       - alert: MgmtApplyLoopStale
         expr: |
           (time() - mgmt_apply_last_ok_tick_timestamp_seconds) > 3600
