@@ -1,6 +1,6 @@
 # Spike — Flux tofu-controller as the [management box](../management-box.md)'s controller substrate
 
-**Tracked by:** FU-242. **Status:** RUN 2026-09-21. **Verdict: NO. Keep the hand-rolled loops** (§Verdict
+**Record:** FU-242 (archived 2026-09-21). **Status:** RUN 2026-09-21. **Verdict: NO. Keep the hand-rolled loops** (§Verdict
 below). Adopting it, or retiring the spike, is the operator's call. Written 2026-09-16 from the design sitting that produced
 ADR-132; design: [`management-box.md`](../management-box.md) §MB4. **Nothing runs on the box during this spike** — the box is the recovery root and a spike is the
 thing not yet trusted. **Where:** a throwaway VM, created by hand and deleted after; plain k3s +

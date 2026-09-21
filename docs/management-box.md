@@ -400,7 +400,7 @@ a resource stays allowed), with both cases in `mgmt-policy-test`.
 
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
-**Tracked by:** FU-235 (the diff), FU-242 (the substrate spike), FU-244 (flags out of git). The ArgoCD model
+**Tracked by:** FU-235 (the diff), FU-244 (flags out of git). The ArgoCD model
 applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers, in build order.
 
 1. **The diff.** `talos_machine_configuration_apply` records *delivery*; Talos honours install-time fields
@@ -477,7 +477,7 @@ any sync of the reinstall class.
    addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
    BMC network through the node's routing.
 
-**The substrate is undecided until FU-242 reports.** The candidate: a single-node k3s from the NixOS module —
+**The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
 no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
 source controller + tofu-controller as the reconcile engine, the whole thing a **Nix closure**: images as
 `dockerTools.pullImage` digests, manifests as files (`services.k3s.images` / `manifests` — verify in the

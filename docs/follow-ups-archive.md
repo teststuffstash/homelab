@@ -10,6 +10,11 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-242** *(archived 2026-09-21)* — **Spike: tofu-controller as the box's substrate — NO, keep
+  hand-rolling.** Run on throwaway VM 9420 on nx-02 (deleted). Fails Q1 (runner tofu 1.12.1 vs pin,
+  `upgradeOnInit` ignores the lock), Q2 (`backendConfig.disable` breaks saved plans), Q3 (in-repo
+  `approvePlan` re-plans forever), Q5 (unreachable provider silent 36+ min). Idle RSS ~1.4 GiB. Side
+  finding: a loopback-bound k3s API breaks in-cluster clients (§MB4 layer 7). #1862, spike doc §Verdict.
 - **FU-265** *(archived 2026-09-21)* — **wk-metal-04's unparseable firmware boot entry: handled by
   `upgrade`.** The firmware re-writes `Boot0008` "UEFI OS" with 2 bytes after its end node on every
   firmware boot; upgrades reboot by kexec, so `node-maintenance upgrade` now runs `efi-scrub` between

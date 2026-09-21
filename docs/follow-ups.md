@@ -413,15 +413,6 @@ six OVERSIZE items pointer-ized into
       guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
       second seed at the first reason to distinguish them; until then the DR step is written down
       in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
-- [ ] **FU-242** — **Spike: Flux tofu-controller as the box's controller substrate — on a throwaway pve VM,
-      never on the box** (ADR-132 leaves the substrate undecided). Single-node k3s + Flux + tofu-controller
-      against the two READ-ONLY roots (`github`, `cloudflare` — FU-238's plan-only shape). Five questions,
-      kill-order: (1) drives OUR pinned OpenTofu + provider mirror, or its runner image dictates versions
-      (FU-240's shape); (2) runs our roots as-is (`-state=` local file, `TF_ENCRYPTION`, per-root creds
-      from Secrets); (3) the `approvePlan` flow — a human plan as a commit on master; (4) drift-only mode +
-      where plan text lives + what surfaces as status; (5) failure legibility (unreachable provider, stuck
-      lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
-      [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
       order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
       **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
@@ -1361,7 +1352,11 @@ the block needs pruning, not more headings.
       schematic and EPHEMERAL on the SATA disk — the install half never can. (4) **ABSENT is the extreme
       case**: wk-metal-02 declared, no Node object for ~12 h, nothing fired (2026-09-21, FU-243).
       **Diff LANDED 2026-09-21** (#1828/#1831): box `check_nodes` + `TalosFleetVersionSplit`.
-      **Next:** a transport for the gauge (§MB2, FU-252), then labels/taints/`volumestatus` axes.
+      **Axes + transport LANDED 2026-09-21** (#1859/#1861): `mgmt_node_drift{node,axis}` over
+      reachable/version/schematic/registered/labels/taints/ephemeral_disk via the box's textfile;
+      `MgmtNodeMissing`/`LiveStateDrift`/`InstallDrift`/`MgmtBelt*` — all 91 series 0 at landing.
+      Pre-merge impact line LANDED (#1858). (2) stands (home = `machine.nodeTaints`), detected not
+      fixed. **Next:** the `install_disk` axis; §MB4 layers 3–5 (`reconcile:`) in flight.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
