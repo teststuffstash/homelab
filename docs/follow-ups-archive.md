@@ -10,6 +10,18 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-259** *(archived 2026-09-21)* — **`talos_cluster_kubeconfig` renders a stale endpoint and
+  `plan` never notices — FIXED and recovered the same day.** It captures the kubeconfig at create
+  time and never re-reads it, so the ADR-133 VIP cutover left every client dialling `.51` while
+  `plan` said `No changes`. Guards (#1825): a `check "kubeconfig_endpoint_current"` block that
+  warns on every plan while the captured host disagrees with `local.cluster_endpoint` — verified
+  firing on the live condition — and `client-configs.sh` refusing to write a mismatched kubeconfig
+  *before* it reaches the box. `replace_triggered_by` was rejected: the fix cannot be planned
+  unscoped, because the kubernetes/helm providers are configured FROM the resource. Recovery ran
+  the same morning — scoped plan read first (exactly one resource), applied, `tofu/kubeconfig` and
+  the box's copy now `https://192.168.2.50:6443`, 13 nodes Ready through it, full plan clean.
+  Mechanism and the recipe: [`controlplane-ha.md`](controlplane-ha.md) §CP8.
+
 - **FU-233** *(archived 2026-09-18)* — **Codeowner-gate trial week (ADR-128): re-read done, ruled.**
   Measurement: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md) §Re-read — 6
   freed-path-only machine PRs, 0 human touches, one real cost (worker PR#1700 archived FU-213 on a
