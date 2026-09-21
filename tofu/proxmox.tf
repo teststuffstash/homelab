@@ -25,8 +25,11 @@ resource "proxmox_virtual_environment_vm" "node" {
   disk {
     datastore_id = var.datastore_vms
     # The image follows two axes (image.tf `local.vm_image_key`): the `longhorn` flag picks the
-    # schematic (mount OR serve, see variables.tf), the role picks the Talos version. Flipping
-    # either on a live VM changes file_id, i.e. plans a REPLACE of the node, not an in-place edit.
+    # schematic (mount OR serve, see variables.tf), the role picks the Talos version. ⚠ Flipping
+    # either on a live VM NO LONGER plans anything — `file_id` is ignored below (ADR-138), because
+    # it is a birth seed. A version change is delivered by the upgrade verb; a SCHEMATIC change is
+    # seen only by `mgmt_node_drift{axis="schematic"}` (FU-235) and rebuilt by a planned `-replace`
+    # that you read first.
     file_id     = proxmox_download_file.talos[local.vm_image_key[each.key]].id
     interface   = "scsi0"
     size        = each.value.disk_gb

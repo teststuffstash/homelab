@@ -188,6 +188,10 @@ metal, provided the installer matches (platform, schematic, version); never the 
 a schematic the node does not declare** (a plain-schematic upgrade stripped iscsi-tools from a
 `longhorn = true` VM the same day). Extension changes still recreate — the image is the declaration.
 Recipe: [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. Relates FU-076, FU-253.
+**For VMs, that last sentence is superseded by [ADR-138](#adr-138--a-vms-disk-image-is-a-birth-seed-the-running-substrate-is-installimage-moved-in-place-2026-09-21)**
+(2026-09-21): the disk image is a birth seed with `ignore_changes`, so an extension change plans
+nothing at all — it is delivered by the same in-place upgrade (a schematic is one of the three axes
+the installer must match), and a deliberate rebuild is a planned `-replace`. Metal is unchanged.
 
 ---
 
