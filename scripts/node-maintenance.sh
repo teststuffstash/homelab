@@ -12,15 +12,24 @@
 #                                                        (settle also SILENCES the node's alerts in
 #                                                         Alertmanager; `up` expires the silence)
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
-#   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → settle → talosctl upgrade → wait
-#                                                        Ready + Longhorn healthy → VERIFY version
-#                                                        AND schematic against the declaration
+#   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → floors → settle → DRAIN → talosctl
+#                                                        upgrade → wait Ready + Longhorn healthy →
+#                                                        VERIFY version AND schematic against the declaration
 #
-# `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl already cordons, drains
-# (client-side, respecting PodDisruptionBudgets — probed 2026-09-18), installs, reboots, rejoins
-# and uncordons. What this adds is everything talosctl does not know about — the Longhorn
+# `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl installs, reboots, rejoins and
+# uncordons. What this adds is everything talosctl does not know about — the Longhorn
 # last-replica move, the fleet floor, WIP 1, the FU-033 gate, and the post-check that the node
-# came back running the schematic it declares. The target image is READ FROM THE DECLARATION
+# came back running the schematic it declares.
+#
+# The DRAIN runs HERE, before talosctl, not inside it: `talosctl upgrade` installs FIRST and drains
+# second, so an eviction that never completes leaves a node whose boot default already points at
+# the new image, not rebooted, cordoned (2026-09-21). Draining first means nothing touches the disk
+# until the node is empty; a blocked drain uncordons and stops with the node exactly as it was.
+# The drain is also the ONLY service-aware step, and it knows no service: each workload's own
+# PodDisruptionBudget + controller decides when it may leave (CNPG switches a primary over ahead of
+# the drain, Longhorn releases its instance-manager once the volumes are safe, Garage is gated by
+# zone). A workload that cannot be drained is that workload's contract to fix — the drain's
+# timeout names it; this script never learns its name. The target image is READ FROM THE DECLARATION
 # (`tofu output node_install_targets`), never typed: it must match on three axes — platform,
 # schematic, version — or the node loses its identity (ADR-014, amended) or its extensions.
 #
@@ -52,7 +61,8 @@
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
 #         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
 #
-# What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
+# What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one; `upgrade` does not
+# need it: there the WARNs are informational, because the drain is the gate):
 #   FAIL  node missing / not Ready / Talos API unreachable
 #   FAIL  an ATTACHED Longhorn volume's only running replica is on this node (the drain would
 #         block on Longhorn's instance-manager PDB) — `settle` waits it out or moves it, see below
@@ -836,6 +846,27 @@ verify_installed() {
   [ "$got_v" = "$want_v" ] && [ "$got_s" = "$want_s" ]
 }
 
+# The drain, as its own bounded step (see the header). A blocked drain undoes only what it did —
+# the cordon and the window — and names what refused, because nothing was written to the node yet.
+drain_for_upgrade() {
+  log "drain $NODE (≤$DRAIN_TIMEOUT, PDB-respecting) BEFORE the install — each workload's controller decides when it leaves"
+  # --force: the finished bare ride pods settle waited on (same reasoning as `down`).
+  if kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT" >/dev/null; then
+    ok "$NODE drained"; return 0
+  fi
+  local left
+  left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json \
+          | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name)"')" \
+    || left="(could not list them)"
+  fail "drain of $NODE did not complete within $DRAIN_TIMEOUT — nothing was installed; still on the node:"
+  printf '%s\n' "$left" | sed '/^$/d;s/^/         /'
+  fail "  a pod that will not leave is ITS workload's disruption contract (PDB + controller), not this script's."
+  log "uncordon $NODE and close the window — the node is exactly as it was"
+  kubectl uncordon "$NODE" >/dev/null || fail "uncordon $NODE failed — do it by hand"
+  silence_close; declare_close
+  return 1
+}
+
 upgrade() {
   load_targets || return 2
   local image version schematic class
@@ -872,26 +903,38 @@ upgrade() {
     host_up "$(node_ip)" || { fail "lab node's Talos API is unreachable"; return 2; }
     ok "isolated lab node Ready; production workload/storage gates do not apply"
   else
-    preflight || rc=$?
-    [ "$rc" = 2 ] && [ "$FORCE" != 1 ] && { fail "preflight refused"; return 2; }
-    assert_wip1   || [ "$FORCE" = 1 ] || return 2
-    assert_fleet_floor || [ "$FORCE" = 1 ] || return 2
-    assert_cnpg_floor  || [ "$FORCE" = 1 ] || return 2
+    # WARNs are INFORMATIONAL here (single-replica Deployments, StatefulSets, pinned zone volumes):
+    # the drain below is the gate for all of them and fails closed. So preflight runs with its WARN
+    # class accepted, and only a FAIL (node unhealthy, a volume already degraded) refuses. Before
+    # this, an unattended run needed FORCE=1 for any storage node — and FORCE also waved through the
+    # floors below, the one thing an unattended run must never skip (2026-09-21).
+    FORCE=1 preflight || rc=$?
+    [ "$rc" = 2 ] && { fail "preflight refused (a FAIL — WARNs do not block an upgrade)"; return 2; }
+    # The fleet floors are NOT FORCE-able: they are what stops a second node (a second Garage zone,
+    # a second CNPG instance) going down before the first is whole again.
+    assert_wip1        || return 2
+    assert_fleet_floor || return 2
+    assert_cnpg_floor  || return 2
   fi
-  # NOT FORCE-able, deliberately: a downgrade is impossible, a skipped minor is untested config
-  # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot". FORCE exists for
-  # preflight's WARN class and the two operational gates above, not for these.
+  # NOT FORCE-able either: a downgrade is impossible, a skipped minor is untested config
+  # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot".
   if [ -n "$version" ]; then assert_upgrade_sane "$version" || return 2; fi
 
   if [ "${LAB:-0}" != 1 ]; then settle || return $?; fi
   [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }
 
   silence_open; declare_open
-  log "talosctl upgrade $NODE ($(node_ip)) — talosctl does the cordon+drain (PDB-respecting) and the reboot"
+  if [ "${LAB:-0}" != 1 ]; then drain_for_upgrade || return 1; fi
+  log "talosctl upgrade $NODE ($(node_ip)) — the node is drained; talosctl installs and reboots"
   if ! talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" \
         upgrade --image "$image" --drain-timeout="$UPGRADE_DRAIN_TIMEOUT"; then
-    fail "talosctl upgrade returned non-zero — a blocked drain fails CLOSED (the node did NOT reboot)."
-    fail "  check what refused eviction, clear it (settle / move), and re-run. Window left OPEN."
+    # The drain already completed, so this is the INSTALLER (or talosctl's own step) failing.
+    # The installer can get far enough to switch the boot default before it dies — 2026-09-21,
+    # wk-metal-04: LoaderEntryDefault -> v1.13.10, then "failed to create boot entry" — so the node
+    # is NOT rebooted but its NEXT reboot may boot the new image. Left cordoned, window OPEN.
+    fail "talosctl upgrade returned non-zero AFTER a completed drain — the installer failed (output above)."
+    fail "  $NODE did NOT reboot, but its boot default MAY already point at the new image: an unplanned"
+    fail "  reboot could finish this upgrade. Node left cordoned, window left OPEN — read the installer error."
     return 1
   fi
   log "waiting for Ready (≤${READY_TIMEOUT}s)"

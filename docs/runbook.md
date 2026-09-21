@@ -294,7 +294,9 @@ long-lived pod holds (StatefulSet/Deployment: `numberOfReplicas`+1 → rebuild e
 the local replica → restore the count; `DRY=1` reports instead of acting). `down` runs it before
 the drain, so a drain is never left to block on Longhorn's PDB (operator direction 2026-09-09);
 no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
-and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
+and single-replica Deployments are WARNs (`FORCE=1` accepts them). `upgrade` needs no `FORCE`: it drains BEFORE the install
+(each workload's PDB + controller decides when it leaves — CNPG switches its primary over), so the
+WARNs are informational there, and the fleet floors are never forceable. `down` runs preflight, cordons,
 drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
 NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-dhcp.py`), waits
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
