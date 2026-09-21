@@ -44,7 +44,9 @@ Gotchas:
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
   diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an
-  unscoped plan taken from `origin/master` stamps the baseline. [`management-box.md`](management-box.md) §MB3.
+  unscoped plan taken from `origin/master` stamps the baseline. **Every state write is snapshotted**
+  on the box and pulled into the wallet cache after an apply; `devbox run mgmt-state-pull` at session
+  wind-down catches the rest ([`tofu-state.md`](tofu-state.md) §Snapshots — restore recipe there). [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail

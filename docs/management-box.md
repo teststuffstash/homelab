@@ -481,6 +481,9 @@ this section.
   and a reinstall that regenerates it silently breaks the jail's `known_hosts`. So `--extra-files`
   is not optional. The push path pins the box's host key from that same wallet entry instead of
   trusting on first use.
+- **`/var/lib/mgmt/state/` is DATA, and a reinstall wipes it.** The main root's state lives
+  nowhere else — so a reinstall restores it from a snapshot before anything plans:
+  [`tofu-state.md`](tofu-state.md) §Snapshots (the mechanism, both copies, the restore recipe).
 - **A version bump never touches a secret.** `nixos-rebuild test|boot` rebuilds the closure from
   git and leaves `/etc/ssh`, `/var/lib/mgmt` and `/root` alone; only a *reinstall* re-provisions
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential

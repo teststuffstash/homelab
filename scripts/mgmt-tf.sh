@@ -135,6 +135,14 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    # (review finding on PR#1721)
    exec 9>/var/lib/mgmt/sentinel/.lock; flock -w 600 9 || { echo "mgmt-tf: lock busy for 10 min" >&2; exit 1; }
    rc=0; devbox run --quiet -- tofu -chdir=tofu "$@" || rc=$?
+   # State snapshots (docs/tofu-state.md section Snapshots): any subcommand that can WRITE main
+   # state gets one, inside THIS lock span, hence --lock-held. The script is taken from the box
+   # own master checkout, so a run from a PR-branch REF that predates it still snapshots. It is
+   # idempotent by serial, so a read-only `state list` costs nothing. It never changes rc.
+   if [ $rc = 0 ]; then case "${1:-}" in apply|state|import|taint|untaint|refresh)
+     S=/var/lib/homelab/scripts/mgmt-state-snapshot.sh
+     if [ -x "$S" ]; then "$S" --lock-held main >&2 || echo "mgmt-tf: WARN snapshot failed - the tofu command itself succeeded" >&2; fi
+   ;; esac; fi
    if [ "$MODE" = plan ] && [ $rc -le 2 ] && [ -f "$P/$PLAN_ID.bin" ]; then
      chmod 600 "$P/$PLAN_ID.bin"
      devbox run --quiet -- tofu -chdir=tofu show -no-color "$P/$PLAN_ID.bin" > "$P/$PLAN_ID.txt" 2>/dev/null || true
@@ -162,5 +170,14 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
      echo "mgmt-tf: NOT stamping — this plan is ${PLAN_SHA:0:8}, master is now $(git rev-parse --short origin/master). Re-plan and apply that to advance the baseline." >&2
    fi
    exit $rc'
-exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-  "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "$MODE" "$PLAN_ID" "${MGMT_YES:-0}" "${ARGS[@]}")"
+rc=0
+ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+  "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "$MODE" "$PLAN_ID" "${MGMT_YES:-0}" "${ARGS[@]}")" || rc=$?
+# The second failure domain (docs/tofu-state.md §Snapshots): an apply that wrote main's state just
+# produced a snapshot on the box — bring it into the wallet cache now, while the session that made
+# the change is still here to see a verification failure. Best-effort by design: a pull that
+# cannot run must never turn a successful apply into a failed command.
+if [ "$MODE" = apply ] && [ "$rc" = 0 ]; then
+  bash "$(dirname "$0")/mgmt-state-pull.sh" || echo "mgmt-tf: WARN the snapshot pull failed — run \`devbox run mgmt-state-pull\` (the apply itself succeeded)" >&2
+fi
+exit "$rc"
