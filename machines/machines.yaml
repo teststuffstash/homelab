@@ -623,6 +623,15 @@ machines:
     ip: 192.168.2.55
     notes: Specs + toggle live in tofu/ci-runner.tf (self-registering via the runner-registrar App).
 
+  - name: ci-runner-02
+    kind: vm
+    zone: nx-02
+    label: "`ci-runner-02` (VM on nx-02)"
+    role: GitHub Actions runner VM — the second, on the other hypervisor (FU-266)
+    hardware: Debian 12 VM on nx-02
+    ip: 192.168.2.66
+    notes: Same labels as ci-runner-01, so a pve outage is not a CI outage. Specs in tofu/ci-runner.tf.
+
   - name: droplet
     kind: device
     label: Droplet (ESP32)

@@ -11,8 +11,14 @@
 # (same single-user-nix flow as the ARC runners, see homelab docs/ci.md).
 #
 # SAFETY: this hits live Proxmox. `devbox run -- tofu -chdir=tofu plan` and review before apply.
-# VERIFY on first plan/boot (flagged inline): the image content-type for your Proxmox datastore,
-# and that 'snippets' are enabled on var.datastore_images.
+# HOST PREREQUISITE (not tofu-managed — Proxmox storage config): 'snippets' must be enabled on
+# var.datastore_images on EACH hypervisor that hosts a runner, or the cloud-init upload fails:
+#   pvesm set local --content import,backup,vztmpl,iso,snippets   # = the existing list + snippets
+# (pve had it from before this was written down; nx-02 was set 2026-09-21 for ci-runner-02.)
+#
+# TWO runners, one per hypervisor (FU-266): ci-runner-01 on pve, ci-runner-02 on nx-02 — same
+# labels, so a pve outage is no longer a CI outage. The nx-02 blocks at the bottom are a literal
+# near-copy for the same reason as nx02.tf: a provider cannot be chosen per for_each key.
 
 variable "ci_runner_enabled" {
   description = "Toggle the CI runner VM. On — the runner-registrar App is live (ADR-082)."
@@ -43,6 +49,17 @@ variable "ci_runner_memory_mb" {
   # measured mid-run). 6 cores at 17–26% were wasted on a single slot. 16G→12G 2026-09-08:
   # idle read 1.5G used / 8.7G cache / 14.4G available — the 4G funds wk-03's ARC headroom
   # (variables.tf); the e2e p50 is sequencing-bound (PSI ~0), not memory-bound.
+}
+
+variable "ci_runner_02_vm_id" {
+  type    = number
+  default = 9002
+}
+
+variable "ci_runner_02_ip_cidr" {
+  description = "ci-runner-02's static IP/CIDR — after cp-02 (.65) in the .51–.99 servers range (docs/ip-plan.md)."
+  type        = string
+  default     = "192.168.2.66/24"
 }
 
 variable "ci_runner_disk_gb" {
@@ -119,6 +136,7 @@ resource "proxmox_virtual_environment_file" "ci_runner_cloud_init" {
   source_raw {
     file_name = "ci-runner-cloud-init.yaml"
     data = templatefile("${path.module}/templates/ci-runner-cloud-init.yaml.tftpl", {
+      name            = "ci-runner-01"
       ssh_key         = var.ci_runner_ssh_authorized_key
       app_private_key = file(var.github_app_private_key_file)
       mint_script     = file("${path.module}/../scripts/gh-app-runner-token.sh")
@@ -182,6 +200,102 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
     ip_config {
       ipv4 {
         address = var.ci_runner_ip_cidr
+        gateway = var.gateway
+      }
+    }
+
+    dns {
+      servers = var.nameservers
+    }
+  }
+}
+
+# ---- ci-runner-02 on nx-02 (FU-266) — same shape, the nx02 provider ---------------------------
+resource "proxmox_download_file" "debian_cloud_nx02" {
+  count        = var.ci_runner_enabled ? 1 : 0
+  provider     = proxmox.nx02
+  content_type = "iso"
+  datastore_id = var.datastore_images
+  node_name    = var.nx02_node
+  file_name    = "debian-12-genericcloud-amd64.img"
+  url          = var.ci_runner_debian_image_url
+  overwrite    = false
+}
+
+resource "proxmox_virtual_environment_file" "ci_runner_02_cloud_init" {
+  count        = var.ci_runner_enabled ? 1 : 0
+  provider     = proxmox.nx02
+  content_type = "snippets"
+  datastore_id = var.datastore_images
+  node_name    = var.nx02_node
+
+  source_raw {
+    file_name = "ci-runner-02-cloud-init.yaml"
+    data = templatefile("${path.module}/templates/ci-runner-cloud-init.yaml.tftpl", {
+      name            = "ci-runner-02"
+      ssh_key         = var.ci_runner_ssh_authorized_key
+      app_private_key = file(var.github_app_private_key_file)
+      mint_script     = file("${path.module}/../scripts/gh-app-runner-token.sh")
+      app_id          = var.github_app_id
+      installation_id = var.github_app_installation_id
+      org             = var.github_runner_org
+      labels          = var.github_runner_labels
+      runner_version  = var.github_runner_version
+    })
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "ci_runner_02" {
+  count     = var.ci_runner_enabled ? 1 : 0
+  provider  = proxmox.nx02
+  name      = "ci-runner-02"
+  vm_id     = var.ci_runner_02_vm_id
+  node_name = var.nx02_node
+  tags      = sort(["ci", "github-runner", "debian"])
+
+  agent { enabled = true }
+
+  # nx-02 is dual-socket — the nx02.tf reasoning: guest topology matches the host's so Linux keeps
+  # a task's memory on its own NUMA node. `cores` is per socket.
+  cpu {
+    cores   = var.ci_runner_cores / 2
+    sockets = 2
+    numa    = true
+    type    = "host"
+  }
+
+  memory {
+    dedicated = var.ci_runner_memory_mb
+  }
+
+  disk {
+    # The Micron NVMe thin pool (never the WD spinner local-lvm) — docker image + kind layers.
+    datastore_id = var.nx02_datastore_vms
+    file_id      = proxmox_download_file.debian_cloud_nx02[0].id
+    interface    = "scsi0"
+    size         = var.ci_runner_disk_gb
+    file_format  = "raw"
+    discard      = "on"
+    ssd          = true
+  }
+
+  network_device {
+    bridge = var.network_bridge
+  }
+
+  serial_device {}
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id      = var.nx02_datastore_vms
+    user_data_file_id = proxmox_virtual_environment_file.ci_runner_02_cloud_init[0].id
+
+    ip_config {
+      ipv4 {
+        address = var.ci_runner_02_ip_cidr
         gateway = var.gateway
       }
     }

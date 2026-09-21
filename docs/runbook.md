@@ -408,7 +408,7 @@ carries `host` / `vg` / `lv`; the pairs today are:
 | `host` | ssh | VG / pool LV | Talos VMs on it |
 |---|---|---|---|
 | `pve` | `192.168.2.3` | `pve` / `data` (Proxmox storage `local-lvm`) | cp-01, wk-01, wk-02, wk-03 (+ ci-runner-01, not a k8s node) |
-| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | wk-04 |
+| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | cp-02, wk-04 (+ ci-runner-02, not a k8s node) |
 
 Below, `<host>`, `<vg>` and `<vmid>` are that row's values; the worked numbers are pve's.
 
