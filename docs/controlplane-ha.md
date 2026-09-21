@@ -109,10 +109,19 @@ The probe: mint a token, move the endpoint, see whether the token still authenti
 | 2 — pin applied at the current value | none | **authenticated** (403 = authn ok, authz denied) |
 | 3 — the real thing, issuer PINNED | `.65` → `.66` | **authenticated** — survived |
 
-Two further readings from phase 3, both load-bearing: the apiserver's flags still showed the pinned
-`.65` issuer (Talos really does replace, not merge), and the kube-apiserver container's `startedAt`
-did **not** move across the flip or a second flip back — **with the issuer pinned, moving the
-endpoint does not restart the apiserver at all**, so step 3 above carries none of the C3 fallout.
+Two further readings from phase 3: the apiserver's flags still showed the pinned `.65` issuer
+(Talos really does replace, not merge), and the kube-apiserver container's `startedAt` did **not**
+move across the flip or a second flip back.
+
+⚠ **That second reading did NOT generalise, and the real cutover disproved it (2026-09-21).** The
+lab is a ONE-NODE cluster; the fleet is three. Flipping `cluster_endpoint` to the VIP restarted
+**all three apiservers together** — a ~2 minute window in which `.51`, `.65`, `.183` *and* the VIP
+all refused connections — followed by the standard §CP3 fallout: `kube-scheduler` and
+`cnpg-operator` crashlooped and recovered on their own within minutes, etcd never lost quorum,
+Cilium kept the apiserver backend (13/13). **Three control planes did not make the restarts roll**,
+so plan the flip as an apiserver restart on every member at once, inside a window, not as the
+free action this paragraph originally promised. What the pin *does* guarantee is the part that
+mattered: every ServiceAccount token survived, because the issuer did not move (C1/C2).
 
 ## CP5. Promoting a running worker to a control plane
 
