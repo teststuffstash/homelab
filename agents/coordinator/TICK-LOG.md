@@ -10392,3 +10392,22 @@ Mine: the alert Monitor sat silent 30 min (zsh `for a in $cur`), the ping watch 
 (`ping`/`nc` not in the jail) — my "pve dark" was an unverified claim that happened to be true;
 the #1841 CI red was my own unpushed FU-266 definition (the batching rule vs a PR that cites a new
 id) — GAPS maintenance-window-G2.
+
+## 2026-09-21 ~15:15–16:35Z — seat: CNPG replica-1 (FU-137), then homelab#1845 (maintenance window)
+FU-137's next: #1843 adds `longhorn-local-std` (r1, strict-local, std-fenced, XFS, WFFC) and pins
+the platform three to zones [hp-01, m70s] (the only untainted boxes with a std disk; plain
+local-xfs could land on m70s's Garage PM961), with `primaryUpdateMethod: switchover`. Stage 1
+refused #1843 on a false positive (`provisioner[[:space:]]` matched `storage_provisioner`), cleared
+by `mgmt-human-plan`; policy fix #1844 is parked for the codeowner. Rebuilt all six instances one
+at a time (delete pvc+pod → join → `cnpg promote` 10–15 s → old primary). Primaries now on m70s;
+forgejo/grafana 200, ESO Ready; oracle-pg untouched (theirs).
+Operator: "check #1845 + oracle handoff", then "fix it while I'm away". Oracle's reading
+(exemption lost at the rollout) was wrong in cause, right in effect. A per-apiserver dry-run gave
+cp-01 ✅ cp-02 ✅ wk-metal-02 ❌: the metal CP never got talos.tf's inline VM-only cluster patch,
+and it holds the VIP. Same gap: as a CP it applied Talos's default flannel DaemonSet to all 13
+nodes at 05:50Z, beside Cilium. Detector first: #1846 `PodSecurityEnforceDenied` (a new-series
+branch, because the deny counter is born at the first deny); replay fires 15:39Z, and a live
+probe fired it 16:04Z. Then #1847 (dry-run: no reboot), applied 16:15Z; the dry-run is admitted on
+all three plus the VIP; cilium-check 13/13. Flannel objects deleted; `flannel.1`/`cni0`/conflist
+removed on all nodes via one-shot pods; two loki pods re-wired onto Cilium. Class fix #1848
+(`cp_common_patches`) + controlplane-ha §CP9. Handoff answered to oracle's `done/`; #1845 closed.

@@ -427,7 +427,7 @@ six OVERSIZE items pointer-ized into
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, the §CP6 defect and the §CP7 recovery: [`docs/controlplane-ha.md`](controlplane-ha.md).
+      order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
       **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
       wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
       `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
