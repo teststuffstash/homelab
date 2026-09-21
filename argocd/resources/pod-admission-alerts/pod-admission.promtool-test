@@ -1,0 +1,54 @@
+rule_files:
+  - pod-admission.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── THE #1845 SHAPE: the deny series is BORN at the first denial ────────────────────────────
+  # No series before 15:39 (the apiserver exports none until something is denied), then 1, then
+  # the next denies minutes later. increase() alone is blind to the birth; the unless-offset
+  # branch must fire on it.
+  - interval: 1m
+    name: "the first-ever denial on one apiserver fires at the series' birth"
+    input_series:
+      - series: 'pod_security_evaluations_total{instance="192.168.2.183:6443",decision="deny",mode="enforce",policy_level="baseline",resource="pod",request_operation="create"}'
+        values: "_x20 1x8 7x10"
+      # the other apiservers allow the same pods: their deny series never exists
+      - series: 'pod_security_evaluations_total{instance="192.168.2.51:6443",decision="allow",mode="enforce",policy_level="baseline",resource="pod",request_operation="create"}'
+        values: "100+1x40"
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: PodSecurityEnforceDenied
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: PodSecurityEnforceDenied
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod }
+      - eval_time: 29m
+        alertname: PodSecurityEnforceDenied
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod }
+
+  # ── Self-clearing: a long-standing counter with no NEW denial is quiet ────────────────────────
+  - interval: 1m
+    name: "an old denial count that stops moving clears"
+    input_series:
+      - series: 'pod_security_evaluations_total{instance="192.168.2.183:6443",decision="deny",mode="enforce",policy_level="baseline",resource="pod",request_operation="create"}'
+        values: "8x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PodSecurityEnforceDenied
+        exp_alerts: []
+
+  # ── warn/audit-mode verdicts are not refusals ──────────────────────────────────────────────────
+  - interval: 1m
+    name: "warn- and audit-mode denials never fire"
+    input_series:
+      - series: 'pod_security_evaluations_total{instance="192.168.2.51:6443",decision="deny",mode="warn",policy_level="restricted",resource="pod",request_operation="create"}'
+        values: "0+3x40"
+      - series: 'pod_security_evaluations_total{instance="192.168.2.51:6443",decision="deny",mode="audit",policy_level="restricted",resource="pod",request_operation="create"}'
+        values: "0+3x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PodSecurityEnforceDenied
+        exp_alerts: []
