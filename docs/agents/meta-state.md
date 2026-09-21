@@ -27,9 +27,9 @@ never the session's arc — that is TICK-LOG's.)
   `install.image` declared (#1829, ADR-138 — APPLIED to all 6 VMs, no reboot), state snapshots on box +
   wallet (#1834, verified twice, restore-drilled), ARC `maxRunners` 4→8 (direct).
   **NEXT, in order:**
-  (1) **#1836** — CP `talos_version_controlplane` → v1.13.10 (bot-approvable, `tofu/` not code-owned).
-      Plans `2 add / 2 change / 2 destroy`, 0 replacements, 0 PKI. Merge, then a HUMAN apply in a
-      `/maintenance-window` (plan → read → `apply <id>`); the box apply loop will refuse it (install-time).
+  (1) **#1836 MERGED** (`f4ceb666`, CP `talos_version_controlplane` → v1.13.10). NOT yet applied: do the
+      HUMAN apply in a `/maintenance-window` (plan → read → `apply <id>`; expect `2 add / 2 change /
+      2 destroy`, 0 replacements, 0 PKI). The box apply loop will REFUSE it meanwhile (install-time field).
   (2) **#1837** — `node-maintenance upgrade-behind [cp|worker|all]` (code-owned → operator). Then on the
       box, as a transient unit (recipe in `provisioning.md`): `upgrade-behind cp` (cp-01, cp-02 — the
       reboots) and `upgrade-behind worker` (wk-metal-04 → m70s → hp-01, the 09-18 chain; hp-01's eventbus
