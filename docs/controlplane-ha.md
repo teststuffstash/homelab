@@ -143,8 +143,12 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
    the router hands it `.183`, and a config that claims its interface can take that away silently
    (§CP6). `dnsmasq/leases/search` on OPNsense is the check that does not need the node.
 9. **Post-install, none of which `Ready` gates:** re-apply the zone label
-   (`kubernetes_labels.node_zone` — the Node object is new), confirm `cilium bgp peers` is
-   `established`, and confirm etcd membership grew by exactly one.
+   (`kubernetes_labels.node_zone` — the Node object is new); **add the node IP to `bgp_node_ips`
+   and run the BGP play** ([`provisioning.md`](provisioning.md) step 8) *before* confirming
+   `cilium bgp peers` is `established` — a new address peers with nothing until OPNsense lists it,
+   and this list has now been the miss four times (wk-03, wk-metal-04, nx-01, cp-02 — the last
+   caught 2026-09-21 an hour after creation, `idle` with 0 routes); and confirm etcd membership
+   grew by exactly one.
 10. Finish with a **full** `mgmt-tf apply`: a targeted apply does not stamp the box's apply-loop
     baseline.
 
@@ -194,3 +198,23 @@ Two adjacent findings from the same night, both filed: the BIOS PXE chainload wa
 (`undionly.kpxe` missing on the Matchbox LXC — [FU-261](follow-ups.md)), which is why three reboots
 read as "PXE just doesn't take"; and nothing alerts on a **declared node that is simply absent**
 from the cluster — the extreme case of [FU-235](follow-ups.md)'s declared-vs-live diff.
+
+## CP7. When the broken config is the installed one
+
+§CP6's defect left `wk-metal-02` unable to network *from its own install*, and that is a state the
+§CP5 recipe cannot re-enter: PXE does not force maintenance mode (Talos reads its config from the
+STATE partition) and `talosctl reset` needs the network the node just lost. The way back is to wipe
+STATE from the kernel command line — **recipe, caveats and the measured timings in
+[`provisioning.md`](provisioning.md) §"Recovering a node whose INSTALLED config is broken"**, which
+owns it because it is a node-level procedure, not a control-plane one.
+
+Done on 2026-09-21: wipe 05:47:42Z → maintenance 05:49:20Z → corrected config applied → `Ready` as
+a control plane 05:52:09Z, `.183` held at `layer: operator` (the default DHCP operator restored),
+etcd 2 members, BGP `established` with 25 routes. cp-02 followed immediately, taking the cluster to
+**three control planes and three etcd members**.
+
+⚠ **One thing this episode is NOT evidence of.** The Matchbox PXE assets were pinned at v1.13.2
+while `var.talos_version_worker` had moved to v1.13.10, and that drift was fixed mid-recovery — but
+it caused none of this. Both kernel versions chainloaded and booted fine; the config on disk was
+the whole story. The lockstep fix stands on [FU-246](follow-ups.md)'s own merits, and the first
+diagnosis that blamed the kernel was wrong.

@@ -31,11 +31,23 @@ for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; d
 done
 [ -n "$CRED" ] || { echo "mgmt-tf: cred dir not found (homelab-pve-ssh/ — the key the box trusts)" >&2; exit 1; }
 [ $# -ge 1 ] || { echo "usage: $0 <tofu subcommand> [args…]  (MGMT_REF=<ref> to pick the ref; default origin/master)" >&2; exit 2; }
-# -state / -var-file only on the subcommands that accept them (init, providers, validate do not)
+# -state / -var-file only on the subcommands that accept them (init, providers, validate do not).
+# ⚠ `tofu state` takes its flags AFTER the sub-subcommand: `state rm -state=X <addr>` is valid,
+# `state -state=X rm <addr>` is a usage error. The flat `$1 + extra + rest` form below therefore
+# builds `state` wrong, which is why `mgmt-tf -- state list` — advertised in this very header —
+# had never once worked (found 2026-09-21 needing `state rm` during the wk-metal-02 recovery).
+# Hence ARGS is assembled per-case instead of one shared `extra`.
+STATEF=/var/lib/mgmt/state/main/terraform.tfstate
 extra=()
 case "$1" in
-  plan|apply|destroy|refresh|import|console|output|taint|untaint) extra=(-state=/var/lib/mgmt/state/main/terraform.tfstate -var-file=/var/lib/mgmt/main.tfvars) ;;
-  state) extra=(-state=/var/lib/mgmt/state/main/terraform.tfstate) ;;
+  plan|apply|destroy|refresh|import|console|output|taint|untaint)
+    extra=(-state="$STATEF" -var-file=/var/lib/mgmt/main.tfvars)
+    ARGS=("$1" "${extra[@]}" "${@:2}") ;;
+  state)
+    [ $# -ge 2 ] || { echo "mgmt-tf: 'state' needs a subcommand (list, rm, mv, show, pull…)" >&2; exit 2; }
+    ARGS=("$1" "$2" -state="$STATEF" "${@:3}") ;;
+  *)
+    ARGS=("$@") ;;
 esac
 STAMP=0
 if [ "$1" = apply ] && [ "$REF" = origin/master ]; then
@@ -66,4 +78,4 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    fi
    exit $rc'
 exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
-  "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "$1" "${extra[@]}" "${@:2}")"
+  "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "${ARGS[@]}")"

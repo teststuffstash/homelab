@@ -179,6 +179,40 @@ on the node is a *stuck upgrade*, not data loss; clear it first with
 `scripts/node-maintenance.sh settle <node>`. Never pass `--legacy`: that forces the old node-side
 drain, the one siderolabs/talos#9882 reported ignoring PDBs.
 
+## Recovering a node whose INSTALLED config is broken
+
+The onboarding recipe above assumes the box can be talked to. When the *installed* machine config
+is what broke the network, it cannot — and the obvious move does not work:
+
+⚠ **PXE does not force maintenance mode.** Talos reads its machine config from the **STATE
+partition**, so a profile with no `talos.config` argument boots the kernel from the network and
+then runs whatever is on disk. `wk-metal-02` PXE-booted cleanly three times on 2026-09-21
+(matchbox logs 05:24, 05:32, 05:39) and came up as a `controlplane` running the broken config every
+time; the only thing that changed between boots was the kernel version.
+
+⚠ **`talosctl reset` needs the network the node just lost.** It is the documented way back to
+maintenance ([onboarding step 6](#onboarding-recipe-reuse-for-each-new-metal-node)), and it is
+unreachable in exactly the case you need it.
+
+What works, from the console, with no network on the node — add one kernel arg to the PXE profile:
+
+```
+talos.experimental.wipe=system
+```
+
+Talos resets the system disk and reboots. With STATE gone the next PXE boot has no config to read
+and lands in maintenance, which is where the normal recipe resumes. Measured 2026-09-21: wipe boot
+05:47:42Z → maintenance `apid` answering 05:49:20Z.
+
+Two things that bite:
+
+- **Swap the profile back before that next boot**, or the box wipes in a loop — the post-wipe
+  reboot PXEs again and re-reads the same arg. Point the group at the plain profile the moment
+  matchbox logs the wipe boot's kernel fetch (here: swap took 15 s against a wipe-plus-reboot of
+  ~90 s). Automate the swap rather than racing it by hand.
+- **The flag is procedure state.** It belongs in `tofu/provisioning/flags.local.tf` — untracked
+  (`*.local.tf`), FU-244 — never a commit.
+
 ## Firmware reality (why USB sometimes)
 
 Smart-plug power alone isn't enough — some boxes need a display/console for a one-time BIOS change
