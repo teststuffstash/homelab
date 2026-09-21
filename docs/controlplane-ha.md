@@ -147,7 +147,8 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
 5. `kubectl delete node <name>` — the join recreates the object; the worker-era one would otherwise
    carry stale labels and taints into its CP life.
 6. `talosctl reset --graceful=false --reboot --wipe-mode all` → it PXE-boots into maintenance.
-7. `devbox run mgmt-tf -- apply -target='talos_machine_configuration_apply.metal["<name>"]'` —
+7. `devbox run mgmt-tf -- plan -target='talos_machine_configuration_apply.metal["<name>"]'`, read it,
+   then `apply <plan-id>` (an apply carries no flags of its own — FU-248) —
    installs with `machine_type: controlplane`, and `metal.tf` conditions the VIP patch and the
    issuer pin on the same flag, so the new CP gets both at birth.
 8. **Unflag** (destroy the matchbox group) so the post-install reboot comes off disk, then
@@ -161,8 +162,8 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
    and this list has now been the miss four times (wk-03, wk-metal-04, nx-01, cp-02 — the last
    caught 2026-09-21 an hour after creation, `idle` with 0 routes); and confirm etcd membership
    grew by exactly one.
-10. Finish with a **full** `mgmt-tf apply`: a targeted apply does not stamp the box's apply-loop
-    baseline.
+10. Finish with a **full, unscoped** plan of master applied by its id: a scoped plan does not stamp
+    the box's apply-loop baseline, and the plan's own `.meta` is what decides that now.
 
 ⚠ **Do not stop here.** Two etcd members is the one state worse than one — go straight on to the
 next join.

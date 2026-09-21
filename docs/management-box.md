@@ -311,6 +311,14 @@ the jail's copy frozen as a backup — so the jail's `devbox run tf-plan|tf-appl
 point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`scripts/mgmt-tf.sh`: ssh to the box, a
 COMMITTED ref — `MGMT_REF=origin/<branch>` — under the loops' flock). A human apply of main
 is therefore push-then-apply from now on; the working tree is not something the box can see.
+**And it is plan-then-apply-that-plan** (2026-09-21, FU-248): every `plan` saves itself to
+`/var/lib/mgmt/plan/<id>.bin` beside a human-readable `.txt` and a `.meta`, and prints the id;
+`apply` takes that id and nothing else — no `-target`, no `-replace`, no bare `apply`. The
+scoping lives inside the plan, so a scoped run is still one command pair, but the apply can no
+longer be typed differently from the plan a human read. Tofu refuses a plan whose state serial
+has moved, which is the "the world changed while you were reading" check that a human cannot
+perform reliably; the incident that forced this is
+[2026-09-16](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
@@ -343,9 +351,10 @@ so the review knows what the box did not judge on its own.
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
-the same hit forever. A **full** `devbox run mgmt-tf -- apply` of `origin/master` (no
-`-target`/`-exclude`/`-replace`) now stamps the baseline and clears `refused-rev` on success; a
-targeted apply does not (finish with a full one).
+the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
+`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
+rather than from the apply's own flags, which a plan-file apply no longer has.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
