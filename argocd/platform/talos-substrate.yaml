@@ -1,0 +1,30 @@
+# The substrate belt — does the fleet run what git declares (FU-235 / FU-254). Raw manifests in
+# argocd/resources/talos-substrate/: one PrometheusRule, no workload. The complete per-node diff
+# (reachable/version/schematic) lives on the management box instead, because that is where the
+# declaration is — this is the half the cluster can see by itself, off kube_node_info.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: talos-substrate
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/talos-substrate
+    directory:
+      recurse: false
+      # The promtool mirror + fixture live beside the CR (the drift pin in
+      # scripts/prometheus-rules-lint.sh wants them in the same directory) and are not manifests.
+      include: '*.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
