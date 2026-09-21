@@ -23,8 +23,12 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-09-21 ~14:00 — pve GPU swap: DONE; arc in TICK-LOG).** pve runs HEADLESS (no
   GPU; x16 + x1 free — storage-ledger §hypervisor). Operator-only: the CMOS clear reset "Restore on
   AC Power Loss" — read it next time a card is fitted, else pve stays dark after a power cut.
-  Unexplained, seen once: argocd-dex-server segfault (139) on hp-01, runs fine on wk-04. oracle-pg
-  (oracle-iac) still has CNPG's default preferred anti-affinity — #1840 covered the platform three.
+  Unexplained, seen once: argocd-dex-server segfault (139) on hp-01, runs fine on wk-04.
+  **NEXT SESSION (operator, 2026-09-21): CNPG replica-1 storage — FU-137's Next.** Zone
+  anti-affinity is done everywhere (#1840, oracle-iac#900, card #1842); replica-1 needs a
+  numberOfReplicas=1 Longhorn class + rebuilding each instance onto it one at a time, and
+  `primaryUpdateMethod: switchover` on the platform three (oracle-pg has it; infisical's in-place
+  primary restart cost ~3.5 min today).
 - **⚑ PICKUP (2026-09-21 ~11:40 — the Talos rollout: DONE; arc in TICK-LOG).** All 13 nodes on
   **v1.13.10** (one os_image; `TalosFleetVersionSplit` resolved before its 09-22 08:00Z fire). #1836
   applied (0 replacements / 0 PKI); `upgrade-behind` ran on the box as transient units: cp-02, cp-01,
