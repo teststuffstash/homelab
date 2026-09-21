@@ -1298,15 +1298,6 @@ the block needs pruning, not more headings.
       against the upstream support matrix, firing on "a newer minor exists" and on "ours is EOL" —
       a natural belt job for the management box once §MB2's metric transport is decided (FU-252).
       Relates FU-033, FU-097, ROADMAP G-D.
-- [ ] **FU-252** — **A standing `management-apply` refusal has no detector — POINTER.** The box
-      refused `main` from Sep 14 11:42Z (2 addresses) to 2026-09-18 (8), 1101 restatements, with
-      zero surfacing: no `mgmt_*` series, nothing scrapes the box, no alert names the loops. The
-      designed verdict+staleness shape would not have caught it — the loop was alive and correctly
-      saying no. Mechanism, the ratchet, and the status-vs-check-run trap:
-      [`management-box.md`](management-box.md) §"A standing refusal is a THIRD verdict shape".
-      **Next:** the detector first — a residue-AGE metric. Transport candidate with prior art (put
-      to the operator 2026-09-21, unanswered): scrape the box like the hypervisors (node_exporter +
-      textfile, a `pve-metrics` ScrapeConfig target) — no VIP decision needed. Relates FU-237, FU-097, ADR-131.
 - [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable
       and it wedges every reconcile report.** `pr-oracle-fleet-minutark` fails with
       `POST …/rum/site_info → 403 "Authentication error"` from Cloudflare (the cf-api-proxy

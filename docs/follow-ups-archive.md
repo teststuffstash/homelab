@@ -10,6 +10,11 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-252** *(archived 2026-09-21)* — **A standing `management-apply` refusal is DETECTED.** Residue-age
+  belt `MgmtApplyResidueStanding` (github-exporter, from master's commit status, cdf01961 09-18);
+  box-side belts for what a status cannot show — `MgmtApplyLoopStale`/`MetricsAbsent`/`MgmtBoxDown`
+  on node_exporter + textfile, static job `mgmt-node` (#1850, #1851). Verified live 18:03Z: target
+  up, `mgmt_apply_*` series present, no Mgmt* alert. Mechanism: management-box.md §standing refusal.
 - **FU-266** *(archived 2026-09-21)* — **Second CI runner VM — DONE.** `ci-runner-02` on nx-02
   (`tofu/ci-runner.tf`, PR#1841, 192.168.2.66, VMID 9002), same labels as ci-runner-01; both slots
   "Listening for Jobs" 13:42Z. A pve outage is no longer a CI outage. nx-02 got `snippets` on `local`.

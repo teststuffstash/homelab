@@ -169,7 +169,7 @@ work), but the spike's "alerts leave by two independent paths" has no second pat
 
 ### A standing refusal is a THIRD verdict shape, and nothing detects it
 
-*Tracked by: FU-252.*
+*Detected since 2026-09-21 (FU-252, archived): `MgmtApplyResidueStanding` + the box-side belts below.*
 
 The shape above has two states — alive, and wedged. The apply loop has a third: **alive, correct,
 and saying no for days.** Measured 2026-09-18: `mgmt-apply` refused `main` continuously from

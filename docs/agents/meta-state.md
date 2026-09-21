@@ -13,7 +13,7 @@ never the session's arc — that is TICK-LOG's.)
   (ROADMAP G-D).** The ruled order (docs/management-box.md §MB4 sequence): the diff belt FU-235 →
   the substrate spike FU-242 → the impact line → box-run maintenance verbs proven by a human-ordered
   run → `reconcile: auto` on the compute tier (WIP 1) — then Renovate class-6 bumps land through
-  the box. First: FU-252's metrics (#1850) live, so the loop is watched before it is trusted with
+  the box. FU-252 DONE (box scraped + belts live 18:03Z), so the loop is watched before it is trusted with
   more. Parked: FU-264 (CA rotation) until oracle's 10 h regen is done; the oracle inbox (7) for
   another session.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
@@ -51,7 +51,7 @@ never the session's arc — that is TICK-LOG's.)
       failed at 10:28Z on `192.168.40.21` (ghcr mirror VIP) "no route to host", the minute cp-01
       rebooted and cilium-operator was evicted. Rerun green; VIP answered at 10:55.
   (4) Operator question still open: box metrics transport = node_exporter scraped as a static
-      target like the hypervisors (FU-252) — the seat agrees, no VIP decision needed.
+      target like the hypervisors (FU-252) — RULED yes, and live 2026-09-21 (#1850).
   `GarageZoneDegraded` LIVE 2026-09-21 (#1849).
   ⚠ Host-side git prunes scratchpad worktrees mid-session and the jail's known_hosts is not durable —
   pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
