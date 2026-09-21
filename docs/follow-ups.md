@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-265** (2026-09-21: FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-266** (2026-09-21: FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1263,7 +1263,8 @@ the block needs pruning, not more headings.
       wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
       **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
       incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
-      unset, kata intact where declared. **Next:** the 7 metal config updates (in place) + the remaining
+      unset, kata intact where declared. **2026-09-21:** cp-01/cp-02 + wk-metal-04 (FU-265) on v1.13.10;
+      m70s + hp-01 wait on #1839 (drain before install). **Next:** the 7 metal config updates (in place) + the remaining
       metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
       metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
@@ -1360,16 +1361,6 @@ the block needs pruning, not more headings.
       generated tables. **Next:** do it with the box's NEXT reinstall for any other reason, never
       as its own outage. Relates FU-243.
 
-- [ ] **FU-263** — **Nocloud VMs cannot be version-bumped: the declared model and the upgrade verb
-      disagree.** Bumping `talos_version_controlplane` plans both CP VMs REPLACED (`disk.file_id`
-      forces replacement) — while `node-maintenance.sh upgrade` upgrades a nocloud VM IN PLACE
-      (ADR-014 amended, proven in the 2026-09-19 lab run) — the FU-248 landmine. (a) The PKI half
-      is closed: `talos_machine_secrets.talos_version` frozen with `prevent_destroy` (#1825).
-      (b) LANDED + APPLIED 2026-09-21 (#1829, ADR-138): the disk image is a birth seed, VMs declare
-      `install.image`. **Next:** merge #1836 (CP → v1.13.10; plans 0 replacements / 0 PKI), human
-      apply it, then `upgrade-behind cp` on the box (#1837) — archive when cp-01/cp-02 are on
-      v1.13.10. Relates FU-235, FU-246, FU-248, FU-254.
-
 - [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master (POINTER).**
       A stray talosconfig was pushed to this PUBLIC repo 2026-09-21 and removed 15 min later; no
       CRL in Talos, so the identity is valid to **2027-05-29** (the CA private key did NOT leak).
@@ -1379,6 +1370,15 @@ the block needs pruning, not more headings.
       **Why deferred (operator, 2026-09-21):** finish the three-CP rollout and let it stabilise.
       **Next:** probe the state-reconciliation candidates on the disposable control plane
       (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
+
+- [ ] **FU-265** — **wk-metal-04's firmware writes a boot entry the Talos installer cannot parse.**
+      `Boot0008` "UEFI OS" (→ `\EFI\BOOT\BOOTX64.EFI`, firmware-created) carries 2 padding bytes after
+      the end-of-path node; the v1.13.10 installer's strict `UnmarshalDevicePath` fails "dangling bytes
+      at the end of device path: 0000" at the boot-entry step — AFTER it has set `LoaderEntryDefault`
+      to the new UKI. 2026-09-21: finished by a planned reboot (node now v1.13.10); upstream `main`
+      still strict. A read-only parse of every metal node's `Boot####` found only this one.
+      **Next:** every future `talosctl upgrade` of this box fails the same way — delete the entry in
+      firmware setup and see whether it comes back; upstream issue (public — operator's call). Relates FU-246.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).

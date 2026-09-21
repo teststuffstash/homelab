@@ -10,6 +10,12 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-263** *(archived 2026-09-21)* — **Nocloud VMs could not be version-bumped — CLOSED by the
+  rollout.** #1829 made the disk image a birth seed (ADR-138), #1836 declared the CPs v1.13.10
+  (applied: 0 replacements, 0 PKI), and `upgrade-behind cp` (#1837) moved cp-02 then cp-01 in place
+  on the box — etcd 3/3 throughout, cilium backend 13/13. Two defects the first real run found:
+  a pure CP has no Longhorn to wait for (#1838), and single-replica WARNs needed FORCE (#1839).
+
 - **FU-253** *(archived 2026-09-21)* — **VMs declared a generic, stale `install.image` — FIXED and applied.**
   All six VMs carried the provider default `ghcr.io/siderolabs/installer:v1.13.0` (wrong platform —
   it reinstalls a nocloud VM as `metal` and ghosts it). #1829 sets it from
