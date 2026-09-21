@@ -38,10 +38,13 @@ Gotchas:
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
   every `devbox run`.
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
-  ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
+  ADR-129/-131): `devbox run mgmt-tf -- plan` (ssh, committed ref — `MGMT_REF=origin/<branch>`) prints a
+  **plan id**, and `devbox run mgmt-tf -- apply <plan-id>` executes that saved plan — an apply with
+  flags is refused (FU-248);
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
-  diff; a full `mgmt-tf apply` of master un-wedges the apply loop. [`management-box.md`](management-box.md) §MB3.
+  diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an
+  unscoped plan taken from `origin/master` stamps the baseline. [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
@@ -473,7 +476,7 @@ homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = tru
 `tofu/variables.tf` (→ `serial_device {}` in `proxmox.tf`; Talos already boots with
 `console=ttyS0`), applied at a FULL stop/start of the VM — a guest reboot keeps the qemu
 process, so pending hardware never lands that way; use `scripts/node-maintenance.sh down <node>`
-→ `devbox run mgmt-tf -- apply` (the provider starts the stopped VM) → `up <node>`. The host
+→ `devbox run mgmt-tf -- plan` then `apply <plan-id>` (the provider starts the stopped VM) → `up <node>`. The host
 side is `devbox run -- ansible-playbook ansible/pve-serial-log.yml` (vmid list in
 `ansible/group_vars/pve.yml`): a `qemu-serial-log@<vmid>` socat unit on pve appends the console
 to `/var/log/qemu-serial/<vmid>.log` (logrotate weekly ×8) — the kernel's last words on a panic

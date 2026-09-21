@@ -78,8 +78,9 @@ fetch_one() {
     if [ -n "$declared" ] && [ -n "$server" ] && [ "$declared" != "$server" ]; then
       rm -f "$tmp"
       echo "client-configs: the kubeconfig in state dials $server but the cluster declares $declared — refusing to write." >&2
-      echo "  recover: devbox run mgmt-tf -- apply -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this" >&2
-      echo "  then re-run this verb (FU-259, docs/controlplane-ha.md)." >&2
+      echo "  recover: devbox run mgmt-tf -- plan -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this" >&2
+      echo "           then, after reading it: devbox run mgmt-tf -- apply <plan-id>" >&2
+      echo "  then re-run this verb (FU-259, docs/controlplane-ha.md §CP8)." >&2
       exit 1
     fi
     [ -n "$declared" ] && [ -n "$server" ] || echo "client-configs: could not compare endpoints (declared='$declared' server='$server') — wrote it unchecked" >&2
