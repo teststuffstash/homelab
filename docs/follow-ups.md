@@ -1333,7 +1333,8 @@ the block needs pruning, not more headings.
       (no k8s move needed); etcd's metrics port 2379→2383 — we scrape neither; `apply-config
       --mode=reboot` removal — unused. ⚠ 1.13 left community support at the 1.14.0 release
       (2026-09-03), so this is a clock, not a nice-to-have. The rollout order and the installer
-      rules are ADR-014 (amended) and the recipe it links. Relates FU-246, FU-253, ROADMAP G-D.
+      rules are ADR-014 (amended) and the recipe it links. **Canary = wk-03 via the reconciler**
+      (#1864; attended, with a rollback drill — operator 2026-09-21). Relates FU-246, FU-253, ROADMAP G-D.
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
@@ -1356,7 +1357,9 @@ the block needs pruning, not more headings.
       reachable/version/schematic/registered/labels/taints/ephemeral_disk via the box's textfile;
       `MgmtNodeMissing`/`LiveStateDrift`/`InstallDrift`/`MgmtBelt*` — all 91 series 0 at landing.
       Pre-merge impact line LANDED (#1858). (2) stands (home = `machine.nodeTaints`), detected not
-      fixed. **Next:** the `install_disk` axis; §MB4 layers 3–5 (`reconcile:`) in flight.
+      fixed. **Reconciler layers 3–5 LANDED** (#1864): `reconcile:` in machines.yaml, box loop
+      `mgmt-reconcile`, wk-03 the only `auto` (idle, in sync). **Next:** its first live sync = the
+      attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**

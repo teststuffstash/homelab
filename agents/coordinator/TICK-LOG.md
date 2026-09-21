@@ -10428,3 +10428,17 @@ target + series live 18:03Z, FU-252 archived. GarageZoneDegraded (#1849) + docs-
 boot recreates it (kexec upgrades never meet the firmware) → next = scrub-before-install in `upgrade`.
 GarageZoneDegraded fired correctly at 18:36 on the unsilenced power-cycle; window closed --force over
 NodeRebooted (mine) + BlockingCodeownerParkWaiting (oracle-fleet#683, theirs).
+
+## 2026-09-21 ~19:30–23:00Z — seat (overnight, subagent-orchestrated): the management box's applies
+PAT rotation checked (fine-grained, exp 2026-12-20; push dry-run OK). Operator rulings: spike on nx-02
+not pve; `reconcile: auto` live on ONE node; Renovate waits on attended bumps incl. a deliberate
+rollback (ROADMAP G-D, memory). Four subagents, seat kept only verdicts:
+- A: FU-235 axes registered/labels/taints/ephemeral_disk + textfile transport + Mgmt* alerts (#1859,
+  #1861 — devbox's KUBECONFIG pointed at a missing path on the box). 91 series all 0 live.
+- B: sentinel install-impact line (#1858), proven on dummy #1860 (m70s kata → "one upgrade window"),
+  closed; inventory-only PRs now plan (policy roots.main.inputs).
+- C: FU-242 spike on VM 9420/nx-02 (deleted) → NO on tofu-controller (#1862); FU-242 archived.
+  Its `maint close` ran `seat-window close --all` → #1863 closes only the tool's own window.
+- D: reconciler layers 3–5 (#1864): `mgmt-reconcile` loop, wk-03 auto, idle; 21/21 fake-verb cases.
+  No live sync: no genuine install diff exists short of the 1.14 canary (FU-033) — left for the
+  attended sitting, not invented.
