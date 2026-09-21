@@ -1,0 +1,25 @@
+# PodSecurityEnforceDenied, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file pod-admission.promtool-test loads. DRIFT-PINNED by
+# `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "pod-admission", "rules": [.spec.groups[].rules[] | del(.annotations)]}]}' argocd/resources/pod-admission-alerts/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: pod-admission
+    rules:
+      - alert: PodSecurityEnforceDenied
+        expr: |
+          (
+            sum by (instance, policy_level, resource) (
+              increase(pod_security_evaluations_total{decision="deny",mode="enforce"}[10m])
+            ) > 0
+          )
+          or
+          (
+            sum by (instance, policy_level, resource) (
+              pod_security_evaluations_total{decision="deny",mode="enforce"}
+                unless pod_security_evaluations_total{decision="deny",mode="enforce"} offset 10m
+            ) > 0
+          )
+        labels:
+          severity: warning
