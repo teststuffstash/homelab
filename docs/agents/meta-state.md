@@ -27,12 +27,18 @@ never the session's arc — that is TICK-LOG's.)
   cp-01 19:08Z (a pre-apply token survived; FU-258 dropped 10/12 backends, one `ds/cilium` roll fixed
   it) · #1813 the evidence · #1814 the ride pool moved to wk-metal-03 · #1815 `controlplane: true` for
   wk-metal-02 · #1816 cp-02 DECLARED (VM not created) · #1817 the Forgejo runner unpinned (+4Gi DinD cap).
-  **⛔ THE BLOCKER — needs eyes on the box.** `wk-metal-02` is wiped (STATE+EPHEMERAL), was installed
-  with the CP config (tofu apply clean), unflagged in Matchbox — and then went **off the network**:
-  `.183` answers no ARP while the plug reads 7.3 W, so it is powered but not booting into anything with
-  a NIC. No console here. First move on the box: power-cycle and WATCH the screen (bootloader present?
-  "no bootable device"?). Its Node object is deleted and etcd is back to ONE member (cp-01), which is
-  the safe resting state — the cluster is 11/11 Ready, cilium 11/11, nothing else degraded.
+  **⛔ THE BLOCKER — CAUSE FOUND 2026-09-21, fix in PR#1818.** `wk-metal-02` is wiped
+  (STATE+EPHEMERAL), was installed with the CP config (tofu apply clean), unflagged — and came up
+  with **no IP**: the VIP patch writes `machine.network.interfaces`, which suppresses Talos's
+  DEFAULT `dhcp4` operator, and a PXE metal box has no other address source (cp-01 is nocloud =
+  `ConfigPlatform`, which is why the `--mode=try` rehearsal on it was blind). Console evidence: NTP
+  failing against 8.8.8.8, Talos's compiled-in fallback resolver. Full write-up:
+  [`../controlplane-ha.md`](../controlplane-ha.md) §CP6. Its Node object is deleted and etcd is back
+  to ONE member (cp-01) — the safe resting state; cluster 11/11 Ready, nothing else degraded.
+  **RECOVERY (needs the operator at the box, PR#1818 merged first):** reflag the MAC
+  `68:f7:28:80:84:09` in `tofu/provisioning` → power-cycle and let it PXE into maintenance → confirm
+  the `.183` lease (OPNsense `dnsmasq/leases/search`) → `mgmt-tf apply -target=...metal["wk-metal-02"]`
+  → confirm the lease AGAIN before unflagging (§CP5 step 8) → §CP5 steps 9–10 → then cp-02.
   **Do NOT create cp-02 until wk-metal-02 is back:** two etcd members is the one state worse than one
   (ip-plan §VIP). Everything for it is merged — `devbox run mgmt-tf -- apply` creates and joins it.
   **Also found and filed:** FU-261 — `/srv/tftp/undionly.kpxe` was missing, so BIOS PXE clients

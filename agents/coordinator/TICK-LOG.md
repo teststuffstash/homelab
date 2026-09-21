@@ -10237,3 +10237,27 @@ booting a NIC. That is where it sits.
 two members is worse than one (ip-plan §VIP), so the third join waits for the second. Cluster at
 wind-down: 11/11 Ready, cilium 11/11, one etcd member, window closed `--force` with the two known
 deltas named.
+
+## 2026-09-21 — wk-metal-02's missing address: the VIP patch takes DHCP with the interface
+
+Condition: the operator walked up to `wk-metal-02` (stuck since its 2026-09-20 CP reinstall) and read
+the console — Talos healthy, NTP lookups failing against **8.8.8.8**. That is Talos's compiled-in
+fallback resolver, so the node had no DHCP-supplied DNS, i.e. no lease.
+
+Commands (all read-only, none touched the box):
+- OPNsense `dnsmasq/leases/search` — every metal node holds a lease, `68:f7:28:80:84:09` holds none.
+- `talosctl get operatorspecs` — wk-metal-03: `dhcp4/enp0s31f6`, `layer: default`. cp-01: **only**
+  `vip/eth0`, `layer: configuration`. No dhcp4 operator exists on cp-01 at all.
+- `talosctl get addressspecs` — cp-01 `.51/24` `layer: platform` (nocloud) vs wk-metal-03 `.184/24`
+  `layer: operator`. `talosctl get deviceconfigspecs` on cp-01 shows the VIP device with no `dhcp` key.
+- `read /proc/cmdline` on a disk-booted metal node: `talos.platform=metal`, no `ip=`.
+
+Conclusion: `local.cp_vip_patch` names the physical link, which puts it in
+`ConfigMachineConfiguration` — and Talos emits the default `dhcp4` operator only for links that NO
+layer configures. The nocloud VMs were immune (their link is already `ConfigPlatform`), which is
+exactly why the `--mode=try` rehearsal on cp-01 passed. PR#1818 splits the patch: `cp_vip_patch_dhcp`
+(`dhcp: true`) for metal, the VM variant unchanged. `docs/controlplane-ha.md` §CP6 carries the
+post-mortem; §CP5 step 8 now waits on the lease before unflagging; FU-235 gains the absent-node
+detector gap (nothing fired for ~12 h while the fleet read 11/11 Ready).
+
+Recovery still needs the operator at the box — reflag, PXE to maintenance, re-apply, verify the lease.
