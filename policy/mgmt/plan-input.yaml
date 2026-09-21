@@ -43,7 +43,9 @@ deny_paths:                 # basename globs a PR may not touch inside a root (s
 deny_patterns:              # ERE over the ADDED lines of the PR diff inside a root (stage 1)
   - 'data[[:space:]]+"external"'
   - 'data[[:space:]]+"http"'
-  - 'provisioner[[:space:]]'
+  # Word-bounded + the type string: the bare `provisioner[[:space:]]` matched every
+  # `storage_provisioner = "driver.longhorn.io"` (a StorageClass refused on #1843).
+  - '(^|[^_[:alnum:]])provisioner[[:space:]]+"'
   - 'required_providers'
   - 'backend[[:space:]]+"'
   - 'encryption[[:space:]]*\{'
