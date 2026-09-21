@@ -20,28 +20,30 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-21 ~10:00 — substrate + box session; arc in TICK-LOG).** ADR-133 is done (3 CPs, VIP
-  endpoint). **Merged + live today:** PKI frozen (#1825), stale-kubeconfig detector + FU-259 recovered
-  (kubeconfig dials `.50`), ADR-137 `cp-NN` naming (#1826), plan-id apply contract (#1827), the node diff
-  + fleet-split alert (#1828/#1831, belt ARMED — green 6/6 every 15 min), disk image = birth seed /
-  `install.image` declared (#1829, ADR-138 — APPLIED to all 6 VMs, no reboot), state snapshots on box +
-  wallet (#1834, verified twice, restore-drilled), ARC `maxRunners` 4→8 (direct).
-  **NEXT, in order:**
-  (1) **#1836 MERGED** (`f4ceb666`, CP `talos_version_controlplane` → v1.13.10). NOT yet applied: do the
-      HUMAN apply in a `/maintenance-window` (plan → read → `apply <id>`; expect `2 add / 2 change /
-      2 destroy`, 0 replacements, 0 PKI). The box apply loop will REFUSE it meanwhile (install-time field).
-  (2) **#1837** — `node-maintenance upgrade-behind [cp|worker|all]` (code-owned → operator). Then on the
-      box, as a transient unit (recipe in `provisioning.md`): `upgrade-behind cp` (cp-01, cp-02 — the
-      reboots) and `upgrade-behind worker` (wk-metal-04 → m70s → hp-01, the 09-18 chain; hp-01's eventbus
-      prerequisite is VERIFIED live: JetStream 1 replica each on wk-04/hp-01/wk-02 + `minAvailable: 2`).
-      `TalosFleetVersionSplit` went PENDING 08:00Z on the real 5-node split — it FIRES 2026-09-22 08:00Z
-      unless both scopes are done by then.
-  (3) **FU-264** — rotate the Talos API CA (leaked `os:admin` key, incident doc) AFTER the rollout is
-      stable; spike `docs/spikes/talos-ca-rotation.md` says probe the state half on the lab CP first.
-  (4) Open question to the operator: box metrics transport = scrape it like the hypervisors (FU-252).
-  ⚠ Host-side git prunes scratchpad worktrees mid-session (twice today) and the jail's `~/.ssh/known_hosts`
-  vanished — pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
+- **⚑ PICKUP (2026-09-21 ~11:40 — the Talos rollout: DONE; arc in TICK-LOG).** All 13 nodes on
+  **v1.13.10** (one os_image; `TalosFleetVersionSplit` resolved before its 09-22 08:00Z fire). #1836
+  applied (0 replacements / 0 PKI); `upgrade-behind` ran on the box as transient units: cp-02, cp-01,
+  then m70s → hp-01. Three fixes landed on the way: #1838 (a pure CP has no Longhorn to wait for),
+  #1839 (**drain BEFORE the install** — each workload's PDB + controller fails itself over, CNPG
+  switched 3+2 primaries unaided; preflight WARNs informational in `upgrade`; floors never
+  FORCE-able), and the transient-unit recipe needs `--setenv=PATH` (docs/provisioning.md).
+  **NEXT:**
+  (1) **FU-264** — rotate the Talos API CA, now that the rollout is done; the spike says probe the
+      state half on the lab CP first.
+  (2) **FU-265** — wk-metal-04's firmware `Boot0008` breaks every future `talosctl upgrade` of it
+      (it finished today by a planned reboot); firmware-setup delete + the public upstream issue are
+      the operator's call.
+  (3) wk-metal-02 carries a STALE `nodes.longhorn.io` object from its worker days (`READY False`) —
+      its next upgrade would wait 300 s for a CSI driver that never registers there. Delete it
+      (read its disks/replicas first); ≤5-minute class.
+  (4) Observation, single sighting — detector-first if it recurs: homelab CI's crossplane render
+      failed at 10:28Z on `192.168.40.21` (ghcr mirror VIP) "no route to host", the minute cp-01
+      rebooted and cilium-operator was evicted. Rerun green; VIP answered at 10:55.
+  (5) Operator question still open: box metrics transport = node_exporter scraped as a static
+      target like the hypervisors (FU-252) — the seat agrees, no VIP decision needed.
   Unfiled and wanted (from 09-18, still true): a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`.
+  ⚠ Host-side git prunes scratchpad worktrees mid-session and the jail's known_hosts is not durable —
+  pin the box key from the wallet (`homelab-mgmt/extra-files/etc/ssh/*.pub`), never TOFU.
 
 - **⚑ PICKUP (2026-09-18 session — two waits, both cheap, both easy to lose).**
   (1) **Flip `docs-graph-lint` check #4b to enforcing** — `DOCS_GRAPH_MISFILED_ENFORCE=1` in

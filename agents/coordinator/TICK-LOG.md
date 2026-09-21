@@ -10349,3 +10349,24 @@ Reviewer catches this session, all real: set -e fallback unreachable (#1825), st
 (#1827), alert text asserting a cause (#1828), three comments made false (#1829), retry swallowing
 a renamed output (#1831), a missed sibling `moved` pair (#1836). Mine: the known_hosts vanished
 (pinned from the wallet since), worktrees pruned twice, a zsh word-split false alarm in the watch.
+
+## 2026-09-21 ~10:00–11:40Z — seat: the Talos rollout, finished (maintenance window)
+
+Window opened at a clean baseline (159 targets, cilium 13/13). #1836 applied from plan
+`20260921T100114Z-4f915b9f` (ISO swap on both hypervisors + two CP config hashes; no VM touched).
+#1837 reviewed + merged by the operator. `upgrade-behind cp` on the box: its first transient unit died
+on "unable to source Nix profile" (systemd's bare PATH — recipe fixed, `--setenv=PATH`); cp-02
+rebooted clean but `upgrade` timed out waiting for driver.longhorn.io, which never registers on a
+control plane → #1838 (skip a node with no nodes.longhorn.io; a failed read still stops). cp-01 then
+refused on a single-replica WARN (cilium-operator); FORCE=1 took it through, etcd 3/3 and cilium 13/13
+after. wk-metal-04: the v1.13.10 installer died on firmware entry Boot0008 ("dangling bytes at the end
+of device path") AFTER setting LoaderEntryDefault — node up on v1.13.2 with a pending boot flip.
+Operator chose a planned reboot → v1.13.10 (FU-265 for the entry). Operator's question — "unattended
+for years, no service logic: how do primaries fail over?" — answered by the eviction API: CNPG
+switches over ahead of a drain by default; our fault was ORDER (talosctl installs, then drains) and
+FORCE doubling as a floor bypass → #1839. m70s + hp-01 then ran with no FORCE: drain-first moved
+infisical/grafana/oracle primaries unaided, Longhorn resync ~18 min + ~10 min. 13/13 on v1.13.10.
+FU-263 archived. Operator's garage.md 4 KiB range-read ceiling committed as theirs.
+Mine: read a stale journal line through a Monitor's `--since -30s` overlap and briefly misdiagnosed
+FORCE as not propagating; reported wk-metal-04 ~8 min after it was actually Ready (the operator
+caught it).
