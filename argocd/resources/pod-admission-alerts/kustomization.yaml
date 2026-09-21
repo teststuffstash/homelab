@@ -1,0 +1,8 @@
+# pod-admission-alerts — the apiserver's admission verdicts as a platform belt (homelab#1845).
+# Rules only; placed in monitoring with the other belts (the ruleSelector is cluster-wide).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - prometheusrule.yaml
