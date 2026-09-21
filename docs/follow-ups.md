@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-268** (2026-09-21: FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-269** (2026-09-21: FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1354,6 +1354,14 @@ the block needs pruning, not more headings.
       **Next:** a transport for the gauge (§MB2, FU-252), then labels/taints/`volumestatus` axes.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
+- [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
+      wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
+      beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
+      admission half, a seat `talosctl` read found flannel ([controlplane-ha.md §CP9](controlplane-ha.md)).
+      Not FU-235's drift: live matched git, git differed per CP. #1848 fixes this path; the belt
+      catches the next one. **Next:** alert on CP config divergence (the `cluster:` section's hash
+      per CP, via the box or an exporter), and/or on a `kube-system` DaemonSet/Deployment missing
+      from git. Detector-first: replay against 2026-09-21 05:50–16:20Z. Relates FU-235, FU-243, #1845.
 - [ ] **FU-262** — **`wk-metal-02` is a control plane wearing a worker's name.** One of the three
       CPs since 2026-09-21 (ADR-133), still `wk-` in `kubectl get nodes`, etcd membership, BGP peer
       lists and every dashboard. The convention is settled — [ADR-137](adr.md): CPs are `cp-NN`,

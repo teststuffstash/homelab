@@ -302,3 +302,5 @@ Talos's defaults from its 2026-09-21 05:50Z reinstall. Two effects, both fleet-w
 Structural fix: `local.cp_common_patches` is the one list both configs consume (#1847, #1848).
 Per-apiserver acceptance, reusable for any admission question: `kubectl --server=https://<cp>:6443
 apply --dry-run=server -f <pod>` against each control plane, not the VIP.
+
+**Tracked by:** FU-268 — the belt for the next divergence (nothing fired for ~10 h this time).
