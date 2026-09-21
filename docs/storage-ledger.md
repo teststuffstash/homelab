@@ -238,18 +238,20 @@ it is *possible* — it just costs a BIOS session with every VM on the box down,
 answer to "where does the next disk go" is a new cheap box, not this one (operator, 2026-08-25).
 The
 board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
-slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
-`driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
+slot ~~is permanently occupied~~ — **CORRECTED 2026-09-21: pve boots HEADLESS.** The old "refuses to
+POST without the GPU" did not survive a CMOS clear: at factory defaults (CSM on, video Legacy — no
+setting changed) it booted with no card, `lspci` showing no display device. The GeForce 9600 GT
+(`driver=none`, idling at full clocks over the M.2 — NVMe sensor 1 ~69°C) is OUT; both slots are free.
+The BIOS is reachable only with a card fitted, and the clear reset every setting (AC-power-restore unread).
 **Re-read 2026-09-05 (`lspci -tv` + root-port `LnkSta`), then corrected by a physical count
 2026-09-08:** `lspci` shows a second x16 CPU root port (`00:02.0`, "Slot 6") and an x4 CPU root
 port (`00:01.0`, "Slot 1") as electrically present and empty (plus one chipset x1), the NVMe riding
 `00:01.1` — but **the board has ONE physical x16 slot, and the GPU is in it** (operator, counted
 2026-09-08). The second x16 root port is CPU silicon the AliExpress board does not break out.
-**The x4 slot IS physical — and the dual-slot 9600 GT sits over it**, so it is blocked until the
-card is swapped for a single-slot one (a hardware want, private hardware repo R9 — not tracked
-here). So growth has three shapes, cheapest first: **(a) a second NVMe on a passive PCIe→M.2
+**The x4 slot IS physical** — it sat under the dual-slot 9600 GT until the card came out
+2026-09-21; free now, as is the x16. So growth has three shapes, cheapest first: **(a) a second NVMe on a passive PCIe→M.2
 adapter in the x4 slot → new PV, extend the VG/pool** (no migration, no firmware change — a data
-disk needs no boot support — gated on the GPU swap freeing the slot, one shutdown for both);
+disk needs no boot support — the slot is free since 2026-09-21 — one shutdown to fit it);
 (b) replace the 500 G NVMe with a larger one (a migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
 consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
 seven years to its 300 TBW rating at that rate.
