@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-262** (2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
+  Next free id: **FU-263** (2026-09-21: FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
   backend on an apiserver restart, parked behind the 1.20.2 upgrade; FU-257 minted for the ownerless loop-CNP enforce flip;
@@ -423,15 +424,15 @@ six OVERSIZE items pointer-ized into
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, live results, and the §CP6 post-mortem of the stuck reinstall:
-      [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: the `.50` ruling (#1799), etcd snapshot,
-      VIP + certSANs on cp-01 (#1801), the metal `controlplane:` flag (#1800), wk-metal-02's prep
-      (#1814/#1815/#1817), cp-02 declared (#1816), the SA-issuer pin LIVE on cp-01 (ADR-136, #1812),
-      and the metal VIP patch's missing `dhcp: true` — §CP6, the reason wk-metal-02 came back off the
-      network. ⛔ The `cluster_endpoint` cutover stays reverted until there are three members.
-      **Next, in order:** (a) recover wk-metal-02 (reflag → PXE to maintenance → re-apply → confirm
-      the `.183` lease BEFORE unflagging, §CP5); (b) the nx-02 VM back to back (never rest at two);
-      (c) the endpoint flip + re-rendered client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258, FU-261.
+      order, the §CP6 defect and the §CP7 recovery: [`docs/controlplane-ha.md`](controlplane-ha.md).
+      **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
+      wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
+      `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
+      STATE-partition wipe that §CP5 could not reach, cp-02's missing BGP neighbour, `mgmt-tf state`).
+      ⛔ The `cluster_endpoint` cutover is still reverted. **Next:** (a) flip `cluster_endpoint` to
+      the `.50` VIP — token-neutral now the issuer is pinned, and it does not restart the apiserver
+      (§CP4 phase 3) — then re-render the client configs or the jail and the box keep dialling `.51`
+      (FU-259); (b) `cp-upgrade` ×3, cp-01 still trails at v1.13.2. Relates FU-235, FU-258, FU-262.
 
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
@@ -1328,7 +1329,9 @@ the block needs pruning, not more headings.
       -exclude=kubernetes_node_taint.ephemeral`, then the fresh node's config via `tofu console` +
       `talosctl apply-config --insecure` (the `-replace` beside `-exclude` is ignored silently);
       (b) `scripts/mgmt-tf.sh`: `apply` only from a plan file it produced (`plan -out` → `apply plan.bin`,
-      the apply loop's own shape), refuse ad-hoc `-target`/`-replace` applies. Relates FU-246, FU-235.
+      the apply loop's own shape), refuse ad-hoc `-target`/`-replace` applies. **RESIGHT 2026-09-21:**
+      `-target=kubernetes_labels.node_zone["wk-metal-02"]` — one label, one node — planned cp-02's VM
+      and config as dependencies; harmless only because creating cp-02 was next anyway. Relates FU-246, FU-235.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
       2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
@@ -1366,6 +1369,17 @@ the block needs pruning, not more headings.
       **Next:** the DIFF on the box's probe — declared (machines.yaml + schematic ids) vs live (`talosctl get
       extensions`/`volumestatus`, labels, taints, *presence*), one gauge per node → alert; then labels+taints
       into the machine config, the taint resource retired. ADR-132's diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
+
+- [ ] **FU-262** — **`wk-metal-02` is a control plane wearing a worker's name.** Since 2026-09-21 it
+      is one of the three CPs (ADR-133) but still reads `wk-` in every `kubectl get nodes`, dashboard
+      and `bgp_node_ips` row, while its siblings are `cp-01`/`cp-02`. There is **no node-naming ADR or
+      glossary entry** (grepped 2026-09-21 — this is the first time the convention has had to be
+      stated), so settle that first: role-prefix for CPs, chassis-prefix for workers, or leave it.
+      **Why deferred:** the hostname is pinned at INSTALL via `HostnameConfig` and changing it on a
+      running node ghosts it (`metal.tf`, provider #296) — a rename is a full wipe-and-reinstall plus
+      machines.yaml, the dnsmasq reservation, `bgp_node_ips` and the generated tables, and it drops
+      etcd back to two members while it runs. **Next:** do it with the box's NEXT reinstall for any
+      other reason, never as its own outage. Relates FU-243.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).

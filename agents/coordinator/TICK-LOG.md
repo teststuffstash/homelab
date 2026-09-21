@@ -10261,3 +10261,30 @@ post-mortem; §CP5 step 8 now waits on the lease before unflagging; FU-235 gains
 detector gap (nothing fired for ~12 h while the fleet read 11/11 Ready).
 
 Recovery still needs the operator at the box — reflag, PXE to maintenance, re-apply, verify the lease.
+
+## 2026-09-21 (cont.) — the recovery: wipe STATE, three CPs, and a wrong first diagnosis
+
+Condition: wk-metal-02 flagged in Matchbox and PXE-booted — and it came up as `controlplane` with the
+broken config anyway, three times. **Talos reads its machine config from the STATE partition**, so PXE
+without `talos.config` boots the network kernel and then runs whatever is on disk; the kernel version
+was the only thing that changed between boots. `talosctl reset`, the documented way back to
+maintenance, needs the network the node had just lost.
+
+⚠ Wrong first diagnosis, recorded on purpose: the PXE assets were pinned at v1.13.2 while
+`talos_version_worker` was v1.13.10, and I read the failed boot as the `page_table_check` kernel
+(FU-246). The matchbox log disproved it — every chainload succeeded. The lockstep bump (`19138c44`)
+was still worth doing on FU-246's own terms, but its commit message asserts a cause it did not have;
+docs/controlplane-ha.md §CP7 carries the correction.
+
+What actually worked: `talos.experimental.wipe=system` on the PXE profile, with the group swapped back
+to the plain profile *during* the wipe (15 s, against ~90 s of wipe-plus-reboot) so the post-wipe boot
+could not re-read the arg. Wipe 05:47:42Z → maintenance apid 05:49:20Z → corrected config applied →
+`Ready` control plane 05:52:09Z with `.183` at `layer: operator`. cp-02 followed: three CPs, three etcd
+members, 06:02 BGP established.
+
+Caught on the way: `-target` on ONE node label planned cp-02's whole VM (FU-248 resight); cp-02 was
+missing from `bgp_node_ips` and sat `idle` with 0 routes (4th miss, §CP5 step 9 now says ADD not
+CONFIRM); `mgmt-tf -- state list`, an example in its own usage header, had never worked; and the stale
+`kubernetes_node_taint` entry was cleared with `state rm`, never `force` (`.spec.taints` is atomic).
+
+PRs: #1818 (the dhcp fix), #1820 (recovery recipe + BGP + mgmt-tf). FU-262 filed for the name.

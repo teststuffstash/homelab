@@ -20,32 +20,26 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-21 ~00:45 — the three-CP program: pin LIVE, `wk-metal-02` STUCK MID-REINSTALL,
-  cp-02 deliberately NOT created).** Mechanism doc: **[`../controlplane-ha.md`](../controlplane-ha.md)**
-  (§CP5 is the promotion recipe this session wrote and then executed).
-  **Done and live:** #1811 the `cp-upgrade` cilium gate · #1812 ADR-136 the SA-issuer pin, APPLIED on
-  cp-01 19:08Z (a pre-apply token survived; FU-258 dropped 10/12 backends, one `ds/cilium` roll fixed
-  it) · #1813 the evidence · #1814 the ride pool moved to wk-metal-03 · #1815 `controlplane: true` for
-  wk-metal-02 · #1816 cp-02 DECLARED (VM not created) · #1817 the Forgejo runner unpinned (+4Gi DinD cap).
-  **⛔ THE BLOCKER — CAUSE FOUND 2026-09-21, fix in PR#1818.** `wk-metal-02` is wiped
-  (STATE+EPHEMERAL), was installed with the CP config (tofu apply clean), unflagged — and came up
-  with **no IP**: the VIP patch writes `machine.network.interfaces`, which suppresses Talos's
-  DEFAULT `dhcp4` operator, and a PXE metal box has no other address source (cp-01 is nocloud =
-  `ConfigPlatform`, which is why the `--mode=try` rehearsal on it was blind). Console evidence: NTP
-  failing against 8.8.8.8, Talos's compiled-in fallback resolver. Full write-up:
-  [`../controlplane-ha.md`](../controlplane-ha.md) §CP6. Its Node object is deleted and etcd is back
-  to ONE member (cp-01) — the safe resting state; cluster 11/11 Ready, nothing else degraded.
-  **RECOVERY (needs the operator at the box, PR#1818 merged first):** reflag the MAC
-  `68:f7:28:80:84:09` in `tofu/provisioning` → power-cycle and let it PXE into maintenance → confirm
-  the `.183` lease (OPNsense `dnsmasq/leases/search`) → `mgmt-tf apply -target=...metal["wk-metal-02"]`
-  → confirm the lease AGAIN before unflagging (§CP5 step 8) → §CP5 steps 9–10 → then cp-02.
-  **Do NOT create cp-02 until wk-metal-02 is back:** two etcd members is the one state worse than one
-  (ip-plan §VIP). Everything for it is merged — `devbox run mgmt-tf -- apply` creates and joins it.
-  **Also found and filed:** FU-261 — `/srv/tftp/undionly.kpxe` was missing, so BIOS PXE clients
-  silently fell back to disk; the `matchbox-ipxe-tftp` role has been failing at its last task
-  (tftpd-hpa masked by proxydhcp) which is why nobody saw it. File restored live.
-  **Window:** closed with `--force` at 00:45Z — knowingly open: nodes 12→11 and targets 151→143 are
-  wk-metal-02 being out; `AgentWorkerEgressDropped` is an oracle-fleet ride (FU-257 class), not this work.
+- **⚑ PICKUP (2026-09-21 06:05 — THREE CONTROL PLANES ARE LIVE; the endpoint flip is what's left).**
+  Mechanism doc: **[`../controlplane-ha.md`](../controlplane-ha.md)** (§CP6 the defect, §CP7 the recovery).
+  cp-01 + cp-02 + wk-metal-02, all `Ready`, etcd 3 members, all BGP `established`; 13 nodes, 159 targets,
+  cilium 13/13; both maintenance windows closed clean.
+  **What it took:** #1818 — metal CPs need `dhcp: true` beside the VIP (naming a link in
+  `machine.network.interfaces` suppresses Talos's default `dhcp4` operator, and a PXE box has no other
+  address source; the cp-01 `--mode=try` rehearsal was structurally blind to it because a nocloud VM's
+  address is `ConfigPlatform`). #1820 — the STATE-partition wipe §CP5 could not reach
+  (`talos.experimental.wipe=system`; PXE does NOT force maintenance, Talos reads its config off disk),
+  cp-02's missing `bgp_node_ips` entry (peer `idle`, the 4th miss on that list), and `mgmt-tf -- state`
+  which had never worked (flag placed before the sub-subcommand).
+  ⚠ **Do not repeat the wrong first diagnosis:** the PXE assets were pinned at v1.13.2 vs
+  `talos_version_worker` v1.13.10 and that drift was real (fixed `19138c44`, FU-246 wanted it) — but it
+  caused NONE of this. Both kernels booted fine.
+  **NEXT:** (a) flip `cluster_endpoint` to the `.50` VIP — token-neutral now the issuer is pinned and it
+  does not restart the apiserver (§CP4 phase 3) — then `devbox run kubeconfig`/`talosconfig` or the jail
+  and the box keep dialling `.51` (FU-259); (b) `cp-upgrade` ×3 — cp-01 still trails at Talos v1.13.2.
+  Knowingly left firing: `NodeRebooted` ×2 (our own install boots, self-clearing) and
+  `ErtPipelineStepFailed` (oracle-fleet upstream code problem, operator-confirmed unrelated — their loop's).
+  Filed: FU-262 (wk-metal-02 still wears a worker's name; rename rides its next reinstall, never its own outage).
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:
