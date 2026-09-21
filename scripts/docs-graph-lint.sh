@@ -152,11 +152,10 @@ done
 # GREEN on master with 45 refs still naming the old file (homelab#1710 → PR#1755 is the manual
 # sweep; this is its ratchet, so the 46th does not happen at the next doc move).
 #
-# ⚠ SHADOW until that sweep lands. Master carries the 42 refs PR#1755 fixes, so enforcing now
-# would red every PR for a defect none of them introduced — the same shadow→enforce rollout the
-# IAC-G04 sentinel used. FLIP: set DOCS_GRAPH_MISFILED_ENFORCE=1 below (one line) once
-# `git grep -c 'model-routing\.md §M'` is 0 on master.
-DOCS_GRAPH_MISFILED_ENFORCE="${DOCS_GRAPH_MISFILED_ENFORCE:-0}"
+# ENFORCING since 2026-09-21: PR#1755 swept the 42 `§M` refs and the last two strays (`§C3` for
+# controlplane-ha's §CP5) were fixed the same day, so master reads 0 misfiled. Shadow is still one
+# env var away (DOCS_GRAPH_MISFILED_ENFORCE=0) for a doc move that needs a sweep first.
+DOCS_GRAPH_MISFILED_ENFORCE="${DOCS_GRAPH_MISFILED_ENFORCE:-1}"
 misfiled=0
 while IFS= read -r ref; do
   [ -n "$ref" ] || continue
