@@ -69,11 +69,14 @@ sync is the outage above.
    `kubectl -n kube-system get pod -l component=kube-apiserver -o jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep -E 'service-account-issuer|api-audiences'`
 2. **Join `wk-metal-02` and the nx-02 VM, back to back.** Never rest at two etcd members —
    [`ip-plan.md`](ip-plan.md) §VIP: at two the VIP is *less* available than at one.
-3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then, and it does not even restart the
-   apiserver (C4). Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
+3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then — but **not free**: it restarts
+   the apiserver on EVERY member, together, and the API is unreachable on all of them for ~2 min
+   while they come back (measured 2026-09-21; §CP4 carries the numbers and why the rehearsal
+   predicted otherwise). Treat it exactly like steps 1 and 2: declared window, C3 fallout expected.
+   Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
    → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (FU-259).
 
-**Steps 1 and 2 restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
+**All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
 ([FU-258](spikes/cilium-apiserver-restart-backend-loss.md) — `devbox run maint cilium-check`;
 `cp-upgrade` gates on it by itself), the Argo Workflows controller hot-loops and floods Loki
