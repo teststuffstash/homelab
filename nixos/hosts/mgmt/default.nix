@@ -325,6 +325,35 @@ in
     };
   };
 
+  # ── state snapshots (docs/tofu-state.md §Snapshots, FU-012) ─────────────────────────────────
+  # The level backstop. mgmt-tf and mgmt-apply already snapshot the root they just wrote, inside
+  # their own lock span; this timer catches every state change made ANYWHERE else — the four
+  # Garage-backed roots are applied from the host and the jail, never from here. Idempotent by
+  # (serial, lineage), so an hour in which nothing changed costs a few jq reads and five S3 GETs.
+  # Takes the loops' lock itself (standalone run), so it can never read main mid-write.
+  systemd.services.mgmt-state-snapshot = {
+    description = "tofu state snapshots: dated, encrypted, round-trip verified (every root)";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" ];
+    path = with pkgs; [ bash git devbox nix coreutils gnugrep gnused findutils util-linux ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # TOFU_STATE_PASSPHRASE + the Garage state key
+    };
+    script = "${repoPath}/scripts/mgmt-state-snapshot.sh";
+  };
+  systemd.timers.mgmt-state-snapshot = {
+    enable = true;
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "hourly";
+      RandomizedDelaySec = "5m";
+      Persistent = true;
+    };
+  };
+
   # ── the SENTINEL: plan-on-PR (ADR-131, docs/management-box.md §MB3) ──────────────────────────
   # Plans open homelab PR heads behind the input allowlist (policy/mgmt/plan-input.yaml, read
   # from MASTER), posts the verdict under the homelab-sentinel App. The timer is the LEVEL

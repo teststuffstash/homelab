@@ -131,6 +131,9 @@
       "mgmt-tf": [
         "bash scripts/mgmt-tf.sh \"$@\""
       ],
+      "mgmt-state-pull": [
+        "bash scripts/mgmt-state-pull.sh \"$@\""
+      ],
       "mgmt-human-plan": [
         "bash scripts/mgmt-human-plan.sh \"$@\""
       ],
