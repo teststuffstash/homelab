@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-263** (2026-09-21: FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-264** (2026-09-21: FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1218,16 +1218,16 @@ the block needs pruning, not more headings.
       backend either side of the reboot (rolls `ds/cilium` only on a genuinely missing one, reading
       shared as `devbox run maint cilium-check`); ⚠ every OTHER apiserver restart is still
       unguarded — run it by hand. **Next:** the spike waits on Renovate/1.20.2. Relates FU-246, FU-253.
-- [ ] **FU-259** — **`talos_cluster_kubeconfig` renders a STALE endpoint and `plan` never notices
-      (2026-09-20).** It captures the kubeconfig at creation and never refreshes, so after a
-      `cluster_endpoint` change `tofu output -raw kubeconfig` keeps serving the OLD server URL while
-      `plan` reports `No changes`. Hit twice in one session, both directions — the jail and the box
-      were left on an endpoint the cluster no longer declared, and only kept working because the VIP
-      was assigned and the cert named both. Recovery is
-      `apply -replace=talos_cluster_kubeconfig.this -target=…`; the UNSCOPED replace fails, since the
-      kubernetes provider is configured from that kubeconfig and goes unconfigured mid-apply.
-      **Next:** endpoint in the resource's replace triggers, or `devbox run kubeconfig` verifies
-      against `cluster_endpoint` and refuses on mismatch. Relates FU-243, FU-253.
+- [ ] **FU-259** — **`talos_cluster_kubeconfig` renders a STALE endpoint and `plan` never notices.**
+      It captures the kubeconfig at creation and never refreshes, so after a `cluster_endpoint`
+      change `tofu output -raw kubeconfig` serves the OLD server URL while `plan` says `No changes`.
+      **CONFIRMED 2026-09-21 at the real VIP cutover:** the flip reached all 13 machine configs, yet
+      the kubeconfig output still reads `https://192.168.2.51:6443`. The talosconfig half is FINE —
+      a DATA source, re-read correctly (`.183/.51/.65`); only the kubeconfig RESOURCE sticks. A
+      second bug masked it a day (`client-configs.sh` never wrote the jail's copy while printing
+      success — fixed #1823). **Next:** endpoint in the resource's replace triggers, or `devbox run
+      kubeconfig` refuses on mismatch; recovery today is `apply -replace=talos_cluster_kubeconfig.this
+      -target=…` (unscoped fails — the k8s provider is configured FROM it). Relates FU-243, FU-253, FU-248.
 - [ ] **FU-260** — **The Argo Workflows controller hot-loops and floods Loki when the apiserver
       goes away (2026-09-20).** v4.0.7's `configmap_watcher` never re-establishes a closed watch:
       it logs `invalid config map object received in config watcher` forever — 1.43M lines / 220 MB
@@ -1380,6 +1380,17 @@ the block needs pruning, not more headings.
       machines.yaml, the dnsmasq reservation, `bgp_node_ips` and the generated tables, and it drops
       etcd back to two members while it runs. **Next:** do it with the box's NEXT reinstall for any
       other reason, never as its own outage. Relates FU-243.
+
+- [ ] **FU-263** — **Nocloud VMs cannot be version-bumped: the declared model and the upgrade verb
+      disagree.** Bumping `talos_version_controlplane` to v1.13.10 plans (a) **both CP VMs REPLACED**
+      (`disk.file_id = "…v1.13.2-nocloud…" # forces replacement` on cp-01 and cp-02) and (b)
+      **`talos_machine_secrets` regenerated** — every CA and client cert to `(known after apply)`,
+      the whole cluster PKI. Yet `node-maintenance.sh upgrade` says a nocloud VM upgrades IN PLACE
+      with the declared image (ADR-014 amended), which then leaves a permanent pending VM replace —
+      the FU-248 landmine. The workers only reached v1.13.10 by being replaced, in that incident.
+      Operator ruling 2026-09-21: **stop, design it.** **Next:** (a) freeze
+      `talos_machine_secrets.talos_version` as ADR-136 froze `sa_issuer`, so no version edit can
+      rotate the CA; (b) a `/design` pass on VM substrate upgrades. Relates FU-246, FU-248, FU-253.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).

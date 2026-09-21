@@ -20,26 +20,31 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
-- **⚑ PICKUP (2026-09-21 06:05 — THREE CONTROL PLANES ARE LIVE; the endpoint flip is what's left).**
-  Mechanism doc: **[`../controlplane-ha.md`](../controlplane-ha.md)** (§CP6 the defect, §CP7 the recovery).
-  cp-01 + cp-02 + wk-metal-02, all `Ready`, etcd 3 members, all BGP `established`; 13 nodes, 159 targets,
-  cilium 13/13; both maintenance windows closed clean.
-  **What it took:** #1818 — metal CPs need `dhcp: true` beside the VIP (naming a link in
-  `machine.network.interfaces` suppresses Talos's default `dhcp4` operator, and a PXE box has no other
-  address source; the cp-01 `--mode=try` rehearsal was structurally blind to it because a nocloud VM's
-  address is `ConfigPlatform`). #1820 — the STATE-partition wipe §CP5 could not reach
-  (`talos.experimental.wipe=system`; PXE does NOT force maintenance, Talos reads its config off disk),
-  cp-02's missing `bgp_node_ips` entry (peer `idle`, the 4th miss on that list), and `mgmt-tf -- state`
-  which had never worked (flag placed before the sub-subcommand).
-  ⚠ **Do not repeat the wrong first diagnosis:** the PXE assets were pinned at v1.13.2 vs
-  `talos_version_worker` v1.13.10 and that drift was real (fixed `19138c44`, FU-246 wanted it) — but it
-  caused NONE of this. Both kernels booted fine.
-  **NEXT:** (a) flip `cluster_endpoint` to the `.50` VIP — token-neutral now the issuer is pinned and it
-  does not restart the apiserver (§CP4 phase 3) — then `devbox run kubeconfig`/`talosconfig` or the jail
-  and the box keep dialling `.51` (FU-259); (b) `cp-upgrade` ×3 — cp-01 still trails at Talos v1.13.2.
-  Knowingly left firing: `NodeRebooted` ×2 (our own install boots, self-clearing) and
-  `ErtPipelineStepFailed` (oracle-fleet upstream code problem, operator-confirmed unrelated — their loop's).
-  Filed: FU-262 (wk-metal-02 still wears a worker's name; rename rides its next reinstall, never its own outage).
+- **⚑ PICKUP (2026-09-21 06:40 — ADR-133 IS DONE; the substrate upgrade is the open fork).**
+  Mechanism: **[`../controlplane-ha.md`](../controlplane-ha.md)** (§CP6 defect, §CP7 recovery).
+  **LIVE:** three control planes (cp-01, cp-02, wk-metal-02), three etcd members, all BGP
+  `established`, 13 nodes, 159 targets, cilium 13/13. **`cluster_endpoint` IS the `.50` VIP**
+  (#1822, applied 06:25, apply-loop baseline stamped `b43653f8`). All windows closed clean.
+  **⚠ §CP4's "the flip does not restart the apiserver" DID NOT HOLD at fleet scale.** All three
+  apiservers restarted together — a ~2 min FULL API outage (all of `.51/.65/.183/.50` refused),
+  then kube-scheduler + cnpg-operator crashlooped and self-recovered as §CP3 predicts. The lab
+  finding came from a ONE-NODE cluster; three CPs did not make the restarts roll. §CP4 should be
+  corrected to say so — not done yet, and it is the kind of claim a future session will trust.
+  **NEXT, in order:**
+  (1) **FU-263 — the open fork, operator-ruled "stop, design it" 2026-09-21.** cp-01/cp-02 still run
+      the `page_table_check` kernel (v1.13.2) and CANNOT simply be bumped: the version change plans
+      BOTH CP VMs replaced (`disk.file_id` forces replacement) AND regenerates `talos_machine_secrets`
+      — the entire cluster PKI. Do the cheap half first: freeze `talos_machine_secrets.talos_version`
+      to a constant exactly as ADR-136 froze `sa_issuer`, so no future version edit can rotate the CA.
+      Then a `/design` pass. The abandoned branch was deleted; nothing is half-applied.
+  (2) **FU-259 — `tofu/kubeconfig` still says `.51`** after the flip, so clients do not use the VIP.
+      Recovery is a SCOPED `apply -replace=talos_cluster_kubeconfig.this -target=…` (unscoped fails).
+      Deliberately not run at 06:40 — a targeted apply on this root is what replaced three VMs in
+      September (FU-248). talosconfig is already correct (`.183/.51/.65`, #1823).
+  (3) FU-262 — wk-metal-02 still wears a worker's name; rename rides its NEXT reinstall, never its own.
+  **In flight:** PR#1823 (client-configs never wrote the jail's copy while reporting success).
+  ⚠ **Do not repeat the wrong first diagnosis** from this session: the PXE asset drift to v1.13.2 was
+  real and fixed (`19138c44`, FU-246) but caused NONE of the wk-metal-02 failure. Both kernels booted.
 - **⚑ PICKUP (2026-09-18 evening — the Talos upgrade verb; two nodes done, three to go).**
   The management-apply residue above is **APPLIED** (baseline stamped at `cdf01961`, `refused-rev`
   cleared, all 8 addresses; `MgmtApplyResidueStanding` clears on its own). What replaces it:

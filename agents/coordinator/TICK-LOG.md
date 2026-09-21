@@ -10288,3 +10288,29 @@ CONFIRM); `mgmt-tf -- state list`, an example in its own usage header, had never
 `kubernetes_node_taint` entry was cleared with `state rm`, never `force` (`.spec.taints` is atomic).
 
 PRs: #1818 (the dhcp fix), #1820 (recovery recipe + BGP + mgmt-tf). FU-262 filed for the name.
+
+## 2026-09-21 (cont.) — the VIP cutover, and two claims that did not survive contact
+
+Condition: three CPs live, so ADR-133's last step was unblocked. Flipped `cluster_endpoint` to the
+`.50` VIP (#1822) after verifying both preconditions live — the issuer pin on ALL THREE apiservers,
+and the VIP itself proven with an AUTHENTICATED `kubectl get nodes` plus a ServiceAccount read, not
+a `Ready` column. Plan was 13 in-place config updates, nothing replaced. Applied 06:25.
+
+⚠ **§CP4 said the flip would not restart the apiserver. It restarted all three, together** — a ~2 min
+full API outage; `.51`, `.65`, `.183` and `.50` all refused. kube-scheduler and cnpg-operator
+crashlooped and recovered on their own, the §CP3 list exactly. The lab finding that predicted no
+restart came from a ONE-NODE cluster, and three control planes did NOT make the restarts roll. The
+doc still claims otherwise.
+
+⚠ **"bump everything to 1.13.10" turned out to be a cluster rebuild.** The plan showed BOTH CP VMs
+replaced (`disk.file_id` forces replacement) and `talos_machine_secrets` regenerated — every CA and
+client cert to `(known after apply)`. Stopped and asked; operator ruled stop-and-design (FU-263).
+The workers only ever reached v1.13.10 by being REPLACED, in the FU-248 incident.
+
+Also: `client-configs.sh` had been printing `wrote … + tofu/<name>` without writing the jail's copy
+for a day — `local name="$1" dest="$ROOT/tofu/$name"` builds dest from an empty name because a shell
+expands all of `local`'s arguments before assigning any. The box's copy was right, the jail's was a
+day stale: the exact split state the script exists to prevent (#1823). After the fix the jail's
+talosconfig carries all three CP endpoints; the kubeconfig is still `.51`, which is FU-259 itself.
+
+Cleared on the way: the committed `nx_01_diag` PXE flag on a RUNNING worker (#1822).
