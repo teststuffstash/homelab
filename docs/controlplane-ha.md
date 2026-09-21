@@ -262,10 +262,18 @@ Blocking would wedge the apply loop on a condition it has no way to resolve. The
 scoped pair, then the re-render, then a full apply to restamp the apply-loop baseline:
 
 ```bash
-devbox run mgmt-tf -- apply -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this
+devbox run mgmt-tf -- plan -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this
+devbox run mgmt-tf -- apply <plan-id>   # the id that plan printed, after reading it
 devbox run kubeconfig
-devbox run mgmt-tf -- apply        # full, origin/master — stamps applied-rev
+devbox run mgmt-tf -- plan && devbox run mgmt-tf -- apply <plan-id>   # full — stamps applied-rev
 ```
 
-⚠ A `-target` on this root is the FU-248 landmine — it once replaced three workers. Plan the exact
-command, read the plan, and check the baseline plan is `No changes` before starting.
+⚠ A `-target` on this root is the FU-248 landmine — it once replaced three workers. The plan-id
+contract is what keeps that honest: the scope lives in the plan file, so the apply cannot be typed
+differently from the plan you read. Check the unscoped plan is `No changes` before starting.
+
+**Done 2026-09-21**, in that order and with the plan read first — the scoped plan touched exactly
+one resource (`talos_cluster_kubeconfig.this will be replaced, as requested`, `1 to add, 1 to
+destroy`) and nothing was dragged in. `tofu/kubeconfig` and the box's copy now read
+`https://192.168.2.50:6443`, an authenticated `kubectl get nodes` through it returns 13 `Ready`,
+and the full plan afterwards is `No changes`.
