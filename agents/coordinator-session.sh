@@ -77,7 +77,7 @@ done
 # (route consulted, fail-OPEN if the proxy is unreachable); an explicit operator --model is an
 # OVERRIDE (route skipped). GOAL_MODEL env survives as the explicit escape hatch for
 # goal-decompose items (deleted in the sweep).
-# Override-rule home: docs/agents/model-routing.md §M10.
+# Override-rule home: docs/spikes/model-routing-history.md §M10.
 RESOLVE_CLASS=""
 if [ -n "$ITEM" ]; then
   # Parse the clause from --item to set the routing class:
