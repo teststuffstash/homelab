@@ -24,7 +24,10 @@ metadata:
   name: <app>-pg          # stack-generic if more tables will join later (e.g. oracle-pg)
   namespace: <your-ns>
 spec:
-  instances: 2            # HA pair; replicas spread by default anti-affinity
+  instances: 2            # HA pair — one instance per PHYSICAL box (next block)
+  affinity:               # ADR-114: REQUIRED, on the zone — never CNPG's default
+    podAntiAffinityType: required
+    topologyKey: topology.kubernetes.io/zone
   storage:
     size: 2Gi             # default StorageClass = replicated Longhorn
   monitoring:
@@ -35,6 +38,14 @@ spec:
       owner: <role>
       # No `secret:` — CNPG mints `<cluster>-app` for exactly this role/database.
 ```
+
+**Why the `affinity` block is not optional.** CNPG's default anti-affinity is `preferred` on
+`kubernetes.io/hostname` — a soft per-*node* preference. It let forgejo-pg heal both instances onto
+one VM (2026-08-24), and a hostname rule can never see that every pve VM shares one hypervisor and
+one thin pool. `topology.kubernetes.io/zone` is the physical box (`machines.yaml` `zone`: every
+pve VM reads `proxmox`, nx-02's read `nx-02`), and `required` makes co-location impossible rather
+than unlikely. Decided in [ADR-114](adr.md) (delivery tracked by FU-137); the platform's own three clusters carry it since 2026-09-21
+(#1840).
 
 Supply your own `secret:` **only** when something outside the cluster must know the password at
 build time (`infisical-pg.yaml` does, because tofu assembles its connection string). Default is:
@@ -62,6 +73,7 @@ don't.
 | `<cluster>-app` never appears | the cluster hasn't finished bootstrapping (read the `Cluster` status/events) — or you set `bootstrap.initdb.secret:`, and CNPG then mints nothing |
 | `password authentication failed` after a re-create | supplied-secret drift: the DB was re-initialized but your supplied secret wasn't (the class ADR-046 warns about) — the CNPG-generated path can't hit this |
 | TLS/certificate error from node-pg | the self-signed cert (FU-010); use `sslmode=require`, not `verify-*` |
+| one instance `Pending` — `didn't match pod anti-affinity rules` | only one zone is schedulable for it right now (a hypervisor down, nodes cordoned). By design: the cluster runs on the other instance until a second zone returns — never relax `required` to "fix" it |
 | you need a second *database* later | declare a `Database` CR (the CRD is live, operator 1.28) — it does **not** mint another `-app` secret; that role/password is yours |
 | CNPG pod-status alerts stay silent for your cluster | the `CNPGInstanceNotReady`/`CNPGInstanceCrashLooping` belts pin namespaces in [`kube-prometheus-stack.yaml`](../argocd/platform/values/kube-prometheus-stack.yaml) — a platform one-liner adds yours (the metric-based belts cover you automatically once the PodMonitor is on) |
 
