@@ -24,7 +24,7 @@ output "cluster_endpoint" {
 # schematic id, which is what `schematic` below is compared against after an upgrade.
 #   devbox run mgmt-tf output -json node_install_targets
 output "node_install_targets" {
-  description = "node => {ip, class, installer, schematic, version} — what each node's declaration says it should be running. Consumed by scripts/node-maintenance.sh upgrade."
+  description = "node => {ip, class, installer, schematic, version, role, install_disk, ephemeral} — what each node's declaration says it should be running. Consumed by scripts/node-maintenance.sh upgrade and by the management sentinel's install-impact line."
   value = merge(
     # VMs (talos.tf + proxmox.tf/nx02.tf): the `longhorn` flag picks the schematic, the ROLE picks
     # the version (image.tf). The nocloud PLATFORM is the half ADR-014 is about — a generic
@@ -36,6 +36,12 @@ output "node_install_targets" {
         installer = data.talos_image_factory_urls.vm[local.vm_image_key[k]].urls.installer
         schematic = n.longhorn ? talos_image_factory_schematic.longhorn.id : talos_image_factory_schematic.this.id
         version   = local.talos_role_version[n.role]
+        # The INSTALL-TIME half (ADR-132 §MB4 layer 2): fields Talos honours only on the next
+        # install, so `plan` shows them as a clean in-place config apply. The sentinel diffs this
+        # output's before/after per node and names the node + field on the PR — never the value.
+        role         = n.role
+        install_disk = local.vm_install_disk
+        ephemeral    = { max_size = null, disk_selector = null }
       }
     },
     # Metal (metal.tf): `kata: true` in machines/machines.yaml selects the metal_kata schematic —
@@ -47,6 +53,10 @@ output "node_install_targets" {
         installer = m.kata ? data.talos_image_factory_urls.metal_kata.urls.installer : local.talos_install_image
         schematic = m.kata ? talos_image_factory_schematic.metal_kata.id : talos_image_factory_schematic.metal.id
         version   = var.talos_version_worker
+        # install-time (see the VM half): machine_type, install.disk, the EPHEMERAL VolumeConfig
+        role         = m.controlplane ? "controlplane" : "worker"
+        install_disk = m.install_disk
+        ephemeral    = { max_size = m.ephemeral_max_size, disk_selector = m.ephemeral_disk_selector }
       }
     },
   )
@@ -58,15 +68,14 @@ output "node_install_targets" {
 # (state records DELIVERY, never the Node object), the ephemeral taint's resource cannot own an
 # atomic list another manager rewrote (metal.tf), and the EPHEMERAL VolumeConfig is honoured only
 # at install. Each expression below restates the CONDITION the patch/resource it mirrors uses —
-# edit both together (the source is named on each line).
+# edit both together (the source is named on each line). The EPHEMERAL diskSelector is NOT here:
+# node_install_targets carries it (`.ephemeral`, the install-time half) and the probe reads it there.
 #   labels          only the keys tofu itself declares; the probe compares over the UNION of
 #                   keys across nodes, so a declared key missing live AND an undeclared one present
 #                   live (an imperative `kubectl label`) both read as drift
 #   taints          "key=value:effect", same union semantics
-#   ephemeral_disk  the EPHEMERAL VolumeConfig diskSelector (a Talos CEL expression), or null =
-#                   "on the system disk"
 output "node_declared_k8s" {
-  description = "node => {labels, taints, ephemeral_disk} — the declared half of the belt's labels/taints/ephemeral_disk axes (scripts/mgmt-probe.sh check_nodes)."
+  description = "node => {labels, taints} — the declared half of the belt's registered/labels/taints axes (scripts/mgmt-probe.sh check_nodes)."
   value = merge(
     {
       for k, n in var.nodes : k => {
@@ -79,7 +88,6 @@ output "node_declared_k8s" {
           contains(local.ephemeral_nodes, k) ? ["homelab.io/ephemeral=true:NoSchedule"] : [],    # metal.tf taint
           n.role == "controlplane" ? ["node-role.kubernetes.io/control-plane=:NoSchedule"] : [], # Talos default
         )
-        ephemeral_disk = null
       }
     },
     {
@@ -94,7 +102,6 @@ output "node_declared_k8s" {
           contains(local.ephemeral_nodes, k) ? ["homelab.io/ephemeral=true:NoSchedule"] : [], # metal.tf taint
           m.controlplane ? ["node-role.kubernetes.io/control-plane=:NoSchedule"] : [],        # Talos default
         )
-        ephemeral_disk = m.ephemeral_disk_selector
       }
     },
   )

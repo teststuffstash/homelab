@@ -130,8 +130,9 @@ _yq() { ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); }
 mgmt_policy_get() { _yq -r "$2" "$1"; }
 
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
-# A path under roots[X].dir/ (longest dir wins) → X; a path under a foreign_roots dir → none;
-# anything not under any root dir → none.
+# A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
+# root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
+# foreign_roots dir → none; anything else → none.
 # FAILS CLOSED (rc 1, a line on stderr) when the policy cannot be read — a yq/devbox hiccup, a
 # missing file, a roots map with no entries or a root without a dir. An EMPTY result here means
 # "no box-held surface touched" = a success status, so a read failure must never degrade into it
@@ -139,7 +140,7 @@ mgmt_policy_get() { _yq -r "$2" "$1"; }
 # not cover process substitution). Callers capture the output with `$(…) || …`, not mapfile.
 mgmt_roots_touched() {
   local pol="$1" f root dir best bestdir foreign n d out
-  local -a names dirs foreigns
+  local -a names dirs foreigns inputs=()
   out="$(mgmt_policy_get "$pol" '.roots | keys | .[]')" || { echo "policy: roots unreadable ($pol)" >&2; return 1; }
   [ -n "$out" ] || { echo "policy: no roots in $pol" >&2; return 1; }
   mapfile -t names <<<"$out"
@@ -147,6 +148,9 @@ mgmt_roots_touched() {
     d="$(mgmt_policy_get "$pol" ".roots.\"$n\".dir")" && [ -n "$d" ] && [ "$d" != null ] \
       || { echo "policy: root $n has no dir" >&2; return 1; }
     dirs+=("$d")
+    # the root's declared out-of-dir inputs ("<root>\t<path>"); `[]?` = none when the key is absent
+    d="$(mgmt_policy_get "$pol" ".roots.\"$n\".inputs[]?")" || { echo "policy: roots.$n.inputs unreadable" >&2; return 1; }
+    if [ -n "$d" ]; then while IFS= read -r f; do if [ -n "$f" ]; then inputs+=("$n"$'\t'"$f"); fi; done <<<"$d"; fi
   done
   out="$(mgmt_policy_get "$pol" '.foreign_roots[]?')" || { echo "policy: foreign_roots unreadable" >&2; return 1; }
   mapfile -t foreigns <<<"$out"
@@ -155,6 +159,7 @@ mgmt_roots_touched() {
     foreign=0
     for dir in "${foreigns[@]}"; do [ -n "$dir" ] || continue; case "$f" in "$dir"/*) foreign=1 ;; esac; done
     [ $foreign = 1 ] && continue
+    for dir in "${inputs[@]}"; do if [ "$f" = "${dir#*$'\t'}" ]; then printf '%s\n' "${dir%%$'\t'*}"; fi; done
     best=""; bestdir=""
     for i in "${!names[@]}"; do
       dir="${dirs[$i]}"
@@ -339,6 +344,10 @@ mgmt_plan_changes() {
   # `node_install_targets` output, 2026-09-18). NAMES AND ACTIONS ONLY: an output's VALUE is
   # exactly the kind of live detail the verdict never carries off the box (the #1635 rule).
   printf '%s' "$json" | jq -r '.output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) | [.key, (.value.actions | join("+"))] | @tsv' > "$out.outputs"
+  # third side channel, LOCAL ONLY: node_install_targets' before/after (ADR-132 §MB4 layer 2 — the
+  # install-impact line). The VALUES stay in this file on the box; mgmt_install_impact reads it and
+  # the verdict carries node names + field names only. `null` = the plan has no such output.
+  printf '%s' "$json" | jq -c '.output_changes.node_install_targets // null' > "$out.install.json"
   printf '%s' "$json" | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
 }
 # mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
@@ -346,6 +355,53 @@ mgmt_plan_changes() {
 # the summary never ran, and the caller has already failed the verdict on that).
 mgmt_plan_outputs() {
   [ -s "$1.outputs" ] && cat "$1.outputs" || return 0
+}
+# mgmt_install_impact <plan-out> → the install-time diff of this plan, one line per affected node:
+#   "<node>\t<kind>\t<fields, comma-joined>\t<fields whose value is known only after apply>"
+# kind: new (the head declares a node the applied state does not) | gone (it drops one) | changed.
+# Fields, named — never valued: schematic, installer, version, install disk, EPHEMERAL, role.
+# BEFORE is the applied state's value (what master last delivered), AFTER is the head's — so a
+# node that was ALREADY drifted from live does not show up here; that is the belt's job (§MB2).
+# A field present in only one side is skipped: an output that GROWS a field is not a fleet-wide
+# reinstall. Whole-output unknown → one line "*\tunknown\t\t". rc 1 = no side channel / no
+# output (the plan carries no node_install_targets) — the caller says "unreadable", never "none".
+mgmt_install_impact() {
+  local f="$1.install.json"
+  [ -s "$f" ] || return 1
+  [ "$(cat "$f")" != null ] || return 1
+  jq -r '
+    def fname: {schematic:"schematic", installer:"installer", version:"version",
+                install_disk:"install disk", ephemeral:"EPHEMERAL", role:"role"}[.] // .;
+    def fields: ["schematic","installer","version","install_disk","ephemeral","role"];
+    . as $c
+    | if ($c.after_unknown == true) then "*\tunknown\t\t"
+      else
+        (($c.before // {}) | keys) as $bk | (($c.after // {}) | keys) as $ak
+        | (($bk + $ak) | unique)[] as $n
+        | ($c.before[$n]) as $b | ($c.after[$n]) as $a
+        | ($c.after_unknown | if type == "object" then .[$n] else null end) as $u
+        | if $b == null then [$n, "new", "", ""] | @tsv
+          elif ($a == null and $u == null) then [$n, "gone", "", ""] | @tsv
+          else
+            [ fields[] as $k | select(($u == true) or (($u|type) == "object" and ($u[$k] // false) != false)) | $k ] as $unk
+            | [ fields[] as $k | select(($unk | index($k))
+                or (($b | has($k)) and (($a // {}) | has($k)) and ($b[$k] != $a[$k]))) | $k ]
+            # the installer URL is DERIVED from schematic + version (+ platform): name it only when
+            # it moves on its own (the platform half, the ADR-014 ghost class)
+            | (if (index("schematic") or index("version")) then map(select(. != "installer")) else . end) as $ch
+            | if ($ch | length) == 0 then empty
+              else [$n, "changed", ([$ch[] | fname] | join(", ")), ([$unk[] | fname] | join(", "))] | @tsv end
+          end
+      end' "$f"
+}
+# mgmt_install_after <plan-out> <node…> → JSON {node: <after value>} for the named nodes whose after
+# value is fully known — the NODE_TARGETS_JSON shape mgmt-probe.sh's check_nodes reads. Local only.
+mgmt_install_after() {
+  local f="$1.install.json"; shift
+  jq -c '. as $c | [$ARGS.positional[] as $n
+      | select(($c.after[$n] // null) != null
+               and ((($c.after_unknown // {}) | if type == "object" then .[$n] else null end) // null) == null)
+      | $n] | map({key: ., value: $c.after[.]}) | from_entries' "$f" --args "$@"
 }
 # mgmt_plan_not_planned <plan-out> → the state addresses the plan did NOT carry (explicit excludes +
 # their dependents), one per line; empty when nothing was excluded or the state list is unavailable

@@ -139,7 +139,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 |---|---|
 | `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
-| **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — and `node_declared_k8s`: the labels/taints tofu itself sets and the EPHEMERAL diskSelector, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
+| **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -307,6 +307,34 @@ state, so an unapplied one would leave §MB2's drift belt (the same `plan`, its 
 reporting `main` as drifted forever. Nothing is offered to the apply allowlist because no address
 is touched.
 
+**The install-impact line (ADR-132 §MB4 layer 2, 2026-09-21).** The plan is blind to one class by
+construction: Talos honours the schematic, `install.disk`, the EPHEMERAL `VolumeConfig` and
+`machine_type` only on the next install, so a head that changes them plans as a clean in-place
+config apply (nx-01 after #1717 — §MB4 item 1). So `main`'s verdict carries a second section,
+computed from the plan's own `node_install_targets` output (`tofu/outputs.tf` — per node:
+schematic, installer, version, role, install disk, EPHEMERAL): its BEFORE is the applied
+declaration, its AFTER is this head, and every node whose install-time fields differ is named
+with the fields that moved — *"this head changes the install of nx-01 (EPHEMERAL) → one
+reinstall window"*. For the upgrade-class axes (schematic, version) the head's value is then
+diffed against LIVE by `mgmt-probe.sh`'s own `check_nodes` (fed the head's declaration through
+`NODE_TARGETS_JSON`, answers through `NODE_DRIFT_OUT`), so a head that only codifies what already
+runs costs no window. Window kinds: **upgrade** (schematic / version / installer — the
+`node-maintenance.sh upgrade` path), **reinstall** (install disk / EPHEMERAL / role — Talos never
+re-partitions, and `machine_type` is baked at install), **install** (a new node). The same
+names-only rule as the rest of the verdict: node names and FIELD names leave the box, never a
+schematic id, disk path or selector. The status description gains ` · install: <node> <kind>`
+(or ` · install: N windows`); a head that moves no install gets *"Install impact: none"* in the
+comment and nothing in the description. It is advisory — the status stays green; the line is
+what the codeowner read refuses on, not a gate. Two limits, named: a node that was ALREADY
+drifted from live before this head is not listed (that is the belt's `mgmt_node_drift`, §MB2),
+and the reinstall-class axes compare head vs applied declaration only — their live reader
+(`volumestatus`) is FU-235's next axis. **`machines/machines.yaml` selects `main`** since the
+same change (`roots.main.inputs` in the policy): `locals.tf` yamldecodes it, and before this a PR
+touching only the inventory got "no box-held surface touched" and was never planned — #1716
+onboarded nx-01 that way. The inventory is pure data (no path or exec surface), so stage 1 does
+not judge it; the apply loop now sees inventory-only master commits too (and refuses them to a
+human apply like any `metal.tf` change outside the allowlist).
+
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
 plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
@@ -385,7 +413,9 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
 2. **The pre-merge impact line.** The sentinel's `tofu plan` is blind to this class, so its verdict grows a
    line computed from the PR head's declaration against live: *"this head changes the install of nx-01
    (schematic, EPHEMERAL disk) → one reinstall window"*. That sentence is what the codeowner read refuses;
-   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit.
+   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit. **Built
+   2026-09-21** — §MB3 "The install-impact line" (live comparison on the schematic/version axes; the
+   layout axes wait on `volumestatus`).
 3. **Sync policy in the declaration.** `reconcile: auto | manual` per node. Compute-tier nodes go `auto`
    first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
    A `manual` node still shows its diff as drift; the box does nothing.

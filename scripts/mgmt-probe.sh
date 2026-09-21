@@ -56,8 +56,13 @@
 #   SKIP          space-separated check names to skip: tofu talos nodes ansible creds
 #   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
 #   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
-#   NODE_K8S_JSON      pre-fetched `node_declared_k8s` JSON — the same for the labels/taints/
-#                      ephemeral_disk axes
+#   NODE_K8S_JSON      pre-fetched `node_declared_k8s` JSON — the same for the registered/labels/
+#                      taints axes. With NODE_TARGETS_JSON set and this unset, those axes are NOT
+#                      checked: the two halves of a declaration must come from the same source (the
+#                      sentinel passes a PR head's node_install_targets alone)
+#   NODE_DRIFT_OUT     write the node diff's (node, axis) verdicts here, one "<node> <axis>\t<drift|ok>"
+#                      per line — how the management sentinel reuses THIS diff for its install-impact
+#                      line (NODE_TARGETS_JSON = the PR head's declaration; ADR-132 §MB4 layer 2)
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
@@ -235,15 +240,20 @@ check_nodes() {
   fi
   # The output is a map node => {ip, class, installer, schematic, version}; anything else means the
   # output moved and this check is reading a shape that no longer exists.
-  # The Kubernetes-facing half of the declaration (labels/taints/EPHEMERAL) — a separate output
-  # so a missing one degrades those axes to "not checked" without touching the three above.
-  local dk k8s_note="" nk sk
-  dk="$(node_declared_k8s "$statef")"
-  if [ -n "$dk" ]; then
-    while IFS=$'\t' read -r nk sk; do [ -n "$nk" ] && DK_SEL[$nk]="${sk#-}"; done \
-      <<< "$(printf '%s' "$dk" | tool jq -r 'to_entries[] | [.key, (.value.ephemeral_disk // "-")] | @tsv' 2>/dev/null)"
+  # EPHEMERAL placement's declared half rides node_install_targets (`.ephemeral.disk_selector`,
+  # #1858). "?" = the field is absent (a state written before that output grew it) → not checked,
+  # never read as "no selector", which would false-drift nx-01.
+  local nk sk
+  while IFS=$'\t' read -r nk sk; do [ -n "$nk" ] && DK_SEL[$nk]="$sk"; done \
+    <<< "$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, (if (.value | has("ephemeral")) then (.value.ephemeral.disk_selector // "-") else "?" end)] | @tsv' 2>/dev/null)"
+  # The Kubernetes-facing half (registered/labels/taints) is its own output, so a missing one
+  # degrades those axes to "not checked" without touching the others.
+  local dk="" k8s_note=""
+  if [ -n "${NODE_TARGETS_JSON:-}" ] && [ -z "${NODE_K8S_JSON:-}" ]; then
+    k8s_note=" (registered/labels/taints not checked: no NODE_K8S_JSON beside NODE_TARGETS_JSON)"
   else
-    k8s_note=" (labels/taints/ephemeral_disk not checked)"
+    dk="$(node_declared_k8s "$statef")"
+    [ -n "$dk" ] || k8s_note=" (registered/labels/taints not checked)"
   fi
   local rows
   rows="$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, .value.ip, .value.version, .value.schematic] | @tsv' 2>/dev/null)" || true
@@ -270,11 +280,12 @@ check_nodes() {
     else
       DRIFT+=("$node schematic"); drift=$((drift+1))
     fi
-    # EPHEMERAL placement (install-time, nx-01 2026-09-16): only when the k8s-facing declaration
-    # was readable, since that is where the declared diskSelector lives.
-    if [ -n "$dk" ]; then
-      node_ephemeral_disk "$node" "$ip" "${DK_SEL[$node]-}" && drift=$((drift+EPH_GAP))
-    fi
+    # EPHEMERAL placement (install-time, nx-01 2026-09-16).
+    case "${DK_SEL[$node]-?}" in
+      "?") log "nodes: $node declares no .ephemeral (pre-#1858 state) — ephemeral_disk not checked" ;;
+      -)   node_ephemeral_disk "$node" "$ip" "" && drift=$((drift+EPH_GAP)) ;;
+      *)   node_ephemeral_disk "$node" "$ip" "${DK_SEL[$node]}" && drift=$((drift+EPH_GAP)) ;;
+    esac
   done <<< "$rows"
   [ -n "$dk" ] && { node_k8s_axes "$dk"; drift=$((drift+K8S_GAPS)); }
   local detail=""
@@ -283,8 +294,8 @@ check_nodes() {
 }
 
 # ── node diff, the Kubernetes-facing axes (FU-235's second step) ───────────────────────────────
-# DECLARED = `tofu output node_declared_k8s` (tofu/outputs.tf — labels/taints tofu itself
-# declares, and the EPHEMERAL diskSelector); LIVE = the Node objects (kubectl) and the Talos
+# DECLARED = `tofu output node_declared_k8s` (tofu/outputs.tf — the labels/taints tofu itself
+# declares) and node_install_targets' `.ephemeral.disk_selector`; LIVE = the Node objects (kubectl) and the Talos
 # `volumestatus` / `systemdisk` / `disks` resources. Axes, one gauge each per node:
 #   registered      a Node object exists — the wk-metal-02 case (2026-09-21): the machine
 #                   answered talosctl, the cluster had no Node for ~12 h
@@ -311,10 +322,10 @@ node_declared_k8s() {
   out="$(tool tofu -chdir=tofu output -state="$statef" -json node_declared_k8s)" || {
     # Transitional, and named: the output exists in git before the apply loop has written it
     # into the state (it applies output-only plans on its next tick, mgmt-apply.sh).
-    log "nodes: node_declared_k8s unreadable — labels/taints/ephemeral_disk axes not checked: $(printf '%s' "$out" | tail -1)"
+    log "nodes: node_declared_k8s unreadable — registered/labels/taints axes not checked: $(printf '%s' "$out" | tail -1)"
     return 0; }
   printf '%s' "$out" | tool jq -e 'type == "object"' >/dev/null 2>&1 || {
-    log "nodes: node_declared_k8s is not a map — labels/taints/ephemeral_disk axes not checked"; return 0; }
+    log "nodes: node_declared_k8s is not a map — registered/labels/taints axes not checked"; return 0; }
   printf '%s' "$out"
 }
 
@@ -513,6 +524,14 @@ gate_store() {
   fi
 }
 
+# NODE_DRIFT_OUT: the diff's verdicts as data, for a caller that is not Prometheus (mgmt-sentinel.sh)
+dump_drift() {
+  [ -n "${NODE_DRIFT_OUT:-}" ] || return 0
+  local d
+  { for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && printf '%s\tdrift\n' "$d"; done
+    for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && printf '%s\tok\n' "$d"; done; } >"$NODE_DRIFT_OUT" || true
+}
+
 # ── publish ─────────────────────────────────────────────────────────────────────────────────────
 # Same shape as the Garage write probe: the verdict AND a last-run timestamp, so a staleness alert
 # catches "the box is wedged" and not only "the box says no". TRANSPORT (FU-252, ruled 2026-09-21):
@@ -582,6 +601,7 @@ case "$MODE" in
     check_tofu
     check_talos
     check_nodes
+    dump_drift
     check_ansible
     check_creds
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the

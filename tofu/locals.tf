@@ -7,6 +7,10 @@ locals {
   pve_nodes  = { for k, n in var.nodes : k => n if n.hypervisor == "pve" }
   nx02_nodes = { for k, n in var.nodes : k => n if n.hypervisor == "nx-02" }
 
+  # Every Proxmox VM's Talos install disk (talos.tf) — one home, because node_install_targets
+  # (outputs.tf) reports it as the VM half of the install-time declaration.
+  vm_install_disk = "/dev/sda"
+
   # IP (without CIDR mask) per node.
   node_ip = { for k, n in var.nodes : k => split("/", n.ip_cidr)[0] }
 

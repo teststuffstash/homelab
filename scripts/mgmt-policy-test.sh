@@ -78,6 +78,10 @@ case_ last-file-outside none          'echo "y" > tofu/monitoring.tf; mkdir -p z
 case_ provisioning-only none          'echo "y" > tofu/provisioning/main.tf'
 # a deny hit in a FOREIGN root must not fire (not this box's business)
 case_ foreign-deny      noroot        'printf "data \"external\" \"x\" {}\n" >> tofu/cloudflare-token/main.tf'
+# a root's out-of-dir INPUT selects it (main reads machines/machines.yaml — #1716 onboarded nx-01
+# through that file alone and was never planned); a sibling of the input does not
+case_ inventory-only    none          'mkdir -p machines; echo "machines: []" > machines/machines.yaml'
+case_ inventory-sibling noroot        'mkdir -p machines; echo "x" > machines/README.md'
 
 # ── the classifier FAILS CLOSED (review finding on homelab#1631): an empty root list is a SUCCESS
 # status ("no box-held surface touched"), so every way the policy read can fail must surface as a
@@ -96,11 +100,11 @@ fail_ stage1-rc        '( _yq() { return 7; }; mgmt_stage1 "$POL" "$T" "$BASE" "
 fail_ stage1-bad-head  'mgmt_stage1 "$POL" "$T" "$BASE" 0000000000000000000000000000000000000000'
 # the SIBLING reads inside stage 1 (dirs / deny_paths / deny_patterns — the second-round #1631
 # finding): _yq fails only from the K-th call onward, so mgmt_roots_touched itself succeeds
-# (1 keys + N dirs + 1 foreign = its call count); with only the first k calls succeeding, the
+# (1 keys + N dirs + N inputs + 1 foreign = its call count); with only the first k calls succeeding, the
 # failure lands on the dirs read, then deny_paths, then deny_patterns.
 eval "_yq_real() $(declare -f _yq | sed 1d)"
 nroots="$(_yq_real -r '.roots | keys | length' "$POL")"
-for k in $((nroots+2)) $((nroots+3)) $((nroots+4)); do   # the (k+1)-th call fails: dirs, deny_paths, deny_patterns
+for k in $((2*nroots+2)) $((2*nroots+3)) $((2*nroots+4)); do   # the (k+1)-th call fails: dirs, deny_paths, deny_patterns
   fail_ "stage1-sibling-read-$k" '( C="$T/yqcount"; echo 0 >"$C"; _yq() { n=$(cat "$C"); echo $((n+1)) >"$C"; [ "$n" -lt '"$k"' ] || return 7; _yq_real "$@"; }; mgmt_stage1 "$POL" "$T" "$BASE" "$(git -C "$T" rev-parse c-versions-tf)" )'
 done
 # the in-cluster half's shape: policy at a ref, temp copy cleaned up, rc preserved across the cleanup
