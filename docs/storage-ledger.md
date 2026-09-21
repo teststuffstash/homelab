@@ -231,28 +231,29 @@ capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
 253 GB returned. Recipe — including the two ways that do NOT work — in
 [`runbook.md`](runbook.md) §"Reclaiming thin-pool space from a Talos VM".
 
-⚠ **pve will not take a SATA SSD without a full-cluster outage.** Checked 2026-08-07: of 90 PCI
-devices the NVMe is the *only* mass-storage controller — no AHCI enumerated, `ahci` not loaded,
-`/sys/class/ata_port/` empty. The ports are physically present and this is a firmware setting, so
-it is *possible* — it just costs a BIOS session with every VM on the box down, which is why the
-answer to "where does the next disk go" is a new cheap box, not this one (operator, 2026-08-25).
-The
-board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
-slot ~~is permanently occupied~~ — **CORRECTED 2026-09-21: pve boots HEADLESS.** The old "refuses to
-POST without the GPU" did not survive a CMOS clear: at factory defaults (CSM on, video Legacy — no
-setting changed) it booted with no card, `lspci` showing no display device. The GeForce 9600 GT
-(`driver=none`, idling at full clocks over the M.2 — NVMe sensor 1 ~69°C) is OUT; both slots are free.
-The BIOS is reachable only with a card fitted, and the clear reset every setting (AC-power-restore unread).
-**Re-read 2026-09-05 (`lspci -tv` + root-port `LnkSta`), then corrected by a physical count
-2026-09-08:** `lspci` shows a second x16 CPU root port (`00:02.0`, "Slot 6") and an x4 CPU root
-port (`00:01.0`, "Slot 1") as electrically present and empty (plus one chipset x1), the NVMe riding
-`00:01.1` — but **the board has ONE physical x16 slot, and the GPU is in it** (operator, counted
-2026-09-08). The second x16 root port is CPU silicon the AliExpress board does not break out.
-**The x4 slot IS physical** — it sat under the dual-slot 9600 GT until the card came out
-2026-09-21; free now, as is the x16. So growth has three shapes, cheapest first: **(a) a second NVMe on a passive PCIe→M.2
-adapter in the x4 slot → new PV, extend the VG/pool** (no migration, no firmware change — a data
-disk needs no boot support — the slot is free since 2026-09-21 — one shutdown to fit it);
-(b) replace the 500 G NVMe with a larger one (a migration); (c) the SATA BIOS session. Wear is not the constraint: the WD Blue SN580 (DRAM-less
+**pve's physical expansion inventory (operator, counted 2026-09-21, the GPU out):**
+
+| Slot / port | State |
+|---|---|
+| PCIe **x16** (the board's only one) | **free** — the GeForce 9600 GT came out 2026-09-21 |
+| PCIe **x1** | **free** |
+| M.2 | the WD Blue SN580 500 G — the only disk |
+| **3 × SATA** | physically present, **disabled in firmware** — one is a different colour: the SATA3 (6 Gb/s) port |
+
+**pve boots HEADLESS (verified 2026-09-21).** The old "refuses to POST without the GPU" did not
+survive a CMOS clear: at factory defaults (CSM on, video Legacy — nothing changed) it booted with no
+card, `lspci` showing no display device. Setup is only reachable with a card fitted (legacy-ROM
+cards work; none on hand has a UEFI GOP, so CSM stays on), and the clear reset every setting —
+"Restore on AC Power Loss" is unread since. The SATA ports stayed disabled at defaults: no AHCI
+controller enumerates, `ahci` not loaded, `/sys/class/ata_port/` empty (read 2026-08-07, again
+2026-09-21). `lspci -tv` (2026-09-05) also shows a second x16 and an x4 CPU root port
+(`00:02.0`, `00:01.0`) with nothing behind them — CPU silicon this AliExpress `INTEL X99-P4` does
+not break out as slots (the NVMe rides `00:01.1`).
+
+Growth shapes, cheapest first: **(a) a second NVMe on a passive PCIe→M.2 adapter in the free x16 →
+new PV, extend the VG/pool** (no migration, no firmware change — a data disk needs no boot support;
+one shutdown to fit it); (b) replace the 500 G NVMe with a larger one (a migration); (c) enable SATA
+— a BIOS session, so a card fitted and every VM down — then SSDs on the SATA3 port. Wear is not the constraint: the WD Blue SN580 (DRAM-less
 consumer TLC) reads 4 % used at 40 TB written over 2,474 power-on hours — ~390 GB/day, roughly
 seven years to its 300 TBW rating at that rate.
 
@@ -458,7 +459,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 
 | requirement | size | why (evidence) | class | pointer |
 |---|---|---|---|---|
-| **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x4/x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
+| **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
 | **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 3 stacks = 300Gi worst case, replica-1 on 453 GiB free | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
 | **a third PHYSICAL zone for Garage rf=3** — **MET 2026-09-07** (`m70s`; all six Garage volumes on `longhorn-local-xfs` across wk-metal-01 / wk-metal-04 / m70s, nothing of Garage on the pool) | residual **want**: a *dedicated* data disk in m70s — garage-1 shares the OEM Micron 2300 with Talos + the image store (kubelet imageGC 60/50 is the belt); supply side = the same NVMe lot as the SA400 demote | ADR-114's redundancy story used to end on a VM that pauses when the pool fills; meta rode rf=1 on wk-02 from 08-25 to 09-07 | need → met | FU-137, ADR-114 |
 | **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want | FU-093 next act (`filesystem-trim` RecurringJob) |
