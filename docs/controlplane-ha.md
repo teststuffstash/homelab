@@ -138,7 +138,10 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
 7. `devbox run mgmt-tf -- apply -target='talos_machine_configuration_apply.metal["<name>"]'` —
    installs with `machine_type: controlplane`, and `metal.tf` conditions the VIP patch and the
    issuer pin on the same flag, so the new CP gets both at birth.
-8. **Unflag** (destroy the matchbox group) so the post-install reboot comes off disk.
+8. **Unflag** (destroy the matchbox group) so the post-install reboot comes off disk, then
+   **watch it take its DHCP lease** before trusting the install: the box is only reachable while
+   the router hands it `.183`, and a config that claims its interface can take that away silently
+   (§CP6). `dnsmasq/leases/search` on OPNsense is the check that does not need the node.
 9. **Post-install, none of which `Ready` gates:** re-apply the zone label
    (`kubernetes_labels.node_zone` — the Node object is new), confirm `cilium bgp peers` is
    `established`, and confirm etcd membership grew by exactly one.
@@ -147,3 +150,47 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
 
 ⚠ **Do not stop here.** Two etcd members is the one state worse than one — go straight on to the
 next join.
+
+## CP6. The VIP patch takes the interface — and with it, the address
+
+`wk-metal-02` was reinstalled as a control plane on 2026-09-20, the apply ran clean, and the box
+never came back: no ARP on `.183`, no DHCP lease on the router, 7.3 W at the plug. The console (read
+by the operator the next morning) showed Talos up and healthy, failing NTP lookups against
+**8.8.8.8** — Talos's compiled-in fallback resolver, i.e. *nothing had handed it a DNS server*.
+
+**Cause — the VIP patch, and it was not a fluke.** A VIP has to hang off an interface, so
+`local.cp_vip_patch` writes `machine.network.interfaces`. Naming a link there moves it into Talos's
+`ConfigMachineConfiguration` layer, and the **default-layer `dhcp4` operator is emitted only for
+physical links that no layer configures** (`internal/app/machined/pkg/controllers/network/operator_config.go`:
+*"interface is configured explicitly, don't run default dhcp4"*). `dhcp` itself defaults to false.
+So the patch quietly withdrew the node's only address source:
+
+| | Address source | Effect of the patch |
+|---|---|---|
+| cp-01, cp-02 (nocloud VM) | `ConfigPlatform` — the Proxmox datasource | none: the link was *already* configured, so there was no default `dhcp4` operator to lose |
+| wk-metal-02 (PXE metal) | the **default** `dhcp4` operator | fatal: `talos.platform=metal` supplies no network config and the disk-boot cmdline carries no `ip=`, so the node has no address at all |
+
+Verifiable without the box, on any live node — `talosctl get operatorspecs` reads `layer: default`
+for a metal worker's `dhcp4/enp0s31f6`, while cp-01 lists **only** `vip/eth0`, and
+`talosctl get addressspecs` shows cp-01's `.51/24` as `layer: platform` against wk-metal-03's
+`.184/24` as `layer: operator`.
+
+**The fix** is one line, and it is what upstream's own VIP example has always carried:
+`tofu/talos.tf` now keeps two variants of the patch off one `cp_vip_interface` — the
+platform-addressed one for the VMs and `cp_vip_patch_dhcp` (`dhcp: true`) for metal, which
+`metal.tf` uses. The VMs deliberately do **not** get `dhcp: true`: their MACs have no dnsmasq
+reservation, so a lease would come from the `.100–.245` pool and give `eth0` a second, arbitrary
+address.
+
+**The lesson is about the verification, not the YAML.** The patch *was* rehearsed —
+`--mode=try` on cp-01, confirmed additive (§CP3's note). That rehearsal was structurally incapable
+of catching this: it ran on the one address source the patch cannot disturb. **A config patch that
+claims a network interface must be rehearsed on a node whose address comes from the layer it is
+about to displace** — for this fleet, that means a metal node, and the cheap version is
+`talosctl patch --mode=try --timeout 1m` against a metal *worker*, which reverts itself if the node
+goes silent.
+
+Two adjacent findings from the same night, both filed: the BIOS PXE chainload was broken
+(`undionly.kpxe` missing on the Matchbox LXC — [FU-261](follow-ups.md)), which is why three reboots
+read as "PXE just doesn't take"; and nothing alerts on a **declared node that is simply absent**
+from the cluster — the extreme case of [FU-235](follow-ups.md)'s declared-vs-live diff.

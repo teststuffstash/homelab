@@ -423,15 +423,16 @@ six OVERSIZE items pointer-ized into
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, live results: [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: ip-plan ruling `.50`
-      (#1799), etcd snapshot, VIP + certSANs on cp-01 (#1801), metal `controlplane:` flag (#1800), and
-      **the SA-issuer pin is LIVE on cp-01** (ADR-136, #1812, applied 2026-09-20 19:08Z — a pre-apply
-      token survived; FU-258 dropped 10/12 cilium backends and one `ds/cilium` roll fixed it).
-      ⛔ The `cluster_endpoint` cutover stays reverted until there are three members. **Next, in order:**
-      (a) wk-metal-02's prep — `controlplane: true`, drop `ephemeral`/`kata`, the `arc` flag to
-      wk-metal-03, `forgejo-runner.tf`'s legacy `ephemeral_tier` set → empty — then its reinstall;
-      (b) the nx-02 VM, joined back to back (never rest at two etcd members); (c) the endpoint flip +
-      re-rendered client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258.
+      order, live results, and the §CP6 post-mortem of the stuck reinstall:
+      [`docs/controlplane-ha.md`](controlplane-ha.md). DONE: the `.50` ruling (#1799), etcd snapshot,
+      VIP + certSANs on cp-01 (#1801), the metal `controlplane:` flag (#1800), wk-metal-02's prep
+      (#1814/#1815/#1817), cp-02 declared (#1816), the SA-issuer pin LIVE on cp-01 (ADR-136, #1812),
+      and the metal VIP patch's missing `dhcp: true` — §CP6, the reason wk-metal-02 came back off the
+      network. ⛔ The `cluster_endpoint` cutover stays reverted until there are three members.
+      **Next, in order:** (a) recover wk-metal-02 (reflag → PXE to maintenance → re-apply → confirm
+      the `.183` lease BEFORE unflagging, §CP5); (b) the nx-02 VM back to back (never rest at two);
+      (c) the endpoint flip + re-rendered client configs (FU-259); (d) `cp-upgrade` ×3. Relates FU-235, FU-258, FU-261.
+
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
@@ -1358,13 +1359,14 @@ the block needs pruning, not more headings.
 - [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
       true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
       (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
-      (nx-01 conflict; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3 after the
-      shared manager pruned the zone labels). (3) **install-time drift** (2026-09-16, nx-01): the machine
-      config applied in place, tofu plans clean, yet the node runs the plain schematic and EPHEMERAL on the
-      SATA disk — the runtime half landed, the install half never can. **Next:** the DIFF on the box's probe
-      — declared (machines.yaml + schematic ids) vs live (`talosctl get extensions`/`volumestatus`, labels,
-      taints), one gauge per node → alert; then labels+taints into the Talos machine config and the k8s
-      taint resource retired. It is ADR-132's reconciler diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
+      (nx-01; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3). (3) **install-time
+      drift** (2026-09-16, nx-01): config applied in place, tofu plans clean, yet the node runs the plain
+      schematic and EPHEMERAL on the SATA disk — the install half never can. (4) **ABSENT is the extreme
+      case**: wk-metal-02 declared, no Node object for ~12 h, nothing fired (2026-09-21, FU-243).
+      **Next:** the DIFF on the box's probe — declared (machines.yaml + schematic ids) vs live (`talosctl get
+      extensions`/`volumestatus`, labels, taints, *presence*), one gauge per node → alert; then labels+taints
+      into the machine config, the taint resource retired. ADR-132's diff ([`management-box.md`](management-box.md) §MB4). Relates FU-218, FU-072.
+
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 
