@@ -57,6 +57,8 @@
 #         through `upgrade`; the fleet must be whole again (all Ready, cilium clean) before the next goes
 #         down, and the FIRST failure stops the run with nothing after it touched. DRY=1 prints the plan.
 #         Run it ON the management box (the etcd snapshots land there) — see the verb's own comment.
+#   bash scripts/node-maintenance.sh efi-scrub <node>   # delete firmware boot entries whose device-path
+#         list does not parse (FU-265); DRY=1 reports only. `upgrade` runs it between drain and install.
 #   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
 #         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
@@ -867,6 +869,102 @@ drain_for_upgrade() {
   return 1
 }
 
+# ── FU-265: firmware boot entries the Talos installer cannot parse ──────────────────────────────
+# `talosctl upgrade`'s installer walks EVERY Boot#### variable and parses its device-path list
+# strictly: wk-metal-04's firmware writes a "UEFI OS" fallback entry (Boot0008 → \EFI\BOOT\
+# BOOTX64.EFI) with 2 zero bytes after the end node — "dangling bytes at the end of device path:
+# 0000" — and the install dies AFTER flipping the boot default (2026-09-21). Deleting it works for
+# the NEXT upgrade only: probed 2026-09-21, one FIRMWARE boot recreates it, same bytes. Upgrades
+# reboot by kexec and never meet the firmware, so deleting just before the install is enough.
+# The rule is "does not parse", not "has bytes after an end node": a path LIST may hold several
+# paths (the PXE entries carry a second vendor path after their first end node — valid), so the
+# list is walked path by path and only a remainder that cannot form whole nodes (< 4 bytes, or a
+# node length < 4 or past the end) marks the entry malformed. Talos mounts efivarfs read-only on
+# the host; a privileged one-shot pod mounts its own. No EFI (a BIOS VM) reports and exits clean.
+EFI_SCRUB_TIMEOUT="${EFI_SCRUB_TIMEOUT:-240}"
+efi_scrub() {
+  local pod="efi-scrub-$NODE" phase="" t=0 out dry="${DRY:-0}"
+  kubectl -n kube-system delete pod "$pod" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  kubectl apply -f - >/dev/null <<EOF || { fail "efi-scrub: could not create pod $pod"; return 1; }
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $pod
+  namespace: kube-system
+  labels: { app: efi-scrub }
+spec:
+  nodeName: $NODE
+  restartPolicy: Never
+  tolerations: [{ operator: Exists }]
+  containers:
+    - name: scrub
+      image: docker.io/library/python:3.13-slim
+      securityContext: { privileged: true }
+      env: [{ name: DRY, value: "$dry" }]
+      command: [python3, -c]
+      args:
+        - |
+          import os, struct, fcntl, array, subprocess, sys
+          G = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
+          if not os.path.isdir("/sys/firmware/efi"):
+              print("no EFI firmware on this node - nothing to scrub"); sys.exit(0)
+          os.makedirs("/efi", exist_ok=True)
+          subprocess.run(["mount", "-t", "efivarfs", "efivarfs", "/efi"], check=True)
+          def malformed(raw):
+              d = raw[4:]
+              if len(d) < 6: return "too short"
+              plen = struct.unpack("<H", d[4:6])[0]; i = 6
+              while i + 1 < len(d) and d[i:i+2] != b"\0\0": i += 2
+              dp = d[i+2:i+2+plen]; j = 0
+              if len(dp) < plen: return "path list shorter than its declared length"
+              while j < len(dp):
+                  if len(dp) - j < 4: return "dangling bytes %s" % dp[j:].hex()
+                  t, st, l = dp[j], dp[j+1], struct.unpack("<H", dp[j+2:j+4])[0]
+                  if l < 4 or j + l > len(dp): return "bad node length %d at %d" % (l, j)
+                  j += l
+              return None
+          def mutable(path):
+              fd = os.open(path, os.O_RDONLY)
+              try:
+                  f = array.array("i", [0]); fcntl.ioctl(fd, 0x80086601, f, True)
+                  f[0] &= ~0x10; fcntl.ioctl(fd, 0x40086602, f, True)
+              finally:
+                  os.close(fd)
+          bad = []
+          for n in sorted(os.listdir("/efi")):
+              if not (n.startswith("Boot") and n.endswith(G) and len(n) == 9 + len(G)): continue
+              why = malformed(open("/efi/" + n, "rb").read())
+              if why:
+                  bad.append(n[4:8]); print("MALFORMED Boot%s: %s" % (n[4:8], why))
+          if not bad:
+              print("clean - no unparseable boot entry"); sys.exit(0)
+          if os.environ.get("DRY") == "1":
+              print("DRY=1 - would delete: " + " ".join(bad)); sys.exit(0)
+          for b in bad:
+              p = "/efi/Boot%s-%s" % (b, G); mutable(p); os.unlink(p); print("deleted Boot" + b)
+          bo = "/efi/BootOrder-" + G
+          if os.path.exists(bo):
+              raw = open(bo, "rb").read(); attrs, d = raw[:4], raw[4:]
+              order = ["%04X" % x for x in struct.unpack("<%dH" % (len(d)//2), d)]
+              keep = [o for o in order if o not in bad]
+              if keep != order:
+                  mutable(bo)
+                  with open(bo, "wb") as f:
+                      f.write(attrs + struct.pack("<%dH" % len(keep), *[int(o, 16) for o in keep]))
+                  print("BootOrder: " + ",".join(order) + " -> " + ",".join(keep))
+EOF
+  until phase="$(kubectl -n kube-system get pod "$pod" -o jsonpath='{.status.phase}' 2>/dev/null)" \
+        && { [ "$phase" = Succeeded ] || [ "$phase" = Failed ]; }; do
+    sleep 5; t=$((t+5))
+    [ $t -ge "$EFI_SCRUB_TIMEOUT" ] && { phase=timeout; break; }
+  done
+  out="$(kubectl -n kube-system logs "$pod" 2>&1 || true)"
+  printf '%s\n' "$out" | sed '/^$/d;s/^/         /'
+  kubectl -n kube-system delete pod "$pod" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ] && { ok "efi-scrub $NODE: done"; return 0; }
+  fail "efi-scrub $NODE: pod ended '$phase'"; return 1
+}
+
 upgrade() {
   load_targets || return 2
   local image version schematic class
@@ -925,6 +1023,17 @@ upgrade() {
 
   silence_open; declare_open
   if [ "${LAB:-0}" != 1 ]; then drain_for_upgrade || return 1; fi
+  # FU-265: scrub unparseable firmware boot entries BEFORE the installer walks them. Fail closed —
+  # an installer run against a node the scrub could not read is the half-applied state this avoids.
+  if [ "${LAB:-0}" != 1 ] && [ "${SKIP_EFI_SCRUB:-0}" != 1 ]; then
+    if ! efi_scrub; then
+      fail "efi-scrub failed after the drain — nothing installed; uncordon $NODE and close the window"
+      fail "  (SKIP_EFI_SCRUB=1 bypasses it if you have read the entries yourself)"
+      kubectl uncordon "$NODE" >/dev/null || fail "uncordon $NODE failed — do it by hand"
+      silence_close; declare_close
+      return 1
+    fi
+  fi
   log "talosctl upgrade $NODE ($(node_ip)) — the node is drained; talosctl installs and reboots"
   if ! talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" \
         upgrade --image "$image" --drain-timeout="$UPGRADE_DRAIN_TIMEOUT"; then
@@ -1138,6 +1247,7 @@ case "$cmd" in
   down) down ;;
   up) up ;;
   upgrade) upgrade ;;
+  efi-scrub) efi_scrub ;;
   order) order ;;
   upgrade-behind) upgrade_behind ;;
   silence-open) silence_open; declare_open ;;

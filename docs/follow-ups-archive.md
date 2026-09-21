@@ -10,6 +10,12 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-265** *(archived 2026-09-21)* — **wk-metal-04's unparseable firmware boot entry: handled by
+  `upgrade`.** The firmware re-writes `Boot0008` "UEFI OS" with 2 bytes after its end node on every
+  firmware boot; upgrades reboot by kexec, so `node-maintenance upgrade` now runs `efi-scrub` between
+  drain and install (deletes only entries whose path list does not parse; fails closed). Proven
+  18:47–18:59Z: scrub deleted it, installer passed, node declared. Fleet DRY: only this entry flagged.
+  Upstream issue deferred until the fleet is on the latest Talos (operator).
 - **FU-252** *(archived 2026-09-21)* — **A standing `management-apply` refusal is DETECTED.** Residue-age
   belt `MgmtApplyResidueStanding` (github-exporter, from master's commit status, cdf01961 09-18);
   box-side belts for what a status cannot show — `MgmtApplyLoopStale`/`MetricsAbsent`/`MgmtBoxDown`
