@@ -1218,16 +1218,6 @@ the block needs pruning, not more headings.
       backend either side of the reboot (rolls `ds/cilium` only on a genuinely missing one, reading
       shared as `devbox run maint cilium-check`); ⚠ every OTHER apiserver restart is still
       unguarded — run it by hand. **Next:** the spike waits on Renovate/1.20.2. Relates FU-246, FU-253.
-- [ ] **FU-259** — **`talos_cluster_kubeconfig` renders a STALE endpoint and `plan` never notices
-      — POINTER.** It captures the kubeconfig at create time and never re-reads it, so after the
-      2026-09-21 VIP cutover every client still dialled `.51` while `plan` said `No changes`.
-      Mechanism, both guards (the `check` block + `client-configs.sh`'s refusal), why
-      `replace_triggered_by` was rejected and the recovery:
-      [`controlplane-ha.md`](controlplane-ha.md) §CP8. Guards landed #1825, verified firing.
-      **Next:** run the scoped recovery in a declared window — `apply
-      -replace=talos_cluster_kubeconfig.this -target=…`, `devbox run kubeconfig`, then a full apply
-      to restamp the baseline. Relates FU-243, FU-248, FU-253.
-
 - [ ] **FU-260** — **The Argo Workflows controller hot-loops and floods Loki when the apiserver
       goes away (2026-09-20).** v4.0.7's `configmap_watcher` never re-establishes a closed watch:
       it logs `invalid config map object received in config watcher` forever — 1.43M lines / 220 MB
@@ -1391,15 +1381,15 @@ the block needs pruning, not more headings.
       gated on FU-235's declared-vs-live belt, which is what replaces `plan` as the drift detector.
       Relates FU-235, FU-246, FU-248, FU-253, FU-254.
 
-- [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master.** A stray
-      talosconfig was swept into a bookkeeping commit and pushed to this PUBLIC repo on 2026-09-21;
-      removed from the tip ~15 min later, but the blob stays reachable by SHA and Talos has no CRL,
-      so the leaked identity is valid to **2027-05-29**. The CA private key did NOT leak. Timeline,
-      what held, and the pre-push gitleaks belt that closed the hole:
-      [`incidents/2026-09-21-talosconfig-committed-to-public-master.md`](incidents/2026-09-21-talosconfig-committed-to-public-master.md).
+- [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master (POINTER).**
+      A stray talosconfig was pushed to this PUBLIC repo 2026-09-21 and removed 15 min later; no
+      CRL in Talos, so the identity is valid to **2027-05-29** (the CA private key did NOT leak).
+      Incident: [`incidents/2026-09-21-talosconfig-committed-to-public-master.md`](incidents/2026-09-21-talosconfig-committed-to-public-master.md).
+      Design, and the unsolved half — tofu state still holds the OLD bundle after a live rotation:
+      [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md) (#1830).
       **Why deferred (operator, 2026-09-21):** finish the three-CP rollout and let it stabilise.
-      **Next:** design the rotation against the machine-secrets freeze — `talosctl rotate-ca` moves
-      the live cluster while tofu state still holds the old bundle. Relates FU-263, FU-243.
+      **Next:** probe the state-reconciliation candidates on the disposable control plane
+      (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
