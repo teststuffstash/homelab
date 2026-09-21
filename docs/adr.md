@@ -2315,3 +2315,25 @@ needs a rebuild or a planned rotation; the pin costs one apiserver restart on cp
 FU-260), while the endpoint flip afterwards restarts nothing (measured in the lab); client configs
 re-render after the flip (FU-259). Mechanism + evidence: [`controlplane-ha.md`](controlplane-ha.md).
 Tracker: FU-243.
+
+### ADR-137 — Control planes are role-named `cp-NN`; workers keep ad-hoc names (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21). **Decision:** a **control plane** carries a role name,
+`cp-NN`, with a single fleet-wide index and no chassis class in it — VM or metal, `cp-01`, `cp-02`,
+`cp-03`, … **Workers keep whatever name fits** (`wk-01`, `hp-01`, `m70s`, `wk-metal-03`, `nx-01`):
+ad-hoc, as they already are. Role is read from `machines/machines.yaml` and the node labels; for a
+worker the name promises nothing. **Considered:** *chassis-naming everything* (names are pinned at
+install, roles churn — but it hides the one role worth spotting instantly); *role-prefixing workers
+too* (a tier move then costs a wipe-and-reinstall, and this fleet moves tiers monthly — wk-02 left
+Longhorn, wk-metal-01 left kata, wk-metal-03 took `arc`, all in September); *ruling the name opaque
+and renaming nothing* (cheapest, but leaves a control plane reading `wk-` in etcd membership, BGP
+peer lists, alert labels and every incident timeline). **Why:** control-plane identity is read under
+pressure and by machines — `etcdctl member list`, `kubectl get nodes -l node-role…/control-plane`,
+BGP neighbours, the recovery recipes — while worker names are read at leisure; the naming rule
+should buy precision exactly where it is scarce and cost nothing where it is not (operator: "control
+plane names are more important than the worker tier"). **Consequences:** `wk-metal-02` is misnamed
+and becomes **`cp-03`** — at its NEXT reinstall for any other reason, never as its own outage, since
+the hostname is pinned at install (`HostnameConfig`, provider #296) and changing it on a running
+node ghosts it and drops etcd to two members (FU-262 carries the checklist); the CP index is
+fleet-wide, so the next control plane is `cp-04` whether it is a VM or a laptop; nothing else
+renames. Tracker: FU-262.

@@ -13,7 +13,12 @@
 #
 # ── Fields ───────────────────────────────────────────────────────────────────────────────────
 # Identity / docs (consumed by generate.py):
-#   name        node/host name (also the tofu map key + the k8s node name for cluster members)
+#   name        node/host name (also the tofu map key + the k8s node name for cluster members).
+#               ⚠ NAMING RULE (ADR-137): a CONTROL PLANE is `cp-NN`, one fleet-wide index, no
+#               chassis class in it — VM or metal alike. Workers keep ad-hoc names (wk-01,
+#               hp-01, m70s, nx-01, wk-metal-03); nothing may infer a worker's role from its
+#               name — `role`, the flags below and the node labels own that. The name is pinned
+#               at INSTALL, so a rename rides a reinstall (`wk-metal-02` → `cp-03`, FU-262).
 #   kind        metal | vm | lxc | device   — only `metal` boxes appear in the power/benchmark
 #               table (a VM/LXC draws no wall power of its own)
 #   label       host-table display name, markdown (README.md + CLAUDE.md "Host" column)
