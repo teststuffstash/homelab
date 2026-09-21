@@ -316,7 +316,13 @@ in
     script = "${repoPath}/scripts/mgmt-probe.sh";
   };
   systemd.timers.mgmt-belt = {
-    enable = false; # phase A: built, not armed (the creds it probes are not here yet)
+    # ARMED 2026-09-21. It was parked at phase A "the creds it probes are not here yet" — they have
+    # been here since the 09-13 state migration, and the timer stayed masked, so the belt last ran
+    # on 2026-09-13 09:32 and nothing said so for eight days. Evidence before arming: started by
+    # hand on the box, 5 checks green in ~90 s (tofu:provisioning, tofu:github, talos skew, the
+    # OPNsense --check, creds). Report-only by construction — it changes no generation and reboots
+    # nothing (§Rollback layer 1), so the cost of arming it is one 90 s run per quarter hour.
+    enable = true;
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*:0/15";
