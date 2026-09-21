@@ -66,6 +66,13 @@ mission) would drown the check in false positives and stay judgment-lint territo
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
 
+- **`openrouter-proxy` → `agent-gateway`** (ADR-139, executed with the extraction — FU-270): the
+  service outgrew its first job (four rails, the ADR-096 router, report/search); named by ROLE.
+  The git broker leaves under its own name first (FU-269). Metric families (`openrouter_*`) keep
+  their names — dashboards and alerts read them.
+- **`github-exporter` keeps its name; its vendor-status collectors leave** (FU-272): exporters are
+  named by the system they READ, and 11 of 13 collectors read GitHub.
+
 - ~~The researcher's dispatch label `goal` → a mission-shaped label~~ **EXECUTED 2026-08-23
   (S4 #766)**: verified that NO predicate reads a bare `goal` label (the scan keys on
   `task/goal`; research dispatch is operator-manual) and the legacy hand-made labels were
