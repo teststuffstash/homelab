@@ -45,13 +45,28 @@ resource "kubernetes_manifest" "forgejo_pg" {
       # One instance per PHYSICAL box (topology.kubernetes.io/zone = the chassis; the pve VMs all
       # read `proxmox`). The old hostname pin to wk-01/wk-02 (from the metal-flapping era) put
       # both instances on one hypervisor — found at the 2026-09-21 pve GPU-swap drain.
+      # Zone list = the untainted boxes with a std Longhorn disk: the volume is strict-local
+      # replica-1, so an instance only runs where its disk is (ADR-114, tofu/longhorn.tf).
       affinity = {
         podAntiAffinityType = "required"
         topologyKey         = "topology.kubernetes.io/zone"
+        nodeAffinity = {
+          requiredDuringSchedulingIgnoredDuringExecution = {
+            nodeSelectorTerms = [{
+              matchExpressions = [{
+                key      = "topology.kubernetes.io/zone"
+                operator = "In"
+                values   = ["hp-01", "m70s"]
+              }]
+            }]
+          }
+        }
       }
+      # Promote the updated replica instead of restarting the primary in place on a spec change.
+      primaryUpdateMethod = "switchover"
       storage = {
         size         = "5Gi"
-        storageClass = "longhorn"
+        storageClass = kubernetes_storage_class.longhorn_local_std.metadata[0].name
       }
       bootstrap = {
         initdb = {
