@@ -287,8 +287,9 @@ six OVERSIZE items pointer-ized into
       in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
       three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
       (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
-      2026-09-12** — garage-1 onto its own PM961. **Next:** CNPG replica-1 + required
-      zone anti-affinity, then the backup CronJob (ADR-114's logical-deletion class). Operator
+      2026-09-12** — garage-1 onto its own PM961; **CNPG required zone anti-affinity, 2026-09-21**
+      (#1840 platform three, oracle-iac#900, card #1842). **Next:** CNPG replica-1 storage, then
+      the backup CronJob (ADR-114's logical-deletion class). Operator
       intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
