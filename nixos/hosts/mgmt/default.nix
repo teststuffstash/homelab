@@ -80,6 +80,29 @@ in
     allowedTCPPorts = [ 22 ];
   };
 
+  # ── metrics (FU-252) ───────────────────────────────────────────────────────────────────────────
+  # The box's loops had no series at all: a four-day standing refusal of `main` restated itself
+  # 1101 times with nothing watching (docs/management-box.md §"A standing refusal is a THIRD
+  # verdict shape"). Transport = the hypervisors' pattern (operator, 2026-09-21): node_exporter +
+  # the textfile collector, scraped by the cluster Prometheus as a static target (job mgmt-node,
+  # argocd/resources/mgmt-metrics/). The loops write /var/lib/node-exporter-textfile/*.prom.
+  # Port 9100 opens to the LAN only (below) — cluster scrapes leave the pod network masqueraded to
+  # a node address in 192.168.2.0/24.
+  services.prometheus.exporters.node = {
+    enable = true;
+    port = 9100;
+    extraFlags = [ "--collector.textfile.directory=/var/lib/node-exporter-textfile" ];
+  };
+  # NOT the module's openFirewall/firewallFilter: it wraps the filter in ip46tables, so an IPv4
+  # `-s` is also fed to ip6tables, which rejects it — the firewall unit fails, systemd goes
+  # degraded, and mgmt-confirm's gate reboots the box back (read from the evaluated
+  # extraCommands, 2026-09-21). IPv4 only, by hand; the add is preceded by a delete so a firewall
+  # reload never stacks duplicates.
+  networking.firewall.extraCommands = ''
+    iptables -D nixos-fw -s 192.168.2.0/24 -p tcp -m tcp --dport 9100 -j nixos-fw-accept 2>/dev/null || true
+    iptables -A nixos-fw -s 192.168.2.0/24 -p tcp -m tcp --dport 9100 -j nixos-fw-accept
+  '';
+
   # ── boot + rollback ───────────────────────────────────────────────────────────────────────────
   # ⚠ DECIDE `bootMode` AT INSTALL TIME, when the firmware is finally known. The pilot is a ~2011
   # ThinkCentre Edge and its firmware is UNVERIFIED. There is no "safely covers both": GRUB with
@@ -175,7 +198,12 @@ in
   nix.settings.min-free = 5 * 1024 * 1024 * 1024;
   nix.settings.max-free = 20 * 1024 * 1024 * 1024;
 
-  systemd.tmpfiles.rules = [ "d /var/lib/mgmt 0700 root root -" ];
+  systemd.tmpfiles.rules = [
+    "d /var/lib/mgmt 0700 root root -"
+    # node_exporter's textfile dir (FU-252). Its own dir because /var/lib/mgmt is 0700 and holds the
+    # credential env files — the exporter (a DynamicUser) must read these metrics and nothing else.
+    "d /var/lib/node-exporter-textfile 0755 root root -"
+  ];
 
   # ── the checkout the whole loop depends on ────────────────────────────────────────────────────
   systemd.services.mgmt-checkout = {

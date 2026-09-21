@@ -192,9 +192,12 @@ Two properties make it worth its own detector rather than a louder log line:
   wants the truth asks `GET /commits/<sha>/status`.
 
 So the metric the loop actually needs is **age of the oldest unapplied residue** (and its address
-count), not liveness. The transport decision above still gates it: this box is out-of-cluster, so
-the series needs either a deliberate Pushgateway exposure or a different sink before any alert can
-read it.
+count), not liveness. **Transport, ruled 2026-09-21 (operator): the hypervisors' pattern** — the
+box runs node_exporter with the textfile collector (`nixos/hosts/mgmt/default.nix`, 9100 open to
+the LAN only), `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus
+scrapes it as the static job `mgmt-node`. Belts in `argocd/resources/mgmt-metrics/`:
+`MgmtApplyResidueStale` (oldest unapplied master commit > 24 h — the 09-14..18 shape, pinned in
+the fixture), `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`.
 
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 
