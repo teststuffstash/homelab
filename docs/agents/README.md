@@ -81,6 +81,7 @@ growing without bound.
 | [`platform-and-stacks.md`](platform-and-stacks.md) | Platform ⟷ stack separation; the composition axes; the credential airlock |
 | [`model-routing.md`](model-routing.md) | **Rules only** — the ladder (rail → class → tier → cell), the strike ladder, the carriers; every rule with its enforcement anchor + evidence query, or an explicit `unenforced` mark |
 | [`../spikes/model-routing-history.md`](../spikes/model-routing-history.md) | The archaeology behind those rules — the fourteen `§M1–§M14` investigations, moved verbatim 2026-09-17 (the `§M*` codes resolve here) |
+| [`../spikes/codex-subscription-rail.md`](../spikes/codex-subscription-rail.md) | Investigation: native Codex harness, ChatGPT OAuth/proxy boundary, subscription headroom, and staged build order |
 | [`chainless-redesign.md`](chainless-redesign.md) | The ADR-107 charter — a harness matrix, N subscription rails, every role routed; claim-knob ledger, Go-rail evidence, build order |
 | [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
 | [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |
