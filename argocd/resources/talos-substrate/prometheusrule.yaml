@@ -1,11 +1,11 @@
 # The substrate belt (FU-235 / FU-254): does the fleet actually run what git declares?
 #
 # Two detectors exist for this, deliberately on different transports. The BOX's probe
-# (scripts/mgmt-probe.sh check_nodes) has the declaration in hand, so it compares per node on
-# three axes — reachable, version, schematic — and publishes mgmt_node_drift. It is the complete
-# one, and it is also the one whose metrics cannot reach Prometheus yet: the box is out-of-cluster
-# and Pushgateway is cluster-internal (docs/management-box.md §MB2, the transport is an unbuilt
-# ip-plan decision, not a config line).
+# (scripts/mgmt-probe.sh check_nodes) has the declaration in hand, so it compares per node —
+# reachable, version, schematic, plus the Kubernetes-facing axes — and publishes mgmt_node_drift
+# through the box's node_exporter textfile (job mgmt-node; its alerts are in
+# argocd/resources/mgmt-metrics/, docs/management-box.md §MB2). The VERSION axis is alerted here,
+# not there: this rule needs no box and no declaration.
 #
 # This rule is the half that needs NO new transport. kube_node_info is already scraped and carries
 # os_image = "Talos (vX.Y.Z)", so the cluster can see one thing on its own: the fleet is not all on

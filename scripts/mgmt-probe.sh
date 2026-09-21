@@ -360,25 +360,31 @@ node_k8s_axes() {
     rm -f "$live"; log "nodes: kubectl get nodes failed — registered/labels/taints axes not checked"; return 0; }
   # One row per declared node: name, present|absent, label diff, taint diff ("-" = none — bash
   # `read` collapses empty tab-separated fields).
-  rows="$(printf '%s' "$dk" | tool jq -r --slurpfile live "$live" '
-    . as $d
-    | ([$d[].labels | keys[]] | unique) as $lk
-    | ([$d[].taints[] | sub("=.*"; "")] | unique) as $tk
-    | ($live[0].items | map({key: .metadata.name, value: .}) | from_entries) as $L
-    | $d | to_entries[] | .key as $n | .value as $v
-    | if $L[$n] == null then [$n, "absent", "-", "-"]
-      else
-        ($L[$n].metadata.labels // {}) as $ll
-        | ([$lk[] | select(($ll[.] // null) != ($v.labels[.] // null))
-            | "\(.) declared=\($v.labels[.] // "none") live=\($ll[.] // "none")"] | join("; ")) as $ld
-        | ([$L[$n].spec.taints[]? | "\(.key)=\(.value // ""):\(.effect)"
-            | select(sub("=.*"; "") as $k | any($tk[]; . == $k))] | sort) as $lt
-        | ($v.taints | sort) as $dt
-        | [$n, "present", (if $ld == "" then "-" else $ld end),
-           (if $lt == $dt then "-" else "declared=\($dt | join(",")) live=\($lt | join(","))" end)]
-      end
-    | @tsv')" || { rm -f "$live"; log "nodes: the k8s diff did not evaluate — registered/labels/taints axes not checked"; return 0; }
-  rm -f "$live"
+  # The program goes in a FILE too: `devbox run` re-parses its arguments through a shell, which
+  # expanded every jq `$var` to nothing and joined the lines (found running this from the jail).
+  local prog; prog="$(mktemp)" || { rm -f "$live"; return 0; }
+  cat >"$prog" <<'JQ'
+. as $d
+| ([$d[].labels | keys[]] | unique) as $lk
+| ([$d[].taints[] | sub("=.*"; "")] | unique) as $tk
+| ($live[0].items | map({key: .metadata.name, value: .}) | from_entries) as $L
+| $d | to_entries[] | .key as $n | .value as $v
+| if $L[$n] == null then [$n, "absent", "-", "-"]
+  else
+    ($L[$n].metadata.labels // {}) as $ll
+    | ([$lk[] | select(($ll[.] // null) != ($v.labels[.] // null))
+        | "\(.) declared=\($v.labels[.] // "none") live=\($ll[.] // "none")"] | join("; ")) as $ld
+    | ([$L[$n].spec.taints[]? | "\(.key)=\(.value // ""):\(.effect)"
+        | select(sub("=.*"; "") as $k | any($tk[]; . == $k))] | sort) as $lt
+    | ($v.taints | sort) as $dt
+    | [$n, "present", (if $ld == "" then "-" else $ld end),
+       (if $lt == $dt then "-" else "declared=\($dt | join(",")) live=\($lt | join(","))" end)]
+  end
+| @tsv
+JQ
+  rows="$(printf '%s' "$dk" | tool jq -r --slurpfile live "$live" -f "$prog")" || {
+    rm -f "$live" "$prog"; log "nodes: the k8s diff did not evaluate — registered/labels/taints axes not checked"; return 0; }
+  rm -f "$live" "$prog"
   while IFS=$'\t' read -r node reg ldiff tdiff; do
     [ -n "$node" ] || continue
     if [ "$reg" = absent ]; then

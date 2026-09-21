@@ -78,3 +78,96 @@ tests:
         alertname: MgmtBoxDown
         exp_alerts:
           - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── FU-235: the node diff ──────────────────────────────────────────────────────────────────────
+  # The 2026-09-12 shape: kata declared on a laptop, the label absent live. Live-applied axes get
+  # an hour; a matched axis (0) never fires.
+  - interval: 5m
+    name: "a label drift fires after 1h; matched axes stay quiet"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-03",axis="labels"}'
+        values: "1x20"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-03",axis="taints"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-03, axis: labels }
+
+  # The 2026-09-21 shape: wk-metal-02 answers talosctl, no Node object. A reinstall window is under
+  # 2h; this one is not.
+  - interval: 5m
+    name: "a declared node with no Node object fires after 2h"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-02",axis="registered"}'
+        values: "1x30"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-02",axis="reachable"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 1h45m
+        alertname: MgmtNodeMissing
+        exp_alerts: []
+      - eval_time: 2h15m
+        alertname: MgmtNodeMissing
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-02, axis: registered }
+
+  # The 2026-09-16 shape: nx-01's EPHEMERAL on the SATA disk after a clean plan. Install-time — a
+  # window fixes it, and windows queue, so a day.
+  - interval: 5m
+    name: "an install-time drift is quiet for a day, then fires"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="nx-01",axis="ephemeral_disk"}'
+        values: "1x320"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="nx-01",axis="version"}'
+        values: "1x320"
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: MgmtNodeInstallDrift
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtNodeInstallDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: nx-01, axis: ephemeral_disk }
+      # version is TalosFleetVersionSplit's, never these rules'
+      - eval_time: 25h
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtNodeMissing
+        exp_alerts: []
+
+  # ── the belt itself ────────────────────────────────────────────────────────────────────────────
+  - interval: 5m
+    name: "a belt whose last run stops advancing fires after an hour plus 15m"
+    input_series:
+      - series: 'mgmt_probe_last_run_timestamp{job="mgmt-node",instance="192.168.2.53:9100",mode="belt"}'
+        values: "0+300x12 3600x30"
+    alert_rule_test:
+      - eval_time: 1h50m
+        alertname: MgmtBeltStale
+        exp_alerts: []
+      - eval_time: 2h20m
+        alertname: MgmtBeltStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", mode: belt }
+
+  - interval: 5m
+    name: "exporter up with only the GATE's file (no belt) fires after 1h"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x18"
+      - series: 'mgmt_probe_last_run_timestamp{job="mgmt-node",instance="192.168.2.53:9100",mode="gate"}'
+        values: "0x18"
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: MgmtBeltMetricsAbsent
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: MgmtBeltMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
