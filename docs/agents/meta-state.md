@@ -9,6 +9,13 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ NEXT (operator, 2026-09-21 evening): the management box's APPLIES, so Renovate can start
+  (ROADMAP G-D).** The ruled order (docs/management-box.md §MB4 sequence): the diff belt FU-235 →
+  the substrate spike FU-242 → the impact line → box-run maintenance verbs proven by a human-ordered
+  run → `reconcile: auto` on the compute tier (WIP 1) — then Renovate class-6 bumps land through
+  the box. First: FU-252's metrics (#1850) live, so the loop is watched before it is trusted with
+  more. Parked: FU-264 (CA rotation) until oracle's 10 h regen is done; the oracle inbox (7) for
+  another session.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
   arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
   should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was
