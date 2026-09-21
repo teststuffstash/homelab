@@ -310,6 +310,34 @@ state, so an unapplied one would leave §MB2's drift belt (the same `plan`, its 
 reporting `main` as drifted forever. Nothing is offered to the apply allowlist because no address
 is touched.
 
+**The install-impact line (ADR-132 §MB4 layer 2, 2026-09-21).** The plan is blind to one class by
+construction: Talos honours the schematic, `install.disk`, the EPHEMERAL `VolumeConfig` and
+`machine_type` only on the next install, so a head that changes them plans as a clean in-place
+config apply (nx-01 after #1717 — §MB4 item 1). So `main`'s verdict carries a second section,
+computed from the plan's own `node_install_targets` output (`tofu/outputs.tf` — per node:
+schematic, installer, version, role, install disk, EPHEMERAL): its BEFORE is the applied
+declaration, its AFTER is this head, and every node whose install-time fields differ is named
+with the fields that moved — *"this head changes the install of nx-01 (EPHEMERAL) → one
+reinstall window"*. For the upgrade-class axes (schematic, version) the head's value is then
+diffed against LIVE by `mgmt-probe.sh`'s own `check_nodes` (fed the head's declaration through
+`NODE_TARGETS_JSON`, answers through `NODE_DRIFT_OUT`), so a head that only codifies what already
+runs costs no window. Window kinds: **upgrade** (schematic / version / installer — the
+`node-maintenance.sh upgrade` path), **reinstall** (install disk / EPHEMERAL / role — Talos never
+re-partitions, and `machine_type` is baked at install), **install** (a new node). The same
+names-only rule as the rest of the verdict: node names and FIELD names leave the box, never a
+schematic id, disk path or selector. The status description gains ` · install: <node> <kind>`
+(or ` · install: N windows`); a head that moves no install gets *"Install impact: none"* in the
+comment and nothing in the description. It is advisory — the status stays green; the line is
+what the codeowner read refuses on, not a gate. Two limits, named: a node that was ALREADY
+drifted from live before this head is not listed (that is the belt's `mgmt_node_drift`, §MB2),
+and the reinstall-class axes compare head vs applied declaration only — their live reader
+(`volumestatus`) is FU-235's next axis. **`machines/machines.yaml` selects `main`** since the
+same change (`roots.main.inputs` in the policy): `locals.tf` yamldecodes it, and before this a PR
+touching only the inventory got "no box-held surface touched" and was never planned — #1716
+onboarded nx-01 that way. The inventory is pure data (no path or exec surface), so stage 1 does
+not judge it; the apply loop now sees inventory-only master commits too (and refuses them to a
+human apply like any `metal.tf` change outside the allowlist).
+
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
 plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
@@ -388,7 +416,9 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
 2. **The pre-merge impact line.** The sentinel's `tofu plan` is blind to this class, so its verdict grows a
    line computed from the PR head's declaration against live: *"this head changes the install of nx-01
    (schematic, EPHEMERAL disk) → one reinstall window"*. That sentence is what the codeowner read refuses;
-   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit.
+   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit. **Built
+   2026-09-21** — §MB3 "The install-impact line" (live comparison on the schematic/version axes; the
+   layout axes wait on `volumestatus`).
 3. **Sync policy in the declaration.** `reconcile: auto | manual` per node. Compute-tier nodes go `auto`
    first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
    A `manual` node still shows its diff as drift; the box does nothing.

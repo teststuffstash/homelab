@@ -55,6 +55,9 @@
 #   SKIP          space-separated check names to skip: tofu talos nodes ansible creds
 #   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
 #   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
+#   NODE_DRIFT_OUT     write the node diff's (node, axis) verdicts here, one "<node> <axis>\t<drift|ok>"
+#                      per line — how the management sentinel reuses THIS diff for its install-impact
+#                      line (NODE_TARGETS_JSON = the PR head's declaration; ADR-132 §MB4 layer 2)
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
@@ -379,6 +382,14 @@ gate_store() {
   fi
 }
 
+# NODE_DRIFT_OUT: the diff's verdicts as data, for a caller that is not Prometheus (mgmt-sentinel.sh)
+dump_drift() {
+  [ -n "${NODE_DRIFT_OUT:-}" ] || return 0
+  local d
+  { for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && printf '%s\tdrift\n' "$d"; done
+    for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && printf '%s\tok\n' "$d"; done; } >"$NODE_DRIFT_OUT" || true
+}
+
 # ── publish ─────────────────────────────────────────────────────────────────────────────────────
 # Same shape as the Garage write probe: the verdict AND a last-run timestamp, so a staleness alert
 # catches "the box is wedged" and not only "the box says no".
@@ -437,6 +448,7 @@ case "$MODE" in
     check_tofu
     check_talos
     check_nodes
+    dump_drift
     check_ansible
     check_creds
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the

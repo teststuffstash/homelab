@@ -192,7 +192,7 @@ data "talos_machine_configuration" "node" {
     [yamlencode({
       machine = {
         install = {
-          disk = "/dev/sda"
+          disk = local.vm_install_disk
           # FU-253: the VMs used to declare NOTHING here, so the provider's bundled default
           # (`ghcr.io/siderolabs/installer:v1.13.0`) landed on all five — the GENERIC image, which
           # reinstalls a nocloud VM as `platform: metal` and ghosts it (ADR-014, probed on wk-03).
