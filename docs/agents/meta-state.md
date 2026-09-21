@@ -20,6 +20,11 @@ never the session's arc — that is TICK-LOG's.)
   (3) Oracle inbox still holds 7 handoffs from 09-08..09-16, untouched. (4) `merged-closeout` reads
   `.agents/closeout.md` (#1806, ADR-134) — the first oracle closeout under it is unobserved;
   oracle-fleet#637 is still CLOSED with nothing in prod (theirs to reopen).
+- **⚑ PICKUP (2026-09-21 ~14:00 — pve GPU swap: DONE; arc in TICK-LOG).** pve runs HEADLESS (no
+  GPU; x16 + x1 free — storage-ledger §hypervisor). Operator-only: the CMOS clear reset "Restore on
+  AC Power Loss" — read it next time a card is fitted, else pve stays dark after a power cut.
+  Unexplained, seen once: argocd-dex-server segfault (139) on hp-01, runs fine on wk-04. oracle-pg
+  (oracle-iac) still has CNPG's default preferred anti-affinity — #1840 covered the platform three.
 - **⚑ PICKUP (2026-09-21 ~11:40 — the Talos rollout: DONE; arc in TICK-LOG).** All 13 nodes on
   **v1.13.10** (one os_image; `TalosFleetVersionSplit` resolved before its 09-22 08:00Z fire). #1836
   applied (0 replacements / 0 PKI); `upgrade-behind` ran on the box as transient units: cp-02, cp-01,

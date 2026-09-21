@@ -185,3 +185,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       of that class and stating the count — "5 reads, 5 guarded" — before the class may be called
       closed; and a mechanical test per site, since the self-test added here initially pinned 3 of
       5 while its own docstring claimed the set.
+- [ ] maintenance-window-G2 — **the skill's alert watch is a snippet the seat re-types, and it went
+      silent for 30 min.** The `Monitor` loop written for the 2026-09-21 pve window used
+      `for a in $cur` — zsh does not word-split, so the whole alert list compared as ONE name and
+      nothing was ever emitted while `maint check` showed four new alerts. The ping-based "is pve
+      up" watch failed the same way twice (`ping`/`nc` absent from the jail's bare PATH; a `$PV`
+      command-in-a-variable never ran). Also improvised: there is no `down` verb for a CONTROL
+      PLANE (node-maintenance refuses, cp-upgrade only upgrades) — cp-01 went down by hand (etcd
+      status + leader/VIP read, snapshot, drain, `talosctl shutdown`, cilium-check). Sighted
+      2026-09-21 (seat, pve GPU swap). Next: ship the watch as a verb (`maint watch`, emits one
+      line per new alert name, exits never) so it is run, not re-typed; and a `cp-down`/`cp-up`
+      pair beside cp-upgrade with the same gates.

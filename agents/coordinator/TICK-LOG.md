@@ -10370,3 +10370,25 @@ FU-263 archived. Operator's garage.md 4 KiB range-read ceiling committed as thei
 Mine: read a stale journal line through a Monitor's `--since -30s` overlap and briefly misdiagnosed
 FORCE as not propagating; reported wk-metal-04 ~8 min after it was actually Ready (the operator
 caught it).
+
+## 2026-09-21 ~11:45–14:00Z — seat: pve GPU swap window, headless finding, CNPG zone spread, ci-runner-02
+Operator asked whether pve could go down for a GPU swap. Read: etcd 3 members (cp-01 neither leader
+nor VIP holder), no Longhorn replicas on pve's VMs, ~2.5 cores of requests to rehome against ~7.7
+free → no extra node. Window opened; wk-01/02/03 via `node-maintenance down`, cp-01 by hand (etcd
+snapshot, drain, shutdown), ci-runner-01 waited out an oracle e2e, Matchbox, then pve poweroff.
+Found on the way: forgejo-pg hard-pinned to wk-01/wk-02 (both pve) — pg-4 relanded on wk-02 and went
+Pending; operator: fix the affinity → #1840 (required anti-affinity on topology.kubernetes.io/zone
+for forgejo/grafana/infisical-pg; patched live first — infisical/grafana primaries restarted in
+place, infisical ~3.5 min unready). dex segfaulted (139) on hp-01, fine on wk-04 — unexplained.
+BIOS: CSM/UEFI-video attempts blocked (no card on hand with GOP); a CMOS clear to defaults (CSM on,
+Legacy) then BOOTED WITH NO GPU — "refuses to POST" was a prior-settings artefact. Docs corrected;
+operator's slot count: free x16 + x1, 3 SATA (one SATA3) still firmware-disabled. Power 133–135 →
+105.6 W (card ≈25–28 W), NVMe sensor 1 75.8 → 63 °C. All back: etcd 3/3, cilium 13/13, 159 targets;
+window closed --force over three unrelated alerts (NodeRebooted, FU-267 cilium-agent at 512 Mi,
+wk-metal-01 Garage LMDB faults = storage-ledger's known 8 GB-zone need). Operator: "second runner
+now" → #1841, ci-runner-02 on nx-02 (192.168.2.66), both slots listening 13:42Z; FU-266 minted
+and archived same day.
+Mine: the alert Monitor sat silent 30 min (zsh `for a in $cur`), the ping watch never worked
+(`ping`/`nc` not in the jail) — my "pve dark" was an unverified claim that happened to be true;
+the #1841 CI red was my own unpushed FU-266 definition (the batching rule vs a PR that cites a new
+id) — GAPS maintenance-window-G2.
