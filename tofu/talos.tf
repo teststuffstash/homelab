@@ -35,6 +35,55 @@ locals {
     }
   })
 
+  # The CLUSTER-scoped control-plane patch — carried by EVERY control plane, VM (below) and metal
+  # (metal.tf) alike. A CP missing it is not inert: as a control plane it applies Talos's DEFAULT
+  # bootstrap manifests (flannel beside Cilium, on every node) and serves an apiserver without the
+  # kata PodSecurity exemption. That is what wk-metal-02 did from its 2026-09-21 reinstall until
+  # this became a shared local (homelab#1845) — the VM-only inline copy never reached metal.
+  cp_cluster_patch = yamlencode({
+    cluster = {
+      # CNI is cluster-scoped. "none" disables the default Flannel so Cilium can be installed
+      # instead (see ROADMAP service-exposure).
+      network = { cni = { name = "none" } }
+      # kube-proxy disabled — Cilium does service routing via eBPF
+      # (kubeProxyReplacement). Fixes NodePort hairpin drop on the backend
+      # node and preps for Cilium LB. Cilium uses Talos KubePrism (:7445).
+      proxy = { disabled = true }
+      # Expose scheduler + controller-manager metrics on the node IP (Talos binds them
+      # to 127.0.0.1 by default, so kube-prometheus-stack can't scrape them → false
+      # "InstanceUnreachable"/"TargetDown" alerts). LAN-only; :10259/:10257 still need auth.
+      # Applied in-place (static-pod restart, no reboot). monitoring.tf points the chart's
+      # ServiceMonitors at the control-plane IP.
+      scheduler         = { extraArgs = { "bind-address" = "0.0.0.0" } }
+      controllerManager = { extraArgs = { "bind-address" = "0.0.0.0" } }
+      # PSS can't see runtime classes, so privileged-inside-a-microVM (kata dind rides —
+      # root in the GUEST only) forced docker-worker namespaces to enforce: privileged
+      # wholesale. Exempting the kata runtimeClass lets those namespaces return to
+      # baseline (FU-077). Talos MERGES this with its built-in PodSecurity entry by plugin
+      # name — carry ONLY the new field: restating the defaults crashes the apiserver
+      # ("Duplicate value: kube-system", learned live 2026-07-16 — list merge concatenates).
+      # Applied in-place: brief apiserver static-pod restart, one control plane at a time.
+      apiServer = {
+        admissionControl = [{
+          name = "PodSecurity"
+          configuration = {
+            apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
+            kind       = "PodSecurityConfiguration"
+            exemptions = {
+              runtimeClasses = ["kata"]
+            }
+          }
+        }]
+      }
+    }
+  })
+
+  # Every control plane carries these — VM (below) and metal (metal.tf) consume this ONE list, so a
+  # new CP patch cannot reach one config and not the other (homelab#1845: the cluster patch lived
+  # inline in the VM config only, and the metal CP ran without it). The VIP patch stays out: it
+  # has a per-platform variant (cp_vip_patch vs cp_vip_patch_dhcp).
+  cp_common_patches = [local.sa_issuer_patch, local.cp_cluster_patch]
+
   # ADR-133's control-plane endpoint VIP (local.cp_vip, ruled in docs/ip-plan.md). Carried by
   # EVERY control plane — VM (below) and metal (metal.tf) alike — because a Talos shared VIP is
   # elected through etcd: the CP that wins the campaign puts the address on its own NIC and
@@ -224,47 +273,8 @@ data "talos_machine_configuration" "node" {
     })] : [],
     # The endpoint VIP — control planes only (see local.cp_vip_patch).
     each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
-    # The frozen SA issuer — control planes only (see local.sa_issuer_patch).
-    each.value.role == "controlplane" ? [local.sa_issuer_patch] : [],
-    # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
-    # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
-    each.value.role == "controlplane" ? [
-      yamlencode({
-        cluster = {
-          network = { cni = { name = "none" } }
-          # kube-proxy disabled — Cilium does service routing via eBPF
-          # (kubeProxyReplacement). Fixes NodePort hairpin drop on the backend
-          # node and preps for Cilium LB. Cilium uses Talos KubePrism (:7445).
-          proxy = { disabled = true }
-          # Expose scheduler + controller-manager metrics on the node IP (Talos binds them
-          # to 127.0.0.1 by default, so kube-prometheus-stack can't scrape them → false
-          # "InstanceUnreachable"/"TargetDown" alerts). LAN-only; :10259/:10257 still need auth.
-          # Applied in-place (static-pod restart, no reboot). monitoring.tf points the chart's
-          # ServiceMonitors at the control-plane IP.
-          scheduler         = { extraArgs = { "bind-address" = "0.0.0.0" } }
-          controllerManager = { extraArgs = { "bind-address" = "0.0.0.0" } }
-          # PSS can't see runtime classes, so privileged-inside-a-microVM (kata dind rides —
-          # root in the GUEST only) forced docker-worker namespaces to enforce: privileged
-          # wholesale. Exempting the kata runtimeClass lets those namespaces return to
-          # baseline (FU-077). Talos MERGES this with its built-in PodSecurity entry by plugin
-          # name — carry ONLY the new field: restating the defaults crashes the apiserver
-          # ("Duplicate value: kube-system", learned live 2026-07-16 — list merge concatenates).
-          # Applied in-place: brief apiserver static-pod restart on the single control plane.
-          apiServer = {
-            admissionControl = [{
-              name = "PodSecurity"
-              configuration = {
-                apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
-                kind       = "PodSecurityConfiguration"
-                exemptions = {
-                  runtimeClasses = ["kata"]
-                }
-              }
-            }]
-          }
-        }
-      })
-    ] : []
+    # The patches EVERY control plane carries, VM and metal alike (local.cp_common_patches).
+    each.value.role == "controlplane" ? local.cp_common_patches : []
   )
 }
 

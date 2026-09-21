@@ -712,3 +712,31 @@ Also observed while measuring (operator, Grafana "top pods by CPU throttling rat
 pods throttle 4–14 % of CFS periods at their 150m req==limit, cilium agents 4–13 %. `instance-manager`
 — the I/O path — has no CPU limit, so §The measurement above is not a throttling artefact; the manager
 is the attach/rebuild plane and that is FU-224.
+
+## 2026-09-21 — CNPG goes replica-1 node-local on std (ADR-114's CNPG half, FU-137)
+
+**Placement:** the platform's three CNPG clusters (forgejo-pg, infisical-pg, grafana-pg) move
+from the default class (Longhorn r2, best-effort) to **`longhorn-local-std`** — r1, strict-local,
+`diskSelector: std`, XFS, WaitForFirstConsumer (`tofu/longhorn.tf`) — each pinned
+`topology.kubernetes.io/zone In [hp-01, m70s]`.
+
+**Why r2 was the wrong layer.** Read live 2026-09-21: the only untainted boxes with a std disk are
+hp-01 and m70s, so every r2 Postgres volume already had one replica on each — four copies of each
+database across two disks, a cross-node hop on every fsync'd commit, a third best-effort replica
+stuck unschedulable whenever an instance ran on a diskless node (wk-04), and the whole std tier's
+capacity floor paying twice for data Postgres already streams to its standby. Replica-1 halves the
+std footprint (24 Gi → 12 Gi provisioned for the three) and makes the failure domain of an
+instance exactly its zone, which is what the required zone anti-affinity assumes.
+
+**Why not `longhorn-local-xfs`.** It carries no diskSelector — its fence is the Garage pods' own
+zone affinity — so on m70s a CNPG volume could land on the PM961, the Garage zone's DEDICATED disk
+(the 2026-09-12 dedicated-spindle move). A second class with the `std` fence is the cheap way to
+keep both fences true.
+
+**What it costs.** An instance can only run where its disk is: two eligible zones for two
+instances, so a zone outage leaves the cluster on one instance until the box returns (the card's
+Pending signature), and `node-maintenance` treats these volumes as zone volumes (WARN, never
+MOVE). The zone list is hand-kept in three places (the two manifests + `tofu/forgejo-pg.tf`) —
+grow it when a std disk joins another untainted zone. hp-01's retirement (fleet-roles direction)
+must move its instances onto the replacement std box first. Stack clusters (oracle-pg) keep the
+default class until the zone list becomes a node label a stack can name (FU-137).

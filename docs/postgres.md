@@ -47,6 +47,14 @@ pve VM reads `proxmox`, nx-02's read `nx-02`), and `required` makes co-location 
 than unlikely. Decided in [ADR-114](adr.md) (delivery tracked by FU-137); the platform's own three clusters carry it since 2026-09-21
 (#1840).
 
+**The platform's own three go one step further** (ADR-114's other CNPG half, 2026-09-21): their
+volumes are **replica-1 node-local** (`storageClass: longhorn-local-std`) — Postgres already
+replicates itself, so a second Longhorn copy of each instance is pure write tax — which ties each
+instance to its box, hence a node-affinity pin to the zones that have a std disk and
+`primaryUpdateMethod: switchover`. Rationale and costs:
+[`storage-ledger.md` §2026-09-21](storage-ledger.md). **Stack clusters keep the default class**
+for now: that pin is a hand-kept zone list, not yet a label your `-iac` repo could name (FU-137).
+
 Supply your own `secret:` **only** when something outside the cluster must know the password at
 build time (`infisical-pg.yaml` does, because tofu assembles its connection string). Default is:
 don't.

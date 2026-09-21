@@ -281,3 +281,26 @@ one resource (`talos_cluster_kubeconfig.this will be replaced, as requested`, `1
 destroy`) and nothing was dragged in. `tofu/kubeconfig` and the box's copy now read
 `https://192.168.2.50:6443`, an authenticated `kubectl get nodes` through it returns 13 `Ready`,
 and the full plan afterwards is `No changes`.
+
+## CP9. A control plane that misses the cluster patch is not inert (homelab#1845)
+
+The **cluster-scoped** CP patch (CNI `none`, kube-proxy off, the PodSecurity `runtimeClasses:
+[kata]` exemption, the scheduler/controller-manager metric binds) lived inline in the VM config
+only. `metal.tf` gave a metal CP the VIP and issuer patches, never this one, so wk-metal-02 ran
+Talos's defaults from its 2026-09-21 05:50Z reinstall. Two effects, both fleet-wide:
+
+- **Its apiserver refused every kata+dind ride.** It held the endpoint VIP, so every docker-mode
+  fixer dispatch hit it (oracle-fleet#679). Found from a stack issue; the belt it lacked is now
+  `PodSecurityEnforceDenied` (`argocd/resources/pod-admission-alerts/`), which fires per instance.
+- **As a control plane it applied the default bootstrap manifests:** a `kube-flannel` DaemonSet
+  on all 13 nodes beside Cilium. Mostly harmless only by luck: `cni-exclusive` kept Cilium as
+  the pod CNI, Cilium's identical per-node /24 routes won, and the VXLAN ports differ (4789 vs
+  8472). It still wired two pods that started before Cilium on wk-metal-02 onto a `cni0` bridge
+  outside Cilium. Setting `cni: none` later does **not** prune what Talos already applied: the
+  objects, `flannel.1`/`cni0` and `/etc/cni/net.d/10-flannel.conflist*` were removed by hand.
+
+Structural fix: `local.cp_common_patches` is the one list both configs consume (#1847, #1848).
+Per-apiserver acceptance, reusable for any admission question: `kubectl --server=https://<cp>:6443
+apply --dry-run=server -f <pod>` against each control plane, not the VIP.
+
+**Tracked by:** FU-268 — the belt for the next divergence (nothing fired for ~10 h this time).

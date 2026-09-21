@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-268** (2026-09-21: FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-269** (2026-09-21: FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -280,17 +280,15 @@ six OVERSIZE items pointer-ized into
       ArgoCD prune deletes the OLD hashed CM the moment the name rolls — a rollback then
       references a pruned CM (Brian Grant, itnext.io/…-1431398c0866, bookmarked). Relates ADR-083.
 
-- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** The risk fired 2026-08-24
-      (meta LMDB wiped with the pve thin pool —
-      [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md), homelab#884). **ADR-114**
-      + its addendum + the 2026-09-07 amendment answer both halves; mechanism and run numbers live
-      in [`garage.md`](garage.md) and the [ledger](storage-ledger.md), not here. Done: **rf=3 across
-      three physical zones (2026-09-07)**; **the rotation loop, unattended since 2026-09-09**
-      (single-actor, 12 h cooldown, all-nodes health gate); **the dedicated-spindle residual,
-      2026-09-12** — garage-1 onto its own PM961; **CNPG required zone anti-affinity, 2026-09-21**
-      (#1840 platform three, oracle-iac#900, card #1842). **Next:** CNPG replica-1 storage, then
-      the backup CronJob (ADR-114's logical-deletion class). Operator
-      intent: metadata maintenance is unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
+- [ ] **FU-137** — **Garage durability + metadata reclamation: POINTER.** Fired 2026-08-24 (meta LMDB
+      wiped with the pve thin pool — [incident](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md),
+      homelab#884). **ADR-114** + addendum + 2026-09-07 amendment answer both halves; mechanism and
+      numbers live in [`garage.md`](garage.md) and the [ledger](storage-ledger.md). Done: rf=3 across
+      three physical zones (09-07); the unattended rotation loop (09-09); garage-1 on its own PM961
+      (09-12); CNPG required zone anti-affinity (09-21, #1840/#1842, oracle-iac#900); CNPG replica-1
+      (09-21, #1843 — ledger §2026-09-21; stack clusters wait on a zone node label). **Next:** the
+      backup CronJob (ADR-114's logical-deletion class). Operator intent: metadata maintenance is
+      unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
@@ -425,7 +423,7 @@ six OVERSIZE items pointer-ized into
       lock — silent retries are the responder incident's shape). Deliverable: the yes/no in
       [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md). Relates FU-097, FU-012.
 - [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, the §CP6 defect and the §CP7 recovery: [`docs/controlplane-ha.md`](controlplane-ha.md).
+      order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
       **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
       wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
       `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
@@ -1352,6 +1350,14 @@ the block needs pruning, not more headings.
       **Next:** a transport for the gauge (§MB2, FU-252), then labels/taints/`volumestatus` axes.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
+- [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
+      wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
+      beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
+      admission half, a seat `talosctl` read found flannel ([controlplane-ha.md §CP9](controlplane-ha.md)).
+      Not FU-235's drift: live matched git, git differed per CP. #1848 fixes this path; the belt
+      catches the next one. **Next:** alert on CP config divergence (the `cluster:` section's hash
+      per CP, via the box or an exporter), and/or on a `kube-system` DaemonSet/Deployment missing
+      from git. Detector-first: replay against 2026-09-21 05:50–16:20Z. Relates FU-235, FU-243, #1845.
 - [ ] **FU-262** — **`wk-metal-02` is a control plane wearing a worker's name.** One of the three
       CPs since 2026-09-21 (ADR-133), still `wk-` in `kubectl get nodes`, etcd membership, BGP peer
       lists and every dashboard. The convention is settled — [ADR-137](adr.md): CPs are `cp-NN`,
