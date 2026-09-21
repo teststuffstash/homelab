@@ -65,9 +65,16 @@ fetch_one() {
   # sides. The tofu-side twin of this guard is the `kubeconfig_endpoint_current` check block.
   if [ "$name" = kubeconfig ]; then
     local declared server
+    # ⚠ Both assignments end in `|| x=""`, and that is load-bearing under this script's
+    # `set -euo pipefail`: a bare assignment whose pipeline fails (the box busy on the apply
+    # loop's `flock -w 600`, an SSH drop, or simply no `server:` line) would otherwise take its
+    # exit status from `pipefail` and kill the function HERE — skipping the "wrote it unchecked"
+    # fallback below and aborting `devbox run kubeconfig` with no explanation, after the config
+    # was already fetched and validated (review, #1825).
     declared="$(bash "$ROOT/scripts/mgmt-tf.sh" output -raw cluster_endpoint 2>/dev/null \
-      | grep -v '^mgmt-tf:' | grep -v 'Pseudo-terminal will not be allocated' | tr -d '[:space:]')"
-    server="$(grep -m1 -oE 'server: *\S+' "$tmp" | awk '{print $2}')"
+      | grep -v '^mgmt-tf:' | grep -v 'Pseudo-terminal will not be allocated' | tr -d '[:space:]')" \
+      || declared=""
+    server="$(grep -m1 -oE 'server: *\S+' "$tmp" | awk '{print $2}')" || server=""
     if [ -n "$declared" ] && [ -n "$server" ] && [ "$declared" != "$server" ]; then
       rm -f "$tmp"
       echo "client-configs: the kubeconfig in state dials $server but the cluster declares $declared — refusing to write." >&2
