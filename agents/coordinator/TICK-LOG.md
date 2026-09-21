@@ -10411,3 +10411,20 @@ probe fired it 16:04Z. Then #1847 (dry-run: no reboot), applied 16:15Z; the dry-
 all three plus the VIP; cilium-check 13/13. Flannel objects deleted; `flannel.1`/`cni0`/conflist
 removed on all nodes via one-shot pods; two loki pods re-wired onto Cilium. Class fix #1848
 (`cp_common_patches`) + controlplane-ha §CP9. Handoff answered to oracle's `done/`; #1845 closed.
+
+## 2026-09-21 ~16:40–18:40Z — seat: proxy-roll clone death, ADR-139, FU-252 closed, FU-265 probed
+oracle-fleet#679-r2 died at clone ("Invalid username or token"): its agent started 16:59:04Z while
+openrouter-proxy rolled for #1755's comment-only sync (Recreate + Multi-Attach, ~30 s); the broker
+curl failed once and the helper fell back to an EMPTY password. A kata probe on nx-01 proved the path
+healthy after; r3 ran and opened oracle-fleet#683. agent-runtime#144 retries the broker across a roll
+(stub-tested) and prints NO TOKEN when none results. ⚠ Mine: the dead-broker test fell back to the
+jail's own GH_TOKEN and printed it into the transcript — operator told to rotate. Operator design
+thread → ADR-139 (#1853): broker split (FU-269), FU-127 before any repo split, `agent-gateway`
+extraction (FU-270), HA deferred to a measured store (FU-271), vendor-status out of github-exporter
+(FU-272). FU-252: #1850 duplicated github-exporter's 09-18 `MgmtApplyResidueStanding` (stale FU text,
+prior-art read only the tracker) → #1851 kept only the box-side belts; box rebuilt at its 18:00 pull,
+target + series live 18:03Z, FU-252 archived. GarageZoneDegraded (#1849) + docs-graph #4b enforcing
+(#1755 merged; two §C3 strays). FU-265: Boot0008 deleted, same-version upgrade PASSED, but a firmware
+boot recreates it (kexec upgrades never meet the firmware) → next = scrub-before-install in `upgrade`.
+GarageZoneDegraded fired correctly at 18:36 on the unsilenced power-cycle; window closed --force over
+NodeRebooted (mine) + BlockingCodeownerParkWaiting (oracle-fleet#683, theirs).
