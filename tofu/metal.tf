@@ -63,9 +63,13 @@ data "talos_machine_configuration" "metal" {
       }
     })],
     [local.registry_mirrors_patch],
-    # The endpoint VIP — metal control planes only (talos.tf, local.cp_vip_patch). A metal CP is
-    # an etcd member like any other, so it campaigns for the address on the same terms.
-    each.value.controlplane ? [local.cp_vip_patch] : [],
+    # The endpoint VIP — metal control planes only (talos.tf). A metal CP is an etcd member like
+    # any other, so it campaigns for the address on the same terms. The `_dhcp` variant is the
+    # load-bearing half: a PXE box's address comes from Talos's DEFAULT dhcp4 operator, which this
+    # patch suppresses the moment it names the interface, so it has to ask for DHCP explicitly.
+    # The VM variant (local.cp_vip_patch) would leave a metal CP with no address at all — which is
+    # what happened to wk-metal-02 on 2026-09-20 (docs/controlplane-ha.md §CP6).
+    each.value.controlplane ? [local.cp_vip_patch_dhcp] : [],
     # The frozen SA issuer (ADR-136, talos.tf local.sa_issuer_patch) — every control plane must
     # carry the SAME issuer, so a metal CP gets it on exactly the same terms as the VM one.
     each.value.controlplane ? [local.sa_issuer_patch] : [],

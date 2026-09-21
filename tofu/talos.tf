@@ -19,6 +19,22 @@ locals {
     }
   })
 
+  # ADR-136's issuer pin (local.sa_issuer, locals.tf). Control planes only — a worker config has
+  # no cluster.apiServer. extraArgs REPLACES Talos's derived flag rather than adding to it, which
+  # is what makes this a pin and not a second issuer (Talos cannot express two; see locals.tf).
+  # Applied at its CURRENT value, so it invalidates no token — rehearsed on the disposable nx-02
+  # lab control plane before the live apply (docs/controlplane-ha.md §CP4).
+  sa_issuer_patch = yamlencode({
+    cluster = {
+      apiServer = {
+        extraArgs = {
+          "service-account-issuer" = local.sa_issuer
+          "api-audiences"          = local.sa_issuer
+        }
+      }
+    }
+  })
+
   # ADR-133's control-plane endpoint VIP (local.cp_vip, ruled in docs/ip-plan.md). Carried by
   # EVERY control plane — VM (below) and metal (metal.tf) alike — because a Talos shared VIP is
   # elected through etcd: the CP that wins the campaign puts the address on its own NIC and
@@ -38,29 +54,47 @@ locals {
   # owning — machine.network was absent from the config until now and this creates it. The certSAN
   # half regenerates the apiserver cert and restarts the static pod: ~2 min of API downtime on a
   # single control plane, and none once there are three.
-  # ADR-136's issuer pin (local.sa_issuer, locals.tf). Control planes only — a worker config has
-  # no cluster.apiServer. extraArgs REPLACES Talos's derived flag rather than adding to it, which
-  # is what makes this a pin and not a second issuer (Talos cannot express two; see locals.tf).
-  # Applied at its CURRENT value, so it invalidates no token — rehearsed on the disposable nx-02
-  # lab control plane before the live apply (docs/controlplane-ha.md §CP4).
-  sa_issuer_patch = yamlencode({
-    cluster = {
-      apiServer = {
-        extraArgs = {
-          "service-account-issuer" = local.sa_issuer
-          "api-audiences"          = local.sa_issuer
-        }
-      }
-    }
-  })
+  #
+  # ⚠ THAT VERIFICATION COULD NOT SEE THE METAL CASE, and wk-metal-02 paid for it (2026-09-20,
+  # docs/controlplane-ha.md §CP6). Naming a link here moves it into Talos's
+  # ConfigMachineConfiguration layer, and the DEFAULT-layer dhcp4 operator is emitted only for
+  # physical links that NO layer configures ("interface is configured explicitly, don't run
+  # default dhcp4" — siderolabs/talos network/operator_config.go). A nocloud VM never had that
+  # default operator to lose (its address is ConfigPlatform, already "configured"), so cp-01 was
+  # additive exactly as measured. A PXE metal node's ONLY address source IS that default operator
+  # — `talos.platform=metal` supplies no network config and the disk-boot cmdline carries no `ip=`
+  # — so the same patch silently took its address away, and the reinstalled node came up with no
+  # IP, no DHCP-supplied resolver, and Talos's compiled-in 8.8.8.8 failing NTP on the console.
+  # Hence TWO variants below: the address source a node relies on has to be RESTATED the moment
+  # this patch claims its interface. Upstream's own VIP example carries `dhcp: true` for this
+  # reason.
+  cp_vip_interface = {
+    deviceSelector = { physical = true }
+    vip            = { ip = local.cp_vip }
+  }
 
+  # Platform-addressed control planes (the nocloud VMs — cp-01, cp-02). No `dhcp`: their address
+  # comes from the Proxmox datasource, and asking dnsmasq for one would add a SECOND, dynamic
+  # address on eth0 — the VM MACs have no reservation, so a lease would come from the .100–.245
+  # pool (opnsense/dnsmasq-dhcp.py) and the node address would be a coin flip.
   cp_vip_patch = yamlencode({
     machine = {
       network = {
-        interfaces = [{
-          deviceSelector = { physical = true }
-          vip            = { ip = local.cp_vip }
-        }]
+        interfaces = [local.cp_vip_interface]
+      }
+    }
+    cluster = {
+      apiServer = { certSANs = [local.cp_vip] }
+    }
+  })
+
+  # DHCP-addressed control planes (the PXE metal boxes — metal.tf). Identical but for `dhcp: true`,
+  # which restates the default operator this patch would otherwise suppress. Their addresses are
+  # dnsmasq reservations, so the lease is the declared one (wk-metal-02 → .183).
+  cp_vip_patch_dhcp = yamlencode({
+    machine = {
+      network = {
+        interfaces = [merge(local.cp_vip_interface, { dhcp = true })]
       }
     }
     cluster = {
