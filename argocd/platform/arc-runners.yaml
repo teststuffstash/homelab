@@ -51,7 +51,21 @@ spec:
         # thin pool is the binding constraint) for DiskPressure evictions under concurrent dind.
         # 2026-09-14: wk-03 back to 8Gi/6c (pve host out of memory headroom, and ~4 concurrent
         # dind on its 40G disk WAS the #1657/#1659 eviction wave) → 4 = 1 + 1 + ~2.
-        maxRunners: 4
+        # 2026-09-21 → 8, and the arithmetic re-done over the tier that actually exists (operator).
+        # The "1 + 1 + ~2" above counted wk-metal-01/-02, and both have LEFT the ephemeral tier
+        # (-02 is a control plane, ADR-133; -01 left kata) — while nx-01 joined it and was never
+        # counted. The live set is the three nodes labelled homelab.io/ephemeral=true, measured:
+        #   nx-01        61.5 GiB allocatable, 40 cores, 11 % memory requested, 230 GB NVMe → ~6
+        #   wk-03         6.0 GiB, 71 % requested (a runner requests ~2.5 GiB: 1.5 + 1 dind) → 1
+        #   wk-metal-03   6.4 GiB, 67 % requested                                            → 1
+        # so 8 = 1 + 1 + ~6. The pool sat at 4/4 with checks queued when this was changed.
+        # nx-01 could take ~20 by memory; it stops at ~6 on purpose, because it is ALSO the ride
+        # tier (kata) and rides compete for it when they run. ⚠ Two costs of leaning on one box:
+        # most runners now land on nx-01, which is the 2026-08-11 shape (every runner on one node
+        # whose WAN died) — the soft spread cannot help once only nx-01 has room; and the runner
+        # requests no ephemeral-storage, so the scheduler does not guard disk at all — harmless on
+        # nx-01's NVMe, the very thing that evicted the small nodes in the #1657 wave.
+        maxRunners: 8
         # NO containerMode: the spec below is the chart's own dind template (rendered at 0.14.2 and
         # transcribed), owned here because dind customization requires it (the chart APPENDS user
         # initContainers — a name-merge dupes the dind container; render-verified). We own it to:
