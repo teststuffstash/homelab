@@ -42,20 +42,12 @@ resource "kubernetes_manifest" "forgejo_pg" {
       # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
       # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (monitoring.tf).
       monitoring = { enablePodMonitor = true }
-      # Pin to the stable VM workers — the bare-metal nodes flap-reboot (qemu-guest-agent boot
-      # hang, see metal-node-flapping); a flap on a node hosting a PG instance breaks the cluster.
+      # One instance per PHYSICAL box (topology.kubernetes.io/zone = the chassis; the pve VMs all
+      # read `proxmox`). The old hostname pin to wk-01/wk-02 (from the metal-flapping era) put
+      # both instances on one hypervisor — found at the 2026-09-21 pve GPU-swap drain.
       affinity = {
-        nodeAffinity = {
-          requiredDuringSchedulingIgnoredDuringExecution = {
-            nodeSelectorTerms = [{
-              matchExpressions = [{
-                key      = "kubernetes.io/hostname"
-                operator = "In"
-                values   = ["wk-01", "wk-02"]
-              }]
-            }]
-          }
-        }
+        podAntiAffinityType = "required"
+        topologyKey         = "topology.kubernetes.io/zone"
       }
       storage = {
         size         = "5Gi"
