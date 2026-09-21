@@ -103,8 +103,28 @@ locals {
   })
 }
 
+# The cluster PKI — every CA, and the client certs derived from it. Created once at bootstrap
+# (2026-05-29) and never since.
+#
+# ⚠⚠ `talos_version` here is FROZEN at the value the bundle was generated with, and must NOT
+# follow var.talos_version_controlplane. The provider treats it as RequiresReplaceIfConfigured,
+# and this resource's replacement is not a version bump — it is a NEW cluster PKI: every CA and
+# every client cert goes `(known after apply)`, and applying it would leave the live machines
+# trusting certificates nothing holds. It read `var.talos_version_controlplane` until 2026-09-21,
+# which meant the routine act of bumping the control-plane version to a patch release planned a
+# full PKI regeneration as a side effect — found while trying to move the CPs off the
+# page_table_check kernel (FU-263; the same shape ADR-136 froze `sa_issuer` for).
+#
+# The string affects the FORMAT of the generated secrets bundle, not the version any node runs —
+# nodes take their version from data.talos_machine_configuration.node / the install image. It
+# therefore only ever wants changing at a deliberate PKI rotation, which is a rebuild-class act:
+# drop the lifecycle block, in its own window, knowing every node needs the new config.
 resource "talos_machine_secrets" "this" {
-  talos_version = var.talos_version_controlplane
+  talos_version = "v1.13.2"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 data "talos_machine_configuration" "node" {
@@ -271,4 +291,31 @@ resource "talos_cluster_kubeconfig" "this" {
   client_configuration = talos_machine_secrets.this.client_configuration
 
   depends_on = [talos_machine_bootstrap.this]
+}
+
+# ⚠ This resource CAPTURES the kubeconfig at create time and never refreshes it. Nothing in its
+# arguments mentions local.cluster_endpoint, so moving the endpoint leaves the rendered
+# kubeconfig — and therefore `devbox run kubeconfig`, the jail's kubectl and the management box —
+# dialling the OLD address while `plan` reports `No changes`. That is not hypothetical: the
+# ADR-133 VIP cutover reached all 13 machine configs on 2026-09-21 and this output still served
+# https://192.168.2.51:6443 (FU-259).
+#
+# The check below makes that divergence VISIBLE on every plan instead of silent. It is a warning,
+# not a failure, on purpose: the condition is fixed by an apply that this very root cannot plan
+# unscoped (the kubernetes/helm providers are configured FROM this resource, so a replacement
+# puts their host/certs in `(known after apply)` and the whole plan errors out), so blocking
+# would wedge the apply loop on a condition it cannot resolve. Recovery is the scoped pair,
+# followed by a re-render of the client configs and a full apply to restamp the baseline:
+#
+#   devbox run mgmt-tf -- apply -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this
+#   devbox run kubeconfig
+#
+# `replace_triggered_by` was considered instead and rejected for the same reason: it would turn
+# every future endpoint move into a plan the root cannot apply at all, rather than a warning
+# with a documented two-step.
+check "kubeconfig_endpoint_current" {
+  assert {
+    condition     = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host == local.cluster_endpoint
+    error_message = "The kubeconfig in state was captured against a different API endpoint than local.cluster_endpoint declares; clients rendered from it dial the old address. Recovery: apply -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this, then `devbox run kubeconfig` (FU-259, docs/controlplane-ha.md)."
+  }
 }

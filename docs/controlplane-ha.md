@@ -17,7 +17,7 @@ rest of the program boring.**
 | It becomes | Read by | Safe to move? |
 |---|---|---|
 | `cluster.controlPlane.endpoint` in every machine config | a node bootstrapping, KubePrism's seed list | yes |
-| the kubeconfig `server:` URL | external `kubectl` — the jail and the [management box](management-box.md) | yes, but `talos_cluster_kubeconfig` does NOT re-render it and `plan` reads clean (FU-259) |
+| the kubeconfig `server:` URL | external `kubectl` — the jail and the [management box](management-box.md) | yes, but `talos_cluster_kubeconfig` does NOT re-render it and `plan` reads clean — §CP8 |
 | `--service-account-issuer` **and** `--api-audiences` on kube-apiserver | **every ServiceAccount token ever minted** | **no — this is the one that bites** |
 
 A token carries the `iss`/`aud` it was minted with, and the apiserver rejects one whose `iss` is not
@@ -74,7 +74,7 @@ sync is the outage above.
    while they come back (measured 2026-09-21; §CP4 carries the numbers and why the rehearsal
    predicted otherwise). Treat it exactly like steps 1 and 2: declared window, C3 fallout expected.
    Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
-   → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (FU-259).
+   → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (§CP8).
 
 **All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
@@ -230,3 +230,41 @@ while `var.talos_version_worker` had moved to v1.13.10, and that drift was fixed
 it caused none of this. Both kernel versions chainloaded and booted fine; the config on disk was
 the whole story. The lockstep fix stands on [FU-246](follow-ups.md)'s own merits, and the first
 diagnosis that blamed the kernel was wrong.
+
+## CP8. The kubeconfig does not follow the endpoint (FU-259)
+
+`talos_cluster_kubeconfig` is a **resource, not a data source**: it calls the API once at create
+time and keeps what it got. Its arguments (`node`, `endpoint`, `client_configuration`) never
+mention `local.cluster_endpoint`, so moving the endpoint changes nothing it tracks — `plan` reads
+`No changes` while `tofu output -raw kubeconfig` keeps serving the old `server:` URL. The
+talosconfig half has no such problem: `data.talos_client_configuration` is a data source, re-read
+every plan, and it listed all three control planes correctly the same day.
+
+Measured on the 2026-09-21 cutover: the flip reached all 13 machine configs and every apiserver,
+and the kubeconfig output still read `https://192.168.2.51:6443` — so the jail and the
+[management box](management-box.md) kept dialling cp-01 and the VIP bought them nothing. A second
+bug hid it for a day (`client-configs.sh` printed success without writing the jail's copy, #1823).
+
+Two guards, both added 2026-09-21:
+
+- **`check "kubeconfig_endpoint_current"`** (`tofu/talos.tf`) compares the captured
+  `kubernetes_client_configuration.host` against `local.cluster_endpoint` and **warns on every
+  plan** while they differ — the sentinel's plan-on-PR and the box's apply loop both surface it.
+- **`scripts/client-configs.sh` refuses to write** a kubeconfig whose `server:` disagrees with the
+  `cluster_endpoint` output, on the box and in the jail, rather than reinstating the old address
+  on both sides.
+
+A warning rather than a failure, and no `replace_triggered_by`, because **this root cannot plan
+the fix unscoped**: the `kubernetes`/`helm` providers are configured from this resource, so a
+planned replacement puts their host and certs in `(known after apply)` and the whole plan errors.
+Blocking would wedge the apply loop on a condition it has no way to resolve. The recovery is the
+scoped pair, then the re-render, then a full apply to restamp the apply-loop baseline:
+
+```bash
+devbox run mgmt-tf -- apply -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this
+devbox run kubeconfig
+devbox run mgmt-tf -- apply        # full, origin/master — stamps applied-rev
+```
+
+⚠ A `-target` on this root is the FU-248 landmine — it once replaced three workers. Plan the exact
+command, read the plan, and check the baseline plan is `No changes` before starting.
