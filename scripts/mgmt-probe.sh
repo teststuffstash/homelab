@@ -215,20 +215,21 @@ check_nodes() {
     # ⚠ The box's OWN checkout has never had the main root initialised — only the apply clone
     # (/var/lib/mgmt/apply/homelab) is, because that is where mgmt-tf and mgmt-apply run. The
     # first real run of this check on the box therefore died with "Required plugins are not
-    # installed" (2026-09-21, found by starting mgmt-belt by hand right after #1828 merged). Same
-    # shape as check_tofu above: init once, -lockfile=readonly so the pin cannot move, then retry.
-    declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
-      log "nodes: main root not initialised in this checkout — init once, then retry"
+    # installed" (2026-09-21, found by starting mgmt-belt by hand right after #1828 merged).
+    # Decided UP FRONT from the missing directory, exactly as check_tofu does — not by retrying
+    # on any failure, which would also swallow a real regression (review, #1831): a renamed or
+    # removed `node_install_targets` must stay a loud FAIL.
+    if [ ! -d "$REPO/tofu/.terraform" ]; then
+      log "nodes: main root not initialised in this checkout — init once (-lockfile=readonly)"
       if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
-        # A tool problem is not a finding (the sentinel's 2026-08-19 discrimination), so this is a
-        # SKIP, not a FAIL — the belt's verdict is about the fleet, and a probe that cannot read
-        # its own input has not seen the fleet at all. The skip is visible on its own terms:
-        # mgmt_probe_check{check="nodes",status="skip"}.
+        # The one case that is a tool problem rather than a finding (the sentinel's 2026-08-19
+        # discrimination): the probe could not read its input, so it has not seen the fleet.
+        # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
         skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
       fi
-      declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
-        skipped nodes "node_install_targets unreadable after init: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
-    }
+    fi
+    declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
+      failed nodes "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
   fi
   # The output is a map node => {ip, class, installer, schematic, version}; anything else means the
   # output moved and this check is reading a shape that no longer exists.
