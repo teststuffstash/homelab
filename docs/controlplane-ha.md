@@ -69,6 +69,10 @@ sync is the outage above.
    `kubectl -n kube-system get pod -l component=kube-apiserver -o jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep -E 'service-account-issuer|api-audiences'`
 2. **Join `wk-metal-02` and the nx-02 VM, back to back.** Never rest at two etcd members —
    [`ip-plan.md`](ip-plan.md) §VIP: at two the VIP is *less* available than at one.
+   A *former worker* keeps its Kubernetes Node, so its `nodes.longhorn.io` object is NOT
+   garbage-collected — it lingers `Ready=False ManagerPodMissing` (Longhorn does not schedule on a
+   CP). Read it is empty (no disks/replicas/engines), `patch … '{"spec":{"allowScheduling":false}}'`
+   (the webhook refuses a schedulable one), then delete it; wk-metal-02's lingered until 2026-09-21.
 3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then — but **not free**: it restarts
    the apiserver on EVERY member, together, and the API is unreachable on all of them for ~2 min
    while they come back (measured 2026-09-21; §CP4 carries the numbers and why the rehearsal

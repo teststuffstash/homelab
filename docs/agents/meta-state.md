@@ -33,13 +33,10 @@ never the session's arc — that is TICK-LOG's.)
   (2) **FU-265** — wk-metal-04's firmware `Boot0008` breaks every future `talosctl upgrade` of it
       (it finished today by a planned reboot); firmware-setup delete + the public upstream issue are
       the operator's call.
-  (3) wk-metal-02 carries a STALE `nodes.longhorn.io` object from its worker days (`READY False`) —
-      its next upgrade would wait 300 s for a CSI driver that never registers there. Delete it
-      (read its disks/replicas first); ≤5-minute class.
-  (4) Observation, single sighting — detector-first if it recurs: homelab CI's crossplane render
+  (3) Observation, single sighting — detector-first if it recurs: homelab CI's crossplane render
       failed at 10:28Z on `192.168.40.21` (ghcr mirror VIP) "no route to host", the minute cp-01
       rebooted and cilium-operator was evicted. Rerun green; VIP answered at 10:55.
-  (5) Operator question still open: box metrics transport = node_exporter scraped as a static
+  (4) Operator question still open: box metrics transport = node_exporter scraped as a static
       target like the hypervisors (FU-252) — the seat agrees, no VIP decision needed.
   Unfiled and wanted (from 09-18, still true): a **`GarageZoneDegraded`** belt on `min(cluster_healthy) == 0 for 5m`.
   ⚠ Host-side git prunes scratchpad worktrees mid-session and the jail's known_hosts is not durable —
