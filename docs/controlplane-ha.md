@@ -69,11 +69,14 @@ sync is the outage above.
    `kubectl -n kube-system get pod -l component=kube-apiserver -o jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep -E 'service-account-issuer|api-audiences'`
 2. **Join `wk-metal-02` and the nx-02 VM, back to back.** Never rest at two etcd members —
    [`ip-plan.md`](ip-plan.md) §VIP: at two the VIP is *less* available than at one.
-3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then, and it does not even restart the
-   apiserver (C4). Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
+3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then — but **not free**: it restarts
+   the apiserver on EVERY member, together, and the API is unreachable on all of them for ~2 min
+   while they come back (measured 2026-09-21; §CP4 carries the numbers and why the rehearsal
+   predicted otherwise). Treat it exactly like steps 1 and 2: declared window, C3 fallout expected.
+   Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
    → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (FU-259).
 
-**Steps 1 and 2 restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
+**All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
 ([FU-258](spikes/cilium-apiserver-restart-backend-loss.md) — `devbox run maint cilium-check`;
 `cp-upgrade` gates on it by itself), the Argo Workflows controller hot-loops and floods Loki
@@ -109,10 +112,19 @@ The probe: mint a token, move the endpoint, see whether the token still authenti
 | 2 — pin applied at the current value | none | **authenticated** (403 = authn ok, authz denied) |
 | 3 — the real thing, issuer PINNED | `.65` → `.66` | **authenticated** — survived |
 
-Two further readings from phase 3, both load-bearing: the apiserver's flags still showed the pinned
-`.65` issuer (Talos really does replace, not merge), and the kube-apiserver container's `startedAt`
-did **not** move across the flip or a second flip back — **with the issuer pinned, moving the
-endpoint does not restart the apiserver at all**, so step 3 above carries none of the C3 fallout.
+Two further readings from phase 3: the apiserver's flags still showed the pinned `.65` issuer
+(Talos really does replace, not merge), and the kube-apiserver container's `startedAt` did **not**
+move across the flip or a second flip back.
+
+⚠ **That second reading did NOT generalise, and the real cutover disproved it (2026-09-21).** The
+lab is a ONE-NODE cluster; the fleet is three. Flipping `cluster_endpoint` to the VIP restarted
+**all three apiservers together** — a ~2 minute window in which `.51`, `.65`, `.183` *and* the VIP
+all refused connections — followed by the standard §CP3 fallout: `kube-scheduler` and
+`cnpg-operator` crashlooped and recovered on their own within minutes, etcd never lost quorum,
+Cilium kept the apiserver backend (13/13). **Three control planes did not make the restarts roll**,
+so plan the flip as an apiserver restart on every member at once, inside a window, not as the
+free action this paragraph originally promised. What the pin *does* guarantee is the part that
+mattered: every ServiceAccount token survived, because the issuer did not move (C1/C2).
 
 ## CP5. Promoting a running worker to a control plane
 
