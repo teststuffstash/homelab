@@ -586,14 +586,14 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     # (the .canary field is the joined "harness=verdict" string since the ADR-112 cells).
     WITHHELD="$(jq -r '[.[] | .model + " (canary: " + (if (.canary // "") == "" then "none" else .canary end) + ")"] | join(", ")' "$WORK/ranked.json")"
     log "scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): ${WITHHELD} — gh issue create NOT run"
-    log "scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)"
+    log "scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/spikes/model-routing-history.md §M7 leg 4)"
   else
     TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
     [ -n "${INTAKE:-}" ] && TITLE="🔭 model scout: operator intake — $(jq length "$WORK/ranked.json") model(s) ($(date -u +%F))"
     # The intro must tell the truth about how the candidates got here: the intake path bypasses
     # the newness diff AND the ceiling (review catch, PR#963) — a false "NEW … ≤ $ceiling" framing
     # would mislead exactly the graduation read this digest exists for.
-    INTRO="Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise \`tools\`, and are \`:free\` or ≤ \$${CEILING}/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
+    INTRO="Weekly model scout (REPORT-ONLY, FU-062 / docs/spikes/model-routing-history.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise \`tools\`, and are \`:free\` or ≤ \$${CEILING}/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
     [ -n "${INTAKE:-}" ] && INTRO="Operator INTAKE (REPORT-ONLY, model-scout --intake): explicitly requested catalog ids ridden through the SAME legs as newcomers (enrich → bench → rank → canary). The newness diff and the \$${CEILING}/M price ceiling are BYPASSED — these models are listed because the operator asked, not because they are new or cheap. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in."
     BODY="$(jq -r --arg intro "$INTRO" '
       $intro + "\n\n"
