@@ -533,7 +533,21 @@ down() {
 # zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
 # vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
 # at 13:30:22, attach kept failing until the plugin registered ~13:32).
+#
+# A node Longhorn does not run on (the control planes: its DaemonSets do not schedule there) has
+# no nodes.longhorn.io object — the CR outlives a reboot, so its absence is a stable "not a storage
+# node", and waiting for a CSI driver that never registers there only times out. Before this, every
+# pure control-plane upgrade ended in that timeout (2026-09-21, cp-02: rebooted fine, `upgrade`
+# returned 1 at the storage wait, upgrade-behind stopped before cp-01). "Not found" skips; a query
+# that FAILED is not "not found" and stops, exactly like a timeout.
 wait_storage_back() {
+  local lh_err
+  if ! lh_err="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o name 2>&1 >/dev/null)"; then
+    case "$lh_err" in
+      *NotFound*|*"not found"*) ok "no Longhorn node object for $NODE — not a storage node, nothing to wait for"; return 0 ;;
+      *) fail "could not read nodes.longhorn.io/$NODE ($lh_err) — cannot tell whether storage is back"; return 1 ;;
+    esac
+  fi
   log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
   local t=0
   until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
@@ -1039,7 +1053,7 @@ upgrade_behind() {
   for e in "${plan[@]}"; do set -- $e; i=$((i+1)); log "  $i. $1 ($2)  $3 -> $4"; done
   [ "$DRY" = 1 ] && { log "DRY=1 — nothing touched"; return 0; }
 
-  local total=${#plan[@]} rc t0
+  local total=${#plan[@]} rc t0 nodes_json
   i=0
   for e in "${plan[@]}"; do
     set -- $e; i=$((i+1))
@@ -1059,8 +1073,10 @@ upgrade_behind() {
     # proves it held for a worker too, and that nothing else fell over meanwhile).
     log "waiting for the fleet to be whole before the next node (≤ ${BETWEEN_TIMEOUT}s)"
     t0=$(date +%s)
-    until [ "$(kubectl get nodes -o json | jq '[.items[] | select(any(.status.conditions[]; .type=="Ready" and .status=="True"))] | length')" \
-            = "$(kubectl get nodes -o json | jq '.items | length')" ] \
+    # ONE read, and an unreadable one is never "whole": two failed reads would compare "" = "".
+    until nodes_json="$(kubectl get nodes -o json)" \
+          && jq -e '(.items | length) > 0 and all(.items[]; any(.status.conditions[]; .type=="Ready" and .status=="True"))' \
+               <<<"$nodes_json" >/dev/null \
           && bash "$REPO/scripts/maintenance-window.sh" cilium-check >/dev/null 2>&1; do
       [ $(( $(date +%s) - t0 )) -lt "$BETWEEN_TIMEOUT" ] || {
         fail "the fleet is not whole ${BETWEEN_TIMEOUT}s after $1 — STOPPING before the next node"; return 2; }
