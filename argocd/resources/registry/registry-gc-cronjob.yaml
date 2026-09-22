@@ -14,12 +14,22 @@
 # The guard replaces the coincidence with an actual check.
 #
 # WHAT IT CHECKS — two read-only signals that a push is active:
-#   1. objects under `<repo>/_uploads/` modified within WINDOW_SECONDS (a blob upload writes
-#      `startedat` at POST and `hashstates/<offset>` as it streams);
+#   1. ANY object under `docker/registry/v2/` modified within WINDOW_SECONDS;
 #   2. multipart uploads INITIATED within WINDOW_SECONDS.
 # The MPU check is time-gated, not presence-gated, on purpose: this bucket carries stale incomplete
 # uploads from 2026-09-02/09-10 that nothing collects (FU-279), and a presence test would defer
 # forever.
+#
+# ⚠ SIGNAL 1 WAS `_uploads/` ONLY AND THAT HAD A HOLE — the exact window this guard exists for.
+# distribution DELETES the `_uploads/` objects as soon as the blob is copied into blobs/, and the
+# manifest is written afterwards. Measured on the 2026-09-22 release: the layer landed in blobs/ at
+# 20:13:49 and its manifest at 20:20:48 — 6m59s in which the blob was unreferenced, no `_uploads`
+# object existed and no multipart upload was open. The first version of this guard answered PROCEED
+# in precisely that state (verified in-cluster at 20:33Z), i.e. it was blind during the only window
+# where a sweep actually corrupts. Watching the WHOLE tree closes it: the commit touches blobs/, the
+# manifest touches _manifests/, an upload touches _uploads/ — every phase of a push writes
+# somewhere under docker/registry/v2/. The lesson generalises: enumerate the STATES of the thing
+# you are guarding, not the error types of the guard.
 #
 # FAIL-SAFE: any error — cannot list, cannot parse, no credentials — DEFERS. "We did not look" must
 # never read as "nothing there": a skipped collection costs a day, a bad sweep is permanent. The
@@ -58,7 +68,8 @@ data:
     ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "")
     SECRET_KEY = os.environ.get("S3_SECRET_KEY", "")
     REGION = os.environ.get("S3_REGION", "garage")
-    PREFIX = "docker/registry/v2/repositories/"
+    # The WHOLE tree, not just _uploads/: see the "SIGNAL 1 HAD A HOLE" note in the YAML header.
+    PREFIX = "docker/registry/v2/"
     DECISION_FILE = os.environ.get("DECISION_FILE", "/guard/decision")
 
 
@@ -140,7 +151,12 @@ data:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
 
 
-    def recent_uploads(now):
+    def recent_writes(now):
+        """Any object under the registry tree touched inside the window.
+
+        A push writes _uploads/ while streaming, blobs/ at commit, _manifests/ at the end; the
+        collector must stand off for all three, not just the first.
+        """
         hits, token = [], None
         while True:
             params = {"list-type": "2", "prefix": PREFIX, "max-keys": "1000"}
@@ -150,8 +166,6 @@ data:
             window = window_seconds()
             for item in children(root, "Contents"):
                 key = text_of(item, "Key") or ""
-                if "/_uploads/" not in key:
-                    continue
                 age = (now - parse_ts(text_of(item, "LastModified"))).total_seconds()
                 if age < window:
                     hits.append((key, int(age)))
@@ -177,11 +191,11 @@ data:
         if not ACCESS_KEY or not SECRET_KEY:
             return "DEFER", "S3 credentials are missing - refusing to sweep blind"
         now = datetime.now(timezone.utc)
-        found = recent_uploads(now) + recent_mpus(now)
+        found = recent_writes(now) + recent_mpus(now)
         if found:
             detail = "; ".join("{} ({}s ago)".format(k, a) for k, a in found[:5])
-            return "DEFER", "push activity inside {}s: {}".format(window_seconds(), detail)
-        return "PROCEED", "no _uploads object or multipart upload touched in {}s".format(
+            return "DEFER", "registry write inside {}s: {}".format(window_seconds(), detail)
+        return "PROCEED", "nothing under docker/registry/v2/ written in {}s".format(
             window_seconds()
         )
 
