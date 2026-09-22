@@ -158,6 +158,10 @@ reset; machines "[$W]"; targets "$D2"; live "$(jq -c '.["wk-03"].version = "v2"'
 echo '{"wk-03":{"state":"parked","key":"v2/s","since":1,"reason":"verb exited 1 — the one attempt for this key is spent; read the journal, then clear the state"}}' >"$RECONCILE_DIR/state.json"
 FAKE_VERIFY_RC=1 tick
 check "a pre-FU-276 'verb exited' park (no cause field) is treated as verb-failed" eval '[ "$(st wk-03)" = parked ] && [ "$(vcalls)" = 1 ]'
+reset; machines "[$W]"; targets "$D2"; live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; mkdir -p "$RECONCILE_DIR"
+echo '{"wk-03":{"state":"parked","key":"v2/s","since":1,"reason":"verb exited 0 but the diff is not zero (version=drift schematic=ok)"}}' >"$RECONCILE_DIR/state.json"
+FAKE_VERIFY_RC=1 tick
+check "a pre-FU-276 'verb exited 0 but the diff…' park is diff-disagrees: clears on diff zero, no verify" eval '[ "$(st wk-03)" = idle ] && [ "$(vcalls)" = 0 ]'
 
 # ── the exit-0-but-diff-non-zero park still clears on diff zero, without the health check ──
 reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_NOOP=1 tick

@@ -133,6 +133,7 @@ field() { jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // ""' <<<"$ST"; }
 park_cause() {
   local c; c="$(field "$1" cause)"
   if [ -z "$c" ]; then case "$(field "$1" reason)" in
+    "verb exited 0 but"*) c=diff-disagrees ;;   # the old exit-0 park shares the prefix below (review, #1887)
     "verb exited "*) c=verb-failed ;; interrupted*) c=interrupted ;; esac; fi
   printf '%s' "$c"
 }
