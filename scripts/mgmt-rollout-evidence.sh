@@ -198,14 +198,19 @@ fi
 # ── longhorn: a replica here serving on the new install, its volume healthy ─────────────────────
 # Two ways a replica proves the node's storage path works on the new install: it was REBUILT since
 # <since> (healthyAt), or Longhorn REUSED it across the reboot — then healthyAt keeps its old date
-# (wk-metal-04, 2026-09-22: 6 healthy replicas, all healthyAt 09-09/09-16), but it is running NOW
-# under an instance-manager pod that started after <since>, i.e. on the new install. An
-# unreadable instance-manager list falls back to the rebuilt-only rule (never a success-shaped 0).
+# (wk-metal-04, 2026-09-22: 6 healthy replicas, healthyAt 09-09/09-16) — and it runs under an
+# instance-manager pod of the node's CURRENT boot. The caller asks only about a node it verified on
+# the target, so the current boot IS the new install; but <since> is the sync's END and the upgrade
+# verb waits for Longhorn before ending, so that instance-manager always starts BEFORE <since>. The
+# boot marker is the node's Ready lastTransitionTime: threshold = min(<since>, that). An unreadable
+# instance-manager list falls back to the rebuilt-only rule (never a success-shaped 0).
 if has_type longhorn; then
   im_new=false
+  boot="$(jq -r '[.status.conditions[]? | select(.type == "Ready") | .lastTransitionTime // empty | fromdateiso8601][0] // empty' <<<"$nj" 2>/dev/null)"
+  imfloor="$SINCE"; [ -n "$boot" ] && [ "$boot" -lt "$SINCE" ] && imfloor="$boot"
   if $KUBECTL -n longhorn-system get pods -l longhorn.io/component=instance-manager \
        --field-selector "spec.nodeName=$NODE" -o json >"$TMP/im.json" 2>/dev/null; then
-    im_new="$(jq -r --argjson s "$SINCE" '[.items[]? | .status.startTime // empty | fromdateiso8601 | select(. >= $s)] | length > 0' "$TMP/im.json" 2>/dev/null || echo false)"
+    im_new="$(jq -r --argjson s "$imfloor" '[.items[]? | .status.startTime // empty | fromdateiso8601 | select(. >= $s)] | length > 0' "$TMP/im.json" 2>/dev/null || echo false)"
   fi
   if $KUBECTL -n longhorn-system get volumes.longhorn.io -o json >"$TMP/vols.json" 2>/dev/null \
      && jq -e '.items | type == "array"' "$TMP/vols.json" >/dev/null 2>&1; then
@@ -216,7 +221,7 @@ if has_type longhorn; then
           and $rob[.spec.volumeName] == "healthy"
           and ($imnew or (((.spec.healthyAt // "") != "") and ((.spec.healthyAt | fromdateiso8601) >= $s))))
           | .spec.volumeName]
-      | if length == 0 then "" elif $imnew then "\(length) replica(s) healthy under an instance-manager started since then, e.g. \(.[0])"
+      | if length == 0 then "" elif $imnew then "\(length) replica(s) healthy under the current boot's instance-manager, e.g. \(.[0])"
         else "\(length) replica(s) rebuilt/healthy, e.g. \(.[0])" end')"
     if [ -n "$ok" ]; then have longhorn "$ok"
     else miss longhorn "none of the $lh_here replica(s) here is running+healthy since then on a healthy volume"; fi

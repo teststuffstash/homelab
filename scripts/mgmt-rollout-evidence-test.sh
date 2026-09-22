@@ -62,6 +62,9 @@ export EVIDENCE_KUBECTL="$T/kubectl" EVIDENCE_TALOSCTL="$T/talosctl" EVIDENCE_PR
 node() {  # <labels-json>
   printf '{"kind":"Node","metadata":{"name":"n1","labels":%s},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.9"}]}}' "$1" >"$F/node.json"
 }
+node_ready_at() {  # <iso> — the node object with a Ready condition that last transitioned at <iso>
+  printf '{"kind":"Node","metadata":{"name":"n1","labels":{}},"status":{"addresses":[{"type":"InternalIP","address":"10.0.0.9"}],"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"%s"}]}}' "$1" >"$F/node.json"
+}
 reset() {
   rm -f "$F"/*
   node '{}'
@@ -147,9 +150,16 @@ case_ longhorn-rebuilt 0 longhorn 'pvc-a'
 reset; replica n1 running "$BEFORE" pvc-a healthy
 case_ longhorn-not-since 1 longhorn 'NOT YET'
 reset; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$AFTER\"}}]}" >"$F/im.json"
-case_ longhorn-reused-under-new-im 0 longhorn 'instance-manager started since'
+case_ longhorn-reused-under-new-im 0 longhorn 'current boot'
 reset; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$BEFORE\"}}]}" >"$F/im.json"
 case_ longhorn-reused-under-old-im 1 longhorn 'NOT YET'
+# the live shape (wk-metal-04): the IM restarted with the upgrade boot, BEFORE <since> (the sync's
+# end) but after the node's Ready transition — it is the current boot's → exercised
+reset; node_ready_at "$(iso $((SINCE - 900)))"; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$(iso $((SINCE - 800)))\"}}]}" >"$F/im.json"
+case_ longhorn-reused-im-of-current-boot 0 longhorn 'current boot'
+# an IM older than the current boot's Ready transition belongs to a previous boot → not yet
+reset; node_ready_at "$(iso $((SINCE - 900)))"; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$(iso $((SINCE - 5000)))\"}}]}" >"$F/im.json"
+case_ longhorn-im-of-previous-boot 1 longhorn 'NOT YET'
 reset; replica n1 running "$BEFORE" pvc-a healthy; touch "$F/im-fail"
 case_ longhorn-im-unreadable-falls-back 1 longhorn 'NOT YET'
 reset; replica n1 running "$BEFORE" pvc-a degraded; echo "{\"items\":[{\"status\":{\"startTime\":\"$AFTER\"}}]}" >"$F/im.json"
