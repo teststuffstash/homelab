@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # seat-window — the DECLARED change window (FU-230 leg b).
 #
-#   bash agents/seat-window.sh open  --reason "<what you are doing>" --alerts A,B,C [--node <n>] [--hours N] [--note "<s>"]
+#   bash agents/seat-window.sh open  --reason "<what you are doing>" --alerts A,B,C [--node <n>] [--hours N] [--note "<s>"] [--admit-reconciler]
 #   bash agents/seat-window.sh close [--id <id>] [--node <n>] [--all]
 #   bash agents/seat-window.sh list
+#
+# A SECOND READER, and it treats the record as a mutex (a sign on the door — not a lock: `open` is
+# a blind merge patch, and a person who declares nothing is invisible). The box's node reconciler
+# (scripts/mgmt-reconcile.sh) refuses to open a window while ANY live window is declared — on
+# another node, seat-wide, or on its target. `--admit-reconciler` (needs `--node`) is the one
+# exception: "I am watching this node, the reconciler may act on it inside my window" — the
+# attended canary. Without it, a seat's hands-on work on a node is never interrupted by a sync.
 #
 # WHY THIS EXISTS, and why it is not a silence. FU-230 leg (a) — `node-maintenance.sh` opening
 # Alertmanager silences — removed most of the maintenance-storm noise by matching on `node`,
@@ -66,9 +73,10 @@ live_windows() {
 }
 
 cmd_open() {
-  local reason="" alerts="" node="" note="" hours="$HOURS"
+  local reason="" alerts="" node="" note="" hours="$HOURS" admit=false
   while [ $# -gt 0 ]; do
     case "$1" in
+      --admit-reconciler) admit=true; shift ;;
       --reason) reason="${2:-}"; shift 2 ;;
       --alerts) alerts="${2:-}"; shift 2 ;;
       --node)   node="${2:-}";   shift 2 ;;
@@ -79,17 +87,21 @@ cmd_open() {
   done
   [ -n "$reason" ] || die "--reason is required: the window record exists to tell a triage session what a person is doing"
   [ -n "$alerts" ] || die "--alerts is required: a window with no declared alert names suppresses nothing (and a namespace-wide mute is deliberately not offered)"
+  [ "$admit" = false ] || [ -n "$node" ] || die "--admit-reconciler needs --node: it admits the reconciler to ONE node, never the fleet"
   local id until_ body
   id="${node:-seat}-$(date -u +%s)"
   until_="$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)"
   body="$(jq -cn --arg id "$id" --arg by "$BY" --arg opened "$(now_iso)" --arg until "$until_" \
                  --arg reason "$reason" --arg node "$node" --arg note "$note" --arg alerts "$alerts" \
+                 --argjson admit "$admit" \
     '{id:$id, by:$by, opened_at:$opened, until:$until, reason:$reason, node:$node, note:$note,
+      admit_reconciler:$admit,
       alerts:($alerts | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0)))}')"
   kubectl -n "$NS" get cm "$CM" >/dev/null 2>&1 || kubectl -n "$NS" create cm "$CM" >/dev/null
   kubectl -n "$NS" patch cm "$CM" --type merge -p "$(jq -cn --arg k "w-$id" --arg v "$body" '{data:{($k):$v}}')" >/dev/null
   printf '✓ window %s open until %s — %s\n' "$id" "$until_" "$reason"
   printf '  alerts: %s%s\n' "$(printf '%s' "$body" | jq -r '.alerts | join(", ")')" "${node:+  (node $node)}"
+  [ "$admit" = true ] && printf '  the box reconciler MAY sync %s inside this window (--admit-reconciler)\n' "$node"
   printf '  the responder skips a triage for those names while it is open; everything else still triages, with the window named in its brief.\n'
 }
 

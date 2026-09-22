@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n>]
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]]
 #   bash scripts/maintenance-window.sh check
 #   bash scripts/maintenance-window.sh close
 #   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
@@ -250,9 +250,10 @@ snapshot() {
 }
 
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --admit-reconciler) admit=1; shift ;;
       --reason) reason="$2"; shift 2 ;;
       --alerts) alerts="$2"; shift 2 ;;
       --hours)  hours="$2";  shift 2 ;;
@@ -278,6 +279,7 @@ cmd_open() {
   local args=(open --reason "$reason" --alerts "$alerts" --hours "$hours"
               --note "opened by scripts/maintenance-window.sh; baseline in $BASE")
   [ -n "$node" ] && args+=(--node "$node")
+  [ -n "$admit" ] && args+=(--admit-reconciler)
   local out; out="$(bash "$ROOT/agents/seat-window.sh" "${args[@]}")"
   printf '%s\n' "$out"
   printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' > "$WID"
@@ -389,5 +391,5 @@ case "${1:-}" in
   # 3 (do not) — under `set -e` a bare call would exit non-zero all the same, but silently
   # collapsing the two here is one refactor away from a verb that rolls cilium on a blind read.
   cilium-check) shift; cmd_cilium || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n] | check | close [--force] | cilium-check" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] | check | close [--force] | cilium-check" >&2; exit 64 ;;
 esac
