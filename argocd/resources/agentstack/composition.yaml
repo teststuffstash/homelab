@@ -1432,6 +1432,10 @@ spec:
                 {{- end }}
             ---
             # Drive the generator → the CENTRAL Secret the in-namespace mirror below reads.
+            # 30m, not 45m (2026-09-22): the token lives 60m and is COPIED onward by a second,
+            # independently-phased clock, so the central's interval is the copy's head start —
+            # 30m here + ≤5m of mirror lag = a consumer never picks up a token older than ~35m.
+            # At 45m/45m the mirror served a token that died mid-cycle (belt: GithubTokenMirrorBehind).
             apiVersion: external-secrets.io/v1
             kind: ExternalSecret
             metadata:
@@ -1440,7 +1444,7 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-es-{{ $i }}
             spec:
-              refreshInterval: 45m
+              refreshInterval: 30m
               target:
                 name: agent-git-readonly-{{ $r.name }}-{{ $i }}
                 creationPolicy: Owner
@@ -1466,7 +1470,9 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-mirror-{{ $i }}
             spec:
-              refreshInterval: 45m
+              # 5m: a Secret-to-Secret copy costs one apiserver read, and the mirror's interval is
+              # how long this namespace can keep serving the PREVIOUS token after a fresh mint.
+              refreshInterval: 5m
               secretStoreRef: { name: agent-git-readonly-{{ $r.name }}, kind: ClusterSecretStore }
               target:
                 name: agent-git-readonly-{{ $i }}

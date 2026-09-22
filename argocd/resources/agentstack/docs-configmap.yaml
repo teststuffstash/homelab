@@ -106,8 +106,10 @@ data:
                   permissions: {contents: read, actions: read}
 
     Each grant mints one `homelab-agents` installation token and mirrors it into the namespace as
-    Secret `agent-git-readonly-<i>` (0-based position in the list; data key `token`), refreshed
-    ~45m. The App private key never enters the namespace (FU-089): the generator lives in
+    Secret `agent-git-readonly-<i>` (0-based position in the list; data key `token`), minted every
+    30m and mirrored every 5m — the token lives 60m and the two clocks are independent, so a
+    consumer never sees one older than ~35m (2026-09-22: at 45m/45m the copy was dead part of
+    every cycle). The App private key never enters the namespace (FU-089): the generator lives in
     agent-coordinator and the token arrives through the same kubernetes-provider mirror the
     transcripts key uses.
 
