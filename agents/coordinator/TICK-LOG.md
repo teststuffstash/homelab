@@ -10522,3 +10522,23 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   `allure-reports` + `oracle-specs` at up to 3.9k req/min → block-read p99 15→240 ms → FU-229 resight.
 - Operator hardware question (5950X/9950X): no single-thread-bound critical path today; the parse
   lever is #684's deferred worker pool. No decision taken.
+
+## 2026-09-22 ~17:15–18:10Z — the oracle handoff inbox drained (10 open, oldest 09-08)
+- Triaged all 10 against master + tracker + issues; 9 processed, the minutark README link (`20260911-1142`)
+  parked in `inbox/` by operator direction. Old `done/` reaped (21 files, ≤09-19).
+- **Closed as no-action:** uv-cache EIO (`20260908-1857`) — no recurrence in any of the 63 failed
+  oracle-fleet runs since 09-08; Garage lifecycle "inert" (`20260910-0920`) — the worker completes
+  daily, the 08-25 object-copy restore reset every clock (docs/garage.md already says so, first
+  deletions ~09-24); the #114 ground-truth comment (`20260913-1050`) — dropped, #114 closed 09-14.
+- **Filed:** #1896 updater strands armed+BEHIND `automerge` PRs on no-approval repos (#1452's arm 2
+  assumes a bot review the -iac mechanical classes never get; detector first, then the arm; pins-first
+  priority left as an operator question), #1897 goal-lint applies homelab's governance set to stack
+  repos (UNQUEUED — codeowner-author), #1898 ride clone's master-only refspec + `/git-token` mint
+  without checks:read (a MINT question — the App declares it).
+- **Shipped:** #1895 publicroute consumer `browser_ttl = respect_origin` (oracle-iac#613 ACCEPTED +
+  closed; live `no-cache` passed through, was `max-age=14400`) and #1899 pre-flight is the repo's own
+  gate (diff-ci out of the universal card into homelab's recipes). #1889 closed by #1895's map row.
+- FU-229 gained the 09-16 PUT-burst numbers (~500 meta writes/PUT, GetObject p99 17 s).
+- ⚠ `devbox run -- gh` re-parses args under dash: an apostrophe in `--title` swallowed the line
+  ("Title is too long"), `scripts/**` globbed and the create silently no-op'd → use
+  `gh api repos/<slug>/issues --input <json>`.
