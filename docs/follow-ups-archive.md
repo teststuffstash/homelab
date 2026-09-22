@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-267** *(archived 2026-09-22)* — **cilium-agent Burstable: 150m request / no CPU limit / 512Mi→1Gi
+  memory.** Materialized in the first box-run Talos rollout: nx-01's restarted agent hung at 510/512 Mi,
+  100 % throttled at 500m, no pod network. Guaranteed was unnecessary for its protections (kubelet
+  -997 for system-node-critical; Talos OOM ranks memory-limited cgroups 0) — rationale in `tofu/cilium.tf`.
 - **FU-275** *(archived 2026-09-22)* — **A canary override no longer downloads/deletes seed images.**
   `tofu/image.tf` splits the key: `vm_seed_key` (ROLE version) keys `proxmox_download_file` on pve +
   nx-02 and the VMs' ignored `file_id`; `vm_image_key` (declared version) keeps the installer URL.
