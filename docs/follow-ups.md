@@ -238,14 +238,12 @@ six OVERSIZE items pointer-ized into
       `argo.teststuff.net` already chose. Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack
       jail reads its logs.
 
-- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** — the `…-alertmanager-db`
-      volume (nflog + silences) is a bare emptyDir. Found 2026-08-30 (the 08-25 restart wiped both S7
-      silences; `GithubActionsMinutesHigh` re-fired days early). **Resight 2026-09-22, now a rollout
-      blocker:** a box-run fleet rollout drains EVERY node, so it restarts Alertmanager by construction
-      (wk-04's drain, ~12:46Z) and wipes every open maintenance silence mid-rollout ("no active
-      silences"; 12 PodSigkilled alerts from the reboots then fired unsilenced). **Next:** add
-      `alertmanagerSpec.storage` (small Longhorn PVC) in `kube-prometheus-stack.yaml` values, before
-      the next rollout.
+- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** (emptyDir `…-alertmanager-db`)
+      — found 2026-08-30; resighted 2026-09-22 as a rollout blocker: a fleet rollout's drains restart
+      Alertmanager by construction (~12:46Z) and wiped every maintenance silence mid-rollout.
+      **Next:** fixer lane: #1885 (Longhorn PVC via `alertmanagerSpec.storage`) — filed `agent-fix`,
+      held UNQUEUED until the running rollout ends (the merge recreates the StatefulSet); seat adds
+      `agent/queued` between rollouts.
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
@@ -1371,13 +1369,11 @@ the block needs pruning, not more headings.
       ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) ; the
       switch `reconcile_rollout.enabled` ON 2026-09-22. **Next:** the first box-run rollout (Talos v1.14.1). Relates FU-235, G-D.
 - [ ] **FU-276** — **The reconciler's failure paths, as nx-01 showed them (first box-run rollout, 2026-09-22).**
-      (a) A park clears when the VERSION diff reaches zero, but nx-01's verb had failed on node HEALTH
-      (hung cilium-agent, no pod network): it was counted done at 11:44 while broken. Clearing a park
-      needs the verb's own post-checks, not the version alone. (b) A verb exiting 1 after the reboot
-      leaves its declared window open until it expires (it blocked the next tick). (c) Talos drops
-      the upgrade fallback after a good boot (`removing fallback entry`), so `talosctl rollback` has
-      a short window; the rollback text in §MB4 should say so. **Next:** (a)+(b) in
-      `scripts/mgmt-reconcile.sh` / `node-maintenance.sh`, (c) one doc line. Relates FU-273, FU-267.
+      (a) a failed-verb park clears on the version diff alone (nx-01 counted synced while cilium hung);
+      (b) a verb exiting 1 after the reboot leaves its window open, blocking the next tick; (c) Talos
+      drops the upgrade fallback after a good boot — the §MB4 doc line, folded into the same issue.
+      **Next:** #1884 — operator/seat lane, UNQUEUED (`scripts/**` is the ❌ `codeowner-author` set,
+      no worker PR can deliver it). Relates FU-273, FU-267.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
