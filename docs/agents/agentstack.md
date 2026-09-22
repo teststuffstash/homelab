@@ -344,6 +344,15 @@ GitHub and the authoritative claim fights it back.
   `AgentStackNotSynced`** (kube-state-metrics custom-resource-state on the XR conditions,
   [`agentstack/prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml),
   2026-09-14): every instance above was found by hand, none by an alert.
+- **⚠ A mirrored App token is only as fresh as the two refresh clocks allow.** A
+  `readOnlyGrants` token (and `retro-git`'s) is minted by a central ES in agent-coordinator and
+  COPIED into the consumer namespace by a second ES; the clocks are independent, so a mirror that
+  refreshes φ minutes after each mint serves a token aged up to φ + its own interval — with
+  45m/45m and φ > 15m the copy is dead (401) for a fixed window of every cycle while both ES read
+  SecretSynced (oracle-fleet's 02:30Z retention cron, 2026-09-21/22). **The belt is
+  `GithubTokenMirrorBehind`** (+ `GithubTokenMintStale` for a stalled mint), on
+  kube-state-metrics' `kube_externalsecret_refresh_time` — same
+  [`prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml).
 - **⚠ Argo Events string data-filter values are REGEX**, not literals. `""` and `!=` are rejected;
   use `.+` to mean "present and non-empty" (this is how the graduated-loop routing selects on
   `body.loop_ns`).

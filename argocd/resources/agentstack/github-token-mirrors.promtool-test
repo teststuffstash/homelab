@@ -1,0 +1,123 @@
+# Behaviour fixture for the GitHub-token mirror belt (oracle handoff 2026-09-22).
+#
+#   devbox run -- promtool test rules argocd/resources/agentstack/github-token-mirrors.promtool-test
+#
+# Series are kube_externalsecret_refresh_time (unix seconds; the fixture's clock starts at 0).
+# Test 1 replays the LIVE 2026-09-22 shape measured on oracle-fleet: the mirror refreshes just
+# BEFORE each central mint (17:20:02 vs 17:20:30), both on 45m — so it always copies the previous,
+# ~45-min-old token and serves it for 45 more minutes (401 at 17:42Z while both read SecretSynced).
+rule_files:
+  - github-token-mirrors.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: 45m/45m with the mirror a minute ahead of the mint fires every cycle
+    input_series:
+      # central: mints at t=1m, 46m, 91m
+      - series: 'kube_externalsecret_refresh_time{namespace="agent-coordinator",name="agent-git-readonly-oracle-fleet-0",target="agent-git-readonly-oracle-fleet-0",generator_kind="GithubAccessToken"}'
+        values: "-2640 60x44 2760x44 5460x9"
+      # mirror: refreshes at t=0, 45m, 90m
+      - series: 'kube_externalsecret_refresh_time{namespace="oracle-fleet",name="agent-git-readonly-0",target="agent-git-readonly-0",remote_key="agent-git-readonly-oracle-fleet-0"}'
+        values: "0x44 2700x44 5400x10"
+      # a minting central with no mirror, and a static-content central: never joined
+      - series: 'kube_externalsecret_refresh_time{namespace="agent-coordinator",name="agent-git-oracle-fleet",target="agent-git-oracle-fleet",generator_kind="GithubAccessToken"}'
+        values: "0x44 2700x44 5400x10"
+      - series: 'kube_externalsecret_refresh_time{namespace="oracle-fleet",name="agent-transcripts-s3",target="agent-transcripts-s3",remote_key="agent-transcripts-s3"}'
+        values: "0x100"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: oracle-fleet
+              name: agent-git-readonly-0
+              target: agent-git-readonly-0
+              remote_key: agent-git-readonly-oracle-fleet-0
+            exp_annotations:
+              summary: "oracle-fleet/agent-git-readonly-0 still holds the token before the latest mint of agent-git-readonly-oracle-fleet-0 (10m+)"
+      # the mirror's own refresh at 45m resets it; the next mint at 46m re-arms — a FIXED window
+      - eval_time: 50m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts: []
+      - eval_time: 57m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: oracle-fleet
+              name: agent-git-readonly-0
+              target: agent-git-readonly-0
+              remote_key: agent-git-readonly-oracle-fleet-0
+            exp_annotations:
+              summary: "oracle-fleet/agent-git-readonly-0 still holds the token before the latest mint of agent-git-readonly-oracle-fleet-0 (10m+)"
+      - eval_time: 57m
+        alertname: GithubTokenMintStale
+        exp_alerts: []
+
+  - interval: 1m
+    name: the fixed shape (central 30m, mirror 5m) stays quiet at every phase
+    input_series:
+      # central: mints at t=2m, 32m, 62m
+      - series: 'kube_externalsecret_refresh_time{namespace="agent-coordinator",name="agent-git-readonly-oracle-fleet-0",target="agent-git-readonly-oracle-fleet-0",generator_kind="GithubAccessToken"}'
+        values: "-1680x1 120x29 1920x29 3720x8"
+      # mirror: every 5m from t=0
+      - series: 'kube_externalsecret_refresh_time{namespace="oracle-fleet",name="agent-git-readonly-0",target="agent-git-readonly-0",remote_key="agent-git-readonly-oracle-fleet-0"}'
+        values: "0x4 300x4 600x4 900x4 1200x4 1500x4 1800x4 2100x4 2400x4 2700x4 3000x4 3300x4 3600x4 3900x4"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts: []
+      - eval_time: 69m
+        alertname: GithubTokenMirrorBehind
+        exp_alerts: []
+      - eval_time: 69m
+        alertname: GithubTokenMintStale
+        exp_alerts: []
+
+  - interval: 1m
+    name: a central that stops minting fires before its token's 60m expiry
+    input_series:
+      - series: 'kube_externalsecret_refresh_time{namespace="agent-coordinator",name="retro-git",target="retro-git",generator_kind="GithubAccessToken"}'
+        values: "0x70"
+    alert_rule_test:
+      - eval_time: 58m
+        alertname: GithubTokenMintStale
+        exp_alerts: []
+      - eval_time: 62m
+        alertname: GithubTokenMintStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: agent-coordinator
+              name: retro-git
+              target: retro-git
+              generator_kind: GithubAccessToken
+            exp_annotations:
+              summary: "agent-coordinator/retro-git has not minted a GitHub token for 55m+ — it expires within minutes"
+      - eval_time: 62m
+        alertname: GithubTokenMirrorMetricAbsent
+        exp_alerts: []
+
+  - interval: 1m
+    name: the belt going blind is itself an alert
+    input_series:
+      - series: 'up{job="kube-state-metrics"}'
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: GithubTokenMirrorMetricAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              generator_kind: GithubAccessToken
+            exp_annotations:
+              summary: "No GithubAccessToken ExternalSecret refresh_time series for 30m — the token mirror belt is blind"
