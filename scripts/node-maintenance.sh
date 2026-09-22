@@ -15,6 +15,14 @@
 #   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → floors → settle → DRAIN → talosctl
 #                                                        upgrade → wait Ready + Longhorn healthy →
 #                                                        VERIFY version AND schematic against the declaration
+#   bash scripts/node-maintenance.sh verify    <node>   # READ-ONLY: the upgrade's post-checks, once, no wait —
+#                                                        Ready + uncordoned, Longhorn back, the budgets over
+#                                                        its pods whole, no multi-node budget at 0, CNPG full,
+#                                                        declared version+schematic, cilium-agent on THIS node
+#                                                        Ready and holding the apiserver backend. Exit 0 = all
+#                                                        pass; 1 = any fails or cannot be read. Never cordons,
+#                                                        drains or opens a window: the reconciler's health
+#                                                        gate for clearing a failed-verb park (FU-276, #1884)
 #
 # `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl installs, reboots, rejoins and
 # uncordons. What this adds is everything talosctl does not know about — the Longhorn
@@ -882,7 +890,9 @@ assert_upgrade_sane() {
   # internal/integration/cli/upgrade.go, TestIncompatibleMachineConfig). So "revert the
   # declaration" is a real rollback for a patch. ACROSS a minor it is refused: configs migrate
   # forward only — back out with `talosctl rollback` while the previous install is still on the
-  # other slot, else a reinstall.
+  # other slot, else a reinstall. That window is SHORT: after a good boot Talos removes the upgrade
+  # fallback (`removing fallback entry` in machined's log — nx-01, 2026-09-22), so `talosctl
+  # rollback` works only shortly after the upgrade reboot; later, a cross-minor back-out is a reinstall.
   if [ "$(printf '%s\n%s\n' "${from#v}" "${to#v}" | sort -V | tail -1)" = "${from#v}" ] && [ "$from" != "$to" ]; then
     if [ "$fmin" != "$tmin" ]; then
       fail "$to is an OLDER MINOR than $from — no cross-minor downgrade (\`talosctl rollback\` while the previous install is on the other slot, else a reinstall)"; return 4
@@ -1157,6 +1167,76 @@ upgrade() {
   kubectl get node "$NODE" -o wide
 }
 
+# ---------------------------------------------------------------- verify
+# The upgrade's post-checks as ONE read-only pass (FU-276, #1884): the reconciler runs it before a
+# failed-verb park may clear, because the version reaching the declaration says nothing about health
+# (nx-01, 2026-09-22: back on the target, cilium-agent hung, no pod network — "synced" two minutes
+# after the park). The same floors `upgrade` waits on, read once: wait_storage_back's Longhorn state,
+# the budgets over this node's pods (currentHealthy ≥ expectedPods — wait_budgets_back's test) plus
+# no budget spanning several nodes at 0 (pdb_blockers — Garage's zone signal among them), CNPG at
+# full instances, verify_installed, and cilium on THIS node: the fleet-wide cilium-check passes
+# with one agent unreadable, which is exactly the hung-agent node. Any read failure is a FAIL.
+cilium_on_node() {
+  local pj p out
+  pj="$(kubectl -n kube-system get pod -l k8s-app=cilium --field-selector "spec.nodeName=$NODE" -o json)" \
+    || { fail "cilium: cannot list the agent on $NODE"; return 1; }
+  p="$(jq -r '[.items[] | select(.status.phase == "Running")][0].metadata.name // ""' <<<"$pj")"
+  [ -n "$p" ] || { fail "cilium: no running cilium-agent pod on $NODE"; return 1; }
+  jq -e --arg p "$p" '.items[] | select(.metadata.name == $p) | any(.status.conditions[]?; .type == "Ready" and .status == "True")' \
+    >/dev/null <<<"$pj" || { fail "cilium: $p on $NODE is not Ready"; return 1; }
+  out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+    || { fail "cilium: $p on $NODE does not answer (exec failed)"; return 1; }
+  awk '$2=="10.96.0.1:443/TCP"' <<<"$out" | grep -q '=>' \
+    || { fail "cilium: $p on $NODE has NO backend for 10.96.0.1:443"; return 1; }
+  ok "cilium: $p Ready and holding the apiserver backend"
+}
+verify() {
+  echo "verify: $NODE (read-only)"
+  local ready uns lh_err sched bad budgets b st short="" blockers cnpg
+  if ! ready="$(node_ready)" || [ -z "$ready" ]; then fail "node $NODE not found (or unreadable)"; return 1; fi
+  [ "$ready" = True ] && ok "node Ready" || fail "node not Ready ($ready)"
+  uns="$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}' 2>/dev/null)" || uns=unreadable
+  case "$uns" in true) fail "node still cordoned" ;; unreadable) fail "cannot read spec.unschedulable" ;; *) ok "node uncordoned" ;; esac
+  # Longhorn: the one-shot of wait_storage_back (no object = not a storage node).
+  if ! lh_err="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o name 2>&1 >/dev/null)"; then
+    case "$lh_err" in
+      *NotFound*|*"not found"*) ok "no Longhorn node object — not a storage node" ;;
+      *) fail "cannot read nodes.longhorn.io/$NODE" ;;
+    esac
+  else
+    kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io' \
+      && ok "Longhorn CSI driver registered" || fail "Longhorn CSI driver not registered on $NODE"
+    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)" || sched=""
+    [ "$sched" = True ] && ok "Longhorn node Schedulable" || fail "Longhorn node not Schedulable (${sched:-unreadable})"
+    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json 2>/dev/null | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length' 2>/dev/null)" || bad=""
+    [ "$bad" = 0 ] && ok "0 degraded attached volumes" || fail "degraded attached volumes: ${bad:-unreadable}"
+  fi
+  # The budgets over this node's pods whole (wait_budgets_back's test), and none spanning nodes at 0.
+  if budgets="$(budgets_on_node 2>/dev/null)"; then
+    while read -r b; do
+      [ -n "$b" ] || continue
+      st="$(kubectl -n "${b%%/*}" get pdb "${b#*/}" -o jsonpath='{.status.currentHealthy}/{.status.expectedPods}' 2>/dev/null)" || continue
+      [ "${st%%/*}" -ge "${st#*/}" ] 2>/dev/null || short="$short $b($st)"
+    done <<<"$budgets"
+    [ -z "$short" ] && ok "every budget over $NODE's pods whole" || fail "budget(s) short:$short"
+  else fail "cannot read the budgets over $NODE's pods"; fi
+  if blockers="$(pdb_blockers 2>/dev/null)"; then
+    [ -z "$blockers" ] && ok "no multi-node budget at 0" || fail "multi-node budget(s) at 0: $(tr '\n' ' ' <<<"$blockers")"
+  else fail "cannot read the PodDisruptionBudgets"; fi
+  if cnpg="$(cnpg_unhealthy 2>/dev/null)"; then
+    [ -z "$cnpg" ] && ok "every CNPG cluster at full instances" || fail "CNPG short: $(tr '\n' ' ' <<<"$cnpg")"
+  else fail "cannot read CNPG clusters"; fi
+  # The declared install, as upgrade's post-check reads it.
+  if load_targets 2>/dev/null && [ -n "$(declared version)" ]; then
+    if [ -z "$ENDPOINT" ]; then ENDPOINT="$(pick_cp_endpoint 2>/dev/null)" || ENDPOINT=""; fi
+    if [ -n "$ENDPOINT" ]; then verify_installed "$(declared version)" "$(declared schematic)" || true
+    else fail "no healthy control plane to read the schematic through"; fi
+  else fail "no declared install target for $NODE (declaration unreadable)"; fi
+  cilium_on_node || true
+  [ "$FAILS" = 0 ] && { echo "verify: $NODE healthy"; return 0; }
+  echo "verify: $NODE NOT healthy ($FAILS failing check(s))"; return 1
+}
+
 # ---------------------------------------------------------------- order
 # Which node to upgrade NEXT — COMPUTED, never a list. A hard-coded order is correct exactly once:
 # it rots the moment a workload is rescheduled, a Garage zone moves, or a node joins. This ranks
@@ -1345,6 +1425,7 @@ case "$cmd" in
   down) down ;;
   up) up ;;
   upgrade) upgrade ;;
+  verify) verify ;;
   efi-scrub) efi_scrub ;;
   order) order ;;
   upgrade-behind) upgrade_behind ;;
