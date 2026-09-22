@@ -1353,13 +1353,13 @@ the block needs pruning, not more headings.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
 - [ ] **FU-273** — **A substrate rollout has no soak and no attribution, so the pressure to roll back
-      wins by default.** The reconciler moves node to node on WIP 1 alone. A symptom 2 h later
-      (stack networking: a fluke, their own deploy…) meets "what changed in 24 h?", which always names
-      the upgrade (operator 2026-09-22). Firing on the first alert means never moving forward. **Direction
-      (operator 2026-09-22):** the responder never reverts; a new alert alone neither halts nor
-      reverts; the default is FORWARD. Halt only on a DIFFERENTIAL signal: worse on upgraded
-      nodes than on not-yet ones, starting after each node's own upgrade. Revert = a human commit
-      with that evidence. **Next:** the detector + soak design in §MB4. Relates FU-235, FU-097, G-D.
+      wins by default.** **Ruled 2026-09-22 (operator):** default FORWARD, the responder never reverts, and a
+      revert is a human commit backed by a DIFFERENTIAL signal (upgraded nodes worse than not-yet ones,
+      cross-stack, never one stack's fixable CI). The whole rollout takes <1 day; drift from git is a tax. Soak = hours, and it
+      ends on EVIDENCE per canary type (nx-01: one ride + one ARC job passed), not wall time. The
+      rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
+      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Next:** the
+      design in §MB4 (exercise predicates, the repel taint, the differential detector). Relates FU-235, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
