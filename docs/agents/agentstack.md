@@ -349,7 +349,8 @@ GitHub and the authoritative claim fights it back.
   COPIED into the consumer namespace by a second ES; the clocks are independent, so a mirror that
   refreshes φ minutes after each mint serves a token aged up to φ + its own interval — with
   45m/45m and φ > 15m the copy is dead (401) for a fixed window of every cycle while both ES read
-  SecretSynced (oracle-fleet's 02:30Z retention cron, 2026-09-21/22). **The belt is
+  SecretSynced (oracle-fleet's 02:30Z retention cron, 2026-09-21/22). Both pairs now mint at 30m
+  and mirror at 5m, so the served token is ≤ ~35m old whatever the phase. **The belt is
   `GithubTokenMirrorBehind`** (+ `GithubTokenMintStale` for a stalled mint), on
   kube-state-metrics' `kube_externalsecret_refresh_time` — same
   [`prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml).
