@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-275** (2026-09-22: FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-276** (2026-09-22: FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -218,6 +218,12 @@ six OVERSIZE items pointer-ized into
       first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
       third-party images only. **Next:** per-repo keep-sets + quota there first (FU-203: 48Gi cap,
       only oracle-fleet has a policy), then dual-publish → pin flip per image. Relates FU-196, FU-203.
+- [ ] **FU-275** — **A per-node Talos canary override downloads and deletes seed images.** `nodes.*.
+      talos_version` (#1866) feeds `vm_image_key`, which keys BOTH the installer URL (needed) and the
+      `proxmox_download_file` set on pve + nx-02 (seeds only, `file_id` ignored after creation, ADR-138).
+      So every canary version adds a download and the next bump deletes it (#1872's plan: 2 create +
+      2 delete). Deferred (operator, 2026-09-22). **Next:** key the downloads by ROLE version only and
+      keep the per-node version on the installer URL, in `tofu/image.tf`. Relates FU-033.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
