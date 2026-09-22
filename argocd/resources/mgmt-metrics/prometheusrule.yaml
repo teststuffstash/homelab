@@ -226,3 +226,138 @@ spec:
               node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_reconcile.prom
               is missing, so MgmtReconcileParked / SyncStuck / LoopStale are blind. Check the
               mgmt-reconcile timer is active (nixos/hosts/mgmt/default.nix) and has run since it landed.
+    # ── THE ROLLOUT DIFFERENTIAL (FU-273; docs/management-box.md §MB4 "The rollout policy") ──────
+    # The ONE automatic halt of a Talos rollout: worse on the nodes that just moved than on the ones
+    # still behind, measured only after each node's own upgrade settled, and seen in more than one
+    # namespace. A plain alert never halts (default forward); the reconciler reads THIS alert
+    # (Prometheus API) and stops advancing while it fires. A revert stays a human commit.
+    #
+    # "Upgraded" is not "the highest version string" — PromQL cannot order versions, and a rollback
+    # drill moves nodes DOWN. It is "the node's current Talos version appeared within the last 2 d"
+    # (the rollout's own deadline is < 1 d); "behind" is every node on a version NO node moved to in
+    # that horizon. A node that sat on the new version before the horizon is on neither side.
+    - name: mgmt-rollout
+      rules:
+        # When each node's CURRENT version first appeared (5-min resolution, 2-d horizon; a version
+        # older than the horizon reads as the horizon's first step).
+        - record: mgmt:node_talos_since:timestamp
+          expr: |
+            min_over_time(timestamp(max by (node, os_image) (kube_node_info{os_image=~"Talos.*"}))[2d:5m])
+              and on (node, os_image) max by (node, os_image) (kube_node_info{os_image=~"Talos.*"})
+        - record: mgmt:node_rollout_upgraded:since
+          expr: |
+            mgmt:node_talos_since:timestamp > time() - 2 * 86400 + 1800
+        - record: mgmt:node_rollout_behind:since
+          expr: |
+            mgmt:node_talos_since:timestamp unless on (os_image) mgmt:node_rollout_upgraded:since
+        # The upgraded nodes the comparison may read: 75 min past BOTH their version change and
+        # their last boot. The upgrade itself restarts every DaemonSet pod (PodSigkilled /
+        # NodeRebooted are expected) — 60 min is the restart window below, +15 min for the boot.
+        - record: mgmt:node_rollout_settled:since
+          expr: |
+            (mgmt:node_rollout_upgraded:since < time() - 4500)
+              unless on (node)
+                (max by (node) (
+                   label_replace(node_boot_time_seconds, "internal_ip", "$1", "instance", "(.*):9100")
+                     * on (internal_ip) group_left (node) max by (internal_ip, node) (kube_node_info)
+                 ) > time() - 4500)
+        # Signal 1: containers that restarted in the last hour, per node and namespace.
+        - record: mgmt:node_restarting_containers:1h
+          expr: |
+            count by (node, namespace) (
+              (max by (namespace, pod, uid, container) (increase(kube_pod_container_status_restarts_total[1h])) > 0)
+                * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+            )
+        # Signal 2: pods scheduled on the node, not finished, and not Ready — per node and namespace,
+        # and a zero-filled per-node total so a 30-min average means "pod-minutes", not "while present".
+        - record: mgmt:node_unready_pods
+          expr: |
+            count by (node, namespace) (
+              (
+                (max by (namespace, pod, uid) (kube_pod_status_ready{condition="false"}) == 1)
+                  and on (uid) (max by (uid) (kube_pod_status_phase{phase=~"Running|Pending"}) == 1)
+              )
+                * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+            )
+        - record: mgmt:node_unready_pods:total
+          expr: |
+            sum by (node) (mgmt:node_unready_pods)
+              or on (node) (0 * max by (node) (kube_node_info{os_image=~"Talos.*"}))
+        # Per side: the mean per node (zero-filled, so a quiet node counts), plus the upgraded
+        # side's total and namespace spread — the floors.
+        - record: mgmt:rollout_signal:avg
+          expr: |
+            label_replace(label_replace(avg(
+                (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_settled:since)
+                  or on (node) (0 * max by (node) (mgmt:node_rollout_settled:since))
+              ), "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(avg(
+                (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_behind:since)
+                  or on (node) (0 * max by (node) (mgmt:node_rollout_behind:since))
+              ), "signal", "container-restarts", "", ""), "side", "behind", "", "")
+            or
+            label_replace(label_replace(avg(
+                avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_settled:since
+              ), "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(avg(
+                avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_behind:since
+              ), "signal", "unready-pods", "", ""), "side", "behind", "", "")
+        - record: mgmt:rollout_signal:sum
+          expr: |
+            label_replace(label_replace(
+                sum(mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since),
+              "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(
+                sum(mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since),
+              "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+        - record: mgmt:rollout_signal:namespaces
+          expr: |
+            label_replace(label_replace(
+                count(count by (namespace) (mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since)),
+              "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(
+                count(count by (namespace) (mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since)),
+              "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+        # Materially worse = the upgraded mean ≥ 3× the behind mean + 1 (the +1 keeps a behind side
+        # at zero from turning one event into "infinitely worse"), from ≥ 3 restarting containers /
+        # ≥ 2 unready pods in ≥ 2 namespaces on the upgraded side — one flaky pod never halts a
+        # fleet — with ≥ 2 nodes still behind to compare against, held for 30 min.
+        - alert: MgmtRolloutDifferential
+          expr: |
+            (
+              (
+                mgmt:rollout_signal:avg{side="upgraded",signal="container-restarts"}
+                  > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="container-restarts"} + 1)
+                and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="container-restarts"} >= 3)
+              )
+              or
+              (
+                mgmt:rollout_signal:avg{side="upgraded",signal="unready-pods"}
+                  > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="unready-pods"} + 1)
+                and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="unready-pods"} >= 2)
+              )
+            )
+              and on (signal) (mgmt:rollout_signal:namespaces{side="upgraded"} >= 2)
+              and on () (count(mgmt:node_rollout_behind:since) >= 2)
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Talos rollout: {{ $labels.signal }} worse on the just-upgraded nodes than on the ones still behind"
+            description: >-
+              Per node, {{ $labels.signal }} averages {{ $value | printf "%.1f" }} on the nodes that moved
+              Talos version in the last 2 days and settled (≥75 min since the change and the boot:
+              {{ range query "mgmt:node_rollout_settled:since" }}{{ .Labels.node }} → {{ .Labels.os_image }};
+              {{ end }}) against
+              {{ with query (printf "mgmt:rollout_signal:avg{side='behind',signal='%s'}" $labels.signal) }}{{ . | first | value | printf "%.1f" }}{{ end }}
+              on the {{ with query "count(mgmt:node_rollout_behind:since)" }}{{ . | first | value }}{{ end }}
+              nodes still behind — {{ with query (printf "mgmt:rollout_signal:sum{signal='%s'}" $labels.signal) }}{{ . | first | value }}{{ end }}
+              on the upgraded side across
+              {{ with query (printf "mgmt:rollout_signal:namespaces{signal='%s'}" $labels.signal) }}{{ . | first | value }}{{ end }}
+              namespaces, for 30 min. The node reconciler holds the rollout (no further node advances)
+              while this fires; it does NOT revert. Compare the two sides per node
+              (`mgmt:node_restarting_containers:1h`, `mgmt:node_unready_pods`) before deciding; a revert
+              is a human commit of the declaration (docs/management-box.md §MB4 "The rollout policy").
