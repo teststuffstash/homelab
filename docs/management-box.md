@@ -420,7 +420,11 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
    A `manual` node still shows its diff as drift; the box does nothing. **Built 2026-09-21** — the field in
    `machines/machines.yaml` (absent = manual; `machines/generate.py` refuses `auto` on anything but a Talos
-   worker), and **`wk-03` is the one `auto` node** (operator: "live on one node").
+   worker), and **`wk-03` is the one `auto` node** (operator: "live on one node"). **2026-09-22 (FU-273):**
+   every Talos node is `auto`, control planes included (ADR-133's three CPs exist; `generate.py` now refuses
+   only non-Talos boxes), behind ONE switch — `reconcile_rollout.enabled` — that is off until the operator
+   flips it; off, the reconciler still owns only `reconcile_rollout.pilot` (wk-03). See
+   [The rollout as built](#the-rollout-as-built-fu-273-2026-09-22).
 4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
    first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
    window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
@@ -461,8 +465,9 @@ Each tick, for the `auto` nodes only:
   new declared key, or the diff reaching zero by other means, clears it. By hand: `rm
   /var/lib/mgmt/reconcile/state.json` once the node is whole.
 - **Not reconciled, reported only:** labels/taints (tofu's apply path owns them — `MgmtNodeLiveStateDrift`),
-  `ephemeral_disk` (reinstall-class — a human window), anything on a `manual` node. A declared
-  `controlplane` is refused even if marked `auto`. The loop never runs tofu.
+  `ephemeral_disk` (reinstall-class — a human window), anything on a `manual` node. With the rollout
+  switch off a declared `controlplane` is refused even if marked `auto`; with it on, a control plane
+  syncs through `controlplane-upgrade.sh`, last. The loop never runs tofu.
 - **State** = `/var/lib/mgmt/reconcile/state.json`; **status** = `mgmt_reconcile_node_state{node,state}`
   (idle | pending | syncing | parked) + `mgmt_reconcile_sync_started_timestamp_seconds{node}` through the
   textfile. Alerts (`argocd/resources/mgmt-metrics/`, promtool-fixtured): `MgmtReconcileParked` (5m),
@@ -496,7 +501,8 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 
 **Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
-the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-21):** everything through `reconcile: auto` is built; the auto set is one node.
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built; the fleet rollout
+(CPs included) is built behind its switch, which is off — the acting set is still one node.
 
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 
@@ -531,9 +537,77 @@ be tested. The rules, ruled before anything below is built:
 - **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
   control planes — as `node-maintenance.sh order` already ranks them.
 
-To build (FU-273): the exercise predicates per canary type, the repel taint, the differential
-detector, and stages in the reconciler. The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the
-rollback drill) run before any of it exists.
+To build (FU-273): the exercise predicates per canary type and the differential detector
+(`scripts/mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`). **Built:** the stages in the
+reconciler and the repel taint — below, behind a switch that is off. The first two attended bumps
+(wk-03 1.14.0 → 1.14.1 and the rollback drill) run before the switch is flipped.
+
+### The rollout as built (FU-273, 2026-09-22)
+
+`scripts/mgmt-reconcile.sh`, same unit and timer, same one-sync-per-tick oneshot — every guarantee
+above holds unchanged (WIP 1 incl. declared windows and `--admit-reconciler`, one attempt per
+declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossible path,
+`restartIfChanged = false`, the metrics). What the switch adds is **which node a tick may sync**:
+
+- **The switch** is `reconcile_rollout.enabled` at the top of `machines/machines.yaml` — a commit,
+  so flipping it is reviewable and the box picks it up on its next pull. **Off** (the default as
+  merged): the reconciler owns only `reconcile_rollout.pilot` (wk-03), first candidate in inventory
+  order, control planes refused — the pre-rollout behaviour, pinned by running the whole original
+  test suite a second time with the switch explicitly off. **To flip:** set `enabled: true` in a
+  one-line PR; nothing moves until a declared bump is applied. Flipping it off mid-rollout lifts the
+  taints and retires the record; nodes already moved stay where they are.
+- **Target.** A rollout moves ONE declared version: the newest declared version among the `auto`
+  nodes with a diff. Its members are the nodes declared at it — a node that already runs it (the
+  tofu canary override, `var.nodes.*.talos_version`) is a member that is already done. A node
+  declared at another version waits, `pending`, for this rollout to end: one rollout at a time.
+- **Stage `canary`.** One canary per node **type** — `class/role/schematic/storage`, storage =
+  `order`'s GARAGE=yes or LH>0 (`ORDER_FORMAT=tsv`, the ranking's own columns) — the least risky of
+  each, synced one per tick in rank order. A type whose member already runs the target uses that
+  node and skips the sync. Control planes are never canaries: they go last, and
+  `controlplane-upgrade.sh`'s post-check (etcd member healthy, apiserver serving) IS their
+  predicate. Then the stage waits until `mgmt-rollout-evidence.sh <node> <synced-at>` exits 0 for
+  every canary (1 and 2 = not yet; a missing script = not yet, logged once), bounded by
+  `RECONCILE_CANARY_TIMEOUT` (4 h). **On timeout it advances anyway** — default forward — with
+  `mgmt_reconcile_rollout_canary_timed_out` = 1 and **`MgmtRolloutCanaryTimedOut`**.
+- **Stage `fleet`.** The rest in `node-maintenance.sh order`'s ranking, workers first; a control
+  plane only when no worker of the rollout is left to sync, one at a time, through
+  `controlplane-upgrade.sh <node>` (which now keeps the same 2/4/1 exit contract: its gates refuse
+  with 2, the shared verb's 4 passes through, a failure after the install is 1). A parked node does
+  not block the stages — the verb's own WIP 1 does, live.
+- **`halted`.** Before any rollout sync the loop reads `ALERTS{alertname="MgmtRolloutDifferential"}`;
+  firing — or unreadable (an unreadable gate is a no; **`MgmtRolloutHaltUnreadable`** after 1 h) —
+  stops new syncs and lifts the pressure (no more work pushed onto nodes that look worse). It
+  resumes where it was when the alert clears. It never reverts anything.
+- **Revert.** A declared target OLDER than the last rollout's is a human revert commit: a `revert`
+  rollout with no canary stage, not halted by the differential (that is what asked for it), the
+  nodes the last rollout moved first. Within a minor the verb allows it; across one it is exit 4 →
+  parked.
+- **Supersede.** A NEWER target mid-rollout (a patch merged): the not-yet nodes switch to it and
+  skip the intermediate version; the nodes already on the old target wait for the NEXT rollout
+  (which, being the same target, starts at `fleet`); the stage restarts at `canary`, because the new
+  version has proved nothing yet. Recorded in `superseded[]`. The fleet may briefly hold three
+  versions (not-yet, old target, new target) — the price of never re-syncing a node twice in one
+  rollout.
+- **Pressure.** Every member not on the target carries
+  `homelab.io/talos-behind=<target>:PreferNoSchedule`; removed from a node the moment its sync
+  completes, from all when the rollout ends, halts, or the switch goes off. Idempotent, and no other
+  taint key is ever read or written. The belt's taint axis compares only keys tofu declares, so the
+  taint is not drift.
+- **State + status.** `/var/lib/mgmt/reconcile/rollout.json` beside `state.json` (its own file:
+  `rm state.json` to clear a park must not restart a rollout) — target, kind, stage,
+  `started_at`/`stage_since`, canaries by type, evidence times, per-node `synced_at`,
+  `superseded[]`. Series: `mgmt_reconcile_rollout_stage{target,kind,stage}`,
+  `…_started_timestamp_seconds`, `…_canary_wait_started_timestamp_seconds`,
+  `…_canary_exercised{node,type}`, `…_canary_timed_out`, `…_halted{reason}`,
+  `…_node_synced_timestamp_seconds{node,target}` — emitted only while the switch is on. The rollout's
+  alerts live in `argocd/resources/mgmt-metrics/reconcile-rollout.yaml`; the 24 h deadline is NOT
+  re-alerted there — `TalosFleetVersionSplit` / `MgmtNodeInstallDrift` already are it.
+- **Unit.** Unchanged: one sync per tick keeps the unit a window, and `TimeoutStartSec = 5h` already
+  covers the CP verb (its extra snapshot + cilium roll are minutes on top of the shared verb).
+- **Tests:** `devbox run mgmt-reconcile-test` — fake verb, CP verb, ranking, evidence, Prometheus
+  and kubectl: canary-per-type selection, the override canary, evidence gating and timeout-forward,
+  CPs last via the CP verb, halt + resume (and unreadable), taints on/off without touching other
+  keys, supersede, revert, one-rollout-at-a-time, the switch off mid-rollout.
 
 ## Rollback — three layers
 
