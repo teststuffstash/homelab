@@ -536,9 +536,53 @@ be tested. The rules, ruled before anything below is built:
 - **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
   control planes — as `node-maintenance.sh order` already ranks them.
 
-To build (FU-273): the exercise predicates per canary type, the repel taint, the differential
-detector, and stages in the reconciler. The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the
-rollback drill) run before any of it exists.
+**The exercise predicate — built:** `scripts/mgmt-rollout-evidence.sh <node> <since>` answers
+"has this node carried its own kind of work on its current install since then?" — exit 0 yes, 1
+not yet, 2 cannot tell (any read failed; the caller asks again, and owns the timeout). It types the
+node from live facts, never a list, and every type that applies must hold:
+
+| Type | Is one when | Evidence since `<since>` |
+|---|---|---|
+| control plane | label `node-role.kubernetes.io/control-plane` | etcd service healthy, its member a voter with no errors; `kube-apiserver-<node>` Ready and `/readyz` ok on the node's own IP |
+| ARC | label `homelab.io/ephemeral=true` **and** ≥ 14 runner pods there in the 7 d before | ≥ 1 job concluded `success` on a runner pod placed there |
+| ride | ≥ 14 worker rides (`agent-<project>-…`, controller-less) there in the 7 d before | ≥ 1 ride created since then reached `Succeeded` there |
+| Longhorn | a replica CR placed there | ≥ 1 replica running, `healthyAt` since then, on a `healthy` volume |
+| Garage | a Garage zone named after the node | the zone connected in every peer's view for 10 min |
+| worker | none of the above | ≥ 1 non-DaemonSet pod scheduled since then that is Ready or Succeeded |
+
+A label alone never makes a type: the history threshold is what keeps a node that sees a ride every
+few days from holding a stage for days. The ARC job outcome reads
+`github_ci_job_completed_timestamp{runner_name,conclusion}` from the GitHub exporter, joined to the
+runner pod's node. The runner pod is deleted seconds after its job, and kube-state-metrics saw 6 of
+~100 such terminations in 6 h. A stale exporter, or one without that series, reads as "cannot tell",
+never as "no job". Fixtures: `devbox run mgmt-rollout-evidence-test`.
+
+**The differential — built:** `MgmtRolloutDifferential` (`argocd/resources/mgmt-metrics/`, group
+`mgmt-rollout`) is the one automatic halt. PromQL cannot order version strings, and a rollback
+drill moves nodes down. So **upgraded** means "this node's current Talos version first appeared in
+the last 2 d" (`kube_node_info{os_image}`). **Behind** means "on a version no node moved to in that
+horizon". A node that ran the new version before the horizon is on neither side. The alert compares
+two per-node signals, each averaged per node and zero-filled:
+
+- **container-restarts** — containers with a restart in the last hour
+- **unready-pods** — scheduled, unfinished pods not Ready, averaged over 30 min
+
+An upgraded node is compared only 75 min after both its version change and its last boot, which
+excludes the upgrade's own DaemonSet restarts. It fires when all of these hold for 30 min:
+
+- the upgraded mean is ≥ 3× the behind mean + 1
+- the upgraded side has ≥ 3 restarting containers or ≥ 2 unready pods, in ≥ 2 namespaces
+- ≥ 2 nodes are still behind
+
+Replayed against 2026-09-21 06:00Z → 2026-09-22 08:00Z (the 1.13.2 → 1.13.10 roll, the wk-03 1.14
+canary and its rollback drill), it stayed silent throughout. Without the 75-min settle, the same
+replay reads 2.3–3.0 restarts per upgraded node across 3–4 namespaces during the 09-21 roll,
+against about 0 behind. That is the reboot transient, and the settle window is what keeps it out of
+the comparison. The promtool fixture fails if any single guard is loosened.
+
+**Still to build (FU-273):** the repel taint, stages in the reconciler, and its read of the alert.
+The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the rollback drill) ran before any of it
+existed.
 
 ## Rollback — three layers
 
