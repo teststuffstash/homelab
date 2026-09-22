@@ -7,8 +7,11 @@
 # `node-maintenance.sh upgrade <node>`. It adds only what the verb does not know:
 #
 #   WIP 1        one sync per tick and the unit is a oneshot, so one window at a time by
-#                construction; a live declared window (agents/seat-window.sh's record) on ANY
-#                OTHER node refuses the tick. The verb's own WIP 1 (no other node cordoned or
+#                construction; ANY live declared window (agents/seat-window.sh's record) refuses
+#                the tick — on another node, seat-wide, or on the target itself — unless it is on
+#                the target AND was opened with --admit-reconciler (the attended canary). The
+#                check runs BEFORE the verb opens its own window, so a window on the target at
+#                that moment is always someone else's. The verb's own WIP 1 (no other node cordoned or
 #                NotReady) and its fleet floors (Longhorn degraded, Garage cluster_healthy, CNPG
 #                instances) stay the verb's — they are not re-implemented here.
 #   one attempt  keyed on the DECLARED target (version/schematic). A verb exit 2 is a REFUSAL
@@ -161,8 +164,9 @@ if [ ${#cands[@]} -eq 0 ]; then save; emit stamp; log "tick done — nothing to 
 n="${cands[0]}"; key="$(jq -r --arg n "$n" '.[$n] | "\(.version)/\(.schematic)"' "$tf")"
 for q in "${cands[@]:1}"; do set_node "$q" pending "$(jq -r --arg n "$q" '.[$n] | "\(.version)/\(.schematic)"' "$tf")" "queued behind $n (WIP 1)"; done
 
-# A live declared window on any OTHER node is someone else's window (a seat's maintenance-window,
-# another verb run) — never open a second one. One on the target itself is the same window.
+# Every live declared window is someone else's: the check runs before the verb opens ours. A
+# seat's window on the target blocks too (hands-on work there must not get a sync on top) —
+# unless the seat opened it with --admit-reconciler, which is the attended-sync case.
 if [ -n "${RECONCILE_WINDOWS_JSON:-}" ]; then wj="$(cat "$RECONCILE_WINDOWS_JSON")"
 else
   kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
@@ -175,7 +179,7 @@ if [ -z "$wj" ]; then
   set_node "$n" pending "$key" "declared windows unreadable — refusing (an unreadable gate is a no)"
   save; emit stamp; log "$n: cannot read the declared-window record — not opening a window"; exit 0
 fi
-other="$(jq -r --arg n "$n" '[.[] | select((.node // "") != $n) | "\(.id) (\(.by // "?"))"] | join(", ")' <<<"$wj")"
+other="$(jq -r --arg n "$n" '[.[] | select((.node // "") != $n or (.admit_reconciler // false) != true) | "\(.id) (\(.by // "?"))"] | join(", ")' <<<"$wj")"
 if [ -n "$other" ]; then
   set_node "$n" pending "$key" "another window is open: $other"
   save; emit stamp; log "$n: WIP 1 — a declared window is open ($other); retry next tick"; exit 0
@@ -197,6 +201,9 @@ case "$rc" in
       set_node "$n" parked "$key" "verb exited 0 but the diff is not zero (version=$(axis "$n" version) schematic=$(axis "$n" schematic))"
       log "$n: PARKED — the verb said done, the diff disagrees"
     fi ;;
+  4)
+    set_node "$n" parked "$key" "the declared version path is impossible (verb exit 4: a downgrade or a skipped minor) — Talos rolls back only via talosctl rollback or a reinstall; fix the declaration or roll back by hand"
+    log "$n: PARKED — the declared path is impossible (exit 4); retrying cannot fix it" ;;
   2)
     set_node "$n" pending "$key" "refused by a gate (verb exit 2, nothing touched) — retried next tick"
     log "$n: refused by a gate (exit 2) — nothing touched, retried next tick" ;;

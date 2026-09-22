@@ -81,6 +81,12 @@ targets "$D1"; live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"   # a NEW ke
 tick
 check "a new declared key un-parks → synced"  eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 4 ]'
 
+# ── an impossible path (verb exit 4: downgrade / skipped minor) parks at once, never retried ──
+reset; machines "[$W]"; targets "$D1"; live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; FAKE_RC=4 tick
+check "verb exit 4 → PARKED (impossible path), not pending" eval '[ "$(st wk-03)" = parked ] && [ "$(calls)" = 1 ] && grep -q "impossible" "$RECONCILE_DIR/state.json"'
+FAKE_RC=4 tick
+check "…and not retried on the same key" eval '[ "$(calls)" = 1 ]'
+
 # ── the diff reaching zero by other means clears a park ──
 reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_RC=1 tick
 live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; tick
@@ -101,7 +107,13 @@ check "a live window on another node → pending, verb not run" eval '[ "$(st wk
 windows '[{"id":"seat-1","node":"","by":"seat"}]'; tick
 check "a node-less (seat-wide) window also refuses" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ]'
 windows '[{"id":"wk-03-1","node":"wk-03","by":"seat"}]'; tick
-check "a window on the target itself is the same window → synced" eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 1 ]'
+check "a seat's window on the TARGET refuses too (hands-on work, no sync on top)" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ] && grep -q "wk-03-1" "$RECONCILE_DIR/state.json"'
+windows '[{"id":"wk-03-1","node":"wk-03","by":"seat","admit_reconciler":false}]'; tick
+check "admit_reconciler:false is the same refusal" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ]'
+windows '[{"id":"m70s-1","node":"m70s","by":"seat","admit_reconciler":true}]'; tick
+check "an admitting window on ANOTHER node still refuses" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ]'
+windows '[{"id":"wk-03-1","node":"wk-03","by":"seat","admit_reconciler":true}]'; tick
+check "a window on the target opened with --admit-reconciler → synced (the attended canary)" eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 1 ]'
 reset; machines "[$W,{\"name\":\"wk-01\",\"reconcile\":\"auto\"}]"; targets "$D2"; live "$V1"; tick
 check "two diffs → ONE sync per tick, the other queued" eval '[ "$(calls)" = 1 ] && [ "$(st wk-03)" = idle ] && [ "$(st wk-01)" = pending ] && grep -q "queued behind wk-03" "$RECONCILE_DIR/state.json"'
 tick
