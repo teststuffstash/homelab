@@ -418,19 +418,8 @@ six OVERSIZE items pointer-ized into
       `tofu/provisioning/flags.local.tf` (gitignored `*.local.tf`) holds per-node groups; flag = write + targeted
       apply, unflag = delete + targeted destroy; the box's provisioning plan shows a live flag as drift until
       unflagged (the belt); a lint refuses `matchbox_group` in TRACKED provisioning files; provisioning.md
-      steps 1/6 + the onboarding skill rewritten around it. **First act:** move or destroy `nx_01_diag`
-      (a standing reinstall flag on a production node; 06:39 showed disk-first boot order bounds the loop
-      risk, not the STATE partition). End state: the reconciler sets and clears flags inside one sync. Relates FU-235.
-- [ ] **FU-238** — **External-provider roots plan READ-ONLY on the box (operator, 2026-09-13):**
-      box-scoped read-only token, state on Garage, policy root with `apply: false`; applies stay
-      host/jail until FU-097. **github DONE 2026-09-13** (read-only PAT + App keys via
-      `scripts/mgmt-root-env/github.sh`; repos + org ruleset excluded). **cloudflare BUILT 2026-09-13**
-      (#1633 the `homelab-mgmt-read` mint + policy root, #1635 the kubeconfig hook; proof on dummy
-      #1634: `+0 ~0 -0 (3 not planned)` — the tunnel-token data source is a credential read no Read
-      group covers, its Secret/Deployment drop with it). **Next (operator, host):** `devbox run
-      cloudflare-token-tofu apply` (store → wallet `cloudflare-mgmt-read`) → `mgmt-provision-secrets.sh
-      --push`; until then the box plans cloudflare with the write key it holds. Civo = stack repos,
-      AWS no root, infisical port-forwards into the cluster (not this box). Relates FU-237, FU-012, ADR-131.
+      steps 1/6 + the onboarding skill rewritten around it. (`nx_01_diag` is gone — #1822 dropped it,
+      2026-09-21; no flag stands in git.) **Next:** the `flags.local.tf` shape + the lint. End state: the reconciler sets and clears flags inside one sync. Relates FU-235.
 - [ ] **FU-239** — **`homelab-jail-read-all` plans as a standing group-order permutation (2026-09-13).**
       The API's read-back order for its 146 + 45 filtered groups is arbitrary (not catalog/id/name
       order — measured), provider 5.x compares positionally, and 5.25.0 (#1636) did not fix it.
