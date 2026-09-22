@@ -202,7 +202,7 @@ case "$rc" in
       log "$n: PARKED — the verb said done, the diff disagrees"
     fi ;;
   4)
-    set_node "$n" parked "$key" "the declared version path is impossible (verb exit 4: a downgrade or a skipped minor) — Talos rolls back only via talosctl rollback or a reinstall; fix the declaration or roll back by hand"
+    set_node "$n" parked "$key" "the declared version path is impossible (verb exit 4: a cross-minor downgrade or a skipped minor) — across a minor Talos rolls back only via talosctl rollback or a reinstall; fix the declaration or roll back by hand"
     log "$n: PARKED — the declared path is impossible (exit 4); retrying cannot fix it" ;;
   2)
     set_node "$n" pending "$key" "refused by a gate (verb exit 2, nothing touched) — retried next tick"
