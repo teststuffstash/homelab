@@ -323,6 +323,10 @@ DECLARED_ALERTS="${DECLARED_ALERTS:-KubeDaemonSetRolloutStuck,KubeDaemonSetMisSc
 
 declare_open() {
   [ "$SILENCE" = 1 ] || return 0
+  # Idempotent, like silence_open: `upgrade` declares in settle() and again before the drain, and
+  # every call used to append a record (two per sync, 2026-09-22).
+  bash "$(dirname "$0")/../agents/seat-window.sh" has --node "$NODE" --by node-maintenance.sh 2>/dev/null \
+    && { log "declared window for $NODE already open"; return 0; }
   SEAT_WINDOW_BY="node-maintenance.sh" SEAT_WINDOW_HOURS="$SILENCE_HOURS" \
     bash "$(dirname "$0")/../agents/seat-window.sh" open \
       --reason "node-maintenance window on $NODE — planned cordon/drain/shutdown" \
@@ -333,7 +337,9 @@ declare_open() {
 
 declare_close() {
   [ "$SILENCE" = 1 ] || return 0
-  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" \
+  # Only OUR records (--by): a seat's window on the same node — the reconciler's admitting window
+  # above all — is the seat's to close.
+  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" --by node-maintenance.sh \
     || warn "could not close the declared window — it self-expires at its \`until\` (${SILENCE_HOURS}h)"
 }
 
