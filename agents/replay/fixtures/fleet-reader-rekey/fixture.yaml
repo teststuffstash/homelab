@@ -41,6 +41,8 @@
 # The router payload is a row's declared CONDITION (`ROUTER_STATUS_JSON`), never a live call: the
 # ClusterIP endpoint answers from inside the loop namespace, so a fixture that reached it would go
 # green for the wrong reason.
+pins:
+  - IL-T30
 name: fleet-reader-rekey
 mode: table
 source: agents/coordinator-scan.sh

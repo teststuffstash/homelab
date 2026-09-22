@@ -256,7 +256,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-no-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
-| `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | - |
+| `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |

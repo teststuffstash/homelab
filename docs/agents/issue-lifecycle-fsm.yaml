@@ -30,7 +30,8 @@ diagram: |
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
       InProgress --> InProgress: goal child + AGENT_STRIKE + resumable branch → decidable, emit --work-branch (IL-T29)
-      InProgress --> Error: fleet-strike — same error_class on ≥2 issues in 24h → agent/error (IL-T30)
+      InProgress --> Error: fleet-strike, the us case — same error_class on ≥2 issues in 24h, attributed to neither provider nor model → agent/error (IL-T30)
+      InProgress --> InProgress: fleet-strike attributed to a cell — provider latched in the router or model nominated, no label (IL-T30)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
@@ -414,22 +415,44 @@ transitions:
       - "2026-09-01 oracle-fleet#329: the third C4/C5 ambig sighting in ~24h froze the whole oracle lane ~4h — 0 WIP, 0 PRs, every scan tick green, homelab#1149 was the identical shape the day before. The AGENT_STRIKE: + Resumable branch pushed: evidence was machine-anchored one comment up; the hold just didn't look."
 
   - id: IL-T30
-    name: fleet-strike reader — same error_class on ≥2 issues in 24h ⇒ agent/error + comment + filing
+    name: fleet-strike reader — same error_class on ≥2 issues in 24h, keyed on (class, provider) / (class, model) / neither ⇒ provider latch / model nomination / agent/error + comment + filing
     owner: coordinator-scan, deterministically — no LLM tick in the path
     when: "≥2 distinct OPEN issues with agent-fix carry an AGENT_STRIKE: comment bearing the same
-      `error_class=` value, and the newest such comments are all within 24h of each other ⇒ the
-      scan applies `agent/error` to each affected issue, posts ONE comment on the first affected
-      issue listing all of them, and files ONE deduped inert platform issue (or extends an existing
-      open match). Forward-compatible with the G2 key-class split: counts strike-class rows only
-      (AGENT_STRIKE: comments), never key-class rows."
+      `error_class=` value, the newest such comments are all within 24h of each other and the newest
+      is within 24h of now ⇒ the scan ASKS the router (`/router-status` → `serving_classes`,
+      `pair_cooldowns`, `generations_24h`) and keys the group (Goal #1640 acceptance 5): a strike
+      whose (model, provider) cell rode cleanly in the window is REFUTED and dropped first; then
+      (class, provider) — a serving class whose cell the router has cooled ⇒ the PROVIDER is
+      latched, the router holds the state, the scan reports and touches no issue; (class, model) —
+      a serving class struck across ≥2 providers ⇒ the MODEL is nominated for the ledger (ONE
+      deduped inert `model-nomination:` filing, no label); neither — the \"us\" case (our recipe,
+      repo, task; every non-serving class lands here) ⇒ the scan applies `agent/error` to each
+      affected issue, posts ONE comment on the first affected issue listing all of them, and files
+      ONE deduped inert `fleet-strike:` issue (or extends an existing open match). Only the us case
+      is the InProgress → Error edge. An unreadable router status is fail-closed and loud: no latch,
+      no nomination, no label. Counts strike-class rows only (AGENT_STRIKE: comments), never
+      key-class rows — the FU-202 mint classes are excluded before keying."
     status: guarded
     replay:
       - agents/replay/fixtures/fleet-strike-reader
+      - agents/replay/fixtures/fleet-reader-rekey
     guards:
       - desc: "the AGENT_STRIKE: marker is ANCHORED at the start of a COMMENT — same discipline as AGENT_INFEASIBLE: (homelab#257) and AGENT_STRIKE: (FU-199)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_STRIKE:"\)' }
       - desc: "match on the structured `error_class=` field only, never log excerpts"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'error_class=' }
+      - desc: "the reader ASKS the router for live cell state — /router-status is read every pass; the scan never reconstructs pair cooldowns from the comment timeline (operator ruling 2026-09-14, one owner per fact)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'ROUTER_STATUS_URL}/router-status' }
+      - desc: "an unreadable /router-status is FAIL-CLOSED and LOUD — no latch, no nomination, no agent/error that tick (rule #6)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: '/router-status unreadable' }
+      - desc: "clean-retry refutation — a strike whose (model, provider) cell appears in generations_24h is dropped before keying"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'generations_24h' }
+      - desc: "(class, provider) — a serving class with a router-cooled pair latches the PROVIDER: report only, the router owns the state, no issue is labelled"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'FLEET STRIKE \(provider\)' }
+      - desc: "(class, model) — a serving class struck across ≥2 providers nominates the MODEL: ONE deduped model-nomination: filing, a record never a label"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'FLEET STRIKE \(model\)' }
+      - desc: "neither — the us case is the ONLY branch that writes agent/error"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'FLEET STRIKE \(us\)' }
       - desc: "dedup — before filing, check for an existing OPEN issue titled fleet-strike: error_class=<ec>; extend it instead of creating a new one"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'fleet-strike: error_class' }
       - desc: "key-class exclusion (FU-202 belt) — budget-exhausted-key and budget-403-key are MINT defects, not worker strikes; explicitly excluded even when they appear as AGENT_STRIKE: (historical rows pre-#1233 merge)"
