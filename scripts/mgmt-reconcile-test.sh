@@ -30,13 +30,31 @@ jq -r --slurpfile L "$LIVE" 'to_entries[] | .key as $n | .value as $d | ($L[0][$
          "\($n) schematic\t\(if $l.schematic == $d.schematic then "ok" else "drift" end)" end' "$1" >"$2"
 EOF
 # The verb: records the call; FAKE_RC decides; on 0 it "installs" the declaration unless FAKE_NOOP.
+# FAKE_INSTALLED=1: it installs and THEN fails (nx-01, 2026-09-22 — back on the target, a post-check
+# failed). FAKE_LEAVE_WINDOW=1: a failure leaves its own declared window open, as the real verb does.
 cat >"$T/verb.sh" <<'EOF'
 echo "$*" >>"$CALLS"
 rc="${FAKE_RC:-0}"
-if [ "$rc" = 0 ] && [ -z "${FAKE_NOOP:-}" ]; then
+if { [ "$rc" = 0 ] && [ -z "${FAKE_NOOP:-}" ]; } || [ -n "${FAKE_INSTALLED:-}" ]; then
   jq --arg n "$2" --slurpfile D "$RECONCILE_TARGETS_JSON" '.[$n] = {version: $D[0][$n].version, schematic: $D[0][$n].schematic}' "$LIVE" >"$LIVE.t" && mv "$LIVE.t" "$LIVE"
 fi
+if [ "$rc" != 0 ] && [ -n "${FAKE_LEAVE_WINDOW:-}" ]; then
+  jq -c --arg n "$2" '. + [{id: ("nm-" + $n), node: $n, by: "node-maintenance.sh"}]' "$RECONCILE_WINDOWS_JSON" >"$RECONCILE_WINDOWS_JSON.t" \
+    && mv "$RECONCILE_WINDOWS_JSON.t" "$RECONCILE_WINDOWS_JSON"
+fi
 exit "$rc"
+EOF
+# The read-only health check (node-maintenance.sh verify): FAKE_VERIFY_RC decides, every call recorded.
+# The window close (node-maintenance.sh silence-close): drops only the verb's own records.
+export RECONCILE_VERIFY="bash $T/verify.sh" RECONCILE_WINDOW_CLOSE="bash $T/wclose.sh" VCALLS="$T/vcalls" WCALLS="$T/wcalls"
+cat >"$T/verify.sh" <<'EOF'
+echo "$1" >>"$VCALLS"
+exit "${FAKE_VERIFY_RC:-0}"
+EOF
+cat >"$T/wclose.sh" <<'EOF'
+echo "$1" >>"$WCALLS"
+jq -c --arg n "$1" 'map(select(.node != $n or .by != "node-maintenance.sh"))' "$RECONCILE_WINDOWS_JSON" >"$RECONCILE_WINDOWS_JSON.t" \
+  && mv "$RECONCILE_WINDOWS_JSON.t" "$RECONCILE_WINDOWS_JSON"
 EOF
 # kubectl (the rollout's pressure taints; set for EVERY case, so the switch-off suite can assert it
 # is never called): `get nodes -o json` from $TAINTS ({node: [taint]}), `taint node <n> k=v:e
@@ -66,10 +84,14 @@ machines() { printf '{%s"machines":%s}' "${SWITCH:+$SWITCH,}" "$1" >"$RECONCILE_
 targets()  { printf '%s' "$1" >"$RECONCILE_TARGETS_JSON"; }
 live()     { printf '%s' "$1" >"$LIVE"; }
 windows()  { printf '%s' "$1" >"$RECONCILE_WINDOWS_JSON"; }
-reset()    { rm -rf "$RECONCILE_DIR" "$CALLS" "$KCALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*; unset FAKE_RC FAKE_NOOP FAKE_DIFF_FAIL; windows '[]'; }
+reset()    { rm -rf "$RECONCILE_DIR" "$CALLS" "$KCALLS" "$VCALLS" "$WCALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*
+             unset FAKE_RC FAKE_NOOP FAKE_DIFF_FAIL FAKE_INSTALLED FAKE_LEAVE_WINDOW FAKE_VERIFY_RC; windows '[]'; }
+cause()    { jq -r --arg n "$1" '.[$n].cause // ""' "$RECONCILE_DIR/state.json" 2>/dev/null; }
+vcalls()   { [ -f "$VCALLS" ] && grep -c . "$VCALLS" || echo 0; }
 tick()     { bash "$HERE/mgmt-reconcile.sh" >"$T/out" 2>&1; echo $? >"$T/rc"; }
 st()       { jq -r --arg n "$1" '.[$n].state // "none"' "$RECONCILE_DIR/state.json" 2>/dev/null || echo none; }
 calls()    { [ -f "$CALLS" ] && grep -c . "$CALLS" || echo 0; }
+lastcall_legacy() { tail -1 "$CALLS" 2>/dev/null; }
 metric()   { grep -v '^#' "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom" 2>/dev/null | grep -F "$1" | awk '{print $NF}'; }
 
 pass=0; fail=0
@@ -117,10 +139,49 @@ check "verb exit 4 → PARKED (impossible path), not pending" eval '[ "$(st wk-0
 FAKE_RC=4 tick
 check "…and not retried on the same key" eval '[ "$(calls)" = 1 ]'
 
-# ── the diff reaching zero by other means clears a park ──
+# ── the diff reaching zero by other means clears a FAILED-VERB park only with the health check ──
 reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_RC=1 tick
 live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; tick
-check "park cleared when the diff is zero (fixed by hand)" eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 1 ]'
+check "park cleared when the diff is zero (fixed by hand) AND verify passes" eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 1 ] && [ "$(vcalls)" = 1 ]'
+
+# ── FU-276 (a): verb exits 1 AFTER installing (nx-01) → diff zero at once; health decides ──
+reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_RC=1 FAKE_INSTALLED=1 tick
+check "verb exit 1 after the install → PARKED, cause verb-failed" eval '[ "$(st wk-03)" = parked ] && [ "$(cause wk-03)" = verb-failed ]'
+FAKE_VERIFY_RC=1 tick
+check "diff zero + verify FAILS → still PARKED, verify asked, not counted in sync" eval '[ "$(st wk-03)" = parked ] && [ "$(vcalls)" = 1 ] && [ "$(calls)" = 1 ] && grep -q "health check failing" "$RECONCILE_DIR/state.json" && grep -q "stays PARKED, not counted synced" "$T/out"'
+FAKE_VERIFY_RC=1 tick
+check "…re-checked every tick, never re-synced, cause kept" eval '[ "$(st wk-03)" = parked ] && [ "$(vcalls)" = 2 ] && [ "$(calls)" = 1 ] && [ "$(cause wk-03)" = verb-failed ]'
+tick
+check "verify passes → cleared to idle" eval '[ "$(st wk-03)" = idle ] && [ "$(vcalls)" = 3 ] && [ "$(cause wk-03)" = "" ]'
+# a park from before causes existed: read from its reason, never cleared on the diff alone
+reset; machines "[$W]"; targets "$D2"; live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; mkdir -p "$RECONCILE_DIR"
+echo '{"wk-03":{"state":"parked","key":"v2/s","since":1,"reason":"verb exited 1 — the one attempt for this key is spent; read the journal, then clear the state"}}' >"$RECONCILE_DIR/state.json"
+FAKE_VERIFY_RC=1 tick
+check "a pre-FU-276 'verb exited' park (no cause field) is treated as verb-failed" eval '[ "$(st wk-03)" = parked ] && [ "$(vcalls)" = 1 ]'
+
+# ── the exit-0-but-diff-non-zero park still clears on diff zero, without the health check ──
+reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_NOOP=1 tick
+live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; FAKE_VERIFY_RC=1 tick
+check "diff-disagrees park → cleared on diff zero, verify never asked" eval '[ "$(st wk-03)" = idle ] && [ "$(vcalls)" = 0 ]'
+
+# ── an interrupted sync: the same health rule, and its window closed at park time ──
+reset; machines "[$W]"; targets "$D2"; live "$(jq -c '.["wk-03"].version = "v2"' <<<"$V1")"; mkdir -p "$RECONCILE_DIR"
+windows '[{"id":"nm-wk-03","node":"wk-03","by":"node-maintenance.sh"}]'
+echo '{"wk-03":{"state":"syncing","key":"v2/s","since":1}}' >"$RECONCILE_DIR/state.json"; FAKE_VERIFY_RC=1 tick
+check "interrupted + diff zero + verify fails → PARKED interrupted, its window closed" eval '[ "$(st wk-03)" = parked ] && [ "$(cause wk-03)" = interrupted ] && [ "$(cat $WCALLS)" = wk-03 ] && [ "$(cat $RECONCILE_WINDOWS_JSON)" = "[]" ]'
+
+# ── FU-276 (b): the failed verb's own window is closed at park time, so the next tick is not refused ──
+reset; machines "[$W]"; targets "$D2"; live "$V1"
+windows '[{"id":"seat-wk-03","node":"wk-03","by":"seat","admit_reconciler":true}]'
+FAKE_RC=1 FAKE_LEAVE_WINDOW=1 tick
+check "verb exit 1 → PARKED, ITS window (--by node-maintenance.sh) closed, the seat's admitting record untouched" eval '[ "$(st wk-03)" = parked ] && [ "$(cat $WCALLS)" = wk-03 ] && [ "$(jq -c "map(.id)" $RECONCILE_WINDOWS_JSON)" = "[\"seat-wk-03\"]" ]'
+reset; machines "[$W,{\"name\":\"wk-01\",\"reconcile\":\"auto\"}]"; targets "$D2"; live "$V1"
+FAKE_RC=1 FAKE_LEAVE_WINDOW=1 tick
+check "two diffs: wk-03's verb exits 1 → parked, its window closed" eval '[ "$(st wk-03)" = parked ] && [ "$(cat $RECONCILE_WINDOWS_JSON)" = "[]" ]'
+tick
+check "…the next tick syncs the queued node — not refused by the parked node's window" eval '[ "$(lastcall_legacy)" = "upgrade wk-01" ] && [ "$(st wk-01)" = idle ] && [ "$(st wk-03)" = parked ]'
+reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_RC=2 FAKE_LEAVE_WINDOW=1 tick
+check "a refusal (exit 2) closes nothing (the verb closed its own)" eval '[ ! -f "$WCALLS" ] && [ "$(st wk-03)" = pending ]'
 
 # ── the verb says done, the diff disagrees → parked ──
 reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_NOOP=1 tick
@@ -329,6 +390,57 @@ check "a declared window refuses the rollout's sync too" eval '[ "$(calls)" = 0 
 rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick
 fleet_machines '"reconcile_rollout":{"enabled":false,"pilot":["wk-03"]}'; tick
 check "switch off mid-rollout → talos-behind lifted everywhere, rollout.json gone" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && [ -z "$(behind nx-01)" ] && other_taints_intact && ! grep -q mgmt_reconcile_rollout "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom"'
+
+# ═══ the health check itself: node-maintenance.sh verify (FU-276) — read-only, fail-closed ═══════
+# A fake kubectl/talosctl on PATH (no cluster). $VF holds the case's switches; every kubectl call is
+# recorded, so the suite can assert verify never mutates anything.
+VB="$T/vbin"; export VF="$T/vf"; mkdir -p "$VB" "$VF"
+cat >"$VB/kubectl" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$VF/kcalls"
+has() { [ -f "$VF/$1" ]; }
+has all-fail && exit 1
+case "$*" in
+  *"get node wk-03 -o jsonpath={.status.conditions"*) echo True ;;
+  *"get node wk-03 -o jsonpath={.spec.unschedulable}"*) : ;;
+  *"get node wk-03 -o jsonpath={.status.nodeInfo.osImage}"*) echo "Talos (v2)" ;;
+  *"get node wk-03 -o jsonpath={.status.addresses"*) echo 10.0.0.3 ;;
+  *"get nodes.longhorn.io wk-03 -o name"*) echo 'Error from server (NotFound): nodes.longhorn.io "wk-03" not found' >&2; exit 1 ;;
+  *"get pdb -A -o json"*) echo '{"items":[]}' ;;
+  *"get pods -A"*) echo '{"items":[]}' ;;
+  *"get clusters.postgresql.cnpg.io"*) has cnpg-fail && exit 1; echo '{"items":[]}' ;;
+  *"get nodes -l node-role.kubernetes.io/control-plane -o json"*)
+    echo '{"items":[{"metadata":{"name":"cp-01"},"spec":{},"status":{"conditions":[{"type":"Ready","status":"True"}],"addresses":[{"type":"InternalIP","address":"10.0.0.1"}]}}]}' ;;
+  *"get pod -l k8s-app=cilium --field-selector spec.nodeName=wk-03 -o json"*)
+    r=True; has cilium-unready && r=False
+    echo '{"items":[{"metadata":{"name":"cilium-x"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"'$r'"}]}}]}' ;;
+  *"exec"*cilium-dbg*) has cilium-hung && exit 1
+    printf 'ID Frontend Service Backend\n10 10.96.0.1:443/TCP ClusterIP 1 => 10.0.0.1:6443/TCP (active)\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+cat >"$VB/talosctl" <<'EOF'
+#!/usr/bin/env bash
+echo "NODE NAMESPACE TYPE ID VERSION NAME VERSION"
+echo "10.0.0.3 runtime ExtensionStatus 0 1 schematic s"
+EOF
+chmod +x "$VB/kubectl" "$VB/talosctl"
+echo '{"wk-03":{"version":"v2","schematic":"s","role":"worker"}}' >"$T/vtargets.json"
+vrun() { rm -f "$VF/kcalls"; PATH="$VB:$PATH" KUBECONFIG=/dev/null TALOSCONFIG=/dev/null INSTALL_TARGETS="$T/vtargets.json" NM_AM=http://127.0.0.1:9 \
+           bash "$HERE/node-maintenance.sh" verify wk-03 >"$T/out" 2>&1; echo $? >"$T/rc"; }
+no_writes() { ! grep -qE '(^| )(cordon|uncordon|drain|taint|label|annotate|apply|delete|patch|create|scale|rollout) ' "$VF/kcalls"; }
+rm -f "$VF"/*; vrun
+check "verify: healthy node → exit 0, and not one mutating kubectl call" eval '[ "$(cat $T/rc)" = 0 ] && no_writes && grep -q "verify: wk-03 healthy" "$T/out"'
+rm -f "$VF"/*; touch "$VF/cilium-hung"; vrun
+check "verify: cilium-agent on the node does not answer (nx-01) → exit 1, named" eval '[ "$(cat $T/rc)" = 1 ] && grep -q "does not answer" "$T/out" && no_writes'
+rm -f "$VF"/*; touch "$VF/cilium-unready"; vrun
+check "verify: cilium-agent not Ready → exit 1" eval '[ "$(cat $T/rc)" = 1 ] && grep -q "not Ready" "$T/out"'
+rm -f "$VF"/*; touch "$VF/cnpg-fail"; vrun
+check "verify: CNPG unreadable → exit 1 (an unreadable floor is a fail)" eval '[ "$(cat $T/rc)" = 1 ] && grep -q "cannot read CNPG" "$T/out"'
+rm -f "$VF"/*; touch "$VF/all-fail"; vrun
+check "verify: the API unreachable → exit 1, never 0" eval '[ "$(cat $T/rc)" = 1 ]'
+echo '{"wk-03":{"version":"v3","schematic":"s","role":"worker"}}' >"$T/vtargets.json"; rm -f "$VF"/*; vrun
+check "verify: live version is not the declared one → exit 1" eval '[ "$(cat $T/rc)" = 1 ] && grep -q "declared v3" "$T/out"'
 
 echo "mgmt-reconcile-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
