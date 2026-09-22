@@ -2,7 +2,8 @@
 # seat-window — the DECLARED change window (FU-230 leg b).
 #
 #   bash agents/seat-window.sh open  --reason "<what you are doing>" --alerts A,B,C [--node <n>] [--hours N] [--note "<s>"] [--admit-reconciler]
-#   bash agents/seat-window.sh close [--id <id>] [--node <n>] [--all]
+#   bash agents/seat-window.sh close [--id <id>] [--node <n> [--by <who>]] [--all]
+#   bash agents/seat-window.sh has --node <n> --by <who>     # exit 0 iff such a live window exists
 #   bash agents/seat-window.sh list
 #
 # A SECOND READER, and it treats the record as a mutex (a sign on the door — not a lock: `open` is
@@ -89,7 +90,9 @@ cmd_open() {
   [ -n "$alerts" ] || die "--alerts is required: a window with no declared alert names suppresses nothing (and a namespace-wide mute is deliberately not offered)"
   [ "$admit" = false ] || [ -n "$node" ] || die "--admit-reconciler needs --node: it admits the reconciler to ONE node, never the fleet"
   local id until_ body
-  id="${node:-seat}-$(date -u +%s)"
+  # The suffix: two opens in one second must not share a key — the merge patch would silently
+  # overwrite the first record (a seat window and node-maintenance.sh's, 2026-09-22).
+  id="${node:-seat}-$(date -u +%s)-$((RANDOM % 10000))"
   until_="$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)"
   body="$(jq -cn --arg id "$id" --arg by "$BY" --arg opened "$(now_iso)" --arg until "$until_" \
                  --arg reason "$reason" --arg node "$node" --arg note "$note" --arg alerts "$alerts" \
@@ -106,21 +109,26 @@ cmd_open() {
 }
 
 cmd_close() {
-  local id="" node="" all=0
+  local id="" node="" by="" all=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --id) id="${2:-}"; shift 2 ;;
       --node) node="${2:-}"; shift 2 ;;
+      --by) by="${2:-}"; shift 2 ;;
       --all) all=1; shift ;;
       *) usage ;;
     esac
   done
+  # --by narrows a --node close to ONE writer's records: a tool closes what it opened, never a
+  # seat's window on the same node (node-maintenance.sh, 2026-09-22: it removed the seat's
+  # admitting window at the end of every sync).
   local keys
   keys="$(kubectl -n "$NS" get cm "$CM" -o json 2>/dev/null \
-    | jq -r --arg id "$id" --arg node "$node" --argjson all "$all" '
+    | jq -r --arg id "$id" --arg node "$node" --arg by "$by" --argjson all "$all" '
         (.data // {}) | to_entries[]
         | . as $e | ($e.value | fromjson?) // empty
-        | select($all == 1 or ($id != "" and .id == $id) or ($node != "" and .node == $node))
+        | select($all == 1 or ($id != "" and .id == $id)
+                 or ($node != "" and .node == $node and ($by == "" or .by == $by)))
         | $e.key' 2>/dev/null || true)"
   [ -n "$keys" ] || { printf 'no matching window to close\n'; return 0; }
   local k n=0
@@ -133,6 +141,19 @@ cmd_close() {
   printf '✓ closed %d window(s)\n' "$n"
 }
 
+cmd_has() {
+  local node="" by=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --node) node="${2:-}"; shift 2 ;;
+      --by) by="${2:-}"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$node" ] && [ -n "$by" ] || die "has needs --node and --by"
+  live_windows | jq -e --arg n "$node" --arg b "$by" 'any(.[]; .node == $n and .by == $b)' >/dev/null
+}
+
 cmd_list() {
   local live
   live="$(live_windows)"
@@ -143,6 +164,7 @@ cmd_list() {
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
   close) shift; cmd_close "$@" ;;
+  has)   shift; cmd_has "$@" ;;
   list)  shift; cmd_list "$@" ;;
   *) usage ;;
 esac
