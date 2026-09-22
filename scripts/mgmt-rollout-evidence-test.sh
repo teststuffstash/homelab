@@ -19,6 +19,7 @@ case "$a" in
   "get node "*)                          [ -f "$F/node-fail" ] && exit 1; cat "$F/node.json" ;;
   *"get replicas.longhorn.io"*)          [ -f "$F/lh-fail" ] && exit 1; cat "$F/reps.json" ;;
   *"get volumes.longhorn.io"*)           [ -f "$F/lh-fail" ] && exit 1; cat "$F/vols.json" ;;
+  *"-l longhorn.io/component=instance-manager"*) [ -f "$F/im-fail" ] && exit 1; cat "$F/im.json" 2>/dev/null || echo '{"items":[]}' ;;
   *"get pod kube-apiserver-"*)           cat "$F/apiserver.json" ;;
   "--server "*"get --raw /readyz")       cat "$F/readyz" ;;
   "get pods -A --field-selector "*)      [ -f "$F/pods-fail" ] && exit 1; cat "$F/pods.json" ;;
@@ -145,6 +146,14 @@ reset; replica n1 running "$AFTER" pvc-a healthy; replica other running "$AFTER"
 case_ longhorn-rebuilt 0 longhorn 'pvc-a'
 reset; replica n1 running "$BEFORE" pvc-a healthy
 case_ longhorn-not-since 1 longhorn 'NOT YET'
+reset; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$AFTER\"}}]}" >"$F/im.json"
+case_ longhorn-reused-under-new-im 0 longhorn 'instance-manager started since'
+reset; replica n1 running "$BEFORE" pvc-a healthy; echo "{\"items\":[{\"status\":{\"startTime\":\"$BEFORE\"}}]}" >"$F/im.json"
+case_ longhorn-reused-under-old-im 1 longhorn 'NOT YET'
+reset; replica n1 running "$BEFORE" pvc-a healthy; touch "$F/im-fail"
+case_ longhorn-im-unreadable-falls-back 1 longhorn 'NOT YET'
+reset; replica n1 running "$BEFORE" pvc-a degraded; echo "{\"items\":[{\"status\":{\"startTime\":\"$AFTER\"}}]}" >"$F/im.json"
+case_ longhorn-new-im-degraded-volume 1 longhorn 'NOT YET'
 reset; replica n1 running "$AFTER" pvc-a degraded; replica n1 stopped "$AFTER" pvc-c healthy
 case_ longhorn-degraded-or-stopped 1 longhorn 'NOT YET'
 reset; touch "$F/lh-fail"; pod web-1 ReplicaSet "$AFTER" True
