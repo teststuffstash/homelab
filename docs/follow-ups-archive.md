@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-243** *(archived 2026-09-22)* — **Three control planes behind the Talos VIP (ADR-133/-136).**
+  cp-01, cp-02, wk-metal-02: three etcd members, the `cluster_endpoint` on the `.50` VIP, all three
+  at v1.13.10 (live-verified 2026-09-22; operator: "three-cp program is done"). Doc survives:
+  [`controlplane-ha.md`](controlplane-ha.md). Enables: CPs as a reconciler question (ADR-132 layer 3).
 - **FU-242** *(archived 2026-09-21)* — **Spike: tofu-controller as the box's substrate — NO, keep
   hand-rolling.** Run on throwaway VM 9420 on nx-02 (deleted). Fails Q1 (runner tofu 1.12.1 vs pin,
   `upgradeOnInit` ignores the lock), Q2 (`backendConfig.disable` breaks saved plans), Q3 (in-repo

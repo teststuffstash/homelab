@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-273** (2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-275** (2026-09-22: FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -211,6 +211,13 @@ six OVERSIZE items pointer-ized into
       **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
       to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
       and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
+- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
+      tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
+      2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
+      that TTL nearly filled it (720h left over from FU-196 v0; #1870 set 168h + 150Gi). Serve
+      first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
+      third-party images only. **Next:** per-repo keep-sets + quota there first (FU-203: 48Gi cap,
+      only oracle-fleet has a policy), then dual-publish → pin flip per image. Relates FU-196, FU-203.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -388,14 +395,15 @@ six OVERSIZE items pointer-ized into
       diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
       `dependencyDashboard: false` by ruling 2026-08-18 (liveness = the exporter gauge ONLY).
       This item closes when that Goal launches and validates. Relates FU-046, FU-097, FU-016.
-- [ ] **FU-097** — **Write the per-surface ruling table** for the surfaces ArgoCD/tofu don't
-      reconcile (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
-      human-applied + a named drift belt. Inputs: `ROADMAP.md` §Deploy paths, the per-root split
-      in [`dependency-upgrades.md`](dependency-upgrades.md), the R12 build order it precedes
-      (ADR-129). **2026-09-13 (operator): the first rows are ruled** — OPNsense / CPs / Proxmox
-      host stay human until the CARP pair + third CP exist; the main root's raw-k8s residue is the
-      box's test surface; `provisioning` the canary — [`management-box.md`](management-box.md)
-      §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
+- [ ] **FU-097** — **The box's capability ledger** (was: the per-surface ruling table). **Reshaped
+      2026-09-22 (operator):** per surface, record what the box has been TESTED doing on its own
+      (date + evidence) and its auto-apply TOGGLE. No codeowner column. On box-applied surfaces the
+      codeowner read becomes an **intent review**, a new reviewer instruction: does the plan +
+      install-impact line do what the issue asked, given what the fleet and the box already run?
+      Anchors (2026-09-13): router/CPs/Proxmox stay human; the raw-k8s residue belongs to the box; `provisioning` = canary.
+      The human `mgmt-tf apply` before a Talos config change is INTERIM. The first toggle, after the
+      wk-03 canary + rollback (FU-033), = `talos_machine_configuration_apply` for `reconcile: auto` nodes.
+      **Next:** the ledger section in [`management-box.md`](management-box.md) + the instruction. Relates FU-012, FU-235.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
@@ -413,17 +421,6 @@ six OVERSIZE items pointer-ized into
       guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
       second seed at the first reason to distinguish them; until then the DR step is written down
       in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
-- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
-      **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
-      wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
-      `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
-      STATE-partition wipe that §CP5 could not reach, cp-02's missing BGP neighbour, `mgmt-tf state`).
-      ⛔ The `cluster_endpoint` cutover is still reverted. **Next:** (a) flip `cluster_endpoint` to
-      the `.50` VIP — token-neutral now the issuer is pinned, and it does not restart the apiserver
-      (§CP4 phase 3) — then re-render the client configs or the jail and the box keep dialling `.51`
-      (FU-259); (b) `cp-upgrade` ×3, cp-01 still trails at v1.13.2. Relates FU-235, FU-258, FU-262.
-
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
@@ -1362,6 +1359,14 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
+- [ ] **FU-273** — **A substrate rollout has no soak and no attribution, so the pressure to roll back
+      wins by default.** **Ruled 2026-09-22 (operator):** default FORWARD, the responder never reverts, and a
+      revert is a human commit backed by a DIFFERENTIAL signal (upgraded nodes worse than not-yet ones,
+      cross-stack, never one stack's fixable CI). The whole rollout takes <1 day; drift from git is a tax. Soak = hours, and it
+      ends on EVIDENCE per canary type (nx-01: one ride + one ARC job passed), not wall time. The
+      rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
+      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Next:** the
+      design in §MB4 (exercise predicates, the repel taint, the differential detector). Relates FU-235, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the

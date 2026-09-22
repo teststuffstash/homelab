@@ -1,6 +1,6 @@
 # Control-plane HA — the endpoint, the VIP, and the issuer riding on it
 
-**Tracked by:** FU-243.
+**Built under:** FU-243 (archived 2026-09-22 — three CPs, the `.50` endpoint, all live).
 
 The mechanism behind [ADR-133](adr.md) (three control planes behind a Talos shared VIP) and
 [ADR-136](adr.md) (freeze the ServiceAccount issuer). Phasing and the fleet-role reasoning live in
