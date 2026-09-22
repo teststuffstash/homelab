@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-248** *(archived 2026-09-22)* — (b) `mgmt-tf apply` takes a plan id only (#1827); (a) the VM-recreate
+  recipe, `-exclude`-shaped, never `-target` a config apply while a VM replace is pending: runbook.md
+  §Recreating a Talos VM (#1893).
 - **FU-238** *(archived 2026-09-22)* — external-provider roots plan READ-ONLY on the box: github (read-only
   PAT + App keys) and cloudflare (`cloudflare-mgmt-read`, verified 2026-09-22 as the box's ONLY Cloudflare
   credential, same hash as the wallet, active to 2027-01-01). The operator's host run exposed a `set -e`

@@ -394,7 +394,9 @@ six OVERSIZE items pointer-ized into
       **First toggle BUILT 2026-09-22:** the loop auto-applies Talos config changes (`no_reboot` only,
       health-gated); `apply_controlplane_config` built OFF, flipped ON 2026-09-22 (operator)
       ([`management-box.md`](management-box.md) §MB3 "Talos config applies").
-      **Next:** the ledger section there + the instruction. Relates FU-012, FU-235.
+      **Ledger section LANDED 2026-09-22 (#1893):** management-box.md §The capability ledger.
+      **Next:** the intent-review instruction in `.agents/review.md` (operator-direct; draft in
+      meta-state). Relates FU-012, FU-235.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
@@ -1285,15 +1287,6 @@ the block needs pruning, not more headings.
       Alerts still fire in Alertmanager/Grafana — only the issue-filing stops. **Next:** after the
       FU-230/FU-231 soak of PR#1733's four legs, delete the filter (one revert) and watch
       `responder_triage_sessions_today` for a day. Relates FU-230, FU-231, ADR-122.
-- [ ] **FU-248** — **`mgmt-tf apply` must apply a PLANNED command; VM recreates are `-exclude`-shaped.**
-      2026-09-16: a `-target` apply for wk-03's config pulled the whole VM resource (dependency at
-      resource granularity) and replaced wk-01/02/04 — [`docs/incidents/2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
-      **Next:** (a) runbook recipe — recreate = `apply -exclude=<every other VM> -exclude=talos_machine_configuration_apply.metal
-      -exclude=kubernetes_node_taint.ephemeral`, then the fresh node's config via `tofu console` +
-      `talosctl apply-config --insecure` (the `-replace` beside `-exclude` is ignored silently);
-      (b) LANDED 2026-09-21 (#1827): `apply` takes a plan id only; scope rides inside the plan, the
-      baseline stamp reads the plan's `.meta` (management-box.md §MB3). Still open: (a).
-      Relates FU-246, FU-235.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
       2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
