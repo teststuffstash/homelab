@@ -452,9 +452,11 @@ Each tick, for the `auto` nodes only:
   door, not a lock (`open` is a blind merge patch; an undeclared drain is invisible to it): the hard
   serialization stays the verb's live WIP 1.
 - **One attempt per declared target** (`version/schematic`). The verb's exit 2 is a refusal with nothing
-  touched → `pending`, retried next tick. Exit 4 is a declared path no retry can pass — a downgrade or a
-  skipped minor — → `parked` at once: Talos backs out only by `talosctl rollback` or a reinstall, so
-  "revert the declaration" is NOT a rollback the reconciler can execute. Any other failure, a zero exit that leaves the diff non-zero, or
+  touched → `pending`, retried next tick. Exit 4 is a declared path no retry can pass — a cross-minor downgrade or a
+  skipped minor — → `parked` at once: across a minor Talos backs out only by `talosctl rollback` or a
+  reinstall. **Within a minor, reverting the declaration IS a rollback** (2026-09-22): the verb allows
+  a patch downgrade, and Talos's older installer refuses on its own, before touching disk, if the
+  running config holds a document it does not know. Any other failure, a zero exit that leaves the diff non-zero, or
   a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried; a
   new declared key, or the diff reaching zero by other means, clears it. By hand: `rm
   /var/lib/mgmt/reconcile/state.json` once the node is whole.

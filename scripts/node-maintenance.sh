@@ -323,6 +323,10 @@ DECLARED_ALERTS="${DECLARED_ALERTS:-KubeDaemonSetRolloutStuck,KubeDaemonSetMisSc
 
 declare_open() {
   [ "$SILENCE" = 1 ] || return 0
+  # Idempotent, like silence_open: `upgrade` declares in settle() and again before the drain, and
+  # every call used to append a record (two per sync, 2026-09-22).
+  bash "$(dirname "$0")/../agents/seat-window.sh" has --node "$NODE" --by node-maintenance.sh 2>/dev/null \
+    && { log "declared window for $NODE already open"; return 0; }
   SEAT_WINDOW_BY="node-maintenance.sh" SEAT_WINDOW_HOURS="$SILENCE_HOURS" \
     bash "$(dirname "$0")/../agents/seat-window.sh" open \
       --reason "node-maintenance window on $NODE — planned cordon/drain/shutdown" \
@@ -333,7 +337,9 @@ declare_open() {
 
 declare_close() {
   [ "$SILENCE" = 1 ] || return 0
-  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" \
+  # Only OUR records (--by): a seat's window on the same node — the reconciler's admitting window
+  # above all — is the seat's to close.
+  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" --by node-maintenance.sh \
     || warn "could not close the declared window — it self-expires at its \`until\` (${SILENCE_HOURS}h)"
 }
 
@@ -815,9 +821,18 @@ assert_upgrade_sane() {
   [ -n "$from" ] || { fail "cannot read $NODE's running Talos version"; return 1; }
   [ "$from" = "$to" ] && { warn "$NODE already runs $to — the upgrade will reinstall the same version"; }
   fmin="$(vminor "$from")"; tmin="$(vminor "$to")"
-  # Refuse a downgrade outright: Talos has no downgrade path.
+  # A downgrade WITHIN a minor is allowed (operator, 2026-09-22 — the rollback drill): Talos has no
+  # version-order refusal; the older installer validates the running machine config and fails
+  # BEFORE touching disk if it holds a document it does not know (siderolabs/talos
+  # internal/integration/cli/upgrade.go, TestIncompatibleMachineConfig). So "revert the
+  # declaration" is a real rollback for a patch. ACROSS a minor it is refused: configs migrate
+  # forward only — back out with `talosctl rollback` while the previous install is still on the
+  # other slot, else a reinstall.
   if [ "$(printf '%s\n%s\n' "${from#v}" "${to#v}" | sort -V | tail -1)" = "${from#v}" ] && [ "$from" != "$to" ]; then
-    fail "$to is OLDER than $from — Talos does not downgrade (back out with \`talosctl rollback\` while the previous install is still on the other slot, else a reinstall)"; return 4
+    if [ "$fmin" != "$tmin" ]; then
+      fail "$to is an OLDER MINOR than $from — no cross-minor downgrade (\`talosctl rollback\` while the previous install is on the other slot, else a reinstall)"; return 4
+    fi
+    warn "$from -> $to is a PATCH DOWNGRADE within $fmin — allowed; Talos refuses it itself if the running config needs the newer release"
   fi
   # One minor at a time: config migrations are only tested between adjacent minors.
   if [ "$fmin" != "$tmin" ]; then
@@ -1017,9 +1032,9 @@ upgrade() {
     assert_fleet_floor || return 2
     assert_cnpg_floor  || return 2
   fi
-  # NOT FORCE-able either: a downgrade is impossible, a skipped minor is untested config
+  # NOT FORCE-able either: a cross-minor downgrade is impossible, a skipped minor is untested config
   # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot".
-  # Exit 4 = the declared path itself is impossible (downgrade, skipped minor): no retry can pass it,
+  # Exit 4 = the declared path itself is impossible (cross-minor downgrade, skipped minor): no retry can pass it,
   # so an unattended caller parks instead of re-trying a refusal (mgmt-reconcile.sh). Exit 2 = a
   # refusal that a later tick can pass (the FU-033 gate once the patch lands, the floors).
   if [ -n "$version" ]; then local sr=0; assert_upgrade_sane "$version" || sr=$?
