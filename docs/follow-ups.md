@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-276** (2026-09-22: FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-277** (2026-09-22: FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1372,6 +1372,14 @@ the block needs pruning, not more headings.
       differential BUILT** (`mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`); **orchestration BUILT**
       ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) ; the
       switch `reconcile_rollout.enabled` ON 2026-09-22. **Next:** the first box-run rollout (Talos v1.14.1). Relates FU-235, G-D.
+- [ ] **FU-276** — **The reconciler's failure paths, as nx-01 showed them (first box-run rollout, 2026-09-22).**
+      (a) A park clears when the VERSION diff reaches zero, but nx-01's verb had failed on node HEALTH
+      (hung cilium-agent, no pod network): it was counted done at 11:44 while broken. Clearing a park
+      needs the verb's own post-checks, not the version alone. (b) A verb exiting 1 after the reboot
+      leaves its declared window open until it expires (it blocked the next tick). (c) Talos drops
+      the upgrade fallback after a good boot (`removing fallback entry`), so `talosctl rollback` has
+      a short window; the rollback text in §MB4 should say so. **Next:** (a)+(b) in
+      `scripts/mgmt-reconcile.sh` / `node-maintenance.sh`, (c) one doc line. Relates FU-273, FU-267.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
