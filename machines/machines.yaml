@@ -144,7 +144,8 @@
 #   a commit, merged, then the box's next pull; the first rollout starts on the next declared bump.
 # `pilot` absent = every auto node (the reconciler's original semantics, which its tests pin).
 reconcile_rollout:
-  enabled: false
+  enabled: true    # FLIPPED 2026-09-22 (operator: "let it do everything" — a Talos version bump is one
+                   # atomic commit; the box applies it and this rolls the fleet, CPs included)
   pilot: [wk-03]
 
 machines:

@@ -142,10 +142,12 @@ apply_case() {  # <name> <expected: allowed | outside | rule-name> <policy> <res
 }
 POL_CP="$T/policy-cp-true.yaml"
 _yq '.roots.main.apply_controlplane_config = true' "$POL" >"$POL_CP"
-# the committed default: CP config applies stay human until the operator flips the toggle
+POL_NOCP="$T/policy-cp-false.yaml"   # the toggle OFF, explicitly — the committed value no longer is
+_yq '.roots.main.apply_controlplane_config = false' "$POL" >"$POL_NOCP"
+# the committed value: the operator flipped the toggle ON 2026-09-22 (CP config applies are the box's)
 got="$(mgmt_policy_get "$POL" '.roots.main.apply_controlplane_config')"
-if [ "$got" = false ]; then pass=$((pass+1)); echo "PASS apply:toggle-default (apply_controlplane_config=false)"
-else fail=$((fail+1)); echo "FAIL apply:toggle-default — committed apply_controlplane_config is '$got', want false"; fi
+if [ "$got" = true ]; then pass=$((pass+1)); echo "PASS apply:toggle-committed (apply_controlplane_config=true)"
+else fail=$((fail+1)); echo "FAIL apply:toggle-committed — committed apply_controlplane_config is '$got', want true (operator 2026-09-22)"; fi
 W_NR="$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' '"no_reboot"')"
 apply_case worker-no-reboot     allowed            "$POL"    "[$W_NR]"
 apply_case metal-worker-no-reboot allowed          "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["update"]' '"no_reboot"')]"
@@ -155,13 +157,13 @@ apply_case worker-auto          talos-apply-mode   "$POL"    "[$(talos_rc talos_
 apply_case worker-reboot        talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' '"reboot"')]"
 apply_case worker-mode-absent   talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' absent)]"
 apply_case worker-mode-unknown  talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' unknown)]"
-apply_case cp-toggle-false      talos-controlplane "$POL"    "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
-apply_case metal-cp-toggle-false talos-controlplane "$POL"   "[$(talos_rc talos_machine_configuration_apply.metal wk-metal-02 '["update"]' '"no_reboot"')]"
+apply_case cp-toggle-false      talos-controlplane "$POL_NOCP"    "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
+apply_case metal-cp-toggle-false talos-controlplane "$POL_NOCP"   "[$(talos_rc talos_machine_configuration_apply.metal wk-metal-02 '["update"]' '"no_reboot"')]"
 apply_case cp-toggle-true       allowed            "$POL_CP" "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
 # the toggle never waives the rest of the precondition
 apply_case cp-toggle-true-auto  talos-apply-mode   "$POL_CP" "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"auto"')]"
 # one bad apple refuses the whole root (a worker passes, the CP beside it does not)
-apply_case worker-plus-cp       talos-controlplane "$POL"    "[$W_NR, $(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
+apply_case worker-plus-cp       talos-controlplane "$POL_NOCP"    "[$W_NR, $(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
 apply_case metal-create         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["create"]' '"no_reboot"')]"
 apply_case metal-delete         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["delete"]' absent)]"
 apply_case node-replace         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["delete","create"]' '"no_reboot"')]"
