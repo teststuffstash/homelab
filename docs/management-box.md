@@ -505,7 +505,7 @@ Each tick, for the `auto` nodes only:
   one diff, used as the trigger and again as the completion condition.
 - **A version or schematic gap** → `node-maintenance.sh upgrade <node>`, run INSIDE the oneshot (the
   unit is the window). Everything the verb already refuses on stays the verb's: preflight, its WIP 1
-  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, Garage `cluster_healthy`,
+  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, Garage `cluster_healthy` and — for a Garage zone node — the resync backlog ≤ `GARAGE_RESYNC_QUEUE_MAX` (1000),
   CNPG instances), the FU-033 gate, the post-install verify. The loop adds WIP 1 across windows it did
   not open — ANY live [declared window](glossary.md) (`agents/seat-window.sh`'s record) refuses the tick,
   the target's own included (the check runs before the verb opens its window, so a window there is a
