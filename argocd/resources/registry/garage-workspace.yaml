@@ -28,7 +28,7 @@
 # WHY 48Gi: the corpus layer is ~10.6 GB and grows; the delta rebuilds the corpus weekly, so
 # successive releases share nothing. 48Gi = two held releases (the served pin + one rollback,
 # ~21 GB) + the 2× commit (~22 GB) + growth. Until the prune half runs (FU-203: the stack untags
-# with its push cred, the Sunday registry-garbage-collect CronJob collects), each unpruned
+# with its push cred, the daily registry-garbage-collect CronJob collects), each unpruned
 # release eats ~10 GB of this. Storage side, read 2026-09-10: every zone holds a full copy at
 # rf=3; each zone is a 150 GiB longhorn-local-xfs volume at ~79 GiB used / ~71 GiB free, and
 # the quotas of all 16 buckets already sum to ~205 GiB against 130 GiB of declared capacity —
