@@ -239,15 +239,13 @@ six OVERSIZE items pointer-ized into
       jail reads its logs.
 
 - [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** — the `…-alertmanager-db`
-      volume (nflog + silences) is a bare emptyDir, no volumeClaimTemplate. Found 2026-08-30: the
-      2026-08-25 17:31Z restart silently wiped both S7 silences (`a3628730` — moot, callers since
-      disabled at source; `5400ed94` — the #698 minutes mute, which let `GithubActionsMinutesHigh`
-      re-fire days early; re-created as `1ac4049c` to 09-01). Why deferred: storage needs a values
-      change + rollout on the monitoring stack, not a quickfix. **Next:** add
-      `alertmanagerSpec.storage` (small Longhorn PVC) in `kube-prometheus-stack.yaml` values, or
-      rule that silences are ephemeral-by-design and belt-worthy mutes must be PrometheusRule
-      changes instead.
-
+      volume (nflog + silences) is a bare emptyDir. Found 2026-08-30 (the 08-25 restart wiped both S7
+      silences; `GithubActionsMinutesHigh` re-fired days early). **Resight 2026-09-22, now a rollout
+      blocker:** a box-run fleet rollout drains EVERY node, so it restarts Alertmanager by construction
+      (wk-04's drain, ~12:46Z) and wipes every open maintenance silence mid-rollout ("no active
+      silences"; 12 PodSigkilled alerts from the reboots then fired unsilenced). **Next:** add
+      `alertmanagerSpec.storage` (small Longhorn PVC) in `kube-prometheus-stack.yaml` values, before
+      the next rollout.
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
