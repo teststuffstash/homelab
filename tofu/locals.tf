@@ -62,7 +62,7 @@ locals {
   # talosconfig` (scripts/client-configs.sh) after, or the jail and the management box keep
   # dialling cp-01 and the whole point of the VIP is lost.
   #
-  # ⚠⚠ local.sa_issuer above does NOT follow this string. That coupling is the outage. Tracked by FU-243.
+  # ⚠⚠ local.sa_issuer above does NOT follow this string. That coupling is the outage (FU-243, archived — the issuer is pinned since).
   cluster_endpoint = "https://${local.cp_vip}:6443"
 
   # Both kinds of control plane: the VM ones in var.nodes and the metal ones flagged in
