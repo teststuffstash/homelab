@@ -38,6 +38,30 @@ import time
 # AST; never a third copy.
 import model_id
 
+# ── THE RAIL VOCABULARY — THE ONE HOME (Goal #1769 acceptance 1) ───────────────────────────────
+# A candidate's rail is whatever `model_id.parse()` says it is. The parser has owned the rule
+# since FU-127; the walk re-derived it anyway as a two-way split
+# (`"subscription" if m.startswith("claude/") else "openrouter"`, three sites), so an
+# `opencode-go/*` candidate classified as OpenRouter and was gated by the OpenRouter KEY's state
+# (`or_gate`) instead of the Go rail's own capacity (`/opencode-limit`). The rule is read from
+# the parser now, at the one place that decides — `route()`'s walk — and the walk's own
+# vocabulary IS the parser's, so `classes.<cls>.rails` and a decision row cannot spell a rail the
+# parser would never produce.
+#
+# `classes.<cls>.rails` is written in this CANONICAL vocabulary. `opencode-zen` is the one member
+# no parse rule produces yet: the `opencode/` prefix is the Zen leg (homelab#445), parked by
+# OPENCODE_RAIL_DISABLED and unmetered — Goal #1769 acceptance 2's `rails:` block declares it
+# `enabled: false`. A class may name it; no candidate can parse onto it, so the walk finds an
+# empty pool and moves on (a rail with no candidates is not a rail with a wrong answer).
+RAIL_OPENCODE_ZEN = "opencode-zen"
+RAILS = (model_id.RAIL_SUBSCRIPTION, model_id.RAIL_OPENCODE_GO, model_id.RAIL_OPENROUTER,
+         RAIL_OPENCODE_ZEN)
+# ONE-RELEASE alias for the pre-Goal-#1769 spelling. Applied once at load and logged once
+# (below), so a class file still carrying `subscription` means the canonical rail instead of
+# meaning NOTHING (which is what an unaliased unknown name would be — an empty pool, silently).
+# Deleted next release, with the alias row.
+RAIL_ALIASES = {"subscription": model_id.RAIL_SUBSCRIPTION}
+
 # ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
 # These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
 # pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
@@ -269,6 +293,10 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
         except (OSError, ValueError) as e:
             _log(f"model-classes load failed ({classes_path}): {e} — defaults only")
             _classes = {}
+        # The ONE-RELEASE rail alias (Goal #1769 acceptance 1): a file still spelling the old
+        # rail name loads, logged once per class that needed it. Runs HERE, at the load, so
+        # nothing downstream ever reads the old vocabulary.
+        _alias_rails()
     _log(f"store={'persistent' if _persistent else 'ephemeral'} "
          f"classes={'loaded' if _classes else 'defaults'}")
     return _persistent
@@ -276,6 +304,25 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
 
 def classes() -> dict:
     return _classes
+
+
+def _alias_rails() -> int:
+    """Rewrite every `classes.<cls>.rails` entry onto the canonical vocabulary, in place.
+    Returns how many classes needed it (0 = the file is already canonical), so a stale file is
+    VISIBLE in the router's own log rather than silently meaning nothing. This is the whole
+    one-release alias — deleted next release, with RAIL_ALIASES."""
+    n = 0
+    for cls, cinfo in (_classes.get("classes") or {}).items():
+        if not isinstance(cinfo, dict) or not isinstance(cinfo.get("rails"), list):
+            continue
+        given = [str(r) for r in cinfo["rails"]]
+        fixed = [RAIL_ALIASES.get(r, r) for r in given]
+        if fixed != given:
+            cinfo["rails"] = fixed
+            _log(f"model-classes: class {cls} rails {given} → {fixed} "
+                 "(one-release rail alias; update the file to the canonical names)")
+            n += 1
+    return n
 
 
 def tier_threshold(tier: str | None, default: float) -> float:
@@ -419,8 +466,13 @@ def _ladder_cfg() -> dict:
 def ladder_tier(model: str, rail: str, price: float | None) -> int:
     """Which RUNG a candidate sits on. Rail decides the subscription rung (it is the rail that is
     already paid for, whatever the model id); on the OpenRouter rail a $0 price is the free rung
-    and everything else is the paid one."""
-    if rail == "subscription":
+    and everything else is the paid one.
+
+    BOTH subscription rails land on rung 1: `anthropic-subscription` and `opencode-go` are each a
+    flat-fee plan whose marginal cost per ride is ~0 (the Go rail's window DRAW is a budget
+    meter, not a per-request price — gometer). The rung is named `subscription` in LADDER; the
+    RAIL names are the canonical ones (Goal #1769 acceptance 1)."""
+    if rail in (model_id.RAIL_SUBSCRIPTION, model_id.RAIL_OPENCODE_GO):
         return 1
     if str(model).endswith(":free") or price == 0.0:
         return 0
@@ -491,7 +543,7 @@ def fold_outcome_into_cell(d: dict, striked: bool) -> dict | None:
         return None
     cls, urgency = cell
     model = str(d.get("model") or "")
-    rail = "subscription" if model.startswith("claude/") else "openrouter"
+    rail = model_id.parse(model)["rail"]
     used = ladder_tier(model, rail, 0.0 if model.endswith(":free") else None)
     st = cell_state(cls, urgency)
     start, clean, degraded = st["start_tier"], st["clean"], st["degraded"]
@@ -1263,7 +1315,7 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
 
 
 def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
-                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick,
+                   cool: dict, ctx: dict, sub_gate, or_gate, go_gate, jitter: float, pick,
                    excl: dict | None = None) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
@@ -1298,12 +1350,20 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     def _rung(model: str, rail: str) -> dict:
         blocked = None
         price = basis = None
-        if rail == "subscription":
+        if rail == model_id.RAIL_SUBSCRIPTION:
             ok, reason, _retry = sub_gate()
             if ok:
                 price, basis = 0.0, "subscription"
             else:
                 blocked = reason or "subscription-limited"
+        elif rail == model_id.RAIL_OPENCODE_GO:
+            # Goal #1769 acceptance 1: the Go rung is gated by ITS OWN rail's capacity, never by
+            # the OpenRouter key's state — the same rule the served walk applies (go_gate).
+            ok, reason, _retry = go_gate()
+            if ok:
+                price, basis = 0.0, "opencode-go"
+            else:
+                blocked = f"go:{reason or 'limited'}"
         else:
             ok, reason = or_gate()
             if ok:
@@ -1318,11 +1378,15 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
 
     cands = [_rung(m, rail) for m, rail in eligible]
     sub_model = cfg["subscription_model"]
-    if (not any(c["rail"] == "subscription" for c in cands) and "subscription" in rails
+    if (not any(c["rail"] == model_id.RAIL_SUBSCRIPTION for c in cands)
+            and model_id.RAIL_SUBSCRIPTION in rails
             and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
-        cands.append({**_rung(sub_model, "subscription"), "synthetic": True})
+        # `subscription` here means the ANTHROPIC safety-net rail (the FU-088 gates' subject, and
+        # what the shadow's own `subscription` block reports); a Go candidate is a real chain
+        # entry, never a stand-in.
+        cands.append({**_rung(sub_model, model_id.RAIL_SUBSCRIPTION), "synthetic": True})
     for c in cands:
         c["tier"] = LADDER[c["_t"]]
     choice, walk = None, "none"
@@ -1341,7 +1405,7 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
         choice = pick(band)
         walk = "at-or-above-start" if t >= start else "below-start"
         break
-    sub = next((c for c in cands if c["rail"] == "subscription"), None)
+    sub = next((c for c in cands if c["rail"] == model_id.RAIL_SUBSCRIPTION), None)
     return {
         "urgency": urgency, "urgency_source": usrc,
         "learned_start_tier": LADDER[learned], "start_tier": LADDER[start], "reprobe": reprobe,
@@ -1385,6 +1449,11 @@ def route(payload: dict, ctx: dict) -> dict:
                     ->(usd_per_mtok|None, basis|None, provider|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
               openrouter_ok:  fn(key_ref)->(ok, reason|None),
+              opencode_ok:    fn()->(ok, reason|None, retry_after_s)  — the GO rail's OWN
+                    capacity (the proxy composes it from /opencode-limit: the observed 429/402
+                    latch, the gometer window draw, OPENCODE_MAX_RUNNING and the FU-213 park).
+                    Goal #1769 acceptance 1: a Go candidate is gated by THIS, never by the
+                    OpenRouter key's state.
               pick: fn(list)->item  (optional; defaults to uniform random — the jitter band.
                     Unused under `jitter: false`, where the tie-break is caller/pool order)}
               `price`'s `exclude_providers` is the task's struck provider slugs (Goal #1640
@@ -1396,6 +1465,11 @@ def route(payload: dict, ctx: dict) -> dict:
     → per class-rail-order pick the effective-cheapest with a jitter-band uniform pick → capacity-
     gate the rail → dispatch, or a TYPED defer (capacity reasons and cooldowns carry retry_after;
     only chain-exhausted escalates — M1 doctrine).
+
+    Every RAIL value here is `model_id.parse()`'s (Goal #1769 acceptance 1): a candidate's rail is
+    parsed, `classes.<cls>.rails` is written in the same canonical vocabulary, and the decision
+    row echoes it. `opencode-go` therefore walks as its own rail — gated by `opencode_ok`, skipped
+    with a `go:…` reason — instead of being flattened onto OpenRouter.
 
     ADR-104 (FU-162) adds the DRAW form on top of that walk rather than beside it: `slot` picks
     one model out of the class's pool (`draw_slot`) and hands it to the same filters as a
@@ -1444,7 +1518,7 @@ def route(payload: dict, ctx: dict) -> dict:
         cls = str((_classes.get("role_defaults") or {}).get(role) or "coding")
     cinfo = (_classes.get("classes") or {}).get(cls) or {}
     tier = str(payload.get("tier") or cinfo.get("tier") or "heavy")
-    rails = list(cinfo.get("rails") or ["openrouter", "subscription"])
+    rails = list(cinfo.get("rails") or [model_id.RAIL_OPENROUTER, model_id.RAIL_SUBSCRIPTION])
     chain = [str(m) for m in (payload.get("chain") or [])]
     source = "chain"
     pre_skipped: list[dict] = []
@@ -1513,7 +1587,9 @@ def route(payload: dict, ctx: dict) -> dict:
     # is priced by the provider it lands on AFTER these are excluded (the next cheapest CELL).
     _excl: dict[str, frozenset] = {}
     for m in chain:
-        rail = "subscription" if m.startswith("claude/") else "openrouter"
+        # Goal #1769 acceptance 1: the rail is PARSED, never re-derived here. One reader
+        # (model_id), one rule, and a third rail value that the walk can act on.
+        rail = model_id.parse(m)["rail"]
         # ── #1259: label_map tier_floor/never_free enforcement ──
         # Checked before the main eligibility chain so failing models are skipped early
         # without breaking the elif structure below.
@@ -1574,11 +1650,23 @@ def route(payload: dict, ctx: dict) -> dict:
             _gate_cache["or"] = ctx["openrouter_ok"](payload.get("key_ref"))
         return _gate_cache["or"]
 
+    def go_gate():
+        """Goal #1769 acceptance 1: the GO rail's own capacity, beside sub_gate/or_gate. Before
+        this, an `opencode-go/*` candidate was flattened onto the OpenRouter rail by the walk's
+        two-way split and gated by `or_gate` — so a Go model was skipped for the OpenRouter KEY's
+        state (budget, a mint that never happened) and a Go outage could never be named as one.
+        The verdict is the proxy's `/opencode-limit` composite: the observed 429/402 latch, the
+        gometer window draw, OPENCODE_MAX_RUNNING and the FU-213 park. Memoized like the other
+        two — one read per route()."""
+        if "go" not in _gate_cache:
+            _gate_cache["go"] = ctx["opencode_ok"]()
+        return _gate_cache["go"]
+
     for rail in rails:
         pool = [m for m, r in eligible if r == rail]
         if not pool:
             continue
-        if rail == "subscription":
+        if rail == model_id.RAIL_SUBSCRIPTION:
             ok, reason, retry = sub_gate()
             if not ok:
                 reason = reason or "subscription-limited"
@@ -1587,6 +1675,18 @@ def route(payload: dict, ctx: dict) -> dict:
                 continue
             result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
                       "basis": "subscription", "provider": None, "jitter_pool": pool[:1]}
+        elif rail == model_id.RAIL_OPENCODE_GO:
+            ok, reason, retry = go_gate()
+            if not ok:
+                # TYPED so a decision row says WHICH rail refused and why: `go:<the /opencode-limit
+                # reason>`. A Go candidate is never skipped with an `openrouter:…` reason — that
+                # flattening is the defect this acceptance ends.
+                reason = f"go:{reason or 'limited'}"
+                capacity_block = capacity_block or {"reason": reason, "retry_after_s": retry}
+                skipped += [{"model": m, "reason": reason} for m in pool]
+                continue
+            result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
+                      "basis": "opencode-go", "provider": None, "jitter_pool": pool[:1]}
         else:
             ok, reason = or_gate()
             if not ok:
@@ -1681,14 +1781,15 @@ def route(payload: dict, ctx: dict) -> dict:
         # arm table too ("slot 4 deferred, cooldown" is evidence; a blank is not).
         decision.update({k: v for k, v in drawn.items() if k in ("pool", "pool_version", "slot")})
     # FU-127: the structured carrier — consumers read `.decision.resolved` instead of re-parsing
-    # the model string. Present on dispatch, absent on defer (no model to resolve). The rail in
-    # resolved uses the canonical vocabulary (anthropic-subscription, openrouter, opencode-go)
-    # while decision.rail uses the route's internal vocabulary (subscription, openrouter).
+    # the model string. Present on dispatch, absent on defer (no model to resolve). Goal #1769
+    # acceptance 1: `resolved.rail` and `decision.rail` are now the SAME canonical vocabulary
+    # (anthropic-subscription, opencode-go, openrouter) — the walk's rail IS the parser's, so
+    # there is no second spelling left to translate between.
     if result:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
-                            sub_gate, or_gate, jitter, pick_fn, _excl)
+                            sub_gate, or_gate, go_gate, jitter, pick_fn, _excl)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
     # point of the shadow line). Present on dispatch, absent on defer.
@@ -2614,6 +2715,9 @@ def self_test() -> int:
                  else (*_BASE_PRICES.get(m, (None, None)), None),
         "subscription_ok": lambda tier: (True, None, 0),
         "openrouter_ok": lambda ref: (True, None),
+        # Goal #1769 acceptance 1: the Go rail's own gate, beside the other two. Open by default
+        # here; the rows below close it and assert the Go reason.
+        "opencode_ok": lambda: (True, None, 0),
         "pick": lambda band: band[0],  # deterministic for the test
     }
     CHAIN = ["inclusionai/ling-3.0-flash:free", "deepseek/deepseek-v4-flash", "tencent/hy3",
@@ -2633,14 +2737,91 @@ def self_test() -> int:
         f"resolved shape (openrouter bare): {d.get('resolved')}"
     # subscription rail: claude/ prefix → anthropic-subscription, harness claude
     _sub = route(dict(base, chain=["claude/haiku"]), CTX)
-    assert _sub["decision"] == "dispatch" and _sub["rail"] == "subscription", _sub
+    assert _sub["decision"] == "dispatch" and _sub["rail"] == "anthropic-subscription", _sub
     assert _sub.get("resolved") == {"rail": "anthropic-subscription", "harness": "claude", "model": "haiku"}, \
         f"resolved shape (subscription): {_sub.get('resolved')}"
-    # opencode-go rail: prefix kept, harness claude
+    # opencode-go rail: the walk parses a THIRD rail value now (Goal #1769 acceptance 1). A class
+    # whose `rails` does not name it skips the candidate BY RAIL — typed and visible, never
+    # silently flattened onto OpenRouter (which is what the two-way split did, and why a Go
+    # candidate used to be gated by the OpenRouter KEY's state).
+    _go_noclass = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
+    assert _go_noclass["decision"] == "defer" and _go_noclass["reason"] == "chain-exhausted", \
+        _go_noclass
+    assert {"model": "opencode-go/deepseek-v4-flash",
+            "reason": "rail-opencode-go-not-in-class-coding"} in _go_noclass["skipped"], \
+        _go_noclass["skipped"]
+    # ── Goal #1769 acceptance 1: THREE-WAY RAIL, from model_id.parse(), at the walk ──
+    # The walk derived the rail with a two-way split before this
+    # (`"subscription" if m.startswith("claude/") else "openrouter"`), so `opencode-go/*`
+    # classified as OpenRouter and was gated by the OpenRouter key's state instead of the Go
+    # rail's own capacity. Every rail value below is one model_id.parse() produced, and a decision
+    # row echoes the CANONICAL name — the same vocabulary `resolved.rail` uses.
+    _saved_rails = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
     _go = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
-    assert _go["decision"] == "dispatch" and _go["rail"] == "openrouter", _go
-    assert _go.get("resolved") == {"rail": "opencode-go", "harness": "claude", "model": "opencode-go/deepseek-v4-flash"}, \
+    assert _go["decision"] == "dispatch" and _go["rail"] == "opencode-go", _go
+    assert _go["model"] == "opencode-go/deepseek-v4-flash" and _go["basis"] == "opencode-go", _go
+    assert _go["price_per_mtok"] is None, "a subscription-rail pick carries no per-token price"
+    assert _go.get("resolved") == {"rail": "opencode-go", "harness": "claude",
+                                   "model": "opencode-go/deepseek-v4-flash"}, \
         f"resolved shape (opencode-go): {_go.get('resolved')}"
+    assert _go["rail"] == _go["resolved"]["rail"], \
+        "decision.rail and resolved.rail are ONE vocabulary now (acceptance 1)"
+    # Go gate CLOSED ⇒ the Go candidate is skipped with a GO reason, and an OpenRouter sibling
+    # still serves: a Go outage is never an OpenRouter-key verdict, and it never takes the
+    # OpenRouter rail down with it.
+    _go_closed = {**CTX, "opencode_ok": lambda: (False, "observed-429", 900)}
+    _go_lim = route(dict(base, chain=["opencode-go/deepseek-v4-flash", "tencent/hy3"]),
+                    _go_closed)
+    assert _go_lim["decision"] == "dispatch" and _go_lim["rail"] == "openrouter", _go_lim
+    assert _go_lim["model"] == "tencent/hy3", _go_lim
+    assert {"model": "opencode-go/deepseek-v4-flash", "reason": "go:observed-429"} \
+        in _go_lim["skipped"], _go_lim["skipped"]
+    assert not any(str(s.get("reason", "")).startswith("openrouter") for s in _go_lim["skipped"]), \
+        f"a Go candidate must never be skipped for an OpenRouter reason: {_go_lim['skipped']}"
+    # …and with ONLY the Go candidate the defer is typed with the Go reason AND its retry_after
+    # (the capacity-class defer shape: retryable, not the escalating chain-exhausted).
+    _go_def = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), _go_closed)
+    assert _go_def["decision"] == "defer" and _go_def["reason"] == "go:observed-429", _go_def
+    assert _go_def["retry_after_s"] == 900, _go_def
+    assert _go_def.get("resolved") is None, "defer carries no resolved model"
+    # …and the SHADOW ladder reads the same gate: the Go rung is blocked with the Go reason,
+    # never priced as if the rail were open (the two halves of the walk cannot disagree about
+    # whether the Go rail is up).
+    _go_shadow = next(c for c in _go_def["shadow"]["candidates"] if c["rail"] == "opencode-go")
+    assert _go_shadow["blocked"] == "go:observed-429", _go_shadow
+    # …and the OpenRouter KEY's state is NOT consulted for a Go candidate: an exhausted
+    # OpenRouter budget leaves the Go rail serving (the inverse of the pre-fix behaviour, where
+    # exactly this input decided the Go candidate's fate).
+    _or_closed = {**CTX, "openrouter_ok": lambda ref: (False, "openrouter-budget-exhausted")}
+    _go_or = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), _or_closed)
+    assert _go_or["decision"] == "dispatch" and _go_or["rail"] == "opencode-go", _go_or
+    # the walk's OWN vocabulary is the parser's: every rail a class may name is one the parser
+    # produces (or the one declared member no parse rule produces yet — the parked Zen leg)
+    assert _classes["classes"]["coding"]["rails"] == ["opencode-go", "openrouter"]
+    _classes["classes"]["coding"]["rails"] = _saved_rails
+    # the THREE-WAY parse itself, per candidate class — the rule this block reads, not re-states
+    for _mid, _want in (("claude/haiku", "anthropic-subscription"),
+                        ("opencode-go/deepseek-v4-flash", "opencode-go"),
+                        ("deepseek/deepseek-v4-flash", "openrouter"),
+                        ("openrouter/owl-alpha", "openrouter")):
+        assert model_id.parse(_mid)["rail"] == _want, (_mid, model_id.parse(_mid))
+    # ── the ONE-RELEASE alias (acceptance 1): the OLD rail name still loads ──
+    # `subscription` meant the Anthropic rail before the canonical vocabulary; a class file still
+    # spelling it must resolve to the canonical name (and the decision row must echo the CANONICAL
+    # one), not to an empty pool that silently never serves.
+    assert _alias_rails() == 0, \
+        "the shipped model-classes.json is already canonical — the alias must be a no-op there"
+    _classes["classes"]["coding"]["rails"] = ["subscription"]
+    assert _alias_rails() == 1, "the old `subscription` rail name must alias, once"
+    assert _classes["classes"]["coding"]["rails"] == ["anthropic-subscription"], \
+        _classes["classes"]["coding"]["rails"]
+    _alias_route = route(dict(base, chain=["claude/haiku"]), CTX)
+    assert _alias_route["decision"] == "dispatch" \
+        and _alias_route["rail"] == "anthropic-subscription", _alias_route
+    # idempotent: a second load of the same file changes nothing and logs nothing
+    assert _alias_rails() == 0, "the alias is idempotent — a canonical list is left alone"
+    _classes["classes"]["coding"]["rails"] = _saved_rails
     # cloaked openrouter/<codename>: prefix KEPT, model is the full id
     _cloak = route(dict(base, chain=["openrouter/owl-alpha"]), CTX)
     assert _cloak["decision"] == "dispatch" and _cloak["rail"] == "openrouter", _cloak
@@ -3061,7 +3242,9 @@ def self_test() -> int:
     sh = dsh["shadow"]
     assert (sh["urgency"], sh["urgency_source"]) == ("tight", "default"), sh
     assert sh["start_tier"] == "subscription" and sh["learned_start_tier"] == "free", sh
-    assert (sh["model"], sh["rail"], sh["ladder_tier"]) == ("claude/haiku", "subscription",
+    # Goal #1769 acceptance 1: the shadow's RAIL is canonical too (the rung it sits on keeps the
+    # ladder's own name — rungs and rails are two vocabularies, and only the rail moved).
+    assert (sh["model"], sh["rail"], sh["ladder_tier"]) == ("claude/haiku", "anthropic-subscription",
                                                             "subscription"), sh
     assert sh["subscription"]["eligible"] and sh["price_per_mtok"] == 0.0, sh
     # elastic takes the learned rung as-is — rung 0, the free model, "tier 1 first"
@@ -3158,7 +3341,7 @@ def self_test() -> int:
         # the ultra band rides the subscription rail, and the class rails let it
         du = route(dict(base, session="t-draw-u", chain=[], slot=1, jitter=False,
                         **{"class": "ultra"}), CTX)
-        assert du["decision"] == "dispatch" and du["rail"] == "subscription", du
+        assert du["decision"] == "dispatch" and du["rail"] == "anthropic-subscription", du
         assert du["model"] == _bands["ultra"][0], du
     # JITTER SUPPRESSED, on the ordinary chain path too: three equally-priced candidates put the
     # tie-break in the open. With the band live, the ctx picker roams it; with `jitter: false` the
@@ -3379,7 +3562,7 @@ def self_test() -> int:
         "first full record wins; measured cache hit = 80/100"
     assert 'router_shadow_start_tier{class="coding",urgency="tight"} 0' in body, \
         "the learned cell must surface as a gauge for the M11 soak"
-    assert 'router_shadow_decisions_total{rail="subscription"' in body, body
+    assert 'router_shadow_decisions_total{rail="anthropic-subscription"' in body, body
     assert 'router_shadow_subscription_blocked_total{reason="subscription-limited:semaphore"} 1' \
         in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
@@ -3402,6 +3585,15 @@ def self_test() -> int:
             if tier.startswith("_"):  # _comment keys are docs, not tiers
                 continue
             assert 0.0 < float(thr) <= 1.0, f"tier {tier} threshold out of range"
+        # Goal #1769 acceptance 1: `classes.<cls>.rails` is written in the CANONICAL rail
+        # vocabulary — every entry is a rail this walk can actually produce (or the declared,
+        # parse-less Zen leg). A typo or a pre-Goal-#1769 spelling that reached the walk would be
+        # an empty pool: a class that silently serves nothing. The alias above covers the old
+        # names at load; this is what makes a NEW wrong name a CI failure instead of a silence.
+        for _c, _ci in (_classes.get("classes") or {}).items():
+            for _r in (_ci.get("rails") or []):
+                assert _r in RAILS, \
+                    f"class {_c} lists rail {_r!r}, which is not in the canonical vocabulary {RAILS}"
         # M11 policy sanity (homelab#159): the two git-owned halves of the ladder.
         umap = _classes.get("urgency_map") or {}
         assert umap, "model-classes.json must carry urgency_map — it is the table BOTH sides read"
@@ -3440,8 +3632,9 @@ def self_test() -> int:
                     assert fam not in fams, f"pool {bname}: family {fam} twice — pools are family-deduped"
                     fams.add(fam)
                     # Same rail rule the walk above applies, so a pool cannot hold a model its
-                    # own class would skip as rail-not-in-class on every single draw.
-                    rail = "subscription" if m.startswith("claude/") else "openrouter"
+                    # own class would skip as rail-not-in-class on every single draw. The rule is
+                    # the PARSER's (Goal #1769 acceptance 1) — never a second copy of it.
+                    rail = model_id.parse(m)["rail"]
                     for c in selectors:
                         assert rail in (all_classes[c].get("rails") or []), \
                             f"pool {bname}: {m} rides {rail}, absent from class {c} rails"
