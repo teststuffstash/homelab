@@ -395,6 +395,38 @@ reboot, and verifies both version and schematic after rejoin. A schematic change
 is `image.tf` `talos_image_factory_schematic.metal` (iscsi-tools + util-linux-tools, no
 qemu-guest-agent — the latter hung the boot on bare metal).
 
+### Recreating a Talos VM (a tofu replace) — `-exclude`-shaped, never `-target`
+
+Rare since nocloud VMs upgrade in place (§Re-imaging above, ADR-014 as amended). When a VM must be
+recreated (a pending `proxmox_virtual_environment_vm` replace — a new seed `file_id`, a disk
+change), do it one VM at a time, and **apply exactly the plan you read**: `mgmt-tf apply` takes a
+plan id only (#1827), so the scope rides inside the plan.
+
+1. **Read placement first** — Longhorn replicas and CNPG instances on the VM (the
+   `node-maintenance.sh preflight <vm>` output), and the hypervisor's thin pool
+   (`pve_lvm_thin_pool_data_percent`, §Reclaiming thin-pool space below). Open a window
+   (`/maintenance-window`) and drain it (`node-maintenance.sh down <vm>` for a worker).
+2. **Plan with `-exclude` on everything else that has a pending change:** every OTHER VM instance
+   with a pending replace, `talos_machine_configuration_apply.metal`, and
+   `kubernetes_node_taint.ephemeral`:
+   `devbox run mgmt-tf -- plan -exclude='proxmox_virtual_environment_vm.node["wk-01"]' … -exclude=talos_machine_configuration_apply.metal -exclude=kubernetes_node_taint.ephemeral`.
+   The plan must replace ONLY that VM and its dependants; anything else is an abort.
+3. **Never `-target` a config apply while any VM has a pending replace.** `-target` pulls
+   dependencies at RESOURCE granularity: `talos_machine_configuration_apply.node` depends on the
+   whole `proxmox_virtual_environment_vm.node`, so every pending VM replace comes along (three
+   workers were replaced that way on 2026-09-16). `-target` and `-exclude` cannot be combined, and a
+   `-replace` beside `-exclude` is ignored silently.
+4. `MGMT_YES=1 devbox run mgmt-tf -- apply <plan-id>`.
+5. **If the fresh VM sits in maintenance mode** (the config apply did not land): finish it outside
+   the tofu graph. Render its config on the box —
+   `echo 'nonsensitive(data.talos_machine_configuration.node["<vm>"].machine_configuration)' | devbox run mgmt-tf -- console > <scratch>/<vm>.yaml`
+   (0600; strip the console's `<<EOT`/`EOT` lines; never print it: it carries the cluster's keys) — then
+   `talosctl apply-config --insecure -n <ip> -e <ip> -f <scratch>/<vm>.yaml`, then shred the file.
+6. `node-maintenance.sh up <vm>`, then a full `mgmt-tf -- plan`: `No changes`, or only in-place
+   `no_reboot` config updates (the box loop applies those). Close the window.
+
+Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
+
 ### Reclaiming thin-pool space from a Talos VM
 Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
 Nothing in the guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its
