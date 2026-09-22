@@ -62,6 +62,34 @@ RAILS = (model_id.RAIL_SUBSCRIPTION, model_id.RAIL_OPENCODE_GO, model_id.RAIL_OP
 # Deleted next release, with the alias row.
 RAIL_ALIASES = {"subscription": model_id.RAIL_SUBSCRIPTION}
 
+# ── CALLER CAPABILITY — THE RAIL WALK'S OTHER INPUT (Goal #1769 acceptance 4, router half) ─────
+# The 2026-08-26 incident (docs/incidents/2026-08-26-reviewer-404-loop.md) named the gap:
+# "the gate asks 'can the ACCOUNT buy', never 'can the CALLER ride'". The reviewer sends no
+# OpenRouter `key_ref` BY DESIGN, and `review`'s second rail entry — one YAML token — turned
+# "defer + fallback" into a served, dead OpenRouter pick with zero review verdicts for ~6h.
+# FU-188 pinned the reviewer to shadow; this predicate is what makes WIDENING the rail lists safe
+# again, so the pin's shell line (theme 2's deletion) stops being load-bearing.
+#
+# What each rail REQUIRES of the caller, declared per rail. Minimal and in-router here; Goal #1769
+# acceptance 2 externalizes it into model-classes.json's `rails:` block (gate/cost/windows/
+# enabled), which this table then reads.
+#
+#   openrouter                a `key_ref` — the caller's OWN credential. Its absence now means
+#                             "I cannot ride this rail", never "unknown, try anyway".
+#   anthropic-subscription,
+#   opencode-go, opencode-zen the matching CLI surface. Derived from the rail's HARNESS, which
+#                             `model_id.parse()` already owns: a Go ride is executed by the claude
+#                             binary (agent-session.sh rides `opencode-go/*` through the jail
+#                             shim / claude CLI — parser harness "claude"), and the parked Zen leg
+#                             is the one the opencode CLI rides. So the Go rail is rideable by a
+#                             `claude-cli` caller — which is why the reviewer's surface can serve
+#                             a Go model when the Anthropic window is latched.
+RAIL_SURFACE = {
+    model_id.RAIL_SUBSCRIPTION: "claude-cli",
+    model_id.RAIL_OPENCODE_GO: "claude-cli",
+    RAIL_OPENCODE_ZEN: "opencode-cli",
+}
+
 # ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
 # These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
 # pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
@@ -131,7 +159,7 @@ CREATE TABLE IF NOT EXISTS generations(
   cost_usd REAL, latency_ms INTEGER, finish TEXT, generation_ms INTEGER);
 CREATE TABLE IF NOT EXISTS decisions(
   ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
-  model TEXT, reason TEXT, detail TEXT);
+  model TEXT, reason TEXT, detail TEXT, surface TEXT, key_ref TEXT);
 CREATE TABLE IF NOT EXISTS latch_state(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS circuit_events(
   ts REAL, session TEXT, model TEXT, class TEXT, n_4xx INTEGER);
@@ -256,6 +284,18 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                     conn.execute("ALTER TABLE strikes ADD COLUMN error_subclass TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
+                # Goal #1769 acceptance 4 (router half, 2026-09-22): decisions grew the CALLER
+                # facts the walk filtered on — `surface` (what the caller can execute) and
+                # `key_ref` (its OpenRouter credential ref). A `caller:*` skip reason is only
+                # actionable if the row says which surface/credential the decision was made on,
+                # so the facts ride the decision row itself, queryable on /router-status. Same
+                # LAST-column discipline: the CREATE TABLE above carries them and the positional
+                # INSERT in route() stays valid on both layouts.
+                for _dcol in ("surface TEXT", "key_ref TEXT"):
+                    try:
+                        conn.execute(f"ALTER TABLE decisions ADD COLUMN {_dcol}")
+                    except sqlite3.OperationalError:
+                        pass  # duplicate column — schema already current
                 
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
@@ -1316,7 +1356,7 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
 
 def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
                    cool: dict, ctx: dict, sub_gate, or_gate, go_gate, jitter: float, pick,
-                   excl: dict | None = None) -> dict:
+                   excl: dict | None = None, caller_block=None) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
     The would-be pick if the ladder were authoritative: rungs ordered by true marginal cost
@@ -1380,12 +1420,15 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     sub_model = cfg["subscription_model"]
     if (not any(c["rail"] == model_id.RAIL_SUBSCRIPTION for c in cands)
             and model_id.RAIL_SUBSCRIPTION in rails
+            and (caller_block is None or caller_block(model_id.RAIL_SUBSCRIPTION) is None)
             and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
         # `subscription` here means the ANTHROPIC safety-net rail (the FU-088 gates' subject, and
         # what the shadow's own `subscription` block reports); a Go candidate is a real chain
-        # entry, never a stand-in.
+        # entry, never a stand-in. Goal #1769 acceptance 4: the stand-in is a CANDIDATE on a rail
+        # the CALLER must be able to ride, so a caller that cannot (surface mismatch) does not get
+        # a shadow pick it could never serve either.
         cands.append({**_rung(sub_model, model_id.RAIL_SUBSCRIPTION), "synthetic": True})
     for c in cands:
         c["tier"] = LADDER[c["_t"]]
@@ -1444,7 +1487,7 @@ def route(payload: dict, ctx: dict) -> dict:
     """The ADR-096 /route decision core — pure given ctx, so the self-test can drive it.
 
     payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?,
-              urgency?, slot?, jitter?}
+              surface?, urgency?, slot?, jitter?}
     ctx:     {price: fn(model, exclude_providers=frozenset())
                     ->(usd_per_mtok|None, basis|None, provider|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
@@ -1466,6 +1509,17 @@ def route(payload: dict, ctx: dict) -> dict:
     gate the rail → dispatch, or a TYPED defer (capacity reasons and cooldowns carry retry_after;
     only chain-exhausted escalates — M1 doctrine).
 
+    CALLER CAPABILITY (Goal #1769 acceptance 4): `surface` (what the caller can EXECUTE) and
+    `key_ref` (its OpenRouter credential ref) are caller facts, and each rail's requirement
+    (`RAIL_SURFACE`, plus openrouter's `key_ref`) is applied in the ELIGIBILITY loop — BEFORE any
+    capacity gate — so a candidate whose rail the caller cannot ride is skipped with a typed
+    `caller:no-key_ref` / `caller:surface` reason and never consumes a gate probe, and the shadow
+    ladder (which reads the same `eligible` set) cannot pick it either. PERMISSIVE BY CONSTRUCTION:
+    a body that sends NEITHER fact is filtered by nothing — byte-identical to the walk before this
+    change. The filter engages only once a caller has ADOPTED the contract by sending at least one
+    of the two; an un-adopted field must never strand a lane, but a caller that HAS declared its
+    facts is taken at its word.
+
     Every RAIL value here is `model_id.parse()`'s (Goal #1769 acceptance 1): a candidate's rail is
     parsed, `classes.<cls>.rails` is written in the same canonical vocabulary, and the decision
     row echoes it. `opencode-go` therefore walks as its own rail — gated by `opencode_ok`, skipped
@@ -1484,6 +1538,12 @@ def route(payload: dict, ctx: dict) -> dict:
     now = time.time()
     role = str(payload.get("role") or "worker")
     labels = [str(x) for x in (payload.get("labels") or [])]
+    # Goal #1769 acceptance 4: the CALLER's capability facts. `key_ref` rides the body already
+    # (the launcher's OpenRouter credential ref, empty on a subscription-rail ride); `surface` is
+    # the new one. Read once, here, so the eligibility filter, the OpenRouter gate and the
+    # decision row all speak about the same two values.
+    caller_surface = str(payload.get("surface") or "").strip()
+    caller_key_ref = str(payload.get("key_ref") or "").strip()
     sel = _classes.get("selection") or {}
     # ADR-104: the jitter band is exploration budget for high-volume dispatch and corruption
     # inside a ~13-call experiment. `jitter: false` zeroes the band AND replaces the uniform pick
@@ -1583,6 +1643,25 @@ def route(payload: dict, ctx: dict) -> dict:
     cooled = pair_cooldowns(now)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
+
+    # Goal #1769 acceptance 4 (router half): what the CALLER can ride, per rail. Decided HERE, in
+    # the eligibility filter, so it precedes every capacity gate by construction — a rail the
+    # caller cannot ride never reaches `sub_gate`/`or_gate`/`go_gate` and never costs a probe.
+    # Returns the TYPED reason naming the missing fact, or None when the caller can ride the rail.
+    def caller_block(rail: str) -> str | None:
+        # Neither fact sent ⇒ the caller has not adopted the contract: filter nothing (the
+        # permissive default this change deliberately preserves).
+        if not (caller_surface or caller_key_ref):
+            return None
+        want = RAIL_SURFACE.get(rail)
+        if want and caller_surface and caller_surface != want:
+            return "caller:surface"
+        # The OpenRouter rail is bought with the caller's OWN key: a declared fact set with no
+        # `key_ref` means the caller cannot ride it (the reviewer, by design). This is the fact
+        # the 2026-08-26 gate never asked about.
+        if rail == model_id.RAIL_OPENROUTER and not caller_key_ref:
+            return "caller:no-key_ref"
+        return None
     # model → the providers struck for it (serving-shaped classes). The model stays eligible and
     # is priced by the provider it lands on AFTER these are excluded (the next cheapest CELL).
     _excl: dict[str, frozenset] = {}
@@ -1612,6 +1691,11 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        elif (caller_reason := caller_block(rail)) is not None:
+            # Typed, and a CALLER reason: the rail may be perfectly healthy — this request cannot
+            # ride it. Checked after the class's rail list (a class that does not name the rail at
+            # all is a class fact, not a caller fact) and before capacity, which is never consulted.
+            skipped.append({"model": m, "reason": caller_reason})
         elif decorrelate_family and vendor_family(m) == decorrelate_family:
             skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
         else:
@@ -1647,7 +1731,7 @@ def route(payload: dict, ctx: dict) -> dict:
 
     def or_gate():
         if "or" not in _gate_cache:
-            _gate_cache["or"] = ctx["openrouter_ok"](payload.get("key_ref"))
+            _gate_cache["or"] = ctx["openrouter_ok"](caller_key_ref or None)
         return _gate_cache["or"]
 
     def go_gate():
@@ -1776,6 +1860,10 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "defer", "reason": reason, "retry_after_s": retry,
                     "class": cls, "tier": tier, "source": source, "skipped": skipped,
                     "jitter": jitter_on}
+    # Goal #1769 acceptance 4: the CALLER facts this row was decided ON, carried by BOTH verdicts
+    # — a `caller:*` skip in `skipped` is only actionable if the row also says which surface and
+    # credential the walk filtered against.
+    decision["caller"] = {"surface": caller_surface, "key_ref": caller_key_ref}
     if drawn:
         # The draw's provenance rides BOTH verdicts: a deferred slot has to be recordable in the
         # arm table too ("slot 4 deferred, cooldown" is evidence; a blank is not).
@@ -1789,7 +1877,7 @@ def route(payload: dict, ctx: dict) -> dict:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
-                            sub_gate, or_gate, go_gate, jitter, pick_fn, _excl)
+                            sub_gate, or_gate, go_gate, jitter, pick_fn, _excl, caller_block)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
     # point of the shadow line). Present on dispatch, absent on defer.
@@ -1797,12 +1885,13 @@ def route(payload: dict, ctx: dict) -> dict:
         shadow["resolved"] = model_id.parse(shadow["model"])
     record_shadow_decision(payload, cls, decision, shadow)
     decision["shadow"] = shadow
-    _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
+    _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
            (now, str(payload.get("session") or ""), str(payload.get("stack") or ""), role, cls,
             decision["decision"], decision.get("rail") or "",
             decision.get("model") or "", decision.get("reason") or "",
             json.dumps({"skipped": skipped, "source": source,
-                        "jitter_pool": decision.get("jitter_pool"), "shadow": shadow})))
+                        "jitter_pool": decision.get("jitter_pool"), "shadow": shadow}),
+            caller_surface, caller_key_ref))
     return decision
 
 
@@ -1872,8 +1961,10 @@ def status_summary() -> dict:
         "SELECT session, model, class, n_4xx, ts FROM circuit_events WHERE ts > ? "
         "ORDER BY ts DESC LIMIT 20", (now - 7 * 86400,))
     decisions_24h = _read(
-        "SELECT decision, rail, model, reason, COUNT(*) FROM decisions WHERE ts > ? "
-        "GROUP BY decision, rail, model, reason ORDER BY 5 DESC LIMIT 20", (now - 86400,))
+        "SELECT decision, rail, model, reason, surface, key_ref, COUNT(*) FROM decisions "
+        "WHERE ts > ? "
+        "GROUP BY decision, rail, model, reason, surface, key_ref ORDER BY 7 DESC LIMIT 20",
+        (now - 86400,))
     return {
         "cooldowns_active": {
             "worker": active_cooldowns(now, role="worker"),
@@ -1888,8 +1979,12 @@ def status_summary() -> dict:
             for v in sorted(pair_cooldowns(now).values(),
                             key=lambda x: (x["model"], x["provider"]))],
         "decisions_24h": [
-            {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
-            for d, rl, m, rs, n in decisions_24h],
+            # Goal #1769 acceptance 4: each row carries the CALLER facts the decision was made on
+            # (`surface`/`key_ref`), beside the reason — so a `caller:*` skip is readable from
+            # /router-status without the sqlite file.
+            {"decision": d, "rail": rl, "model": m, "reason": rs,
+             "surface": sf or "", "key_ref": kr or "", "n": n}
+            for d, rl, m, rs, sf, kr, n in decisions_24h],
         "db_persistent": _persistent,
         "rows": counts,
         "strikes_7d": [{"model": m, "error_class": e, "n": n,
@@ -2195,6 +2290,33 @@ def self_test() -> int:
         ("pr", None), ("harness-death", "subscription-fallback")], \
         "ALTER'd layout must match the CREATE TABLE one — else the positional write is off by a column"
     _mig.close()
+    # Goal #1769 acceptance 4 (router half): the same discipline for decisions.surface/key_ref. The
+    # live PVC store takes the two columns by ALTER while the CREATE TABLE path already carries
+    # them, and route()'s INSERT is POSITIONAL — so a drift between the layouts would write the
+    # caller facts into the wrong slot and still "succeed". Replay the real sequence (pre-#1913
+    # schema → ALTER → today's writer) and read the columns back BY NAME.
+    _dmig = sqlite3.connect(":memory:")
+    _dmig.execute("""CREATE TABLE decisions(
+      ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
+      model TEXT, reason TEXT, detail TEXT)""")  # the pre-#1913 layout, verbatim
+    _dmig.execute("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  (1.0, "old-d", "issue-1", "worker", "coding", "defer", "", "",
+                   "chain-exhausted", "{}"))
+    for _dcol in ("surface TEXT", "key_ref TEXT"):
+        try:
+            _dmig.execute(f"ALTER TABLE decisions ADD COLUMN {_dcol}")
+        except sqlite3.OperationalError:
+            pass  # duplicate column — schema already current
+    _dmig.execute("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (2.0, "new-d", "issue-2", "reviewer", "review", "dispatch",
+                   "anthropic-subscription", "claude/sonnet", "", "{}", "claude-cli",
+                   "sleep-agents/sleep-openrouter"))
+    assert _dmig.execute(
+        "SELECT session, surface, key_ref FROM decisions ORDER BY ts").fetchall() == [
+        ("old-d", None, None),
+        ("new-d", "claude-cli", "sleep-agents/sleep-openrouter")], \
+        "the ALTER'd decisions layout must match the CREATE TABLE one — else the caller facts land in the wrong column"
+    _dmig.close()
     # ── homelab#1042: model_cooldowns PVC migration test ──
     # The self-test normally starts from a FRESH schema (:memory: via init(None)), so it never
     # exercises the "table already exists with the old 5-column shape" path that the live PVC
@@ -3066,6 +3188,85 @@ def self_test() -> int:
     dv = route(dict(base, chain=[]), {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
     assert dv["model"] == "tencent/hy3", dv
+    # ── Goal #1769 acceptance 4 (router half): CALLER CAPABILITY in the rail walk ──
+    # The 2026-08-26 world, REPLAYED (docs/incidents/2026-08-26-reviewer-404-loop.md). The
+    # reviewer sends NO chain — candidates come from the class's chain_head + the rotation, which
+    # is OpenRouter-ids-only (`tencent/hy3` here, exactly the shape that served dead) — and NO
+    # OpenRouter `key_ref`, by design. `review`'s second rail entry then served a dead OpenRouter
+    # pick with the account perfectly healthy: the gate asked "can the ACCOUNT buy", never "can
+    # the CALLER ride". With the caller's `surface` now declared, the openrouter candidates are
+    # skipped for the missing credential and the subscription candidate serves.
+    _review_caller = {"stack": "oracle", "task": "issue-188", "role": "reviewer",
+                      "session": "t-caller-review", "class": "review", "chain": [],
+                      "surface": "claude-cli"}
+    _cr = route(dict(_review_caller), CTX)      # OpenRouter account HEALTHY: CTX's or_gate is open
+    assert _cr["decision"] == "dispatch", _cr
+    assert _cr["rail"] == "anthropic-subscription" and _cr["model"] == "claude/sonnet", _cr
+    assert {"model": "tencent/hy3", "reason": "caller:no-key_ref"} in _cr["skipped"], \
+        f"the openrouter candidate must be skipped for the missing credential: {_cr['skipped']}"
+    assert not any(s.get("model") == "claude/sonnet" and str(s.get("reason", "")).startswith("caller:")
+                   for s in _cr["skipped"]), \
+        f"the subscription candidate rides a claude-cli caller: {_cr['skipped']}"
+    # …and the CALLER facts ride the decision row itself (acceptance 4's status half).
+    assert _cr["caller"] == {"surface": "claude-cli", "key_ref": ""}, _cr.get("caller")
+    assert _read("SELECT surface, key_ref FROM decisions WHERE session='t-caller-review'") \
+        == [("claude-cli", "")], "the caller facts must land on the stored decision row"
+    # THE SHADOW LADDER READS THE SAME ELIGIBLE SET: the unrideable rail is absent from it, so a
+    # defer can never be handed an openrouter model as its shadow pick (the FU-188 shape).
+    assert _cr["shadow"]["decision"] == "dispatch", _cr["shadow"]
+    assert all(model_id.parse(c["model"])["rail"] != "openrouter"
+               for c in _cr["shadow"]["candidates"]), \
+        f"an unrideable rail must be absent from the shadow ladder too: {_cr['shadow']['candidates']}"
+    # …and the openrouter rail is not even PROBED: the capability skip precedes the capacity gate,
+    # so a healthy account's gate is never consulted for a caller that cannot ride the rail.
+    _rev_probes: list = []
+    _rev_ctx = {**CTX, "openrouter_ok": lambda ref: (_rev_probes.append(ref), (True, None))[1]}
+    _cr_p = route(dict(_review_caller, session="t-caller-review-probe"), _rev_ctx)
+    assert _cr_p["rail"] == "anthropic-subscription" and not _rev_probes, \
+        f"a caller-unrideable rail must not consume a probe (calls={_rev_probes})"
+    # The SAME body WITH a credential ⇒ the openrouter rail is rideable again (no caller skip).
+    _cr2 = route(dict(_review_caller, session="t-caller-review-key",
+                      key_ref="sleep-agents/sleep-openrouter"), CTX)
+    assert not any(str(s.get("reason", "")).startswith("caller:") for s in _cr2["skipped"]), \
+        f"a caller that sends the credential must not be capability-skipped: {_cr2['skipped']}"
+    # NO REGRESSION for a caller that has not adopted the field: `key_ref` alone (no `surface`)
+    # walks the openrouter rail exactly as the fact-less body does — byte-identical pick and rail.
+    _with_key = route(dict(base, key_ref="sleep-agents/sleep-openrouter"), CTX)
+    assert _with_key["model"] == d["model"] and _with_key["rail"] == d["rail"], \
+        f"a key_ref-only body must walk as before this change: {_with_key} vs {d}"
+    assert not any(str(s.get("reason", "")).startswith("caller:")
+                   for s in _with_key["skipped"]), _with_key["skipped"]
+    # The SURFACE mismatch: a caller that can only execute the OpenAI-compatible API can ride
+    # NEITHER CLI rail — every claude/* and Go candidate is skipped `caller:surface` (and, with no
+    # credential, the openrouter rail for its own missing fact).
+    _saved_rails2 = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "anthropic-subscription", "openrouter"]
+    _api = route(dict(base, session="t-caller-surface",
+                      chain=["claude/haiku", "opencode-go/deepseek-v4-flash"],
+                      surface="openai-api"), CTX)
+    for _mid in ("claude/haiku", "opencode-go/deepseek-v4-flash"):
+        assert {"model": _mid, "reason": "caller:surface"} in _api["skipped"], \
+            f"{_mid} must be skipped on the surface mismatch: {_api['skipped']}"
+    assert _api["decision"] == "defer", _api
+    _classes["classes"]["coding"]["rails"] = _saved_rails2
+    # …and with ONLY an openrouter candidate, the capability skip still precedes the gate: the
+    # walk defers WITHOUT the OpenRouter gate having been consulted.
+    _or_calls: list = []
+    _nc = route(dict(base, session="t-caller-nogate", chain=["deepseek/deepseek-v4-flash"],
+                     surface="openai-api"),
+                {**CTX, "openrouter_ok": lambda ref: (_or_calls.append(ref), (True, None))[1]})
+    assert {"model": "deepseek/deepseek-v4-flash", "reason": "caller:no-key_ref"} \
+        in _nc["skipped"], _nc["skipped"]
+    assert _nc["decision"] == "defer" and not _or_calls, \
+        f"capability is decided BEFORE capacity (OpenRouter gate calls={_or_calls})"
+    # The requirement table is per-rail and complete: every CLI-bound rail declares its surface,
+    # and openrouter's requirement is the CREDENTIAL (its own key_ref test), never a surface.
+    assert set(RAIL_SURFACE) <= set(RAILS) and model_id.RAIL_OPENROUTER not in RAIL_SURFACE, \
+        RAIL_SURFACE
+    # …and /router-status carries the caller facts on its decision rows.
+    assert any(r.get("surface") == "claude-cli" and r["rail"] == "anthropic-subscription"
+               for r in status_summary()["decisions_24h"]), \
+        "decision rows must carry the caller facts the route was decided on"
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
