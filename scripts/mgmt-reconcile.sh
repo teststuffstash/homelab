@@ -20,9 +20,28 @@
 #                impossible declared path; any other non-zero exit — or a zero exit that leaves the
 #                diff non-zero, or a sync the loop died in the middle of — PARKS the node on that key.
 #                A parked node is never retried for the same key: a bad disk must not become a
-#                reinstall loop. A NEW declared key (the next commit) un-parks it; so does the diff
-#                reaching zero by other means. By hand: `rm /var/lib/mgmt/reconcile/state.json` (or
-#                edit the node's entry).
+#                reinstall loop. A NEW declared key (the next commit) un-parks it. The park records
+#                its CAUSE, and the cause decides what the diff reaching zero means (FU-276, #1884):
+#                a `diff-disagrees` / `impossible` park clears on diff zero (the diff is what
+#                failed); a `verb-failed` / `interrupted` park does NOT — there the version is
+#                usually already right (nx-01, 2026-09-22: rebooted onto the target, exit 1 on a
+#                hung cilium-agent, "cleared" two minutes later), so it clears only when the
+#                READ-ONLY `node-maintenance.sh verify <node>` passes (Ready + uncordoned, the
+#                Longhorn/budget/CNPG floors, the declared version+schematic, cilium on that node);
+#                until then it stays parked and out of INSYNC. An unreadable verify is a fail.
+#                By hand: `rm /var/lib/mgmt/reconcile/state.json` (or edit the node's entry).
+#   its window   a verb that exits non-0/2/4 leaves its window OPEN by design (Ready timeout, a
+#                failed floor or verify). At park time the reconciler closes THAT window —
+#                `node-maintenance.sh silence-close <node>`, which touches only the records the
+#                verb made (`--by node-maintenance.sh`, its own silences), never a seat's — so the
+#                broken node's alerts reach a person and the park is the one record. Without it the
+#                leftover window refused every next tick (WIP 1) until SILENCE_HOURS ran out. The
+#                same on an `interrupted` park. A node the verb left cordoned still stops the next
+#                sync — through the verb's own live WIP 1, which is the right stop.
+#   rollback     after a GOOD boot Talos removes the upgrade fallback (`removing fallback entry` in
+#                machined's log, nx-01 2026-09-22), so `talosctl rollback` works only in the short
+#                window after the upgrade reboot; after that, backing out across a minor is a
+#                reinstall. Within a minor, reverting the declaration is the rollback (below).
 #   state        /var/lib/mgmt/reconcile/state.json on the box (per node) + rollout.json beside it
 #                (the fleet rollout, below), surfaced as mgmt_reconcile_* through the node_exporter
 #                textfile — never a commit (§MB4 layer 5).
@@ -70,7 +89,8 @@
 # Test seams (scripts/mgmt-reconcile-test.sh — the state machine against a fake verb):
 #   RECONCILE_DIR  RECONCILE_MACHINES_JSON  RECONCILE_TARGETS_JSON  RECONCILE_WINDOWS_JSON
 #   RECONCILE_DIFF_CMD "<cmd> <targets-file> <drift-out>"   RECONCILE_VERB "<cmd> upgrade <node>"
-#   MGMT_TEXTFILE_DIR
+#   RECONCILE_VERIFY "<cmd> <node>" (the health check; 0 = pass)
+#   RECONCILE_WINDOW_CLOSE "<cmd> <node>" (closes the verb's own window records)   MGMT_TEXTFILE_DIR
 #   rollout: RECONCILE_CP_VERB "<cmd> <node>"   RECONCILE_ORDER_CMD "<cmd>" (order's TSV rows)
 #            RECONCILE_EVIDENCE <path> (run as `bash <path> <node> <since>`)
 #            RECONCILE_DIFFERENTIAL_CMD "<cmd>" (prints the firing count; non-zero exit = unreadable)
@@ -102,12 +122,38 @@ save() {
   local t; t="$(mktemp "$DIR/.state.XXXXXX")" && printf '%s\n' "$ST" >"$t" && mv -f "$t" "$STATE"
   if [ -n "$RO" ]; then t="$(mktemp "$DIR/.state.XXXXXX")" && printf '%s\n' "$RO" >"$t" && mv -f "$t" "$RO_FILE"; fi
 }
-set_node() {  # <node> <state> <key> <reason>
-  ST="$(jq -c --arg n "$1" --arg s "$2" --arg k "$3" --arg r "$4" --argjson t "$(now)" \
-    '.[$n] = ((.[$n] // {}) + {state:$s, key:$k, reason:$r}
+set_node() {  # <node> <state> <key> <reason> [cause — parks only: verb-failed|interrupted|diff-disagrees|impossible|guard]
+  ST="$(jq -c --arg n "$1" --arg s "$2" --arg k "$3" --arg r "$4" --arg c "${5:-}" --argjson t "$(now)" \
+    '.[$n] = ((.[$n] // {}) + {state:$s, key:$k, reason:$r, cause:$c}
               + (if (.[$n].state // "") != $s then {since:$t} else {} end))' <<<"$ST")"
 }
 field() { jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // ""' <<<"$ST"; }
+# A park's cause. A park written before causes existed (no field) is read from its reason, so a
+# box upgraded mid-park does not clear a failed-verb park on the diff alone.
+park_cause() {
+  local c; c="$(field "$1" cause)"
+  if [ -z "$c" ]; then case "$(field "$1" reason)" in
+    "verb exited 0 but"*) c=diff-disagrees ;;   # the old exit-0 park shares the prefix below (review, #1887)
+    "verb exited "*) c=verb-failed ;; interrupted*) c=interrupted ;; esac; fi
+  printf '%s' "$c"
+}
+# The read-only health check a verb-failed/interrupted park must pass before diff zero clears it
+# (node-maintenance.sh verify: never cordons, drains or opens a window). Non-zero = not healthy OR
+# could not tell — the same answer (rule #6: never fail into a write).
+node_verify() {  # <node>
+  if [ -n "${RECONCILE_VERIFY:-}" ]; then $RECONCILE_VERIFY "$1"; return; fi
+  ( cd "$REPO" && INSTALL_TARGETS="$tf" devbox run --quiet -- bash scripts/node-maintenance.sh verify "$1" )
+}
+# Close the window the verb left open (its own silences + its `--by node-maintenance.sh` declared
+# record — silence-close touches nothing else, a seat's window least of all). Best effort: a
+# failure is logged, and the leftover window then refuses ticks until it expires, as before.
+close_verb_window() {  # <node>
+  local rc=0
+  if [ -n "${RECONCILE_WINDOW_CLOSE:-}" ]; then $RECONCILE_WINDOW_CLOSE "$1" || rc=$?
+  else ( cd "$REPO" && devbox run --quiet -- bash scripts/node-maintenance.sh silence-close "$1" ) || rc=$?; fi
+  if [ "$rc" = 0 ]; then log "$1: closed the verb's own window (silences + its declared record) — the park is the record now"
+  else log "$1: closing the verb's own window FAILED (exit $rc) — it blocks new syncs until it expires"; fi
+}
 
 emit() {  # [stamp]
   [ -d "$TEXTDIR" ] || return 0
@@ -165,7 +211,8 @@ emit() {  # [stamp]
 # the node may be anywhere between cordoned and half-installed, and that is a human read.
 for n in $(jq -r 'to_entries[] | select(.value.state == "syncing") | .key' <<<"$ST"); do
   log "$n: found mid-sync with no running tick — PARKED (interrupted; the attempt is spent)"
-  set_node "$n" parked "$(field "$n" key)" "interrupted: the loop died mid-sync (reboot/timeout) — read the node, then clear the state"
+  set_node "$n" parked "$(field "$n" key)" "interrupted: the loop died mid-sync (reboot/timeout) — read the node; clears once diff zero AND node-maintenance.sh verify passes" interrupted
+  close_verb_window "$n"
 done
 save
 
@@ -265,7 +312,7 @@ for n in $auto; do
   if [ -z "$key" ]; then log "$n: auto but not in node_install_targets — nothing declared to sync to"; continue; fi
   if [ "$role" = controlplane ] && [ "$rollout_on" != true ]; then
     log "$n: declared controlplane — without the fleet rollout the reconciler never syncs a control plane (reconcile_rollout.enabled)"
-    set_node "$n" parked "$key" "declared controlplane with reconcile: auto — control planes sync only through the fleet rollout (machines.yaml reconcile_rollout)"; continue
+    set_node "$n" parked "$key" "declared controlplane with reconcile: auto — control planes sync only through the fleet rollout (machines.yaml reconcile_rollout)" guard; continue
   fi
   for a in labels taints ephemeral_disk registered; do
     [ "$(axis "$n" "$a")" = drift ] && log "$n: $a drift — reported by the belt, not reconciled here"
@@ -277,7 +324,20 @@ for n in $auto; do
     continue
   fi
   if [ "$v" = ok ] && [ "$s" = ok ]; then
-    [ "$(field "$n" state)" = parked ] && log "$n: diff is zero — clearing the park on $(field "$n" key)"
+    if [ "$(field "$n" state)" = parked ]; then
+      pc="$(park_cause "$n")"
+      if [ "$pc" = verb-failed ] || [ "$pc" = interrupted ]; then
+        # The version was never what failed: diff zero says nothing about health (FU-276).
+        if ! node_verify "$n"; then
+          log "$n: diff is zero but the park is $pc and node-maintenance.sh verify FAILS (or cannot read) — stays PARKED, not counted synced"
+          set_node "$n" parked "$(field "$n" key)" "$pc; diff zero, health check failing since $(date -u +%FT%TZ) — read the node (node-maintenance.sh verify $n)" "$pc"
+          continue
+        fi
+        log "$n: diff is zero AND node-maintenance.sh verify passes — clearing the $pc park on $(field "$n" key)"
+      else
+        log "$n: diff is zero — clearing the park on $(field "$n" key)${pc:+ ($pc)}"
+      fi
+    fi
     [ "$(field "$n" state)" = idle ] || log "$n: in sync at $key — idle"
     set_node "$n" idle "$key" "in sync"; INSYNC+=("$n"); continue
   fi
@@ -550,18 +610,19 @@ case "$rc" in
         kube taint node "$n" "$TAINT_KEY-" >/dev/null 2>&1 && log "pressure: $n — $TAINT_KEY removed (synced)"
       fi
     else
-      set_node "$n" parked "$key" "verb exited 0 but the diff is not zero (version=$(axis "$n" version) schematic=$(axis "$n" schematic))"
+      set_node "$n" parked "$key" "verb exited 0 but the diff is not zero (version=$(axis "$n" version) schematic=$(axis "$n" schematic))" diff-disagrees
       log "$n: PARKED — the verb said done, the diff disagrees"
     fi ;;
   4)
-    set_node "$n" parked "$key" "the declared version path is impossible (verb exit 4: a cross-minor downgrade or a skipped minor) — across a minor Talos rolls back only via talosctl rollback or a reinstall; fix the declaration or roll back by hand"
+    set_node "$n" parked "$key" "the declared version path is impossible (verb exit 4: a cross-minor downgrade or a skipped minor) — across a minor Talos rolls back only via talosctl rollback (while the fallback entry exists, i.e. shortly after the upgrade reboot) or a reinstall; fix the declaration or roll back by hand" impossible
     log "$n: PARKED — the declared path is impossible (exit 4); retrying cannot fix it" ;;
   2)
     set_node "$n" pending "$key" "refused by a gate (verb exit 2, nothing touched) — retried next tick"
     log "$n: refused by a gate (exit 2) — nothing touched, retried next tick" ;;
   *)
-    set_node "$n" parked "$key" "verb exited $rc — the one attempt for this key is spent; read the journal, then clear the state"
-    log "$n: PARKED — verb exited $rc (journalctl -u mgmt-reconcile)" ;;
+    set_node "$n" parked "$key" "verb exited $rc — the one attempt for this key is spent; read the journal. Clears on a new key, or once diff zero AND node-maintenance.sh verify passes" verb-failed
+    log "$n: PARKED — verb exited $rc (journalctl -u mgmt-reconcile)"
+    close_verb_window "$n" ;;
 esac
 save; emit stamp; log "tick done"
 exit 0

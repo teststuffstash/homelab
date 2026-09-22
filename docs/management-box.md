@@ -521,12 +521,29 @@ Each tick, for the `auto` nodes only:
 - **One attempt per declared target** (`version/schematic`). The verb's exit 2 is a refusal with nothing
   touched → `pending`, retried next tick. Exit 4 is a declared path no retry can pass — a cross-minor downgrade or a
   skipped minor — → `parked` at once: across a minor Talos backs out only by `talosctl rollback` or a
-  reinstall. **Within a minor, reverting the declaration IS a rollback** (2026-09-22): the verb allows
+  reinstall — and `talosctl rollback` only briefly: **after a good boot Talos removes the upgrade
+  fallback** (`removing fallback entry` in machined's log — nx-01, 2026-09-22), so it works only in the
+  short window after the upgrade reboot; after that a cross-minor back-out is a reinstall. **Within a
+  minor, reverting the declaration IS a rollback** (2026-09-22): the verb allows
   a patch downgrade, and Talos's older installer refuses on its own, before touching disk, if the
   running config holds a document it does not know. Any other failure, a zero exit that leaves the diff non-zero, or
-  a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried; a
-  new declared key, or the diff reaching zero by other means, clears it. By hand: `rm
-  /var/lib/mgmt/reconcile/state.json` once the node is whole.
+  a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried.
+  A new declared key clears any park. **What the diff reaching zero means depends on the park's
+  recorded cause** (FU-276, #1884): a `diff-disagrees` or `impossible` park clears on diff zero — the
+  diff is what failed. A **`verb-failed` or `interrupted`** park does not: the version is usually
+  already right (nx-01 rebooted onto the target, the verb exited 1 on a hung cilium-agent, and the
+  diff "cleared" the park two minutes later with the node off the pod network). It clears only when
+  the read-only **`node-maintenance.sh verify <node>`** passes — Ready and uncordoned, Longhorn back,
+  the budgets over its pods whole and none spanning nodes at 0, CNPG full, the declared version and
+  schematic, and cilium-agent on *that* node Ready and holding the apiserver backend — re-asked every
+  tick; until then the node stays `parked`, out of the in-sync set, and the rollout does not count it.
+  An unreadable check is a fail. **The failed verb's window** (it deliberately exits 1 with its window
+  open) **is closed by the reconciler at park time** — `node-maintenance.sh silence-close <node>`,
+  which touches only the verb's own silences and its `--by node-maintenance.sh` declared record, never
+  a seat's window — so the broken node's alerts reach a person, the park is the one record, and the
+  next tick is not refused by a leftover window until `SILENCE_HOURS` runs out (option (i) of #1884;
+  the same on an `interrupted` park). A node the verb left cordoned still stops the next sync through
+  the verb's own live WIP 1. By hand: `rm /var/lib/mgmt/reconcile/state.json` once the node is whole.
 - **Not reconciled, reported only:** labels/taints (tofu's apply path owns them — `MgmtNodeLiveStateDrift`),
   `ephemeral_disk` (reinstall-class — a human window), anything on a `manual` node. With the rollout
   switch off a declared `controlplane` is refused even if marked `auto`; with it on, a control plane
@@ -581,7 +598,8 @@ be tested. The rules, ruled before anything below is built:
   not-yet-upgraded ones, starting after each node's own upgrade, seen across stacks. Only that
   evidence halts the rollout automatically. Within a minor the reverted declaration is then a
   rollback the reconciler runs (`node-maintenance.sh upgrade` allows a patch downgrade within a minor since #1867, and refuses a cross-minor one with exit 4, which the reconciler parks); across a minor it is `talosctl
-  rollback` or a reinstall.
+  rollback` — only while the upgrade fallback exists, i.e. shortly after the upgrade reboot (Talos
+  removes it after a good boot) — or a reinstall.
 - **Less than a day, end to end.** Drift from git is a tax: with master at 1.14.2 and the fleet split,
   nobody can say which version a node runs without looking. `TalosFleetVersionSplit` /
   `MgmtNodeInstallDrift` at 24 h are the rollout's deadline, not a threshold to tune.
