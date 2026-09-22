@@ -51,3 +51,67 @@ spec:
               kube-state-metrics pod args carry --custom-resource-state-config-file, that its
               ClusterRole still lists agentstacks.platform.teststuff.net (rbac.extraRules in the
               kube-prometheus-stack values), and that at least one AgentStack claim exists.
+    # GitHub-token mirror belt (oracle handoff 2026-09-22; oracle-fleet's 02:30Z retention cron
+    # 401'd on 09-21 + 09-22). A GithubAccessToken generator's central ES in agent-coordinator
+    # mints a 60-min App token; a kubernetes-provider MIRROR ES copies that Secret into a consumer
+    # namespace (the composition's readOnlyGrants mirror, agents/coordinator/retro-git.yaml's).
+    # Two independent refresh clocks: a mirror that refreshes φ minutes after each mint holds a
+    # token aged φ..φ+interval — with 45m/45m, φ > 15m = a dead copy for a fixed window of every
+    # cycle while both ES read SecretSynced. The observable: the mirror's last refresh PRECEDES the
+    # latest mint of the Secret it copies. A healthy mirror catches up within its own (short)
+    # interval; still behind after 10m = it serves a token ≥ central interval + 10m old.
+    # Source: kube-state-metrics custom-resource-state (kube-prometheus-stack values).
+    - name: github-token-mirrors
+      rules:
+        - alert: GithubTokenMirrorBehind
+          expr: |
+            (
+                max by (remote_key) (
+                  label_replace(
+                    kube_externalsecret_refresh_time{namespace="agent-coordinator", generator_kind="GithubAccessToken"},
+                    "remote_key", "$1", "target", "(.+)"))
+              - on (remote_key) group_right
+                kube_externalsecret_refresh_time{namespace!="agent-coordinator", remote_key!=""}
+            ) > 0
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.name }} still holds the token before the latest mint of {{ $labels.remote_key }} (10m+)"
+            description: >-
+              The mirror ExternalSecret {{ $labels.namespace }}/{{ $labels.name }} last synced
+              {{ $value | humanizeDuration }} before agent-coordinator/{{ $labels.remote_key }}
+              minted its current GitHub App token and has not caught up for 10m — the Secret in
+              {{ $labels.namespace }} carries the PREVIOUS token, now at least the central
+              refreshInterval + 10m old; past 60m every GitHub call with it is 401 while both ES
+              read SecretSynced. Cause is refresh-clock phase, not a failure: the mirror's
+              refreshInterval must be minutes, and the central's ≤ 60m minus the mirror's.
+              Probe without echoing the value (token into a header file, curl
+              api.github.com/installation/repositories); force a catch-up by annotating the
+              mirror ES `force-sync=$(date +%s)`.
+        # The mint itself stalled (generator erroring, ESO down): the served token dies at 60m.
+        - alert: GithubTokenMintStale
+          expr: |
+            time() - kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"} > 3300
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.name }} has not minted a GitHub token for 55m+ — it expires within minutes"
+            description: >-
+              The GithubAccessToken-driven ExternalSecret {{ $labels.namespace }}/{{ $labels.name }}
+              last synced {{ $value | humanizeDuration }} ago; GitHub App installation tokens live
+              60m, so everything reading Secret {{ $labels.target }} (and its mirrors) is about to
+              401. Read `kubectl -n {{ $labels.namespace }} describe externalsecret
+              {{ $labels.name }}` for the generator error, then the external-secrets controller log.
+        # Blind-belt guard (FU-125/FU-108 class): if the series stop, both rules above go quiet.
+        - alert: GithubTokenMirrorMetricAbsent
+          expr: |
+            absent(kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"})
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "No GithubAccessToken ExternalSecret refresh_time series for 30m — the token mirror belt is blind"
+            description: >-
+              kube-state-metrics is not exporting kube_externalsecret_refresh_time. Check its
+              custom-resource-state config still carries the external-secrets.io ExternalSecret
+              resource and its ClusterRole lists externalsecrets (rbac.extraRules in the
+              kube-prometheus-stack values).
