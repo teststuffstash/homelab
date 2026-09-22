@@ -3,6 +3,7 @@
 # scripts/mgmt-lib.sh) against policy/mgmt/plan-input.yaml as committed HERE: a synthetic repo, a
 # clean dashboard edit must pass, every deny rule must fire exactly on its own change, a symlink
 # is caught, a foreign-root-only change selects no root. `devbox run mgmt-policy-test`.
+# Since 2026-09-22 also the APPLY side: the allowlist, the Talos config precondition, the post-check polling.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export REPO="$HERE/.."
@@ -113,6 +114,84 @@ fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" 
 got="$(printf 'tofu/github/x.tf\ntofu/cloudflare-token/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
 if [ $rc = 0 ] && [ "$got" = github ]; then pass=$((pass+1)); echo "PASS at-ref-positive (roots: github)"
 else fail=$((fail+1)); echo "FAIL at-ref-positive — rc=$rc roots '$got'"; fi
+
+# ── the APPLY side: the allowlist + the Talos config precondition (mgmt_talos_gate) + the post-apply
+# health gate (mgmt_post_check), over SYNTHETIC `tofu show -json` plans fed through mgmt_plan_digest —
+# the same digest the loop runs on a real plan (docs/management-box.md §MB3 "Talos config applies").
+# NIT: node_install_targets roles as the plan's output carries them (before = applied, after = head).
+NIT='{"actions":["no-op"],"before":{"wk-03":{"role":"worker"},"cp-01":{"role":"controlplane"},"wk-metal-02":{"role":"controlplane"},"nx-01":{"role":"worker"}},"after":{"wk-03":{"role":"worker"},"cp-01":{"role":"controlplane"},"wk-metal-02":{"role":"controlplane"},"nx-01":{"role":"worker"}},"after_unknown":false}'
+talos_rc() {  # <type.name> <key> <actions json> <apply_mode json|absent|unknown>
+  local after='{}' unk='{}'
+  case "$4" in absent) ;; unknown) unk='{"apply_mode":true}' ;; *) after="{\"apply_mode\":$4}" ;; esac
+  [ "$3" = '["delete"]' ] && after=null
+  printf '{"address":"%s[\\"%s\\"]","type":"%s","index":"%s","change":{"actions":%s,"after":%s,"after_unknown":%s}}' \
+    "$1" "$2" "${1%%.*}" "$2" "$3" "$after" "$unk"
+}
+apply_case() {  # <name> <expected: allowed | outside | rule-name> <policy> <resource_changes json array> [nit json]
+  local name="$1" want="$2" pol="$3" rcs="$4" nit="${5:-$NIT}" out changes outside hits got
+  out="$T/plan-$name.bin"
+  changes="$(jq -n --argjson rc "$rcs" --argjson nit "$nit" '{resource_changes:$rc, output_changes:(if $nit == null then {} else {node_install_targets:$nit} end)}' | mgmt_plan_digest "$out")" \
+    || { fail=$((fail+1)); echo "FAIL apply:$name — mgmt_plan_digest rc≠0"; return; }
+  outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$pol" main)" || { fail=$((fail+1)); echo "FAIL apply:$name — allowlist unreadable"; return; }
+  hits="$(mgmt_talos_gate "$pol" main "$out")" || { fail=$((fail+1)); echo "FAIL apply:$name — talos gate rc≠0"; return; }
+  if [ -n "$outside" ]; then got=outside
+  elif [ -n "$hits" ]; then got="$(cut -f1 <<<"$hits" | sort -u | tr '\n' ' ' | sed 's/ $//')"
+  else got=allowed; fi
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "PASS apply:$name ($got)"
+  else fail=$((fail+1)); echo "FAIL apply:$name — want '$want', got '$got'"; printf '%s\n' "$outside" "$hits" | grep . | sed 's/^/     /'; fi
+}
+POL_CP="$T/policy-cp-true.yaml"
+_yq '.roots.main.apply_controlplane_config = true' "$POL" >"$POL_CP"
+# the committed default: CP config applies stay human until the operator flips the toggle
+got="$(mgmt_policy_get "$POL" '.roots.main.apply_controlplane_config')"
+if [ "$got" = false ]; then pass=$((pass+1)); echo "PASS apply:toggle-default (apply_controlplane_config=false)"
+else fail=$((fail+1)); echo "FAIL apply:toggle-default — committed apply_controlplane_config is '$got', want false"; fi
+W_NR="$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' '"no_reboot"')"
+apply_case worker-no-reboot     allowed            "$POL"    "[$W_NR]"
+apply_case metal-worker-no-reboot allowed          "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["update"]' '"no_reboot"')]"
+# the ordering point: before package A declares apply_mode the plan carries the provider default
+# (or nothing) — the loop keeps refusing
+apply_case worker-auto          talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' '"auto"')]"
+apply_case worker-reboot        talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' '"reboot"')]"
+apply_case worker-mode-absent   talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' absent)]"
+apply_case worker-mode-unknown  talos-apply-mode   "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["update"]' unknown)]"
+apply_case cp-toggle-false      talos-controlplane "$POL"    "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
+apply_case metal-cp-toggle-false talos-controlplane "$POL"   "[$(talos_rc talos_machine_configuration_apply.metal wk-metal-02 '["update"]' '"no_reboot"')]"
+apply_case cp-toggle-true       allowed            "$POL_CP" "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
+# the toggle never waives the rest of the precondition
+apply_case cp-toggle-true-auto  talos-apply-mode   "$POL_CP" "[$(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"auto"')]"
+# one bad apple refuses the whole root (a worker passes, the CP beside it does not)
+apply_case worker-plus-cp       talos-controlplane "$POL"    "[$W_NR, $(talos_rc talos_machine_configuration_apply.node cp-01 '["update"]' '"no_reboot"')]"
+apply_case metal-create         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["create"]' '"no_reboot"')]"
+apply_case metal-delete         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.metal nx-01 '["delete"]' absent)]"
+apply_case node-replace         talos-action       "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-03 '["delete","create"]' '"no_reboot"')]"
+# role from node_install_targets only — a node the output does not know is refused, and so is a
+# plan whose output is absent (never a name list)
+apply_case role-unknown         talos-role-unknown "$POL"    "[$(talos_rc talos_machine_configuration_apply.node wk-99 '["update"]' '"no_reboot"')]"
+apply_case no-nit-output        talos-role-unknown "$POL"    "[$W_NR]" null
+# the rest of the widening, and what stays outside it
+apply_case seed-image-replace   allowed            "$POL"    '[{"address":"proxmox_download_file.talos[\"worker\"]","type":"proxmox_download_file","index":"worker","change":{"actions":["delete","create"],"after":{},"after_unknown":{}}}]'
+apply_case vm-change            outside            "$POL"    "[$W_NR, "'{"address":"proxmox_virtual_environment_vm.node[\"wk-03\"]","type":"proxmox_virtual_environment_vm","index":"wk-03","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
+apply_case bootstrap-outside    outside            "$POL"    '[{"address":"talos_machine_bootstrap.this","type":"talos_machine_bootstrap","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
+apply_case residue-only         allowed            "$POL"    '[{"address":"kubernetes_config_map.x","type":"kubernetes_config_map","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
+# the side channel is REQUIRED: a missing one is rc 1 (the loop refuses), never "no Talos change"
+fail_ talos-gate-no-channel 'mgmt_talos_gate "$POL" main "$T/never-digested.bin"'
+
+# the post-apply health gate's polling, over a stubbed `compare` (maintenance-window.sh's own verbs
+# are pinned by `devbox run maint-self-test`). HSEQ = one verdict per call: ok | reg (a regression).
+post_case() {  # <name> <want-rc> <verdict sequence> [grep for the output]
+  local name="$1" want="$2" seq="$3" pat="${4:-}" out rc
+  printf '%s\n' $seq >"$T/hseq"
+  out="$( mgmt_health() { local v; v="$(head -1 "$T/hseq")"; sed -i 1d "$T/hseq"; [ -n "$v" ] || v=reg
+            case "$v" in ok) echo "  ok  all"; return 0 ;; *) echo "  ⚠ NEW firing alerts: KubeAPIDown"; echo "  ok  nodes"; return 2 ;; esac; }
+          _mgmt_sleep() { :; }
+          MGMT_POSTCHECK_SETTLE=0 MGMT_POSTCHECK_INTERVAL=30 MGMT_POSTCHECK_TIMEOUT=90 mgmt_post_check "$T/base.json" )"; rc=$?
+  if [ "$rc" = "$want" ] && { [ -z "$pat" ] || grep -qx -- "$pat" <<<"$out"; }; then pass=$((pass+1)); echo "PASS post:$name (rc=$rc)"
+  else fail=$((fail+1)); echo "FAIL post:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
+}
+post_case clean-first         0 "ok"
+post_case transient-recovers  0 "reg reg ok"
+post_case regressed-deadline  2 "reg reg reg reg reg reg" "NEW firing alerts: KubeAPIDown"
 
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

@@ -5,6 +5,12 @@
 #   bash scripts/maintenance-window.sh check
 #   bash scripts/maintenance-window.sh close
 #   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
+#   bash scripts/maintenance-window.sh snapshot          # probes 1–4 as JSON on stdout; exit 1 if any read failed
+#   bash scripts/maintenance-window.sh compare <file>    # probes 1–4 now vs a `snapshot` file; exit 2 on regression
+#
+# `snapshot` + `compare` are the UNATTENDED form — no window, no CI probe (the caller has no gh):
+# the management box's apply loop brackets a Talos config apply with them (scripts/mgmt-apply.sh,
+# docs/management-box.md §MB3 "Talos config applies"). Same probes, same verdicts, one home.
 #
 # WHY. `agents/seat-window.sh` declares a window to the responder and `node-maintenance.sh`
 # opens the Alertmanager silences — both only ever wired for NODE maintenance. Everything else
@@ -249,6 +255,14 @@ snapshot() {
           cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber), nodes_ok:$nodes_ok}'
 }
 
+# Is a snapshot file a baseline worth banking? Non-zero + the unread flags on stderr if not.
+baseline_readable() { # <snapshot-file>
+  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok
+         and (.cilium_have > 0 or .cilium_unknown == 0)' >/dev/null "$1" && return 0
+  jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok) cilium[have=\(.cilium_have) unknown=\(.cilium_unknown)]"' "$1" >&2
+  return 1
+}
+
 cmd_open() {
   local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit=""
   while [ $# -gt 0 ]; do
@@ -270,9 +284,7 @@ cmd_open() {
   # favourably against it. Refuse rather than bank one.
   # `cilium_have == 0 and cilium_unknown > 0` is the same thing as an unread signal: no agent
   # answered, so the baseline knows nothing about the backend the whole tool is built around.
-  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok
-         and (.cilium_have > 0 or .cilium_unknown == 0)' >/dev/null "$BASE" || {
-    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok) cilium[have=\(.cilium_have) unknown=\(.cilium_unknown)]"' "$BASE" >&2
+  baseline_readable "$BASE" || {
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
     rm -f "$BASE"; exit 1
   }
@@ -285,12 +297,10 @@ cmd_open() {
   printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' > "$WID"
 }
 
-cmd_check() {
-  [ -f "$BASE" ] || { echo "check: no baseline — run 'open' first" >&2; exit 1; }
-  local b; b="$(cat "$BASE")"
-  local now; now="$(snapshot)"
-  local rc=0
-  echo "== check vs baseline ($(jq -r .at <<<"$b")) =="
+# The cluster half of `check`: probes 1–4 of <now> against <baseline>, one ok/⚠ line each.
+# rc 2 on any regression or unread probe, else 0. Shared by `check` and `compare`.
+compare_snapshots() { # <baseline-json> <now-json>
+  local b="$1" now="$2" rc=0
 
   # The precondition, not a sixth check: did kubectl answer at all? Reported like the probes so a
   # dead apiserver still yields the full breakdown instead of killing the run (review, #1804 r4).
@@ -335,6 +345,16 @@ cmd_check() {
       rc=2
     else echo "  ok  hard-failed pods: $p0 -> $p1"; fi
   fi
+  return $rc
+}
+
+cmd_check() {
+  [ -f "$BASE" ] || { echo "check: no baseline — run 'open' first" >&2; exit 1; }
+  local b; b="$(cat "$BASE")"
+  local now; now="$(snapshot)"
+  local rc=0
+  echo "== check vs baseline ($(jq -r .at <<<"$b")) =="
+  compare_snapshots "$b" "$now" || rc=$?
 
   local ci_all ci ci_unread; ci_all="$(stranded_ci 600)"
   ci_unread="$(printf '%s\n' "$ci_all" | sed -n 's/^UNREADABLE://p' | tr '\n' ' ' | sed 's/ *$//')"
@@ -383,6 +403,23 @@ cmd_cilium() {
   cilium_verdict "$ok" "$have" "$missing" "$unknown"
 }
 
+# The unattended pair (header). `snapshot` refuses — exit 1, flags on stderr, JSON still on
+# stdout — exactly where `open` refuses to bank a baseline: a caller must never compare against a
+# reading that measured nothing. `compare` is `check` minus the window and the CI probe.
+cmd_snapshot() {
+  local tmp; tmp="$(mktemp)"
+  snapshot > "$tmp"
+  cat "$tmp"
+  baseline_readable "$tmp" || { rm -f "$tmp"; return 1; }
+  rm -f "$tmp"
+}
+cmd_compare() {
+  [ -s "${1:-}" ] || { echo "compare: no baseline file '${1:-}'" >&2; return 1; }
+  local b; b="$(cat "$1")"
+  echo "== compare vs baseline ($(jq -r .at <<<"$b")) =="
+  compare_snapshots "$b" "$(snapshot)"
+}
+
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
   check) shift; cmd_check ;;
@@ -391,5 +428,7 @@ case "${1:-}" in
   # 3 (do not) — under `set -e` a bare call would exit non-zero all the same, but silently
   # collapsing the two here is one refactor away from a verb that rolls cilium on a blind read.
   cilium-check) shift; cmd_cilium || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] | check | close [--force] | cilium-check" >&2; exit 64 ;;
+  snapshot) shift; cmd_snapshot ;;
+  compare)  shift; cmd_compare "$@" || exit $? ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] | check | close [--force] | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
 esac

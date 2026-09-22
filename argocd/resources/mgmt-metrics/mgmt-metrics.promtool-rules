@@ -20,6 +20,12 @@ groups:
         for: 30m
         labels:
           severity: warning
+      - alert: MgmtApplyPostCheckFailed
+        expr: |
+          mgmt_apply_post_check_failed == 1
+        for: 5m
+        labels:
+          severity: warning
   - name: mgmt-node
     rules:
       - alert: MgmtBoxDown

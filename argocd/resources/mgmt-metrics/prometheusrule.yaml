@@ -44,6 +44,28 @@ spec:
               (/var/lib/node-exporter-textfile/mgmt_apply.prom) is missing, so MgmtApplyLoopStale
               cannot fire. Check the dir exists and the loop has run since
               the metric change landed (scripts/mgmt-apply.sh emit_metrics).
+        # The post-apply health gate (docs/management-box.md §MB3 "Talos config applies"): the box
+        # auto-applied a Talos machine config and the cluster did not come back to its baseline
+        # within the bounded post-check. The unattended twin of the seat's /maintenance-window
+        # `check` — the 2026-09-20 lesson (a CP config apply took the API path down while every
+        # node read Ready). REPORTS ONLY: the loop does not revert (FU-273: default forward).
+        - alert: MgmtApplyPostCheckFailed
+          expr: |
+            mgmt_apply_post_check_failed == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box auto-applied a Talos config and the cluster regressed"
+            description: >-
+              mgmt-apply's post-apply health check found a regression against the baseline it took
+              before the apply (new firing alerts, lost scrape targets, a cilium agent without the
+              10.96.0.1:443 apiserver backend, new hard-failed pods, or nodes leaving the API) and it
+              did not clear within the post-check window. What regressed: the `management-apply`
+              status on the applied master commit, or `journalctl -u mgmt-apply -n 80` on
+              192.168.2.53. Nothing was reverted — a revert is a human commit (FU-273). The known
+              cilium signature's fix: `kubectl -n kube-system rollout restart ds/cilium`. Clears on
+              the next Talos config apply whose post-check is clean, or by hand once the cluster is
+              whole: `rm /var/lib/mgmt/apply/post-check-failed` on the box.
     - name: mgmt-node
       rules:
         - alert: MgmtBoxDown

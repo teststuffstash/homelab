@@ -407,9 +407,10 @@ six OVERSIZE items pointer-ized into
       codeowner read becomes an **intent review**, a new reviewer instruction: does the plan +
       install-impact line do what the issue asked, given what the fleet and the box already run?
       Anchors (2026-09-13): router/CPs/Proxmox stay human; the raw-k8s residue belongs to the box; `provisioning` = canary.
-      The human `mgmt-tf apply` before a Talos config change is INTERIM. The first toggle, after the
-      wk-03 canary + rollback (FU-033), = `talos_machine_configuration_apply` for `reconcile: auto` nodes.
-      **Next:** the ledger section in [`management-box.md`](management-box.md) + the instruction. Relates FU-012, FU-235.
+      **First toggle BUILT 2026-09-22:** the loop auto-applies Talos config changes (`no_reboot` only,
+      health-gated); `apply_controlplane_config` defaults OFF for CPs, the operator flips it
+      ([`management-box.md`](management-box.md) §MB3 "Talos config applies").
+      **Next:** the ledger section there + the instruction. Relates FU-012, FU-235.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
