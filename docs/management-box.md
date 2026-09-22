@@ -478,7 +478,9 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    [The rollout as built](#the-rollout-as-built-fu-273-2026-09-22).
 4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
    first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
-   window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
+   window while Longhorn is degraded, or while a service's PodDisruptionBudget says no; Garage's says
+   no while a zone is down or still resyncing, see [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22)).
+   One attempt per diff, then a parked failed
    state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
    mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
    apply and lands in a window instead — **set 2026-09-22** as `apply_mode = "no_reboot"` on both
@@ -505,8 +507,11 @@ Each tick, for the `auto` nodes only:
   one diff, used as the trigger and again as the completion condition.
 - **A version or schematic gap** → `node-maintenance.sh upgrade <node>`, run INSIDE the oneshot (the
   unit is the window). Everything the verb already refuses on stays the verb's: preflight, its WIP 1
-  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, Garage `cluster_healthy` and — for a Garage zone node — the resync backlog ≤ `GARAGE_RESYNC_QUEUE_MAX` (1000),
-  CNPG instances), the FU-033 gate, the post-install verify. The loop adds WIP 1 across windows it did
+  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, a PodDisruptionBudget
+  spanning several nodes already at 0, CNPG instances), the FU-033 gate, the post-install verify. The
+  drain respects every PDB; one that does not complete is a refusal (exit 2, uncordoned, retried next
+  tick), never a park. The verb knows no service: Garage's "may a zone go" lives in its own budget
+  ([garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22)). The loop adds WIP 1 across windows it did
   not open — ANY live [declared window](glossary.md) (`agents/seat-window.sh`'s record) refuses the tick,
   the target's own included (the check runs before the verb opens its window, so a window there is a
   person's hands-on work), unless it is on the target and opened with `--admit-reconciler` — the

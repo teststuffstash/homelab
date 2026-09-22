@@ -2397,3 +2397,23 @@ freedom — measurement: [change-hotspots §2026-09-21](spikes/change-hotspots.m
 **Consequences:** agent-runtime#144's broker retry stays as defense in depth; the renames sit in
 the glossary's pending list. Tracker: FU-269 (broker), FU-127 (structured ids), FU-270 (gateway
 project), FU-271 (HA measurement).
+
+### ADR-140 — A service's "may I lose a member now" lives in its own PodDisruptionBudget; maintenance verbs stay generic (2026-09-22)
+
+**Status:** Accepted (operator, 2026-09-22). Narrows how [ADR-132](#adr-132--the-management-box-reconciles-master-the-argocd-model-for-tofu-and-metal-end-state-2026-09-16)'s
+fleet floor is enforced. **Decision:** when a service must not lose a member right now, it says
+so in its PodDisruptionBudget, driven by a signal the service owns. The node-maintenance verbs
+only drain (PDB-respecting). They refuse up front when a budget spanning several nodes is already
+at 0, and they turn a drain that does not complete into a refusal (exit 2, uncordoned, retried),
+never a park. The first instance is Garage: a recording rule `garage:disruption_allowed` (cluster
+healthy AND resync backlog ≤ 1000, 10-minute hysteresis) is copied onto the `garage` PDB by a
+per-minute CronJob, fail closed. **Considered:** the gate inside `node-maintenance.sh` (#1880; the
+script learns every service's internals, and only this script's drains are protected); a
+backlog-aware readiness probe (after a rejoin all three peers carry backlogs at once, which would
+have emptied the S3 Service); a static `maxUnavailable: 1` (pod-Ready is connectivity, the same
+blind spot `cluster_healthy` has). **Why:** the 2026-09-22 rollout took a second zone down on a
+4.5–6.2k-block resync backlog while every generic check was green. The knowledge of when that is
+safe belongs to the service, and a PDB is the one place every drain already reads.
+**Consequences:** fail closed needs an override. It is an expiring PDB annotation, or
+`kubectl drain --disable-eviction` for a single drain. There are two belts (closed 2h, open
+against the signal). Design and override: [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22).

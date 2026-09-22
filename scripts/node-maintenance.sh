@@ -27,9 +27,13 @@
 # until the node is empty; a blocked drain uncordons and stops with the node exactly as it was.
 # The drain is also the ONLY service-aware step, and it knows no service: each workload's own
 # PodDisruptionBudget + controller decides when it may leave (CNPG switches a primary over ahead of
-# the drain, Longhorn releases its instance-manager once the volumes are safe, Garage is gated by
-# zone). A workload that cannot be drained is that workload's contract to fix — the drain's
-# timeout names it; this script never learns its name. The target image is READ FROM THE DECLARATION
+# the drain, Longhorn releases its instance-manager once the volumes are safe, Garage's `garage` PDB
+# follows its own "may a zone go" signal — docs/garage.md §Voluntary disruption). A workload that
+# cannot be drained is that workload's contract to fix — the drain's timeout names it; this script
+# never learns its name. A drain that does not complete is a REFUSAL (exit 2: uncordoned, window
+# closed, nothing installed — the reconciler retries it), and preflight refuses up front when a
+# budget spanning several nodes already allows 0 (draining this node cannot release it).
+# The target image is READ FROM THE DECLARATION
 # (`tofu output node_install_targets`), never typed: it must match on three axes — platform,
 # schematic, version — or the node loses its identity (ADR-014, amended) or its extensions.
 #
@@ -73,6 +77,9 @@
 #         drain proceeds; replica-1 classes longhorn-single/-fast/-scratch are replica-1 BY DESIGN)
 #   FAIL  any attached Longhorn volume cluster-wide is already degraded (a second outage on
 #         top of a rebuild is how a 2-replica volume loses data)
+#   FAIL  a PodDisruptionBudget covering a pod here allows 0 disruptions AND covers pods on other
+#         nodes too — the drain would wait on it until its timeout (single-node budgets such as
+#         Longhorn's instance-manager or a CNPG primary are released BY the drain, so they pass)
 #   WARN  a StatefulSet pod runs here (it moves, but that is a service interruption)
 #   WAIT  an Argo Workflow / agent ride / coordinator pod / busy ARC runner runs here (not a WARN:
 #         settle waits — a drained busy runner is a cancelled CI job)
@@ -120,12 +127,8 @@ ENDPOINT="${ENDPOINT:-}"                 # the CP the upgrade is endpointed at (
 KEEP_SCHEMATIC="${KEEP_SCHEMATIC:-0}"          # upgrade at the declared VERSION on the LIVE schematic
 ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared schematic, extensions and all
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
-PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (the Garage fleet floor reads it)
-GARAGE_SYNC_TIMEOUT="${GARAGE_SYNC_TIMEOUT:-900}" # s — wait for cluster_healthy after a window
-# The resync backlog a Garage ZONE node may go down on top of (max over peers). Steady state is ~50
-# (7-day median 48 to 2026-09-21); a fresh post-reboot backlog is thousands (p99 16k). 1000 = "the
-# previous zone's absence has been copied back" without a zero gate the scrubber would deadlock.
-GARAGE_RESYNC_QUEUE_MAX="${GARAGE_RESYNC_QUEUE_MAX:-1000}"
+PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (only `order`'s GARAGE ranking column reads it)
+REJOIN_TIMEOUT="${REJOIN_TIMEOUT:-900}"  # s — after a window: CNPG instances + the budgets over the node's pods whole again
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
@@ -425,6 +428,13 @@ preflight() {
   fi
   local ds; ds="$(jq -r '[.items[]|select(.metadata.ownerReferences[0].kind=="DaemonSet")]|length' <<<"$pods")"
   ok "$ds DaemonSet pod(s) (ignored by the drain)"
+  # A multi-node budget already at 0 over a pod here: the drain could only wait it out (see
+  # pdb_blockers). Unreadable = refuse.
+  local blockers
+  if ! blockers="$(pdb_blockers "$NODE")"; then fail "cannot read the PodDisruptionBudgets — refusing"
+  elif [ -n "$blockers" ]; then
+    fail "disruption budget(s) over pods on $NODE allow 0 disruptions now — the drain would only wait (that workload says 'not now'; retry later):"$'\n'"$(sed 's/^/         /' <<<"$blockers")"
+  else ok "no disruption budget over a pod here is closed across nodes (single-node ones are released by the drain)"; fi
 
   echo
   if [ "$FAILS" -gt 0 ]; then
@@ -532,10 +542,11 @@ down() {
   # DRY=1 previews the whole window: settle reported what it would wait on / move — stop here,
   # never a real drain or power-off under a dry-run flag (reviewer, PR#1564).
   [ "$DRY" = 1 ] && { log "DRY=1: would now cordon (if not yet), drain $NODE and talosctl shutdown — stopping"; return 0; }
-  # --force is what lets the drain delete bare (controller-less) pods; it is safe ONLY because
-  # settle just verified no running bare pod is left — what remains are finished ride pods.
-  log "drain $NODE (timeout $DRAIN_TIMEOUT; --force for the finished bare pods settle waited on)"
-  kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT"
+  # --force (inside drain_node) is what lets the drain delete bare (controller-less) pods; it is
+  # safe ONLY because settle just verified no running bare pod is left — what remains are finished
+  # ride pods. A drain a budget holds up is a refusal (exit 2, node uncordoned), never a power-off.
+  local drc=0; drain_node || drc=$?
+  [ "$drc" = 0 ] || return "$drc"
   local left
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
@@ -738,62 +749,69 @@ assert_wip1() {
   fail "WIP 1: another window looks open — $(tr '\n' ' ' <<<"$busy")"; return 1
 }
 
-# The fleet floor (ADR-132 §4): no window while the storage fabric is already down one leg.
-# Longhorn's degraded check is preflight's; this is the Garage half, and pod-Ready is NOT the
-# right test. rf=3 over three physical zones, quorum 2: with one zone down every partition it
-# holds sits at 2/3 — available, but the NEXT zone down takes those partitions to 1/3 and writes
-# fail. So the binding condition is Garage's own `cluster_healthy`, which is exactly "every
-# partition has ALL of its replica nodes up" (`cluster_available` is the weaker quorum-only
-# twin). Both are scraped from the admin port already; neither had a consumer before this.
-prom() { curl -sS --max-time 15 --data-urlencode "query=$1" "$PROM/api/v1/query"; }
-prom_min() {  # min value of a metric across every garage instance; "" if the query fails
-  local r; r="$(prom "$1")" || return 1
-  jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
-  jq -r '[.data.result[].value[1]|tonumber]|min // empty' <<<"$r"
+prom() { curl -sS --max-time 15 --data-urlencode "query=$1" "$PROM/api/v1/query"; }  # `order` only
+
+# ── Disruption budgets, read generically ─────────────────────────────────────────────────────────
+# ADR-132 §4's fleet floor, as far as budgets carry it. A service that must not lose a member right
+# now says so in its PodDisruptionBudget and the drain honours it: Garage's `garage` PDB follows its
+# own "may a zone go" signal (docs/garage.md §Voluntary disruption). That replaced the Garage floor
+# that lived here until 2026-09-22 (a `cluster_healthy` read, which is connectivity, not "caught
+# up": wk-metal-04 went down on a 4.5–6.2k resync backlog). This script knows no service; it only
+# asks which budgets would block.
+#
+# A budget at 0 is NOT always a refusal. A single-node budget (Longhorn's per-node
+# instance-manager, a CNPG primary) is released BY the drain: Longhorn deletes it once the volumes
+# are safe, CNPG switches the primary away from a cordoned node. A budget at 0 whose pods also sit
+# on OTHER nodes (or are unscheduled) cannot be released by draining this one. That is a workload
+# saying "not now", and the drain would only wait out its timeout, so preflight refuses on exactly
+# those before settle cordons or moves anything. The unhealthy-pod carve-out follows the API: under
+# unhealthyPodEvictionPolicy AlwaysAllow a not-Ready pod may always be evicted, so a budget whose
+# only pods here are not Ready does not block this node.
+PDB_JQ_DEFS='
+  def ready: any(.status.conditions[]?; .type == "Ready" and .status == "True");
+  def not_ds: (((.metadata.ownerReferences // [])[0].kind // "") != "DaemonSet");
+  def matches($s; $l):
+    $s != null
+    and ((($s.matchLabels // {}) | to_entries) | all(. as $e | $l[$e.key] == $e.value))
+    and (($s.matchExpressions // []) | all(. as $x |
+          if   $x.operator == "In"           then ($l[$x.key] // null) as $v | $v != null and any($x.values[]; . == $v)
+          elif $x.operator == "NotIn"        then ($l[$x.key] // null) as $v | $v == null or all($x.values[]; . != $v)
+          elif $x.operator == "Exists"       then $l | has($x.key)
+          elif $x.operator == "DoesNotExist" then $l | has($x.key) | not
+          else false end));
+  def covered($b): [ $P[0].items[]
+      | select(.metadata.namespace == $b.metadata.namespace)
+      | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+      | select(not_ds)
+      | select(matches($b.spec.selector; .metadata.labels // {})) ];
+'
+# pdb_blockers [node]: one line per blocking budget, "" = none. With no node: every multi-node
+# budget at 0 cluster-wide (upgrade-behind's "fleet whole" check). Non-zero = could not read, and
+# every caller refuses on that (an unreadable gate is a no). Dumps go through FILES, never argv
+# (the pod list is megabytes, see `order`).
+pdb_blockers() {
+  local d rc=0; d="$(mktemp -d)" || return 1
+  { kubectl get pdb -A -o json >"$d/b.json" && kubectl get pods -A -o json >"$d/p.json"; } || { rm -rf "$d"; return 1; }
+  jq -r --arg n "${1:-}" --slurpfile P "$d/p.json" "$PDB_JQ_DEFS"'
+    .items[] | select((.status.disruptionsAllowed // 0) == 0) | . as $b
+    | covered($b) as $pods
+    | ($pods | map(.spec.nodeName // "<unscheduled>") | unique) as $where
+    | select(($where | length) > 1)
+    | select($n == "" or any($pods[]; .spec.nodeName == $n
+                              and ($b.spec.unhealthyPodEvictionPolicy != "AlwaysAllow" or ready)))
+    | "\($b.metadata.namespace)/\($b.metadata.name) allows 0 disruptions (its pods: \($where | join(",")))"
+  ' "$d/b.json" || rc=1
+  rm -rf "$d"; return $rc
 }
-prom_max() {  # max value of a metric across every garage instance; "" if the query fails
-  local r; r="$(prom "$1")" || return 1
-  jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
-  jq -r '[.data.result[].value[1]|tonumber]|max // empty' <<<"$r"
-}
-garage_zone_node() {  # is $NODE one of the Garage zones? the zone label IS the node name
-  local r; r="$(prom "count by (role_zone) (cluster_layout_node_connected)")" || return 1
-  jq -e --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' >/dev/null <<<"$r"
-}
-assert_fleet_floor() {
-  local notready healthy
-  notready="$(kubectl -n garage get pods -l 'app.kubernetes.io/name=garage,garage.teststuff.net/serve-s3=true' -o json \
-              | jq -r '.items[] | select(any(.status.conditions[]?; .type=="Ready" and .status=="True") | not) | .metadata.name')"
-  [ -n "$notready" ] && { fail "fleet floor: Garage pod(s) not Ready — $(tr '\n' ' ' <<<"$notready")"; return 1; }
-  # Rule #6: an unreadable gate is a REFUSAL, never a pass — we must not fail into a window.
-  healthy="$(prom_min 'cluster_healthy')" || { fail "fleet floor: Prometheus at $PROM unreadable — refusing"; return 1; }
-  [ -n "$healthy" ] || { fail "fleet floor: cluster_healthy returned no series — refusing"; return 1; }
-  if [ "$healthy" != "1" ]; then
-    fail "fleet floor: Garage cluster_healthy=$healthy — a partition is missing a replica, so a"
-    fail "  second zone down would drop it below quorum. Wait for the previous node to rejoin."
-    return 1
-  fi
-  # cluster_healthy says every partition has its replicas UP, not that they hold the data: blocks
-  # written while the previous zone was down live on the other two until the resync copies them
-  # back. Taking a second ZONE down on top of that backlog leaves those blocks on one zone (seen
-  # 2026-09-22: wk-metal-04 went down at queue 4.5-6.2k, 10 min after wk-metal-01 came back). Only a
-  # zone node's window can do that, so only a zone node waits; a refusal here is the verb's exit 2
-  # (retried next tick), never a park.
-  local zr zone
-  zr="$(prom "count by (role_zone) (cluster_layout_node_connected)")" \
-    && jq -e '.status=="success"' >/dev/null 2>&1 <<<"$zr" \
-    || { fail "fleet floor: Garage zone list unreadable — refusing"; return 1; }
-  zone="$(jq -r --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' <<<"$zr")"
-  if [ "$zone" = true ]; then
-    local q; q="$(prom_max 'block_resync_queue_length')" || { fail "fleet floor: resync queue unreadable — refusing"; return 1; }
-    [ -n "$q" ] || { fail "fleet floor: block_resync_queue_length returned no series — refusing"; return 1; }
-    if [ "$(printf '%.0f' "$q")" -gt "$GARAGE_RESYNC_QUEUE_MAX" ]; then
-      fail "fleet floor: Garage resync backlog $q > $GARAGE_RESYNC_QUEUE_MAX (max over peers) — $NODE is a zone;"
-      fail "  wait for the previous zone's absence to be copied back before taking another one down"
-      return 1
-    fi
-  fi
-  ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue ≤ $(prom_max 'block_resync_queue_length')"
+# budgets_on_node: every budget (any disruptionsAllowed) covering a non-DaemonSet pod on $NODE.
+budgets_on_node() {
+  local d rc=0; d="$(mktemp -d)" || return 1
+  { kubectl get pdb -A -o json >"$d/b.json" \
+    && kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json >"$d/p.json"; } || { rm -rf "$d"; return 1; }
+  jq -r --slurpfile P "$d/p.json" "$PDB_JQ_DEFS"'
+    .items[] | . as $b | select(covered($b) | length > 0) | "\(.metadata.namespace)/\(.metadata.name)"
+  ' "$d/b.json" || rc=1
+  rm -rf "$d"; return $rc
 }
 
 # The CNPG half of the same idea. Every cluster here is 2 instances, and infisical-pg and
@@ -815,32 +833,40 @@ assert_cnpg_floor() {
   return 1
 }
 wait_cnpg_back() {
-  log "waiting for every CNPG cluster back to full instances (≤${GARAGE_SYNC_TIMEOUT}s)"
+  log "waiting for every CNPG cluster back to full instances (≤${REJOIN_TIMEOUT}s)"
   local t=0 bad
   while :; do
     bad="$(cnpg_unhealthy || true)"
     [ -z "$bad" ] && break
     sleep 15; t=$((t+15))
-    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: CNPG still short — $(tr '\n' ' ' <<<"$bad")"; return 1; }
+    [ $t -ge "$REJOIN_TIMEOUT" ] && { fail "TIMEOUT: CNPG still short — $(tr '\n' ' ' <<<"$bad")"; return 1; }
   done
   ok "CNPG: every cluster at full instances after ~${t}s"
 }
 
-# After the window: membership whole again. This is the gate that lets the NEXT node start, which
-# is why it belongs to the upgrade and not to the operator's patience. The resync queue is
-# reported but not blocked on — it never reaches zero in steady state (a background scrubber keeps
-# ~40 queued here), so an absolute-zero gate would deadlock; cluster_healthy is the real signal.
-wait_garage_back() {
-  garage_zone_node || { log "$NODE holds no Garage zone — no sync gate"; return 0; }
-  log "waiting for Garage cluster_healthy=1 (≤${GARAGE_SYNC_TIMEOUT}s)"
-  local t=0 h
+# After the window: the budgets this node's pods were under are whole again, i.e. every pod they
+# expect is back and healthy (PDB status currentHealthy >= expectedPods). For a Garage zone node
+# that is the three storage pods Ready (readiness = /health = this node has quorum), which is what
+# the old cluster_healthy wait amounted to. Whether the NEXT zone may go is not this window's
+# question: the budget answers it again at the next node's preflight and drain.
+BUDGETS_HERE=""   # "ns/name" per line, captured by drain_node before it evicts anything
+wait_budgets_back() {
+  [ -n "$BUDGETS_HERE" ] || { log "no disruption budget covered a pod on $NODE — nothing to wait for"; return 0; }
+  log "waiting for the budget(s) over $NODE's pods to be whole again (≤${REJOIN_TIMEOUT}s): $(tr '\n' ' ' <<<"$BUDGETS_HERE")"
+  local t=0 short b st
   while :; do
-    h="$(prom_min 'cluster_healthy' || true)"
-    [ "$h" = "1" ] && break
+    short=""
+    while read -r b; do
+      [ -n "$b" ] || continue
+      # A budget that no longer exists (Longhorn's per-node ones come and go) is not short.
+      st="$(kubectl -n "${b%%/*}" get pdb "${b#*/}" -o jsonpath='{.status.currentHealthy}/{.status.expectedPods}' 2>/dev/null)" || continue
+      [ "${st%%/*}" -ge "${st#*/}" ] 2>/dev/null || short="$short $b($st)"
+    done <<<"$BUDGETS_HERE"
+    [ -z "$short" ] && break
     sleep 15; t=$((t+15))
-    [ $t -ge "$GARAGE_SYNC_TIMEOUT" ] && { fail "TIMEOUT: Garage cluster_healthy=${h:-?} after ${t}s"; return 1; }
+    [ $t -ge "$REJOIN_TIMEOUT" ] && { fail "TIMEOUT: budget(s) still short after ${t}s:$short"; return 1; }
   done
-  ok "Garage cluster_healthy=1 after ~${t}s (resync queue $(prom_min 'block_resync_queue_length'), errored $(prom_min 'block_resync_errored_blocks'))"
+  ok "every budget over $NODE's pods whole again after ~${t}s"
 }
 
 # Version sanity + the gates that are written down rather than computable.
@@ -892,25 +918,35 @@ verify_installed() {
   [ "$got_v" = "$want_v" ] && [ "$got_s" = "$want_s" ]
 }
 
-# The drain, as its own bounded step (see the header). A blocked drain undoes only what it did —
-# the cordon and the window — and names what refused, because nothing was written to the node yet.
-drain_for_upgrade() {
-  log "drain $NODE (≤$DRAIN_TIMEOUT, PDB-respecting) BEFORE the install — each workload's controller decides when it leaves"
-  # --force: the finished bare ride pods settle waited on (same reasoning as `down`).
+# The drain, as its own bounded step (see the header) — shared by `down` and `upgrade`. It is
+# PDB-respecting: an eviction a budget refuses is retried until DRAIN_TIMEOUT, and then kubectl
+# gives up with exit 1. That is a workload saying "not now", so this turns it into a REFUSAL:
+# name what stayed and which budgets held it, uncordon, close the window, return 2 — the verb's
+# exit 2, which the reconciler retries next tick (scripts/mgmt-reconcile.sh's exit contract), never
+# a half-done window and never a park. Nothing was written to the node yet. Pods the drain DID
+# evict before the budget refused stay wherever their controllers put them; preflight's
+# pdb_blockers keeps that to the rare budget that closed during settle.
+# Returns 1 only when the undo itself fails (the node stays cordoned — that is not "as it was").
+drain_node() {
+  BUDGETS_HERE="$(budgets_on_node 2>/dev/null || true)"
+  log "drain $NODE (≤$DRAIN_TIMEOUT, PDB-respecting) — each workload's budget + controller decides when it leaves"
+  # --force: the finished bare ride pods settle waited on (running bare pods are settle's to wait out).
   if kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT" >/dev/null; then
     ok "$NODE drained"; return 0
   fi
-  local left
+  local left blockers
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json \
           | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name)"')" \
     || left="(could not list them)"
-  fail "drain of $NODE did not complete within $DRAIN_TIMEOUT — nothing was installed; still on the node:"
+  blockers="$(pdb_blockers "$NODE" 2>/dev/null)" || blockers="(could not read the budgets)"
+  fail "drain of $NODE did not complete within $DRAIN_TIMEOUT — nothing was installed or powered off; still on the node:"
   printf '%s\n' "$left" | sed '/^$/d;s/^/         /'
+  [ -n "$blockers" ] && { fail "  budget(s) refusing:"; printf '%s\n' "$blockers" | sed 's/^/         /'; }
   fail "  a pod that will not leave is ITS workload's disruption contract (PDB + controller), not this script's."
-  log "uncordon $NODE and close the window — the node is exactly as it was"
-  kubectl uncordon "$NODE" >/dev/null || fail "uncordon $NODE failed — do it by hand"
+  log "uncordon $NODE and close the window — REFUSED (exit 2), retry once the budget allows"
+  kubectl uncordon "$NODE" >/dev/null || { fail "uncordon $NODE failed — do it by hand"; return 1; }
   silence_close; declare_close
-  return 1
+  return 2
 }
 
 # ── FU-265: firmware boot entries the Talos installer cannot parse ──────────────────────────────
@@ -1052,13 +1088,14 @@ upgrade() {
     # the drain below is the gate for all of them and fails closed. So preflight runs with its WARN
     # class accepted, and only a FAIL (node unhealthy, a volume already degraded) refuses. Before
     # this, an unattended run needed FORCE=1 for any storage node — and FORCE also waved through the
-    # floors below, the one thing an unattended run must never skip (2026-09-21).
+    # floors below, the one thing an unattended run must never skip (2026-09-21). A budget that
+    # would block the drain (pdb_blockers — a Garage zone that may not go yet) is a preflight FAIL,
+    # so it refuses here too, before settle cordons anything.
     FORCE=1 preflight || rc=$?
     [ "$rc" = 2 ] && { fail "preflight refused (a FAIL — WARNs do not block an upgrade)"; return 2; }
-    # The fleet floors are NOT FORCE-able: they are what stops a second node (a second Garage zone,
-    # a second CNPG instance) going down before the first is whole again.
+    # The fleet floors are NOT FORCE-able: they are what stops a second node (a second CNPG
+    # instance) going down before the first is whole again. Garage's floor is its own budget now.
     assert_wip1        || return 2
-    assert_fleet_floor || return 2
     assert_cnpg_floor  || return 2
   fi
   # NOT FORCE-able either: a cross-minor downgrade is impossible, a skipped minor is untested config
@@ -1073,7 +1110,8 @@ upgrade() {
   [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }
 
   silence_open; declare_open
-  if [ "${LAB:-0}" != 1 ]; then drain_for_upgrade || return 1; fi
+  # A drain a budget holds up returns 2 (a refusal: uncordoned, window closed, retried next tick).
+  if [ "${LAB:-0}" != 1 ]; then local drc=0; drain_node || drc=$?; [ "$drc" = 0 ] || return "$drc"; fi
   # FU-265: scrub unparseable firmware boot entries BEFORE the installer walks them. Fail closed —
   # an installer run against a node the scrub could not read is the half-applied state this avoids.
   if [ "${LAB:-0}" != 1 ] && [ "${SKIP_EFI_SCRUB:-0}" != 1 ]; then
@@ -1107,7 +1145,7 @@ upgrade() {
   [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
   if [ "${LAB:-0}" != 1 ]; then
     wait_storage_back || return 1
-    wait_garage_back  || return 1
+    wait_budgets_back || return 1
     wait_cnpg_back    || return 1
   fi
   if [ -n "$version" ]; then
@@ -1260,7 +1298,7 @@ upgrade_behind() {
   for e in "${plan[@]}"; do set -- $e; i=$((i+1)); log "  $i. $1 ($2)  $3 -> $4"; done
   [ "$DRY" = 1 ] && { log "DRY=1 — nothing touched"; return 0; }
 
-  local total=${#plan[@]} rc t0 nodes_json
+  local total=${#plan[@]} rc t0 nodes_json closed
   i=0
   for e in "${plan[@]}"; do
     set -- $e; i=$((i+1))
@@ -1277,16 +1315,21 @@ upgrade_behind() {
     [ "$i" = "$total" ] && break
     # The fleet whole again before the next node goes down: every node Ready, and Cilium holding
     # the apiserver backend on every agent (the FU-258 class — cp-upgrade repairs it itself; this
-    # proves it held for a worker too, and that nothing else fell over meanwhile).
+    # proves it held for a worker too, and that nothing else fell over meanwhile), and no budget
+    # spanning several nodes at 0 — a service still catching up from the last window (a Garage
+    # zone's resync backlog: docs/garage.md §Voluntary disruption) would refuse the next node's
+    # preflight anyway. Raise BETWEEN_TIMEOUT for a storage-heavy run: a post-reboot backlog has
+    # held a budget closed for up to ~80 min.
     log "waiting for the fleet to be whole before the next node (≤ ${BETWEEN_TIMEOUT}s)"
     t0=$(date +%s)
     # ONE read, and an unreadable one is never "whole": two failed reads would compare "" = "".
     until nodes_json="$(kubectl get nodes -o json)" \
           && jq -e '(.items | length) > 0 and all(.items[]; any(.status.conditions[]; .type=="Ready" and .status=="True"))' \
                <<<"$nodes_json" >/dev/null \
-          && bash "$REPO/scripts/maintenance-window.sh" cilium-check >/dev/null 2>&1; do
+          && bash "$REPO/scripts/maintenance-window.sh" cilium-check >/dev/null 2>&1 \
+          && closed="$(pdb_blockers)" && [ -z "$closed" ]; do
       [ $(( $(date +%s) - t0 )) -lt "$BETWEEN_TIMEOUT" ] || {
-        fail "the fleet is not whole ${BETWEEN_TIMEOUT}s after $1 — STOPPING before the next node"; return 2; }
+        fail "the fleet is not whole ${BETWEEN_TIMEOUT}s after $1 — STOPPING before the next node${closed:+ (closed budget(s): $(tr '\n' ' ' <<<"$closed"))}"; return 2; }
       sleep 15
     done
     ok "fleet whole again after $1"
