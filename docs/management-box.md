@@ -473,6 +473,43 @@ Each tick, for the `auto` nodes only:
 
 Not built here: layer 5's PXE flags (FU-244 — the verb in use is an in-place upgrade, which needs none) and
 any sync of the reinstall class.
+
+### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
+
+The reconciler syncs one node per tick with WIP 1 and nothing else. That is enough for one `auto` node
+and not for a fleet: a symptom two hours after the last node is done meets "what changed in the last
+24 hours?", which always names the upgrade, and with every node on the new version the claim cannot
+be tested. The rules, ruled before anything below is built:
+
+- **Default forward.** A new alert on its own neither halts nor reverts a rollout, and the responder
+  never reverts. Rolling back on the first alert means never moving forward in practice: the symptom may be a fluke or
+  a stack's own change, and a single stack's CI that a script update fixes is not a platform verdict.
+- **Revert is a human commit**, backed by a **differential** signal: worse on upgraded nodes than on
+  not-yet-upgraded ones, starting after each node's own upgrade, seen across stacks. Only that
+  evidence halts the rollout automatically. Within a minor the reverted declaration is then a
+  rollback the reconciler runs (the verb allows a patch downgrade); across a minor it is `talosctl
+  rollback` or a reinstall.
+- **Less than a day, end to end.** Drift from git is a tax: with master at 1.14.2 and the fleet split,
+  nobody can say which version a node runs without looking. `TalosFleetVersionSplit` /
+  `MgmtNodeInstallDrift` at 24 h are the rollout's deadline, not a threshold to tune.
+- **Soak = evidence, in hours, never wall time.** A canary stage ends when each canary TYPE has been
+  exercised on the new version, with a timeout: nx-01 after one ride + one ARC job, wk-03 after ARC
+  jobs, a storage node after a Longhorn replica rebuilt onto it with its Garage zone healthy, a
+  control plane after its etcd member is healthy and its apiserver serves. Time passing on an idle
+  node proves nothing.
+- **The rollout creates the pressure.** Workloads do not move to a new node on their own (a CNPG
+  instance stays where it is until evicted). So a rollout taints every not-yet-upgraded node
+  `PreferNoSchedule` (e.g. `homelab.io/talos-behind`) and clears the taint as each one upgrades. Every drain then lands its
+  pods on upgraded nodes, and the new version carries real work within hours. That same load is what the
+  differential compares. A preference, so it never blocks scheduling when the upgraded nodes are full.
+- **One rollout per substrate** (Talos), not a soak matrix per component. Per-component soaks end in
+  every node running a unique combination — the 500-feature-flags failure.
+- **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
+  control planes — as `node-maintenance.sh order` already ranks them.
+
+To build (FU-273): the exercise predicates per canary type, the repel taint, the differential
+detector, and stages in the reconciler. The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the
+rollback drill) run before any of it exists.
 6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
    virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
    nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
