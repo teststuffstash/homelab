@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-274** (2026-09-22: FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-275** (2026-09-22: FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -211,6 +211,13 @@ six OVERSIZE items pointer-ized into
       **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
       to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
       and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
+- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
+      tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
+      2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
+      that TTL nearly filled it (720h left over from FU-196 v0; #1870 set 168h + 150Gi). Serve
+      first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
+      third-party images only. **Next:** per-repo keep-sets + quota there first (FU-203: 48Gi cap,
+      only oracle-fleet has a policy), then dual-publish → pin flip per image. Relates FU-196, FU-203.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
