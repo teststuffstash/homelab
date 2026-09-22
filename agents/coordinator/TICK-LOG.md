@@ -10539,6 +10539,13 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   closed; live `no-cache` passed through, was `max-age=14400`) and #1899 pre-flight is the repo's own
   gate (diff-ci out of the universal card into homelab's recipes). #1889 closed by #1895's map row.
 - FU-229 gained the 09-16 PUT-burst numbers (~500 meta writes/PUT, GetObject p99 17 s).
+- **Readonly-token hazard (`20260922-0813`) fixed detector-first:** #1900 the belt
+  (`kube_externalsecret_refresh_time` via KSM custom-resource-state + `GithubTokenMirrorBehind`
+  /`MintStale`/`MetricAbsent`, promtool fixture; went firing at 18:30Z on the real pairs before the
+  fix — the series is new, so 09-21/22 could not be replayed), then #1901 mint 30m / mirror 5m.
+  Second instance found and fixed: `openrouter-operator/retro-git` (same 45m/45m, also 401). Live:
+  all four ES at 30m/5m, the oracle-fleet mirror probes 200 (seat, 18:5xZ), no GithubToken* firing.
+  Open: oracle-fleet's 02:30Z `retention` tick is the end-to-end confirmation.
 - ⚠ `devbox run -- gh` re-parses args under dash: an apostrophe in `--title` swallowed the line
   ("Title is too long"), `scripts/**` globbed and the create silently no-op'd → use
   `gh api repos/<slug>/issues --input <json>`.
