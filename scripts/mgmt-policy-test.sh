@@ -184,7 +184,8 @@ post_case() {  # <name> <want-rc> <verdict sequence> [grep for the output]
   printf '%s\n' $seq >"$T/hseq"
   out="$( mgmt_health() { local v; v="$(head -1 "$T/hseq")"; sed -i 1d "$T/hseq"; [ -n "$v" ] || v=reg
             case "$v" in ok) echo "  ok  all"; return 0 ;; *) echo "  ⚠ NEW firing alerts: KubeAPIDown"; echo "  ok  nodes"; return 2 ;; esac; }
-          _mgmt_sleep() { :; }
+          echo 0 >"$T/hclock"; _mgmt_now() { cat "$T/hclock"; }
+          _mgmt_sleep() { echo $(( $(cat "$T/hclock") + $1 )) >"$T/hclock"; }
           MGMT_POSTCHECK_SETTLE=0 MGMT_POSTCHECK_INTERVAL=30 MGMT_POSTCHECK_TIMEOUT=90 mgmt_post_check "$T/base.json" )"; rc=$?
   if [ "$rc" = "$want" ] && { [ -z "$pat" ] || grep -qx -- "$pat" <<<"$out"; }; then pass=$((pass+1)); echo "PASS post:$name (rc=$rc)"
   else fail=$((fail+1)); echo "FAIL post:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
@@ -192,6 +193,10 @@ post_case() {  # <name> <want-rc> <verdict sequence> [grep for the output]
 post_case clean-first         0 "ok"
 post_case transient-recovers  0 "reg reg ok"
 post_case regressed-deadline  2 "reg reg reg reg reg reg" "NEW firing alerts: KubeAPIDown"
+# the FAKE clock bounds the polls: settle 0, every 30 s, deadline 90 s → readings at t=0,30,60,90 = 4
+left="$(grep -c . "$T/hseq")"
+if [ "$left" = 2 ]; then pass=$((pass+1)); echo "PASS post:deadline-poll-count (4 readings)"
+else fail=$((fail+1)); echo "FAIL post:deadline-poll-count — $((6-left)) readings, want 4"; fi
 
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

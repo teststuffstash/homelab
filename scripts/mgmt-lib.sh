@@ -507,18 +507,19 @@ mgmt_health() { ( cd "$REPO" && devbox run --quiet -- bash "$REPO/scripts/mainte
 mgmt_post_check() {
   local base="$1" settle="${MGMT_POSTCHECK_SETTLE:-180}" every="${MGMT_POSTCHECK_INTERVAL:-30}"
   local deadline="${MGMT_POSTCHECK_TIMEOUT:-900}" t0 out
-  t0="$(date +%s)"
+  t0="$(_mgmt_now)"
   _mgmt_sleep "$settle"
   while :; do
     if out="$(mgmt_health compare "$base" 2>&1)"; then return 0; fi
-    [ $(( $(date +%s) - t0 + every )) -le "$deadline" ] || break
+    [ $(( $(_mgmt_now) - t0 + every )) -le "$deadline" ] || break
     _mgmt_sleep "$every"
   done
   printf '%s\n' "$out" | grep '⚠' | sed 's/^[[:space:]]*⚠[[:space:]]*//'
   [ -n "$(printf '%s\n' "$out" | grep '⚠')" ] || printf '%s\n' "compare failed without a finding: $(printf '%s' "$out" | tail -1)"
   return 2
 }
-_mgmt_sleep() { sleep "$1"; }   # the fixture test stubs this
+_mgmt_sleep() { sleep "$1"; }   # the fixture test stubs these two with a FAKE clock
+_mgmt_now() { date +%s; }       # (a no-op sleep alone left the deadline on the wall clock: ~60 s of busy loop, #1875)
 
 # mgmt_git <git args…> — git with the App token as a per-invocation `http.extraHeader` (the
 # PR#1333 pattern: preemptive Basic auth, so GitHub never sees an ANONYMOUS request from this box —
