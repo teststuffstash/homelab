@@ -1,0 +1,53 @@
+# fleet-reader-rekey — Goal #1640 acceptance 5 (scan half): the FU-200 fleet reader re-keyed on
+# `(class, provider)` / `(class, model)` / neither.
+#
+# CONDITION UNDER REPLAY. The reader used to walk `AGENT_STRIKE:` comments to reconstruct CELL
+# state the router already owns, and its only verb was "label issues". It now keys on the strike's
+# `(class, provider)`, `(class, model)`, or NEITHER, and acts accordingly:
+#
+#   (class, provider) — a repeated serving strike on one provider LATCHES THE PROVIDER. The
+#       router's (model, provider) pair cooldown IS that state (`/router-status` →
+#       `pair_cooldowns`); the scan ASKS for it, it does not rebuild it from a timeline.
+#   (class, model)    — a repeated serving strike ACROSS providers NOMINATES THE MODEL for the
+#       ledger: a record, never a label.
+#   neither           — the "us" case: our recipe, our repo, our task. This, and ONLY this, puts
+#       `agent/error` on issues (the fleet-fault rule's ≥2-in-24h shape stays; its verb changes).
+#
+# THE CONTRACT, one leg each:
+#   provider-latch      the pair world, the router reporting the (model, provider) pair COOLED ⇒
+#                       the PROVIDER branch: a report line, NO `agent/error`, no filing.
+#   model-nomination    the across world (one model, two providers), no cooled pair ⇒ the MODEL
+#                       branch: a report line + ONE deduped inert `model-nomination:` filing, NO
+#                       `agent/error` on any issue.
+#   us-case-labels      the spread world (four distinct models AND providers) ⇒ the "us" branch:
+#                       `agent/error` on every affected issue + ONE comment + ONE filing.
+#   us-case-unknown     a NON-serving class (`unknown`, the FU-200 latch class) ⇒ the "us" branch
+#                       even though the cells are distinct — a non-serving death is never a
+#                       provider or model fault.
+#   us-case-pair        the pair world with NO cooled pair and NO clean ride ⇒ the "us" branch.
+#                       This is the CONTRAST row: the same world as provider-latch, a different
+#                       router state, a different branch.
+#   clean-retry-refutes the pair world, the router reporting the cell in `generations_24h` (a
+#                       clean ride) ⇒ the strikes are REFUTED and dropped: no branch, no write.
+#   router-unreadable   `curl` fails ⇒ FAIL-CLOSED and LOUD (rule #6): one ⛔ report line, no
+#                       latch, no nomination, no `agent/error`.
+#   key-class-excluded  the keyclass world (two issues, each with `budget-403-key` AND
+#                       `budget-exhausted-key` strikes — the FU-202 key classes recorded as
+#                       AGENT_STRIKE: pre-#1233) ⇒ NO branch at all: a key class is a MINT defect,
+#                       never a provider, model or "us" fault. No latch, no nomination, no
+#                       `agent/error`, no filing. The re-key dropped this belt (its worlds carried
+#                       no key-class strike, so nothing noticed); this row pins IL-T30's guard.
+#
+# The router payload is a row's declared CONDITION (`ROUTER_STATUS_JSON`), never a live call: the
+# ClusterIP endpoint answers from inside the loop namespace, so a fixture that reached it would go
+# green for the wrong reason.
+pins:
+  - IL-T30
+name: fleet-reader-rekey
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fleet-strike-reader
+  - file:post.sh
+rows: rows.psv

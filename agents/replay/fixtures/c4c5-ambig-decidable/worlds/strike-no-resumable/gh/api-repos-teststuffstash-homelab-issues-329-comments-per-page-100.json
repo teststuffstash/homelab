@@ -1,0 +1,16 @@
+[
+  {
+    "id": 100,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "<!-- agent-summary -->\n\ud83e\udd16 **Agent activity** \u2014 picking this up (round 1)."
+  },
+  {
+    "id": 101,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: error_class=unknown\n\nThe worker went terminal without pushing. The issue is still actionable \u2014 the deliverable is unchanged.\n\nNo branch was pushed this round; the next ride starts from scratch."
+  }
+]
