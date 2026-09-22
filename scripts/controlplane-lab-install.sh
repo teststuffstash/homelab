@@ -2,7 +2,11 @@
 # Install and bootstrap a disposable, isolated one-node Talos control plane on an already-created
 # nocloud VM. The generated credentials stay in OUTPUT_DIR and must never be committed.
 #
-#   scripts/controlplane-lab-install.sh 192.168.2.65 /tmp/cp-upgrade-lab
+#   scripts/controlplane-lab-install.sh <free-lab-ip> /tmp/cp-upgrade-lab
+#
+# The IP is BORROWED: clear it first (git grep + nmap -sn, docs/ip-plan.md). .65 (the 2026-09-20 run's)
+# is production cp-02 now (docs/controlplane-ha.md §CP4). Run it with TALOSCONFIG/KUBECONFIG UNSET:
+# `devbox run` points them at production's configs (tools on PATH instead).
 set -euo pipefail
 
 IP="${1:-}"

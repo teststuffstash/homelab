@@ -244,6 +244,29 @@ additionalPrometheusRulesMap:
             labels:
               severity: warning
 alertmanager:
+  # FU-195: the operator's default is a bare emptyDir for the `…-alertmanager-db` volume, so
+  # EVERY Alertmanager pod restart wipes every open silence and the whole notification log. A
+  # fleet Talos rollout restarts Alertmanager BY CONSTRUCTION — every node drain moves the pod —
+  # so the rollout erases the very safety net it runs under: scripts/node-maintenance.sh's
+  # per-node maintenance silences are gone by the time the rollout's own PodSigkilled alerts
+  # fire. Measured twice: 2026-08-25 (both open S7 silences lost) and 2026-09-22, when wk-04's
+  # drain (~12:46Z) left "no active silences" and the rollout's 12 reboots alerted unsilenced.
+  # Longhorn RWO follows the pod to its new node, so a silence now outlives the restart it was
+  # written to cover. 1Gi is generous headroom — silences + nflog are kilobytes. Same shape as
+  # prometheus.prometheusSpec.storageSpec below.
+  # ⚠ The FIRST sync after this lands recreates the Alertmanager StatefulSet (a volumeClaimTemplate
+  # is an immutable field), which wipes the current silences one last time — re-create any open
+  # silence after that sync, before the next rollout.
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: longhorn
   config:
     receivers:
       - name: "null"

@@ -365,6 +365,9 @@ GitHub docs + a credential-free `tofu validate` before any apply.
    dialed loopback. Fix: a **trailing dot** on the origin host (`…svc.cluster.local.:8123`) →
    absolute name, no search expansion. ⚠️ This is a cluster-wide landmine: any client using a
    full `.cluster.local` name *without* a trailing dot can hit the wildcard.
+   **Bit again 2026-09-22** when Talos v1.14 started applying the DHCP search domain on metal nodes
+   (FU-277): the LAN answer is now NXDOMAIN for all of `local.teststuff.net` (Unbound DNSBL policy,
+   `ansible/group_vars/opnsense.yml` `unbound_nxdomain_wildcards`); the public wildcard is unchanged.
 2. **400, "reverse proxy not configured".** HA rejects requests carrying `X-Forwarded-For`
    unless trust is configured. cloudflared sends XFF; the LAN HAProxy path does **not**, which
    is why HAProxy worked with no `http:` block. Fix: `http.use_x_forwarded_for: true` +
