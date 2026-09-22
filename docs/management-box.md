@@ -483,6 +483,19 @@ any sync of the reinstall class.
    addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
    BMC network through the node's routing.
 
+**The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
+no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
+source controller + tofu-controller as the reconcile engine, the whole thing a **Nix closure**: images as
+`dockerTools.pullImage` digests, manifests as files (`services.k3s.images` / `manifests` — verify in the
+26.05 pin), so `mgmt-confirm`'s gate-and-reboot covers the cluster and `nixos-anywhere` recreates it. Prior
+art and why none of it fits as-is: Flux tofu-controller and Burrito (the model, but in-cluster state + creds),
+Atlantis (the sentinel by another name, pre-merge apply), Sidero Omni / CAPI+CAPT / Tinkerbell / Metal3 (the
+metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md).
+
+**Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
+(FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-21):** everything through `reconcile: auto` is built; the auto set is one node.
+
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 
 The reconciler syncs one node per tick with WIP 1 and nothing else. That is enough for one `auto` node
@@ -519,19 +532,6 @@ be tested. The rules, ruled before anything below is built:
 To build (FU-273): the exercise predicates per canary type, the repel taint, the differential
 detector, and stages in the reconciler. The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the
 rollback drill) run before any of it exists.
-
-**The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
-no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
-source controller + tofu-controller as the reconcile engine, the whole thing a **Nix closure**: images as
-`dockerTools.pullImage` digests, manifests as files (`services.k3s.images` / `manifests` — verify in the
-26.05 pin), so `mgmt-confirm`'s gate-and-reboot covers the cluster and `nixos-anywhere` recreates it. Prior
-art and why none of it fits as-is: Flux tofu-controller and Burrito (the model, but in-cluster state + creds),
-Atlantis (the sentinel by another name, pre-merge apply), Sidero Omni / CAPI+CAPT / Tinkerbell / Metal3 (the
-metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md).
-
-**Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
-(FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
-the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-21):** everything through `reconcile: auto` is built; the auto set is one node.
 
 ## Rollback — three layers
 
