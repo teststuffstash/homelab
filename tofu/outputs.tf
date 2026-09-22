@@ -35,7 +35,7 @@ output "node_install_targets" {
         class     = "vm"
         installer = data.talos_image_factory_urls.vm[local.vm_image_key[k]].urls.installer
         schematic = n.longhorn ? talos_image_factory_schematic.longhorn.id : talos_image_factory_schematic.this.id
-        version   = local.talos_role_version[n.role]
+        version   = local.node_talos_version[k]
         # The INSTALL-TIME half (ADR-132 §MB4 layer 2): fields Talos honours only on the next
         # install, so `plan` shows them as a clean in-place config apply. The sentinel diffs this
         # output's before/after per node and names the node + field on the PR — never the value.
