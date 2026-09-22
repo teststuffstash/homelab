@@ -10507,3 +10507,10 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   printed into this session's transcript by a zsh no-word-split curl — ROTATED 16:1xZ by the seat: new
   root key via `auth/user/add_api_key/root` (the uuid form fails), wallet entries edited, box env
   `--push`ed, old key `del_api_key`'d → 401; new key 200; `opnsense-playbook --check` clean.
+- **16:00–16:40Z (mgmt box tail):** OPNsense API key ROTATED (above). FU-238 closed: the box's only
+  Cloudflare credential is `cloudflare-mgmt-read` (hash-matched); the operator's host run died on a
+  `set -e` exit before the store step → fixed in #1893, which also landed the FU-097 capability
+  ledger (management-box.md) and the FU-248 (a) VM-recreate recipe (runbook). #1894: maintenance-
+  window.sh keys state per window id (`--id`, `list`) — filed as G1, closed as G3 (id clash).
+  Box reconciler confirmed on the new code (FU-276/278) after the 16:05Z pull. A subagent's
+  `until ! pgrep -f 'pr-wait.sh …'` loop matched itself and never ended — killed; never use it.
