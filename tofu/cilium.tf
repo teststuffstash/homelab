@@ -77,18 +77,22 @@ resource "helm_release" "cilium" {
     }
     # FU-082: requests only (DaemonSet, one per node) — envoy proxies pod L7 traffic, ~15-30Mi.
     envoy = { resources = { requests = { cpu = "50m", memory = "64Mi" } } }
-    # FU-112(b): the cilium-AGENT DaemonSet was BestEffort (no resources) → the Talos OOMController
-    # killed it FIRST under node memory pressure (homelab#63, the #48 kata-ride OOM cascade). Make it
-    # GUARANTEED (req==limit) so its oom_score_adj is -997: among Guaranteed pods the kernel then
-    # evicts the biggest RSS (the ~5Gi kata ride), NOT the node's network. NB Burstable/requests-only
-    # does NOT achieve this — a small request still leaves oom_score_adj ~950. Limits are generous
-    # (mem 2× the ~261Mi observed peak; cpu 2.5× the ~100m peak) so self-cgroup-OOM/throttle is
-    # unlikely, while keeping the per-node reservation small enough that a ~5.1Gi kata ride still fits
-    # on the 7.1Gi kata nodes (the reservation-vs-self-OOM tension on the 8GB tier — kept modest).
-    # FU-224 (2026-09-08): cpu 250m → 500m — the agents on the slow-CPU boxes (wk-metal-03, hp-01,
-    # m70s) throttled 11–17 % of CFS periods at 250m; laptops carry 25–31 % CPU requested, so the
-    # extra 250m reservation still leaves room. Memory unchanged (the kata-fit tension above).
-    resources = { requests = { cpu = "500m", memory = "512Mi" }, limits = { cpu = "500m", memory = "512Mi" } }
+    # The cilium-AGENT's resources (FU-112(b) → FU-224 → FU-267). History: it was BestEffort and the
+    # 2026-07-27/28 kata-ride OOM cascade killed it first (docs/incidents/2026-07-27-kata-ride-oom-
+    # cascade.md); it was then made Guaranteed (req == limit, 500m / 512Mi) for oom_score_adj -997.
+    # 2026-09-22 (operator; the first box-run Talos rollout): on nx-01 the restarted agent sat at
+    # 510/512 Mi and 100 % CFS-throttled at 500m and never became ready — the node had no pod
+    # network. Guaranteed was the wrong tool for both protections it was chosen for:
+    #   • KERNEL global OOM: the kubelet gives a system-node-critical pod oom_score_adj -997 BEFORE it
+    #     looks at QoS (pkg/kubelet/qos/policy.go GetContainerOOMScoreAdjust, IsNodeCriticalPod — k8s
+    #     v1.36.1), and this DaemonSet is system-node-critical. Burstable keeps -997.
+    #   • Talos OOMController: the default cgroupRankingExpression scores any cgroup WITH a memory
+    #     limit 0 (`memory_max.hasValue() ? 0.0 : …`, Talos v1.14 oomconfig) — the limit protects it.
+    # So: no CPU limit (a restart bursts onto idle cores — 40 on nx-01 — instead of freezing; the
+    # request covers steady state: 3-day p99 46–271m), memory request = steady state (unchanged, so
+    # the 8 GB kata laptops' fit is unchanged), memory limit = restart headroom (peaks 437–511 Mi on
+    # every node against the old 512 Mi). Every 4-core box gets 350m of CPU request back.
+    resources = { requests = { cpu = "150m", memory = "512Mi" }, limits = { memory = "1Gi" } }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
     operator = {

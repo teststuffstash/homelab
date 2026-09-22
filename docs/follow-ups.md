@@ -1398,12 +1398,6 @@ the block needs pruning, not more headings.
       **Next:** probe the state-reconciliation candidates on the disposable control plane
       (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
 
-- [ ] **FU-267** — **cilium-agent runs at 80–87 % of its 512 Mi Guaranteed limit fleet-wide.**
-      `tofu/cilium.tf:91` requests = limits 512 Mi; 2026-09-21 reads 410–446 Mi on the busy nodes,
-      and `ContainerMemoryNearLimit` fired on hp-01 as the pve drain landed pods there. An OOM kill
-      of the agent is a node-networking blip. **Next:** raise the limit (or go Burstable — the
-      fleet-roles "request-tax" lever) after reading a week of `max_over_time` per node.
-
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
 
