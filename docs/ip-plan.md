@@ -16,7 +16,32 @@ range.** Real machines get an inventory entry (`machines/machines.yaml` or a
 `opnsense/dnsmasq-dhcp.py` static) *before* they get an address; VIPs come only from the two VIP
 blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 
-**Pending ruling — the control-plane endpoint VIP (Tracked by: FU-243, ADR-133):** a Talos shared VIP is an L2 address on the CPs' own subnet (`192.168.2.0/24`), which this rule and the `.2–.49` "no NEW VIPs" note both refuse today; it needs a reserved address or sub-range declared here before the cutover, not an exception.
+### The control-plane endpoint VIP — `192.168.2.50`, reserved (ADR-133, FU-243)
+
+**The ruling:** the Kubernetes API endpoint is **`192.168.2.50`**, a single address reserved in
+`2.0/24` and assignable to no real host, ever.
+
+The hard rule above bends here because the mechanism leaves no choice, and the ruling is written
+so the bug class it prevents still cannot happen. A **Talos shared VIP is not a router alias**: the
+control planes campaign for it in **etcd**, and the winner adds the address to its own NIC and
+sends a gratuitous ARP. So it is an L2 address that must sit in the CPs' own subnet — `3.0/24`
+(router-owned, ADR-088's answer for every other VIP) cannot carry it, because OPNsense is not a
+participant in the election, and routing the API through the router would make `kubectl` depend on
+the router while a single OPNsense is still the design (ADR-133's own "considered").
+
+Two consequences follow, and both are load-bearing:
+
+- **It is a real-host-shaped address held by a real NIC**, so ARP collision is prevented the same
+  way a machine's address is: by reservation. `.50` is carved out of the frozen map as its own
+  slot, below the node range and above the legacy mix — never in the DHCP pool, never in
+  `dnsmasq-dhcp.py`, never in `machines.yaml`.
+- **The election needs a quorate etcd.** The VIP is therefore a property of the etcd cluster, not
+  of any node: at one member it works and cannot fail over; at two it is *less* available than one
+  (quorum 2 of 2); failover is real only at three. This is why ADR-133 orders the VIP onto `cp-01`
+  first and then both joins back to back, and why it never rests at two members.
+
+Clear before assignment, per the procedure above: `git grep 192.168.2.50` finds nothing and
+`nmap -sn 192.168.2.45-70` shows `.50` down (2026-09-20).
 
 ## The partition
 
@@ -24,7 +49,7 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 |---|---|---|---|
 | `192.168.0.0/24` | /24 | 254 | **Avoid** — the most common consumer-router default; guest/double-NAT gear collides here. Free in principle, use last. |
 | `192.168.1.0/24` | /24 | 254 | **Unallocated** — was the Telia-router subnet; all Telia gear removed with the fibre move (2026), so it's free (same consumer-default caveat as `0.0/24`). |
-| `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · `.51–.99` cluster nodes & servers · `.100–.245` DHCP pool. |
+| `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · **`.50` control-plane endpoint VIP** (reserved, never a real host — ADR-133, ruling above) · `.51–.99` cluster nodes & servers · `.100–.245` DHCP pool. |
 | `192.168.3.0/24` | /24 | 254 | **Router-owned service VIPs** (OPNsense HAProxy IP aliases). Never a real host, so ARP collision is impossible by construction. Convention: **last octet mirrors the backend's cluster VIP** (`.3.19` → `.40.19`). |
 | `192.168.4.0/22` | /22 | 1022 | **IoT VLAN** — the ESP32-per-radiator/valve endgame (“couple hundred, definitely < 1000”). |
 | `192.168.8.0/24` | /24 | 254 | **Guest VLAN** (wifi-password → VLAN steering; firewalled off `2.0/24`, `3.0/24`, `32.0/19`). |

@@ -111,6 +111,9 @@ _Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IP
 - ✅ Garage S3 (LAN-only, ADR-031/073) + Postgres via CloudNativePG (ADR-046).
 - 🔜 Off-cluster backups to S3 (FU-013), Civo burst.
 - ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy — FU-034).
+- ⬜ **Time is not served on the LAN, by decision** (operator, 2026-09-22): nothing declares
+  `machine.time`, so every Talos node uses Talos's built-in default `time.cloudflare.com` over the
+  WAN. The fleet has WAN dependencies everywhere; hosting NTP buys too little for its cost.
 
 ## 4 · Observability Plane _(cross-cutting)_
 

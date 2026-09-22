@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single-node maintenance window for a Talos WORKER (metal or VM): the deterministic
+# Single-node maintenance window for a Talos node (metal or VM): the deterministic
 # cordon → drain → shutdown path, with the storage checks that make "safe to pull the
 # plug" a computed answer instead of a k9s glance — and the reverse (wake → Ready →
 # uncordon → Longhorn healthy again).
@@ -12,6 +12,43 @@
 #                                                        (settle also SILENCES the node's alerts in
 #                                                         Alertmanager; `up` expires the silence)
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
+#   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → floors → settle → DRAIN → talosctl
+#                                                        upgrade → wait Ready + Longhorn healthy →
+#                                                        VERIFY version AND schematic against the declaration
+#   bash scripts/node-maintenance.sh verify    <node>   # READ-ONLY: the upgrade's post-checks, once, no wait —
+#                                                        Ready + uncordoned, Longhorn back, the budgets over
+#                                                        its pods whole, no multi-node budget at 0, CNPG full,
+#                                                        declared version+schematic, cilium-agent on THIS node
+#                                                        Ready and holding the apiserver backend. Exit 0 = all
+#                                                        pass; 1 = any fails or cannot be read. Never cordons,
+#                                                        drains or opens a window: the reconciler's health
+#                                                        gate for clearing a failed-verb park (FU-276, #1884)
+#   bash scripts/node-maintenance.sh workload-health   # READ-ONLY, fleet-wide, no node: one JSON line per
+#                                                        workload (top owner) — key, class, revision,
+#                                                        healthy, reason, since. The fleet rollout's
+#                                                        baseline + hold read it (FU-278); exit 1 = a read
+#                                                        failed, and then it prints nothing
+#
+# `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl installs, reboots, rejoins and
+# uncordons. What this adds is everything talosctl does not know about — the Longhorn
+# last-replica move, the fleet floor, WIP 1, the FU-033 gate, and the post-check that the node
+# came back running the schematic it declares.
+#
+# The DRAIN runs HERE, before talosctl, not inside it: `talosctl upgrade` installs FIRST and drains
+# second, so an eviction that never completes leaves a node whose boot default already points at
+# the new image, not rebooted, cordoned (2026-09-21). Draining first means nothing touches the disk
+# until the node is empty; a blocked drain uncordons and stops with the node exactly as it was.
+# The drain is also the ONLY service-aware step, and it knows no service: each workload's own
+# PodDisruptionBudget + controller decides when it may leave (CNPG switches a primary over ahead of
+# the drain, Longhorn releases its instance-manager once the volumes are safe, Garage's `garage` PDB
+# follows its own "may a zone go" signal — docs/garage.md §Voluntary disruption). A workload that
+# cannot be drained is that workload's contract to fix — the drain's timeout names it; this script
+# never learns its name. A drain that does not complete is a REFUSAL (exit 2: uncordoned, window
+# closed, nothing installed — the reconciler retries it), and preflight refuses up front when a
+# budget spanning several nodes already allows 0 (draining this node cannot release it).
+# The target image is READ FROM THE DECLARATION
+# (`tofu output node_install_targets`), never typed: it must match on three axes — platform,
+# schematic, version — or the node loses its identity (ADR-014, amended) or its extensions.
 #
 # `down` does as much as it can before it lets a drain block (operator direction 2026-09-09):
 #   WAIT  a ride / Argo Workflow / coordinator pod / ARC runner with a job assigned, or a last
@@ -32,11 +69,19 @@
 #                                                             both (all four are done for you by
 #                                                             settle/down and up — FU-230);
 #                                                             SILENCE=0 opts the whole window out
+#   bash scripts/node-maintenance.sh upgrade-behind [cp|worker|all]   # every node BEHIND its declaration,
+#         one at a time, in `order`'s ranking: control planes through controlplane-upgrade.sh, workers
+#         through `upgrade`; the fleet must be whole again (all Ready, cilium clean) before the next goes
+#         down, and the FIRST failure stops the run with nothing after it touched. DRY=1 prints the plan.
+#         Run it ON the management box (the etcd snapshots land there) — see the verb's own comment.
+#   bash scripts/node-maintenance.sh efi-scrub <node>   # delete firmware boot entries whose device-path
+#         list does not parse (FU-265); DRY=1 reports only. `upgrade` runs it between drain and install.
 #   bash scripts/node-maintenance.sh power <node> [status|cycle]   # smart-plug draw (machines.yaml `plug:`);
 #         `cycle` REFUSES a socket carrying load (FORCE=1 overrides) — 2026-09-09: crossed plug ids
 #         let a "boot thinkcentre" cycle cut hp-01 (docs/incidents/2026-09-09-crossed-plug-hp01-outage.md)
 #
-# What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one):
+# What preflight refuses on (exit 2 — pass FORCE=1 to override a WARN-class one; `upgrade` does not
+# need it: there the WARNs are informational, because the drain is the gate):
 #   FAIL  node missing / not Ready / Talos API unreachable
 #   FAIL  an ATTACHED Longhorn volume's only running replica is on this node (the drain would
 #         block on Longhorn's instance-manager PDB) — `settle` waits it out or moves it, see below
@@ -45,13 +90,16 @@
 #         drain proceeds; replica-1 classes longhorn-single/-fast/-scratch are replica-1 BY DESIGN)
 #   FAIL  any attached Longhorn volume cluster-wide is already degraded (a second outage on
 #         top of a rebuild is how a 2-replica volume loses data)
+#   FAIL  a PodDisruptionBudget covering a pod here allows 0 disruptions AND covers pods on other
+#         nodes too — the drain would wait on it until its timeout (single-node budgets such as
+#         Longhorn's instance-manager or a CNPG primary are released BY the drain, so they pass)
 #   WARN  a StatefulSet pod runs here (it moves, but that is a service interruption)
 #   WAIT  an Argo Workflow / agent ride / coordinator pod / busy ARC runner runs here (not a WARN:
 #         settle waits — a drained busy runner is a cancelled CI job)
 #   WARN  a Deployment pod runs here with replicas==1 (drain = downtime for that service)
 #
-# This is a WORKER recipe. cp-01 is the only control plane — its window is the Proxmox
-# full-stop in docs/runbook.md §Proxmox host maintenance window, not this script.
+# Control-plane callers go through controlplane-upgrade.sh, which adds the etcd quorum/snapshot
+# gates before entering this shared drain/install/rejoin path.
 # Not tofu/Ansible: the whole thing is live-state orchestration with waits; tofu manages the
 # node's existence, not its power state (the `talosctl shutdown` → WoL pair is the runbook's
 # tested recipe for metal). The MAC for WoL comes from the one DHCP source of truth,
@@ -61,6 +109,15 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+# ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, not in the checkout, and
+# `devbox run` exports devbox.json's KUBECONFIG/TALOSCONFIG=$PWD/tofu/* regardless — a path that
+# does not exist there. kubectl then fell back to localhost:8080 and every box-side run of the
+# upgrade verbs failed (found 2026-09-21; the only box run before was the LAB=1 rehearsal, which
+# passed explicit paths). So a configured path that does not exist yields to the box's copy.
+# Same three lines in node-maintenance.sh, controlplane-upgrade.sh, maintenance-window.sh.
+[ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
+[ -f "$TALOSCONFIG" ] || { [ -f /var/lib/mgmt/talosconfig ] && TALOSCONFIG=/var/lib/mgmt/talosconfig; }
+export TALOSCONFIG
 PVE_SSH_KEY="${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 PVE_HOST="${PVE_HOST:-root@192.168.2.3}"
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-600s}"
@@ -71,7 +128,20 @@ SETTLE_TIMEOUT="${SETTLE_TIMEOUT:-3600}" # s — rides / transient consumers to 
 MOVE_TIMEOUT="${MOVE_TIMEOUT:-1800}"     # s — per volume: the extra replica's rebuild elsewhere
 MOVE_AFTER="${MOVE_AFTER:-600}"          # s — a last replica still held by TRANSIENT pods after this long gets moved too
 DRY="${DRY:-0}"                          # settle: report what it would wait on / move, change nothing
+UPGRADE_DRAIN_TIMEOUT="${UPGRADE_DRAIN_TIMEOUT:-5m}"  # talosctl's own client-side drain
+# Where the declared install targets come from. Default: the management box, which holds main's
+# state (ADR-131/FU-012) and reads a COMMITTED ref — so the declaration is what master says, not
+# what the working tree says. Override with a pre-fetched file for an offline/dry run.
+INSTALL_TARGETS="${INSTALL_TARGETS:-}"   # path to a `tofu output -json node_install_targets` dump
+TARGET_IMAGE="${TARGET_IMAGE:-}"         # last-resort explicit --image; skips the declaration read
+ENDPOINT="${ENDPOINT:-}"                 # the CP the upgrade is endpointed at (pick_cp_endpoint)
+# An upgrade whose image carries a DIFFERENT schematic is a re-image, not a version move: it adds
+# or removes system extensions. Refused by default; pick one deliberately.
+KEEP_SCHEMATIC="${KEEP_SCHEMATIC:-0}"          # upgrade at the declared VERSION on the LIVE schematic
+ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared schematic, extensions and all
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
+PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (only `order`'s GARAGE ranking column reads it)
+REJOIN_TIMEOUT="${REJOIN_TIMEOUT:-900}"  # s — after a window: CNPG instances + the budgets over the node's pods whole again
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
@@ -83,7 +153,9 @@ fail() { printf '  \033[31mFAIL\033[0m %s\n' "$*"; FAILS=$((FAILS+1)); }
 usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 64; }
 
 cmd="${1:-}"; NODE="${2:-}"
-[ -n "$cmd" ] && [ -n "$NODE" ] || usage
+[ -n "$cmd" ] || usage
+# `order` ranks the whole fleet and takes no node argument; `upgrade-behind` takes a SCOPE there.
+[ -n "$NODE" ] || [ "$cmd" = order ] || [ "$cmd" = upgrade-behind ] || [ "$cmd" = workload-health ] || usage
 WARNS=0; FAILS=0
 
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -189,7 +261,7 @@ silence_open() {
       {name:"instance", value:($ip+"(:[0-9]+)?"), isRegex:true,  isEqual:true},
       {name:"node",     value:$n,                 isRegex:false, isEqual:true}]')"
   if has_zone_volume; then
-    garage='Garage(ClusterDegraded|ClusterFlapping|PeerRpcTimeouts|QuorumMembersRestarted|AdminMetricsAbsent|TableEmpty|S3ServerErrors)'
+    garage='Garage(ZoneDegraded|ClusterDegraded|ClusterFlapping|PeerRpcTimeouts|QuorumMembersRestarted|AdminMetricsAbsent|TableEmpty|S3ServerErrors)'
     log "$NODE carries a strict-local zone volume — also silencing the Garage health alerts"
   fi
   local m
@@ -271,6 +343,10 @@ DECLARED_ALERTS="${DECLARED_ALERTS:-KubeDaemonSetRolloutStuck,KubeDaemonSetMisSc
 
 declare_open() {
   [ "$SILENCE" = 1 ] || return 0
+  # Idempotent, like silence_open: `upgrade` declares in settle() and again before the drain, and
+  # every call used to append a record (two per sync, 2026-09-22).
+  bash "$(dirname "$0")/../agents/seat-window.sh" has --node "$NODE" --by node-maintenance.sh 2>/dev/null \
+    && { log "declared window for $NODE already open"; return 0; }
   SEAT_WINDOW_BY="node-maintenance.sh" SEAT_WINDOW_HOURS="$SILENCE_HOURS" \
     bash "$(dirname "$0")/../agents/seat-window.sh" open \
       --reason "node-maintenance window on $NODE — planned cordon/drain/shutdown" \
@@ -281,7 +357,9 @@ declare_open() {
 
 declare_close() {
   [ "$SILENCE" = 1 ] || return 0
-  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" \
+  # Only OUR records (--by): a seat's window on the same node — the reconciler's admitting window
+  # above all — is the seat's to close.
+  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" --by node-maintenance.sh \
     || warn "could not close the declared window — it self-expires at its \`until\` (${SILENCE_HOURS}h)"
 }
 
@@ -294,8 +372,13 @@ preflight() {
   if [ "$ready" = True ]; then ok "node Ready ($ip)"; else fail "node not Ready ($ready)"; fi
   if talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" version --short >/dev/null 2>&1; then
     ok "Talos API reachable at $ip"; else fail "Talos API unreachable at $ip (shutdown would not be possible)"; fi
-  if kubectl get node "$NODE" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' | grep -q .; then
-    fail "control-plane node — use the Proxmox full-stop window (runbook), not this script"; fi
+  if kubectl get node "$NODE" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+    if [ "${CONTROLPLANE_GUARDED:-0}" = 1 ]; then
+      ok "control-plane node admitted by controlplane-upgrade.sh after CP-specific gates"
+    else
+      fail "control-plane node — use controlplane-upgrade.sh, not this script"
+    fi
+  fi
 
   # --- Longhorn: the whole point ---------------------------------------------------------
   local vols reps
@@ -358,6 +441,13 @@ preflight() {
   fi
   local ds; ds="$(jq -r '[.items[]|select(.metadata.ownerReferences[0].kind=="DaemonSet")]|length' <<<"$pods")"
   ok "$ds DaemonSet pod(s) (ignored by the drain)"
+  # A multi-node budget already at 0 over a pod here: the drain could only wait it out (see
+  # pdb_blockers). Unreadable = refuse.
+  local blockers
+  if ! blockers="$(pdb_blockers "$NODE")"; then fail "cannot read the PodDisruptionBudgets — refusing"
+  elif [ -n "$blockers" ]; then
+    fail "disruption budget(s) over pods on $NODE allow 0 disruptions now — the drain would only wait (that workload says 'not now'; retry later):"$'\n'"$(sed 's/^/         /' <<<"$blockers")"
+  else ok "no disruption budget over a pod here is closed across nodes (single-node ones are released by the drain)"; fi
 
   echo
   if [ "$FAILS" -gt 0 ]; then
@@ -465,10 +555,11 @@ down() {
   # DRY=1 previews the whole window: settle reported what it would wait on / move — stop here,
   # never a real drain or power-off under a dry-run flag (reviewer, PR#1564).
   [ "$DRY" = 1 ] && { log "DRY=1: would now cordon (if not yet), drain $NODE and talosctl shutdown — stopping"; return 0; }
-  # --force is what lets the drain delete bare (controller-less) pods; it is safe ONLY because
-  # settle just verified no running bare pod is left — what remains are finished ride pods.
-  log "drain $NODE (timeout $DRAIN_TIMEOUT; --force for the finished bare pods settle waited on)"
-  kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT"
+  # --force (inside drain_node) is what lets the drain delete bare (controller-less) pods; it is
+  # safe ONLY because settle just verified no running bare pod is left — what remains are finished
+  # ride pods. A drain a budget holds up is a refusal (exit 2, node uncordoned), never a power-off.
+  local drc=0; drain_node || drc=$?
+  [ "$drc" = 0 ] || return "$drc"
   local left
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
@@ -479,6 +570,46 @@ down() {
   local i=0
   until [ "$(node_ready)" != True ] || [ $i -ge 120 ]; do sleep 5; i=$((i+1)); done
   log "node condition Ready=$(node_ready) — pull the power when the box is dark. Wake with: $0 up $NODE"
+}
+
+# ------------------------------------------------- storage is back (shared by up + upgrade)
+# Ready is NOT enough for a volume to come back: the Longhorn CSI plugin registers on the node
+# SECONDS-to-MINUTES after Ready, and until it does every attach fails with "CSINode <node> does
+# not contain driver driver.longhorn.io". The healthy test below cannot see that — a strict-local
+# zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
+# vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
+# at 13:30:22, attach kept failing until the plugin registered ~13:32).
+#
+# A node Longhorn does not run on (the control planes: its DaemonSets do not schedule there) has
+# no nodes.longhorn.io object — the CR outlives a reboot, so its absence is a stable "not a storage
+# node", and waiting for a CSI driver that never registers there only times out. Before this, every
+# pure control-plane upgrade ended in that timeout (2026-09-21, cp-02: rebooted fine, `upgrade`
+# returned 1 at the storage wait, upgrade-behind stopped before cp-01). "Not found" skips; a query
+# that FAILED is not "not found" and stops, exactly like a timeout.
+wait_storage_back() {
+  local lh_err
+  if ! lh_err="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o name 2>&1 >/dev/null)"; then
+    case "$lh_err" in
+      *NotFound*|*"not found"*) ok "no Longhorn node object for $NODE — not a storage node, nothing to wait for"; return 0 ;;
+      *) fail "could not read nodes.longhorn.io/$NODE ($lh_err) — cannot tell whether storage is back"; return 1 ;;
+    esac
+  fi
+  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
+  local t=0
+  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
+    sleep 10; t=$((t+10))
+    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
+  done
+  ok "Longhorn CSI driver registered on $NODE"
+  log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
+  local bad sched; t=0
+  while :; do
+    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
+    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
+    [ "$sched" = True ] && [ "$bad" = 0 ] && break
+    sleep 15; t=$((t+15)); [ $t -ge "$HEALTHY_TIMEOUT" ] && { log "TIMEOUT: longhorn schedulable=$sched degraded=$bad after ${HEALTHY_TIMEOUT}s"; return 1; }
+  done
+  ok "Longhorn: $NODE schedulable, 0 degraded attached volumes"
 }
 
 # ---------------------------------------------------------------- up
@@ -513,22 +644,8 @@ up() {
   # zone volume is DETACHED while its pod cannot attach, so "0 degraded ATTACHED volumes" is
   # vacuously true and the window reads closed with garage-1 still down (2026-09-12, m70s: closed
   # at 13:30:22, attach kept failing until the plugin registered ~13:32).
-  log "waiting for the Longhorn CSI driver to register on $NODE (≤300s)"
-  local t=0
-  until kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io'; do
-    sleep 10; t=$((t+10))
-    [ $t -ge 300 ] && { log "TIMEOUT: driver.longhorn.io not registered on $NODE after 300s — attaches will fail"; return 1; }
-  done
-  ok "Longhorn CSI driver registered on $NODE"
-  log "waiting for Longhorn: node Schedulable + every attached volume healthy (≤${HEALTHY_TIMEOUT}s)"
-  local bad sched; t=0
-  while :; do
-    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)"
-    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length')"
-    [ "$sched" = True ] && [ "$bad" = 0 ] && break
-    sleep 15; t=$((t+15)); [ $t -ge "$HEALTHY_TIMEOUT" ] && { log "TIMEOUT: longhorn schedulable=$sched degraded=$bad after ${HEALTHY_TIMEOUT}s"; return 1; }
-  done
-  log "Longhorn: $NODE schedulable, 0 degraded attached volumes. Window closed."
+  wait_storage_back || return 1
+  log "Window closed."
   silence_close
   declare_close
   kubectl get node "$NODE" -o wide
@@ -552,6 +669,885 @@ up() {
   fi
 }
 
+# ---------------------------------------------------------------- upgrade
+# The DECLARED install target for a node: tofu's node_install_targets output (tofu/outputs.tf).
+# Read from the management box by default, because that is where main's state lives and it reads a
+# COMMITTED ref — so "declared" means what master says, not what this working tree says.
+TARGETS_JSON=""
+load_targets() {
+  [ -n "$TARGETS_JSON" ] && return 0
+  if [ -n "$INSTALL_TARGETS" ]; then
+    TARGETS_JSON="$(cat "$INSTALL_TARGETS")"
+  elif [ -r "${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}" ]; then
+    # ON the management box the state is local, so read it directly. The mgmt-tf path below
+    # ssh-es to the box with the JAIL's key — from the box itself that key is not there, which is
+    # why every box-side upgrade needed a hand-made INSTALL_TARGETS dump until 2026-09-21.
+    log "reading the declared install targets from the local main state (on the box)"
+    [ -d "$REPO/tofu/.terraform" ] || ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null ) \
+      || { fail "cannot initialise the main root in $REPO"; return 1; }
+    TARGETS_JSON="$( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu output \
+      -state="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}" -json node_install_targets )" \
+      || { fail "could not read node_install_targets from the local main state"; return 1; }
+  else
+    log "reading the declared install targets from the management box (mgmt-tf output)"
+    TARGETS_JSON="$(bash "$REPO/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
+      fail "could not read node_install_targets from the box — is the output on master yet?"
+      fail "  INSTALL_TARGETS=<file> $0 upgrade $NODE  to use a pre-fetched dump instead"
+      return 1; }
+  fi
+  jq -e . >/dev/null 2>&1 <<<"$TARGETS_JSON" || { fail "node_install_targets is not JSON"; return 1; }
+}
+declared() { jq -r --arg n "$NODE" --arg f "$1" '.[$n][$f] // ""' <<<"$TARGETS_JSON"; }
+
+# talosctl performs the drain CLIENT-side and fetches kubeconfig over MachineService/Kubeconfig,
+# which is control-plane only — so a worker upgrade MUST be endpointed at a control plane. Never
+# at one that is itself mid-window: pick a Ready, uncordoned CP that is not the target.
+pick_cp_endpoint() {
+  local cp
+  cp="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o json \
+        | jq -r --arg n "$NODE" '.items[]
+            | select(.metadata.name != $n)
+            | select(.spec.unschedulable != true)
+            | select(any(.status.conditions[]; .type=="Ready" and .status=="True"))
+            | .status.addresses[] | select(.type=="InternalIP") | .address' | head -1)"
+  [ -n "$cp" ] || { fail "no healthy control plane to endpoint the upgrade at"; return 1; }
+  printf '%s' "$cp"
+}
+
+live_version() { kubectl get node "$NODE" -o jsonpath='{.status.nodeInfo.osImage}' 2>/dev/null | sed -n 's/.*(\(v[0-9.]*\)).*/\1/p'; }
+live_schematic() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6=="schematic"{print $7}'; }
+live_extensions() { talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6!="schematic" && NR>1 {print $6}' | tr '\n' ' '; }
+
+# Changing the schematic during an upgrade adds or removes EXTENSIONS. It is a legitimate act
+# (that is how a node gains kata, or loses it) but it is never what "upgrade the version" means,
+# and it is silent: the wrong schematic stripped iscsi-tools off wk-03 on 2026-09-18 and only the
+# crashlooping longhorn-manager said so. It also collides with deliberate, documented divergence —
+# wk-metal-01 declares plain metal while running the kata image, and machines.yaml says in as many
+# words "Do not fix that drift". So: refuse, and make the operator pick which they meant.
+# ⚠ stdout is this function's RETURN CHANNEL (the image). Every human-readable line must go to
+# stderr or it lands in the caller's variable instead of the terminal.
+resolve_schematic() {
+  local declared_img="$1" declared_s="$2" live_s
+  live_s="$(live_schematic)"
+  [ -n "$live_s" ] || { fail "cannot read $NODE's live schematic"; return 1; }
+  [ -z "$declared_s" ] || [ "$live_s" = "$declared_s" ] && { printf '%s' "$declared_img"; return 0; }
+  log "SCHEMATIC DIVERGENCE on $NODE"
+  log "  live:     $live_s   ($(live_extensions))"
+  log "  declared: $declared_s"
+  if [ "$KEEP_SCHEMATIC" = 1 ]; then
+    warn "KEEP_SCHEMATIC=1 — moving the VERSION only, on the live schematic (declared drift preserved)" >&2
+    printf '%s' "$(printf '%s' "$declared_img" | sed "s|/${declared_s}:|/${live_s}:|")"
+    return 0
+  fi
+  if [ "$ALLOW_SCHEMATIC_CHANGE" = 1 ]; then
+    warn "ALLOW_SCHEMATIC_CHANGE=1 — RE-IMAGING to the declared schematic; extensions will change" >&2
+    printf '%s' "$declared_img"; return 0
+  fi
+  fail "refusing: this upgrade would also change the schematic (extensions added/removed)" >&2
+  fail "  KEEP_SCHEMATIC=1        version only, keep the live schematic  (the drift-preserving choice)" >&2
+  fail "  ALLOW_SCHEMATIC_CHANGE=1  re-image to the declaration          (a deliberate extension change)" >&2
+  return 1
+}
+vminor() { printf '%s' "${1#v}" | cut -d. -f1,2; }
+
+# WIP 1 (ADR-132 §4): never a second window before the first node is back. Any other node
+# NotReady or cordoned means one is open — including one somebody opened by hand.
+assert_wip1() {
+  local busy
+  busy="$(kubectl get nodes -o json | jq -r --arg n "$NODE" '.items[]
+            | select(.metadata.name != $n)
+            | select(.spec.unschedulable == true or (any(.status.conditions[]; .type=="Ready" and .status=="True") | not))
+            | .metadata.name')"
+  [ -z "$busy" ] && { ok "WIP 1: no other node cordoned or NotReady"; return 0; }
+  fail "WIP 1: another window looks open — $(tr '\n' ' ' <<<"$busy")"; return 1
+}
+
+prom() { curl -sS --max-time 15 --data-urlencode "query=$1" "$PROM/api/v1/query"; }  # `order` only
+
+# ── Disruption budgets, read generically ─────────────────────────────────────────────────────────
+# ADR-132 §4's fleet floor, as far as budgets carry it. A service that must not lose a member right
+# now says so in its PodDisruptionBudget and the drain honours it: Garage's `garage` PDB follows its
+# own "may a zone go" signal (docs/garage.md §Voluntary disruption). That replaced the Garage floor
+# that lived here until 2026-09-22 (a `cluster_healthy` read, which is connectivity, not "caught
+# up": wk-metal-04 went down on a 4.5–6.2k resync backlog). This script knows no service; it only
+# asks which budgets would block.
+#
+# A budget at 0 is NOT always a refusal. A single-node budget (Longhorn's per-node
+# instance-manager, a CNPG primary) is released BY the drain: Longhorn deletes it once the volumes
+# are safe, CNPG switches the primary away from a cordoned node. A budget at 0 whose pods also sit
+# on OTHER nodes (or are unscheduled) cannot be released by draining this one. That is a workload
+# saying "not now", and the drain would only wait out its timeout, so preflight refuses on exactly
+# those before settle cordons or moves anything. The unhealthy-pod carve-out follows the API: under
+# unhealthyPodEvictionPolicy AlwaysAllow a not-Ready pod may always be evicted, so a budget whose
+# only pods here are not Ready does not block this node.
+PDB_JQ_DEFS='
+  def ready: any(.status.conditions[]?; .type == "Ready" and .status == "True");
+  def not_ds: (((.metadata.ownerReferences // [])[0].kind // "") != "DaemonSet");
+  def matches($s; $l):
+    $s != null
+    and ((($s.matchLabels // {}) | to_entries) | all(. as $e | $l[$e.key] == $e.value))
+    and (($s.matchExpressions // []) | all(. as $x |
+          if   $x.operator == "In"           then ($l[$x.key] // null) as $v | $v != null and any($x.values[]; . == $v)
+          elif $x.operator == "NotIn"        then ($l[$x.key] // null) as $v | $v == null or all($x.values[]; . != $v)
+          elif $x.operator == "Exists"       then $l | has($x.key)
+          elif $x.operator == "DoesNotExist" then $l | has($x.key) | not
+          else false end));
+  def covered($b): [ $P[0].items[]
+      | select(.metadata.namespace == $b.metadata.namespace)
+      | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+      | select(not_ds)
+      | select(matches($b.spec.selector; .metadata.labels // {})) ];
+'
+# pdb_blockers [node]: one line per blocking budget, "" = none. With no node: every multi-node
+# budget at 0 cluster-wide (upgrade-behind's "fleet whole" check). Non-zero = could not read, and
+# every caller refuses on that (an unreadable gate is a no). Dumps go through FILES, never argv
+# (the pod list is megabytes, see `order`).
+pdb_blockers() {
+  local d rc=0; d="$(mktemp -d)" || return 1
+  { kubectl get pdb -A -o json >"$d/b.json" && kubectl get pods -A -o json >"$d/p.json"; } || { rm -rf "$d"; return 1; }
+  jq -r --arg n "${1:-}" --slurpfile P "$d/p.json" "$PDB_JQ_DEFS"'
+    .items[] | select((.status.disruptionsAllowed // 0) == 0) | . as $b
+    | covered($b) as $pods
+    | ($pods | map(.spec.nodeName // "<unscheduled>") | unique) as $where
+    | select(($where | length) > 1)
+    | select($n == "" or any($pods[]; .spec.nodeName == $n
+                              and ($b.spec.unhealthyPodEvictionPolicy != "AlwaysAllow" or ready)))
+    | "\($b.metadata.namespace)/\($b.metadata.name) allows 0 disruptions (its pods: \($where | join(",")))"
+  ' "$d/b.json" || rc=1
+  rm -rf "$d"; return $rc
+}
+# budgets_on_node: every budget (any disruptionsAllowed) covering a non-DaemonSet pod on $NODE.
+budgets_on_node() {
+  local d rc=0; d="$(mktemp -d)" || return 1
+  { kubectl get pdb -A -o json >"$d/b.json" \
+    && kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json >"$d/p.json"; } || { rm -rf "$d"; return 1; }
+  jq -r --slurpfile P "$d/p.json" "$PDB_JQ_DEFS"'
+    .items[] | . as $b | select(covered($b) | length > 0) | "\(.metadata.namespace)/\(.metadata.name)"
+  ' "$d/b.json" || rc=1
+  rm -rf "$d"; return $rc
+}
+
+# The CNPG half of the same idea. Every cluster here is 2 instances, and infisical-pg and
+# grafana-pg each keep one on hp-01 and one on m70s — the two heaviest nodes. WIP 1 stops them
+# going down together, but nothing stopped the SECOND node starting before the first instance had
+# rejoined and caught up, which is the Garage mistake in another fabric. readyInstances == instances
+# is the condition; an unreadable answer refuses (rule #6).
+cnpg_unhealthy() {
+  kubectl get clusters.postgresql.cnpg.io -A -o json \
+    | jq -r '.items[] | select((.status.readyInstances // 0) < .spec.instances)
+             | "\(.metadata.namespace)/\(.metadata.name) \(.status.readyInstances // 0)/\(.spec.instances)"'
+}
+assert_cnpg_floor() {
+  local bad
+  bad="$(cnpg_unhealthy)" || { fail "fleet floor: cannot read CNPG clusters — refusing"; return 1; }
+  [ -z "$bad" ] && { ok "fleet floor: every CNPG cluster at full instances"; return 0; }
+  fail "fleet floor: CNPG cluster(s) short an instance — $(tr '\n' ' ' <<<"$bad")"
+  fail "  a second node down could take the last healthy instance with it. Wait for the rejoin."
+  return 1
+}
+wait_cnpg_back() {
+  log "waiting for every CNPG cluster back to full instances (≤${REJOIN_TIMEOUT}s)"
+  local t=0 bad
+  while :; do
+    bad="$(cnpg_unhealthy || true)"
+    [ -z "$bad" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$REJOIN_TIMEOUT" ] && { fail "TIMEOUT: CNPG still short — $(tr '\n' ' ' <<<"$bad")"; return 1; }
+  done
+  ok "CNPG: every cluster at full instances after ~${t}s"
+}
+
+# After the window: the budgets this node's pods were under are whole again, i.e. every pod they
+# expect is back and healthy (PDB status currentHealthy >= expectedPods). For a Garage zone node
+# that is the three storage pods Ready (readiness = /health = this node has quorum), which is what
+# the old cluster_healthy wait amounted to. Whether the NEXT zone may go is not this window's
+# question: the budget answers it again at the next node's preflight and drain.
+BUDGETS_HERE=""   # "ns/name" per line, captured by drain_node before it evicts anything
+wait_budgets_back() {
+  [ -n "$BUDGETS_HERE" ] || { log "no disruption budget covered a pod on $NODE — nothing to wait for"; return 0; }
+  log "waiting for the budget(s) over $NODE's pods to be whole again (≤${REJOIN_TIMEOUT}s): $(tr '\n' ' ' <<<"$BUDGETS_HERE")"
+  local t=0 short b st
+  while :; do
+    short=""
+    while read -r b; do
+      [ -n "$b" ] || continue
+      # A budget that no longer exists (Longhorn's per-node ones come and go) is not short.
+      st="$(kubectl -n "${b%%/*}" get pdb "${b#*/}" -o jsonpath='{.status.currentHealthy}/{.status.expectedPods}' 2>/dev/null)" || continue
+      [ "${st%%/*}" -ge "${st#*/}" ] 2>/dev/null || short="$short $b($st)"
+    done <<<"$BUDGETS_HERE"
+    [ -z "$short" ] && break
+    sleep 15; t=$((t+15))
+    [ $t -ge "$REJOIN_TIMEOUT" ] && { fail "TIMEOUT: budget(s) still short after ${t}s:$short"; return 1; }
+  done
+  ok "every budget over $NODE's pods whole again after ~${t}s"
+}
+
+# Version sanity + the gates that are written down rather than computable.
+assert_upgrade_sane() {
+  local from to fmin tmin
+  from="$(live_version)"; to="$1"
+  [ -n "$from" ] || { fail "cannot read $NODE's running Talos version"; return 1; }
+  [ "$from" = "$to" ] && { warn "$NODE already runs $to — the upgrade will reinstall the same version"; }
+  fmin="$(vminor "$from")"; tmin="$(vminor "$to")"
+  # A downgrade WITHIN a minor is allowed (operator, 2026-09-22 — the rollback drill): Talos has no
+  # version-order refusal; the older installer validates the running machine config and fails
+  # BEFORE touching disk if it holds a document it does not know (siderolabs/talos
+  # internal/integration/cli/upgrade.go, TestIncompatibleMachineConfig). So "revert the
+  # declaration" is a real rollback for a patch. ACROSS a minor it is refused: configs migrate
+  # forward only — back out with `talosctl rollback` while the previous install is still on the
+  # other slot, else a reinstall. That window is SHORT: after a good boot Talos removes the upgrade
+  # fallback (`removing fallback entry` in machined's log — nx-01, 2026-09-22), so `talosctl
+  # rollback` works only shortly after the upgrade reboot; later, a cross-minor back-out is a reinstall.
+  if [ "$(printf '%s\n%s\n' "${from#v}" "${to#v}" | sort -V | tail -1)" = "${from#v}" ] && [ "$from" != "$to" ]; then
+    if [ "$fmin" != "$tmin" ]; then
+      fail "$to is an OLDER MINOR than $from — no cross-minor downgrade (\`talosctl rollback\` while the previous install is on the other slot, else a reinstall)"; return 4
+    fi
+    warn "$from -> $to is a PATCH DOWNGRADE within $fmin — allowed; Talos refuses it itself if the running config needs the newer release"
+  fi
+  # One minor at a time: config migrations are only tested between adjacent minors.
+  if [ "$fmin" != "$tmin" ]; then
+    local fm tm; fm="${fmin#*.}"; tm="${tmin#*.}"
+    [ $((tm - fm)) -gt 1 ] && { fail "$from -> $to skips a minor; go one minor at a time"; return 4; }
+    # FU-033: 1.14+ mounts EPHEMERAL noexec, which kills Longhorn v1's instance-manager.
+    if [ "$tm" -eq "$tm" ] && [ "$tm" -ge 14 ]; then
+      local mc; mc="$(talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get machineconfig -o yaml 2>/dev/null)"
+      if ! grep -q 'kind: VolumeConfig' <<<"$mc" || ! grep -qE 'secure: *false' <<<"$mc"; then
+        fail "FU-033 gate: $NODE has no EPHEMERAL VolumeConfig with mount.secure=false, and $to mounts /var noexec"
+        fail "  -> Longhorn v1's instance-manager cannot exec its engine binaries. Land the patch on EVERY node first (tofu/longhorn.tf)."
+        return 1
+      fi
+      ok "FU-033 gate: EPHEMERAL VolumeConfig secure=false present"
+    fi
+  fi
+  ok "version path $from -> $to"
+}
+
+# The post-check that matters as much as the version: did the node come back running the
+# SCHEMATIC it declares? A wrong --image silently strips extensions (2026-09-18, wk-03).
+verify_installed() {
+  local want_v="$1" want_s="$2" got_v got_s
+  got_v="$(live_version)"
+  got_s="$(talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get extensions 2>/dev/null | awk '$6=="schematic"{print $7}')"
+  [ "$got_v" = "$want_v" ] && ok "version $got_v" || fail "version is $got_v, declared $want_v"
+  [ "$got_s" = "$want_s" ] && ok "schematic $got_s" || fail "schematic is ${got_s:-<none>}, declared $want_s"
+  [ "$got_v" = "$want_v" ] && [ "$got_s" = "$want_s" ]
+}
+
+# The drain, as its own bounded step (see the header) — shared by `down` and `upgrade`. It is
+# PDB-respecting: an eviction a budget refuses is retried until DRAIN_TIMEOUT, and then kubectl
+# gives up with exit 1. That is a workload saying "not now", so this turns it into a REFUSAL:
+# name what stayed and which budgets held it, uncordon, close the window, return 2 — the verb's
+# exit 2, which the reconciler retries next tick (scripts/mgmt-reconcile.sh's exit contract), never
+# a half-done window and never a park. Nothing was written to the node yet. Pods the drain DID
+# evict before the budget refused stay wherever their controllers put them; preflight's
+# pdb_blockers keeps that to the rare budget that closed during settle.
+# Returns 1 only when the undo itself fails (the node stays cordoned — that is not "as it was").
+drain_node() {
+  BUDGETS_HERE="$(budgets_on_node 2>/dev/null || true)"
+  log "drain $NODE (≤$DRAIN_TIMEOUT, PDB-respecting) — each workload's budget + controller decides when it leaves"
+  # --force: the finished bare ride pods settle waited on (running bare pods are settle's to wait out).
+  if kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --force --timeout="$DRAIN_TIMEOUT" >/dev/null; then
+    ok "$NODE drained"; return 0
+  fi
+  local left blockers
+  left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json \
+          | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name)"')" \
+    || left="(could not list them)"
+  blockers="$(pdb_blockers "$NODE" 2>/dev/null)" || blockers="(could not read the budgets)"
+  fail "drain of $NODE did not complete within $DRAIN_TIMEOUT — nothing was installed or powered off; still on the node:"
+  printf '%s\n' "$left" | sed '/^$/d;s/^/         /'
+  [ -n "$blockers" ] && { fail "  budget(s) refusing:"; printf '%s\n' "$blockers" | sed 's/^/         /'; }
+  fail "  a pod that will not leave is ITS workload's disruption contract (PDB + controller), not this script's."
+  log "uncordon $NODE and close the window — REFUSED (exit 2), retry once the budget allows"
+  kubectl uncordon "$NODE" >/dev/null || { fail "uncordon $NODE failed — do it by hand"; return 1; }
+  silence_close; declare_close
+  return 2
+}
+
+# ── FU-265: firmware boot entries the Talos installer cannot parse ──────────────────────────────
+# `talosctl upgrade`'s installer walks EVERY Boot#### variable and parses its device-path list
+# strictly: wk-metal-04's firmware writes a "UEFI OS" fallback entry (Boot0008 → \EFI\BOOT\
+# BOOTX64.EFI) with 2 zero bytes after the end node — "dangling bytes at the end of device path:
+# 0000" — and the install dies AFTER flipping the boot default (2026-09-21). Deleting it works for
+# the NEXT upgrade only: probed 2026-09-21, one FIRMWARE boot recreates it, same bytes. Upgrades
+# reboot by kexec and never meet the firmware, so deleting just before the install is enough.
+# The rule is "does not parse", not "has bytes after an end node": a path LIST may hold several
+# paths (the PXE entries carry a second vendor path after their first end node — valid), so the
+# list is walked path by path and only a remainder that cannot form whole nodes (< 4 bytes, or a
+# node length < 4 or past the end) marks the entry malformed. Talos mounts efivarfs read-only on
+# the host; a privileged one-shot pod mounts its own. No EFI (a BIOS VM) reports and exits clean.
+EFI_SCRUB_TIMEOUT="${EFI_SCRUB_TIMEOUT:-240}"
+efi_scrub() {
+  local pod="efi-scrub-$NODE" phase="" t=0 out dry="${DRY:-0}"
+  kubectl -n kube-system delete pod "$pod" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  kubectl apply -f - >/dev/null <<EOF || { fail "efi-scrub: could not create pod $pod"; return 1; }
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $pod
+  namespace: kube-system
+  labels: { app: efi-scrub }
+spec:
+  nodeName: $NODE
+  restartPolicy: Never
+  tolerations: [{ operator: Exists }]
+  containers:
+    - name: scrub
+      image: docker.io/library/python:3.13-slim
+      securityContext: { privileged: true }
+      env: [{ name: DRY, value: "$dry" }]
+      command: [python3, -c]
+      args:
+        - |
+          import os, re, struct, fcntl, array, subprocess, sys
+          G = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
+          if not os.path.isdir("/sys/firmware/efi"):
+              print("no EFI firmware on this node - nothing to scrub"); sys.exit(0)
+          os.makedirs("/efi", exist_ok=True)
+          subprocess.run(["mount", "-t", "efivarfs", "efivarfs", "/efi"], check=True)
+          def malformed(raw):
+              d = raw[4:]
+              if len(d) < 6: return "too short"
+              plen = struct.unpack("<H", d[4:6])[0]; i = 6
+              while i + 1 < len(d) and d[i:i+2] != b"\0\0": i += 2
+              dp = d[i+2:i+2+plen]; j = 0
+              if len(dp) < plen: return "path list shorter than its declared length"
+              while j < len(dp):
+                  if len(dp) - j < 4: return "dangling bytes %s" % dp[j:].hex()
+                  t, st, l = dp[j], dp[j+1], struct.unpack("<H", dp[j+2:j+4])[0]
+                  if l < 4 or j + l > len(dp): return "bad node length %d at %d" % (l, j)
+                  j += l
+              return None
+          def mutable(path):
+              fd = os.open(path, os.O_RDONLY)
+              try:
+                  f = array.array("i", [0]); fcntl.ioctl(fd, 0x80086601, f, True)
+                  f[0] &= ~0x10; fcntl.ioctl(fd, 0x40086602, f, True)
+              finally:
+                  os.close(fd)
+          bad = []
+          for n in sorted(os.listdir("/efi")):
+              # Boot + EXACTLY 4 hex digits: BootNext/BootOrder/BootCurrent share the prefix, and
+              # BootNext even the length — its 2-byte payload would read as "too short" and a
+              # pending one-time boot override would be deleted (#1856 review).
+              if not re.fullmatch(r"Boot[0-9A-F]{4}-" + G, n): continue
+              why = malformed(open("/efi/" + n, "rb").read())
+              if why:
+                  bad.append(n[4:8]); print("MALFORMED Boot%s: %s" % (n[4:8], why))
+          if not bad:
+              print("clean - no unparseable boot entry"); sys.exit(0)
+          if os.environ.get("DRY") == "1":
+              print("DRY=1 - would delete: " + " ".join(bad)); sys.exit(0)
+          for b in bad:
+              p = "/efi/Boot%s-%s" % (b, G); mutable(p); os.unlink(p); print("deleted Boot" + b)
+          bo = "/efi/BootOrder-" + G
+          if os.path.exists(bo):
+              raw = open(bo, "rb").read(); attrs, d = raw[:4], raw[4:]
+              order = ["%04X" % x for x in struct.unpack("<%dH" % (len(d)//2), d)]
+              keep = [o for o in order if o not in bad]
+              if keep != order:
+                  mutable(bo)
+                  with open(bo, "wb") as f:
+                      f.write(attrs + struct.pack("<%dH" % len(keep), *[int(o, 16) for o in keep]))
+                  print("BootOrder: " + ",".join(order) + " -> " + ",".join(keep))
+EOF
+  until phase="$(kubectl -n kube-system get pod "$pod" -o jsonpath='{.status.phase}' 2>/dev/null)" \
+        && { [ "$phase" = Succeeded ] || [ "$phase" = Failed ]; }; do
+    sleep 5; t=$((t+5))
+    [ $t -ge "$EFI_SCRUB_TIMEOUT" ] && { phase=timeout; break; }
+  done
+  out="$(kubectl -n kube-system logs "$pod" 2>&1 || true)"
+  printf '%s\n' "$out" | sed '/^$/d;s/^/         /'
+  kubectl -n kube-system delete pod "$pod" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ] && { ok "efi-scrub $NODE: done"; return 0; }
+  fail "efi-scrub $NODE: pod ended '$phase'"; return 1
+}
+
+upgrade() {
+  load_targets || return 2
+  local image version schematic class
+  if [ -n "$TARGET_IMAGE" ]; then
+    image="$TARGET_IMAGE"; version=""; schematic=""; class="$(declared class)"
+    warn "TARGET_IMAGE set — using $image and SKIPPING the declaration check"
+  else
+    image="$(declared installer)"; version="$(declared version)"
+    schematic="$(declared schematic)"; class="$(declared class)"
+    [ -n "$image" ] || { fail "no declared install target for $NODE in node_install_targets"; return 2; }
+    # The gates below judge $version; talosctl installs $image. One output produces both, so a
+    # mismatch means the declaration is malformed — refuse rather than gate one thing and install
+    # another.
+    [ "${image##*:}" = "$version" ] || {
+      fail "declaration inconsistent: installer tag '${image##*:}' != version '$version'"; return 2; }
+  fi
+  # An explicit endpoint is useful for the isolated one-node rehearsal and remains safe in
+  # production: controlplane-upgrade.sh validates that a live-cluster CP never endpoints itself.
+  if [ -z "$ENDPOINT" ]; then ENDPOINT="$(pick_cp_endpoint)" || return 2; fi
+  # Resolve the schematic BEFORE anything else: it can rewrite the image, and the post-check must
+  # verify against what we actually install, not against what the declaration happened to say.
+  if [ -z "$TARGET_IMAGE" ]; then
+    image="$(resolve_schematic "$image" "$schematic")" || return 2
+    schematic="${image##*/}"; schematic="${schematic%%:*}"
+  fi
+  log "$NODE ($class) -> $version, endpoint $ENDPOINT"
+  log "  image: $image"
+  [ "$class" = vm ] && log "  NOTE: a nocloud VM upgrades in place ONLY with this image (ADR-014 as amended 2026-09-18);
+           cross-version control-plane upgrade proven v1.13.2 -> v1.13.10 on the isolated nx-02 lab."
+
+  local rc=0
+  if [ "${LAB:-0}" = 1 ]; then
+    [ "$(node_ready)" = True ] || { fail "lab node is not Ready"; return 2; }
+    host_up "$(node_ip)" || { fail "lab node's Talos API is unreachable"; return 2; }
+    ok "isolated lab node Ready; production workload/storage gates do not apply"
+  else
+    # WARNs are INFORMATIONAL here (single-replica Deployments, StatefulSets, pinned zone volumes):
+    # the drain below is the gate for all of them and fails closed. So preflight runs with its WARN
+    # class accepted, and only a FAIL (node unhealthy, a volume already degraded) refuses. Before
+    # this, an unattended run needed FORCE=1 for any storage node — and FORCE also waved through the
+    # floors below, the one thing an unattended run must never skip (2026-09-21). A budget that
+    # would block the drain (pdb_blockers — a Garage zone that may not go yet) is a preflight FAIL,
+    # so it refuses here too, before settle cordons anything.
+    FORCE=1 preflight || rc=$?
+    [ "$rc" = 2 ] && { fail "preflight refused (a FAIL — WARNs do not block an upgrade)"; return 2; }
+    # The fleet floors are NOT FORCE-able: they are what stops a second node (a second CNPG
+    # instance) going down before the first is whole again. Garage's floor is its own budget now.
+    assert_wip1        || return 2
+    assert_cnpg_floor  || return 2
+  fi
+  # NOT FORCE-able either: a cross-minor downgrade is impossible, a skipped minor is untested config
+  # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot".
+  # Exit 4 = the declared path itself is impossible (cross-minor downgrade, skipped minor): no retry can pass it,
+  # so an unattended caller parks instead of re-trying a refusal (mgmt-reconcile.sh). Exit 2 = a
+  # refusal that a later tick can pass (the FU-033 gate once the patch lands, the floors).
+  if [ -n "$version" ]; then local sr=0; assert_upgrade_sane "$version" || sr=$?
+    [ "$sr" = 4 ] && return 4; [ "$sr" = 0 ] || return 2; fi
+
+  if [ "${LAB:-0}" != 1 ]; then settle || return $?; fi
+  [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }
+
+  silence_open; declare_open
+  # A drain a budget holds up returns 2 (a refusal: uncordoned, window closed, retried next tick).
+  if [ "${LAB:-0}" != 1 ]; then local drc=0; drain_node || drc=$?; [ "$drc" = 0 ] || return "$drc"; fi
+  # FU-265: scrub unparseable firmware boot entries BEFORE the installer walks them. Fail closed —
+  # an installer run against a node the scrub could not read is the half-applied state this avoids.
+  if [ "${LAB:-0}" != 1 ] && [ "${SKIP_EFI_SCRUB:-0}" != 1 ]; then
+    if ! efi_scrub; then
+      fail "efi-scrub failed after the drain — nothing installed; uncordon $NODE and close the window"
+      fail "  (SKIP_EFI_SCRUB=1 bypasses it if you have read the entries yourself)"
+      kubectl uncordon "$NODE" >/dev/null || fail "uncordon $NODE failed — do it by hand"
+      silence_close; declare_close
+      return 1
+    fi
+  fi
+  log "talosctl upgrade $NODE ($(node_ip)) — the node is drained; talosctl installs and reboots"
+  if ! talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" \
+        upgrade --image "$image" --drain-timeout="$UPGRADE_DRAIN_TIMEOUT"; then
+    # The drain already completed, so this is the INSTALLER (or talosctl's own step) failing.
+    # The installer can get far enough to switch the boot default before it dies — 2026-09-21,
+    # wk-metal-04: LoaderEntryDefault -> v1.13.10, then "failed to create boot entry" — so the node
+    # is NOT rebooted but its NEXT reboot may boot the new image. Left cordoned, window OPEN.
+    fail "talosctl upgrade returned non-zero AFTER a completed drain — the installer failed (output above)."
+    fail "  $NODE did NOT reboot, but its boot default MAY already point at the new image: an unplanned"
+    fail "  reboot could finish this upgrade. Node left cordoned, window left OPEN — read the installer error."
+    return 1
+  fi
+  log "waiting for Ready (≤${READY_TIMEOUT}s)"
+  local t=0; until [ "$(node_ready)" = True ]; do
+    sleep 10; t=$((t+10))
+    [ $t -ge "$READY_TIMEOUT" ] && { fail "TIMEOUT: $NODE not Ready after ${READY_TIMEOUT}s — window left OPEN"; return 1; }
+  done
+  ok "$NODE Ready after ~${t}s"
+  # Talos uncordons itself on rejoin; make sure, because a half-finished window is invisible.
+  [ "$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" = true ] && kubectl uncordon "$NODE"
+  if [ "${LAB:-0}" != 1 ]; then
+    wait_storage_back || return 1
+    wait_budgets_back || return 1
+    wait_cnpg_back    || return 1
+  fi
+  if [ -n "$version" ]; then
+    log "verifying the node came back as DECLARED"
+    verify_installed "$version" "$schematic" || { fail "post-check FAILED — window left OPEN"; return 1; }
+  fi
+  log "Window closed."
+  silence_close; declare_close
+  kubectl get node "$NODE" -o wide
+}
+
+# ---------------------------------------------------------------- verify
+# The upgrade's post-checks as ONE read-only pass (FU-276, #1884): the reconciler runs it before a
+# failed-verb park may clear, because the version reaching the declaration says nothing about health
+# (nx-01, 2026-09-22: back on the target, cilium-agent hung, no pod network — "synced" two minutes
+# after the park). The same floors `upgrade` waits on, read once: wait_storage_back's Longhorn state,
+# the budgets over this node's pods (currentHealthy ≥ expectedPods — wait_budgets_back's test) plus
+# no budget spanning several nodes at 0 (pdb_blockers — Garage's zone signal among them), CNPG at
+# full instances, verify_installed, and cilium on THIS node: the fleet-wide cilium-check passes
+# with one agent unreadable, which is exactly the hung-agent node. Any read failure is a FAIL.
+cilium_on_node() {
+  local pj p out
+  pj="$(kubectl -n kube-system get pod -l k8s-app=cilium --field-selector "spec.nodeName=$NODE" -o json)" \
+    || { fail "cilium: cannot list the agent on $NODE"; return 1; }
+  p="$(jq -r '[.items[] | select(.status.phase == "Running")][0].metadata.name // ""' <<<"$pj")"
+  [ -n "$p" ] || { fail "cilium: no running cilium-agent pod on $NODE"; return 1; }
+  jq -e --arg p "$p" '.items[] | select(.metadata.name == $p) | any(.status.conditions[]?; .type == "Ready" and .status == "True")' \
+    >/dev/null <<<"$pj" || { fail "cilium: $p on $NODE is not Ready"; return 1; }
+  out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+    || { fail "cilium: $p on $NODE does not answer (exec failed)"; return 1; }
+  awk '$2=="10.96.0.1:443/TCP"' <<<"$out" | grep -q '=>' \
+    || { fail "cilium: $p on $NODE has NO backend for 10.96.0.1:443"; return 1; }
+  ok "cilium: $p Ready and holding the apiserver backend"
+}
+verify() {
+  echo "verify: $NODE (read-only)"
+  local ready uns lh_err sched bad budgets b st short="" blockers cnpg
+  if ! ready="$(node_ready)" || [ -z "$ready" ]; then fail "node $NODE not found (or unreadable)"; return 1; fi
+  [ "$ready" = True ] && ok "node Ready" || fail "node not Ready ($ready)"
+  uns="$(kubectl get node "$NODE" -o jsonpath='{.spec.unschedulable}' 2>/dev/null)" || uns=unreadable
+  case "$uns" in true) fail "node still cordoned" ;; unreadable) fail "cannot read spec.unschedulable" ;; *) ok "node uncordoned" ;; esac
+  # Longhorn: the one-shot of wait_storage_back (no object = not a storage node).
+  if ! lh_err="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o name 2>&1 >/dev/null)"; then
+    case "$lh_err" in
+      *NotFound*|*"not found"*) ok "no Longhorn node object — not a storage node" ;;
+      *) fail "cannot read nodes.longhorn.io/$NODE" ;;
+    esac
+  else
+    kubectl get csinode "$NODE" -o jsonpath='{.spec.drivers[*].name}' 2>/dev/null | grep -q 'driver.longhorn.io' \
+      && ok "Longhorn CSI driver registered" || fail "Longhorn CSI driver not registered on $NODE"
+    sched="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}' 2>/dev/null)" || sched=""
+    [ "$sched" = True ] && ok "Longhorn node Schedulable" || fail "Longhorn node not Schedulable (${sched:-unreadable})"
+    bad="$(kubectl -n longhorn-system get volumes.longhorn.io -o json 2>/dev/null | jq -r '[.items[]|select(.status.state=="attached" and .status.robustness!="healthy")]|length' 2>/dev/null)" || bad=""
+    [ "$bad" = 0 ] && ok "0 degraded attached volumes" || fail "degraded attached volumes: ${bad:-unreadable}"
+  fi
+  # The budgets over this node's pods whole (wait_budgets_back's test), and none spanning nodes at 0.
+  if budgets="$(budgets_on_node 2>/dev/null)"; then
+    while read -r b; do
+      [ -n "$b" ] || continue
+      st="$(kubectl -n "${b%%/*}" get pdb "${b#*/}" -o jsonpath='{.status.currentHealthy}/{.status.expectedPods}' 2>/dev/null)" || continue
+      [ "${st%%/*}" -ge "${st#*/}" ] 2>/dev/null || short="$short $b($st)"
+    done <<<"$budgets"
+    [ -z "$short" ] && ok "every budget over $NODE's pods whole" || fail "budget(s) short:$short"
+  else fail "cannot read the budgets over $NODE's pods"; fi
+  if blockers="$(pdb_blockers 2>/dev/null)"; then
+    [ -z "$blockers" ] && ok "no multi-node budget at 0" || fail "multi-node budget(s) at 0: $(tr '\n' ' ' <<<"$blockers")"
+  else fail "cannot read the PodDisruptionBudgets"; fi
+  if cnpg="$(cnpg_unhealthy 2>/dev/null)"; then
+    [ -z "$cnpg" ] && ok "every CNPG cluster at full instances" || fail "CNPG short: $(tr '\n' ' ' <<<"$cnpg")"
+  else fail "cannot read CNPG clusters"; fi
+  # The declared install, as upgrade's post-check reads it.
+  if load_targets 2>/dev/null && [ -n "$(declared version)" ]; then
+    if [ -z "$ENDPOINT" ]; then ENDPOINT="$(pick_cp_endpoint 2>/dev/null)" || ENDPOINT=""; fi
+    if [ -n "$ENDPOINT" ]; then verify_installed "$(declared version)" "$(declared schematic)" || true
+    else fail "no healthy control plane to read the schematic through"; fi
+  else fail "no declared install target for $NODE (declaration unreadable)"; fi
+  cilium_on_node || true
+  [ "$FAILS" = 0 ] && { echo "verify: $NODE healthy"; return 0; }
+  echo "verify: $NODE NOT healthy ($FAILS failing check(s))"; return 1
+}
+
+# ---------------------------------------------------------------- workload-health
+# FU-278 (operator ruling 2026-09-22): the fleet rollout's WORKLOAD read. On 2026-09-22 wk-04's window
+# moved Forgejo onto hp-01, where its init container crash-looped (the FU-277 DNS trap), and the
+# rollout took cp-01, cp-02 and wk-metal-02 down after it: between windows it read node Ready, cilium
+# and multi-node budgets, none of which a single-replica Deployment moves. This verb is only the
+# READ — generic, no service named, no judgement: the reconciler (scripts/mgmt-reconcile.sh) owns
+# the rollout-start baseline and the comparison.
+#
+# One JSON object per line, per workload keyed by its TOP OWNER — "<ns>/<Kind>/<name>": a pod's
+# ReplicaSet resolves to its Deployment; StatefulSet, DaemonSet as themselves; a CNPG pod to its
+# `Cluster.postgresql.cnpg.io`; any other owner kind as itself. Not counted: bare pods (agent rides),
+# Job / CronJob / Argo Workflow pods, ARC runner pods (EphemeralRunner), `app=agent-session` pods,
+# and finished (Succeeded/Failed) or terminating pods.
+#   revision  Deployment: its current ReplicaSet's pod-template-hash (highest deployment revision);
+#             StatefulSet: status.updateRevision; DaemonSet / other: the pods' controller-revision-hash
+#             (or pod-template-hash); CNPG: the pods' image(s). Several values join with "+".
+#   healthy   false when any counted pod has a container or init container waiting in
+#             CrashLoopBackOff / Error / ImagePullBackOff / ErrImagePull / CreateContainerConfigError
+#             or terminated in Error, or has not been Ready for more than WH_NOT_READY_GRACE (300 s,
+#             from the Ready condition's lastTransitionTime, else the pod's creation).
+#   class     platform         — any namespace that is not a stack's app namespace. Stack app
+#                                namespaces = the repo names of every AgentStack claim except the
+#                                platform's own (WH_PLATFORM_STACK=platform) — a fixer repo's
+#                                namespace IS its repo name (argocd/resources/agentstack/xrd.yaml).
+#                                The `<stack>-agents` / agent-coordinator namespaces are platform.
+#             stack-important  — a stack workload with ≥ 2 replicas (CNPG: instances; DaemonSet:
+#                                desired pods) or a PodDisruptionBudget over any of its pods
+#             stack-singleton  — every other stack workload
+# The claims unreadable = the whole read unreadable (exit 1): a class guessed without them could
+# call a stack's crash-looping singleton a platform outage, or the reverse.
+# Test seam: WH_DIR=<dir> holding pods/replicasets/deployments/statefulsets/daemonsets/pdb/
+# clusters/agentstacks .json dumps instead of kubectl; WH_NOW=<epoch> for the clock.
+WH_NOT_READY_GRACE="${WH_NOT_READY_GRACE:-300}"
+WH_PLATFORM_STACK="${WH_PLATFORM_STACK:-platform}"
+workload_health() {
+  local d f rc=0; d="$(mktemp -d)" || return 1
+  if [ -n "${WH_DIR:-}" ]; then
+    for f in pods replicasets deployments statefulsets daemonsets pdb clusters agentstacks; do
+      jq -e '.items | type == "array"' "$WH_DIR/$f.json" >/dev/null 2>&1 && cp "$WH_DIR/$f.json" "$d/$f.json" || rc=1
+    done
+  else
+    kubectl get pods -A -o json >"$d/pods.json" \
+      && kubectl get replicasets -A -o json >"$d/replicasets.json" \
+      && kubectl get deployments -A -o json >"$d/deployments.json" \
+      && kubectl get statefulsets -A -o json >"$d/statefulsets.json" \
+      && kubectl get daemonsets -A -o json >"$d/daemonsets.json" \
+      && kubectl get pdb -A -o json >"$d/pdb.json" \
+      && kubectl get clusters.postgresql.cnpg.io -A -o json >"$d/clusters.json" \
+      && kubectl get agentstacks -o json >"$d/agentstacks.json" || rc=1
+    for f in pods replicasets deployments statefulsets daemonsets pdb clusters agentstacks; do
+      [ "$rc" = 0 ] && { jq -e '.items | type == "array"' "$d/$f.json" >/dev/null 2>&1 || rc=1; }
+    done
+  fi
+  # A fleet always runs workloads and always has claims: an empty answer is a read, not a fleet.
+  [ "$rc" = 0 ] && { jq -e '(.items | length) > 0' "$d/pods.json" >/dev/null 2>&1 && jq -e '(.items | length) > 0' "$d/agentstacks.json" >/dev/null 2>&1 || rc=1; }
+  [ "$rc" = 0 ] || { rm -rf "$d"; echo "workload-health: a read failed — no answer (an unreadable read is a hold for the caller)" >&2; return 1; }
+  jq -c -n --argjson now "${WH_NOW:-$(date -u +%s)}" --argjson grace "$WH_NOT_READY_GRACE" --arg plat "$WH_PLATFORM_STACK" \
+     --slurpfile P "$d/pods.json" --slurpfile RS "$d/replicasets.json" --slurpfile D "$d/deployments.json" \
+     --slurpfile SS "$d/statefulsets.json" --slurpfile DS "$d/daemonsets.json" --slurpfile B "$d/pdb.json" \
+     --slurpfile C "$d/clusters.json" --slurpfile S "$d/agentstacks.json" "$PDB_JQ_DEFS"'
+    def ts: if . == null then null else (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) end;
+    def byname: map({key: "\(.metadata.namespace)/\(.metadata.name)", value: .}) | from_entries;
+    def badreasons: ["CrashLoopBackOff","Error","ImagePullBackOff","ErrImagePull","CreateContainerConfigError"];
+    ([$S[0].items[] | select(.metadata.name != $plat) | .spec.repos[]? | (if type == "object" then .name else . end)] | unique) as $stackns
+    | ($RS[0].items | byname) as $rs
+    | ($D[0].items | byname) as $dep | ($SS[0].items | byname) as $sts
+    | ($DS[0].items | byname) as $ds  | ($C[0].items | byname) as $cnpg
+    # the CURRENT hash of a Deployment: its ReplicaSet with the highest deployment revision
+    | ([$RS[0].items[] | select(((.metadata.ownerReferences // [])[0].kind // "") == "Deployment")
+        | {k: "\(.metadata.namespace)/\(.metadata.ownerReferences[0].name)",
+           r: ((.metadata.annotations["deployment.kubernetes.io/revision"] // "0") | tonumber? // 0),
+           h: (.metadata.labels["pod-template-hash"] // "")}]
+       | group_by(.k) | map({key: .[0].k, value: (max_by(.r).h)}) | from_entries) as $dephash
+    | [ $P[0].items[]
+        | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+        | select(.metadata.deletionTimestamp == null)
+        | select((.metadata.labels["app"] // "") != "agent-session")
+        | . as $p | .metadata.namespace as $ns
+        | ((.metadata.ownerReferences // []) | (map(select(.controller == true))[0] // .[0])) as $o
+        | select($o != null)
+        | select(($o.kind | IN("Job","CronJob","Workflow","EphemeralRunner")) | not)
+        | (if $o.kind == "ReplicaSet" then
+             (($rs["\($ns)/\($o.name)"].metadata.ownerReferences // []) | map(select(.kind == "Deployment"))[0]) as $d
+             | if $d then {kind: "Deployment", name: $d.name} else {kind: "ReplicaSet", name: $o.name} end
+           elif $o.kind == "Cluster" and (($o.apiVersion // "") | startswith("postgresql.cnpg.io")) then
+             {kind: "Cluster.postgresql.cnpg.io", name: $o.name}
+           else {kind: $o.kind, name: $o.name} end) as $top
+        | ([ ((.status.initContainerStatuses // [])[] | {c: ("init " + .name), s: .state}),
+             ((.status.containerStatuses // [])[] | {c: .name, s: .state}) ]
+           | map(select(((.s.waiting.reason // "") as $r | badreasons | index($r)) or ((.s.terminated.reason // "") == "Error"))
+                 | "\(.c) \(.s.waiting.reason // .s.terminated.reason)")) as $crash
+        | ([.status.conditions[]? | select(.type == "Ready")][0]) as $rc
+        | (($rc.lastTransitionTime // .metadata.creationTimestamp) | ts) as $rsince
+        | (($rc.status // "False") != "True" and $rsince != null and ($now - $rsince) > $grace) as $unready
+        | { ns: $ns, kind: $top.kind, name: $top.name, pod: .metadata.name, labels: (.metadata.labels // {}),
+            image: ([.spec.containers[]?.image] | join(",")),
+            rev: (.metadata.labels["controller-revision-hash"] // .metadata.labels["pod-template-hash"] // null),
+            bad: (if ($crash | length) > 0 then "\(.metadata.name): \($crash | join(", "))"
+                  elif $unready then "\(.metadata.name): not Ready for \((($now - $rsince) / 60) | floor)m"
+                  else null end),
+            since: $rsince } ]
+    | group_by([.ns, .kind, .name])
+    | map(.[0] as $w | "\($w.ns)/\($w.name)" as $nn | ($w.ns | IN($stackns[])) as $stack
+        | (if   $w.kind == "Deployment"                then ($dephash[$nn] // ([.[].rev | select(. != null)] | unique | join("+")))
+           elif $w.kind == "StatefulSet"               then ($sts[$nn].status.updateRevision // ([.[].rev | select(. != null)] | unique | join("+")))
+           elif $w.kind == "Cluster.postgresql.cnpg.io" then ([.[].image] | unique | join("+"))
+           else ([.[].rev | select(. != null)] | unique | join("+")) end) as $rev
+        | (if   $w.kind == "Deployment"                then ($dep[$nn].spec.replicas // length)
+           elif $w.kind == "StatefulSet"               then ($sts[$nn].spec.replicas // length)
+           elif $w.kind == "Cluster.postgresql.cnpg.io" then ($cnpg[$nn].spec.instances // length)
+           elif $w.kind == "DaemonSet"                 then ($ds[$nn].status.desiredNumberScheduled // length)
+           else length end) as $replicas
+        | . as $pods
+        | ([$B[0].items[] | select(.metadata.namespace == $w.ns) | . as $b
+            | select(any($pods[]; matches($b.spec.selector; .labels)))] | length > 0) as $pdb
+        | [.[] | select(.bad != null)] as $bad
+        | { key: "\($w.ns)/\($w.kind)/\($w.name)",
+            class: (if $stack | not then "platform" elif ($replicas >= 2 or $pdb) then "stack-important" else "stack-singleton" end),
+            revision: (if $rev == "" then "-" else $rev end),
+            healthy: ($bad | length == 0),
+            reason: ($bad | map(.bad) | join("; ")),
+            since: (if ($bad | length) > 0 then ($bad | map(.since // $now) | min | todate) else "" end) })
+    | .[]' || rc=1
+  rm -rf "$d"; return $rc
+}
+
+# ---------------------------------------------------------------- order
+# Which node to upgrade NEXT — COMPUTED, never a list. A hard-coded order is correct exactly once:
+# it rots the moment a workload is rescheduled, a Garage zone moves, or a node joins. This ranks
+# every node that is not at its declared version/schematic by what draining it would actually cost,
+# from live placement, so the answer follows the fleet instead of the other way round.
+#
+#   SOLO   workloads whose every running pod is on this node -> they go down for the window
+#   QUORUM workloads where the survivors would fall below majority -> not degraded, BROKEN
+#   GARAGE this node is a Garage zone -> rf=3 of 3 zones, the sync gate applies
+#   LH     Longhorn replicas living here -> `settle` has work to do before the drain
+#
+# A PDB changes SOLO/QUORUM from an outage into a serialized roll (Talos honours them), so the
+# counts are an upper bound on harm, not a prediction — read them as "how much this node is load
+# bearing", which is what an ordering wants.
+order() {
+  # A report must not hard-fail on the declaration read: without it the DECLARED column is blank
+  # and every other number — which is what the ranking is actually made of — is still true.
+  load_targets || { warn "no declared targets (box unreachable?) — DECLARED column will be blank"; TARGETS_JSON='{}'; }
+  # The dumps are megabytes — they go through FILES, never argv (a --argjson of the pod list is an
+  # "Argument list too long" the moment the cluster is real).
+  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
+  local zones
+  log "ranking the fleet by what a drain would cost (live placement)"
+  kubectl get pods -A -o json > "$d/p.json"
+  kubectl get replicasets -A -o json > "$d/r.json"
+  kubectl -n longhorn-system get replicas.longhorn.io -o json 2>/dev/null > "$d/lh.json" || echo '{"items":[]}' > "$d/lh.json"
+  kubectl get nodes -o json > "$d/n.json"
+  printf '%s' "$TARGETS_JSON" > "$d/t.json"
+  zones="$(prom 'count by (role_zone) (cluster_layout_node_connected)' 2>/dev/null \
+           | jq -c '[.data.result[].metric.role_zone]' 2>/dev/null)" || zones='[]'
+  [ -n "$zones" ] || zones='[]'
+  printf '%s' "$zones" > "$d/z.json"
+
+  jq -rn --slurpfile P "$d/p.json" --slurpfile R "$d/r.json" --slurpfile Z "$d/z.json" \
+         --slurpfile LH "$d/lh.json" --slurpfile N "$d/n.json" --slurpfile T "$d/t.json" '
+    ($P[0]) as $p | ($R[0]) as $r | ($Z[0]) as $z | ($LH[0]) as $lh | ($N[0]) as $n | ($T[0]) as $t |
+    ($r.items | map({key:(.metadata.namespace+"/"+.metadata.name),
+                     value:((.metadata.ownerReferences//[])[0].name // "")}) | from_entries) as $own
+    | [ $p.items[]
+        | select(.status.phase=="Running" and .spec.nodeName != null)
+        | . as $pod | (($pod.metadata.ownerReferences // [])[0] // null) as $o
+        | select($o != null and (($o.kind // "") | test("DaemonSet|Job|Workflow") | not))
+        | { name: (if $o.kind=="ReplicaSet"
+                   then ($own[$pod.metadata.namespace+"/"+$o.name] // "") else ($o.name // "") end),
+            ns: $pod.metadata.namespace, kind: $o.kind, node: $pod.spec.nodeName } ]
+      | map(select(.name != ""))
+      | group_by(.kind+"|"+.ns+"|"+.name)
+      | map({ total: length,
+              nodes: (group_by(.node) | map({key: .[0].node, value: length}) | from_entries) }) as $w
+    | ($lh.items | map(.spec.nodeID) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $lhn
+    | [ $n.items[] | .metadata.name ] as $allnodes
+    | $allnodes
+      | map( . as $nd
+        | ($t[$nd] // null) as $decl
+        | ([ $p.items[] | select(.spec.nodeName==$nd) ] | length) as $podcount
+        | { node: $nd,
+            declared: ($decl.version // "-"),
+            solo:   ([ $w[] | select((.nodes[$nd] // 0) > 0 and .total == (.nodes[$nd] // 0)) ] | length),
+            quorum: ([ $w[] | select(.total >= 3 and (.nodes[$nd] // 0) > 0
+                                      and ((.total - (.nodes[$nd] // 0)) < ((.total/2|floor)+1))) ] | length),
+            garage: (if ($z | index($nd)) then 1 else 0 end),
+            lh:     ($lhn[$nd] // 0) } )
+      | map(. + { risk: (.solo*2 + .quorum*10 + .garage*3 + (if .lh>0 then 2 else 0 end)) })
+      | sort_by(.risk, .node)
+      | .[]
+      | [ .risk, .node, .declared, .solo, .quorum, (if .garage==1 then "yes" else "-" end), .lh ]
+      | @tsv' > "$d/ranked.tsv"
+  # ORDER_FORMAT=names: the ranked node names alone, one per line — what upgrade-behind walks, so
+  # the ranking has ONE implementation and the table below is only its human rendering.
+  # ⚠ Called as `x="$(order)" || …`, this function runs with `set -e` OFF (bash disables it for
+  # anything on the left of `||`), so a failed kubectl above does not stop it — it carries on and
+  # ranks an empty fleet. Found 2026-09-21: kubectl missing from PATH made upgrade-behind report
+  # "nothing is behind". So the names mode refuses an empty ranking explicitly.
+  # ORDER_FORMAT=tsv: the ranked rows themselves (RISK NODE DECLARED SOLO QUORUM GARAGE LH, tab-
+  # separated, no header) — what the box's reconciler reads to rank a rollout AND to type its
+  # canaries by storage-ness (GARAGE=yes or LH>0), so it never re-derives what this function knows.
+  if [ "${ORDER_FORMAT:-table}" = names ] || [ "${ORDER_FORMAT:-table}" = tsv ]; then
+    [ -s "$d/ranked.tsv" ] || { fail "the fleet ranking came back EMPTY (kubectl unreachable?) — not a result"; return 2; }
+    if [ "$ORDER_FORMAT" = tsv ]; then cat "$d/ranked.tsv"; else cut -f2 "$d/ranked.tsv"; fi
+    return 0
+  fi
+  awk -F'\t' '
+        BEGIN{printf "%-5s %-14s %-10s %5s %7s %7s %4s\n","RISK","NODE","DECLARED","SOLO","QUORUM","GARAGE","LH"}
+        {printf "%-5s %-14s %-10s %5s %7s %7s %4s\n",$1,$2,$3,$4,$5,$6,$7}' "$d/ranked.tsv"
+  echo
+  log "lowest risk first. A node already at its declared version is still listed — 'behind or not'"
+  log "is the verb's own check (it refuses a same-version reinstall with a WARN, not this ranking)."
+}
+
+# ── upgrade-behind: every node that trails its declaration, one at a time ───────────────────────
+# The loop over the two verbs that already exist, nothing more: `order` decides the sequence (its
+# ranking by what a drain costs — never a hand-written list, operator 2026-09-18), `upgrade` moves a
+# worker, controlplane-upgrade.sh moves a control plane with its etcd/snapshot/cilium gates. What
+# this adds is only what a HUMAN did between nodes: skip anything already at its declared version,
+# wait for the fleet to be whole again before the next node goes down, and stop at the first
+# failure — a failed node is never followed by a second one.
+#
+# Scope (the node argument): cp | worker | all (default). Run it ON the management box:
+#   systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
+#     -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root \
+#     --setenv=KUBECONFIG=/var/lib/mgmt/kubeconfig --setenv=TALOSCONFIG=/var/lib/mgmt/talosconfig \
+#     devbox run node-maintenance -- upgrade-behind cp
+#   journalctl -fu node-upgrade-behind
+# A transient unit, not an ssh session: a control-plane upgrade that loses its terminal halfway
+# is exactly the state nobody wants to recover from. The box also holds the etcd snapshots
+# controlplane-upgrade.sh takes, and reads the declaration from its own local state.
+BETWEEN_TIMEOUT="${BETWEEN_TIMEOUT:-900}"   # s — the fleet must be whole again within this
+upgrade_behind() {
+  local scope="${NODE:-all}"
+  case "$scope" in cp|worker|all) ;; *) fail "scope must be cp, worker or all (got '$scope')"; return 64 ;; esac
+  load_targets || return 2
+  local ranked n ip dv lv role plan=()
+  command -v kubectl >/dev/null && command -v talosctl >/dev/null && command -v jq >/dev/null \
+    || { fail "kubectl/talosctl/jq not on PATH — run it through \`devbox run node-maintenance\`"; return 2; }
+  ranked="$(ORDER_FORMAT=names order)" || { fail "could not rank the fleet"; return 2; }
+  # "Could not look" must never read as "nothing is behind" — a real fleet always ranks nodes.
+  [ -n "$ranked" ] || { fail "the fleet ranking is EMPTY — refusing to treat that as 'nothing behind'"; return 2; }
+  while read -r n; do
+    [ -n "$n" ] || continue
+    dv="$(jq -r --arg n "$n" '.[$n].version // ""' <<<"$TARGETS_JSON")" || dv=""
+    [ -n "$dv" ] || continue                     # not a declared Talos node (nothing to move it to)
+    if kubectl get node "$n" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+      role=cp; else role=worker; fi
+    [ "$scope" = all ] || [ "$scope" = "$role" ] || continue
+    ip="$(jq -r --arg n "$n" '.[$n].ip // ""' <<<"$TARGETS_JSON")" || ip=""
+    # `|| lv=""` is load-bearing under `set -euo pipefail`: a bare assignment whose pipeline fails
+    # (node unreachable) would exit the script here instead of reaching the refusal below.
+    lv="$(talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" version --short 2>/dev/null \
+          | sed -e 's/\x1b\[[0-9;]*m//g' | awk '/Tag:/{print $2; exit}')" || lv=""
+    # A node whose version cannot be read is a stop, not a skip: "unknown" is not "current".
+    [ -n "$lv" ] || { fail "$n: cannot read its live Talos version at $ip — refusing to plan around it"; return 2; }
+    [ "$lv" = "$dv" ] && continue
+    plan+=("$n $role $lv $dv")
+  done <<<"$ranked"
+
+  if [ ${#plan[@]} -eq 0 ]; then ok "no node in scope '$scope' is behind its declaration — nothing to do"; return 0; fi
+  log "upgrade-behind ($scope): ${#plan[@]} node(s), in order:"
+  local e i=0
+  for e in "${plan[@]}"; do set -- $e; i=$((i+1)); log "  $i. $1 ($2)  $3 -> $4"; done
+  [ "$DRY" = 1 ] && { log "DRY=1 — nothing touched"; return 0; }
+
+  local total=${#plan[@]} rc t0 nodes_json closed
+  i=0
+  for e in "${plan[@]}"; do
+    set -- $e; i=$((i+1))
+    log "── [$i/$total] $1 ($2): $3 -> $4 ──"
+    # `|| rc=$?`, never `cmd; rc=$?`: under `set -e` the latter exits on the failure it means to
+    # report, and the STOP message below — the whole point of this loop — would never print.
+    rc=0
+    if [ "$2" = cp ]; then bash "$REPO/scripts/controlplane-upgrade.sh" "$1" || rc=$?
+    else bash "$0" upgrade "$1" || rc=$?; fi
+    if [ "$rc" != 0 ]; then
+      fail "$1: upgrade exited $rc — STOPPING. $((total-i)) node(s) after it were NOT touched."
+      return 2
+    fi
+    [ "$i" = "$total" ] && break
+    # The fleet whole again before the next node goes down: every node Ready, and Cilium holding
+    # the apiserver backend on every agent (the FU-258 class — cp-upgrade repairs it itself; this
+    # proves it held for a worker too, and that nothing else fell over meanwhile), and no budget
+    # spanning several nodes at 0 — a service still catching up from the last window (a Garage
+    # zone's resync backlog: docs/garage.md §Voluntary disruption) would refuse the next node's
+    # preflight anyway. Raise BETWEEN_TIMEOUT for a storage-heavy run: a post-reboot backlog has
+    # held a budget closed for up to ~80 min.
+    log "waiting for the fleet to be whole before the next node (≤ ${BETWEEN_TIMEOUT}s)"
+    t0=$(date +%s)
+    # ONE read, and an unreadable one is never "whole": two failed reads would compare "" = "".
+    until nodes_json="$(kubectl get nodes -o json)" \
+          && jq -e '(.items | length) > 0 and all(.items[]; any(.status.conditions[]; .type=="Ready" and .status=="True"))' \
+               <<<"$nodes_json" >/dev/null \
+          && bash "$REPO/scripts/maintenance-window.sh" cilium-check >/dev/null 2>&1 \
+          && closed="$(pdb_blockers)" && [ -z "$closed" ]; do
+      [ $(( $(date +%s) - t0 )) -lt "$BETWEEN_TIMEOUT" ] || {
+        fail "the fleet is not whole ${BETWEEN_TIMEOUT}s after $1 — STOPPING before the next node${closed:+ (closed budget(s): $(tr '\n' ' ' <<<"$closed"))}"; return 2; }
+      sleep 15
+    done
+    ok "fleet whole again after $1"
+  done
+  ok "upgrade-behind ($scope): all ${total} node(s) at their declared version"
+}
+
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
@@ -559,6 +1555,12 @@ case "$cmd" in
   power) power "${3:-status}" ;;
   down) down ;;
   up) up ;;
+  upgrade) upgrade ;;
+  verify) verify ;;
+  workload-health) workload_health ;;
+  efi-scrub) efi_scrub ;;
+  order) order ;;
+  upgrade-behind) upgrade_behind ;;
   silence-open) silence_open; declare_open ;;
   silence-close) silence_close; declare_close ;;
   *) usage ;;

@@ -1,0 +1,23 @@
+# pod-admission-alerts — PodSecurityEnforceDenied, the platform belt for refused pods (homelab#1845).
+# Raw manifests in argocd/resources/pod-admission-alerts/; the why is in that PrometheusRule header.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pod-admission-alerts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/pod-admission-alerts
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

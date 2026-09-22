@@ -1,0 +1,9 @@
+# coordinator-pick-rail-anthropic (homelab#439 leg 3) — the subscription is clear.
+#
+# CONDITION: the ladder's first rung answers "anthropic"; the Go leg is never probed.
+# EXPECTED: the stack's own coordinatorModel stands — a clear subscription changes nothing.
+name: coordinator-pick-rail-anthropic
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh

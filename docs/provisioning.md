@@ -90,7 +90,11 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
 
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
   ⚠ kata node AND a **Longhorn BULK zone** (ADR-089) — a wipe destroys bulk replicas; drain first.
-- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE; kata node.
+- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), legacy PXE; kata node.
+  **CONTROL PLANE since 2026-09-20** (ADR-133; left the ride pool in #1814, merged 9b978367 —
+  the prerequisite §CP5 step 1 names): reinstalled rather than
+  flipped, because `machine_type` is baked at install — recipe in
+  [`controlplane-ha.md`](controlplane-ha.md) §CP5. etcd sync-write ~1.6 ms (etcd's dd probe).
 - `wk-metal-03` — laptop i5-6200U, .184, `/dev/sda`, ephemeral tier, **kata node** (`kata: true`
   → the `metal_kata` install image + `homelab.io/kata` label).
 - `wk-metal-04` — desktop i5-3570K/16GB, .186, `/dev/sda`, ephemeral tier, **kata node**. The roomy
@@ -115,23 +119,125 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a
   **bad NIC cable** (100Mbps + link flapping), replaced 2026-06-11; it PXE-onboards fine now.
 
-## Upgrading a metal node's Talos
+## Upgrading a node's Talos — metal AND nocloud VM
 
-Metal nodes (unlike nocloud VMs) upgrade in place with the factory installer image that carries the
-extensions:
+`talosctl upgrade` cordons the node, drains it, installs, reboots, then rejoins and uncordons
+itself. What you must get right is `--image`, on three axes — **platform, schematic, version**:
+
 ```bash
-devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> -e 192.168.2.51 \
-  upgrade --image <factory installer URL — see below>
+devbox run -- talosctl --talosconfig tofu/talosconfig -n <node ip> -e <a healthy CP ip> \
+  upgrade --image <factory installer URL>
 ```
-The URL is what `tofu/metal.tf` would install: `local.talos_install_image` (defined at the top of
-`tofu/metal.tf` as `data.talos_image_factory_urls.metal.urls.installer`, whose schematic lives in
-`tofu/image.tf`). A node flagged `kata: true` in `machines/machines.yaml` gets the **`metal_kata`**
-installer instead (`data.talos_image_factory_urls.metal_kata`) — pass that one, or the upgrade
-quietly swaps the node back to the plain-metal schematic.
 
-Point `-e` at a control-plane node (`.51`), not the worker itself — otherwise the post-install drain
-step can't fetch kubeconfig and errors (the install still succeeds, but the node may not reboot;
-a manual `talosctl reboot` then boots the staged version).
+| Node | Installer URL comes from |
+|---|---|
+| metal | `data.talos_image_factory_urls.metal.urls.installer` (= `local.talos_install_image`, top of `tofu/metal.tf`) |
+| metal with `kata: true` (`machines/machines.yaml`) | `data.talos_image_factory_urls.metal_kata` — pass THIS one |
+| VM (nocloud) | `data.talos_image_factory_urls.vm["<longhorn\|plain>-<role version>"].urls.installer` — the `longhorn` flag in `variables.tf` picks the schematic, the ROLE picks the version (`tofu/image.tf`) |
+
+⚠ **Never the generic `ghcr.io/siderolabs/installer`** — which is exactly what `talosctl upgrade`
+defaults to when `--image` is omitted. On a nocloud VM it installs the **metal** platform, so the
+nocloud datasource is never read again and the node rejoins as a DHCP-addressed `talos-xxxxx`
+ghost. That is ADR-014's failure, root-caused 2026-09-18. The pinned talosctl also trails the
+fleet by a patch, so the default would downgrade as well. **Always pass `--image`.**
+
+⚠ **The schematic is part of the node's identity.** Upgrading with the wrong one silently strips
+extensions: probed 2026-09-18 on `wk-03` (a `longhorn = true` VM) upgraded with the PLAIN
+schematic — iscsi-tools vanished and longhorn-manager crashlooped on
+`nsenter … iscsiadm: No such file or directory`. The same trap on metal is the `metal_kata` row
+above (and FU-076's reverse case). `talosctl get extensions` reports the live schematic id —
+compare it after every upgrade, not just the version.
+
+Point `-e` at a control-plane node, never the worker itself: talosctl performs the drain
+**client-side** and fetches kubeconfig over `MachineService/Kubeconfig`, which is control-plane
+only. (Symptom when you get this wrong: the install succeeds but the node may not reboot; a
+manual `talosctl reboot` then boots the staged version.)
+
+For a control-plane node, run the dedicated wrapper from [the management box](management-box.md):
+
+```bash
+devbox run cp-upgrade -- cp-01
+```
+
+**To move every node that trails its declaration**, don't loop by hand — `upgrade-behind` walks
+`node-maintenance order`'s ranking, skips anything already at its declared version, sends control
+planes through `cp-upgrade` and workers through `upgrade`, waits for the fleet to be whole (all
+`Ready`, Cilium clean) between nodes, and stops at the first failure. `DRY=1` prints the plan. Run it
+on the box as a transient unit, so a dropped ssh session cannot strand a control plane mid-upgrade:
+
+```bash
+systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
+  -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root --setenv=PATH="$PATH" \
+  devbox run node-maintenance -- upgrade-behind cp        # or: worker | all
+journalctl -fu node-upgrade-behind
+```
+
+`--setenv=PATH` is load-bearing: a transient unit gets systemd's bare PATH, and devbox then dies on
+"unable to source Nix profile" (2026-09-21, first real run). `DRY=1` goes in as `--setenv=DRY=1`.
+
+**A node the reconciler owns** — `reconcile: auto` in `machines/machines.yaml`, every Talos node
+since `reconcile_rollout.enabled` went on (2026-09-22) — needs none of this: the box's
+reconciler runs this same `upgrade` verb on it (a control plane: `controlplane-upgrade.sh`) once the
+applied declaration moves, one attempt per declared target, and parks it with an alert if that
+attempt fails — [`management-box.md`](management-box.md) §MB4 (layers 3–5 and the rollout as built).
+
+On the box the verbs read the declaration from the local main state and the client configs from
+`/var/lib/mgmt/` by themselves (2026-09-21 — before that, every box-side run died on
+`localhost:8080`, because `devbox run` points KUBECONFIG at a checkout path the box does not have).
+
+It requires at least three Ready control planes, selects a healthy endpoint other than the target,
+checks that etcd has an odd membership of at least three, takes an etcd snapshot under
+`/var/lib/mgmt/etcd-snapshots/`, and then enters the same WIP-1 maintenance path workers use. It
+verifies the declared version and schematic plus unchanged etcd membership after the node rejoins.
+It also gates on Cilium's backend for the in-cluster apiserver Service either side of the reboot —
+restarting an apiserver drops it fleet-wide with no re-sync
+([FU-258](spikes/cilium-apiserver-restart-backend-loss.md)) — refusing to start on an already
+broken fleet and rolling `ds/cilium` after the rejoin only when an agent is genuinely missing it.
+The full path was rehearsed on 2026-09-19 with a separate one-node cluster on a disposable nx-02
+VM: Talos v1.13.2 → v1.13.10 preserved the nocloud IP, hostname, schematic and etcd identity. The
+reproducible lab installer is `scripts/controlplane-lab-install.sh`; its generated credentials are
+ephemeral and must never be committed.
+
+**The drain respects PodDisruptionBudgets and fails closed.** Probed 2026-09-18 on v1.13.10: a
+`minAvailable: 1` PDB over a 1-replica pod made `talosctl … --drain` retry the eviction, then exit
+1 **without rebooting** — while `kubectl drain` errored the same way. So a Longhorn last replica
+on the node is a *stuck upgrade*, not data loss; clear it first with
+`scripts/node-maintenance.sh settle <node>`. Never pass `--legacy`: that forces the old node-side
+drain, the one siderolabs/talos#9882 reported ignoring PDBs.
+
+## Recovering a node whose INSTALLED config is broken
+
+The onboarding recipe above assumes the box can be talked to. When the *installed* machine config
+is what broke the network, it cannot — and the obvious move does not work:
+
+⚠ **PXE does not force maintenance mode.** Talos reads its machine config from the **STATE
+partition**, so a profile with no `talos.config` argument boots the kernel from the network and
+then runs whatever is on disk. `wk-metal-02` PXE-booted cleanly three times on 2026-09-21
+(matchbox logs 05:24, 05:32, 05:39) and came up as a `controlplane` running the broken config every
+time; the only thing that changed between boots was the kernel version.
+
+⚠ **`talosctl reset` needs the network the node just lost.** It is the documented way back to
+maintenance ([onboarding step 6](#onboarding-recipe-reuse-for-each-new-metal-node)), and it is
+unreachable in exactly the case you need it.
+
+What works, from the console, with no network on the node — add one kernel arg to the PXE profile:
+
+```
+talos.experimental.wipe=system
+```
+
+Talos resets the system disk and reboots. With STATE gone the next PXE boot has no config to read
+and lands in maintenance, which is where the normal recipe resumes. Measured 2026-09-21: wipe boot
+05:47:42Z → maintenance `apid` answering 05:49:20Z.
+
+Two things that bite:
+
+- **Swap the profile back before that next boot**, or the box wipes in a loop — the post-wipe
+  reboot PXEs again and re-reads the same arg. Point the group at the plain profile the moment
+  matchbox logs the wipe boot's kernel fetch (here: swap took 15 s against a wipe-plus-reboot of
+  ~90 s). Automate the swap rather than racing it by hand.
+- **The flag is procedure state.** It belongs in `tofu/provisioning/flags.local.tf` — untracked
+  (`*.local.tf`), FU-244 — never a commit.
 
 ## Firmware reality (why USB sometimes)
 

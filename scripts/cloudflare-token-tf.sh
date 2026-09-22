@@ -52,8 +52,8 @@ rc=$?
 if [ "$excluded" -eq 1 ] && [ "$rc" -eq 0 ]; then
   echo ""
   echo "→ $READ_ALL was EXCLUDED (standing permutation, FU-239) — checking it for real changes"
-  out="$(tofu plan -input=false -no-color -detailed-exitcode "-target=$READ_ALL" 2>&1)"; prc=$?
-  real="$(printf '%s\n' "$out" | grep -cE '^[[:space:]]+[+-] \{')"
+  prc=0; out="$(tofu plan -input=false -no-color -detailed-exitcode "-target=$READ_ALL" 2>&1)" || prc=$?  # set -e: rc 2 = "has changes", not a failure (2026-09-22 it killed the script before the store step)
+  real="$(printf '%s\n' "$out" | grep -cE '^[[:space:]]+[+-] \{' || true)"
   if [ "$prc" -eq 2 ] && [ "$real" -gt 0 ]; then
     echo "  ⚠ $real ADDED/REMOVED group element(s) — a real catalog change; review + apply with: CF_INCLUDE_READ_ALL=1 devbox run cloudflare-token-tofu plan|apply"
     printf '%s\n' "$out" | grep -E '^[[:space:]]+[+-] \{' -A1 | grep -oE 'id = "[0-9a-f]+"' | sed 's/^/    /'

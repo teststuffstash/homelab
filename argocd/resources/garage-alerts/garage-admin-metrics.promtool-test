@@ -370,3 +370,42 @@ tests:
               pod: garage-2
             exp_annotations:
               summary: "Garage garage-2 has 600k GC items parked for 26h"
+
+  # ── GarageZoneDegraded: one zone down, quorum serving ──────────────────────────────────────────
+  # The 2026-09-21 11:03–11:10Z shape: the down zone's own series vanishes, the other two read 0.
+  - interval: 1m
+    name: "GarageZoneDegraded fires after 5m of a zone down, from the surviving zones' view"
+    input_series:
+      - series: 'cluster_healthy{instance="10.244.3.140:3903"}'
+        values: "1x5 0x8 1x5"
+      - series: 'cluster_healthy{instance="10.244.8.193:3903"}'
+        values: "1x5 0x8 1x5"
+      - series: 'cluster_healthy{instance="10.244.9.11:3903"}'
+        values: "1x5 _x8 1x5"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: GarageZoneDegraded
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: GarageZoneDegraded
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: "Garage is running with a zone down — one more zone loss stops writes"
+      - eval_time: 16m
+        alertname: GarageZoneDegraded
+        exp_alerts: []
+
+  # The six 1-min blips and the 4–5 min episodes of 09-14..09-21 must not page.
+  - interval: 1m
+    name: "GarageZoneDegraded stays quiet through blips and a 4-minute dip"
+    input_series:
+      - series: 'cluster_healthy{instance="10.244.3.140:3903"}'
+        values: "1x5 0 1x5 0x4 1x10"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: GarageZoneDegraded
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GarageZoneDegraded
+        exp_alerts: []

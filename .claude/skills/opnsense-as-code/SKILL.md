@@ -13,6 +13,9 @@ description: >
 > **Glance first**: [`../GAPS.md`](../GAPS.md) §opnsense-as-code — unpromoted sightings apply
 > until closed (contract: [`../README.md`](../README.md)).
 
+> ⚠ **A router change runs inside a [maintenance window](../maintenance-window/SKILL.md)** — the
+> router carries the BGP peerings and every HAProxy VIP, so a mistake here reads cluster-wide.
+
 OPNsense is managed with the `oxlorg.opnsense` Ansible collection, in a **roles layout**: edit the
 **config value in `ansible/group_vars/opnsense.yml`** (the logic lives in `ansible/roles/opnsense-*`),
 then apply the matching playbook with the wrapper. Never click-ops it.

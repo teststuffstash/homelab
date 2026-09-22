@@ -7,7 +7,7 @@
 #   bash agents/research-fanout.sh <project> <mission-issue> --arms N [--class regular] [--dry-run]
 #   bash agents/research-fanout.sh oracle-fleet 210 --arms 7
 #
-# THE CALLER NAMES ZERO MODELS (ADR-104 / model-routing.md §M13, built FU-162). The roster is
+# THE CALLER NAMES ZERO MODELS (ADR-104 / model-routing-history.md §M13, built FU-162). The roster is
 # DRAWN: one `POST /route` per arm carrying `class` + `slot` + `jitter:false`, answered from the
 # scout-curated pool, so the same (class, slot, pool-version) always yields the same model — a
 # relaunched arm is identical and the mission is reproducible from its calls. Hand-picked model

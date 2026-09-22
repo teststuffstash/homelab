@@ -139,6 +139,7 @@ mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the
 |---|---|
 | `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
+| **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -147,17 +148,54 @@ a staleness alert catches "the box is wedged" and not only "the box says no". Th
 prober contract applied to its first non-stack consumer — the spike's line is that *the prober is
 the human*.
 
-⚠ **The transport is UNBUILT, and it is a decision rather than a detail.** Pushgateway is
-"cluster-internal only … never BGP-advertised — internal exhaust plumbing"
-(`argocd/resources/pushgateway/service.yaml`), and the write probe reaches it from an in-cluster
-CronJob. This box is out-of-cluster by construction, so publishing needs either a deliberate
-exposure (a VIP for internal exhaust plumbing — an ip-plan/ADR-088 call, not a config line) or a
-different sink. `scripts/mgmt-probe.sh` therefore treats a failed push as reporting-only and never
-lets it change the verdict; with `PUSHGATEWAY` unset it does not publish at all.
+**The transport is the textfile collector** (FU-252's ruling, below): the probe writes
+`mgmt_probe_<mode>.prom` — the verdict, `mgmt_probe_last_run_timestamp{mode}` and the node diff —
+into `/var/lib/node-exporter-textfile/`, which the cluster Prometheus scrapes as job `mgmt-node`.
+The Pushgateway path the probe was born with never ran (it needed a deliberate exposure of
+cluster-internal plumbing) and is gone. Alerts, in `argocd/resources/mgmt-metrics/`, by how long
+each axis may legitimately differ: `MgmtNodeMissing` (reachable/registered, 2 h — longer than a
+reinstall window), `MgmtNodeLiveStateDrift` (labels/taints, 1 h — applied live), `MgmtNodeInstallDrift`
+(schematic/ephemeral_disk, 24 h — only a window fixes them), and `MgmtBeltStale` /
+`MgmtBeltMetricsAbsent` for the belt itself. The **version** axis has no box-side alert:
+`TalosFleetVersionSplit` (`argocd/resources/talos-substrate/`, `for: 24h`) already owns the
+stalled-rollout case from `kube_node_info`, with no transport at all.
 
 ⚠ **Known hole:** Prometheus is in-cluster, so a cluster-down event blinds the detector. Acceptable
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
 work), but the spike's "alerts leave by two independent paths" has no second path yet.
+
+### A standing refusal is a THIRD verdict shape, and nothing detects it
+
+*Detected since 2026-09-21 (FU-252, archived): `MgmtApplyResidueStanding` + the box-side belts below.*
+
+The shape above has two states — alive, and wedged. The apply loop has a third: **alive, correct,
+and saying no for days.** Measured 2026-09-18: `mgmt-apply` refused `main` continuously from
+**Sep 14 11:42Z** (`7d9949ee`, 2 addresses outside the allowlist) to `e63b0073` (**8**), restating
+*"was REFUSED — waiting for a new commit or a human apply"* **1101 times**. Every tick ran
+perfectly. A verdict-plus-`_last_run_timestamp` alert stays GREEN through all of it, because the
+verdict is not an error and the timestamp is fresh.
+
+Two properties make it worth its own detector rather than a louder log line:
+
+- **It ratchets.** A refusal writes `refused-rev` and deliberately does not stamp the apply
+  baseline, so every later master commit touching the root joins its residue to the same pending
+  apply: 2 → 4 → … → 8 in four days. The human apply grows monotonically and gets less reviewable
+  the longer it stands — the cost of tolerating it is not flat.
+- **Its only surfaces are unwatched.** No `mgmt_*` series exists; nothing scrapes 192.168.2.53 at
+  all (`up{instance=~".*2\.53.*"}` = 0 series, 2026-09-18); no alert rule names the box loops. What
+  remains is journald on an unscraped box and a red commit **status** on master — and a status is
+  not a check-run: `GET /commits/<sha>/check-runs` does not return it, which is exactly how a jail
+  session read master as green on 2026-09-18 while four days of refusal sat on HEAD. A reader that
+  wants the truth asks `GET /commits/<sha>/status`.
+
+So the metric the loop actually needs is **age of the oldest unapplied residue** (and its address
+count), not liveness. **Transport, ruled 2026-09-21 (operator): the hypervisors' pattern** — the
+box runs node_exporter with the textfile collector (`nixos/hosts/mgmt/default.nix`, 9100 open to
+the LAN only), `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus
+scrapes it as the static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`**
+(github-exporter, from master's commit status, since 2026-09-18). The box-side belts in
+`argocd/resources/mgmt-metrics/` cover what a status cannot show — a loop or box that stopped
+posting: `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`.
 
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 
@@ -198,7 +236,9 @@ unit is a oneshot, so runs serialize by construction.
 **Verdict-only leaves the box.** The plan output can carry sensitive attribute values and the
 state's shape, so it stays in the journal. What leaves: the `management-sentinel` commit status
 (the `post_status` shape of `scripts/iac-sentinel.sh`) and one PR comment listing changed resource
-ADDRESSES with add/change/destroy counts from `tofu show -json`, never values — both under the
+ADDRESSES with add/change/destroy counts from `tofu show -json` — plus, on the same terms, the
+NAMES of the outputs whose value the plan changes (that same JSON's `.output_changes` key, read
+into the summary's `$out.outputs` side channel) — never values, both under the
 `homelab-sentinel` App (ADR-130; the App row in [`github-apps.yaml`](github-apps.yaml) already
 grants `statuses`+`pull_requests` write for this). The box holds that App's private key as one more
 wallet-provisioned root-only file (§Credentials), so the key sits in two stores — Infisical for the
@@ -255,6 +295,46 @@ the status description carries the count. A worker, reviewer or coordinator read
 `management-sentinel` on a PR that edits repo settings or the cloudflared half should read it as
 "the parts the box can see are clean", never as "applied-equivalent".
 
+**An OUTPUT-ONLY plan is a real plan.** A new `output` block gives `plan` exit code 2 with every
+RESOURCE a no-op — "save these new output values … without changing any real infrastructure". Read
+through resource changes alone that is exit-2-with-an-empty-summary, which is the silent zero the
+2026-09-13 false negative installed the INCONSISTENT verdict against (§the `github` root), and it
+duly failed the first PR to add one (#1774's `node_install_targets`, 2026-09-18). So the summary
+carries a second side channel — `$out.outputs`, the changed output names from `.output_changes`
+in `tofu show -json` — and only exit 2 with NEITHER is
+inconsistent. The apply loop **applies** such a plan rather than skipping it: outputs live in the
+state, so an unapplied one would leave §MB2's drift belt (the same `plan`, its rc the alarm)
+reporting `main` as drifted forever. Nothing is offered to the apply allowlist because no address
+is touched.
+
+**The install-impact line (ADR-132 §MB4 layer 2, 2026-09-21).** The plan is blind to one class by
+construction: Talos honours the schematic, `install.disk`, the EPHEMERAL `VolumeConfig` and
+`machine_type` only on the next install, so a head that changes them plans as a clean in-place
+config apply (nx-01 after #1717 — §MB4 item 1). So `main`'s verdict carries a second section,
+computed from the plan's own `node_install_targets` output (`tofu/outputs.tf` — per node:
+schematic, installer, version, role, install disk, EPHEMERAL): its BEFORE is the applied
+declaration, its AFTER is this head, and every node whose install-time fields differ is named
+with the fields that moved — *"this head changes the install of nx-01 (EPHEMERAL) → one
+reinstall window"*. For the upgrade-class axes (schematic, version) the head's value is then
+diffed against LIVE by `mgmt-probe.sh`'s own `check_nodes` (fed the head's declaration through
+`NODE_TARGETS_JSON`, answers through `NODE_DRIFT_OUT`), so a head that only codifies what already
+runs costs no window. Window kinds: **upgrade** (schematic / version / installer — the
+`node-maintenance.sh upgrade` path), **reinstall** (install disk / EPHEMERAL / role — Talos never
+re-partitions, and `machine_type` is baked at install), **install** (a new node). The same
+names-only rule as the rest of the verdict: node names and FIELD names leave the box, never a
+schematic id, disk path or selector. The status description gains ` · install: <node> <kind>`
+(or ` · install: N windows`); a head that moves no install gets *"Install impact: none"* in the
+comment and nothing in the description. It is advisory — the status stays green; the line is
+what the codeowner read refuses on, not a gate. Two limits, named: a node that was ALREADY
+drifted from live before this head is not listed (that is the belt's `mgmt_node_drift`, §MB2),
+and the reinstall-class axes compare head vs applied declaration only — their live reader
+(`volumestatus`) is FU-235's next axis. **`machines/machines.yaml` selects `main`** since the
+same change (`roots.main.inputs` in the policy): `locals.tf` yamldecodes it, and before this a PR
+touching only the inventory got "no box-held surface touched" and was never planned — #1716
+onboarded nx-01 that way. The inventory is pure data (no path or exec surface), so stage 1 does
+not judge it; the apply loop now sees inventory-only master commits too (and refuses them to a
+human apply like any `metal.tf` change outside the allowlist).
+
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
 existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
 plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
@@ -268,6 +348,14 @@ the jail's copy frozen as a backup — so the jail's `devbox run tf-plan|tf-appl
 point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`scripts/mgmt-tf.sh`: ssh to the box, a
 COMMITTED ref — `MGMT_REF=origin/<branch>` — under the loops' flock). A human apply of main
 is therefore push-then-apply from now on; the working tree is not something the box can see.
+**And it is plan-then-apply-that-plan** (2026-09-21, FU-248): every `plan` saves itself to
+`/var/lib/mgmt/plan/<id>.bin` beside a human-readable `.txt` and a `.meta`, and prints the id;
+`apply` takes that id and nothing else — no `-target`, no `-replace`, no bare `apply`. The
+scoping lives inside the plan, so a scoped run is still one command pair, but the apply can no
+longer be typed differently from the plan a human read. Tofu refuses a plan whose state serial
+has moved, which is the "the world changed while you were reading" check that a human cannot
+perform reliably; the incident that forced this is
+[2026-09-16](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
@@ -300,18 +388,90 @@ so the review knows what the box did not judge on its own.
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
-the same hit forever. A **full** `devbox run mgmt-tf -- apply` of `origin/master` (no
-`-target`/`-exclude`/`-replace`) now stamps the baseline and clears `refused-rev` on success; a
-targeted apply does not (finish with a full one).
+the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
+`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
+rather than from the apply's own flags, which a plan-file apply no longer has.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
 block. `deny_patterns` now carries `^[[:space:]]*provider[[:space:]]+"` (the `provider =` meta-argument on
 a resource stays allowed), with both cases in `mgmt-policy-test`.
 
+### Talos config applies — the precondition, the toggle, the health gate (FU-097, 2026-09-22)
+
+Until this change every install change needed a human `mgmt-tf apply`: the apply allowlist held
+only the raw-k8s residue. The operator ruled that interim (FU-097, the capability ledger with
+auto-apply toggles) and asked for a version-bump PR to roll out on merge with no human apply. So
+`apply_addresses.main` now also holds `proxmox_download_file.*` (seed images; a VM re-pointing at
+one is a `proxmox_virtual_environment_vm` change, which stays outside and refuses the plan whole)
+and `talos_machine_configuration_apply.node[…]` / `.metal[…]`. Inside the allowlist is not enough
+for a Talos config apply. Three more things stand between the plan and the apply:
+
+1. **The precondition** (`mgmt_talos_gate` in `scripts/mgmt-lib.sh`, read from the plan's own
+   `tofu show -json` through the `$out.talos` side channel). Every changed
+   `talos_machine_configuration_apply` must be an in-place `update` (a create is an onboarding and
+   a delete/replace is a node leaving: rule `talos-action`) whose planned **`apply_mode` is
+   `no_reboot`** (rule `talos-apply-mode`; `(unset)` and `(unknown)` refuse too). `no_reboot` is
+   what makes the §MB4 item 4 line mechanical: a config Talos can only take by rebooting fails
+   the apply and lands in a window instead. The resources declare the attribute (`tofu/talos.tf`,
+   `tofu/metal.tf`, #1874). The gate reads it from the PLAN, not from a belief about the source:
+   a resource that loses it plans without `no_reboot` and refuses to a human apply. A failure refuses the whole root as before (status
+   `failure`, the rule named, the addresses in the journal).
+2. **The control-plane toggle**: `roots.main.apply_controlplane_config` in the policy, built
+   `false`, **flipped `true` 2026-09-22** (operator: "let it do everything"). It is the first FU-097 toggle. A node whose declared `role` in the plan's
+   `node_install_targets` output is `controlplane` stays a human apply while the toggle is off
+   (rule `talos-controlplane`). A node the output does not name is refused (`talos-role-unknown`).
+   No list of node names exists anywhere in the gate. The operator flips the toggle; the reason it
+   starts off is the [2026-09-20](../.claude/skills/maintenance-window/SKILL.md) lesson, where a
+   control-plane config apply took the cluster's API path down while every node read `Ready`.
+3. **The post-apply health gate**, the unattended form of the seat's `/maintenance-window`. Before
+   the apply the loop takes a baseline with `scripts/maintenance-window.sh snapshot`. That is the
+   window's own probes: firing alert names, `sum(up)`, cilium's `10.96.0.1:443` apiserver backend
+   on every agent, hard-failed pods and the node count. It is the same script with one set of
+   verdicts, minus the CI probe (the box has no `gh`). An unreadable baseline is a probe failure:
+   no apply, no stamp, and the next tick retries. After a successful apply the loop waits
+   `MGMT_POSTCHECK_SETTLE` (180 s), then runs `compare` every 30 s until it gets a clean reading or
+   900 s have passed. A clean reading gives `success … · post-check clean`. A regression still
+   standing at the deadline sets **`management-apply` to `failure`** with the regressed probes
+   named (`main: applied, POST-CHECK regressed: NEW firing alerts: …`). It also writes
+   `/var/lib/mgmt/apply/post-check-failed`, which sets `mgmt_apply_post_check_failed` to 1 and
+   fires **`MgmtApplyPostCheckFailed`** (`argocd/resources/mgmt-metrics/`, promtool-fixtured).
+   **Nothing is reverted.** Under the rollout policy below the default is forward and a revert is
+   a human commit. The sha is still stamped because the apply happened. The marker clears on the
+   next clean post-check, or by hand (`rm` it) once the cluster is whole. A known overlap: while
+   master's head carries that `failure`, the github-exporter reads it as a standing refusal, so
+   `MgmtApplyResidueStanding` would also fire if master stayed on that commit for 24 h.
+
+Fixtures: `mgmt-policy-test` feeds synthetic plans through the loop's own digest. It covers
+`no_reboot` allowed, `auto`/unset/unknown refused, a CP with the toggle off refused and on
+allowed, create/delete/replace refused, an unknown role refused, seed images allowed, a VM change
+outside, and the post-check polling (clean, transient, still regressed at the deadline).
+`maint-self-test` pins the `snapshot`/`compare` verbs.
+
+### The capability ledger — what the box has been TESTED doing on its own (FU-097)
+
+One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
+toggle. A surface enters with its first unattended success, never with a belief about what it could
+do. Anchors (2026-09-13): the router, the control planes' substrate and Proxmox stay human; the
+raw-k8s residue belongs to the box; `provisioning` is the canary. On a box-applied surface the
+codeowner read becomes an **intent review** (does the plan + install-impact line do what the issue
+asked, given what the fleet and the box already run?). That reviewer instruction is not written yet.
+
+| Surface | Toggle | Tested on its own | Evidence |
+|---|---|---|---|
+| Main root, raw-k8s residue (the apply allowlist) | always on | since 2026-09-13 | every `management-apply` tick; §The test surface |
+| Talos config apply, workers (`no_reboot`, health-gated) | on | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean |
+| Talos config apply, control planes | `apply_controlplane_config` **on** (operator, 2026-09-22) | 2026-09-22 | the same apply, CP rows included |
+| Talos install rollout, workers + CPs (`mgmt-reconcile`) | switch + CP toggle on | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last |
+| Reconciler park/verify + window close (FU-276) | — | harness only | #1887 (123 cases); not yet exercised live |
+| Rollout workload-health hold (FU-278) | — | harness + replay | #1891 (replay holds on forgejo before cp-01); first live rollout pending |
+| Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
+| Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
+
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
-**Tracked by:** FU-235 (the diff), FU-242 (the substrate spike), FU-244 (flags out of git). The ArgoCD model
+**Tracked by:** FU-235 (the diff), FU-244 (flags out of git). The ArgoCD model
 applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers, in build order.
 
 1. **The diff.** `talos_machine_configuration_apply` records *delivery*; Talos honours install-time fields
@@ -324,20 +484,102 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
 2. **The pre-merge impact line.** The sentinel's `tofu plan` is blind to this class, so its verdict grows a
    line computed from the PR head's declaration against live: *"this head changes the install of nx-01
    (schematic, EPHEMERAL disk) → one reinstall window"*. That sentence is what the codeowner read refuses;
-   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit.
+   a `machines.yaml` typo that would re-image the fleet is caught here, never by the WIP limit. **Built
+   2026-09-21** — §MB3 "The install-impact line" (live comparison on the schematic/version axes; the
+   layout axes wait on `volumestatus`).
 3. **Sync policy in the declaration.** `reconcile: auto | manual` per node. Compute-tier nodes go `auto`
    first; control planes, hypervisors and the router stay `manual` until ADR-133's CPs and a CARP pair exist.
-   A `manual` node still shows its diff as drift; the box does nothing.
+   A `manual` node still shows its diff as drift; the box does nothing. **Built 2026-09-21** — the field in
+   `machines/machines.yaml` (absent = manual; `machines/generate.py` refuses `auto` on anything but a Talos
+   worker), and **`wk-03` is the one `auto` node** (operator: "live on one node"). **2026-09-22 (FU-273):**
+   every Talos node is `auto`, control planes included (ADR-133's three CPs exist; `generate.py` now refuses
+   only non-Talos boxes), behind ONE switch — `reconcile_rollout.enabled` — **flipped on 2026-09-22** (operator); off, the
+   reconciler owns only `reconcile_rollout.pilot` (wk-03). See
+   [The rollout as built](#the-rollout-as-built-fu-273-2026-09-22).
 4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
    first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
-   window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
+   window while Longhorn is degraded, or while a service's PodDisruptionBudget says no; Garage's says
+   no while a zone is down or still resyncing, see [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22)).
+   One attempt per diff, then a parked failed
    state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
    mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
-   apply and lands in a window instead.
+   apply and lands in a window instead — **set 2026-09-22** as `apply_mode = "no_reboot"` on both
+   `talos_machine_configuration_apply` resources (`tofu/talos.tf`, `tofu/metal.tf`; the provider default
+   `auto` reboots). Talos judges only the v1alpha1 document; other documents (VolumeConfig, HostnameConfig)
+   are install-time and pass. The config is rendered against a pinned contract
+   (`local.talos_config_contract`, `tofu/talos.tf`), not the install version, so a version bump moves
+   installers and declared versions only. **Enforced by the apply loop since 2026-09-22:**
+   it auto-applies a Talos config change only when the planned `apply_mode` is `no_reboot`, only on workers
+   unless `apply_controlplane_config` is on, and brackets it with the health gate — §MB3 "Talos config applies".
 5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
    flags out of the tracked tree (`flags.local.tf`, gitignored; a live flag shows as drift until unflagged).
+
+**Layers 3–5 as built (2026-09-21): `scripts/mgmt-reconcile.sh`, the `mgmt-reconcile` unit + a
+`*:4/10` timer** — hand-rolled, another box loop in the belt/apply style, because the FU-242 spike
+ruled the controller substrate out ([`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md)).
+Each tick, for the `auto` nodes only:
+
+- **Declared** = `node_install_targets` from `main`'s *applied* state — the expression the upgrade verb
+  passes as `--image`, so a merged declaration syncs once the apply path has applied it, never before.
+  **Live** = `mgmt-probe.sh`'s own `check_nodes` (`NODE_TARGETS_JSON` = the auto nodes, `DRY_RUN=1`) —
+  one diff, used as the trigger and again as the completion condition.
+- **A version or schematic gap** → `node-maintenance.sh upgrade <node>`, run INSIDE the oneshot (the
+  unit is the window). Everything the verb already refuses on stays the verb's: preflight, its WIP 1
+  (another node cordoned or NotReady), the fleet floors (Longhorn degraded, a PodDisruptionBudget
+  spanning several nodes already at 0, CNPG instances), the FU-033 gate, the post-install verify. The
+  drain respects every PDB; one that does not complete is a refusal (exit 2, uncordoned, retried next
+  tick), never a park. The verb knows no service: Garage's "may a zone go" lives in its own budget
+  ([garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22)). The loop adds WIP 1 across windows it did
+  not open — ANY live [declared window](glossary.md) (`agents/seat-window.sh`'s record) refuses the tick,
+  the target's own included (the check runs before the verb opens its window, so a window there is a
+  person's hands-on work), unless it is on the target and opened with `--admit-reconciler` — the
+  attended sync, 2026-09-22 — and one sync per tick, the rest queued. The record is a sign on the
+  door, not a lock (`open` is a blind merge patch; an undeclared drain is invisible to it): the hard
+  serialization stays the verb's live WIP 1.
+- **One attempt per declared target** (`version/schematic`). The verb's exit 2 is a refusal with nothing
+  touched → `pending`, retried next tick. Exit 4 is a declared path no retry can pass — a cross-minor downgrade or a
+  skipped minor — → `parked` at once: across a minor Talos backs out only by `talosctl rollback` or a
+  reinstall — and `talosctl rollback` only briefly: **after a good boot Talos removes the upgrade
+  fallback** (`removing fallback entry` in machined's log — nx-01, 2026-09-22), so it works only in the
+  short window after the upgrade reboot; after that a cross-minor back-out is a reinstall. **Within a
+  minor, reverting the declaration IS a rollback** (2026-09-22): the verb allows
+  a patch downgrade, and Talos's older installer refuses on its own, before touching disk, if the
+  running config holds a document it does not know. Any other failure, a zero exit that leaves the diff non-zero, or
+  a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried.
+  A new declared key clears any park. **What the diff reaching zero means depends on the park's
+  recorded cause** (FU-276, #1884): a `diff-disagrees` or `impossible` park clears on diff zero — the
+  diff is what failed. A **`verb-failed` or `interrupted`** park does not: the version is usually
+  already right (nx-01 rebooted onto the target, the verb exited 1 on a hung cilium-agent, and the
+  diff "cleared" the park two minutes later with the node off the pod network). It clears only when
+  the read-only **`node-maintenance.sh verify <node>`** passes — Ready and uncordoned, Longhorn back,
+  the budgets over its pods whole and none spanning nodes at 0, CNPG full, the declared version and
+  schematic, and cilium-agent on *that* node Ready and holding the apiserver backend — re-asked every
+  tick; until then the node stays `parked`, out of the in-sync set, and the rollout does not count it.
+  An unreadable check is a fail. **The failed verb's window** (it deliberately exits 1 with its window
+  open) **is closed by the reconciler at park time** — `node-maintenance.sh silence-close <node>`,
+  which touches only the verb's own silences and its `--by node-maintenance.sh` declared record, never
+  a seat's window — so the broken node's alerts reach a person, the park is the one record, and the
+  next tick is not refused by a leftover window until `SILENCE_HOURS` runs out (option (i) of #1884;
+  the same on an `interrupted` park). A node the verb left cordoned still stops the next sync through
+  the verb's own live WIP 1. By hand: `rm /var/lib/mgmt/reconcile/state.json` once the node is whole.
+- **Not reconciled, reported only:** labels/taints (tofu's apply path owns them — `MgmtNodeLiveStateDrift`),
+  `ephemeral_disk` (reinstall-class — a human window), anything on a `manual` node. With the rollout
+  switch off a declared `controlplane` is refused even if marked `auto`; with it on, a control plane
+  syncs through `controlplane-upgrade.sh`, last. The loop never runs tofu.
+- **State** = `/var/lib/mgmt/reconcile/state.json`; **status** = `mgmt_reconcile_node_state{node,state}`
+  (idle | pending | syncing | parked) + `mgmt_reconcile_sync_started_timestamp_seconds{node}` through the
+  textfile. Alerts (`argocd/resources/mgmt-metrics/`, promtool-fixtured): `MgmtReconcileParked` (5m),
+  `MgmtReconcileSyncStuck` (a window past 3h; the unit's hard stop is 5h, after which the next tick parks),
+  `MgmtReconcileLoopStale` (no evaluation for an hour with no sync open), `MgmtReconcileMetricsAbsent`.
+  A long `pending` has no alert of its own — it is `MgmtNodeInstallDrift` / `TalosFleetVersionSplit` at 24h.
+- The state machine is fixture-tested against a fake verb: `devbox run mgmt-reconcile-test` (also run by
+  `mgmt-policy-test`, which CI runs on every `scripts/mgmt-*` change). The unit is `restartIfChanged =
+  false`: a `mgmt-pull` activation must never kill a window mid-install.
+
+Not built here: layer 5's PXE flags (FU-244 — the verb in use is an in-place upgrade, which needs none) and
+any sync of the reinstall class.
 6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
    virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
    nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
@@ -348,7 +590,7 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
    BMC network through the node's routing.
 
-**The substrate is undecided until FU-242 reports.** The candidate: a single-node k3s from the NixOS module —
+**The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
 no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
 source controller + tofu-controller as the reconcile engine, the whole thing a **Nix closure**: images as
 `dockerTools.pullImage` digests, manifests as files (`services.k3s.images` / `manifests` — verify in the
@@ -359,7 +601,206 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 
 **Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
-the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair.
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built; the fleet rollout
+(CPs included) is built behind its switch, which is off — the acting set is still one node.
+
+### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
+
+The reconciler syncs one node per tick with WIP 1 and nothing else. That is enough for one `auto` node
+and not for a fleet: a symptom two hours after the last node is done meets "what changed in the last
+24 hours?", which always names the upgrade, and with every node on the new version the claim cannot
+be tested. The rules, ruled before anything below is built:
+
+- **Default forward.** A new alert on its own neither halts nor reverts a rollout, and the responder
+  never reverts. Rolling back on the first alert means never moving forward in practice: the symptom may be a fluke or
+  a stack's own change, and a single stack's CI that a script update fixes is not a platform verdict.
+  **But a broken workload PAUSES it, never reverts it** (FU-278, operator 2026-09-22): a PLATFORM
+  workload (any namespace that is not a stack's app namespace) unhealthy since the rollout started, or
+  an important stack workload (≥ 2 replicas/instances or a PodDisruptionBudget) unhealthy on the SAME
+  revision it had then, holds the next window until it is healthy again or a human acks. A stack
+  workload on a new revision, or a stack singleton, is the stack's own business — logged, never a
+  hold. The 2026-09-22 rollout is why: wk-04's window moved Forgejo onto hp-01, where it crash-looped
+  (the FU-277 DNS trap), and the rollout took cp-01, cp-02 and wk-metal-02 down after it — between
+  windows it read node Ready, cilium and multi-node budgets, which a single-replica Deployment never
+  moves. [The hold as built](#the-rollout-as-built-fu-273-2026-09-22).
+- **Revert is a human commit**, backed by a **differential** signal: worse on upgraded nodes than on
+  not-yet-upgraded ones, starting after each node's own upgrade, seen across stacks. Only that
+  evidence halts the rollout automatically. Within a minor the reverted declaration is then a
+  rollback the reconciler runs (`node-maintenance.sh upgrade` allows a patch downgrade within a minor since #1867, and refuses a cross-minor one with exit 4, which the reconciler parks); across a minor it is `talosctl
+  rollback` — only while the upgrade fallback exists, i.e. shortly after the upgrade reboot (Talos
+  removes it after a good boot) — or a reinstall.
+- **Less than a day, end to end.** Drift from git is a tax: with master at 1.14.2 and the fleet split,
+  nobody can say which version a node runs without looking. `TalosFleetVersionSplit` /
+  `MgmtNodeInstallDrift` at 24 h are the rollout's deadline, not a threshold to tune.
+- **Soak = evidence, in hours, never wall time.** A canary stage ends when each canary TYPE has been
+  exercised on the new version, with a timeout: nx-01 after one ride + one ARC job, wk-03 after ARC
+  jobs, a storage node after a Longhorn replica rebuilt onto it with its Garage zone healthy, a
+  control plane after its etcd member is healthy and its apiserver serves. Time passing on an idle
+  node proves nothing.
+- **The rollout creates the pressure.** Workloads do not move to a new node on their own (a CNPG
+  instance stays where it is until evicted). So a rollout taints every not-yet-upgraded node
+  `PreferNoSchedule` (e.g. `homelab.io/talos-behind`) and clears the taint as each one upgrades. Every drain then lands its
+  pods on upgraded nodes, and the new version carries real work within hours. That same load is what the
+  differential compares. A preference, so it never blocks scheduling when the upgraded nodes are full.
+- **One rollout per substrate** (Talos), not a soak matrix per component. Per-component soaks end in
+  every node running a unique combination — the 500-feature-flags failure.
+- **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
+  control planes — as `node-maintenance.sh order` already ranks them.
+
+**The exercise predicate — built:** `scripts/mgmt-rollout-evidence.sh <node> <since>` answers
+"has this node carried its own kind of work on its current install since then?" — exit 0 yes, 1
+not yet, 2 cannot tell (any read failed; the caller asks again, and owns the timeout). It types the
+node from live facts, never a list, and every type that applies must hold:
+
+| Type | Is one when | Evidence since `<since>` |
+|---|---|---|
+| control plane | label `node-role.kubernetes.io/control-plane` | etcd service healthy, its member a voter with no errors; `kube-apiserver-<node>` Ready and `/readyz` ok on the node's own IP |
+| ARC | label `homelab.io/ephemeral=true` **and** ≥ 14 runner pods there in the 7 d before | ≥ 1 job concluded `success` on a runner pod placed there |
+| ride | ≥ 14 worker rides (`agent-<project>-…`, controller-less) there in the 7 d before | ≥ 1 ride created since then reached `Succeeded` there |
+| Longhorn | a replica CR placed there | ≥ 1 replica running on a `healthy` volume, either rebuilt since then (`healthyAt`) or reused across the reboot under an instance-manager pod of the current boot (started ≥ min(since, the node's Ready transition): Longhorn keeps a reused replica's old `healthyAt`) |
+| Garage | a Garage zone named after the node | the zone connected in every peer's view for 10 min |
+| worker | none of the above | ≥ 1 non-DaemonSet pod scheduled since then that is Ready or Succeeded |
+
+A label alone never makes a type: the history threshold is what keeps a node that sees a ride every
+few days from holding a stage for days. The ARC job outcome reads
+`github_ci_job_completed_timestamp{runner_name,conclusion}` from the GitHub exporter, joined to the
+runner pod's node. The runner pod is deleted seconds after its job, and kube-state-metrics saw 6 of
+~100 such terminations in 6 h. A stale exporter, or one without that series, reads as "cannot tell",
+never as "no job". Fixtures: `devbox run mgmt-rollout-evidence-test`.
+
+**The differential — built:** `MgmtRolloutDifferential` (`argocd/resources/mgmt-metrics/`, group
+`mgmt-rollout`) is the one automatic halt. PromQL cannot order version strings, and a rollback
+drill moves nodes down. So **upgraded** means "this node's current Talos version first appeared in
+the last 2 d" (`kube_node_info{os_image}`). **Behind** means "on a version no node moved to in that
+horizon". A node that ran the new version before the horizon is on neither side. The alert compares
+two per-node signals, each averaged per node and zero-filled:
+
+- **container-restarts** — containers with a restart in the last hour
+- **unready-pods** — scheduled, unfinished pods not Ready, averaged over 30 min
+
+An upgraded node is compared only 75 min after both its version change and its last boot, which
+excludes the upgrade's own DaemonSet restarts. It fires when all of these hold for 30 min:
+
+- the upgraded mean is ≥ 3× the behind mean + 1
+- the upgraded side has ≥ 3 restarting containers or ≥ 2 unready pods, in ≥ 2 namespaces
+- ≥ 2 nodes are still behind
+
+Replayed against 2026-09-21 06:00Z → 2026-09-22 08:00Z (the 1.13.2 → 1.13.10 roll, the wk-03 1.14
+canary and its rollback drill), it stayed silent throughout. Without the 75-min settle, the same
+replay reads 2.3–3.0 restarts per upgraded node across 3–4 namespaces during the 09-21 roll,
+against about 0 behind. That is the reboot transient, and the settle window is what keeps it out of
+the comparison. The promtool fixture fails if any single guard is loosened.
+
+**The stages, the repel taint and the halt read — built** (the orchestration, below). The first
+two attended bumps (wk-03 1.14.0 → 1.14.1 and the rollback drill) ran before any of it existed;
+the switch is flipped after them.
+
+### The rollout as built (FU-273, 2026-09-22)
+
+`scripts/mgmt-reconcile.sh`, same unit and timer, same one-sync-per-tick oneshot — every guarantee
+above holds unchanged (WIP 1 incl. declared windows and `--admit-reconciler`, one attempt per
+declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossible path,
+`restartIfChanged = false`, the metrics). What the switch adds is **which node a tick may sync**:
+
+- **The switch** is `reconcile_rollout.enabled` at the top of `machines/machines.yaml` — a commit,
+  so flipping it is reviewable and the box picks it up on its next pull. **On since 2026-09-22**
+  (operator; built off, #1876). **Off:** the reconciler owns only `reconcile_rollout.pilot` (wk-03), first candidate in inventory
+  order, control planes refused — the pre-rollout behaviour, pinned by running the whole original
+  test suite a second time with the switch explicitly off. **To flip:** set `enabled: true` in a
+  one-line PR; nothing moves until a declared bump is applied. Flipping it off mid-rollout lifts the
+  taints and retires the record; nodes already moved stay where they are.
+- **Target.** A rollout moves ONE declared version: the newest declared version among the `auto`
+  nodes with a diff. Its members are the nodes declared at it — a node that already runs it (the
+  tofu canary override, `var.nodes.*.talos_version`) is a member that is already done. A node
+  declared at another version waits, `pending`, for this rollout to end: one rollout at a time.
+- **Stage `canary`.** One canary per node **type** — `class/role/schematic/storage`, storage =
+  `order`'s GARAGE=yes or LH>0 (`ORDER_FORMAT=tsv`, the ranking's own columns) — the least risky of
+  each, synced one per tick in rank order. A type whose member already runs the target uses that
+  node and skips the sync. Control planes are never canaries: they go last, and
+  `controlplane-upgrade.sh`'s post-check (etcd member healthy, apiserver serving) IS their
+  predicate. Then the stage waits until `mgmt-rollout-evidence.sh <node> <synced-at>` exits 0 for
+  every canary (1 and 2 = not yet; a missing script = not yet, logged once), bounded by
+  `RECONCILE_CANARY_TIMEOUT` (4 h). **On timeout it advances anyway** — default forward — with
+  `mgmt_reconcile_rollout_canary_timed_out` = 1 and **`MgmtRolloutCanaryTimedOut`**.
+- **Stage `fleet`.** The rest in `node-maintenance.sh order`'s ranking, workers first; a control
+  plane only when no worker of the rollout is left to sync, one at a time, through
+  `controlplane-upgrade.sh <node>` (which now keeps the same 2/4/1 exit contract: its gates refuse
+  with 2, the shared verb's 4 passes through, a failure after the install is 1). A parked node does
+  not block the stages — the verb's own WIP 1 does, live.
+- **`halted`.** Before any rollout sync the loop reads `ALERTS{alertname="MgmtRolloutDifferential"}`;
+  firing — or unreadable (an unreadable gate is a no; **`MgmtRolloutHaltUnreadable`** after 1 h) —
+  stops new syncs and lifts the pressure (no more work pushed onto nodes that look worse). It
+  resumes where it was when the alert clears. It never reverts anything. The same stage carries the
+  workload-health hold (next bullet), read after the differential; the differential's reason wins
+  when both apply.
+- **The workload-health hold (FU-278).** At rollout start (before the first canary) the loop
+  snapshots every workload into `rollout.json` (`.wh.baseline`) through the read-only
+  `node-maintenance.sh workload-health` — one JSON line per workload keyed by its TOP OWNER (a pod's
+  ReplicaSet → its Deployment; StatefulSet; DaemonSet; a CNPG pod → its `Cluster.postgresql.cnpg.io`;
+  other owner kinds as themselves; bare pods — agent rides —, Job/CronJob/Workflow pods, ARC runner
+  pods and finished pods excluded), with a **revision** (Deployment: the current ReplicaSet's
+  pod-template-hash; StatefulSet: `updateRevision`; DaemonSet/other: the pods' revision hash; CNPG:
+  the pods' image), a **class** and a **healthy** verdict. Unhealthy = any counted pod with a
+  container or init container in CrashLoopBackOff / Error / ImagePullBackOff / ErrImagePull /
+  CreateContainerConfigError, or not Ready for more than `WH_NOT_READY_GRACE` (5 min, from the Ready
+  condition's `lastTransitionTime`). **Classes** come from the live AgentStack claims: a stack's app
+  namespaces are its claim's repo names (a fixer repo's namespace IS its repo name —
+  `argocd/resources/agentstack/xrd.yaml`), the `platform` claim's own repos excluded; everything else
+  — `<stack>-agents`, `agent-coordinator`, `forgejo`, `garage`, … — is PLATFORM; a stack workload is
+  STACK-IMPORTANT with ≥ 2 replicas/instances or a PDB over its pods, else STACK-SINGLETON. Claims
+  unreadable = the whole read unreadable. **The rule**, evaluated right after each window returns and
+  again before each next one: a workload unhealthy now that was healthy (or absent) in the snapshot —
+  PLATFORM → hold whatever its revision; STACK-IMPORTANT on the snapshot's revision → hold; a new
+  revision or a STACK-SINGLETON → logged once per revision. Already unhealthy at the snapshot → never
+  holds. An unreadable read, or no baseline yet → hold (`workload-health-unreadable`). The hold is the
+  differential's `halted` stage with reason `workload-health`: no new sync, the pressure lifted,
+  nothing reverted, each workload named with revision and since-when (the journal, the nodes'
+  `pending` reasons, `mgmt_reconcile_rollout_workload_held{workload,class,revision}`). It releases
+  when the held workloads are healthy again, or on a **human ack**: `touch
+  /var/lib/mgmt/reconcile/workload-health.ack` on the box — every workload held at that moment stops
+  holding for the rest of this rollout (`.wh.acked`), the file is consumed, and a workload that goes
+  bad later still holds. Not on a revert rollout (the differential's carve-out: the revert is the
+  fix). **`MgmtRolloutHeldOnWorkloadHealth`** after 30 min. **Replayed** against 2026-09-22
+  (fixtures reconstructed from kube-state-metrics, `scripts/fixtures/workload-health-2026-09-22/`):
+  with the 09:45Z baseline it holds at 12:54:45Z — the read before cp-01's sync — on exactly
+  `forgejo/Deployment/forgejo@68f79d44d9` (init `configure-gitea` CrashLoopBackOff), and at 10:30:45Z,
+  before wk-metal-04's window, on `garage/StatefulSet/garage` (garage-2 not Ready 23 min after its
+  zone's window — the backlog ADR-140's budget now answers); every other pre-window read of that day
+  is clean.
+- **Revert.** A declared target OLDER than the last rollout's is a human revert commit: a `revert`
+  rollout with no canary stage, not halted by the differential (that is what asked for it), the
+  nodes the last rollout moved first. Within a minor the verb allows it; across one it is exit 4 →
+  parked.
+- **Supersede.** A NEWER target mid-rollout (a patch merged): the not-yet nodes switch to it and
+  skip the intermediate version; the nodes already on the old target wait for the NEXT rollout
+  (which, being the same target, starts at `fleet`); the stage restarts at `canary`, because the new
+  version has proved nothing yet. Recorded in `superseded[]`. The fleet may briefly hold three
+  versions (not-yet, old target, new target) — the price of never re-syncing a node twice in one
+  rollout.
+- **Pressure.** Every member not on the target carries
+  `homelab.io/talos-behind=<target>:PreferNoSchedule`; removed from a node the moment its sync
+  completes, from all when the rollout ends, halts, or the switch goes off. Idempotent, and no other
+  taint key is ever read or written. The belt's taint axis compares only keys tofu declares, so the
+  taint is not drift.
+- **State + status.** `/var/lib/mgmt/reconcile/rollout.json` beside `state.json` (its own file:
+  `rm state.json` to clear a park must not restart a rollout) — target, kind, stage,
+  `started_at`/`stage_since`, canaries by type, evidence times, per-node `synced_at`,
+  `superseded[]`. Series: `mgmt_reconcile_rollout_stage{target,kind,stage}`,
+  `…_started_timestamp_seconds`, `…_canary_wait_started_timestamp_seconds`,
+  `…_canary_exercised{node,type}`, `…_canary_timed_out`, `…_halted{reason}` (`differential`,
+  `unreadable`, `workload-health`, `workload-health-unreadable`), `…_workload_held{workload,class,revision}`,
+  `…_node_synced_timestamp_seconds{node,target}` — emitted only while the switch is on. The rollout's
+  alerts live in `argocd/resources/mgmt-metrics/reconcile-rollout.yaml`; the 24 h deadline is NOT
+  re-alerted there — `TalosFleetVersionSplit` / `MgmtNodeInstallDrift` already are it.
+- **Unit.** Unchanged: one sync per tick keeps the unit a window, and `TimeoutStartSec = 5h` already
+  covers the CP verb (its extra snapshot + cilium roll are minutes on top of the shared verb).
+- **Tests:** `devbox run mgmt-reconcile-test` — fake verb, CP verb, ranking, evidence, Prometheus
+  and kubectl: canary-per-type selection, the override canary, evidence gating and timeout-forward,
+  CPs last via the CP verb, halt + resume (and unreadable), taints on/off without touching other
+  keys, supersede, revert, one-rollout-at-a-time, the switch off mid-rollout; the workload-health
+  hold (snapshot, each class, the revision split, absent/already-unhealthy, unreadable read and
+  baseline, the ack, the after-window read, revert exempt, the 2026-09-22 replay) and the
+  `workload-health` read itself against synthetic dumps.
 
 ## Rollback — three layers
 
@@ -421,6 +862,9 @@ this section.
   and a reinstall that regenerates it silently breaks the jail's `known_hosts`. So `--extra-files`
   is not optional. The push path pins the box's host key from that same wallet entry instead of
   trusting on first use.
+- **`/var/lib/mgmt/state/` is DATA, and a reinstall wipes it.** The main root's state lives
+  nowhere else — so a reinstall restores it from a snapshot before anything plans:
+  [`tofu-state.md`](tofu-state.md) §Snapshots (the mechanism, both copies, the restore recipe).
 - **A version bump never touches a secret.** `nixos-rebuild test|boot` rebuilds the closure from
   git and leaves `/etc/ssh`, `/var/lib/mgmt` and `/root` alone; only a *reinstall* re-provisions
   (`--extra-files`), and only a *rotation* re-runs the script. Authorized keys are the one credential
@@ -449,11 +893,10 @@ this section.
 
 | Question | Why it waits |
 |---|---|
-| Which surfaces may it reconcile? | **FU-097's ruling table is the first deliverable and is unwritten.** Standing the box up before deciding is hardware driving design |
+| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review reviewer instruction is still unwritten |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
-| How probe results leave the box at all | Pushgateway is cluster-internal and never BGP-advertised, so even the FIRST path is unbuilt — exposing it is an ip-plan/ADR-088 decision (§MB2) |
 | The management network | recovery path 2, after phase C — the topology work, not the box work |
 | A CI gate on `nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 

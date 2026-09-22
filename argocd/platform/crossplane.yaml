@@ -10,6 +10,16 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    # scripts/publicroute-tf-validate.sh's `crossplane composition render --crossplane-image`
+    # pin (homelab#1739). A floating :vX tag always revalidates against live docker.io on every
+    # pull — tags are mutable, so distribution's proxy mode (mirror-docker-io, ADR-091) never
+    # serves one from cache alone — and the mirror sets no upstream fetch timeout, so an
+    # ordinary docker.io slowdown blows the render's fixed 3m budget. A digest pull is
+    # content-addressed: the LAN mirror serves it from its own cache with NO live check, same as
+    # every other @sha256-pinned image in this repo. Keyed by targetRevision so a version bump
+    # with no matching key here fails the gate loudly instead of silently rendering a stale
+    # engine. Resolve on bump: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.
+    crossplane.io/engine-image-digest.2.3.2: "sha256:884a235ea0fac77cb87870e282c05bc9814ebaded89bcc46e97a7c1967060d20"
 spec:
   project: default
   source:

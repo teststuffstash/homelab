@@ -44,14 +44,26 @@ esac
 
 # ── the dispatch seam ──────────────────────────────────────────────────────────────────────────
 # Both spawn paths land here. The latch line is what pins ADR-125's "the latch probe stays PER
-# DISPATCH": it appears exactly once in `two-lanes` (before the SECOND spawn, never the first —
+# DISPATCH": it appears exactly once in `two-lanes` (charged to the SECOND spawn, never the first —
 # the pass-level probe above this block covers that one) and never in the single-lane rows.
+# Since #439 leg 3 the probe is the LADDER (`--pick-rail`), so the marker rides ERR (stdout is the
+# rail the caller captures) and the harness records ERR after the OUT stream — the row still counts
+# ONE probe for TWO lanes, which is the whole assertion.
 bash() {
   case "$1" in
     "${HERE}/coordinator-session.sh")
       echo "  [MOCK] coordinator-session.sh spawned → exit 0"; return 0 ;;
     "${HERE}/subscription-latch.sh")
-      echo "  [MOCK] subscription-latch (tier=${SUBSCRIPTION_TIER:-unset}) → clear"; return 0 ;;
+      # #439 leg 3: the per-dispatch probe asks the LADDER now (`--pick-rail`), whose contract is
+      # "rail on stdout, diagnostics on stderr, exit 1 = both latched". The marker therefore moves
+      # to stderr — stdout is the rail the caller captures.
+      case "${2:-}" in
+        --pick-rail)
+          echo "  [MOCK] subscription-latch --pick-rail (tier=${SUBSCRIPTION_TIER:-unset}) → anthropic" >&2
+          echo "anthropic"; return 0 ;;
+        *)
+          echo "  [MOCK] subscription-latch (tier=${SUBSCRIPTION_TIER:-unset}) → clear"; return 0 ;;
+      esac ;;
   esac
   command bash "$@"
 }

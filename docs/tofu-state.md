@@ -123,7 +123,57 @@ So the roots do not migrate as a set:
 | `provisioning` | no — Matchbox LXC on Proxmox | **MIGRATED 2026-08-04** |
 | `infisical` | partly | **MIGRATED 2026-08-04** — its state holds the Infisical client secret, so getting it out of a plaintext file was the point; still slated to leave tofu (`minimize-tofu` direction) |
 | `github` | no | **MIGRATED 2026-09-13** (FU-238, `use_lockfile=false` — the single-writer ruling above: the host applies, the management box only plans with a read-only PAT). 55/55 resources, plan clean on the host; the pre-migration copy is the host's dated backup |
-| `main` | **yes, fully** | **On the management box since 2026-09-13** (ADR-129/-131, FU-012): `/var/lib/mgmt/state/main/terraform.tfstate`, local backend via `-state=`, out of the cone by construction; the jail's copy is a frozen backup (+ `~/.claude/homelab-tofu-state-backups/main-*.tfstate`). The jail plans/applies main THROUGH the box: `devbox run mgmt-tf -- plan` ([`management-box.md`](management-box.md) §MB3). Never migrate it INTO Garage — the row's original reasoning stands |
+| `main` | **yes, fully** | **On the management box since 2026-09-13** (ADR-129/-131, FU-012): `/var/lib/mgmt/state/main/terraform.tfstate`, local backend via `-state=`, out of the cone by construction; the jail's `tofu/terraform.tfstate` is a **frozen pre-migration corpse** (serial 254 vs the box's 309 on 2026-09-21 — loadable, and wrong: never read it). Current copies are the §Snapshots below. The jail plans/applies main THROUGH the box: `devbox run mgmt-tf -- plan` ([`management-box.md`](management-box.md) §MB3). Never migrate it INTO Garage — the row's original reasoning stands |
+
+## Snapshots — dated, encrypted, verified, in two failure domains (2026-09-21)
+
+Until 2026-09-21 **no root had a snapshot at all.** `main` lived only on the management box's one
+disk (tofu's own `.backup` sibling is one generation back, same disk); the four migrated roots are
+one object each in `homelab-tofu-state`, overwritten in place, and the bucket has no versioning
+(`aws s3api get-bucket-versioning` → empty). The only dated copies were the ones
+`tofu-state-migrate.sh` wrote once at migration — `main`'s was **55 serials stale** by then, and
+losing the box would have meant importing the whole cluster into an empty state. The row above
+used to call that copy "a frozen backup", which is how the gap looked designed.
+
+| | where | written by | when |
+|---|---|---|---|
+| box copy | `/var/lib/mgmt/state/<root>/snapshots/` | `scripts/mgmt-state-snapshot.sh` | after every `mgmt-tf` command that can write state, after every `mgmt-apply` apply, and hourly (`mgmt-state-snapshot.timer`) |
+| wallet copy | `~/.claude/homelab-tofu-state-backups/mgmt/<root>/snapshots/` | `scripts/mgmt-state-pull.sh` (`devbox run mgmt-state-pull`) | after every successful `mgmt-tf -- apply`, and by hand at session wind-down |
+
+**One key, not two.** `main` is plaintext on disk, so its snapshot is encrypted with openssl —
+AES-256-CBC, PBKDF2-SHA256, 600 000 iterations — under the **same** `tofu-state-passphrase` the
+migrated roots' native encryption uses. A Garage root's object is already ciphertext under that
+passphrase, so its snapshot is the object's bytes as they are. There is one secret to hold, and the
+warning above already says losing it loses every migrated root.
+
+**Every snapshot is a completed round trip.** The box decrypts (or, for an envelope, parses) each
+file right after writing it and requires serial + lineage to match; the pull does it again with
+the passphrase from the **wallet**, not the box's env file — so a snapshot counts once it has been
+read by the copy of the key you would actually restore with. A file that fails is kept as
+`<name>.UNVERIFIED` and the pull exits non-zero; nothing is ever filed as good on a guess. Both are
+idempotent by `(serial, lineage)`, which is what makes calling them after every apply AND on a timer
+free. Retention: 50 per root on the box, everything in the wallet cache.
+
+**One direction only.** The box is the single writer (the locking ruling), so nothing here ever
+writes state back — a restore is a deliberate human act, or the mechanism becomes the second
+writer that ruling forbids. What it does NOT cover yet: the Garage roots' snapshots are verified
+*structurally* (the envelope, serial, lineage), not decrypted — that is tofu's format, and
+restoring one is putting the object back. And AES-CBC carries no MAC: the copy is as trusted as the
+machine holding it, which is fine against disk loss and not a seal against tampering in between.
+
+**Restore** (proven for `main` on 2026-09-21: the decrypted snapshot read back as 137 addresses in
+`tofu state list`, the live state's exact count):
+
+```bash
+# main — onto a reinstalled box, BEFORE anything plans against it
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -pass env:TOFU_STATE_PASSPHRASE \
+  -in main-<ts>-s<serial>-<lineage8>.tfstate.enc > /var/lib/mgmt/state/main/terraform.tfstate
+# a Garage root — the snapshot IS the object
+aws s3 cp <root>-<ts>-s<serial>-<lineage8>.tfstate s3://homelab-tofu-state/<root>/terraform.tfstate
+```
+
+Pick the newest snapshot whose lineage matches the one you expect; a lineage change means a
+different state, not a newer one.
 
 ## Running a migration
 

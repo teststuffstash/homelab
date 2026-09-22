@@ -2,21 +2,30 @@
 # so any XRD the platform publishes needs these installed. First consumer: the AgentStack
 # Composition (argocd/resources/agentstack/, FU-048). Same wave as the providers (4): needs only
 # Crossplane core.
+#
+# Digest-pinned (FU-011 pattern, provider.yaml sibling; homelab#1739): digest read off the running
+# pod's imageID, cross-verified against both mirror-ghcr and ghcr.io directly. Same reason as the
+# provider pin PLUS a second one — scripts/publicroute-tf-validate.sh's render pulls these same
+# refs through the mirror, and a floating tag always revalidates live against ghcr.io (tags are
+# mutable) with no bounded mirror timeout, which is the class of hang that intermittently reddened
+# master ci on the crossplane ENGINE image. A digest pull is content-addressed: pure cache serve,
+# no live check.
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: function-go-templating
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.2
+  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.2@sha256:76a5550611df7871afc32fc81e7aef3da0e2fbcae4402978232152d112252c00
   runtimeConfigRef: { name: function-runtime }
 ---
-# Aggregates composed-resource readiness into the XR's Ready condition.
+# Aggregates composed-resource readiness into the XR's Ready condition. Digest-pinned — see
+# function-go-templating above.
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: function-auto-ready
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0@sha256:989e7bb4704859cbd6475cc61255b4b4ad53483ea43f3d2d1e4be5e3ff678869
   runtimeConfigRef: { name: function-runtime }
 ---
 # FU-082: both functions are light gRPC servers (~18-19Mi); one shared runtime config,

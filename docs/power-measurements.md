@@ -104,8 +104,8 @@ that indirection exists.
 
 ## The pve GPU: −6 °C on the NVMe for nothing (2026-08-07)
 
-pve carries a **GeForce 9600 GT** (G94, 2008) that cannot be removed — the X99-P4 board refuses to
-POST without it — and it sits between the CPU cooler and the M.2, so its heat rises straight onto
+pve carried a **GeForce 9600 GT** (G94, 2008) believed unremovable — the X99-P4 board "refuses to
+POST without it" (disproved 2026-09-21, card removed — below) — and it sat between the CPU cooler and the M.2, so its heat rose straight onto
 the NVMe. It ran with **`driver=none`**, which is the worst case: no driver means no power
 management at all, so it idled at power-on clocks doing nothing but holding a console.
 
@@ -177,6 +177,21 @@ justification for keeping it bound; ~7 W ≈ €8/year is a rounding error by co
 > board will not POST without the card) and a 65 nm G94 idles at **≥30–35 W by spec**. So "rounding
 > error" is wrong — the card is pve's largest idle consumer after the CPU package. Whether to swap
 > it is a hardware want, not a platform concern (private hardware repo, R9).
+
+### The card out: ≈25–28 W (2026-09-21)
+
+The board POSTs headless after all (`storage-ledger.md` §hypervisor), so the card came out and the
+baseline D3hot never gave was measured directly. Same four VMs + LXC running, freshly booted:
+
+| state | plug (`sensor.plug_pve_power`) | CPU package (`intel-rapl:0`) | load 1-min |
+|---|---|---|---|
+| 9600 GT in, `D0` (08-07 legs 2, today 10:52–11:42Z) | 132.7–134.9 W | ~22 W (08-07) | 2–3 |
+| **no card** | **105.6 W** (one value across 44 samples / 15 min — stable within the plug's deadband) | **19.2 W** (n=12, 19–20) | 1.35 |
+
+Wall delta ≈ 27–29 W, of which ~3 W is the package running lighter — **the card cost ≈25–28 W at
+the wall**, about four times the D3hot delta and in line with the 09-08 correction's ≥30 W spec
+(the plug reads after PSU losses). The NVMe lost its heat source too: **sensor 1 63 °C, composite
+42 °C** (vs 75.8 / 54.4 in `D0` and 69.8 / 48.8 in D3hot above) — read ~20 min after boot.
 
 ## Method
 

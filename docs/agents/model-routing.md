@@ -373,7 +373,9 @@ and `subscription-fallback` (the §M12 degrade). The folded accounting view is i
 - **Every role routes.** `goal-decompose`, the dispatch units, the reviewer and the responder/retro
   launchers all call `/route`; a class that must stay on one rail says so in
   `classes.<cls>.chain_head`/`rails` (`audit`/`research` pin `rails: ["openrouter"]` with a fusion
-  head; `review` carries `chain_head: ["claude/sonnet"]`).
+  head; `review` carries `chain_head: ["claude/sonnet"]`; `coding` carries
+  `chain_head: ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"]` — the platform
+  claim's per-stack ordering surviving as class policy, before the claim goes chainless).
   - anchor: `model-classes.json` → `classes`; `router.py:route`.
   - evidence: decision rows per role; `/router-status` → `decisions_24h`.
 - **A platform claim is chainless when it has no chain** and refuses a chainless dispatch without

@@ -869,7 +869,7 @@ spec:
                         - { name: ORG, value: "teststuffstash" }
                         # reviewer.goalModel → the ASSEMBLY review's model (head goal/**, the
                         # goal→master shape) — review-reflex.sh routes on it; all other PRs
-                        # keep the reviewer default. Claim-owned; see model-routing.md §M10.
+                        # keep the reviewer default. Claim-owned; see model-routing-history.md §M10.
                         - { name: REVIEW_GOAL_MODEL, value: {{ default "sonnet" (get (default dict (get $xr.spec "reviewer")) "goalModel") | quote }} }
                       volumeMounts:
                         - { name: work, mountPath: /work }
@@ -979,7 +979,7 @@ spec:
             # FU-020/ADR-081 loop-ns egress (FU-080 loop-home). Selector hits Argo Workflow pods
             # (coordinator, reviewer, prober) via the built-in workflows.argoproj.io/workflow label.
             # MONITOR phase: rules attach (DNS visibility for the Hubble harvest) but the default
-            # deny does not. Flip to enforce after clean harvested rides (Goal #1162 acceptance 3).
+            # deny does not. FU-257: the enforce flip — not clean as of 2026-09-20 (see the item).
             apiVersion: cilium.io/v2
             kind: CiliumNetworkPolicy
             metadata:
@@ -1045,6 +1045,46 @@ spec:
                 - toEndpoints:
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: monitoring
+                # fixer.egress.ownServices — every repo's declared in-namespace legs, so the
+                # reviewer/coordinator verify against the same bytes the worker read. Rendered
+                # while this policy is still MONITOR so the enforce flip cannot blind them (the
+                # spec.mcp lesson, #1283).
+                {{- range $rr := $xr.spec.repos }}
+                {{- if $rr.fixer }}
+                {{- range $o := default (list) (get (default (dict) $rr.fixer.egress) "ownServices") }}
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: {{ $rr.name }}
+                        {{- range $k := keys $o.podLabels | sortAlpha }}
+                        {{ $k | quote }}: {{ get $o.podLabels $k | quote }}
+                        {{- end }}
+                  toPorts:
+                    - ports:
+                        - { port: {{ $o.port | quote }}, protocol: TCP }
+                {{- end }}
+                {{- end }}
+                {{- end }}
+                # fixer.imageVolumes (ADR-135) — the LAUNCHER probes each declared reference's
+                # manifest from a loop pod before mounting it (probe-then-mount), so the registry
+                # HOSTS ride this policy. Rendered while it is still MONITOR so the enforce flip
+                # cannot turn every declared volume into a loudly-unmounted one.
+                {{- $ivhosts := dict }}
+                {{- range $rr := $xr.spec.repos }}
+                {{- if $rr.fixer }}
+                {{- range $iv := default (list) (get $rr.fixer "imageVolumes") }}
+                {{- $_ := set $ivhosts (index (splitList "/" $iv.reference) 0) true }}
+                {{- end }}
+                {{- end }}
+                {{- end }}
+                {{- if $ivhosts }}
+                - toFQDNs:
+                    {{- range $h := keys $ivhosts | sortAlpha }}
+                    - { matchName: {{ $h | quote }} }
+                    {{- end }}
+                  toPorts:
+                    - ports:
+                        - { port: "443", protocol: TCP }
+                {{- end }}
                 # Baseline FQDNs — git over TLS + nix upstream fallback
                 - toFQDNs:
                     - { matchName: github.com }
@@ -1275,6 +1315,7 @@ spec:
             {{- $eg := default (dict) $fx.egress }}
             {{- $profile := default "none" (get $eg "profile") }}
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
+            {{- $ownsvc := default (list) (get $eg "ownServices") }}
             {{- $enforce := default false (get $eg "enforce") }}
             {{- $docker := default false (get $fx "docker") }}
             {{- $mcp := $xr.spec.mcp }}
@@ -1391,6 +1432,10 @@ spec:
                 {{- end }}
             ---
             # Drive the generator → the CENTRAL Secret the in-namespace mirror below reads.
+            # 30m, not 45m (2026-09-22): the token lives 60m and is COPIED onward by a second,
+            # independently-phased clock, so the central's interval is the copy's head start —
+            # 30m here + ≤5m of mirror lag = a consumer never picks up a token older than ~35m.
+            # At 45m/45m the mirror served a token that died mid-cycle (belt: GithubTokenMirrorBehind).
             apiVersion: external-secrets.io/v1
             kind: ExternalSecret
             metadata:
@@ -1399,7 +1444,7 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-es-{{ $i }}
             spec:
-              refreshInterval: 45m
+              refreshInterval: 30m
               target:
                 name: agent-git-readonly-{{ $r.name }}-{{ $i }}
                 creationPolicy: Owner
@@ -1425,7 +1470,9 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-mirror-{{ $i }}
             spec:
-              refreshInterval: 45m
+              # 5m: a Secret-to-Secret copy costs one apiserver read, and the mirror's interval is
+              # how long this namespace can keep serving the PREVIOUS token after a fresh mint.
+              refreshInterval: 5m
               secretStoreRef: { name: agent-git-readonly-{{ $r.name }}, kind: ClusterSecretStore }
               target:
                 name: agent-git-readonly-{{ $i }}
@@ -1696,6 +1743,20 @@ spec:
                 - toEndpoints: # pushgateway run metrics (FU-057)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: monitoring
+                {{- range $o := $ownsvc }}
+                # fixer.egress.ownServices — a stack-declared leg to pods in THIS namespace (first
+                # consumer: oracle-fleet's keyless corpus proxy). The namespace is pinned here,
+                # never claim-supplied: the deny-all widens only toward the repo's own workloads.
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: {{ $r.name }}
+                        {{- range $k := keys $o.podLabels | sortAlpha }}
+                        {{ $k | quote }}: {{ get $o.podLabels $k | quote }}
+                        {{- end }}
+                  toPorts:
+                    - ports:
+                        - { port: {{ $o.port | quote }}, protocol: TCP }
+                {{- end }}
                 - toFQDNs:
                     # baseline: git over TLS + nix upstream fallback. NO openrouter.ai — direct LLM
                     # egress is the thing this policy forbids.

@@ -1,0 +1,1 @@
+{"items":[{"metadata":{"namespace":"agent-coordinator","name":"eventbus-default-js"},"spec":{"replicas":3},"status":{"updateRevision":"eventbus-default-js-779667b4c9"}},{"metadata":{"namespace":"garage","name":"garage"},"spec":{"replicas":3},"status":{"updateRevision":"garage-577b4b6f98"}}]}

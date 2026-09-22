@@ -1,0 +1,1 @@
+{"items":[{"metadata":{"namespace":"forgejo","name":"forgejo-pg"},"spec":{"instances":2}},{"metadata":{"namespace":"oracle-fleet","name":"oracle-pg"},"spec":{"instances":2}}]}

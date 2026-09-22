@@ -474,6 +474,45 @@ client-side measurement).
 - `garage:cluster_health:availability_ratio_1h` — SERVING per pod: share of the hour `/health` answered HTTP 200 (Garage's own quorum signal; Degraded serves and counts as available — a node down is the `GarageClusterDegraded`/`Flapping` belts' business, which read the same probe's "fully operational" regex instead)
 - `garage:meta_volume_used_ratio` / `:data_volume_used_ratio` — volume utilization per pod
 
+### 4 KiB range reads — the measured ceiling (2026-09-21)
+
+The oracle ERT parser's 42.2 GB ZIP exercises **4 KiB logical reads through S3 Range GETs**. A
+pre-maintenance run held at **9.4–9.7 parsed members/s** through later Garage-node restarts; the
+comparable clean 10:35Z five-minute window was 9.0 `GetObject`/s at 79.5 ms mean handler time.
+This is not a saturated CPU, disk, NIC, or Longhorn path. It is Garage's per-request metadata
+shape:
+
+| Stage (`garage-2`, clean 5m window) | Mean |
+|---|---:|
+| object-table quorum lookup | 7.1 ms |
+| version-table quorum lookup | 72.5 ms |
+| whole S3 handler, before the streamed body | 79.5 ms |
+| subsequent block read | 3.3 ms |
+
+The object has about **40,223 × 1 MiB Garage blocks**. Garage v2.3.0 stores the complete block map
+in one Version-table entry; every 4 KiB Range GET in `consistent` mode reads two copies (RF=3 read
+quorum 2), decodes them and CRDT-merges them before locating the intersecting block. In the clean
+window the local Version RPC was 4.5 ms, the healthy remote RPC 49–55 ms, and decode/merge after
+the replies accounted for the remaining ≈18–23 ms. Network accounting independently sizes the
+remote Version response: 28.6 MB/s received minus 9.34 MB/s of block data, divided by 9.24 remote
+lookups/s, is **≈2.1 MB of metadata per GET**. This is serial request latency, not resource
+saturation: Garage used 0.46 core and the NIC received 28.6 MB/s.
+
+Longhorn is not the lever for this read shape. In the same window `meta-garage-2` did 46 read IOPS
+at 188 KiB/s and 0.313 ms/read; the remote peers' meta volumes did 0 and 4 IOPS, showing that their
+repeated Version entry was page-cached. Even pessimistically serializing `garage-2`'s roughly five
+Longhorn reads per GET gives ≈1.6 ms/request. Its instance-manager used 0.068 core, had no CPU
+limit, the data PVCs showed no local reads, and the busiest physical disk was 3.7 %. Raw XFS may
+still reduce the separately measured write/fsync and resync engine tax, but would not materially
+move this 4 KiB Range GET ceiling. `longhorn-manager` throttling is also unrelated: the manager is
+the attach/reconcile plane; the unlimited instance-manager carries I/O.
+
+**Ruling:** accept these as the Garage v2.3.0/RF=3-consistent numbers; do no further Garage or
+platform tuning for this workload. In particular, do not trade away read-after-write consistency,
+re-cut storage onto raw XFS, or change the global block size for it. If this access pattern must be
+faster, either use an S3 implementation with faster small-range reads or change oracle-fleet to
+coalesce/cache its ZIP reads. There is deliberately no homelab follow-up for the accepted limit.
+
 ### Belts — what alerts on the rf=3 store (2026-09-09)
 
 Symptoms, not guessed causes; each names where to read next. In
@@ -524,6 +563,68 @@ Symptoms, not guessed causes; each names where to read next. In
   saw them, none became an issue), `LonghornVolumeDegraded/Faulted` (the volumes under the
   pods), `KubeNodeUnreachable`. `GarageMetaRotation*` (the loop's own belts) are in
   [`garage-meta-rotation/`](../argocd/resources/garage-meta-rotation/).
+- **`GarageDisruptionBlocked`** / **`GarageDisruptionBudgetOpenAgainstSignal`**: the voluntary
+  disruption gate's two failure directions. The first means closed for 2h, so no zone node can be
+  drained. The second means open while the signal says no. See §Voluntary disruption below.
+
+### Voluntary disruption — may a zone go now? (2026-09-22)
+
+**The question lives with Garage, answered at the Kubernetes level** ([ADR-140](adr.md#adr-140--a-services-may-i-lose-a-member-now-lives-in-its-own-poddisruptionbudget-maintenance-verbs-stay-generic-2026-09-22)). Management scripts drain
+nodes and nothing more: a drain respects PodDisruptionBudgets, and the `garage` PDB says whether a
+Garage storage pod may be evicted right now. `node-maintenance.sh` knows no Garage (it refuses up
+front on any multi-node budget at 0, and a drain that times out is its exit 2, retried by the
+reconciler: [management-box.md](management-box.md) §MB4).
+
+- **The signal:** the recording rule `garage:disruption_allowed` (1/0) in
+  [`garage-alerts/prometheusrule.yaml`](../argocd/resources/garage-alerts/prometheusrule.yaml)
+  group `garage-disruption`. It reads 1 only if all three clauses held at every minute of the last
+  10: `min(cluster_healthy) == 1`, `max(block_resync_queue_length) <= 1000` over the peers, and
+  every storage node scraped. A minute with no data counts as 0. The threshold, its 7-day
+  statistics and the metrics considered and rejected are in the rule's header. Its home is there,
+  not here.
+- **Why the backlog clause.** `cluster_healthy` is connectivity: every partition's replicas are
+  up. Garage v2.3.0 has no "caught up" notion (`/health` and `GetClusterHealth` are connectivity +
+  quorum, src/api/admin/special.rs and api.rs). In the first box-run Talos rollout (2026-09-22),
+  wk-metal-04 (garage-0's zone) went down at ~10:33Z on a 4.5–6.2k-block resync backlog left by
+  wk-metal-01's reboot. Blocks written during the first absence then lived on one zone. The rule
+  reads 0 throughout that window. PR #1880 briefly held the same gate inside the management
+  script; this replaces it.
+- **Why not readiness.** Readiness gates serving. After a zone rejoins, all three peers carry
+  backlogs at once, so a backlog-based readiness would have emptied the S3 Service. Readiness stays
+  `/health` (this node has quorum): [`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml).
+- **The budget:** [`garage-disruption/pdb.yaml`](../argocd/resources/garage-disruption/pdb.yaml)
+  selects the three storage pods. `unhealthyPodEvictionPolicy: AlwaysAllow` means a not-Ready pod
+  is already the missing zone and may always be evicted, which keeps "reboot the node with the
+  wedged pod" open. Its `maxUnavailable` is runtime-owned. Git holds only the fail-closed 0 it is
+  created with, and the ArgoCD app ignores the field (`RespectIgnoreDifferences`).
+- **The controller:** a CronJob every minute
+  ([`controller.py`](../argocd/resources/garage-disruption/controller.py), stdlib Python, the
+  pinned `python:3.13-slim` image the other garage jobs use). It queries the signal and patches the
+  PDB to `maxUnavailable: 1` on exactly one sample reading 1, and to `0` on anything else:
+  0, absent, several series, or Prometheus unreachable. That is **fail closed**. RBAC is `get` +
+  `patch` on that one PDB. It has no pod, secret or admin-API access.
+- **Not gated by it:** the StatefulSet's own rolling update (readiness + `minReadySeconds`), the
+  metadata rotation loop's pod delete (its own stricter gate, §Metadata reclamation), kubelet
+  pressure eviction, and a plain `kubectl delete pod`.
+- **Belts:** `GarageDisruptionBlocked` fires when the PDB has allowed 0 for 2h (the 7-day longest
+  closed stretch was 82 min). `GarageDisruptionBudgetOpenAgainstSignal` fires when the PDB has been
+  open for 5m while the signal is not 1. That happens when the CronJob stopped after opening it,
+  or when the override is set. A dead CronJob also trips the generic `CronJobNotSucceeding`.
+
+**Manual override: an emergency drain while Prometheus is down.** Fail closed means an unreadable
+signal blocks every voluntary eviction of a Garage pod. Two ways past it, both deliberate:
+
+1. **One drain:** `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+   --disable-eviction` deletes pods instead of evicting them, which bypasses every PDB on that
+   node, Garage's included. Check `garage status` yourself first. This is the upstream escape
+   hatch and needs nothing from this gate.
+2. **A sustained window** (several drains, the reconciler running): open the budget with an
+   expiring annotation, which the controller honours until the time passes:
+   `kubectl -n garage annotate pdb garage garage.teststuff.net/open-until=2026-09-22T18:00:00Z`
+   (RFC3339 UTC). `GarageDisruptionBudgetOpenAgainstSignal` fires for as long as the annotation
+   holds, which is intended. Remove it with `kubectl -n garage annotate pdb garage
+   garage.teststuff.net/open-until-`, or let it expire. Suspending the CronJob does NOT work as an
+   override: ArgoCD's selfHeal reverts `suspend` within minutes.
 
 ### Metadata reclamation — rotation, not compaction (ADR-114 addendum, 2026-09-06)
 

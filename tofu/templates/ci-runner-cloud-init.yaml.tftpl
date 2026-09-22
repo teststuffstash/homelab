@@ -1,5 +1,5 @@
 #cloud-config
-hostname: ci-runner-01
+hostname: ${name}
 package_update: true
 # qemu-guest-agent: so Proxmox sees the agent/IP + clean shutdowns (the VM sets agent.enabled=true).
 packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent, skopeo]
@@ -167,8 +167,8 @@ runcmd:
       GH_APP_PRIVATE_KEY_FILE=/etc/runner-app/private-key.pem GH_RUNNER_ORG='${org}' \
       /usr/local/bin/mint-runner-token.sh)
     su - runner -c "cd ~/actions-runner && ./config.sh --unattended --replace \
-      --url https://github.com/${org} --token $TOKEN --name ci-runner-01 --labels '${labels}'"
+      --url https://github.com/${org} --token $TOKEN --name ${name} --labels '${labels}'"
     su - runner -c "cd ~/actions-runner-2 && ./config.sh --unattended --replace \
-      --url https://github.com/${org} --token $TOKEN --name ci-runner-01-2 --labels '${labels}'"
+      --url https://github.com/${org} --token $TOKEN --name ${name}-2 --labels '${labels}'"
     cd /home/runner/actions-runner && ./svc.sh install runner && ./svc.sh start
     cd /home/runner/actions-runner-2 && ./svc.sh install runner && ./svc.sh start
