@@ -430,7 +430,12 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
    state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
    mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
-   apply and lands in a window instead.
+   apply and lands in a window instead — **set 2026-09-22** as `apply_mode = "no_reboot"` on both
+   `talos_machine_configuration_apply` resources (`tofu/talos.tf`, `tofu/metal.tf`; the provider default
+   `auto` reboots). Talos judges only the v1alpha1 document; other documents (VolumeConfig, HostnameConfig)
+   are install-time and pass. The config is rendered against a pinned contract
+   (`local.talos_config_contract`, `tofu/talos.tf`), not the install version, so a version bump moves
+   installers and declared versions only.
 5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
@@ -537,10 +542,53 @@ be tested. The rules, ruled before anything below is built:
 - **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
   control planes — as `node-maintenance.sh order` already ranks them.
 
-To build (FU-273): the exercise predicates per canary type and the differential detector
-(`scripts/mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`). **Built:** the stages in the
-reconciler and the repel taint — below, behind a switch that is off. The first two attended bumps
-(wk-03 1.14.0 → 1.14.1 and the rollback drill) run before the switch is flipped.
+**The exercise predicate — built:** `scripts/mgmt-rollout-evidence.sh <node> <since>` answers
+"has this node carried its own kind of work on its current install since then?" — exit 0 yes, 1
+not yet, 2 cannot tell (any read failed; the caller asks again, and owns the timeout). It types the
+node from live facts, never a list, and every type that applies must hold:
+
+| Type | Is one when | Evidence since `<since>` |
+|---|---|---|
+| control plane | label `node-role.kubernetes.io/control-plane` | etcd service healthy, its member a voter with no errors; `kube-apiserver-<node>` Ready and `/readyz` ok on the node's own IP |
+| ARC | label `homelab.io/ephemeral=true` **and** ≥ 14 runner pods there in the 7 d before | ≥ 1 job concluded `success` on a runner pod placed there |
+| ride | ≥ 14 worker rides (`agent-<project>-…`, controller-less) there in the 7 d before | ≥ 1 ride created since then reached `Succeeded` there |
+| Longhorn | a replica CR placed there | ≥ 1 replica running, `healthyAt` since then, on a `healthy` volume |
+| Garage | a Garage zone named after the node | the zone connected in every peer's view for 10 min |
+| worker | none of the above | ≥ 1 non-DaemonSet pod scheduled since then that is Ready or Succeeded |
+
+A label alone never makes a type: the history threshold is what keeps a node that sees a ride every
+few days from holding a stage for days. The ARC job outcome reads
+`github_ci_job_completed_timestamp{runner_name,conclusion}` from the GitHub exporter, joined to the
+runner pod's node. The runner pod is deleted seconds after its job, and kube-state-metrics saw 6 of
+~100 such terminations in 6 h. A stale exporter, or one without that series, reads as "cannot tell",
+never as "no job". Fixtures: `devbox run mgmt-rollout-evidence-test`.
+
+**The differential — built:** `MgmtRolloutDifferential` (`argocd/resources/mgmt-metrics/`, group
+`mgmt-rollout`) is the one automatic halt. PromQL cannot order version strings, and a rollback
+drill moves nodes down. So **upgraded** means "this node's current Talos version first appeared in
+the last 2 d" (`kube_node_info{os_image}`). **Behind** means "on a version no node moved to in that
+horizon". A node that ran the new version before the horizon is on neither side. The alert compares
+two per-node signals, each averaged per node and zero-filled:
+
+- **container-restarts** — containers with a restart in the last hour
+- **unready-pods** — scheduled, unfinished pods not Ready, averaged over 30 min
+
+An upgraded node is compared only 75 min after both its version change and its last boot, which
+excludes the upgrade's own DaemonSet restarts. It fires when all of these hold for 30 min:
+
+- the upgraded mean is ≥ 3× the behind mean + 1
+- the upgraded side has ≥ 3 restarting containers or ≥ 2 unready pods, in ≥ 2 namespaces
+- ≥ 2 nodes are still behind
+
+Replayed against 2026-09-21 06:00Z → 2026-09-22 08:00Z (the 1.13.2 → 1.13.10 roll, the wk-03 1.14
+canary and its rollback drill), it stayed silent throughout. Without the 75-min settle, the same
+replay reads 2.3–3.0 restarts per upgraded node across 3–4 namespaces during the 09-21 roll,
+against about 0 behind. That is the reboot transient, and the settle window is what keeps it out of
+the comparison. The promtool fixture fails if any single guard is loosened.
+
+**The stages, the repel taint and the halt read — built** (the orchestration, below). The first
+two attended bumps (wk-03 1.14.0 → 1.14.1 and the rollback drill) ran before any of it existed;
+the switch is flipped after them.
 
 ### The rollout as built (FU-273, 2026-09-22)
 

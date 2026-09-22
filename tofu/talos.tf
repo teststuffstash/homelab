@@ -176,6 +176,22 @@ resource "talos_machine_secrets" "this" {
   }
 }
 
+# The machine-config CONTRACT every node's config is rendered against — the VMs here, metal in
+# metal.tf. Deliberately NOT the install version (var.talos_version_controlplane/_worker and the
+# per-node `talos_version` canary override): those move the installer image and the node's
+# declared version, and a version bump must stay exactly that. Until 2026-09-22 the data sources
+# read the ROLE version, so bumping a role to a new MINOR would have re-rendered every node of
+# that role against the new minor's contract in the same apply — its new defaults included, which
+# is where FU-033 (b)'s `SecurityProfileConfig.workloadIsolation` would come from (longhorn.tf
+# header). A newer Talos runs an older contract by design.
+#
+# Same shape as the `talos_machine_secrets` "v1.13.2" pin above: moving this is a deliberate act
+# with its own PR and plan (every node's config re-renders — read the diff; the no_reboot apply
+# refuses any part that would need a reboot), taken only once EVERY node runs at least this version.
+locals {
+  talos_config_contract = "v1.13.10"
+}
+
 data "talos_machine_configuration" "node" {
   for_each = var.nodes
 
@@ -184,7 +200,7 @@ data "talos_machine_configuration" "node" {
   machine_type       = each.value.role
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
-  talos_version      = each.value.role == "controlplane" ? var.talos_version_controlplane : var.talos_version_worker
+  talos_version      = local.talos_config_contract # the contract, NOT the install version (above)
 
   # hostname comes from the Proxmox nocloud datasource (the VM name); setting it
   # here too makes Talos reject the config as a conflict.
@@ -301,6 +317,15 @@ resource "talos_machine_configuration_apply" "node" {
   machine_configuration_input = data.talos_machine_configuration.node[each.key].machine_configuration
   node                        = local.node_ip[each.key]
   endpoint                    = local.node_ip[each.key]
+  # no_reboot (docs/management-box.md §MB4 layer 4): Talos applies the config only if every change
+  # can take effect live (its CanApplyImmediate: install, network, kubelet, nodeLabels/Taints,
+  # registries, sysctls, …); anything else is refused with InvalidArgument, which the provider does
+  # not retry — so a reboot-needing change FAILS the apply and goes to a window, instead of the
+  # provider default "auto" rebooting the node mid-apply. Caveat: Talos's check reads only the
+  # v1alpha1 document — a change to another document (VolumeConfig, HostnameConfig, …) is never
+  # refused here; when it takes effect is that document's own semantics (the volume and hostname
+  # ones are INSTALL-TIME, annotated where declared).
+  apply_mode = "no_reboot"
 
   depends_on = [
     proxmox_virtual_environment_vm.node,

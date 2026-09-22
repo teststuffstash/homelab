@@ -17,7 +17,8 @@ resource "talos_image_factory_schematic" "this" {
 # util-linux-tools), the version follows its ROLE (variables.tf: talos_version_controlplane /
 # talos_version_worker), so a Longhorn-less worker or a Longhorn control plane still boots the
 # right kernel (PR#1740 review). Keys double as the file-name stem; nx02.tf downloads the same
-# set on the second hypervisor so a VM definition can move between them unchanged.
+# set on the second hypervisor so a VM definition can move between them unchanged. A per-node
+# canary override moves the node's INSTALLER only, never this download set (FU-275, below).
 locals {
   talos_role_version = {
     controlplane = var.talos_version_controlplane
@@ -28,12 +29,34 @@ locals {
   node_talos_version = {
     for name, n in var.nodes : name => coalesce(n.talos_version, local.talos_role_version[n.role])
   }
+  # Two keys per VM, deliberately different (FU-275):
+  #   vm_image_key — (schematic, DECLARED version): picks the INSTALLER URL (talos.tf
+  #                  machine.install.image, outputs.tf node_install_targets), so a canary override
+  #                  moves what the node upgrades to.
+  #   vm_seed_key  — (schematic, ROLE version): picks the seed disk image (proxmox.tf / nx02.tf
+  #                  `file_id`, ignored after creation — ADR-138). A canary override must not
+  #                  download a seed on both hypervisors and delete it at the next bump; a VM
+  #                  created mid-canary boots the role version and the verb takes it from there.
   vm_image_key = {
     for name, n in var.nodes :
     name => "${n.longhorn ? "longhorn" : "plain"}-${local.node_talos_version[name]}"
   }
+  vm_seed_key = {
+    for name, n in var.nodes :
+    name => "${n.longhorn ? "longhorn" : "plain"}-${local.talos_role_version[n.role]}"
+  }
+  # The seed set — what proxmox_download_file fetches on each hypervisor.
   vm_images = {
-    for key in distinct(values(local.vm_image_key)) :
+    for key in distinct(values(local.vm_seed_key)) :
+    key => {
+      longhorn = startswith(key, "longhorn-")
+      version  = trimprefix(trimprefix(key, "longhorn-"), "plain-")
+    }
+  }
+  # Every (schematic, version) pair a factory URL is needed for: the seeds plus the overrides'
+  # installers.
+  vm_image_urls = {
+    for key in distinct(concat(values(local.vm_seed_key), values(local.vm_image_key))) :
     key => {
       longhorn = startswith(key, "longhorn-")
       version  = trimprefix(trimprefix(key, "longhorn-"), "plain-")
@@ -42,7 +65,7 @@ locals {
 }
 
 data "talos_image_factory_urls" "vm" {
-  for_each      = local.vm_images
+  for_each      = local.vm_image_urls
   talos_version = each.value.version
   schematic_id  = each.value.longhorn ? talos_image_factory_schematic.longhorn.id : talos_image_factory_schematic.this.id
   platform      = "nocloud"

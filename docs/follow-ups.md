@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-275** (2026-09-22: FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-276** (2026-09-22: FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1365,10 +1365,10 @@ the block needs pruning, not more headings.
       cross-stack, never one stack's fixable CI). The whole rollout takes <1 day; drift from git is a tax. Soak = hours, and it
       ends on EVIDENCE per canary type (nx-01: one ride + one ARC job passed), not wall time. The
       rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
-      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Orchestration
-      built 2026-09-22** (stages, canary-per-type, timeout-forward, CPs last, halt, repel taint, supersede —
-      [§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)), behind
-      `reconcile_rollout.enabled` = off. **Next:** the evidence predicates + differential detector, then the operator flips the switch. Relates FU-235, G-D.
+      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Evidence +
+      differential BUILT** (`mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`); **orchestration BUILT**
+      ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) behind
+      `reconcile_rollout.enabled` = off. **Next:** the operator flips the switch (after the attended bumps). Relates FU-235, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
