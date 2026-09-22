@@ -449,6 +449,26 @@ allowed, create/delete/replace refused, an unknown role refused, seed images all
 outside, and the post-check polling (clean, transient, still regressed at the deadline).
 `maint-self-test` pins the `snapshot`/`compare` verbs.
 
+### The capability ledger — what the box has been TESTED doing on its own (FU-097)
+
+One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
+toggle. A surface enters with its first unattended success, never with a belief about what it could
+do. Anchors (2026-09-13): the router, the control planes' substrate and Proxmox stay human; the
+raw-k8s residue belongs to the box; `provisioning` is the canary. On a box-applied surface the
+codeowner read becomes an **intent review** (does the plan + install-impact line do what the issue
+asked, given what the fleet and the box already run?). That reviewer instruction is not written yet.
+
+| Surface | Toggle | Tested on its own | Evidence |
+|---|---|---|---|
+| Main root, raw-k8s residue (the apply allowlist) | always on | since 2026-09-13 | every `management-apply` tick; §The test surface |
+| Talos config apply, workers (`no_reboot`, health-gated) | on | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean |
+| Talos config apply, control planes | `apply_controlplane_config` **on** (operator, 2026-09-22) | 2026-09-22 | the same apply, CP rows included |
+| Talos install rollout, workers + CPs (`mgmt-reconcile`) | switch + CP toggle on | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last |
+| Reconciler park/verify + window close (FU-276) | — | harness only | #1887 (123 cases); not yet exercised live |
+| Rollout workload-health hold (FU-278) | — | harness + replay | #1891 (replay holds on forgejo before cp-01); first live rollout pending |
+| Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
+| Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
+
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
 **Tracked by:** FU-235 (the diff), FU-244 (flags out of git). The ArgoCD model
@@ -873,7 +893,7 @@ this section.
 
 | Question | Why it waits |
 |---|---|
-| Which surfaces may it reconcile? | **FU-097's ruling table is the first deliverable and is unwritten.** Standing the box up before deciding is hardware driving design |
+| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review reviewer instruction is still unwritten |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
