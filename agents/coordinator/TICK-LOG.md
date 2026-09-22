@@ -10514,3 +10514,11 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   window.sh keys state per window id (`--id`, `list`) — filed as G1, closed as G3 (id clash).
   Box reconciler confirmed on the new code (FU-276/278) after the 16:05Z pull. A subagent's
   `until ! pgrep -f 'pr-wait.sh …'` loop matched itself and never ended — killed; never use it.
+
+## 2026-09-22 ~16:40Z — ert parse diagnosis (oracle-fleet#684 A/B, regen-2zqn7)
+- Parse on wk-04: CPU-bound (0.63→0.85 core, 1-thread ceiling), no throttling; ~20 % synchronous
+  window-GET wait (by design, #680 latency accepted); rate decay = per-byte CPU cost rising deeper in
+  `xml.2026.zip`, not Garage. Two ~1-min stalls 16:28–30 / 16:32–33 = a runner (nx-01) syncing
+  `allure-reports` + `oracle-specs` at up to 3.9k req/min → block-read p99 15→240 ms → FU-229 resight.
+- Operator hardware question (5950X/9950X): no single-thread-bound critical path today; the parse
+  lever is #684's deferred worker pool. No decision taken.
