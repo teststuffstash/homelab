@@ -10592,3 +10592,31 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   First check after the GC looked clean; by 20:05 all three peers read 10079 ≈ the ~10.6k 1 MB
   blocks deleted, sustaining `GarageDisruptionBlocked` (pre-existing since 17:43Z, but this is the
   tail). Window held open until it drains rather than closed on a stale diagnosis.
+- **Release landed on the retry, 20:12:57Z–20:20:46Z:** the same commit that 500'd at 19:01 returned
+  **201** (layer), then config blob 201, then `PUT manifests/2026-09-22` 201. Tag now serves a NEW
+  digest `abb5c9ee` (was `32d8280e`) — the same-day re-release under one tag. It fit with ~5 GB of
+  margin ONLY because the collector had freed the 09-15 lineage first; without tonight's reclaim the
+  retry would have died exactly as the first attempt did. The double-hold was visible and transient
+  (46 GB combined mid-copy, then the upload object deleted by the registry itself).
+  ⚠ Bucket is back to 31.6 GB / 3 distinct corpus layers → 19.9 GB headroom, so
+  `RegistryBucketCommitHeadroomLow` re-fires on the next gauge push and clears at 03:00Z on the new
+  daily collector (under the old Sunday slot it would have sat until 09-27). **A second release
+  tonight would fail again** — 19.9 GB against the ~21 GB a commit needs. That is the prune-BEFORE-push
+  ordering gap, not a capacity one.
+- **#1903 (gc-guard) — the bot found a real defect and the contract was FALSE, not just loosely
+  worded.** Header claimed "any error DEFERS"; `main()` caught a tuple, and `parse_ts(None)` raises
+  TypeError when a listing omits LastModified — with `restartPolicy: Never`/`backoffLimit: 0` that
+  fails the initContainer, so the collector never starts and no decision file is written. Sweep still
+  safe, invariant not. Enumerated the class instead of patching the line: **4** escapes (module-level
+  `int(WINDOW_SECONDS)` at IMPORT; parse_ts in recent_uploads; in recent_mpus; `http.client.HTTPException`
+  which is neither URLError nor OSError) → `except Exception`, the sibling probe.py pattern. 7 paths
+  mechanically tested. ⚠ This is the SECOND self-reported-complete thing tonight that wasn't (#1902's
+  stale "Sunday" strings were the first) — `maintenance-window-G1`, resighted twice in one session.
+- **Window `seat-1790104641-7697` force-closed, deliberately, with a known-open item:**
+  `GarageDisruptionBlocked` was still firing. It was NOT mine at close time — pending since 17:43Z
+  (before the window), then briefly fed by my GC's block deletions (all three peers hit ~10079 ≈ the
+  ~10.6k blocks deleted, surfacing ~40 min late), and by 20:1xZ driven by the release push writing
+  new blocks (17510, draining to 12446). Holding the window open would have suppressed responder
+  triage for a condition I was not causing and kept the box reconciler from syncing. Baseline
+  otherwise clean; cilium re-read standalone after a flaky `unknown` in the close output:
+  have=13 missing=0 unknown=0.
