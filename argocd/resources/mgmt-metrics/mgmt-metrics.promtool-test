@@ -1,0 +1,270 @@
+# Behaviour fixture for the management box's belts (FU-252).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/mgmt-metrics.promtool-test
+#
+# promtool's clock starts at 0, so a commit "at t=60" has timestamp 60 and time() is the test clock.
+rule_files:
+  - mgmt-metrics.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── THE 2026-09-14..18 SHAPE: alive, correct, and saying no for days ──────────────────────────
+  # The residue-age alert is github-exporter's (MgmtApplyResidueStanding); here the point is the
+  # converse — a loop that is alive and refusing must NOT trip any box-side liveness belt.
+  - interval: 5m
+    name: "a standing refusal with a live loop trips none of the box-side belts"
+    input_series:
+      - series: 'mgmt_apply_unapplied_oldest_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "60x340"
+      - series: 'mgmt_apply_refused{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x340"
+      - series: 'mgmt_apply_last_ok_tick_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x340"
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x340"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: MgmtApplyLoopStale
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtApplyMetricsAbsent
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtBoxDown
+        exp_alerts: []
+
+  # ── the loop stops completing ticks ────────────────────────────────────────────────────────────
+  - interval: 5m
+    name: "a loop whose last ok tick stops advancing fires after an hour plus 15m"
+    input_series:
+      - series: 'mgmt_apply_last_ok_tick_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x12 3600x30"
+    alert_rule_test:
+      - eval_time: 1h50m
+        alertname: MgmtApplyLoopStale
+        exp_alerts: []
+      - eval_time: 2h20m
+        alertname: MgmtApplyLoopStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── scraped, but the loop's file is missing ────────────────────────────────────────────────────
+  - interval: 1m
+    name: "exporter up with no mgmt_apply series fires after 30m"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x45"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: MgmtApplyMetricsAbsent
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: MgmtApplyMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── the post-apply health gate regressed after a Talos config apply ─────────────────────────────
+  - interval: 1m
+    name: "a regressed post-check fires after 5m; a clean one never does"
+    input_series:
+      - series: 'mgmt_apply_post_check_failed{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x10 1x20 0x10"
+      - series: 'mgmt_apply_post_check_failed{job="mgmt-node",instance="192.168.2.99:9100"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 35m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+
+  # ── the box stops answering ────────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: "a down box fires after 15m"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x5 0x25"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: MgmtBoxDown
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: MgmtBoxDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── FU-235: the node diff ──────────────────────────────────────────────────────────────────────
+  # The 2026-09-12 shape: kata declared on a laptop, the label absent live. Live-applied axes get
+  # an hour; a matched axis (0) never fires.
+  - interval: 5m
+    name: "a label drift fires after 1h; matched axes stay quiet"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-03",axis="labels"}'
+        values: "1x20"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-03",axis="taints"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-03, axis: labels }
+
+  # The 2026-09-21 shape: wk-metal-02 answers talosctl, no Node object. A reinstall window is under
+  # 2h; this one is not.
+  - interval: 5m
+    name: "a declared node with no Node object fires after 2h"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-02",axis="registered"}'
+        values: "1x30"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="wk-metal-02",axis="reachable"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 1h45m
+        alertname: MgmtNodeMissing
+        exp_alerts: []
+      - eval_time: 2h15m
+        alertname: MgmtNodeMissing
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-02, axis: registered }
+
+  # The 2026-09-16 shape: nx-01's EPHEMERAL on the SATA disk after a clean plan. Install-time — a
+  # window fixes it, and windows queue, so a day.
+  - interval: 5m
+    name: "an install-time drift is quiet for a day, then fires"
+    input_series:
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="nx-01",axis="ephemeral_disk"}'
+        values: "1x320"
+      - series: 'mgmt_node_drift{job="mgmt-node",instance="192.168.2.53:9100",node="nx-01",axis="version"}'
+        values: "1x320"
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: MgmtNodeInstallDrift
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtNodeInstallDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: nx-01, axis: ephemeral_disk }
+      # version is TalosFleetVersionSplit's, never these rules'
+      - eval_time: 25h
+        alertname: MgmtNodeLiveStateDrift
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: MgmtNodeMissing
+        exp_alerts: []
+
+  # ── the belt itself ────────────────────────────────────────────────────────────────────────────
+  - interval: 5m
+    name: "a belt whose last run stops advancing fires after an hour plus 15m"
+    input_series:
+      - series: 'mgmt_probe_last_run_timestamp{job="mgmt-node",instance="192.168.2.53:9100",mode="belt"}'
+        values: "0+300x12 3600x30"
+    alert_rule_test:
+      - eval_time: 1h50m
+        alertname: MgmtBeltStale
+        exp_alerts: []
+      - eval_time: 2h20m
+        alertname: MgmtBeltStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", mode: belt }
+
+  - interval: 5m
+    name: "exporter up with only the GATE's file (no belt) fires after 1h"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x18"
+      - series: 'mgmt_probe_last_run_timestamp{job="mgmt-node",instance="192.168.2.53:9100",mode="gate"}'
+        values: "0x18"
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: MgmtBeltMetricsAbsent
+        exp_alerts: []
+      - eval_time: 80m
+        alertname: MgmtBeltMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── the node reconciler (ADR-132 §MB4, scripts/mgmt-reconcile.sh) ─────────────────────────────
+  - interval: 1m
+    name: "a parked node fires after 5m; idle and pending never do"
+    input_series:
+      - series: 'mgmt_reconcile_node_state{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03",state="parked"}'
+        values: "0x10 1x20"
+      - series: 'mgmt_reconcile_node_state{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03",state="pending"}'
+        values: "1x10 0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtReconcileParked
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: MgmtReconcileParked
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: MgmtReconcileParked
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03, state: parked }
+
+  # A sync that started at t=60s: fine at 2h, stuck past 3h + 5m. The loop does not tick while it
+  # runs, so its last-run stays at the sync start — and must NOT read as a stale loop.
+  - interval: 5m
+    name: "a long sync fires SyncStuck after 3h and never LoopStale"
+    input_series:
+      - series: 'mgmt_reconcile_sync_started_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03"}'
+        values: "60x60"
+      - series: 'mgmt_reconcile_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "60x60"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts: []
+      - eval_time: 3h10m
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03 }
+      - eval_time: 4h
+        alertname: MgmtReconcileLoopStale
+        exp_alerts: []
+
+  - interval: 5m
+    name: "no sync open and no tick for over an hour → LoopStale; an idle node is not stuck"
+    input_series:
+      - series: 'mgmt_reconcile_sync_started_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="wk-03"}'
+        values: "0x40"
+      - series: 'mgmt_reconcile_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+600x6 3600x34"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: MgmtReconcileLoopStale
+        exp_alerts: []
+      - eval_time: 2h30m
+        alertname: MgmtReconcileLoopStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 3h
+        alertname: MgmtReconcileSyncStuck
+        exp_alerts: []
+
+  - interval: 1m
+    name: "exporter up with no mgmt_reconcile series fires after 1h"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x90"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: MgmtReconcileMetricsAbsent
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: MgmtReconcileMetricsAbsent
+        exp_alerts:
+          - exp_labels: { job: mgmt-node, instance: "192.168.2.53:9100", severity: warning }

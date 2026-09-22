@@ -1,0 +1,19 @@
+# garage-disruption — "may Garage lose a zone right now?" answered at the Kubernetes level
+# (docs/garage.md §Voluntary disruption). Three parts, one owner:
+#   • the SIGNAL — recording rule garage:disruption_allowed, in argocd/resources/garage-alerts/
+#     prometheusrule.yaml (group garage-disruption; threshold + rationale there, with its belts);
+#   • pdb.yaml — the `garage` PodDisruptionBudget every PDB-respecting drain asks;
+#   • controller.py — a CronJob copying the signal onto the PDB's maxUnavailable (fail closed).
+# Management scripts learn nothing Garage-specific from this: they drain, and the drain waits.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: garage
+
+resources:
+  - pdb.yaml
+  - controller.yaml
+
+configMapGenerator:
+  - name: garage-disruption-controller
+    files:
+      - controller.py

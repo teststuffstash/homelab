@@ -60,7 +60,11 @@ metadata:
   name: retro-git
   namespace: agent-coordinator
 spec:
-  refreshInterval: 45m             # token lives ~1h; refresh before expiry
+  # 30m, not 45m (2026-09-22): the token lives 60m and the mirror below COPIES it on its own,
+  # independently-phased clock — 30m here + ≤5m of mirror lag = the ride namespace never gets a
+  # token older than ~35m. At 45m/45m this pair served a dead token for ~44 min of every cycle
+  # (probed 17:54Z: mirror 401, central 200; belt GithubTokenMirrorBehind, homelab#1900).
+  refreshInterval: 30m
   target:
     name: retro-git
     creationPolicy: Owner
@@ -159,7 +163,9 @@ metadata:
   name: retro-git
   namespace: openrouter-operator
 spec:
-  refreshInterval: 45m
+  # 5m: one apiserver read per copy; this interval is how long the ride namespace can keep
+  # serving the PREVIOUS token after a fresh mint.
+  refreshInterval: 5m
   secretStoreRef: { name: retro-git, kind: ClusterSecretStore }
   target:
     name: retro-git

@@ -1,3 +1,5 @@
 ---
 # Defaults — real values live in group_vars/opnsense.yml.
 unbound_hosts: []
+unbound_nxdomain_wildcards: []
+unbound_nxdomain_description: "homelab: NXDOMAIN wildcard zones (ansible opnsense-unbound)"

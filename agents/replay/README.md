@@ -220,6 +220,10 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-pick-rail/anthropic` | actions | - | `agents/coordinator-scan.sh` | - |
+| `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |
+| `coordinator-pick-rail/go-goal-lane` | actions | - | `agents/coordinator-scan.sh` | - |
+| `coordinator-pick-rail/go` | actions | - | `agents/coordinator-scan.sh` | - |
 | `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
 | `cred-inject-unconditional/claude-opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/no-proxy-breakglass` | actions | - | `agents/agent-session.sh` | - |
@@ -290,6 +294,8 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/re-review-shadow` | actions | - | `agents/re-review.sh` | - |
 | `harvest` | table | - | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `hermeticity-audit` | table | - | `~` | - |
+| `image-volumes/absent` | actions | - | `agents/agent-session.sh` | - |
+| `image-volumes/resolve` | actions | - | `agents/agent-session.sh` | - |
 | `issue-body/issue-body` | suite | - | `-` | - |
 | `issue-derivation` | suite | - | `-` | - |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -469,6 +475,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unit-fast-path-blocked-on` | actions | - | `agents/coordinator-scan.sh` | - |
 | `updater` | table | - | `-` | MP-T02 |
 <!-- replay-index:end -->
 

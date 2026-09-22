@@ -509,6 +509,10 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "Verify against the GOAL BRANCH" }
       - desc: "goal closeout retargets surviving sprouts to master (their base dies with the branch)"
         anchor: { file: agents/coordinator/README.md, pattern: "GOAL closeout only" }
+      - desc: "a LIVE / post-deploy acceptance item is never satisfied from a PR-local reproduction — it waits and the issue stays OPEN at agent/done (ADR-134; oracle-fleet#637 closed COMPLETED four minutes after merge on a fixture reproduction, nothing in prod)"
+        anchor: { file: agents/coordinator/README.md, pattern: "A LIVE acceptance item is never satisfied from the PR" }
+      - desc: "the stack's definition of done is `<mainRepo>/.agents/closeout.md`, read from the default-branch clone only; it tightens, never loosens (ADR-134)"
+        anchor: { file: agents/coordinator/README.md, pattern: "The stack's definition of done" }
 
   - id: IL-T10
     name: goal queued by a human

@@ -21,5 +21,5 @@ ERR canary: dispatching stealth/ox-alpha harness=opencode arm=<proxy-pin> attemp
 ERR canary: dispatching meta/muse-spark-1.2-contributor harness=opencode arm=<proxy-pin> attempt=1 ($0.05 cap)
 ERR canary: dispatching deepseek/deepseek-v4-flash-vision-exp harness=opencode arm=<proxy-pin> attempt=1 ($0.05 cap)
 ERR scout: digest SKIPPED — every row unbenched AND lacks evidence-bearing canary (FU-161 filing gate): stealth/ox-alpha (canary: opencode=void), meta/muse-spark-1.2-contributor (canary: opencode=no-stats), deepseek/deepseek-v4-flash-vision-exp (canary: opencode=void) — gh issue create NOT run
-ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/agents/model-routing.md §M7 leg 4)
+ERR scout: (unbenched models without benched baseline or evidence-bearing canary verdicts are not graduation candidates; see docs/spikes/model-routing-history.md §M7 leg 4)
 RC 0

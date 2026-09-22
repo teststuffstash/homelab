@@ -26,6 +26,38 @@ spec:
       resources:
         requests: { cpu: "50m", memory: "64Mi" }
         limits: { memory: "256Mi" }
+    # One replica per node, REQUIRED (2026-09-18). JetStream needs 2 of 3 for quorum, and the
+    # StatefulSet carried no affinity at all — two replicas had landed on hp-01, so draining that
+    # one node for a Talos upgrade would have taken the bus's quorum, not merely a replica, and
+    # with it the whole agent loop. `required` rather than `preferred` on purpose: the soft form is
+    # what let Longhorn's csi-attacher stack 3-of-3 on the same node (docs/runbook.md's
+    # "soft anti-affinity = SILENT co-location"). Five untainted workers carry these 50m/64Mi pods,
+    # so the hard constraint has ample room.
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                controller: eventbus-controller
+                eventbus-name: default
+            topologyKey: kubernetes.io/hostname
+---
+# Quorum is a DRAIN-time property, and affinity alone does not defend it: nothing stops two pods
+# being evicted at once once they are placed. Talos's drain honours PodDisruptionBudgets and fails
+# closed (probed 2026-09-18, siderolabs/talos#9882 does NOT reproduce on v1.13.10), so minAvailable
+# 2 of 3 makes any node window roll the bus one replica at a time instead of breaking it. Argo
+# Events ships no PDB of its own.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: eventbus-default-js
+  namespace: agent-coordinator
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      controller: eventbus-controller
+      eventbus-name: default
 ---
 # Webhook EventSource — an in-cluster POST /review {repo,number} endpoint (svc :12000).
 apiVersion: argoproj.io/v1alpha1

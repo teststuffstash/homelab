@@ -20,16 +20,6 @@ resource "proxmox_download_file" "talos_nx02" {
   overwrite               = false
 }
 
-# State carry-over from the pre-split pair — remove with image.tf's `moved` blocks.
-moved {
-  from = proxmox_download_file.talos_nx02
-  to   = proxmox_download_file.talos_nx02["plain-v1.13.2"]
-}
-
-moved {
-  from = proxmox_download_file.talos_longhorn_nx02
-  to   = proxmox_download_file.talos_nx02["longhorn-v1.13.10"]
-}
 
 resource "proxmox_virtual_environment_vm" "nx02_node" {
   provider = proxmox.nx02
@@ -65,11 +55,11 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     # The Micron NVMe thin pool, never the WD spinner `local-lvm` — this tier hosts the
     # containerd image store and a VM root, both of which the 5400-rpm disk would throttle.
     datastore_id = var.nx02_datastore_vms
-    # Same two axes as proxmox.tf (image.tf `local.vm_image_key`): `longhorn` means "this VM
+    # Same two axes as proxmox.tf (image.tf `local.vm_seed_key`): `longhorn` means "this VM
     # TOUCHES Longhorn volumes" (iscsi-tools + util-linux-tools in the image), not "it serves
-    # replicas"; the role picks the version. Flipping either on a live VM changes file_id, i.e.
-    # plans a REPLACE of the node.
-    file_id     = proxmox_download_file.talos_nx02[local.vm_image_key[each.key]].id
+    # replicas"; the role picks the version. ⚠ Flipping either on a live VM plans NOTHING now —
+    # `file_id` is ignored below (ADR-138); see the longer note in proxmox.tf.
+    file_id     = proxmox_download_file.talos_nx02[local.vm_seed_key[each.key]].id
     interface   = "scsi0"
     size        = each.value.disk_gb
     file_format = "raw"
@@ -92,9 +82,21 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     type = "l26"
   }
 
-  # Static IP handed to Talos via the nocloud datasource — same as the pve nodes. ⚠ Never
-  # `talosctl upgrade` one of these: the reboot loses the nocloud IP/hostname and the node
-  # rejoins as a ghost. Bake extensions into the image and recreate.
+  # ⚠ THE DISK IMAGE IS A BIRTH SEED, NOT A DECLARATION OF WHAT THE NODE RUNS (ADR-138, FU-263).
+  # Same reasoning as the pve nodes — the long version is in proxmox.tf. `file_id` names the image
+  # this disk was CLONED FROM; the running substrate is declared by `machine.install.image`
+  # (talos.tf) and moved in place by the upgrade verb. `plan` no longer sees a schematic change
+  # here either; `mgmt_node_drift{axis="schematic"}` does (FU-235).
+  lifecycle {
+    ignore_changes = [disk[0].file_id]
+  }
+
+  # Static IP handed to Talos via the nocloud datasource — same as the pve nodes. ⚠ `talosctl
+  # upgrade` one of these ONLY with the platform-correct installer: the generic
+  # ghcr.io/siderolabs/installer reinstalls it as `platform: metal`, the nocloud datasource is
+  # never read again, and the node rejoins as a DHCP-addressed ghost. With the matching
+  # nocloud-installer URL it upgrades in place, IP and hostname intact (ADR-014 as amended
+  # 2026-09-18; `devbox run node-maintenance order` picks the image for you).
   initialization {
     datastore_id = var.nx02_datastore_vms
 

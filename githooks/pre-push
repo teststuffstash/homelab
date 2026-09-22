@@ -11,8 +11,31 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
   [ "$remote_ref" = "refs/heads/master" ] && { remote_master_touched=1; local_sha="$_local_sha"; remote_sha="$_remote_sha"; }
 done
 [ "$remote_master_touched" -eq 1 ] || exit 0
-echo "pre-push: master push — running the doc lints (docs-graph-lint + follow-ups-lint) + tofu fmt -check" >&2
+echo "pre-push: master push — running gitleaks + the doc lints (docs-graph-lint + follow-ups-lint) + tofu fmt -check" >&2
 cd "$(git rev-parse --show-toplevel)" || exit 1
+# The range being pushed. Used by gitleaks below and by the clause replays at the bottom.
+range="$remote_sha..$local_sha"
+case "$remote_sha" in 0000000000000000000000000000000000000000|'') range="$local_sha";; esac
+# SECRET SCAN, first because it is the one whose miss cannot be undone (2026-09-21): a stray
+# talosconfig — os:admin cert AND private key — was swept into a bookkeeping commit by a bulk
+# `git add` and pushed to this PUBLIC repo. The gitleaks engine already existed, but only in CI,
+# and a master push from the jail bypasses CI; the pre-push gate ran three lints, none of them a
+# secret scan. Scoped to the pushed RANGE (~0.1 s, vs ~5 s for the whole tree) and deliberately
+# NOT `--no-git`: a working tree here always holds gitignored kubeconfig/talosconfig/tfstate, so
+# a tree scan would block every push. Config comes from policy/iac/ — the same file the sentinel
+# uses. Exit 9 is "found something"; anything else is a tool problem, reported but not a block
+# (the sentinel's 2026-08-19 discrimination: a missing binary is not a finding).
+devbox run -- gitleaks detect --source . --log-opts="$range" --config policy/iac/gitleaks.toml \
+  --no-banner --redact --exit-code 9 >/dev/null 2>&1
+grc=$?
+if [ "$grc" -eq 9 ]; then
+  echo "pre-push: BLOCKED — gitleaks found secret material in the commits being pushed." >&2
+  echo "  see it with: devbox run -- gitleaks detect --source . --log-opts=\"$range\" --config policy/iac/gitleaks.toml --redact -v" >&2
+  echo "  a pushed secret cannot be unpushed — remove the file, then ROTATE the credential." >&2
+  exit 1
+elif [ "$grc" -ne 0 ]; then
+  echo "pre-push: gitleaks TOOL ERROR (rc=$grc) — scan did not run; not blocking on it." >&2
+fi
 if ! devbox run docs-graph-lint >&2; then
   echo "pre-push: BLOCKED — docs-graph-lint red. Fix, commit, push again." >&2; exit 1
 fi
@@ -31,8 +54,6 @@ fi
 # hour. Same path set as scripts/diff-ci.sh's CLAUSE_PATHS plus scripts/ (the scan reads
 # pin-only-lint.sh's GUARDED list — today's exact miss). ~76 s; skipped when nothing matches.
 eval "$(grep -m1 '^CLAUSE_PATHS=' scripts/diff-ci.sh)"
-range="$remote_sha..$local_sha"
-case "$remote_sha" in 0000000000000000000000000000000000000000|'') range="$local_sha";; esac
 if git diff --name-only "$range" 2>/dev/null | grep -qE "${CLAUSE_PATHS:-^agents/}|^scripts/"; then
   echo "pre-push: clause path touched — running the clause replays (devbox run clause-replay)" >&2
   if ! devbox run clause-replay >&2; then
