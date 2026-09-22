@@ -473,6 +473,15 @@ Each tick, for the `auto` nodes only:
 
 Not built here: layer 5's PXE flags (FU-244 — the verb in use is an in-place upgrade, which needs none) and
 any sync of the reinstall class.
+6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
+   virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
+   nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
+   human for hypervisor reinstalls and recovery (ISO over virtual media, BIOS over SOL) — a runbook, never a
+   loop. `machines.yaml` gains `bmc:` beside `plug:`; `node-maintenance.sh` is the first caller.
+7. **Two networks.** The box's second NIC is the management-network leg; the BMCs (today the Nutanix twin's
+   two IPMI ports sit on the LAN) move behind it, so nothing but the box can speak to BMC firmware. Static
+   addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
+   BMC network through the node's routing.
 
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 
@@ -510,15 +519,6 @@ be tested. The rules, ruled before anything below is built:
 To build (FU-273): the exercise predicates per canary type, the repel taint, the differential
 detector, and stages in the reconciler. The first two attended bumps (wk-03 1.14.0 → 1.14.1 and the
 rollback drill) run before any of it exists.
-6. **BMC duty, split by caller on one inventory.** The same primitives (power, boot-device override, SOL,
-   virtual media where Redfish exists) serve two callers: the reconciler for lifecycle on `reconcile: auto`
-   nodes (Tinkerbell's Rufio is the prior art — a `Machine` per BMC, power/boot Tasks over bmclib), and the
-   human for hypervisor reinstalls and recovery (ISO over virtual media, BIOS over SOL) — a runbook, never a
-   loop. `machines.yaml` gains `bmc:` beside `plug:`; `node-maintenance.sh` is the first caller.
-7. **Two networks.** The box's second NIC is the management-network leg; the BMCs (today the Nutanix twin's
-   two IPMI ports sit on the LAN) move behind it, so nothing but the box can speak to BMC firmware. Static
-   addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
-   BMC network through the node's routing.
 
 **The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
 no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
