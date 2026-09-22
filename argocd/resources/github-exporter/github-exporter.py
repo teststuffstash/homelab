@@ -326,6 +326,8 @@ def collect_workflow_runs(lines):
         "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, job, runner_pool). Delta-only: one /jobs call per new completed run.",
         "# TYPE github_ci_job_duration_seconds gauge",
         "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job, runner_pool).",
+        "# TYPE github_ci_job_completed_timestamp gauge",
+        "# HELP github_ci_job_completed_timestamp Completion epoch of each finished job, with the runner that ran it (runner_name = the ARC runner POD name) and the job's conclusion — the rollout's ARC exercise evidence joins it to kube_pod_info's node (scripts/mgmt-rollout-evidence.sh, FU-273). Same series budget as the timings: one per job in the window.",
         "# TYPE github_ci_runner_busy_jobs gauge",
         "# HELP github_ci_runner_busy_jobs In-progress CI jobs per runner pool at poll time (runs-on labels via the in-flight /jobs fetch). Capacity: proxmox-vm=2 slots (tofu/ci-runner.tf), arc maxRunners=4 (argocd/platform/arc-runners.yaml). arc/proxmox-vm always emit (0 is a reading); other pools only while busy.",
     ]
@@ -491,6 +493,14 @@ def collect_job_timings(repo, run):
             duration_seconds = epoch(completed_at) - epoch(started_at)
             lines.append(metric("github_ci_job_queue_seconds", labels, queue_seconds))
             lines.append(metric("github_ci_job_duration_seconds", labels, duration_seconds))
+            # FU-273: WHICH runner ran it and how it ended — the only place a finished ARC job's
+            # outcome survives its runner pod (deleted seconds after the job; kube-state-metrics
+            # saw 6 of ~100 such terminations in 6 h). No extra API call: same /jobs response.
+            if job.get("runner_name"):
+                lines.append(metric("github_ci_job_completed_timestamp",
+                                    {**labels, "runner_name": job["runner_name"],
+                                     "conclusion": job.get("conclusion") or ""},
+                                    epoch(completed_at)))
         _job_timings[rid] = lines
         _jobs_fetched.add(rid)
     except Exception:
@@ -3132,6 +3142,17 @@ def self_test():
                     "created_at": "2026-08-19T10:00:15Z",
                     "started_at": "2026-08-19T10:00:20Z",
                     "completed_at": "2026-08-19T10:00:50Z",
+                    "runner_name": "homelab-ephemeral-abcde-runner-xyz12",
+                    "conclusion": "success",
+                }, {
+                    # a job GitHub never gave a runner (skipped) has no runner_name: no
+                    # completion series for it (there is no pod to join it to).
+                    "name": "skipped-job",
+                    "created_at": "2026-08-19T10:00:15Z",
+                    "started_at": "2026-08-19T10:00:15Z",
+                    "completed_at": "2026-08-19T10:00:15Z",
+                    "runner_name": None,
+                    "conclusion": "skipped",
                 }]
             }
         return {}
@@ -3195,6 +3216,13 @@ def self_test():
             "second poll must include job-timing sample collection when _first_successful_poll=False"
         assert any(line.startswith("github_ci_job_duration_seconds{") for line in lines_second), \
             "job duration metric samples must be emitted"
+        # FU-273: the completion series carries the runner POD name + the conclusion, valued at
+        # completed_at — the ARC exercise evidence joins it to kube_pod_info{node}.
+        done = [line for line in lines_second if line.startswith("github_ci_job_completed_timestamp{")]
+        assert len(done) == 1, f"one completion series (the runner-less job emits none): {done}"
+        assert 'runner_name="homelab-ephemeral-abcde-runner-xyz12"' in done[0], done[0]
+        assert 'conclusion="success"' in done[0], done[0]
+        assert done[0].endswith(" " + str(epoch("2026-08-19T10:00:50Z"))), done[0]
     finally:
         globals()['gh'] = saved_gh_for_first_poll
         globals()['gh_paged'] = saved_gh_paged_for_first_poll
