@@ -511,7 +511,7 @@ be tested. The rules, ruled before anything below is built:
 - **Revert is a human commit**, backed by a **differential** signal: worse on upgraded nodes than on
   not-yet-upgraded ones, starting after each node's own upgrade, seen across stacks. Only that
   evidence halts the rollout automatically. Within a minor the reverted declaration is then a
-  rollback the reconciler runs (`node-maintenance.sh upgrade` allows a patch downgrade within a minor since #1867, and parks a cross-minor one with exit 4); across a minor it is `talosctl
+  rollback the reconciler runs (`node-maintenance.sh upgrade` allows a patch downgrade within a minor since #1867, and refuses a cross-minor one with exit 4, which the reconciler parks); across a minor it is `talosctl
   rollback` or a reinstall.
 - **Less than a day, end to end.** Drift from git is a tax: with master at 1.14.2 and the fleet split,
   nobody can say which version a node runs without looking. `TalosFleetVersionSplit` /
