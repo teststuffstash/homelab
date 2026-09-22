@@ -66,6 +66,22 @@
 #                sync, through controlplane-upgrade.sh (etcd quorum, snapshot, cilium gate).
 #   halt         MgmtRolloutDifferential firing (or unreadable — an unreadable gate is a no) → stage
 #                `halted`: no new sync, the pressure taints lifted; it resumes when the alert clears.
+#   hold         (FU-278, operator ruling 2026-09-22) the WORKLOAD read. At rollout start the loop
+#                snapshots every workload's health (`node-maintenance.sh workload-health`: top owner,
+#                class, revision, healthy) into rollout.json; after each window returns and again
+#                before each next one it re-reads and compares. A workload unhealthy NOW that was
+#                healthy (or absent) in the snapshot: PLATFORM (any non-stack namespace) → HOLD,
+#                whatever its revision; STACK-IMPORTANT (≥2 replicas/instances or a PDB) on the SAME
+#                revision as the snapshot → HOLD (likely the rollout); a stack workload on a NEW
+#                revision, or a STACK-SINGLETON → logged once, never a hold. Already unhealthy at the
+#                snapshot → never holds. An unreadable read (or no baseline yet) → hold. The hold is
+#                stage `halted` with reason `workload-health` (`-unreadable`): no new sync, pressure
+#                lifted, nothing reverted; it names each workload, revision and since-when, and
+#                releases when the held workloads are healthy again OR a human acks:
+#                `touch /var/lib/mgmt/reconcile/workload-health.ack` on the box acknowledges every
+#                workload held at that moment for the rest of this rollout (the file is consumed; a
+#                workload that goes bad later still holds). Never on a revert rollout — the
+#                differential's carve-out, for the same reason: the revert is the fix.
 #                Nothing is ever reverted here — a revert is a human commit; a declared target OLDER
 #                than the last rollout's starts a `revert` rollout (no canary, not halted by the
 #                differential, the nodes the last rollout moved go first).
@@ -95,6 +111,7 @@
 #            RECONCILE_EVIDENCE <path> (run as `bash <path> <node> <since>`)
 #            RECONCILE_DIFFERENTIAL_CMD "<cmd>" (prints the firing count; non-zero exit = unreadable)
 #            RECONCILE_KUBECTL "<cmd>" (kubectl for the taints)   RECONCILE_CANARY_TIMEOUT (s)
+#            RECONCILE_WORKLOAD_HEALTH_CMD "<cmd>" (workload-health's JSON lines; non-zero = unreadable)
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 export HOME="${HOME:-/root}"
@@ -107,6 +124,7 @@ CANARY_TIMEOUT="${RECONCILE_CANARY_TIMEOUT:-14400}"
 EVIDENCE="${RECONCILE_EVIDENCE:-$REPO/scripts/mgmt-rollout-evidence.sh}"
 PROM="${NM_PROM:-http://192.168.40.13:9090}"
 TAINT_KEY=homelab.io/talos-behind
+WH_ACK="$DIR/workload-health.ack"   # FU-278: a human's ack of the workloads held right now
 mkdir -p "$DIR" || exit 1
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 now() { date -u +%s; }
@@ -182,10 +200,14 @@ emit() {  # [stamp]
       "# HELP mgmt_reconcile_rollout_started_timestamp_seconds When the current (or last) fleet rollout began.",
       "# TYPE mgmt_reconcile_rollout_started_timestamp_seconds gauge",
       "mgmt_reconcile_rollout_started_timestamp_seconds{target=\"\(.target)\"} \(.started_at)",
-      "# HELP mgmt_reconcile_rollout_halted 1 while the rollout is halted, by reason (differential = MgmtRolloutDifferential firing, unreadable = the box could not read it).",
+      "# HELP mgmt_reconcile_rollout_halted 1 while the rollout is halted, by reason (differential = MgmtRolloutDifferential firing, unreadable = the box could not read it, workload-health = a workload went unhealthy since the rollout started (FU-278), workload-health-unreadable = the workload read failed).",
       "# TYPE mgmt_reconcile_rollout_halted gauge",
-      (. as $r | ("differential","unreadable") as $x
+      (. as $r | ("differential","unreadable","workload-health","workload-health-unreadable") as $x
         | "mgmt_reconcile_rollout_halted{reason=\"\($x)\"} \(if $r.stage == "halted" and $r.halt_reason == $x then 1 else 0 end)"),
+      "# HELP mgmt_reconcile_rollout_workload_held 1 per workload the rollout is held on (FU-278): unhealthy now, healthy at the rollout-start snapshot.",
+      "# TYPE mgmt_reconcile_rollout_workload_held gauge",
+      (if .stage == "halted" and .halt_reason == "workload-health" then (.wh.held // [])[] else empty end
+        | "mgmt_reconcile_rollout_workload_held{workload=\"\(.key)\",class=\"\(.class)\",revision=\"\(.revision | gsub("[\"\\\\]"; ""))\"} 1"),
       "# HELP mgmt_reconcile_rollout_canary_wait_started_timestamp_seconds When the canary stage began waiting for evidence (0 = not waiting).",
       "# TYPE mgmt_reconcile_rollout_canary_wait_started_timestamp_seconds gauge",
       "mgmt_reconcile_rollout_canary_wait_started_timestamp_seconds \(if .stage == "canary" then .canary_wait_started else 0 end)",
@@ -401,6 +423,66 @@ differential() {
   jq -e '.status == "success"' >/dev/null 2>&1 <<<"$r" || return 1
   jq -r '.data.result | length' <<<"$r"
 }
+# ── FU-278: the workload-health hold ────────────────────────────────────────────────────────────
+# The READ is node-maintenance.sh's (generic, no service named); the baseline and the rule are here.
+wh_read() {  # → every workload as ONE JSON array; non-zero = unreadable (never an empty "all fine")
+  local out
+  if [ -n "${RECONCILE_WORKLOAD_HEALTH_CMD:-}" ]; then out="$($RECONCILE_WORKLOAD_HEALTH_CMD)" || return 1
+  else out="$(cd "$REPO" && devbox run --quiet -- bash scripts/node-maintenance.sh workload-health 2>/dev/null)" || return 1; fi
+  jq -se 'length > 0 and all(.[]; (.key | type) == "string" and (.healthy | type) == "boolean")' >/dev/null 2>&1 <<<"$out" || return 1
+  jq -sc . <<<"$out"
+}
+wh_snapshot() {  # the rollout-start baseline; unreadable leaves it unset, and the gate holds until one is taken
+  local cur
+  if ! cur="$(wh_read)"; then log "rollout: workload-health baseline UNREADABLE — held until one can be taken"; return 1; fi
+  ro_set --argjson c "$cur" --argjson t "$(now)" \
+    '.wh.baseline = ($c | map({key: .key, value: {healthy, revision}}) | from_entries) | .wh.baseline_at = $t'
+  log "rollout: workload-health baseline — $(jq -r length <<<"$cur") workloads, $(jq -r 'map(select(.healthy | not)) | length' <<<"$cur") already unhealthy (those never hold$(jq -r 'map(select(.healthy | not) | .key) | if length > 0 then ": " + join(", ") else "" end' <<<"$cur"))"
+}
+# The rule, against the baseline. Sets WH_WHY ("" | workload-health | workload-health-unreadable) and
+# records the held set in rollout.json (.wh.held — what the log, the pending reasons and the
+# mgmt_reconcile_rollout_workload_held series name). A human ack (WH_ACK) adds everything held at
+# that moment to .wh.acked for the rest of this rollout.
+WH_WHY=""
+wh_gate() {
+  local cur ev held logged k c r rv
+  WH_WHY=""
+  if [ "$(ro '.wh.baseline | type')" != object ]; then
+    wh_snapshot || { ro_set '.wh.held = []'; WH_WHY=workload-health-unreadable; return 0; }
+  fi
+  if ! cur="$(wh_read)"; then
+    ro_set '.wh.held = []'; WH_WHY=workload-health-unreadable
+    log "rollout: the workload-health read is UNREADABLE — held (an unreadable read is a hold)"; return 0
+  fi
+  ev="$(jq -c --argjson b "$(ro -c '.wh.baseline')" --argjson a "$(ro -c '.wh.acked // []')" '
+    [ .[] | select(.healthy | not) | . as $w | ($b[$w.key] // null) as $s
+      | select($s == null or $s.healthy == true)        # already unhealthy at the snapshot: never holds (not `// true`: false is falsy)
+      | select(($a | index($w.key)) == null)            # acknowledged by a human for this rollout
+      | . + { snap_revision: ($s.revision // null),
+              verdict: (if .class == "platform" then "hold"
+                        elif .class == "stack-important" and $s != null and $s.revision == .revision then "hold"
+                        else "log" end) } ]' <<<"$cur")"
+  held="$(jq -c 'map(select(.verdict == "hold") | {key, class, revision, since, reason})' <<<"$ev")"
+  if [ -e "$WH_ACK" ]; then
+    if [ "$held" != '[]' ]; then
+      ro_set --argjson h "$held" '.wh.acked = ((.wh.acked // []) + ($h | map(.key)) | unique)'
+      log "rollout: workload-health hold ACKED by a human ($WH_ACK) — $(jq -r 'map(.key) | join(", ")' <<<"$held") no longer hold this rollout"
+      held='[]'
+    else log "rollout: $WH_ACK present but nothing is held — ignored"; fi
+    rm -f "$WH_ACK"
+  fi
+  # Log-only verdicts: once per workload and revision, not every tick.
+  while IFS=$'\t' read -r k c rv r; do
+    [ -n "$k" ] || continue
+    [ "$(ro --arg k "$k" '.wh.logged[$k] // ""')" = "$rv" ] && continue
+    log "rollout: $k ($c) unhealthy on revision $rv — logged, not held ($([ "$c" = stack-singleton ] && echo "a stack singleton" || echo "a new revision since the snapshot: the stack's own change")): $r"
+    ro_set --arg k "$k" --arg rv "$rv" '.wh.logged[$k] = $rv'
+  done < <(jq -r '.[] | select(.verdict == "log") | [.key, .class, .revision, .reason] | @tsv' <<<"$ev")
+  ro_set --argjson h "$held" '.wh.held = $h'
+  [ "$held" = '[]' ] || WH_WHY=workload-health
+}
+wh_names() { ro -r '[.wh.held[]? | "\(.key)@\(.revision) (\(.class), unhealthy since \(.since): \(.reason))"] | join("; ")'; }
+
 set_stage() {  # <stage>
   [ "$(ro .stage)" = "$1" ] && return 0
   ro_set --arg s "$1" --argjson t "$(now)" '.stage = $s | .stage_since = $t'
@@ -419,8 +501,11 @@ rollout_start() {  # <target>
   RO="$(jq -nc --arg t "$t" --arg k "$kind" --arg s "$stage" --arg p "$prev" --argjson pr "$prior" --argjson now "$(now)" \
     '{target:$t, kind:$k, stage:$s, started_at:$now, stage_since:$now, prev_target:$p, prior:$pr,
       canaries:{}, canaries_picked:false, evidence:{}, canary_wait_started:0, canary_timed_out:false,
-      halt_reason:"", halted_from:"", nodes:{}, superseded:[]}')"
+      halt_reason:"", halted_from:"", nodes:{}, superseded:[],
+      wh:{baseline:null, baseline_at:0, acked:[], logged:{}, held:[]}}')"
   log "rollout: START $t ($kind) — stage $stage${prev:+ (previous rollout: $prev)}"
+  # FU-278: the workload-health baseline, before the first window. Not on a revert (never held).
+  [ "$kind" = revert ] || wh_snapshot || true
 }
 rollout_supersede() {  # <newer target>
   local old; old="$(ro .target)"
@@ -454,6 +539,31 @@ pick_canaries() {  # <target> <work node...> — one per non-CP type, the least 
   ro_set '.canaries_picked = true'
 }
 
+halt_release() {  # <why> → what releases it, for the pending reasons
+  case "$1" in
+    differential|unreadable) echo "resumes when MgmtRolloutDifferential clears" ;;
+    workload-health) echo "held on $(wh_names) — resumes when they are healthy again, or on an ack (touch $WH_ACK)" ;;
+    workload-health-unreadable) echo "the workload-health read (node-maintenance.sh workload-health) failed — resumes when it reads" ;;
+  esac
+}
+halt_rollout() {  # <target> <why> — stage halted, the reason recorded + logged, the pressure lifted
+  local T="$1" why="$2" msg
+  case "$why" in
+    differential) msg="MgmtRolloutDifferential is firing" ;;
+    unreadable) msg="MgmtRolloutDifferential is unreadable (an unreadable gate is a no)" ;;
+    workload-health) msg="HELD on workload health (FU-278; never a revert): $(wh_names)" ;;
+    workload-health-unreadable) msg="the workload-health read failed (an unreadable read is a hold)" ;;
+  esac
+  if [ "$(ro .stage)" != halted ]; then
+    ro_set --arg s "$(ro .stage)" '.halted_from = $s'
+    log "rollout: $T HALTED — $msg; no sync starts, pressure lifted"
+  elif [ "$(ro .halt_reason)" != "$why" ] || [ "${why#workload-health}" != "$why" ]; then
+    log "rollout: $T still halted — $msg"
+  fi
+  set_stage halted; ro_set --arg w "$why" '.halt_reason = $w'
+  reconcile_taints "$T"   # no node listed: while the fleet looks worse, push no more work onto it
+}
+
 PICK=""
 rollout_plan() {
   local T c n work=() behind_t=() pend=() waiting=() ordered=() workers=() cps=() since ws f frc why
@@ -477,23 +587,20 @@ rollout_plan() {
   for n in "${BEHIND[@]}"; do [ "$(decl "$n" version)" = "$T" ] && behind_t+=("$n"); done
   if [ ${#work[@]} -eq 0 ]; then rollout_done "every node of $T is synced or parked"; reconcile_taints "$T"; return 0; fi
 
-  # ── the halt: MgmtRolloutDifferential (never on a revert — the differential is why it exists)
+  # ── the halt: MgmtRolloutDifferential, then the workload-health hold (FU-278) — neither on a
+  # revert (the differential is why it exists; the revert is the fix)
   if [ "$(ro .kind)" != revert ]; then
     frc=0; f="$(differential)" || frc=$?; why=""
     if [ "$frc" != 0 ] || ! [[ "$f" =~ ^[0-9]+$ ]]; then why=unreadable
     elif [ "$f" -gt 0 ]; then why=differential; fi
+    if [ -z "$why" ]; then wh_gate; why="$WH_WHY"; fi
     if [ -n "$why" ]; then
-      if [ "$(ro .stage)" != halted ]; then
-        ro_set --arg s "$(ro .stage)" '.halted_from = $s'
-        log "rollout: $T HALTED — $([ "$why" = differential ] && echo "MgmtRolloutDifferential is firing" || echo "MgmtRolloutDifferential is unreadable (an unreadable gate is a no)"); no sync starts, pressure lifted"
-      fi
-      set_stage halted; ro_set --arg w "$why" '.halt_reason = $w'
-      for c in "${work[@]}"; do set_node "$c" pending "$(keyof "$c")" "rollout $T halted ($why) — resumes when MgmtRolloutDifferential clears"; done
-      reconcile_taints "$T"   # no node listed: while upgraded nodes look worse, push no more work onto them
+      halt_rollout "$T" "$why"
+      for c in "${work[@]}"; do set_node "$c" pending "$(keyof "$c")" "rollout $T halted ($why) — $(halt_release "$why")"; done
       return 0
     fi
     if [ "$(ro .stage)" = halted ]; then
-      log "rollout: $T RESUMED — MgmtRolloutDifferential clear; back to $(ro .halted_from)"
+      log "rollout: $T RESUMED — MgmtRolloutDifferential clear and no workload held; back to $(ro .halted_from)"
       set_stage "$(ro .halted_from)"; ro_set '.halt_reason = ""'
     fi
   fi
@@ -624,5 +731,11 @@ case "$rc" in
     log "$n: PARKED — verb exited $rc (journalctl -u mgmt-reconcile)"
     close_verb_window "$n" ;;
 esac
+# FU-278: the window has returned — read the workloads now, not only before the next window, so a
+# hold is on record (and the pressure off) the moment a window left something broken behind it.
+if [ "$rollout_on" = true ] && [ -n "$RO" ] && [ "$(ro .kind)" != revert ] && [ "$(ro .stage)" != done ] && [ "$(ro .stage)" != halted ]; then
+  wh_gate
+  [ -z "$WH_WHY" ] || halt_rollout "$(ro .target)" "$WH_WHY"
+fi
 save; emit stamp; log "tick done"
 exit 0

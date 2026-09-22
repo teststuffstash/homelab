@@ -594,6 +594,15 @@ be tested. The rules, ruled before anything below is built:
 - **Default forward.** A new alert on its own neither halts nor reverts a rollout, and the responder
   never reverts. Rolling back on the first alert means never moving forward in practice: the symptom may be a fluke or
   a stack's own change, and a single stack's CI that a script update fixes is not a platform verdict.
+  **But a broken workload PAUSES it, never reverts it** (FU-278, operator 2026-09-22): a PLATFORM
+  workload (any namespace that is not a stack's app namespace) unhealthy since the rollout started, or
+  an important stack workload (≥ 2 replicas/instances or a PodDisruptionBudget) unhealthy on the SAME
+  revision it had then, holds the next window until it is healthy again or a human acks. A stack
+  workload on a new revision, or a stack singleton, is the stack's own business — logged, never a
+  hold. The 2026-09-22 rollout is why: wk-04's window moved Forgejo onto hp-01, where it crash-looped
+  (the FU-277 DNS trap), and the rollout took cp-01, cp-02 and wk-metal-02 down after it — between
+  windows it read node Ready, cilium and multi-node budgets, which a single-replica Deployment never
+  moves. [The hold as built](#the-rollout-as-built-fu-273-2026-09-22).
 - **Revert is a human commit**, backed by a **differential** signal: worse on upgraded nodes than on
   not-yet-upgraded ones, starting after each node's own upgrade, seen across stacks. Only that
   evidence halts the rollout automatically. Within a minor the reverted declaration is then a
@@ -701,7 +710,43 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
 - **`halted`.** Before any rollout sync the loop reads `ALERTS{alertname="MgmtRolloutDifferential"}`;
   firing — or unreadable (an unreadable gate is a no; **`MgmtRolloutHaltUnreadable`** after 1 h) —
   stops new syncs and lifts the pressure (no more work pushed onto nodes that look worse). It
-  resumes where it was when the alert clears. It never reverts anything.
+  resumes where it was when the alert clears. It never reverts anything. The same stage carries the
+  workload-health hold (next bullet), read after the differential; the differential's reason wins
+  when both apply.
+- **The workload-health hold (FU-278).** At rollout start (before the first canary) the loop
+  snapshots every workload into `rollout.json` (`.wh.baseline`) through the read-only
+  `node-maintenance.sh workload-health` — one JSON line per workload keyed by its TOP OWNER (a pod's
+  ReplicaSet → its Deployment; StatefulSet; DaemonSet; a CNPG pod → its `Cluster.postgresql.cnpg.io`;
+  other owner kinds as themselves; bare pods — agent rides —, Job/CronJob/Workflow pods, ARC runner
+  pods and finished pods excluded), with a **revision** (Deployment: the current ReplicaSet's
+  pod-template-hash; StatefulSet: `updateRevision`; DaemonSet/other: the pods' revision hash; CNPG:
+  the pods' image), a **class** and a **healthy** verdict. Unhealthy = any counted pod with a
+  container or init container in CrashLoopBackOff / Error / ImagePullBackOff / ErrImagePull /
+  CreateContainerConfigError, or not Ready for more than `WH_NOT_READY_GRACE` (5 min, from the Ready
+  condition's `lastTransitionTime`). **Classes** come from the live AgentStack claims: a stack's app
+  namespaces are its claim's repo names (a fixer repo's namespace IS its repo name —
+  `argocd/resources/agentstack/xrd.yaml`), the `platform` claim's own repos excluded; everything else
+  — `<stack>-agents`, `agent-coordinator`, `forgejo`, `garage`, … — is PLATFORM; a stack workload is
+  STACK-IMPORTANT with ≥ 2 replicas/instances or a PDB over its pods, else STACK-SINGLETON. Claims
+  unreadable = the whole read unreadable. **The rule**, evaluated right after each window returns and
+  again before each next one: a workload unhealthy now that was healthy (or absent) in the snapshot —
+  PLATFORM → hold whatever its revision; STACK-IMPORTANT on the snapshot's revision → hold; a new
+  revision or a STACK-SINGLETON → logged once per revision. Already unhealthy at the snapshot → never
+  holds. An unreadable read, or no baseline yet → hold (`workload-health-unreadable`). The hold is the
+  differential's `halted` stage with reason `workload-health`: no new sync, the pressure lifted,
+  nothing reverted, each workload named with revision and since-when (the journal, the nodes'
+  `pending` reasons, `mgmt_reconcile_rollout_workload_held{workload,class,revision}`). It releases
+  when the held workloads are healthy again, or on a **human ack**: `touch
+  /var/lib/mgmt/reconcile/workload-health.ack` on the box — every workload held at that moment stops
+  holding for the rest of this rollout (`.wh.acked`), the file is consumed, and a workload that goes
+  bad later still holds. Not on a revert rollout (the differential's carve-out: the revert is the
+  fix). **`MgmtRolloutHeldOnWorkloadHealth`** after 30 min. **Replayed** against 2026-09-22
+  (fixtures reconstructed from kube-state-metrics, `scripts/fixtures/workload-health-2026-09-22/`):
+  with the 09:45Z baseline it holds at 12:54:45Z — the read before cp-01's sync — on exactly
+  `forgejo/Deployment/forgejo@68f79d44d9` (init `configure-gitea` CrashLoopBackOff), and at 10:30:45Z,
+  before wk-metal-04's window, on `garage/StatefulSet/garage` (garage-2 not Ready 23 min after its
+  zone's window — the backlog ADR-140's budget now answers); every other pre-window read of that day
+  is clean.
 - **Revert.** A declared target OLDER than the last rollout's is a human revert commit: a `revert`
   rollout with no canary stage, not halted by the differential (that is what asked for it), the
   nodes the last rollout moved first. Within a minor the verb allows it; across one it is exit 4 →
@@ -722,7 +767,8 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
   `started_at`/`stage_since`, canaries by type, evidence times, per-node `synced_at`,
   `superseded[]`. Series: `mgmt_reconcile_rollout_stage{target,kind,stage}`,
   `…_started_timestamp_seconds`, `…_canary_wait_started_timestamp_seconds`,
-  `…_canary_exercised{node,type}`, `…_canary_timed_out`, `…_halted{reason}`,
+  `…_canary_exercised{node,type}`, `…_canary_timed_out`, `…_halted{reason}` (`differential`,
+  `unreadable`, `workload-health`, `workload-health-unreadable`), `…_workload_held{workload,class,revision}`,
   `…_node_synced_timestamp_seconds{node,target}` — emitted only while the switch is on. The rollout's
   alerts live in `argocd/resources/mgmt-metrics/reconcile-rollout.yaml`; the 24 h deadline is NOT
   re-alerted there — `TalosFleetVersionSplit` / `MgmtNodeInstallDrift` already are it.
@@ -731,7 +777,10 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
 - **Tests:** `devbox run mgmt-reconcile-test` — fake verb, CP verb, ranking, evidence, Prometheus
   and kubectl: canary-per-type selection, the override canary, evidence gating and timeout-forward,
   CPs last via the CP verb, halt + resume (and unreadable), taints on/off without touching other
-  keys, supersede, revert, one-rollout-at-a-time, the switch off mid-rollout.
+  keys, supersede, revert, one-rollout-at-a-time, the switch off mid-rollout; the workload-health
+  hold (snapshot, each class, the revision split, absent/already-unhealthy, unreadable read and
+  baseline, the ack, the after-window read, revert exempt, the 2026-09-22 replay) and the
+  `workload-health` read itself against synthetic dumps.
 
 ## Rollback — three layers
 

@@ -23,6 +23,11 @@
 #                                                        pass; 1 = any fails or cannot be read. Never cordons,
 #                                                        drains or opens a window: the reconciler's health
 #                                                        gate for clearing a failed-verb park (FU-276, #1884)
+#   bash scripts/node-maintenance.sh workload-health   # READ-ONLY, fleet-wide, no node: one JSON line per
+#                                                        workload (top owner) — key, class, revision,
+#                                                        healthy, reason, since. The fleet rollout's
+#                                                        baseline + hold read it (FU-278); exit 1 = a read
+#                                                        failed, and then it prints nothing
 #
 # `upgrade` is the GATE and the QUEUE, not the upgrader: talosctl installs, reboots, rejoins and
 # uncordons. What this adds is everything talosctl does not know about — the Longhorn
@@ -150,7 +155,7 @@ usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exi
 cmd="${1:-}"; NODE="${2:-}"
 [ -n "$cmd" ] || usage
 # `order` ranks the whole fleet and takes no node argument; `upgrade-behind` takes a SCOPE there.
-[ -n "$NODE" ] || [ "$cmd" = order ] || [ "$cmd" = upgrade-behind ] || usage
+[ -n "$NODE" ] || [ "$cmd" = order ] || [ "$cmd" = upgrade-behind ] || [ "$cmd" = workload-health ] || usage
 WARNS=0; FAILS=0
 
 node_ip() { kubectl get node "$NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'; }
@@ -1237,6 +1242,132 @@ verify() {
   echo "verify: $NODE NOT healthy ($FAILS failing check(s))"; return 1
 }
 
+# ---------------------------------------------------------------- workload-health
+# FU-278 (operator ruling 2026-09-22): the fleet rollout's WORKLOAD read. On 2026-09-22 wk-04's window
+# moved Forgejo onto hp-01, where its init container crash-looped (the FU-277 DNS trap), and the
+# rollout took cp-01, cp-02 and wk-metal-02 down after it: between windows it read node Ready, cilium
+# and multi-node budgets, none of which a single-replica Deployment moves. This verb is only the
+# READ — generic, no service named, no judgement: the reconciler (scripts/mgmt-reconcile.sh) owns
+# the rollout-start baseline and the comparison.
+#
+# One JSON object per line, per workload keyed by its TOP OWNER — "<ns>/<Kind>/<name>": a pod's
+# ReplicaSet resolves to its Deployment; StatefulSet, DaemonSet as themselves; a CNPG pod to its
+# `Cluster.postgresql.cnpg.io`; any other owner kind as itself. Not counted: bare pods (agent rides),
+# Job / CronJob / Argo Workflow pods, ARC runner pods (EphemeralRunner), `app=agent-session` pods,
+# and finished (Succeeded/Failed) or terminating pods.
+#   revision  Deployment: its current ReplicaSet's pod-template-hash (highest deployment revision);
+#             StatefulSet: status.updateRevision; DaemonSet / other: the pods' controller-revision-hash
+#             (or pod-template-hash); CNPG: the pods' image(s). Several values join with "+".
+#   healthy   false when any counted pod has a container or init container waiting in
+#             CrashLoopBackOff / Error / ImagePullBackOff / ErrImagePull / CreateContainerConfigError
+#             or terminated in Error, or has not been Ready for more than WH_NOT_READY_GRACE (300 s,
+#             from the Ready condition's lastTransitionTime, else the pod's creation).
+#   class     platform         — any namespace that is not a stack's app namespace. Stack app
+#                                namespaces = the repo names of every AgentStack claim except the
+#                                platform's own (WH_PLATFORM_STACK=platform) — a fixer repo's
+#                                namespace IS its repo name (argocd/resources/agentstack/xrd.yaml).
+#                                The `<stack>-agents` / agent-coordinator namespaces are platform.
+#             stack-important  — a stack workload with ≥ 2 replicas (CNPG: instances; DaemonSet:
+#                                desired pods) or a PodDisruptionBudget over any of its pods
+#             stack-singleton  — every other stack workload
+# The claims unreadable = the whole read unreadable (exit 1): a class guessed without them could
+# call a stack's crash-looping singleton a platform outage, or the reverse.
+# Test seam: WH_DIR=<dir> holding pods/replicasets/deployments/statefulsets/daemonsets/pdb/
+# clusters/agentstacks .json dumps instead of kubectl; WH_NOW=<epoch> for the clock.
+WH_NOT_READY_GRACE="${WH_NOT_READY_GRACE:-300}"
+WH_PLATFORM_STACK="${WH_PLATFORM_STACK:-platform}"
+workload_health() {
+  local d f rc=0; d="$(mktemp -d)" || return 1
+  if [ -n "${WH_DIR:-}" ]; then
+    for f in pods replicasets deployments statefulsets daemonsets pdb clusters agentstacks; do
+      jq -e '.items | type == "array"' "$WH_DIR/$f.json" >/dev/null 2>&1 && cp "$WH_DIR/$f.json" "$d/$f.json" || rc=1
+    done
+  else
+    kubectl get pods -A -o json >"$d/pods.json" \
+      && kubectl get replicasets -A -o json >"$d/replicasets.json" \
+      && kubectl get deployments -A -o json >"$d/deployments.json" \
+      && kubectl get statefulsets -A -o json >"$d/statefulsets.json" \
+      && kubectl get daemonsets -A -o json >"$d/daemonsets.json" \
+      && kubectl get pdb -A -o json >"$d/pdb.json" \
+      && kubectl get clusters.postgresql.cnpg.io -A -o json >"$d/clusters.json" \
+      && kubectl get agentstacks -o json >"$d/agentstacks.json" || rc=1
+    for f in pods replicasets deployments statefulsets daemonsets pdb clusters agentstacks; do
+      [ "$rc" = 0 ] && { jq -e '.items | type == "array"' "$d/$f.json" >/dev/null 2>&1 || rc=1; }
+    done
+  fi
+  # A fleet always runs workloads and always has claims: an empty answer is a read, not a fleet.
+  [ "$rc" = 0 ] && { jq -e '(.items | length) > 0' "$d/pods.json" >/dev/null 2>&1 && jq -e '(.items | length) > 0' "$d/agentstacks.json" >/dev/null 2>&1 || rc=1; }
+  [ "$rc" = 0 ] || { rm -rf "$d"; echo "workload-health: a read failed — no answer (an unreadable read is a hold for the caller)" >&2; return 1; }
+  jq -c -n --argjson now "${WH_NOW:-$(date -u +%s)}" --argjson grace "$WH_NOT_READY_GRACE" --arg plat "$WH_PLATFORM_STACK" \
+     --slurpfile P "$d/pods.json" --slurpfile RS "$d/replicasets.json" --slurpfile D "$d/deployments.json" \
+     --slurpfile SS "$d/statefulsets.json" --slurpfile DS "$d/daemonsets.json" --slurpfile B "$d/pdb.json" \
+     --slurpfile C "$d/clusters.json" --slurpfile S "$d/agentstacks.json" "$PDB_JQ_DEFS"'
+    def ts: if . == null then null else (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) end;
+    def byname: map({key: "\(.metadata.namespace)/\(.metadata.name)", value: .}) | from_entries;
+    def badreasons: ["CrashLoopBackOff","Error","ImagePullBackOff","ErrImagePull","CreateContainerConfigError"];
+    ([$S[0].items[] | select(.metadata.name != $plat) | .spec.repos[]? | (if type == "object" then .name else . end)] | unique) as $stackns
+    | ($RS[0].items | byname) as $rs
+    | ($D[0].items | byname) as $dep | ($SS[0].items | byname) as $sts
+    | ($DS[0].items | byname) as $ds  | ($C[0].items | byname) as $cnpg
+    # the CURRENT hash of a Deployment: its ReplicaSet with the highest deployment revision
+    | ([$RS[0].items[] | select(((.metadata.ownerReferences // [])[0].kind // "") == "Deployment")
+        | {k: "\(.metadata.namespace)/\(.metadata.ownerReferences[0].name)",
+           r: ((.metadata.annotations["deployment.kubernetes.io/revision"] // "0") | tonumber? // 0),
+           h: (.metadata.labels["pod-template-hash"] // "")}]
+       | group_by(.k) | map({key: .[0].k, value: (max_by(.r).h)}) | from_entries) as $dephash
+    | [ $P[0].items[]
+        | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+        | select(.metadata.deletionTimestamp == null)
+        | select((.metadata.labels["app"] // "") != "agent-session")
+        | . as $p | .metadata.namespace as $ns
+        | ((.metadata.ownerReferences // []) | (map(select(.controller == true))[0] // .[0])) as $o
+        | select($o != null)
+        | select(($o.kind | IN("Job","CronJob","Workflow","EphemeralRunner")) | not)
+        | (if $o.kind == "ReplicaSet" then
+             (($rs["\($ns)/\($o.name)"].metadata.ownerReferences // []) | map(select(.kind == "Deployment"))[0]) as $d
+             | if $d then {kind: "Deployment", name: $d.name} else {kind: "ReplicaSet", name: $o.name} end
+           elif $o.kind == "Cluster" and (($o.apiVersion // "") | startswith("postgresql.cnpg.io")) then
+             {kind: "Cluster.postgresql.cnpg.io", name: $o.name}
+           else {kind: $o.kind, name: $o.name} end) as $top
+        | ([ ((.status.initContainerStatuses // [])[] | {c: ("init " + .name), s: .state}),
+             ((.status.containerStatuses // [])[] | {c: .name, s: .state}) ]
+           | map(select(((.s.waiting.reason // "") as $r | badreasons | index($r)) or ((.s.terminated.reason // "") == "Error"))
+                 | "\(.c) \(.s.waiting.reason // .s.terminated.reason)")) as $crash
+        | ([.status.conditions[]? | select(.type == "Ready")][0]) as $rc
+        | (($rc.lastTransitionTime // .metadata.creationTimestamp) | ts) as $rsince
+        | (($rc.status // "False") != "True" and $rsince != null and ($now - $rsince) > $grace) as $unready
+        | { ns: $ns, kind: $top.kind, name: $top.name, pod: .metadata.name, labels: (.metadata.labels // {}),
+            image: ([.spec.containers[]?.image] | join(",")),
+            rev: (.metadata.labels["controller-revision-hash"] // .metadata.labels["pod-template-hash"] // null),
+            bad: (if ($crash | length) > 0 then "\(.metadata.name): \($crash | join(", "))"
+                  elif $unready then "\(.metadata.name): not Ready for \((($now - $rsince) / 60) | floor)m"
+                  else null end),
+            since: $rsince } ]
+    | group_by([.ns, .kind, .name])
+    | map(.[0] as $w | "\($w.ns)/\($w.name)" as $nn | ($w.ns | IN($stackns[])) as $stack
+        | (if   $w.kind == "Deployment"                then ($dephash[$nn] // ([.[].rev | select(. != null)] | unique | join("+")))
+           elif $w.kind == "StatefulSet"               then ($sts[$nn].status.updateRevision // ([.[].rev | select(. != null)] | unique | join("+")))
+           elif $w.kind == "Cluster.postgresql.cnpg.io" then ([.[].image] | unique | join("+"))
+           else ([.[].rev | select(. != null)] | unique | join("+")) end) as $rev
+        | (if   $w.kind == "Deployment"                then ($dep[$nn].spec.replicas // length)
+           elif $w.kind == "StatefulSet"               then ($sts[$nn].spec.replicas // length)
+           elif $w.kind == "Cluster.postgresql.cnpg.io" then ($cnpg[$nn].spec.instances // length)
+           elif $w.kind == "DaemonSet"                 then ($ds[$nn].status.desiredNumberScheduled // length)
+           else length end) as $replicas
+        | . as $pods
+        | ([$B[0].items[] | select(.metadata.namespace == $w.ns) | . as $b
+            | select(any($pods[]; matches($b.spec.selector; .labels)))] | length > 0) as $pdb
+        | [.[] | select(.bad != null)] as $bad
+        | { key: "\($w.ns)/\($w.kind)/\($w.name)",
+            class: (if $stack | not then "platform" elif ($replicas >= 2 or $pdb) then "stack-important" else "stack-singleton" end),
+            revision: (if $rev == "" then "-" else $rev end),
+            healthy: ($bad | length == 0),
+            reason: ($bad | map(.bad) | join("; ")),
+            since: (if ($bad | length) > 0 then ($bad | map(.since // $now) | min | todate) else "" end) })
+    | .[]' || rc=1
+  rm -rf "$d"; return $rc
+}
+
 # ---------------------------------------------------------------- order
 # Which node to upgrade NEXT — COMPUTED, never a list. A hard-coded order is correct exactly once:
 # it rots the moment a workload is rescheduled, a Garage zone moves, or a node joins. This ranks
@@ -1426,6 +1557,7 @@ case "$cmd" in
   up) up ;;
   upgrade) upgrade ;;
   verify) verify ;;
+  workload-health) workload_health ;;
   efi-scrub) efi_scrub ;;
   order) order ;;
   upgrade-behind) upgrade_behind ;;
