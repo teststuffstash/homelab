@@ -30,7 +30,13 @@ spec:
       # Affordable only because bulk grew: wk-metal-04 joined the tier the same day, so bulk went
       # from 2 disks (one of them a thin-provisioned VM disk on a 99%-full pool) to 706G
       # allocatable across two independent physical disks.
-      storage: 100Gi
+      # 100→150Gi 2026-09-22 (RegistryMirrorCacheAlmostFull at 83.5G, +2.4 GiB/day over 14 days, +6.8
+      # the last day). The cause was the 720h TTL below, whose reason left on 09-02, and lowering it
+      # frees NOTHING already cached: the proxy scheduler stores each entry's expiry as an absolute
+      # time at add and restores it on restart (distribution v3.0.0 registry/proxy/scheduler). The
+      # 720h entries age out from ~09-29; this headroom carries the store until then without a wipe.
+      # Room checked first: bulk replicas on wk-metal-01 (209G avail) + wk-metal-04 (111-135G avail).
+      storage: 150Gi
       # Replica placement is REAL again (2026-08-07): the co-location note below is obsolete —
       # the two replicas now sit on wk-metal-01 + wk-metal-04, one per zone, as the tier intends.
       # (Was: both on wk-metal-01 because wk-02's allocation couldn't fit the 40Gi expansion.)
@@ -96,7 +102,12 @@ spec:
             # corpus (~6GB/release) — a TTL eviction there re-costs a full upstream pull, which
             # is exactly the ghcr-dependence the credential below exists to remove. Same
             # headroom logic as the 100Gi oversize: the wipe threshold stays the only real valve.
-            - { name: REGISTRY_PROXY_TTL, value: "720h" }
+            # 720h→168h 2026-09-22: the corpus left this mirror for registry.teststuff.net on 09-02
+            # (FU-196 v1, ADR-121) and the 720h stayed behind, retaining 30 days of every
+            # first-party release (132 oracle-fleet-ingester, 106 agent-base, 82 static-site revisions
+            # at the time). Takes effect for NEW entries only (see the PVC note). Moving first-party
+            # images off this mirror entirely: FU-274.
+            - { name: REGISTRY_PROXY_TTL, value: "168h" }
             # FU-196 v0: upstream auth so private org images cache too. optional: true — until
             # the operator mints the PAT (scripts/ghcr-mirror-pat-bootstrap.sh) the secret is
             # absent and the mirror serves anonymously, exactly as before. The env lands only
