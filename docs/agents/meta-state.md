@@ -9,14 +9,13 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ NEXT (2026-09-22 — first box-run fleet rollout DONE; arc in TICK-LOG).** Fleet 13/13 Talos v1.14.1,
-  rolled by the box (switch + CP toggle ON). Next session: (1) **Garage PDB #1882** — HELD, unmerged,
-  unreviewed (the reflex skips unarmed PRs): read it, arm, then TEST a zone-node window against the
-  PDB (operator: "test the garage rollout separately"); decide its 3 flagged choices. (2) **FU-264** CA
-  rotation — the lab probe on the disposable CP (`scripts/controlplane-lab-install.sh`), recipe first.
-  (3) **#1884** (FU-276) is seat/operator work (`scripts/**`); **#1885** (FU-195) is queued for the
-  fixer and MUST land before the next rollout. (4) FU-097's ledger section + the intent-review
-  instruction. Stack-side, unrelated: oracle-fleet#698 waits for a codeowner read.
+- **⚑ NEXT (2026-09-22 evening — pickup list done; arc in TICK-LOG).** Garage PDB #1882 LIVE + tested on
+  m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) **#1891** (FU-278 rollout
+  workload-health hold) — land it (review cycle), then archive FU-278; it MUST be live before the next
+  rollout. (2) **Operator:** rotate the OPNsense API key (printed into a transcript 2026-09-22); check
+  pop-os `~/.talos/config` for the dead identity; #1882's "3 flagged choices" (never recorded). (3)
+  FU-277 next step (drop the DHCP search on nodes? + an in-cluster DNS detector). (4) FU-097's ledger
+  section + the intent-review instruction. Stack-side: oracle-fleet#698 waits for a codeowner read.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
   arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
   should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was

@@ -10482,3 +10482,26 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   1Gi mem; oom_score_adj -997 verified via node-critical), nx-01 recovered, rollout resumed.
 - Found, filed: park clears on version-only + failed verb's window (#1884, FU-276); Alertmanager
   restart mid-rollout wiped every silence (#1885 queued, FU-195). NTP = WAN by decision (ARCHITECTURE).
+
+## 2026-09-22 ~13:20–15:40Z — seat (operator present, then away): the pickup list, a DNS incident, the CA rotation
+- **Garage PDB #1882 (ADR-140):** read against live (no prior garage PDB/netpol, prom svc right), hold
+  lifted, armed, merged 13:54Z. Live test via a same-version `upgrade m70s` (not `down`: no plug, WoL
+  untested, operator away): PDB allowed 1→0 at eviction 14:13:23, signal 0 at 14:14, controller maxU
+  1→0 14:15, wk-metal-01 `DRY=1 preflight` FAIL rc 2 naming `garage/garage`, controller 0→1 at 14:27:01
+  (10-min hysteresis after cluster_healthy=1). Short reboot: backlog peaked ~115, so the >1000 clause is
+  replay-proven only. The PR's "3 flagged choices" were never written down anywhere — not decided.
+- **Incident (FU-277):** Talos v1.14.0 applies DHCPv4 search domains → metal-node pods search
+  `teststuff.net`; ndots:5 sends `x.ns.svc.cluster.local` to `….teststuff.net` → the CF `*.local`
+  wildcard → 127.0.0.1. Forgejo (drained wk-04 → hp-01 12:50Z) + Alertmanager→responder down ~1 h; the
+  fixer's #1885 ride died on it too (#1886, its own correct diagnosis). Fix: Unbound DNSBL NXDOMAIN for
+  `local.teststuff.net` (opnsense-unbound role, operator: the wildcard need not work at home).
+- **Operator ruling → FU-278:** the rollout took 3 more nodes while Forgejo was down. Rollout-start
+  fleet-wide workload snapshot (top owner + revision); hold (never revert) on a new unhealthy platform
+  workload, or an important stack workload (≥2 replicas/instances or a PDB) on its SAME revision.
+  Subagent: #1887 (FU-276) merged; #1891 (FU-278; replay holds on forgejo before cp-01) in review.
+- **FU-264 DONE:** subagent lab probe + recipe (#1888, GO, --talos only); production rotation by the seat
+  14:55–15:14Z from the box — rotate-ca 13/13 exit 0, state candidate A byte-matched, P2 15 in-place,
+  `No changes`; leaked cert gets TLS `alert unknown ca` on every node. Recipe fixes: #1892.
+- **FU-195 DONE:** #1890 (fixer) — silence survived a pod restart (probe).
+- Found: maintenance-window.sh single state slot (GAPS maintenance-window-G1); the OPNsense API key+secret
+  printed into this session's transcript by a zsh no-word-split curl — ROTATE (operator).
