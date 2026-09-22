@@ -82,12 +82,15 @@ spec:
               {{ $value | humanizeDuration }} before agent-coordinator/{{ $labels.remote_key }}
               minted its current GitHub App token and has not caught up for 10m — the Secret in
               {{ $labels.namespace }} carries the PREVIOUS token, now at least the central
-              refreshInterval + 10m old; past 60m every GitHub call with it is 401 while both ES
-              read SecretSynced. Cause is refresh-clock phase, not a failure: the mirror's
-              refreshInterval must be minutes, and the central's ≤ 60m minus the mirror's.
-              Probe without echoing the value (token into a header file, curl
-              api.github.com/installation/repositories); force a catch-up by annotating the
-              mirror ES `force-sync=$(date +%s)`.
+              refreshInterval + 10m old; past 60m every GitHub call with it is 401, and both ES
+              may still read SecretSynced. Check both: is the mirror syncing at all (`kubectl -n
+              {{ $labels.namespace }} describe externalsecret {{ $labels.name }}` — an error
+              condition, a store whose SA lost read access), and is its refreshInterval short
+              (minutes) next to the central's, with the central's ≤ 60m minus the mirror's (a
+              long mirror interval lags by the refresh-clock phase every cycle). Probe the token
+              without echoing it (value into a header file, curl
+              api.github.com/installation/repositories); annotating the mirror ES
+              `force-sync=$(date +%s)` forces one sync attempt.
         # The mint itself stalled (generator erroring, ESO down): the served token dies at 60m.
         - alert: GithubTokenMintStale
           expr: |
