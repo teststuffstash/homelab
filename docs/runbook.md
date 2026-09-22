@@ -799,7 +799,7 @@ ADR-121) has a 32Gi bucket cap and **no automatic retention** (FU-203). Ownershi
 split: the stack's IaC decides the keep-set (oracle-iac#664 — the pinned digest + the newest date
 tag + the previous pin) and untags/deletes what it no longer wants with its push credential
 (`DELETE /v2/<repo>/manifests/<digest>` — `REGISTRY_STORAGE_DELETE_ENABLED=true`); homelab runs the
-collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (runs Sundays 03:00 UTC; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
+collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (**daily 03:00 UTC** since 2026-09-22 — 30 min after the stack's 02:30Z untag; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
 
 **Symptom of a full bucket:** the pusher sees an opaque **500** on a blob PATCH/PUT (Garage's
 `403 Bucket size quota is reached` is swallowed by the registry), `api_s3_error_counter` does not
@@ -826,6 +826,15 @@ $K -n registry exec deploy/registry -c registry -- \
 ⚠ `--delete-untagged` is correct HERE and wrong on the pull-through mirrors — a mirror caches
 digest-pinned pulls as untagged manifests, and that flag deletes exactly the images the pinning
 convention produces (homelab#116; the mirrors' `store-maintenance.yaml` runs GC without it).
+
+**After a push that FAILED at commit, the collector is only half the reclaim.** The refused
+upload's bytes sit in `_uploads/` as a completed object (the first `CompleteMultipartUpload`
+landed; only the copy's commit was refused) and count against the quota until the registry's own
+`UPLOADPURGING` (age 1h, interval 15m) drops them — no action, just the wait. Measured 2026-09-22:
+GC reclaimed 10.6 GB (42.2 → 31.6 GB) and left headroom at 19.9 GB, **still below the alert's
+22 GB**; the failed upload's further 9.8 GiB purged itself ~1 h after it started, taking headroom
+to ~30 GB. A still-firing alert minutes after a GC is this, not a failed collection. (A third pool,
+Garage-side incomplete multipart uploads, is invisible to both and to the quota — FU-279.)
 
 Measured 2026-09-08: dry run + real run ~1 min each on a 3-manifest repo; bucket 30.3 → 15.3 GiB.
 The Garage "Size" counter before the run read ~8 GB above the sum of the listed objects — the

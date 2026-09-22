@@ -4,8 +4,14 @@ metadata:
   name: registry-garbage-collect
   namespace: registry
 spec:
-  # Sunday 03:00 UTC — outside the Tuesday 07:17Z oracle release window (Touches: oracle-iac#664)
-  schedule: "0 3 * * 0"
+  # DAILY 03:00 UTC — 30 min after oracle-fleet's `retention` CronWorkflow untags at 02:30Z
+  # (ns oracle-fleet), and 4 h before the Tuesday 07:17Z release push. Was Sunday-only until
+  # 2026-09-22 (FU-203): the untag is nightly but the reclaim was weekly, so a prunable tag sat
+  # up to six days while RegistryBucketCommitHeadroomLow fired — three times (09-07, 09-15→16,
+  # 09-22), each costing a triage session and a hand-run of this job. --delete-untagged is
+  # hazardous only against a CONCURRENT push (a blob whose manifest is not yet written is
+  # indistinguishable from garbage), and 03:00Z carries no push on any day.
+  schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
