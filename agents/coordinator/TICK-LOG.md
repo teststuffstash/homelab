@@ -10549,3 +10549,46 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
 - ⚠ `devbox run -- gh` re-parses args under dash: an apostrophe in `--title` swallowed the line
   ("Title is too long"), `scripts/**` globbed and the create silently no-op'd → use
   `gh api repos/<slug>/issues --input <json>`.
+- **Registry commit-refusal (operator relay, 19:1xZ): the report's two proposed actions were one
+  half-fix and one no-op; the thing that cleared it was listed by neither.** oracle-fleet's 18:51Z
+  ert-corpus push died at 19:01:32 with the ADR-121 shape — first `CompleteMultipartUpload` lands,
+  the server-side COPY's commit is refused on quota, registry maps 403 → opaque 500. NOT an
+  untag failure: held was 3 distinct blobs (09-15/09-17/09-22) because the morning release landed
+  07:32 and the nightly untag wasn't due till 02:30. Ran the collector by hand under window
+  `seat-1790104641-7697` (dry run gated at storage level: the two marked manifests were exactly the
+  two tag-served digests) → 42.2 → 31.6 GB, but headroom 19.9 GB, still UNDER the alert's 22 GB.
+  The other half was the failed upload's own 9.8 GiB sitting in `_uploads/` as a COMPLETED object,
+  which `UPLOADPURGING` (1h/15m) dropped by itself at 19:59:28Z → 21.1 GB held, 30.5 GB headroom,
+  alert cleared 20:01:07Z. **Proposed action 2 (cleanup-incomplete-uploads) would have moved
+  nothing:** `garage_bucket_bytes` = 42232648384 equalled the completed-object sum exactly, MPU
+  parts outside it — they are raw disk at rf=3, never quota. Deferred by the operator → FU-279.
+- **Shipped:** #1902 collector Sunday → DAILY 03:00Z, 30 min behind the 02:30Z untag (FU-203's
+  remaining half, on this failure's third firing: 09-07, 09-15→16, 09-22); then `05d5329` for two
+  stale "Sunday" references #1902 itself missed (alert annotation + workspace header — both would
+  have sent a triage after a weekly job that no longer exists; 2 sites enumerated, 2 fixed).
+  ⚠ #1902's first CI was RED and it was mine: the branch referenced FU-279 while that id existed
+  only in an unpushed local commit → dangling ref. Fix = move the tracker entry onto the branch so
+  id and fix land atomically. Root lesson: I had pipe-filtered the lint's exit earlier and read
+  pre-existing STALE-ARCHIVE noise as "master is red too".
+- **Operator reframing, twice, each time correcting a premise of mine (assessment only, nothing
+  applied):** (1) cadence is NOT 2/day-steady — regen went 10h → 1h so fixes ship as development
+  needs, bursty, weekly baseline with spiking active days. A cron reclaim is sized for the average;
+  the cost lands on the spike. (2) "corpus is data → S3" (ADR-121's PVC rejection) is about the
+  corpus in the PIPELINE (staged on Garage, `corpus-image.oci.tar`, Argo artifact passing), NOT the
+  registry's backing store — a category error I repeated. The LAN registry is not canonical (the
+  release dual-pushes ghcr), so its store is rebuildable, which is the pull-through mirrors' class
+  and those sit on PVCs by decision (ADR-080/#116). ADR-121's PVC rejection therefore rests on one
+  real clause (bulk 88% committed — measured today: std has 227G/295G avail) and one misapplied
+  principle. A filesystem backend renames on commit → the double-hold, and today's whole failure
+  class, structurally cannot occur. ⚠ operator then corrected the durability half too: replica=1
+  "rebuild from ghcr" is circular, since ghcr outage resilience is part of why the mirror exists →
+  2-replica `longhorn` (std), which is also FEWER writes/release (21.2 GB) than today's Garage path.
+  ADR-shaped; not written yet.
+- Found by the same read, un-owned: no ADR/spec decides image-as-transport for the corpus (only an
+  explicitly undecided research note); the written cadence is still weekly + an 8-day freshness
+  promise, contradicted by measurement; no pre-flight capacity gate and no retry anywhere in the
+  release path (the 09-08 instance burned 51 min before its 500).
+- ⚠ **A registry GC's block deletions reach the Garage resync queue ~40 min later, on EVERY zone.**
+  First check after the GC looked clean; by 20:05 all three peers read 10079 ≈ the ~10.6k 1 MB
+  blocks deleted, sustaining `GarageDisruptionBlocked` (pre-existing since 17:43Z, but this is the
+  tail). Window held open until it drains rather than closed on a stale diagnosis.
