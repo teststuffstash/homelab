@@ -122,6 +122,10 @@ ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared sch
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
 PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (the Garage fleet floor reads it)
 GARAGE_SYNC_TIMEOUT="${GARAGE_SYNC_TIMEOUT:-900}" # s — wait for cluster_healthy after a window
+# The resync backlog a Garage ZONE node may go down on top of (max over peers). Steady state is ~50
+# (7-day median 48 to 2026-09-21); a fresh post-reboot backlog is thousands (p99 16k). 1000 = "the
+# previous zone's absence has been copied back" without a zero gate the scrubber would deadlock.
+GARAGE_RESYNC_QUEUE_MAX="${GARAGE_RESYNC_QUEUE_MAX:-1000}"
 SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
@@ -747,6 +751,11 @@ prom_min() {  # min value of a metric across every garage instance; "" if the qu
   jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
   jq -r '[.data.result[].value[1]|tonumber]|min // empty' <<<"$r"
 }
+prom_max() {  # max value of a metric across every garage instance; "" if the query fails
+  local r; r="$(prom "$1")" || return 1
+  jq -e '.status=="success"' >/dev/null 2>&1 <<<"$r" || return 1
+  jq -r '[.data.result[].value[1]|tonumber]|max // empty' <<<"$r"
+}
 garage_zone_node() {  # is $NODE one of the Garage zones? the zone label IS the node name
   local r; r="$(prom "count by (role_zone) (cluster_layout_node_connected)")" || return 1
   jq -e --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' >/dev/null <<<"$r"
@@ -764,7 +773,27 @@ assert_fleet_floor() {
     fail "  second zone down would drop it below quorum. Wait for the previous node to rejoin."
     return 1
   fi
-  ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue $(prom_min 'block_resync_queue_length')"
+  # cluster_healthy says every partition has its replicas UP, not that they hold the data: blocks
+  # written while the previous zone was down live on the other two until the resync copies them
+  # back. Taking a second ZONE down on top of that backlog leaves those blocks on one zone (seen
+  # 2026-09-22: wk-metal-04 went down at queue 4.5-6.2k, 10 min after wk-metal-01 came back). Only a
+  # zone node's window can do that, so only a zone node waits; a refusal here is the verb's exit 2
+  # (retried next tick), never a park.
+  local zr zone
+  zr="$(prom "count by (role_zone) (cluster_layout_node_connected)")" \
+    && jq -e '.status=="success"' >/dev/null 2>&1 <<<"$zr" \
+    || { fail "fleet floor: Garage zone list unreadable — refusing"; return 1; }
+  zone="$(jq -r --arg n "$NODE" '[.data.result[].metric.role_zone] | index($n) != null' <<<"$zr")"
+  if [ "$zone" = true ]; then
+    local q; q="$(prom_max 'block_resync_queue_length')" || { fail "fleet floor: resync queue unreadable — refusing"; return 1; }
+    [ -n "$q" ] || { fail "fleet floor: block_resync_queue_length returned no series — refusing"; return 1; }
+    if [ "$(printf '%.0f' "$q")" -gt "$GARAGE_RESYNC_QUEUE_MAX" ]; then
+      fail "fleet floor: Garage resync backlog $q > $GARAGE_RESYNC_QUEUE_MAX (max over peers) — $NODE is a zone;"
+      fail "  wait for the previous zone's absence to be copied back before taking another one down"
+      return 1
+    fi
+  fi
+  ok "fleet floor: Garage cluster_healthy=1 (every partition has all replicas up), queue ≤ $(prom_max 'block_resync_queue_length')"
 }
 
 # The CNPG half of the same idea. Every cluster here is 2 instances, and infisical-pg and
