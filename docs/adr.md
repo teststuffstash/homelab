@@ -188,6 +188,10 @@ metal, provided the installer matches (platform, schematic, version); never the 
 a schematic the node does not declare** (a plain-schematic upgrade stripped iscsi-tools from a
 `longhorn = true` VM the same day). Extension changes still recreate — the image is the declaration.
 Recipe: [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. Relates FU-076, FU-253.
+**For VMs, that last sentence is superseded by [ADR-138](#adr-138--a-vms-disk-image-is-a-birth-seed-the-running-substrate-is-installimage-moved-in-place-2026-09-21)**
+(2026-09-21): the disk image is a birth seed with `ignore_changes`, so an extension change plans
+nothing at all — it is delivered by the same in-place upgrade (a schematic is one of the three axes
+the installer must match), and a deliberate rebuild is a planned `-replace`. Metal is unchanged.
 
 ---
 
@@ -1216,6 +1220,10 @@ Surfaces: `router_decisions_total`, `router_cooldowns_active`, cooldowns + decis
 429→cooldown→paid-fallback→half-open-re-pick→2xx-clear→escalated-re-trip cycle through the
 real data plane; live entry = the sleep free-first chain test (claim reorder, same date).
 
+**Amended by [ADR-139](#adr-139--the-egress-proxys-shape-the-git-broker-leaves-the-gateway-becomes-its-own-project-ha-waits-for-a-measured-store-2026-09-21) (2026-09-21):** the single-replica `Recreate` consequence
+stands for the router, not for everything behind it — the git credential broker leaves; and the
+"launchers already fail-open/retry" line was false for the git path (oracle-fleet#679-r2).
+
 ### ADR-097 — Dispatch parallelism keys on declared footprints, not track labels
 
 **Accepted 2026-08-03.** Closes FU-086 knob 3's design question. **Decision:** per-repo worker
@@ -1577,7 +1585,7 @@ codeowner economics. **Consequences:** ADR-102's bucket text is fully correct ag
 IL-T15/T17 master-lane disposition simplifies away; the ADR-097 footprint HOLD and the #270
 replay coupling retire (conflicts route via the updater/MP-T06 as measured); FU-090's gauge =
 the exporter's existing walk over now-native depth; build items = Bucket A4/A2 then the next
-Goal's children; doc homes: issue-authoring.md, model-routing.md §M10, workflow.md.
+Goal's children; doc homes: issue-authoring.md, model-routing-history.md §M10, workflow.md.
 
 ### ADR-103 — The platform develops itself like a stack: replay-gated clauses, human-only timelines, weekly self-KPIs
 
@@ -1665,7 +1673,7 @@ doctrine changes stay operator-gated except plain factual wrongness.
 
 ### ADR-115 — Provider selection prices the JOB: Exacto delegated for cheap classes, an overhead-cost pin for priced ones
 
-**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing.md §M14).
+**Status:** Accepted (2026-08-26, the 0731 intake session — evidence in model-routing-history.md §M14).
 
 **Decision.** Provider choice is priced per successful JOB, not per token:
 `expected_cost = eff_price × tokens + p(fail | provider, model) × C_overhead`, where C_overhead
@@ -2315,3 +2323,97 @@ needs a rebuild or a planned rotation; the pin costs one apiserver restart on cp
 FU-260), while the endpoint flip afterwards restarts nothing (measured in the lab); client configs
 re-render after the flip (FU-259). Mechanism + evidence: [`controlplane-ha.md`](controlplane-ha.md).
 Tracker: FU-243.
+
+### ADR-137 — Control planes are role-named `cp-NN`; workers keep ad-hoc names (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21). **Decision:** a **control plane** carries a role name,
+`cp-NN`, with a single fleet-wide index and no chassis class in it — VM or metal, `cp-01`, `cp-02`,
+`cp-03`, … **Workers keep whatever name fits** (`wk-01`, `hp-01`, `m70s`, `wk-metal-03`, `nx-01`):
+ad-hoc, as they already are. Role is read from `machines/machines.yaml` and the node labels; for a
+worker the name promises nothing. **Considered:** *chassis-naming everything* (names are pinned at
+install, roles churn — but it hides the one role worth spotting instantly); *role-prefixing workers
+too* (a tier move then costs a wipe-and-reinstall, and this fleet moves tiers monthly — wk-02 left
+Longhorn, wk-metal-01 left kata, wk-metal-03 took `arc`, all in September); *ruling the name opaque
+and renaming nothing* (cheapest, but leaves a control plane reading `wk-` in etcd membership, BGP
+peer lists, alert labels and every incident timeline). **Why:** control-plane identity is read under
+pressure and by machines — `etcdctl member list`, `kubectl get nodes -l node-role…/control-plane`,
+BGP neighbours, the recovery recipes — while worker names are read at leisure; the naming rule
+should buy precision exactly where it is scarce and cost nothing where it is not (operator: "control
+plane names are more important than the worker tier"). **Consequences:** `wk-metal-02` is misnamed
+and becomes **`cp-03`** — at its NEXT reinstall for any other reason, never as its own outage, since
+the hostname is pinned at install (`HostnameConfig`, provider #296) and changing it on a running
+node ghosts it and drops etcd to two members (FU-262 carries the checklist); the CP index is
+fleet-wide, so the next control plane is `cp-04` whether it is a VM or a laptop; nothing else
+renames. Tracker: FU-262.
+
+### ADR-138 — A VM's disk image is a birth seed; the running substrate is `install.image`, moved in place (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21 — "POC both changes together"), landing behind
+[FU-235](follow-ups.md)'s declared-vs-live diff. **Decision:** `disk.file_id` on the Proxmox VMs
+carries `ignore_changes`, so it means only *what a NEW VM boots the first time*; the version a node
+actually runs is declared by `machine.install.image` (now set for VMs too, FU-253) and moved by
+`node-maintenance.sh upgrade` / `cp-upgrade` **in place**, exactly as metal already works.
+**Considered:** *accept the recreate* — the pure cattle reading, and what the declaration used to
+force: two control-plane VMs destroyed and rebuilt to change a patch version, with etcd member
+churn, `-exclude`-shaped applies and the FU-248 landmine in the way; *a per-VM `seed_version`
+knob* — keeps `plan` honest with no `ignore_changes`, at the price of a second version field per VM
+that rots the first time someone forgets it (the `pin_hostname` failure mode); *status quo* —
+upgrade in place and let the declaration lie, which is what FU-254 says nothing detects. **Why:**
+the attribute was asked to mean two things at once. It is a *creation* input the provider treats as
+a *live* one, so the model disagreed with [ADR-014](#adr-014--talos-upgrades-a-nocloud-vm-needs-the-nocloud-installer-amended-2026-09-18--the-hazard-is-the-image-not-the-vm)
+as amended — which says a nocloud VM upgrades in place given a platform-, schematic- and
+version-correct installer, proven on a disposable nx-02 VM 2026-09-19. One upgrade model for the
+whole fleet is also one less thing to get wrong at 2 a.m. **Consequences:** `plan` stops seeing a
+SCHEMATIC change on a live VM (both axes live in that one string) — the detector is
+`mgmt_node_drift{axis="schematic"}`, which is why the diff landed first; a deliberate rebuild is a
+planned `-replace` read before it runs; ADR-014's "extension changes are `tofu apply -replace`"
+consequence is superseded for VMs. Tracker: FU-263, FU-253.
+
+### ADR-139 — The egress proxy's shape: the git broker leaves, the gateway becomes its own project, HA waits for a measured store (2026-09-21)
+
+**Status:** Accepted (operator, 2026-09-21 — after oracle-fleet#679-r2 died cloning mid-roll).
+Amends [ADR-096](#adr-096--the-egress-proxy-becomes-the-modelbilling-router-fu-095-decision-api--budgeter)'s
+single-replica consequence. **Decision:** three steps, in order. **(1)** The git credential broker
+(`/git-token`, `/loop-git-token`) leaves `openrouter-proxy` for its own stateless Deployment, ≥2
+replicas, with the Secret-read RBAC it needs — the LLM path loses that grant. **(2)** FU-127's
+structured `{rail, harness, model, routing}` claim form lands before any repo split, so
+`model_id.py` stops being shared code. **(3)** The rest — the LLM rails plus the ADR-096 router —
+becomes its own image-producing repo named **`agent-gateway`** (services are named by role,
+exporters by the system they read), deployed by pinned image so the FU-044 revert class covers it;
+`model-classes.json` stays homelab config, mounted; a compat Service keeps
+`openrouter-proxy.agent-egress` resolving until consumers move. It stays single-replica on SQLite.
+**Deferred, not decided — gateway HA** (FU-271): in-process limiters double every cap at 2
+replicas, so a session store plus a durable store are picked after a per-request measurement.
+**Considered:** splitting the LLM passthrough from the router (every request meters into router
+state — 21 Go-usage call sites — so a split is a hop plus distributed state per call); CNPG and 2
+replicas now (unmeasured on the hot path; the limiters make 2 replicas wrong regardless);
+extracting before FU-127 (a byte-identical `model_id.py` in two repos trades one coupling for
+two); status quo. **Why:** the broker is the failure that bit — stateless, 3 of
+the proxy's 57 commits since June, yet down ~30 s on every roll, and a ride cloning in that window
+gets an empty password. And the coupling is low: 30 of 44 proxy-code commits touched nothing else,
+most co-changes are additive, so extraction costs a second PR on ~1 change in 4 and buys rolls
+decoupled from homelab merges (the 09-21 roll was a comment edit), the revert class, and backend
+freedom — measurement: [change-hotspots §2026-09-21](spikes/change-hotspots.md).
+**Consequences:** agent-runtime#144's broker retry stays as defense in depth; the renames sit in
+the glossary's pending list. Tracker: FU-269 (broker), FU-127 (structured ids), FU-270 (gateway
+project), FU-271 (HA measurement).
+
+### ADR-140 — A service's "may I lose a member now" lives in its own PodDisruptionBudget; maintenance verbs stay generic (2026-09-22)
+
+**Status:** Accepted (operator, 2026-09-22). Narrows how [ADR-132](#adr-132--the-management-box-reconciles-master-the-argocd-model-for-tofu-and-metal-end-state-2026-09-16)'s
+fleet floor is enforced. **Decision:** when a service must not lose a member right now, it says
+so in its PodDisruptionBudget, driven by a signal the service owns. The node-maintenance verbs
+only drain (PDB-respecting). They refuse up front when a budget spanning several nodes is already
+at 0, and they turn a drain that does not complete into a refusal (exit 2, uncordoned, retried),
+never a park. The first instance is Garage: a recording rule `garage:disruption_allowed` (cluster
+healthy AND resync backlog ≤ 1000, 10-minute hysteresis) is copied onto the `garage` PDB by a
+per-minute CronJob, fail closed. **Considered:** the gate inside `node-maintenance.sh` (#1880; the
+script learns every service's internals, and only this script's drains are protected); a
+backlog-aware readiness probe (after a rejoin all three peers carry backlogs at once, which would
+have emptied the S3 Service); a static `maxUnavailable: 1` (pod-Ready is connectivity, the same
+blind spot `cluster_healthy` has). **Why:** the 2026-09-22 rollout took a second zone down on a
+4.5–6.2k-block resync backlog while every generic check was green. The knowledge of when that is
+safe belongs to the service, and a PDB is the one place every drain already reads.
+**Consequences:** fail closed needs an override. It is an expiring PDB annotation, or
+`kubectl drain --disable-eviction` for a single drain. There are two belts (closed 2h, open
+against the signal). Design and override: [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22).

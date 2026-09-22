@@ -42,24 +42,31 @@ resource "kubernetes_manifest" "forgejo_pg" {
       # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
       # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (monitoring.tf).
       monitoring = { enablePodMonitor = true }
-      # Pin to the stable VM workers — the bare-metal nodes flap-reboot (qemu-guest-agent boot
-      # hang, see metal-node-flapping); a flap on a node hosting a PG instance breaks the cluster.
+      # One instance per PHYSICAL box (topology.kubernetes.io/zone = the chassis; the pve VMs all
+      # read `proxmox`). The old hostname pin to wk-01/wk-02 (from the metal-flapping era) put
+      # both instances on one hypervisor — found at the 2026-09-21 pve GPU-swap drain.
+      # Zone list = the untainted boxes with a std Longhorn disk: the volume is strict-local
+      # replica-1, so an instance only runs where its disk is (ADR-114, tofu/longhorn.tf).
       affinity = {
+        podAntiAffinityType = "required"
+        topologyKey         = "topology.kubernetes.io/zone"
         nodeAffinity = {
           requiredDuringSchedulingIgnoredDuringExecution = {
             nodeSelectorTerms = [{
               matchExpressions = [{
-                key      = "kubernetes.io/hostname"
+                key      = "topology.kubernetes.io/zone"
                 operator = "In"
-                values   = ["wk-01", "wk-02"]
+                values   = ["hp-01", "m70s"]
               }]
             }]
           }
         }
       }
+      # Promote the updated replica instead of restarting the primary in place on a spec change.
+      primaryUpdateMethod = "switchover"
       storage = {
         size         = "5Gi"
-        storageClass = "longhorn"
+        storageClass = kubernetes_storage_class.longhorn_local_std.metadata[0].name
       }
       bootstrap = {
         initdb = {

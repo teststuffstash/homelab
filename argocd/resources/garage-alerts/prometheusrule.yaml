@@ -129,6 +129,30 @@ spec:
               that shadowed multipart parts and stretched UploadPart p99 to 100 s on 2026-09-08
               without any sustained outage. Read the garage Loki tenant for which node id the
               peers cannot ping, then that node's disk latency (node_disk_write_time) and load.
+        # A ZONE is down: some partition has lost one of its three replicas. rf=3 across three
+        # physical zones at quorum 2 keeps serving (`cluster_available` stays 1), so every
+        # availability belt stays quiet — but the NEXT zone down takes those partitions to 1/3 and
+        # writes fail. `cluster_healthy` (every partition has ALL replicas up) is the exact
+        # predicate. It gates windows through garage:disruption_allowed below (the `garage` PDB;
+        # node-maintenance.sh read it directly 2026-09-20..22), and on the 09-20/21 windows a zone
+        # sat down ~10 min with nothing firing. GarageClusterDegraded
+        # needs a 5m window fully failed for 10m, i.e. ≥15 min of outage. Replay 09-14..09-21: the
+        # 1-min blips (6) and the 4-5 min episodes stay quiet; the 2026-09-21 11:03–11:10Z run
+        # fires. A deliberate zone window silences it (node-maintenance.sh's Garage regex).
+        - alert: GarageZoneDegraded
+          expr: |
+            min(cluster_healthy) == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage is running with a zone down — one more zone loss stops writes"
+            description: >-
+              `cluster_healthy` has read 0 for 5m: at least one partition is missing a replica, so
+              Garage is on quorum (2 of 3 zones). Reads and writes still work; a second zone down
+              stops them. Which zone: `count by (role_zone) (cluster_layout_node_connected == 0)`,
+              or the garage pods not Ready (`kubectl -n garage get pods -o wide`). If a window is
+              open on that node, this is expected and the window should be silencing it. Do NOT
+              start another node window or a metadata rotation until it clears.
         # Deletions not propagating: a table's GC backlog. GC pushes each tombstone to EVERY
         # replica before deleting it, so an unreachable peer parks the whole queue — garage-2
         # climbed 133k → 1.77 M across the 2026-09-08 stall day and drained at ~130k/h once
@@ -395,3 +419,93 @@ spec:
               numbers, not none. Read the CronJob's last Job log for "WARN bucket gauges" (admin
               token, ListBuckets) or "WARN pushgateway". Until fixed, GarageBucketQuotaNear and
               RegistryBucketCommitHeadroomLow reflect the last successful tick, not now.
+    # ── VOLUNTARY DISRUPTION: may a zone be taken down NOW? (2026-09-22) ──────────────────────
+    # docs/garage.md §Voluntary disruption. The ONE place this knowledge lives. The
+    # garage-disruption CronJob (argocd/resources/garage-disruption/) copies garage:disruption_allowed
+    # onto the `garage` PodDisruptionBudget's maxUnavailable (1/0, fail closed), and every drain
+    # asks the PDB. Management scripts know nothing Garage-specific.
+    #
+    # Found in the first box-run Talos rollout (2026-09-22): wk-metal-04 (garage-0's zone) went down
+    # at ~10:33Z with a resync backlog of 4.5–6.2k blocks per peer, after wk-metal-01 (garage-2's
+    # zone) had rejoined. `cluster_healthy` read 1. It measures CONNECTIVITY (every partition's
+    # replicas up), not "caught up"; Garage v2.3.0's /health and GetClusterHealth have no such
+    # notion (src/api/admin/special.rs, api.rs). Blocks written during the first absence sat on two
+    # zones, then on one. Replay: this rule reads 0 at every minute 09:50–10:40Z, the 10:33Z
+    # shutdown included (and 1 in the quiet early morning, e.g. 05:30Z at queue 49).
+    #
+    # The clauses, all three required, each over every peer:
+    #  • min(cluster_healthy) == 1: every partition has ALL its replicas up (a zone down or a peer
+    #    off the mesh reads 0 here from every surviving node's view);
+    #  • max(block_resync_queue_length) <= 1000: the previous absence has been copied back. 7-day
+    #    stats to 2026-09-22 (max over peers, 1-min steps): median 58, p95 2.6k, p99 10.6k, max
+    #    34.6k. The tail is reboot and churn spikes. It never reaches 0 (a background scrubber
+    #    keeps tens queued), so a zero gate would deadlock; 1000 sits above the steady state and
+    #    below a post-rejoin backlog. With the hysteresis below it was open ~85 % of those 7 days,
+    #    and the longest closed stretch was 82 min (GarageDisruptionBlocked's 2h has margin).
+    #  • count(block_resync_queue_length) >= max(cluster_storage_nodes): every storage node is
+    #    actually scraped. A peer whose queue we cannot see is not a peer we know is caught up.
+    # Considered and NOT gated: block_resync_errored_blocks (steady state 3–4 per pod, never 0 in 7
+    # days, spikes past 200 without making a zone unsafe); table_merkle_updater_todo_queue_length
+    # (every >10k excursion in the 2026-09-22 replay sat inside a resync-backlog excursion, so it
+    # adds nothing here; garage-meta-rotation gates on it for its own, heavier act).
+    #
+    # Hysteresis: the conjunction must hold at EVERY minute of the last 10 (min_over_time over a
+    # subquery). A pod that just rejoined flips cluster_healthy to 1 before its peers have queued
+    # what it missed, and the gate must not open in that gap. A minute with NO data counts as 0
+    # (`or on() vector(0)`): a scrape or Prometheus gap closes the gate instead of shortening the
+    # window it is judged on.
+    - name: garage-disruption
+      rules:
+        - record: garage:disruption_allowed
+          expr: |
+            min_over_time((
+              (
+                  (min(cluster_healthy) == bool 1)
+                * (max(block_resync_queue_length) <= bool 1000)
+                * (count(block_resync_queue_length) >= bool max(cluster_storage_nodes))
+              ) or on() vector(0)
+            )[10m:1m])
+        # Closed too long: no zone node can have a window. Read from the PDB itself (what drains
+        # see), so it also covers a Garage pod not Ready for 2h and a controller that died with
+        # the budget closed. 2h = the 7-day longest closed stretch (82 min) plus margin.
+        - alert: GarageDisruptionBlocked
+          expr: |
+            kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="garage",poddisruptionbudget="garage"} == 0
+          for: 2h
+          labels: { severity: warning }
+          annotations:
+            summary: "Garage has refused voluntary disruption for 2h, so no zone node can be drained"
+            description: >-
+              The `garage` PodDisruptionBudget has allowed 0 disruptions for 2h. Every drain of a
+              Garage zone node (wk-metal-01, wk-metal-04, m70s) waits, and the node-maintenance
+              verbs refuse (the reconciler retries them). Check in this order: a garage pod not
+              Ready (`kubectl -n garage get pods`); `garage:disruption_allowed` = 0, whose three
+              clauses are `min(cluster_healthy)`, `max(block_resync_queue_length)` (above 1000 =
+              a resync backlog that is not draining; `garage worker list` on the pods) and
+              `count(block_resync_queue_length)` vs `max(cluster_storage_nodes)` (a peer not
+              scraped); or the garage-disruption CronJob not running (its last Job log). Emergency
+              override: docs/garage.md §Voluntary disruption.
+        # The dangerous direction: the budget is OPEN while the signal is not 1. Either the CronJob
+        # stopped (or cannot patch) after opening it, or the manual override is set. Effective
+        # maxUnavailable = expected_pods - desired_healthy (kube-state-metrics has no spec field).
+        # 5m = five controller ticks.
+        - alert: GarageDisruptionBudgetOpenAgainstSignal
+          expr: |
+            (
+                kube_poddisruptionbudget_status_expected_pods{namespace="garage",poddisruptionbudget="garage"}
+              - kube_poddisruptionbudget_status_desired_healthy{namespace="garage",poddisruptionbudget="garage"}
+            ) > 0
+            unless on() (garage:disruption_allowed == 1)
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The garage PodDisruptionBudget lets a zone go while Garage's signal says it must not"
+            description: >-
+              The `garage` PDB allows a disruption, but `garage:disruption_allowed` has not read 1
+              for 5m. A drain could take a zone while the cluster is degraded or a resync backlog
+              is still draining. Either the manual override is set (annotation
+              garage.teststuff.net/open-until on `kubectl -n garage get pdb garage -o yaml`;
+              expected while it lasts), or the garage-disruption CronJob stopped reconciling. Read
+              its last Job log: an unreachable Prometheus leaves the PDB closed, so this is a PATCH
+              or scheduling failure. Close it by hand meanwhile with `kubectl -n garage patch pdb
+              garage --type merge -p '{"spec":{"maxUnavailable":0}}'`.

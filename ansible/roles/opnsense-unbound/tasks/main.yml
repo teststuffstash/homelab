@@ -51,3 +51,45 @@
     data: { unbound: { advanced: "{{ unbound_advanced }}" } }
   when: unbound_advanced_drift | default([]) | length > 0
   notify: reconfigure unbound
+
+# --- NXDOMAIN wildcard zones (unbound_nxdomain_wildcards) ---------------------------------
+# One DNSBL policy (OPNsense ≥ 26.1: a policy's `wildcards` blocks the domain AND every name under
+# it; `nxdomain: 1` answers NXDOMAIN instead of 0.0.0.0). Why it exists: a resolver walking its
+# search list must get NXDOMAIN for a name that is not ours, so it falls through to the next
+# candidate — see group_vars/opnsense.yml unbound_nxdomain_wildcards. Matched by description;
+# set only on drift; then `service/dnsbl` regenerates the list and the handler reconfigures.
+- name: Find the NXDOMAIN wildcard policy
+  oxlorg.opnsense.raw: { module: unbound, controller: settings, command: search_dnsbl }
+  register: unbound_dnsbl_search
+
+- name: Compute the NXDOMAIN wildcard policy's state
+  ansible.builtin.set_fact:
+    unbound_nx_row: >-
+      {{ (unbound_dnsbl_search.response.rows | default([])
+          | selectattr('description', 'equalto', unbound_nxdomain_description) | list + [{}]) | first }}
+    unbound_nx_want: "{{ unbound_nxdomain_wildcards | join(',') }}"
+
+- name: "NXDOMAIN wildcard policy ({{ unbound_nxdomain_wildcards | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: unbound
+    controller: settings
+    command: "{{ 'set_dnsbl' if unbound_nx_row.uuid is defined else 'add_dnsbl' }}"
+    params: "{{ [unbound_nx_row.uuid] if unbound_nx_row.uuid is defined else [] }}"
+    action: post
+    data:
+      blocklist:
+        enabled: "1"
+        wildcards: "{{ unbound_nx_want }}"
+        nxdomain: "1"
+        description: "{{ unbound_nxdomain_description }}"
+  when: >-
+    unbound_nxdomain_wildcards | length > 0 and
+    (unbound_nx_row.uuid is not defined
+     or (unbound_nx_row.wildcards | default('') | replace(' ', '')) != unbound_nx_want
+     or (unbound_nx_row.enabled | default('0') | string) != '1')
+  register: unbound_nx_set
+  notify: reconfigure unbound
+
+- name: Regenerate the DNSBL data
+  oxlorg.opnsense.raw: { module: unbound, controller: service, command: dnsbl, action: post }
+  when: unbound_nx_set is changed

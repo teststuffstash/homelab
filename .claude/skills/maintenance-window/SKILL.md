@@ -31,17 +31,29 @@ and compared after.** Not "a risky act" — you do not get to judge that in adva
 was a one-line config change with a clean plan and a rehearsal behind it.
 
 ```bash
-devbox run maint -- open --reason "<what you are doing, in the responder's words>"
+devbox run maint -- open --reason "<what you are doing, in the responder's words>"   # prints the window id
 # ... do the work, running `check` between steps ...
-devbox run maint -- check
-devbox run maint -- close
+devbox run maint -- check [--id <id>]
+devbox run maint -- close [--id <id>]
 ```
 
 `open` snapshots firing alerts, `sum(up)`, non-Running pods and the cilium apiserver-backend
 count, then writes the [declared window](../../../docs/glossary.md) (`agents/seat-window.sh` →
 the `responder-window` ConfigMap) so the responder does not burn triage sessions on alerts a
-person is causing. `check` diffs live against that baseline. `close` refuses while anything is
+person is causing. The box's node reconciler also reads that record and will NOT sync while any
+window is open — a window on a `reconcile: auto` node holds it off that node too. When the window
+exists to WATCH the reconciler act (an attended sync), open it with `--node <n>
+--admit-reconciler`. `check` diffs live against that baseline. `close` refuses while anything is
 still off baseline.
+
+**Note your window id.** `open` prints it (`✓ window <id> open …`) and keeps the baseline in a
+slot of its own (`~/.claude/maintenance-window/<id>/`). Without `--id`, `check`/`close` act on
+the ONE open window and **refuse, listing them, when several are open** — which is the normal
+state while a subagent runs its own window beside yours (a seat and its subagent clobbered each
+other's single slot on 2026-09-22). So whenever a subagent may have a window open, pass it
+explicitly: `devbox run maint -- check --id <id>`, `devbox run maint -- close --id <id>`;
+`devbox run maint -- list` shows them. A stale slot from a dead session goes with
+`close --id <it> --force`.
 
 A probe that **could not be read** prints `⚠ … UNREADABLE` and blocks exactly like a regression —
 "we did not look" is never `ok`, and a dead apiserver still yields the whole breakdown rather than

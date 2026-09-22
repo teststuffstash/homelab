@@ -61,6 +61,7 @@ MAP=(
   "py-compile-lint:\.py$"
   "shim-self-test:^scripts/claude-model-shim\.py"
   "machines-lint:^machines/"
+  "maint-self-test:^scripts/maintenance-window"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"

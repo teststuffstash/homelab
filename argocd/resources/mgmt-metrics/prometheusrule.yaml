@@ -1,0 +1,363 @@
+# Belts on the management box itself (FU-252's liveness half). The standing-refusal belt —
+# the AGE of the oldest unapplied residue, the 2026-09-14..18 failure — is `MgmtApplyResidueStanding`
+# in github-exporter, read from master's commit status. These cover the box-side blind spot: a
+# loop or box that has stopped posting leaves no status for it to read.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-metrics
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-apply
+      rules:
+        # NO residue-age alert here: that belt already exists and has ONE home —
+        # `MgmtApplyResidueStanding` (argocd/resources/github-exporter/, cdf01961, 2026-09-18), read
+        # from master's commit status. The mgmt_apply_unapplied_* series below are data for it and
+        # for dashboards; the belts in this file cover what a status CANNOT show — a loop or box
+        # that has stopped posting at all (a dead loop leaves no status, so the exporter is silent).
+        # The loop itself: ticks every 5 min, an apply may hold it up to 40 min.
+        - alert: MgmtApplyLoopStale
+          expr: |
+            (time() - mgmt_apply_last_ok_tick_timestamp_seconds) > 3600
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box apply loop has not completed a tick in over an hour"
+            description: >-
+              mgmt-apply ticks every 5 minutes; none has finished its evaluation for over an hour
+              (a PROBE-FAIL — fetch, lock or classifier — does not count as a tick). On the box:
+              `systemctl status mgmt-apply.timer`, `journalctl -u mgmt-apply -n 50`.
+        # Exporter up but the loop's file never written (a fresh box, a moved textfile dir):
+        # the two belts above would be blind.
+        - alert: MgmtApplyMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_apply_last_ok_tick_timestamp_seconds
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box is scraped but publishes no mgmt_apply_* metrics"
+            description: >-
+              node_exporter on the box answers, but the apply loop's textfile
+              (/var/lib/node-exporter-textfile/mgmt_apply.prom) is missing, so MgmtApplyLoopStale
+              cannot fire. Check the dir exists and the loop has run since
+              the metric change landed (scripts/mgmt-apply.sh emit_metrics).
+        # The post-apply health gate (docs/management-box.md §MB3 "Talos config applies"): the box
+        # auto-applied a Talos machine config and the cluster did not come back to its baseline
+        # within the bounded post-check. The unattended twin of the seat's /maintenance-window
+        # `check` — the 2026-09-20 lesson (a CP config apply took the API path down while every
+        # node read Ready). REPORTS ONLY: the loop does not revert (FU-273: default forward).
+        - alert: MgmtApplyPostCheckFailed
+          expr: |
+            mgmt_apply_post_check_failed == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box auto-applied a Talos config and the cluster regressed"
+            description: >-
+              mgmt-apply's post-apply health check found a regression against the baseline it took
+              before the apply (new firing alerts, lost scrape targets, a cilium agent without the
+              10.96.0.1:443 apiserver backend, new hard-failed pods, or nodes leaving the API) and it
+              did not clear within the post-check window. What regressed: the `management-apply`
+              status on the applied master commit, or `journalctl -u mgmt-apply -n 80` on
+              192.168.2.53. Nothing was reverted — a revert is a human commit (FU-273). The known
+              cilium signature's fix: `kubectl -n kube-system rollout restart ds/cilium`. Clears on
+              the next Talos config apply whose post-check is clean, or by hand once the cluster is
+              whole: `rm /var/lib/mgmt/apply/post-check-failed` on the box.
+    - name: mgmt-node
+      rules:
+        - alert: MgmtBoxDown
+          expr: |
+            up{job="mgmt-node"} == 0 or absent(up{job="mgmt-node"})
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box (192.168.2.53) is not answering its scrape"
+            description: >-
+              No scrape of the box's node_exporter for 15m — the box is down, off the LAN, or its
+              firewall/exporter unit failed (a NixOS activation that the gate rolled back reverts
+              the exporter too). The out-of-band applier is then gone: no plan-on-PR sentinel, no
+              apply loop. `ssh` it via the pinned key (docs/management-box.md §MB1).
+    # FU-235 — the declared-vs-live node diff (scripts/mgmt-probe.sh check_nodes, the belt every
+    # 15 min, docs/management-box.md §MB2). mgmt_node_drift{node,axis} is 1 when declaration and
+    # live disagree, 0 when checked and matched; a read failure publishes NO series (never a false
+    # 1). The `for:` is per axis class — how long each can legitimately differ:
+    #   reachable/registered  a reinstall window takes a node off for well under an hour
+    #   labels/taints         applied LIVE (Talos nodeLabels, the taint resource) — minutes
+    #   schematic/ephemeral_disk  install-time: only a window fixes them, and windows queue (24h,
+    #                         the TalosFleetVersionSplit reasoning)
+    # The VERSION axis has no alert here on purpose: TalosFleetVersionSplit (talos-substrate/) owns
+    # the rollout-stalled case, and a second 24h alert on the same windows would double-page.
+    - name: mgmt-node-drift
+      rules:
+        - alert: MgmtNodeMissing
+          expr: |
+            mgmt_node_drift{axis=~"reachable|registered"} == 1
+          for: 2h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} is declared but not {{ $labels.axis }} — for 2h"
+            description: >-
+              The management box's node diff finds {{ $labels.node }} declared (tofu
+              node_install_targets / node_declared_k8s) but
+              {{ if eq $labels.axis "reachable" }}not answering the Talos API{{ else }}absent from the
+              cluster as a Node object{{ end }} for 2h — longer than a reinstall window. The
+              2026-09-21 case: wk-metal-02 answered talosctl with no Node object for ~12 h and nothing
+              fired. Read `talosctl -n <ip> version` / `kubectl get node {{ $labels.node }}`; the
+              box's view is `journalctl -u mgmt-belt` on 192.168.2.53.
+        - alert: MgmtNodeLiveStateDrift
+          expr: |
+            mgmt_node_drift{axis=~"labels|taints"} == 1
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }}'s {{ $labels.axis }} differ from the declaration for 1h"
+            description: >-
+              The Node object's {{ $labels.axis }} disagree with what tofu declares
+              (node_declared_k8s in tofu/outputs.tf — only keys tofu itself sets are compared, so
+              an imperative `kubectl label` on one of those keys counts too). Both are applied live,
+              so an hour is not a rollout. The exact key and both values are in the box's belt log:
+              `journalctl -u mgmt-belt | grep '{{ $labels.node }} {{ $labels.axis }}'`. The 2026-09-12
+              case: kata declared on four laptops, live on two (FU-235).
+        - alert: MgmtNodeInstallDrift
+          expr: |
+            mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
+          for: 24h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} runs an install that differs from the declaration ({{ $labels.axis }}) for 24h"
+            description: >-
+              An install-time field differs: {{ if eq $labels.axis "schematic" }}the node's Talos
+              schematic is not the one its declaration selects{{ else }}the EPHEMERAL volume is not on
+              the disk its VolumeConfig selects{{ end }}. tofu plans clean on this class by
+              construction — Talos honours it only at the next install — so only a maintenance window
+              (reinstall or upgrade with the declared image) resolves it. The 2026-09-16 case: nx-01
+              after #1717, plain schematic and EPHEMERAL on the SATA disk. docs/management-box.md §MB4.
+    - name: mgmt-belt
+      rules:
+        # The drift alerts above are only as live as the belt that writes the series.
+        - alert: MgmtBeltStale
+          expr: |
+            (time() - mgmt_probe_last_run_timestamp{mode="belt"}) > 3600
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box drift belt has not finished a run in over an hour"
+            description: >-
+              mgmt-belt runs every 15 minutes; none has finished for over an hour, so every
+              mgmt_node_drift series is frozen at its last value. On the box:
+              `systemctl status mgmt-belt.timer`, `journalctl -u mgmt-belt -n 50`.
+        - alert: MgmtBeltMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_probe_last_run_timestamp{mode="belt"}
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box is scraped but publishes no drift-belt metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_probe_belt.prom
+              is missing, so MgmtBeltStale and the MgmtNode* drift alerts are blind. Check the belt
+              has run since the change that publishes it landed (scripts/mgmt-probe.sh publish).
+    # ADR-132 §MB4 layers 3–5 — the node reconciler (scripts/mgmt-reconcile.sh, a box loop every
+    # 10 min). mgmt_reconcile_node_state{node,state} is one-hot per `reconcile: auto` node over
+    # idle|pending|syncing|parked; mgmt_reconcile_sync_started_timestamp_seconds{node} is the
+    # running sync's start (0 = none). PENDING (a gate refused, nothing touched) has no alert of
+    # its own: a diff that never syncs is already MgmtNodeInstallDrift / TalosFleetVersionSplit at 24h.
+    - name: mgmt-reconcile
+      rules:
+        - alert: MgmtReconcileParked
+          expr: |
+            mgmt_reconcile_node_state{state="parked"} == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box's reconciler PARKED {{ $labels.node }} — its one attempt failed"
+            description: >-
+              The node reconciler ran `node-maintenance.sh upgrade {{ $labels.node }}` for its
+              declared install and it did not end in sync (the verb failed after touching the node,
+              exited 0 with the diff still non-zero, or the loop died mid-sync). One attempt per
+              declared target is the rule — a bad disk must never become a reinstall loop — so it
+              will NOT retry until the declaration changes or a human clears the state. Read the
+              node (cordoned? window open? which image?), then the reason:
+              `jq . /var/lib/mgmt/reconcile/state.json`, `journalctl -u mgmt-reconcile` on
+              192.168.2.53. Clear with `rm /var/lib/mgmt/reconcile/state.json` once the node is
+              whole. docs/management-box.md §MB4.
+        - alert: MgmtReconcileSyncStuck
+          expr: |
+            mgmt_reconcile_sync_started_timestamp_seconds > 0
+              and (time() - mgmt_reconcile_sync_started_timestamp_seconds) > 3 * 3600
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The reconciler's sync of {{ $labels.node }} has run for over 3h"
+            description: >-
+              A reconciler window on {{ $labels.node }} opened over 3 hours ago and has not
+              finished — past the upgrade verb's own bounds for a node with nothing to settle (the
+              unit's hard stop is 5h; the next tick then parks it). The node is likely cordoned,
+              draining, or waiting on a floor. `journalctl -fu mgmt-reconcile` on 192.168.2.53;
+              `kubectl get node {{ $labels.node }}`.
+        # The loop does not tick while a sync runs (a oneshot), so staleness is judged only when
+        # no sync is open — the stuck alert above owns the long-sync case.
+        - alert: MgmtReconcileLoopStale
+          expr: |
+            (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
+              unless on (instance) (max by (instance) (mgmt_reconcile_sync_started_timestamp_seconds) > 0)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box's node reconciler has not evaluated in over an hour"
+            description: >-
+              mgmt-reconcile ticks every 10 minutes and no sync is open, yet none has evaluated for
+              over an hour — it cannot read an input (the main state's node_install_targets, the
+              inventory, the node diff) or its timer stopped. Every reconcile:auto node's state is
+              frozen. `systemctl status mgmt-reconcile.timer`, `journalctl -u mgmt-reconcile -n 50`.
+        - alert: MgmtReconcileMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_reconcile_last_run_timestamp_seconds
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box is scraped but publishes no mgmt_reconcile_* metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_reconcile.prom
+              is missing, so MgmtReconcileParked / SyncStuck / LoopStale are blind. Check the
+              mgmt-reconcile timer is active (nixos/hosts/mgmt/default.nix) and has run since it landed.
+    # ── THE ROLLOUT DIFFERENTIAL (FU-273; docs/management-box.md §MB4 "The rollout policy") ──────
+    # The ONE automatic halt of a Talos rollout: worse on the nodes that just moved than on the ones
+    # still behind, measured only after each node's own upgrade settled, and seen in more than one
+    # namespace. A plain alert never halts (default forward); the reconciler reads THIS alert
+    # (Prometheus API) and stops advancing while it fires. A revert stays a human commit.
+    #
+    # "Upgraded" is not "the highest version string" — PromQL cannot order versions, and a rollback
+    # drill moves nodes DOWN. It is "the node's current Talos version appeared within the last 2 d"
+    # (the rollout's own deadline is < 1 d); "behind" is every node on a version NO node moved to in
+    # that horizon. A node that sat on the new version before the horizon is on neither side.
+    - name: mgmt-rollout
+      rules:
+        # When each node's CURRENT version first appeared (5-min resolution, 2-d horizon; a version
+        # older than the horizon reads as the horizon's first step).
+        - record: mgmt:node_talos_since:timestamp
+          expr: |
+            min_over_time(timestamp(max by (node, os_image) (kube_node_info{os_image=~"Talos.*"}))[2d:5m])
+              and on (node, os_image) max by (node, os_image) (kube_node_info{os_image=~"Talos.*"})
+        - record: mgmt:node_rollout_upgraded:since
+          expr: |
+            mgmt:node_talos_since:timestamp > time() - 2 * 86400 + 1800
+        - record: mgmt:node_rollout_behind:since
+          expr: |
+            mgmt:node_talos_since:timestamp unless on (os_image) mgmt:node_rollout_upgraded:since
+        # The upgraded nodes the comparison may read: 75 min past BOTH their version change and
+        # their last boot. The upgrade itself restarts every DaemonSet pod (PodSigkilled /
+        # NodeRebooted are expected) — 60 min is the restart window below, +15 min for the boot.
+        - record: mgmt:node_rollout_settled:since
+          expr: |
+            (mgmt:node_rollout_upgraded:since < time() - 4500)
+              unless on (node)
+                (max by (node) (
+                   label_replace(node_boot_time_seconds, "internal_ip", "$1", "instance", "(.*):9100")
+                     * on (internal_ip) group_left (node) max by (internal_ip, node) (kube_node_info)
+                 ) > time() - 4500)
+        # Signal 1: containers that restarted in the last hour, per node and namespace.
+        - record: mgmt:node_restarting_containers:1h
+          expr: |
+            count by (node, namespace) (
+              (max by (namespace, pod, uid, container) (increase(kube_pod_container_status_restarts_total[1h])) > 0)
+                * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+            )
+        # Signal 2: pods scheduled on the node, not finished, and not Ready — per node and namespace,
+        # and a zero-filled per-node total so a 30-min average means "pod-minutes", not "while present".
+        - record: mgmt:node_unready_pods
+          expr: |
+            count by (node, namespace) (
+              (
+                (max by (namespace, pod, uid) (kube_pod_status_ready{condition="false"}) == 1)
+                  and on (uid) (max by (uid) (kube_pod_status_phase{phase=~"Running|Pending"}) == 1)
+              )
+                * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+            )
+        - record: mgmt:node_unready_pods:total
+          expr: |
+            sum by (node) (mgmt:node_unready_pods)
+              or on (node) (0 * max by (node) (kube_node_info{os_image=~"Talos.*"}))
+        # Per side: the mean per node (zero-filled, so a quiet node counts), plus the upgraded
+        # side's total and namespace spread — the floors.
+        - record: mgmt:rollout_signal:avg
+          expr: |
+            label_replace(label_replace(avg(
+                (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_settled:since)
+                  or on (node) (0 * max by (node) (mgmt:node_rollout_settled:since))
+              ), "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(avg(
+                (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_behind:since)
+                  or on (node) (0 * max by (node) (mgmt:node_rollout_behind:since))
+              ), "signal", "container-restarts", "", ""), "side", "behind", "", "")
+            or
+            label_replace(label_replace(avg(
+                avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_settled:since
+              ), "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(avg(
+                avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_behind:since
+              ), "signal", "unready-pods", "", ""), "side", "behind", "", "")
+        - record: mgmt:rollout_signal:sum
+          expr: |
+            label_replace(label_replace(
+                sum(mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since),
+              "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(
+                sum(mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since),
+              "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+        - record: mgmt:rollout_signal:namespaces
+          expr: |
+            label_replace(label_replace(
+                count(count by (namespace) (mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since)),
+              "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+            or
+            label_replace(label_replace(
+                count(count by (namespace) (mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since)),
+              "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+        # Materially worse = the upgraded mean ≥ 3× the behind mean + 1 (the +1 keeps a behind side
+        # at zero from turning one event into "infinitely worse"), from ≥ 3 restarting containers /
+        # ≥ 2 unready pods in ≥ 2 namespaces on the upgraded side — one flaky pod never halts a
+        # fleet — with ≥ 2 nodes still behind to compare against, held for 30 min.
+        - alert: MgmtRolloutDifferential
+          expr: |
+            (
+              (
+                mgmt:rollout_signal:avg{side="upgraded",signal="container-restarts"}
+                  > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="container-restarts"} + 1)
+                and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="container-restarts"} >= 3)
+              )
+              or
+              (
+                mgmt:rollout_signal:avg{side="upgraded",signal="unready-pods"}
+                  > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="unready-pods"} + 1)
+                and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="unready-pods"} >= 2)
+              )
+            )
+              and on (signal) (mgmt:rollout_signal:namespaces{side="upgraded"} >= 2)
+              and on () (count(mgmt:node_rollout_behind:since) >= 2)
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Talos rollout: {{ $labels.signal }} worse on the just-upgraded nodes than on the ones still behind"
+            description: >-
+              Per node, {{ $labels.signal }} averages {{ $value | printf "%.1f" }} on the nodes that moved
+              Talos version in the last 2 days and settled (≥75 min since the change and the boot:
+              {{ range query "mgmt:node_rollout_settled:since" }}{{ .Labels.node }} → {{ .Labels.os_image }};
+              {{ end }}) against
+              {{ with query (printf "mgmt:rollout_signal:avg{side='behind',signal='%s'}" $labels.signal) }}{{ . | first | value | printf "%.1f" }}{{ end }}
+              on the {{ with query "count(mgmt:node_rollout_behind:since)" }}{{ . | first | value }}{{ end }}
+              nodes still behind — {{ with query (printf "mgmt:rollout_signal:sum{signal='%s'}" $labels.signal) }}{{ . | first | value }}{{ end }}
+              on the upgraded side across
+              {{ with query (printf "mgmt:rollout_signal:namespaces{signal='%s'}" $labels.signal) }}{{ . | first | value }}{{ end }}
+              namespaces, for 30 min. The node reconciler holds the rollout (no further node advances)
+              while this fires; it does NOT revert. Compare the two sides per node
+              (`mgmt:node_restarting_containers:1h`, `mgmt:node_unready_pods`) before deciding; a revert
+              is a human commit of the declaration (docs/management-box.md §MB4 "The rollout policy").

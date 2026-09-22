@@ -1,10 +1,26 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n>]
-#   bash scripts/maintenance-window.sh check
-#   bash scripts/maintenance-window.sh close
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]]
+#   bash scripts/maintenance-window.sh check [--id <window-id>]
+#   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]
+#   bash scripts/maintenance-window.sh list              # the windows this tool has open (its state slots)
 #   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
+#   bash scripts/maintenance-window.sh snapshot          # probes 1–4 as JSON on stdout; exit 1 if any read failed
+#   bash scripts/maintenance-window.sh compare <file>    # probes 1–4 now vs a `snapshot` file; exit 2 on regression
+#
+# ONE STATE SLOT PER WINDOW: `open` keeps its baseline under $STATE_DIR/<window-id>/, keyed by the
+# seat-window id it prints. `check`/`close` take `--id`; without it they use the ONE open slot and
+# REFUSE (listing them) when there are several — never a guess. The first cut kept a single
+# per-user slot, so on 2026-09-22 a seat and its subagent with windows open at once clobbered each
+# other: the second `open` overwrote the first's baseline and window id, and the first `close`
+# would have closed the subagent's window (GAPS maintenance-window-G1). A slot lives until its
+# `close` succeeds, so a stale one from a dead session makes the no-`--id` form refuse: `list`,
+# then `close --id <it> --force`.
+#
+# `snapshot` + `compare` are the UNATTENDED form — no window, no CI probe (the caller has no gh):
+# the management box's apply loop brackets a Talos config apply with them (scripts/mgmt-apply.sh,
+# docs/management-box.md §MB3 "Talos config applies"). Same probes, same verdicts, one home.
 #
 # WHY. `agents/seat-window.sh` declares a window to the responder and `node-maintenance.sh`
 # opens the Alertmanager silences — both only ever wired for NODE maintenance. Everything else
@@ -33,10 +49,25 @@ set -euo pipefail
 
 ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 STATE_DIR="${MAINT_STATE_DIR:-$HOME/.claude/maintenance-window}"
-BASE="$STATE_DIR/baseline.json"
+# Per-window slot: $STATE_DIR/<key>/{baseline.json,window-id,meta.json}. <key> IS the seat-window
+# id for every slot `open` writes; `window-id` inside is the id close hands to seat-window.sh (it
+# can be empty only for a migrated pre-slot state whose open never recorded one). BASE/WID are set
+# by use_slot() once the verb has resolved which window it is acting on.
+BASE=""
+WID=""
+SLOT=""
 PROM="${PROM_URL:-http://192.168.40.13:9090}"
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$ROOT/tofu/talosconfig}"
+# ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, not in the checkout, and
+# `devbox run` exports devbox.json's KUBECONFIG/TALOSCONFIG=$PWD/tofu/* regardless — a path that
+# does not exist there. kubectl then fell back to localhost:8080 and every box-side run of the
+# upgrade verbs failed (found 2026-09-21; the only box run before was the LAB=1 rehearsal, which
+# passed explicit paths). So a configured path that does not exist yields to the box's copy.
+# Same three lines in node-maintenance.sh, controlplane-upgrade.sh, maintenance-window.sh.
+[ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
+[ -f "$TALOSCONFIG" ] || { [ -f /var/lib/mgmt/talosconfig ] && TALOSCONFIG=/var/lib/mgmt/talosconfig; }
+export TALOSCONFIG
 
 # FAIL LOUDLY on a missing kubeconfig. Caught building this script: run from a git worktree, ROOT
 # had no tofu/kubeconfig (gitignored, so a fresh worktree lacks it), kubectl fell through to
@@ -239,10 +270,19 @@ snapshot() {
           cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber), nodes_ok:$nodes_ok}'
 }
 
+# Is a snapshot file a baseline worth banking? Non-zero + the unread flags on stderr if not.
+baseline_readable() { # <snapshot-file>
+  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok
+         and (.cilium_have > 0 or .cilium_unknown == 0)' >/dev/null "$1" && return 0
+  jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok) cilium[have=\(.cilium_have) unknown=\(.cilium_unknown)]"' "$1" >&2
+  return 1
+}
+
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --admit-reconciler) admit=1; shift ;;
       --reason) reason="$2"; shift 2 ;;
       --alerts) alerts="$2"; shift 2 ;;
       --hours)  hours="$2";  shift 2 ;;
@@ -252,6 +292,10 @@ cmd_open() {
   done
   [ -n "$reason" ] || { echo "open: --reason is required (it is what the responder reads)" >&2; exit 64; }
   mkdir -p "$STATE_DIR"
+  # The baseline is taken BEFORE the window exists (the window id is minted by seat-window.sh),
+  # so it lands in a pending slot and is renamed to the id once the window is open.
+  local pend; pend="$(mktemp -d "$STATE_DIR/.pending.XXXXXX")"
+  BASE="$pend/baseline.json"
   echo "== baseline =="
   snapshot > "$BASE"
   jq -r '"  at=\(.at) targets_up=\(.up) alerts=\(.alerts|length) hard_failed_pods=\(.pods_bad) cilium[have=\(.cilium_have) missing=\(.cilium_missing) unknown=\(.cilium_unknown)] nodes=\(.nodes)"' "$BASE"
@@ -259,24 +303,100 @@ cmd_open() {
   # favourably against it. Refuse rather than bank one.
   # `cilium_have == 0 and cilium_unknown > 0` is the same thing as an unread signal: no agent
   # answered, so the baseline knows nothing about the backend the whole tool is built around.
-  jq -e '.alerts_ok and .up_ok and .pods_ok and .cilium_ok and .nodes_ok
-         and (.cilium_have > 0 or .cilium_unknown == 0)' >/dev/null "$BASE" || {
-    jq -r '"  UNREADABLE at baseline: alerts_ok=\(.alerts_ok) up_ok=\(.up_ok) pods_ok=\(.pods_ok) cilium_ok=\(.cilium_ok) nodes_ok=\(.nodes_ok) cilium[have=\(.cilium_have) unknown=\(.cilium_unknown)]"' "$BASE" >&2
+  baseline_readable "$BASE" || {
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
-    rm -f "$BASE"; exit 1
+    rm -rf "$pend"; exit 1
   }
   local args=(open --reason "$reason" --alerts "$alerts" --hours "$hours"
-              --note "opened by scripts/maintenance-window.sh; baseline in $BASE")
+              --note "opened by scripts/maintenance-window.sh; baseline in $STATE_DIR/<this id>/")
   [ -n "$node" ] && args+=(--node "$node")
-  bash "$ROOT/agents/seat-window.sh" "${args[@]}"
+  [ -n "$admit" ] && args+=(--admit-reconciler)
+  local out id
+  out="$(bash "$ROOT/agents/seat-window.sh" "${args[@]}")" || { rm -rf "$pend"; exit 1; }
+  printf '%s\n' "$out"
+  id="$(printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' | head -1)"
+  # No id means no slot key and nothing close could target: say so loudly rather than bank an
+  # anonymous slot that every later no-`--id` call would have to guess about.
+  if [ -z "$id" ] || [ -e "$STATE_DIR/$id" ]; then
+    echo "open: could not record the window id (got '${id}') — the window MAY be open; baseline kept at $BASE" >&2
+    echo "  'bash agents/seat-window.sh list' to find it" >&2
+    exit 1
+  fi
+  printf '%s' "$id" > "$pend/window-id"
+  jq -n --arg id "$id" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg until "$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)" \
+        '{id:$id, reason:$reason, opened_at:$at, until:$until}' > "$pend/meta.json"
+  mv "$pend" "$STATE_DIR/$id"
+  echo "  maintenance-window slot: $id — pass '--id $id' to check/close if any other session may have a window open"
 }
 
-cmd_check() {
-  [ -f "$BASE" ] || { echo "check: no baseline — run 'open' first" >&2; exit 1; }
-  local b; b="$(cat "$BASE")"
-  local now; now="$(snapshot)"
-  local rc=0
-  echo "== check vs baseline ($(jq -r .at <<<"$b")) =="
+# ---- slot resolution --------------------------------------------------------------------------
+# A pre-slot state (baseline.json + window-id directly in $STATE_DIR, written by the single-slot
+# version) becomes a slot of its own, so a window opened before the upgrade still closes cleanly.
+migrate_legacy() {
+  [ -f "$STATE_DIR/baseline.json" ] || return 0
+  local id=""; [ -s "$STATE_DIR/window-id" ] && id="$(cat "$STATE_DIR/window-id")"
+  local key="${id:-legacy}"
+  [ -e "$STATE_DIR/$key" ] && return 0
+  mkdir -p "$STATE_DIR/$key"
+  mv "$STATE_DIR/baseline.json" "$STATE_DIR/$key/baseline.json"
+  printf '%s' "$id" > "$STATE_DIR/$key/window-id"
+  rm -f "$STATE_DIR/window-id"
+}
+slots() { # one key per line, oldest first
+  [ -d "$STATE_DIR" ] || return 0
+  local d
+  for d in "$STATE_DIR"/*/; do
+    [ -f "$d/baseline.json" ] || continue
+    d="${d%/}"; printf '%s %s\n' "$(jq -r '.at // ""' "$d/baseline.json" 2>/dev/null)" "${d##*/}"
+  done | sort | awk '{print $NF}'
+}
+slot_line() { # <key>
+  local m="$STATE_DIR/$1/meta.json" now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -f "$m" ]; then
+    jq -r --arg now "$now" '"  \(.id)  opened \(.opened_at)  until \(.until)\(if .until < $now then " (EXPIRED — stale?)" else "" end)\n      reason: \(.reason)"' "$m"
+  else
+    printf '  %s  (pre-slot state, baseline at %s)\n' "$1" "$(jq -r .at "$STATE_DIR/$1/baseline.json")"
+  fi
+}
+use_slot() { # <verb> [<id>] — sets BASE/WID, or exits naming why it will not choose
+  local verb="$1" id="${2:-}"
+  migrate_legacy
+  if [ -n "$id" ]; then
+    # A key is a seat-window id: never a path. `--id ..` must not resolve outside the state dir.
+    case "$id" in .*|*/*|*[!A-Za-z0-9._-]*) echo "$verb: '$id' is not a window id" >&2; exit 64 ;; esac
+    [ -f "$STATE_DIR/$id/baseline.json" ] || {
+      echo "$verb: no maintenance-window slot for '$id'" >&2
+      local k; for k in $(slots); do slot_line "$k" >&2; done
+      exit 1
+    }
+  else
+    local all n; all="$(slots)"; n="$(printf '%s' "$all" | awk 'NF{c++} END{print c+0}')"
+    if [ "$n" -eq 0 ]; then echo "$verb: no baseline — run 'open' first" >&2; exit 1; fi
+    if [ "$n" -gt 1 ]; then
+      echo "$verb: REFUSING — $n maintenance windows are open from this user; name one with --id:" >&2
+      local k; for k in $all; do slot_line "$k" >&2; done
+      echo "  (a subagent's window is one of these; a stale one closes with '$verb --id <id> --force')" >&2
+      exit 1
+    fi
+    id="$all"
+  fi
+  SLOT="$id"
+  BASE="$STATE_DIR/$id/baseline.json"
+  WID="$STATE_DIR/$id/window-id"
+}
+
+cmd_list() {
+  migrate_legacy
+  local all; all="$(slots)"
+  [ -n "$all" ] || { echo "no maintenance window open from this tool"; return 0; }
+  local k; for k in $all; do slot_line "$k"; done
+}
+
+# The cluster half of `check`: probes 1–4 of <now> against <baseline>, one ok/⚠ line each.
+# rc 2 on any regression or unread probe, else 0. Shared by `check` and `compare`.
+compare_snapshots() { # <baseline-json> <now-json>
+  local b="$1" now="$2" rc=0
 
   # The precondition, not a sixth check: did kubectl answer at all? Reported like the probes so a
   # dead apiserver still yields the full breakdown instead of killing the run (review, #1804 r4).
@@ -321,6 +441,15 @@ cmd_check() {
       rc=2
     else echo "  ok  hard-failed pods: $p0 -> $p1"; fi
   fi
+  return $rc
+}
+
+cmd_check() {
+  local b; b="$(cat "$BASE")"
+  local now; now="$(snapshot)"
+  local rc=0
+  echo "== check vs baseline ($(jq -r .at <<<"$b"), window $SLOT) =="
+  compare_snapshots "$b" "$now" || rc=$?
 
   local ci_all ci ci_unread; ci_all="$(stranded_ci 600)"
   ci_unread="$(printf '%s\n' "$ci_all" | sed -n 's/^UNREADABLE://p' | tr '\n' ' ' | sed 's/ *$//')"
@@ -348,8 +477,14 @@ cmd_close() {
     echo "leaving a known-open item, and SAY SO)."
     [ "${FORCE:-0}" = 1 ] || return "$rc"
   fi
-  bash "$ROOT/agents/seat-window.sh" close --all
-  rm -f "$BASE"
+  # Close only the window this tool opened: `--all` also closed windows other sessions had
+  # declared (a spike's close removed a concurrent seat window, 2026-09-21).
+  if [ -s "$WID" ]; then
+    bash "$ROOT/agents/seat-window.sh" close --id "$(cat "$WID")"
+  else
+    echo "close: no recorded window id — closing none; 'bash agents/seat-window.sh list' to find it" >&2
+  fi
+  rm -rf "${STATE_DIR:?}/${SLOT:?}"
 }
 
 # The cilium backend probe on its own, with no baseline and no window — for a caller that has
@@ -363,13 +498,42 @@ cmd_cilium() {
   cilium_verdict "$ok" "$have" "$missing" "$unknown"
 }
 
+# The unattended pair (header). `snapshot` refuses — exit 1, flags on stderr, JSON still on
+# stdout — exactly where `open` refuses to bank a baseline: a caller must never compare against a
+# reading that measured nothing. `compare` is `check` minus the window and the CI probe.
+cmd_snapshot() {
+  local tmp; tmp="$(mktemp)"
+  snapshot > "$tmp"
+  cat "$tmp"
+  baseline_readable "$tmp" || { rm -f "$tmp"; return 1; }
+  rm -f "$tmp"
+}
+cmd_compare() {
+  [ -s "${1:-}" ] || { echo "compare: no baseline file '${1:-}'" >&2; return 1; }
+  local b; b="$(cat "$1")"
+  echo "== compare vs baseline ($(jq -r .at <<<"$b")) =="
+  compare_snapshots "$b" "$(snapshot)"
+}
+
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
-  check) shift; cmd_check ;;
-  close) shift; [ "${1:-}" = "--force" ] && FORCE=1; cmd_close ;;
+  check|close)
+    verb="$1"; shift; id=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --id)    [ -n "${2:-}" ] || { echo "$verb: --id needs a window id" >&2; exit 64; }; id="$2"; shift 2 ;;
+        --force) [ "$verb" = close ] || { echo "check: unknown arg --force" >&2; exit 64; }; FORCE=1; shift ;;
+        *) echo "$verb: unknown arg: $1" >&2; exit 64 ;;
+      esac
+    done
+    use_slot "$verb" "$id"
+    if [ "$verb" = check ]; then cmd_check; else cmd_close; fi ;;
+  list) shift; cmd_list ;;
   # `|| exit $?` so the exit CODE survives: the caller distinguishes 2 (roll the DaemonSet) from
   # 3 (do not) — under `set -e` a bare call would exit non-zero all the same, but silently
   # collapsing the two here is one refactor away from a verb that rolls cilium on a blind read.
   cilium-check) shift; cmd_cilium || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n] | check | close [--force] | cilium-check" >&2; exit 64 ;;
+  snapshot) shift; cmd_snapshot ;;
+  compare)  shift; cmd_compare "$@" || exit $? ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] | check [--id <id>] | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
 esac

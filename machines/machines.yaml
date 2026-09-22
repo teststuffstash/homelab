@@ -13,7 +13,12 @@
 #
 # ── Fields ───────────────────────────────────────────────────────────────────────────────────
 # Identity / docs (consumed by generate.py):
-#   name        node/host name (also the tofu map key + the k8s node name for cluster members)
+#   name        node/host name (also the tofu map key + the k8s node name for cluster members).
+#               ⚠ NAMING RULE (ADR-137): a CONTROL PLANE is `cp-NN`, one fleet-wide index, no
+#               chassis class in it — VM or metal alike. Workers keep ad-hoc names (wk-01,
+#               hp-01, m70s, nx-01, wk-metal-03); nothing may infer a worker's role from its
+#               name — `role`, the flags below and the node labels own that. The name is pinned
+#               at INSTALL, so a rename rides a reinstall (`wk-metal-02` → `cp-03`, FU-262).
 #   kind        metal | vm | lxc | device   — only `metal` boxes appear in the power/benchmark
 #               table (a VM/LXC draws no wall power of its own)
 #   label       host-table display name, markdown (README.md + CLAUDE.md "Host" column)
@@ -104,6 +109,16 @@
 #                     tofu/talos.tf declines it for exactly this reason). Same boot-from-git
 #                     pattern as `avx2`: the label rides the machine config and survives a
 #                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
+#   reconcile         auto | manual (default manual) — ADR-132 §MB4 layer 3. `auto` hands the node's
+#                     INSTALL (Talos version + schematic, from node_install_targets) to the management
+#                     box's reconciler (scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
+#                     declared install differs from live it runs `node-maintenance.sh upgrade` (a
+#                     control plane: `controlplane-upgrade.sh`) — WIP 1, the verb's floors, ONE attempt
+#                     per declared target, then PARKED + an alert. A `manual` node's diff is drift on
+#                     the belt and nothing more. Only Talos NODES may be auto (generate.py refuses
+#                     anything else): hypervisors and the router stay manual until a CARP pair exists.
+#                     Every Talos node is auto since FU-273 — but the reconciler only acts on them all
+#                     once `reconcile_rollout.enabled` (below) is true; until then, only its `pilot`.
 #   zone              failure-domain for topology.kubernetes.io/zone (ADR-114): physical box =
 #                     zone; every VM on the pve thin pool = "proxmox" (the 2026-08-24 incident
 #                     took several VMs with ONE pool). Consumed by tofu/longhorn.tf via
@@ -117,6 +132,21 @@
 #   • Version triple (Talos/k8s/Cilium) — `tofu/variables.tf` defaults; generate.py READS them
 #     from there to render the version line (one home, no copy).
 #   • Services (VIPs/hostnames) — SERVICES.md (its generated successor is FU-049).
+
+# ── The fleet-rollout switch (FU-273, docs/management-box.md §MB4 "The rollout as built") ────────
+# enabled: false — the reconciler owns ONLY the `pilot` nodes, exactly as before the rollout was
+#   built (one node per tick, no stages, no taints; a declared control plane is refused).
+# enabled: true  — the reconciler owns EVERY `reconcile: auto` node and moves a declared target
+#   across the fleet as a staged ROLLOUT: one canary per node type, evidence-gated with a timeout
+#   (default forward), then the rest in `node-maintenance.sh order`'s ranking, control planes last
+#   through controlplane-upgrade.sh; the not-yet nodes carry homelab.io/talos-behind=<target>:
+#   PreferNoSchedule; MgmtRolloutDifferential firing halts it. Flipping this is the operator's act —
+#   a commit, merged, then the box's next pull; the first rollout starts on the next declared bump.
+# `pilot` absent = every auto node (the reconciler's original semantics, which its tests pin).
+reconcile_rollout:
+  enabled: true    # FLIPPED 2026-09-22 (operator: "let it do everything" — a Talos version bump is one
+                   # atomic commit; the box applies it and this rolls the fleet, CPs included)
+  pilot: [wk-03]
 
 machines:
   - name: opnsense
@@ -164,6 +194,7 @@ machines:
     role: k8s control plane
     hardware: Talos VM on pve
     ip: 192.168.2.51
+    reconcile: auto
     # avx2 deliberately unset: the label targets AVX2-only *workload* scheduling, and the control
     # plane carries none (unchanged from the pre-YAML local.avx2_nodes set).
 
@@ -174,6 +205,7 @@ machines:
     role: k8s worker
     hardware: Talos VM on pve
     ip: 192.168.2.61
+    reconcile: auto
     avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
 
   - name: wk-02
@@ -183,6 +215,7 @@ machines:
     role: k8s worker (left the Longhorn std tier 2026-09-14 — compute-only; mounts volumes, serves none)
     hardware: Talos VM on pve
     ip: 192.168.2.62
+    reconcile: auto
     avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
 
   - name: wk-03
@@ -193,6 +226,8 @@ machines:
     hardware: Talos VM on pve
     ip: 192.168.2.63
     avx2: true           # same host CPU as wk-01/wk-02
+    reconcile: auto      # the reconciler's first node (operator, 2026-09-21: "live on one node") —
+                         # the cattle CI tier: tainted, no Longhorn disks, no kata, removable
     ephemeral: true      # taint (metal.tf for_each) + nodeLabel (talos.tf patch) — ARC runners
                          # select on the LABEL; added 2026-08-18 to double CI runner capacity
                          # (2→4 slots). Deliberately a VM: CI needs no metal (no kata/KVM — that
@@ -206,6 +241,7 @@ machines:
     role: k8s control plane (ADR-133 — the third CP, second hypervisor)
     hardware: Talos VM on nx-02
     ip: 192.168.2.65
+    reconcile: auto
     # avx2 unset for the same reason as cp-01: the label targets AVX2-only workload scheduling and
     # a control plane carries none.
 
@@ -222,6 +258,7 @@ machines:
     role: k8s worker, untainted batch compute (the second hypervisor's first VM)
     hardware: Talos VM on nx-02
     ip: 192.168.2.64
+    reconcile: auto
     avx2: true           # Xeon E5-2640 v4 (Broadwell) — same family as the pve VMs
 
   - name: thinkcentre
@@ -277,6 +314,7 @@ machines:
     #                      PCIe (dmidecode type 9, all four EMPTY): x16 PCIe 2.0 + x4 PCIe 2.0 + x1
     #                      + legacy PCI — i.e. TWO x4-capable low-profile slots free.
     ip: 192.168.2.54
+    reconcile: auto
     plug: sensor.plug_hp_power
     idle_w: null
     load_w: null
@@ -318,6 +356,7 @@ machines:
     cpu_cores: 4         # 2C / 4T — Pentium Gold G6400 @ 4.00GHz (talosctl get processors)
     memory_gb: 16
     ip: 192.168.2.56
+    reconcile: auto
     plug: null
     idle_w: null
     load_w: null
@@ -383,6 +422,7 @@ machines:
     cpu_cores: 4         # 2C / 4T
     memory_gb: 8
     ip: 192.168.2.182
+    reconcile: auto
     plug: sensor.plug_laptop3_power
     idle_w: 9.1
     load_w: 28.8
@@ -428,6 +468,7 @@ machines:
     cpu_cores: 4
     memory_gb: 8
     ip: 192.168.2.183
+    reconcile: auto
     plug: sensor.plug_laptop4_power
     idle_w: null
     load_w: null
@@ -462,6 +503,7 @@ machines:
     cpu_cores: 4         # 2C / 4T (the column is LOGICAL cpus — `talosctl get cpu`: 2 cores, 4 threads)
     memory_gb: 8
     ip: 192.168.2.184
+    reconcile: auto
     plug: null
     idle_w: null
     load_w: null
@@ -477,7 +519,7 @@ machines:
     avx2: true
     ephemeral: true
     # Takes the ride/ARC pool membership over from wk-metal-02, which leaves it ahead of its
-    # control-plane reinstall (ADR-133 as amended 2026-09-20; docs/controlplane-ha.md §C3). As a
+    # control-plane reinstall (ADR-133 as amended 2026-09-20; docs/controlplane-ha.md §CP5). As a
     # FLAG, not the imperative `kubectl label` this node has carried until now — that one does not
     # survive a reinstall, which is how it silently left the pool once already.
     arc: true
@@ -492,6 +534,7 @@ machines:
     cpu_cores: 4
     memory_gb: 16
     ip: 192.168.2.186
+    reconcile: auto
     plug: null
     idle_w: null
     load_w: null
@@ -539,6 +582,7 @@ machines:
     cpu_cores: 40        # 2 sockets × 10C/20T — the largest node in the fleet
     memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
     ip: 192.168.2.58
+    reconcile: auto
     plug: null
     idle_w: null         # 104 W read from the BMC (DCMI, BIOS idle, no drives, single PSU) —
                          # deliberately NOT in this column, which holds WALL-METER numbers.
@@ -617,6 +661,15 @@ machines:
     hardware: Debian 12 VM on pve
     ip: 192.168.2.55
     notes: Specs + toggle live in tofu/ci-runner.tf (self-registering via the runner-registrar App).
+
+  - name: ci-runner-02
+    kind: vm
+    zone: nx-02
+    label: "`ci-runner-02` (VM on nx-02)"
+    role: GitHub Actions runner VM — the second, on the other hypervisor (FU-266)
+    hardware: Debian 12 VM on nx-02
+    ip: 192.168.2.66
+    notes: Same labels as ci-runner-01, so a pve outage is not a CI outage. Specs in tofu/ci-runner.tf.
 
   - name: droplet
     kind: device

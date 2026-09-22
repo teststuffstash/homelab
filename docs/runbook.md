@@ -38,10 +38,15 @@ Gotchas:
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
   every `devbox run`.
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
-  ADR-129/-131): `devbox run mgmt-tf -- plan|apply` (ssh, committed ref — `MGMT_REF=origin/<branch>`);
+  ADR-129/-131): `devbox run mgmt-tf -- plan` (ssh, committed ref — `MGMT_REF=origin/<branch>`) prints a
+  **plan id**, and `devbox run mgmt-tf -- apply <plan-id>` executes that saved plan — an apply with
+  flags is refused (FU-248);
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
-  diff; a full `mgmt-tf apply` of master un-wedges the apply loop. [`management-box.md`](management-box.md) §MB3.
+  diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an
+  unscoped plan taken from `origin/master` stamps the baseline. **Every state write is snapshotted**
+  on the box and pulled into the wallet cache after an apply; `devbox run mgmt-state-pull` at session
+  wind-down catches the rest ([`tofu-state.md`](tofu-state.md) §Snapshots — restore recipe there). [`management-box.md`](management-box.md) §MB3.
 - Tofu's OTHER roots still take secret vars locally — **don't pass them by hand, use the wrappers**:
   `devbox run tf-plan` / `devbox run tf-apply` sourced them via `scripts/tf.sh` (→ `keepass-env.sh`
   reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
@@ -289,7 +294,9 @@ long-lived pod holds (StatefulSet/Deployment: `numberOfReplicas`+1 → rebuild e
 the local replica → restore the count; `DRY=1` reports instead of acting). `down` runs it before
 the drain, so a drain is never left to block on Longhorn's PDB (operator direction 2026-09-09);
 no volume attached on the node; then the workload read — StatefulSet pods, Argo/agent ride pods
-and single-replica Deployments are WARNs (`FORCE=1` accepts them). `down` runs preflight, cordons,
+and single-replica Deployments are WARNs (`FORCE=1` accepts them). `upgrade` needs no `FORCE`: it drains BEFORE the install
+(each workload's PDB + controller decides when it leaves — CNPG switches its primary over), so the
+WARNs are informational there, and the fleet floors are never forceable. `down` runs preflight, cordons,
 drains (DaemonSets ignored), confirms Longhorn's node view, then `talosctl shutdown` and waits for
 NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-dhcp.py`), waits
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
@@ -388,6 +395,38 @@ reboot, and verifies both version and schematic after rejoin. A schematic change
 is `image.tf` `talos_image_factory_schematic.metal` (iscsi-tools + util-linux-tools, no
 qemu-guest-agent — the latter hung the boot on bare metal).
 
+### Recreating a Talos VM (a tofu replace) — `-exclude`-shaped, never `-target`
+
+Rare since nocloud VMs upgrade in place (§Re-imaging above, ADR-014 as amended). When a VM must be
+recreated (a pending `proxmox_virtual_environment_vm` replace — a new seed `file_id`, a disk
+change), do it one VM at a time, and **apply exactly the plan you read**: `mgmt-tf apply` takes a
+plan id only (#1827), so the scope rides inside the plan.
+
+1. **Read placement first** — Longhorn replicas and CNPG instances on the VM (the
+   `node-maintenance.sh preflight <vm>` output), and the hypervisor's thin pool
+   (`pve_lvm_thin_pool_data_percent`, §Reclaiming thin-pool space below). Open a window
+   (`/maintenance-window`) and drain it (`node-maintenance.sh down <vm>` for a worker).
+2. **Plan with `-exclude` on everything else that has a pending change:** every OTHER VM instance
+   with a pending replace, `talos_machine_configuration_apply.metal`, and
+   `kubernetes_node_taint.ephemeral`:
+   `devbox run mgmt-tf -- plan -exclude='proxmox_virtual_environment_vm.node["wk-01"]' … -exclude=talos_machine_configuration_apply.metal -exclude=kubernetes_node_taint.ephemeral`.
+   The plan must replace ONLY that VM and its dependants; anything else is an abort.
+3. **Never `-target` a config apply while any VM has a pending replace.** `-target` pulls
+   dependencies at RESOURCE granularity: `talos_machine_configuration_apply.node` depends on the
+   whole `proxmox_virtual_environment_vm.node`, so every pending VM replace comes along (three
+   workers were replaced that way on 2026-09-16). `-target` and `-exclude` cannot be combined, and a
+   `-replace` beside `-exclude` is ignored silently.
+4. `MGMT_YES=1 devbox run mgmt-tf -- apply <plan-id>`.
+5. **If the fresh VM sits in maintenance mode** (the config apply did not land): finish it outside
+   the tofu graph. Render its config on the box —
+   `echo 'nonsensitive(data.talos_machine_configuration.node["<vm>"].machine_configuration)' | devbox run mgmt-tf -- console > <scratch>/<vm>.yaml`
+   (0600; strip the console's `<<EOT`/`EOT` lines; never print it: it carries the cluster's keys) — then
+   `talosctl apply-config --insecure -n <ip> -e <ip> -f <scratch>/<vm>.yaml`, then shred the file.
+6. `node-maintenance.sh up <vm>`, then a full `mgmt-tf -- plan`: `No changes`, or only in-place
+   `no_reboot` config updates (the box loop applies those). Close the window.
+
+Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
+
 ### Reclaiming thin-pool space from a Talos VM
 Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
 Nothing in the guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its
@@ -401,7 +440,7 @@ carries `host` / `vg` / `lv`; the pairs today are:
 | `host` | ssh | VG / pool LV | Talos VMs on it |
 |---|---|---|---|
 | `pve` | `192.168.2.3` | `pve` / `data` (Proxmox storage `local-lvm`) | cp-01, wk-01, wk-02, wk-03 (+ ci-runner-01, not a k8s node) |
-| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | wk-04 |
+| `nx-02` | `192.168.2.59` | `nvme-thin` / `data` (Proxmox storage `nvme-thin`) | cp-02, wk-04 (+ ci-runner-02, not a k8s node) |
 
 Below, `<host>`, `<vg>` and `<vmid>` are that row's values; the worked numbers are pve's.
 
@@ -473,7 +512,7 @@ homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = tru
 `tofu/variables.tf` (→ `serial_device {}` in `proxmox.tf`; Talos already boots with
 `console=ttyS0`), applied at a FULL stop/start of the VM — a guest reboot keeps the qemu
 process, so pending hardware never lands that way; use `scripts/node-maintenance.sh down <node>`
-→ `devbox run mgmt-tf -- apply` (the provider starts the stopped VM) → `up <node>`. The host
+→ `devbox run mgmt-tf -- plan` then `apply <plan-id>` (the provider starts the stopped VM) → `up <node>`. The host
 side is `devbox run -- ansible-playbook ansible/pve-serial-log.yml` (vmid list in
 `ansible/group_vars/pve.yml`): a `qemu-serial-log@<vmid>` socat unit on pve appends the console
 to `/var/log/qemu-serial/<vmid>.log` (logrotate weekly ×8) — the kernel's last words on a panic
@@ -760,7 +799,7 @@ ADR-121) has a 32Gi bucket cap and **no automatic retention** (FU-203). Ownershi
 split: the stack's IaC decides the keep-set (oracle-iac#664 — the pinned digest + the newest date
 tag + the previous pin) and untags/deletes what it no longer wants with its push credential
 (`DELETE /v2/<repo>/manifests/<digest>` — `REGISTRY_STORAGE_DELETE_ENABLED=true`); homelab runs the
-collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (runs Sundays 03:00 UTC; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
+collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (**daily 03:00 UTC** since 2026-09-22 — 30 min after the stack's 02:30Z untag; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
 
 **Symptom of a full bucket:** the pusher sees an opaque **500** on a blob PATCH/PUT (Garage's
 `403 Bucket size quota is reached` is swallowed by the registry), `api_s3_error_counter` does not
@@ -787,6 +826,15 @@ $K -n registry exec deploy/registry -c registry -- \
 ⚠ `--delete-untagged` is correct HERE and wrong on the pull-through mirrors — a mirror caches
 digest-pinned pulls as untagged manifests, and that flag deletes exactly the images the pinning
 convention produces (homelab#116; the mirrors' `store-maintenance.yaml` runs GC without it).
+
+**After a push that FAILED at commit, the collector is only half the reclaim.** The refused
+upload's bytes sit in `_uploads/` as a completed object (the first `CompleteMultipartUpload`
+landed; only the copy's commit was refused) and count against the quota until the registry's own
+`UPLOADPURGING` (age 1h, interval 15m) drops them — no action, just the wait. Measured 2026-09-22:
+GC reclaimed 10.6 GB (42.2 → 31.6 GB) and left headroom at 19.9 GB, **still below the alert's
+22 GB**; the failed upload's further 9.8 GiB purged itself ~1 h after it started, taking headroom
+to ~30 GB. A still-firing alert minutes after a GC is this, not a failed collection. (A third pool,
+Garage-side incomplete multipart uploads, is invisible to both and to the quota — FU-279.)
 
 Measured 2026-09-08: dry run + real run ~1 min each on a 3-manifest repo; bucket 30.3 → 15.3 GiB.
 The Garage "Size" counter before the run read ~8 GB above the sum of the listed objects — the

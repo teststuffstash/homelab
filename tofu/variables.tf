@@ -86,15 +86,15 @@ variable "cluster_name" {
 # bundle follows the control-plane version. First use: FU-246 (the page_table_check reboots —
 # workers must be ≥ v1.13.4).
 variable "talos_version_controlplane" {
-  description = "Talos Linux version for control-plane nodes (secrets bundle, CP machine configs, the plain nocloud image)."
+  description = "Talos Linux version for control-plane nodes (CP machine configs, the plain nocloud image). NOT the secrets bundle — that is frozen at the version it was generated with, FU-263 (a)."
   type        = string
-  default     = "v1.13.2"
+  default     = "v1.14.1"
 }
 
 variable "talos_version_worker" {
   description = "Talos Linux version for worker nodes (worker machine configs, metal installer images, the longhorn nocloud image)."
   type        = string
-  default     = "v1.13.10"
+  default     = "v1.14.1"
 }
 
 variable "kubernetes_version" {
@@ -165,6 +165,14 @@ variable "nodes" {
     # so each value gets its own resource block; the cluster layer (talos.tf) spans both and
     # never learns which is which. Changing this on a live node REPLACES the VM.
     hypervisor = optional(string, "pve")
+    # Per-node Talos version override — the CANARY lever (FU-033, 2026-09-22): the node's installer
+    # image + declared version (node_install_targets, which the box reconciler syncs to) move ahead
+    # of its role's version, one node at a time. Unset = the role version. It does NOT move the
+    # machine-config contract (talos.tf `local.talos_config_contract`, pinned apart from every
+    # install version): a newer Talos runs an older contract by design, and a 1.14 contract is where
+    # FU-033 (b)'s workloadIsolation default lives. Nor does it move the seed disk images (image.tf,
+    # FU-275): those follow the role version only.
+    talos_version = optional(string)
   }))
   default = {
     # memory 8→12 GiB (2026-09-14, #1687): kube-apiserver alone holds ~4.1 GiB (10 nodes, the

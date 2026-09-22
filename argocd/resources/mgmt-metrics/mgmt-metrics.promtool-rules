@@ -1,0 +1,196 @@
+# The mgmt-metrics groups, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file mgmt-metrics.promtool-test loads. DRIFT-PINNED by
+# `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-apply
+    rules:
+      - alert: MgmtApplyLoopStale
+        expr: |
+          (time() - mgmt_apply_last_ok_tick_timestamp_seconds) > 3600
+        for: 15m
+        labels:
+          severity: warning
+      - alert: MgmtApplyMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_apply_last_ok_tick_timestamp_seconds
+        for: 30m
+        labels:
+          severity: warning
+      - alert: MgmtApplyPostCheckFailed
+        expr: |
+          mgmt_apply_post_check_failed == 1
+        for: 5m
+        labels:
+          severity: warning
+  - name: mgmt-node
+    rules:
+      - alert: MgmtBoxDown
+        expr: |
+          up{job="mgmt-node"} == 0 or absent(up{job="mgmt-node"})
+        for: 15m
+        labels:
+          severity: warning
+  - name: mgmt-node-drift
+    rules:
+      - alert: MgmtNodeMissing
+        expr: |
+          mgmt_node_drift{axis=~"reachable|registered"} == 1
+        for: 2h
+        labels:
+          severity: warning
+      - alert: MgmtNodeLiveStateDrift
+        expr: |
+          mgmt_node_drift{axis=~"labels|taints"} == 1
+        for: 1h
+        labels:
+          severity: warning
+      - alert: MgmtNodeInstallDrift
+        expr: |
+          mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
+        for: 24h
+        labels:
+          severity: warning
+  - name: mgmt-belt
+    rules:
+      - alert: MgmtBeltStale
+        expr: |
+          (time() - mgmt_probe_last_run_timestamp{mode="belt"}) > 3600
+        for: 15m
+        labels:
+          severity: warning
+      - alert: MgmtBeltMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_probe_last_run_timestamp{mode="belt"}
+        for: 1h
+        labels:
+          severity: warning
+  - name: mgmt-reconcile
+    rules:
+      - alert: MgmtReconcileParked
+        expr: |
+          mgmt_reconcile_node_state{state="parked"} == 1
+        for: 5m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileSyncStuck
+        expr: |
+          mgmt_reconcile_sync_started_timestamp_seconds > 0
+            and (time() - mgmt_reconcile_sync_started_timestamp_seconds) > 3 * 3600
+        for: 5m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileLoopStale
+        expr: |
+          (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
+            unless on (instance) (max by (instance) (mgmt_reconcile_sync_started_timestamp_seconds) > 0)
+        for: 15m
+        labels:
+          severity: warning
+      - alert: MgmtReconcileMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_reconcile_last_run_timestamp_seconds
+        for: 1h
+        labels:
+          severity: warning
+  - name: mgmt-rollout
+    rules:
+      - record: mgmt:node_talos_since:timestamp
+        expr: |
+          min_over_time(timestamp(max by (node, os_image) (kube_node_info{os_image=~"Talos.*"}))[2d:5m])
+            and on (node, os_image) max by (node, os_image) (kube_node_info{os_image=~"Talos.*"})
+      - record: mgmt:node_rollout_upgraded:since
+        expr: |
+          mgmt:node_talos_since:timestamp > time() - 2 * 86400 + 1800
+      - record: mgmt:node_rollout_behind:since
+        expr: |
+          mgmt:node_talos_since:timestamp unless on (os_image) mgmt:node_rollout_upgraded:since
+      - record: mgmt:node_rollout_settled:since
+        expr: |
+          (mgmt:node_rollout_upgraded:since < time() - 4500)
+            unless on (node)
+              (max by (node) (
+                 label_replace(node_boot_time_seconds, "internal_ip", "$1", "instance", "(.*):9100")
+                   * on (internal_ip) group_left (node) max by (internal_ip, node) (kube_node_info)
+               ) > time() - 4500)
+      - record: mgmt:node_restarting_containers:1h
+        expr: |
+          count by (node, namespace) (
+            (max by (namespace, pod, uid, container) (increase(kube_pod_container_status_restarts_total[1h])) > 0)
+              * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+          )
+      - record: mgmt:node_unready_pods
+        expr: |
+          count by (node, namespace) (
+            (
+              (max by (namespace, pod, uid) (kube_pod_status_ready{condition="false"}) == 1)
+                and on (uid) (max by (uid) (kube_pod_status_phase{phase=~"Running|Pending"}) == 1)
+            )
+              * on (uid) group_left (node) max by (uid, node) (kube_pod_info{node!=""})
+          )
+      - record: mgmt:node_unready_pods:total
+        expr: |
+          sum by (node) (mgmt:node_unready_pods)
+            or on (node) (0 * max by (node) (kube_node_info{os_image=~"Talos.*"}))
+      - record: mgmt:rollout_signal:avg
+        expr: |
+          label_replace(label_replace(avg(
+              (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_settled:since)
+                or on (node) (0 * max by (node) (mgmt:node_rollout_settled:since))
+            ), "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+          or
+          label_replace(label_replace(avg(
+              (sum by (node) (mgmt:node_restarting_containers:1h) and on (node) mgmt:node_rollout_behind:since)
+                or on (node) (0 * max by (node) (mgmt:node_rollout_behind:since))
+            ), "signal", "container-restarts", "", ""), "side", "behind", "", "")
+          or
+          label_replace(label_replace(avg(
+              avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_settled:since
+            ), "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+          or
+          label_replace(label_replace(avg(
+              avg_over_time(mgmt:node_unready_pods:total[30m]) and on (node) mgmt:node_rollout_behind:since
+            ), "signal", "unready-pods", "", ""), "side", "behind", "", "")
+      - record: mgmt:rollout_signal:sum
+        expr: |
+          label_replace(label_replace(
+              sum(mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since),
+            "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+          or
+          label_replace(label_replace(
+              sum(mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since),
+            "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+      - record: mgmt:rollout_signal:namespaces
+        expr: |
+          label_replace(label_replace(
+              count(count by (namespace) (mgmt:node_restarting_containers:1h and on (node) mgmt:node_rollout_settled:since)),
+            "signal", "container-restarts", "", ""), "side", "upgraded", "", "")
+          or
+          label_replace(label_replace(
+              count(count by (namespace) (mgmt:node_unready_pods and on (node) mgmt:node_rollout_settled:since)),
+            "signal", "unready-pods", "", ""), "side", "upgraded", "", "")
+      - alert: MgmtRolloutDifferential
+        expr: |
+          (
+            (
+              mgmt:rollout_signal:avg{side="upgraded",signal="container-restarts"}
+                > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="container-restarts"} + 1)
+              and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="container-restarts"} >= 3)
+            )
+            or
+            (
+              mgmt:rollout_signal:avg{side="upgraded",signal="unready-pods"}
+                > on (signal) group_left () (3 * mgmt:rollout_signal:avg{side="behind",signal="unready-pods"} + 1)
+              and on (signal) (mgmt:rollout_signal:sum{side="upgraded",signal="unready-pods"} >= 2)
+            )
+          )
+            and on (signal) (mgmt:rollout_signal:namespaces{side="upgraded"} >= 2)
+            and on () (count(mgmt:node_rollout_behind:since) >= 2)
+        for: 30m
+        labels:
+          severity: warning

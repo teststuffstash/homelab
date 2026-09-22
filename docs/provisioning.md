@@ -159,6 +159,32 @@ For a control-plane node, run the dedicated wrapper from [the management box](ma
 devbox run cp-upgrade -- cp-01
 ```
 
+**To move every node that trails its declaration**, don't loop by hand — `upgrade-behind` walks
+`node-maintenance order`'s ranking, skips anything already at its declared version, sends control
+planes through `cp-upgrade` and workers through `upgrade`, waits for the fleet to be whole (all
+`Ready`, Cilium clean) between nodes, and stops at the first failure. `DRY=1` prints the plan. Run it
+on the box as a transient unit, so a dropped ssh session cannot strand a control plane mid-upgrade:
+
+```bash
+systemd-run --unit=node-upgrade-behind --collect --working-directory=/var/lib/homelab \
+  -p EnvironmentFile=/var/lib/mgmt/env --setenv=HOME=/root --setenv=PATH="$PATH" \
+  devbox run node-maintenance -- upgrade-behind cp        # or: worker | all
+journalctl -fu node-upgrade-behind
+```
+
+`--setenv=PATH` is load-bearing: a transient unit gets systemd's bare PATH, and devbox then dies on
+"unable to source Nix profile" (2026-09-21, first real run). `DRY=1` goes in as `--setenv=DRY=1`.
+
+**A node the reconciler owns** — `reconcile: auto` in `machines/machines.yaml`, every Talos node
+since `reconcile_rollout.enabled` went on (2026-09-22) — needs none of this: the box's
+reconciler runs this same `upgrade` verb on it (a control plane: `controlplane-upgrade.sh`) once the
+applied declaration moves, one attempt per declared target, and parks it with an alert if that
+attempt fails — [`management-box.md`](management-box.md) §MB4 (layers 3–5 and the rollout as built).
+
+On the box the verbs read the declaration from the local main state and the client configs from
+`/var/lib/mgmt/` by themselves (2026-09-21 — before that, every box-side run died on
+`localhost:8080`, because `devbox run` points KUBECONFIG at a checkout path the box does not have).
+
 It requires at least three Ready control planes, selects a healthy endpoint other than the target,
 checks that etcd has an odd membership of at least three, takes an etcd snapshot under
 `/var/lib/mgmt/etcd-snapshots/`, and then enters the same WIP-1 maintenance path workers use. It
@@ -178,6 +204,40 @@ ephemeral and must never be committed.
 on the node is a *stuck upgrade*, not data loss; clear it first with
 `scripts/node-maintenance.sh settle <node>`. Never pass `--legacy`: that forces the old node-side
 drain, the one siderolabs/talos#9882 reported ignoring PDBs.
+
+## Recovering a node whose INSTALLED config is broken
+
+The onboarding recipe above assumes the box can be talked to. When the *installed* machine config
+is what broke the network, it cannot — and the obvious move does not work:
+
+⚠ **PXE does not force maintenance mode.** Talos reads its machine config from the **STATE
+partition**, so a profile with no `talos.config` argument boots the kernel from the network and
+then runs whatever is on disk. `wk-metal-02` PXE-booted cleanly three times on 2026-09-21
+(matchbox logs 05:24, 05:32, 05:39) and came up as a `controlplane` running the broken config every
+time; the only thing that changed between boots was the kernel version.
+
+⚠ **`talosctl reset` needs the network the node just lost.** It is the documented way back to
+maintenance ([onboarding step 6](#onboarding-recipe-reuse-for-each-new-metal-node)), and it is
+unreachable in exactly the case you need it.
+
+What works, from the console, with no network on the node — add one kernel arg to the PXE profile:
+
+```
+talos.experimental.wipe=system
+```
+
+Talos resets the system disk and reboots. With STATE gone the next PXE boot has no config to read
+and lands in maintenance, which is where the normal recipe resumes. Measured 2026-09-21: wipe boot
+05:47:42Z → maintenance `apid` answering 05:49:20Z.
+
+Two things that bite:
+
+- **Swap the profile back before that next boot**, or the box wipes in a loop — the post-wipe
+  reboot PXEs again and re-reads the same arg. Point the group at the plain profile the moment
+  matchbox logs the wipe boot's kernel fetch (here: swap took 15 s against a wipe-plus-reboot of
+  ~90 s). Automate the swap rather than racing it by hand.
+- **The flag is procedure state.** It belongs in `tofu/provisioning/flags.local.tf` — untracked
+  (`*.local.tf`), FU-244 — never a commit.
 
 ## Firmware reality (why USB sometimes)
 

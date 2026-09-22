@@ -1,4 +1,4 @@
-# CNPG Postgres for Infisical. HA pair on Longhorn. The app role's password is supplied
+# CNPG Postgres for Infisical. HA pair on node-local replica-1 Longhorn (ADR-114). The app role's password is supplied
 # (not generated) via the tofu-seeded basic-auth secret `infisical-pg-app`, so tofu's
 # connection string (infisical-db) always matches. CNPG creates the `infisical-pg-rw`
 # service the connection string targets.
@@ -9,6 +9,23 @@ metadata:
   namespace: infisical
 spec:
   instances: 2
+  # One instance per PHYSICAL box — zone = the chassis, so a box outage never takes both (CNPG's
+  # default is `preferred` on hostname). The zone list = the untainted boxes with a std Longhorn
+  # disk: the volume is strict-local replica-1 (below), so an instance can only run where its
+  # disk is — an instance whose zone is down stays Pending and the other serves (ADR-114).
+  affinity:
+    podAntiAffinityType: required
+    topologyKey: topology.kubernetes.io/zone
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values: [hp-01, m70s]
+  # A spec change restarts the primary LAST, and `switchover` makes that a promotion of the
+  # already-updated replica instead of an in-place primary restart (~3.5 min of infisical, 2026-09-21).
+  primaryUpdateMethod: switchover
   # FU-082: a BestEffort database is first in the OOM-kill order under node memory pressure —
   # unacceptable for a DB. Requests lift it to Burstable + honest scheduling (~100Mi steady);
   # the memory limit is generous headroom (shared_buffers/work_mem/connections), not a tight cap.
@@ -21,7 +38,7 @@ spec:
     enablePodMonitor: true
   storage:
     size: 5Gi
-    storageClass: longhorn
+    storageClass: longhorn-local-std # replica-1 node-local std (tofu/longhorn.tf) — Postgres replicates itself
   bootstrap:
     initdb:
       database: infisical

@@ -59,6 +59,14 @@ groups:
           severity: warning
         annotations:
           summary: Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}
+      - alert: GarageZoneDegraded
+        expr: |
+          min(cluster_healthy) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Garage is running with a zone down — one more zone loss stops writes
       - alert: GarageTableGcBacklog
         expr: |
           sum by (pod) (table_gc_todo_queue_length) > 500000

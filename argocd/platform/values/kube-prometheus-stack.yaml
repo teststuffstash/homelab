@@ -156,7 +156,7 @@ additionalPrometheusRulesMap:
               severity: warning
           - alert: ContainerMemoryNearLimit
             annotations:
-              description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-csi-plugin and its CSI sidecars), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node — cilium-agent and longhorn-manager via their own `resources` keys, the CSI components via `defaultSettings.systemManagedCSIComponentsResourceLimits` (the old `longhornDriver.resources` key was inert — no chart template consumed it — and is gone).
+              description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a platform daemon (cilium-agent — Burstable since FU-267, 1Gi limit; longhorn-manager / longhorn-csi-plugin and its CSI sidecars — FU-112(b) Guaranteed), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node — cilium-agent and longhorn-manager via their own `resources` keys, the CSI components via `defaultSettings.systemManagedCSIComponentsResourceLimits` (the old `longhornDriver.resources` key was inert — no chart template consumed it — and is gone).
               summary: '{{ $labels.namespace }}/{{ $labels.pod }} near its memory limit'
             expr: container_memory_working_set_bytes{namespace=~"kube-system|longhorn-system", container!="", container!="POD"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace=~"kube-system|longhorn-system", resource="memory"} > 0.85
             for: 15m
@@ -244,6 +244,29 @@ additionalPrometheusRulesMap:
             labels:
               severity: warning
 alertmanager:
+  # FU-195: the operator's default is a bare emptyDir for the `…-alertmanager-db` volume, so
+  # EVERY Alertmanager pod restart wipes every open silence and the whole notification log. A
+  # fleet Talos rollout restarts Alertmanager BY CONSTRUCTION — every node drain moves the pod —
+  # so the rollout erases the very safety net it runs under: scripts/node-maintenance.sh's
+  # per-node maintenance silences are gone by the time the rollout's own PodSigkilled alerts
+  # fire. Measured twice: 2026-08-25 (both open S7 silences lost) and 2026-09-22, when wk-04's
+  # drain (~12:46Z) left "no active silences" and the rollout's 12 reboots alerted unsilenced.
+  # Longhorn RWO follows the pod to its new node, so a silence now outlives the restart it was
+  # written to cover. 1Gi is generous headroom — silences + nflog are kilobytes. Same shape as
+  # prometheus.prometheusSpec.storageSpec below.
+  # ⚠ The FIRST sync after this lands recreates the Alertmanager StatefulSet (a volumeClaimTemplate
+  # is an immutable field), which wipes the current silences one last time — re-create any open
+  # silence after that sync, before the next rollout.
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: longhorn
   config:
     receivers:
       - name: "null"
@@ -442,6 +465,9 @@ kube-state-metrics:
       - apiGroups: [platform.teststuff.net]
         resources: [agentstacks]
         verbs: [list, watch]
+      - apiGroups: [external-secrets.io]
+        resources: [externalsecrets]
+        verbs: [list, watch]
   customResourceState:
     enabled: true
     config:
@@ -465,6 +491,30 @@ kube-state-metrics:
                       type: [type]
                       reason: [reason]
                     valueFrom: [status]
+          # GitHub-token mirror belt (oracle handoff 2026-09-22): every ExternalSecret's last
+          # successful sync as a unix timestamp (KSM parses the RFC3339 `.status.refreshTime`).
+          # `target` + the first `remoteRef.key` let a MIRROR (kubernetes-provider store reading
+          # a Secret in agent-coordinator) be joined to the CENTRAL ES that writes that Secret;
+          # `generator_kind` marks the centrals that MINT (GithubAccessToken → a 60-min token).
+          # Absent paths drop the label. Rules: argocd/resources/agentstack/prometheusrule.yaml.
+          - groupVersionKind:
+              group: external-secrets.io
+              version: v1
+              kind: ExternalSecret
+            metricNamePrefix: kube_externalsecret
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              name: [metadata, name]
+              target: [spec, target, name]
+              remote_key: [spec, data, "0", remoteRef, key]
+              generator_kind: [spec, dataFrom, "0", sourceRef, generatorRef, kind]
+            metrics:
+              - name: refresh_time
+                help: "ExternalSecret .status.refreshTime — unix time of the last successful sync"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, refreshTime]
 kubeControllerManager:
   endpoints:
     - 192.168.2.51

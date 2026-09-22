@@ -10,6 +10,9 @@
 # Changing it requires a reinstall (reset → maintenance → `tofu apply -replace`).
 locals {
   talos_install_image = data.talos_image_factory_urls.metal.urls.installer
+  # FU-033 (a) on metal — see the EPHEMERAL VolumeConfig below. Metal has no per-node version
+  # override: every metal node's declared version is the worker version.
+  metal_ephemeral_insecure = tonumber(split(".", trimprefix(var.talos_version_worker, "v"))[1]) >= 14
 }
 
 # The node set + its per-node flags (install_disk / longhorn_disks / pin_hostname / kata) live in
@@ -32,14 +35,16 @@ data "talos_machine_configuration" "metal" {
   machine_type       = each.value.controlplane ? "controlplane" : "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
-  # Metal keeps the WORKER version on both roles, deliberately — unlike the VMs, whose version
-  # follows their role (image.tf `local.talos_role_version`). The reason is that the split exists
-  # to let the two planes roll independently, and metal's installer image is one factory URL for
-  # the whole fleet (`local.talos_install_image`): keying it off the role would fork the metal
-  # image per role for no gain, and would install ADR-133's brand-new CP onto whatever the VM
-  # control plane happens to trail at (v1.13.2 today — the page_table_check kernel, FU-246).
-  # A metal CP converges with the rest of the control plane via `devbox run cp-upgrade`.
-  talos_version = var.talos_version_worker
+  # The machine-config CONTRACT, shared with the VMs and pinned apart from any install version
+  # (talos.tf `local.talos_config_contract` — why). The INSTALL version is a different thing:
+  # metal keeps the WORKER version on both roles (image.tf `data.talos_image_factory_urls.metal`),
+  # deliberately — unlike the VMs, whose version follows their role (image.tf
+  # `local.talos_role_version`). The split exists to let the two planes roll independently, and
+  # metal's installer image is one factory URL for the whole fleet (`local.talos_install_image`):
+  # keying it off the role would fork the metal image per role for no gain, and would install
+  # ADR-133's brand-new CP onto whatever the VM control plane happens to trail at. A metal CP
+  # converges with the rest of the control plane via `devbox run cp-upgrade`.
+  talos_version = local.talos_config_contract
 
   # Hostname is PINNED via the HostnameConfig document (highest-priority source, overrides DHCP),
   # so a cold-booted node no longer ghosts as `talos-xxx` if it DHCP-discovers before dnsmasq.
@@ -70,9 +75,11 @@ data "talos_machine_configuration" "metal" {
     # The VM variant (local.cp_vip_patch) would leave a metal CP with no address at all — which is
     # what happened to wk-metal-02 on 2026-09-20 (docs/controlplane-ha.md §CP6).
     each.value.controlplane ? [local.cp_vip_patch_dhcp] : [],
-    # The frozen SA issuer (ADR-136, talos.tf local.sa_issuer_patch) — every control plane must
-    # carry the SAME issuer, so a metal CP gets it on exactly the same terms as the VM one.
-    each.value.controlplane ? [local.sa_issuer_patch] : [],
+    # The patches every control plane carries on the same terms as the VMs (talos.tf
+    # local.cp_common_patches: the frozen SA issuer, ADR-136, and the cluster-scoped patch — CNI
+    # none, kube-proxy off, the PodSecurity kata exemption). One shared list since homelab#1845,
+    # when the cluster patch existed for VMs only and wk-metal-02 deployed flannel fleet-wide.
+    each.value.controlplane ? local.cp_common_patches : [],
     # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }
@@ -184,17 +191,29 @@ data "talos_machine_configuration" "metal" {
     # ⚠ INSTALL-TIME ONLY: "the volume configuration is only applied when the volume has not been
     # provisioned yet". Changing this on a running node does nothing; XFS cannot shrink. Wipe +
     # reinstall (docs/provisioning.md) is the only path, which is why it is cheapest on a new box.
-    (each.value.ephemeral_max_size != null || each.value.ephemeral_disk_selector != null) ? [yamlencode({
-      apiVersion = "v1alpha1"
-      kind       = "VolumeConfig"
-      name       = "EPHEMERAL"
-      provisioning = merge(
-        each.value.ephemeral_max_size != null ? { maxSize = each.value.ephemeral_max_size } : {},
-        # diskSelector moves EPHEMERAL off the system disk entirely (ride hosts: image store +
-        # scratch on a DRAM-cached NVMe while boot stays on a legacy-bootable SATA bay disk).
-        each.value.ephemeral_disk_selector != null ? { diskSelector = { match = each.value.ephemeral_disk_selector } } : {},
-      )
-    })] : [],
+    #
+    # FU-033 (a), the metal half of talos.tf's: Talos 1.14 mounts EPHEMERAL (/var) noexec, which
+    # kills Longhorn v1's instance-manager (longhorn.tf) — so every metal node carries
+    # `mount: {secure: false}` once the metal install version (var.talos_version_worker, the one
+    # metal installer URL) is ≥ v1.14, landing in the same apply as the bump, before any node
+    # upgrades. Talos accepts ONE document per volume name, so it is MERGED into the provisioning
+    # document on the nodes that already declare one, and stands alone on the rest.
+    (each.value.ephemeral_max_size != null || each.value.ephemeral_disk_selector != null || local.metal_ephemeral_insecure) ? [yamlencode(merge(
+      {
+        apiVersion = "v1alpha1"
+        kind       = "VolumeConfig"
+        name       = "EPHEMERAL"
+      },
+      (each.value.ephemeral_max_size != null || each.value.ephemeral_disk_selector != null) ? {
+        provisioning = merge(
+          each.value.ephemeral_max_size != null ? { maxSize = each.value.ephemeral_max_size } : {},
+          # diskSelector moves EPHEMERAL off the system disk entirely (ride hosts: image store +
+          # scratch on a DRAM-cached NVMe while boot stays on a legacy-bootable SATA bay disk).
+          each.value.ephemeral_disk_selector != null ? { diskSelector = { match = each.value.ephemeral_disk_selector } } : {},
+        )
+      } : {},
+      local.metal_ephemeral_insecure ? { mount = { secure = false } } : {},
+    ))] : [],
     # User volumes — node-local XFS partitions mounted at /var/mnt/<name> (partition label u-<name>).
     # ADR-114 wants Garage on node-local XFS, NOT Longhorn (engines replicate, storage stores
     # singles), and a DEDICATED partition rather than a hostPath into /var: sharing the Talos
@@ -274,4 +293,7 @@ resource "talos_machine_configuration_apply" "metal" {
   machine_configuration_input = data.talos_machine_configuration.metal[each.key].machine_configuration
   node                        = each.value.ip
   endpoint                    = each.value.ip
+  # no_reboot: a change Talos cannot apply live FAILS the apply instead of rebooting the node —
+  # the full note is on talos.tf `talos_machine_configuration_apply.node`.
+  apply_mode = "no_reboot"
 }

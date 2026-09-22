@@ -19,12 +19,15 @@
 # ⚠️ BEFORE upgrading Talos to v1.14+: 1.14 mounts EPHEMERAL (/var) `noexec`, which breaks
 # Longhorn v1 — instance-manager exec's engine binaries the engine-image DaemonSet drops in
 # /var/lib/longhorn/engine-binaries/ (=> "permission denied", storage dies on the post-upgrade
-# reboot). We run the v1 data engine (v2-data-engine=false), so we're affected. Apply this
-# patch (machine config, all nodes) FIRST, then upgrade:
+# reboot). We run the v1 data engine (v2-data-engine=false), so we're affected. The fix is this
+# document, which must reach a node's config BEFORE it upgrades:
 #     apiVersion: v1alpha1
 #     kind: VolumeConfig
 #     name: EPHEMERAL
 #     mount: { secure: false }   # re-enables exec (also drops nosuid/nodev on /var)
+# WRITTEN (FU-033 (a)), keyed on the DECLARED version so it lands in the same apply as the bump:
+# VMs in talos.tf (per node, the canary override included), metal in metal.tf (the worker version;
+# merged into the nodes' own provisioning EPHEMERAL document where one exists).
 # (Longhorn v2 / SPDK runs the data plane in-process and is NOT affected — moot if we migrate.)
 # Ref: Talos v1.14.0-alpha.1 release notes ("noexec on EPHEMERAL").
 #
@@ -33,7 +36,10 @@
 # behaviour, so the upgrade itself is safe. With it ON the kubelet runs in its own PID+mount
 # namespace and cannot reach the host iscsid, which kills the in-tree iSCSI path Longhorn v1
 # rides. This is a BOOT-FROM-GIT hazard, not an upgrade one: a cluster rebuilt from scratch on
-# 1.14+ would isolate by default and break where this one does not (FU-033).
+# 1.14+ would isolate by default and break where this one does not (FU-033). A version bump no
+# longer re-renders configs against the new minor's contract: talos.tf pins
+# `local.talos_config_contract` apart from the install version, so moving it past 1.13 is its own
+# deliberate PR — read that plan for this document.
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string
@@ -86,7 +92,7 @@ resource "kubernetes_labels" "longhorn_storage" {
 resource "kubernetes_labels" "node_zone" {
   for_each = {
     for n, z in local.machine_zones : n => z
-    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && n != "ci-runner-01"
+    if !contains(keys(local.longhorn_zones), n) && !contains(keys(local.longhorn_bulk_zones), n) && !startswith(n, "ci-runner-") # the runner VMs are not k8s nodes
   }
   api_version = "v1"
   kind        = "Node"
@@ -389,6 +395,31 @@ resource "kubernetes_storage_class" "longhorn_local_xfs" {
   volume_binding_mode    = "WaitForFirstConsumer"
   parameters = {
     numberOfReplicas    = "1"
+    dataLocality        = "strict-local"
+    staleReplicaTimeout = "30"
+    fsType              = "xfs"
+  }
+  depends_on = [helm_release.longhorn]
+}
+
+# ---- Node-local std singles for CNPG (ADR-114: engines replicate, storage stores singles) ------
+# The Postgres sibling of longhorn-local-xfs: replica=1 + strict-local, but FENCED to the std tier.
+# longhorn-local-xfs has no diskSelector (the Garage pods' zone affinity is its fence), which would
+# let a CNPG volume land on m70s's untagged PM961 — the Garage zone's DEDICATED disk. Here the
+# fence is `std`, and the consumer's node affinity must name nodes that have a std disk: a pod
+# scheduled onto a diskless node (wk-01/wk-04 today) gets a volume that can never place. The
+# CNPG Clusters pin `topology.kubernetes.io/zone In [hp-01, m70s]` for exactly that reason —
+# grow the list when a std disk joins another untainted zone. Placement ruling + why r2 was
+# retired for Postgres: docs/storage-ledger.md §2026-09-21.
+resource "kubernetes_storage_class" "longhorn_local_std" {
+  metadata { name = "longhorn-local-std" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "WaitForFirstConsumer"
+  parameters = {
+    numberOfReplicas    = "1"
+    diskSelector        = "std"
     dataLocality        = "strict-local"
     staleReplicaTimeout = "30"
     fsType              = "xfs"

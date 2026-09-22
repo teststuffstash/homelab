@@ -39,7 +39,18 @@ done
 KEY="$CRED/homelab-pve-ssh/id_ed25519"
 
 fetch_one() {
-  local name="$1" dest="$ROOT/tofu/$name" tmp
+  # ⚠ ONE assignment per `local`. A shell expands every argument of `local` BEFORE it assigns any
+  # of them, so the old `local name="$1" dest="$ROOT/tofu/$name"` built dest from an EMPTY name.
+  # Two different failures fell out of that, neither of them loud: under `devbox run` the local
+  # copy was never written while the script still printed "wrote ... + tofu/<name>", and under a
+  # plain `bash scripts/client-configs.sh` it died at this line with "name: unbound variable".
+  # The silent half is the dangerous one — it leaves the jail on the OLD endpoint and the box on
+  # the new one, which is precisely the split state the comment below says this script exists to
+  # prevent. Found 2026-09-21 during the ADR-133 VIP cutover: the box's talosconfig correctly
+  # listed all three control planes while tofu/talosconfig still named only cp-01, a day stale.
+  local name="$1"
+  local dest="$ROOT/tofu/$name"
+  local tmp
   tmp="$(mktemp)"
   # mgmt-tf prints its own banner line to stdout before tofu's output; drop it and the ssh notice.
   bash "$ROOT/scripts/mgmt-tf.sh" output -raw "$name" 2>/dev/null \
@@ -47,6 +58,33 @@ fetch_one() {
   # Fail closed: a truncated or error-shaped answer must never overwrite a working config.
   head -1 "$tmp" | grep -qE '^(apiVersion|context):' \
     || { echo "client-configs: $name from the box does not look like a config — refusing to write" >&2; rm -f "$tmp"; exit 1; }
+  # The kubeconfig is a CAPTURED resource, not a data source: talos_cluster_kubeconfig renders
+  # the endpoint it saw at create time and `plan` never notices it has drifted (FU-259 — the
+  # ADR-133 VIP cutover left it on cp-01 for a day). Refuse to hand out a config that dials an
+  # address the cluster no longer declares, rather than quietly reinstating the old one on both
+  # sides. The tofu-side twin of this guard is the `kubeconfig_endpoint_current` check block.
+  if [ "$name" = kubeconfig ]; then
+    local declared server
+    # ⚠ Both assignments end in `|| x=""`, and that is load-bearing under this script's
+    # `set -euo pipefail`: a bare assignment whose pipeline fails (the box busy on the apply
+    # loop's `flock -w 600`, an SSH drop, or simply no `server:` line) would otherwise take its
+    # exit status from `pipefail` and kill the function HERE — skipping the "wrote it unchecked"
+    # fallback below and aborting `devbox run kubeconfig` with no explanation, after the config
+    # was already fetched and validated (review, #1825).
+    declared="$(bash "$ROOT/scripts/mgmt-tf.sh" output -raw cluster_endpoint 2>/dev/null \
+      | grep -v '^mgmt-tf:' | grep -v 'Pseudo-terminal will not be allocated' | tr -d '[:space:]')" \
+      || declared=""
+    server="$(grep -m1 -oE 'server: *\S+' "$tmp" | awk '{print $2}')" || server=""
+    if [ -n "$declared" ] && [ -n "$server" ] && [ "$declared" != "$server" ]; then
+      rm -f "$tmp"
+      echo "client-configs: the kubeconfig in state dials $server but the cluster declares $declared — refusing to write." >&2
+      echo "  recover: devbox run mgmt-tf -- plan -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this" >&2
+      echo "           then, after reading it: devbox run mgmt-tf -- apply <plan-id>" >&2
+      echo "  then re-run this verb (FU-259, docs/controlplane-ha.md §CP8)." >&2
+      exit 1
+    fi
+    [ -n "$declared" ] && [ -n "$server" ] || echo "client-configs: could not compare endpoints (declared='$declared' server='$server') — wrote it unchecked" >&2
+  fi
   # THE BOX FIRST, the local copy only once it lands (review, #1803). Written the other way
   # round at first, and `set -e` then turned an unreachable box into exactly the split state this
   # script exists to prevent: the jail already on the new endpoint, /var/lib/mgmt/<name> still on

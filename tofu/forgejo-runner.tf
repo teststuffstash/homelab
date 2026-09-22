@@ -38,7 +38,7 @@ locals {
 # New members belong on the `arc` flag in machines/machines.yaml, not here — this set is the legacy
 # home and should shrink to nothing as nodes move over.
 # ⚠ EMPTY since 2026-09-20 — it did. wk-metal-02 was the last member and leaves the ride pool ahead
-# of its control-plane reinstall (ADR-133 as amended, docs/controlplane-ha.md §C3); wk-metal-03 now
+# of its control-plane reinstall (ADR-133 as amended, docs/controlplane-ha.md §CP5); wk-metal-03 now
 # carries the pool on the `arc` flag instead. Destroying this resource REMOVES the label from
 # wk-metal-02, which is the point: ARC runners and the Forgejo runner below (node_selector on the
 # same label) stop scheduling there before the node is reset to maintenance. Kept at zero rather

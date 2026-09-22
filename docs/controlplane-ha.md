@@ -1,6 +1,6 @@
 # Control-plane HA — the endpoint, the VIP, and the issuer riding on it
 
-**Tracked by:** FU-243.
+**Built under:** FU-243 (archived 2026-09-22 — three CPs, the `.50` endpoint, all live).
 
 The mechanism behind [ADR-133](adr.md) (three control planes behind a Talos shared VIP) and
 [ADR-136](adr.md) (freeze the ServiceAccount issuer). Phasing and the fleet-role reasoning live in
@@ -17,7 +17,7 @@ rest of the program boring.**
 | It becomes | Read by | Safe to move? |
 |---|---|---|
 | `cluster.controlPlane.endpoint` in every machine config | a node bootstrapping, KubePrism's seed list | yes |
-| the kubeconfig `server:` URL | external `kubectl` — the jail and the [management box](management-box.md) | yes, but `talos_cluster_kubeconfig` does NOT re-render it and `plan` reads clean (FU-259) |
+| the kubeconfig `server:` URL | external `kubectl` — the jail and the [management box](management-box.md) | yes, but `talos_cluster_kubeconfig` does NOT re-render it and `plan` reads clean — §CP8 |
 | `--service-account-issuer` **and** `--api-audiences` on kube-apiserver | **every ServiceAccount token ever minted** | **no — this is the one that bites** |
 
 A token carries the `iss`/`aud` it was minted with, and the apiserver rejects one whose `iss` is not
@@ -69,11 +69,18 @@ sync is the outage above.
    `kubectl -n kube-system get pod -l component=kube-apiserver -o jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep -E 'service-account-issuer|api-audiences'`
 2. **Join `wk-metal-02` and the nx-02 VM, back to back.** Never rest at two etcd members —
    [`ip-plan.md`](ip-plan.md) §VIP: at two the VIP is *less* available than at one.
-3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then, and it does not even restart the
-   apiserver (C4). Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
-   → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (FU-259).
+   A *former worker* keeps its Kubernetes Node, so its `nodes.longhorn.io` object is NOT
+   garbage-collected — it lingers `Ready=False ManagerPodMissing` (Longhorn does not schedule on a
+   CP). Read it is empty (no disks/replicas/engines), `patch … '{"spec":{"allowScheduling":false}}'`
+   (the webhook refuses a schedulable one), then delete it; wk-metal-02's lingered until 2026-09-21.
+3. **Flip `cluster_endpoint` to the VIP.** Token-neutral by then — but **not free**: it restarts
+   the apiserver on EVERY member, together, and the API is unreachable on all of them for ~2 min
+   while they come back (measured 2026-09-21; §CP4 carries the numbers and why the rehearsal
+   predicted otherwise). Treat it exactly like steps 1 and 2: declared window, C3 fallout expected.
+   Re-render the client configs afterwards (`devbox run kubeconfig` / `talosconfig`
+   → `scripts/client-configs.sh`) or the jail and the box keep dialling the old address (§CP8).
 
-**Steps 1 and 2 restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
+**All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
 ([FU-258](spikes/cilium-apiserver-restart-backend-loss.md) — `devbox run maint cilium-check`;
 `cp-upgrade` gates on it by itself), the Argo Workflows controller hot-loops and floods Loki
@@ -96,8 +103,12 @@ bash scripts/controlplane-lab-install.sh 192.168.2.65 /tmp/cplab   # isolated cr
 ```
 
 Read the thin pool before creating it (`pvesm status` on the hypervisor — the pve pool has filled
-four times). `.65`/`.66` are **borrowed for an hour, not assigned**: a lab address is procedure
-state, so nothing about it enters `machines.yaml`, dnsmasq or [`ip-plan.md`](ip-plan.md).
+four times). A lab address is **borrowed for an hour, not assigned**: it is procedure state, so
+nothing about it enters `machines.yaml`, dnsmasq or [`ip-plan.md`](ip-plan.md).
+⚠ **The `.65`/`.66` above are the 2026-09-20 run's, and both are production now** (cp-02 and
+ci-runner-02). Pick a fresh address every time and clear it per `ip-plan.md` (`git grep` + `nmap -sn`).
+The FU-264 run (2026-09-22) used `.69` and the `talos-v1.14.1-nocloud` image, because the v1.13.2
+image is gone from nx-02 ([`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md)).
 Tear down with `qm stop 8199 && qm destroy 8199 --purge` and the addresses are free again.
 
 The probe: mint a token, move the endpoint, see whether the token still authenticates — with the
@@ -109,10 +120,19 @@ The probe: mint a token, move the endpoint, see whether the token still authenti
 | 2 — pin applied at the current value | none | **authenticated** (403 = authn ok, authz denied) |
 | 3 — the real thing, issuer PINNED | `.65` → `.66` | **authenticated** — survived |
 
-Two further readings from phase 3, both load-bearing: the apiserver's flags still showed the pinned
-`.65` issuer (Talos really does replace, not merge), and the kube-apiserver container's `startedAt`
-did **not** move across the flip or a second flip back — **with the issuer pinned, moving the
-endpoint does not restart the apiserver at all**, so step 3 above carries none of the C3 fallout.
+Two further readings from phase 3: the apiserver's flags still showed the pinned `.65` issuer
+(Talos really does replace, not merge), and the kube-apiserver container's `startedAt` did **not**
+move across the flip or a second flip back.
+
+⚠ **That second reading did NOT generalise, and the real cutover disproved it (2026-09-21).** The
+lab is a ONE-NODE cluster; the fleet is three. Flipping `cluster_endpoint` to the VIP restarted
+**all three apiservers together** — a ~2 minute window in which `.51`, `.65`, `.183` *and* the VIP
+all refused connections — followed by the standard §CP3 fallout: `kube-scheduler` and
+`cnpg-operator` crashlooped and recovered on their own within minutes, etcd never lost quorum,
+Cilium kept the apiserver backend (13/13). **Three control planes did not make the restarts roll**,
+so plan the flip as an apiserver restart on every member at once, inside a window, not as the
+free action this paragraph originally promised. What the pin *does* guarantee is the part that
+mattered: every ServiceAccount token survived, because the issuer did not move (C1/C2).
 
 ## CP5. Promoting a running worker to a control plane
 
@@ -135,7 +155,8 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
 5. `kubectl delete node <name>` — the join recreates the object; the worker-era one would otherwise
    carry stale labels and taints into its CP life.
 6. `talosctl reset --graceful=false --reboot --wipe-mode all` → it PXE-boots into maintenance.
-7. `devbox run mgmt-tf -- apply -target='talos_machine_configuration_apply.metal["<name>"]'` —
+7. `devbox run mgmt-tf -- plan -target='talos_machine_configuration_apply.metal["<name>"]'`, read it,
+   then `apply <plan-id>` (an apply carries no flags of its own — FU-248) —
    installs with `machine_type: controlplane`, and `metal.tf` conditions the VIP patch and the
    issuer pin on the same flag, so the new CP gets both at birth.
 8. **Unflag** (destroy the matchbox group) so the post-install reboot comes off disk, then
@@ -143,10 +164,14 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
    the router hands it `.183`, and a config that claims its interface can take that away silently
    (§CP6). `dnsmasq/leases/search` on OPNsense is the check that does not need the node.
 9. **Post-install, none of which `Ready` gates:** re-apply the zone label
-   (`kubernetes_labels.node_zone` — the Node object is new), confirm `cilium bgp peers` is
-   `established`, and confirm etcd membership grew by exactly one.
-10. Finish with a **full** `mgmt-tf apply`: a targeted apply does not stamp the box's apply-loop
-    baseline.
+   (`kubernetes_labels.node_zone` — the Node object is new); **add the node IP to `bgp_node_ips`
+   and run the BGP play** ([`provisioning.md`](provisioning.md) step 8) *before* confirming
+   `cilium bgp peers` is `established` — a new address peers with nothing until OPNsense lists it,
+   and this list has now been the miss four times (wk-03, wk-metal-04, nx-01, cp-02 — the last
+   caught 2026-09-21 an hour after creation, `idle` with 0 routes); and confirm etcd membership
+   grew by exactly one.
+10. Finish with a **full, unscoped** plan of master applied by its id: a scoped plan does not stamp
+    the box's apply-loop baseline, and the plan's own `.meta` is what decides that now.
 
 ⚠ **Do not stop here.** Two etcd members is the one state worse than one — go straight on to the
 next join.
@@ -194,3 +219,92 @@ Two adjacent findings from the same night, both filed: the BIOS PXE chainload wa
 (`undionly.kpxe` missing on the Matchbox LXC — [FU-261](follow-ups.md)), which is why three reboots
 read as "PXE just doesn't take"; and nothing alerts on a **declared node that is simply absent**
 from the cluster — the extreme case of [FU-235](follow-ups.md)'s declared-vs-live diff.
+
+## CP7. When the broken config is the installed one
+
+§CP6's defect left `wk-metal-02` unable to network *from its own install*, and that is a state the
+§CP5 recipe cannot re-enter: PXE does not force maintenance mode (Talos reads its config from the
+STATE partition) and `talosctl reset` needs the network the node just lost. The way back is to wipe
+STATE from the kernel command line — **recipe, caveats and the measured timings in
+[`provisioning.md`](provisioning.md) §"Recovering a node whose INSTALLED config is broken"**, which
+owns it because it is a node-level procedure, not a control-plane one.
+
+Done on 2026-09-21: wipe 05:47:42Z → maintenance 05:49:20Z → corrected config applied → `Ready` as
+a control plane 05:52:09Z, `.183` held at `layer: operator` (the default DHCP operator restored),
+etcd 2 members, BGP `established` with 25 routes. cp-02 followed immediately, taking the cluster to
+**three control planes and three etcd members**.
+
+⚠ **One thing this episode is NOT evidence of.** The Matchbox PXE assets were pinned at v1.13.2
+while `var.talos_version_worker` had moved to v1.13.10, and that drift was fixed mid-recovery — but
+it caused none of this. Both kernel versions chainloaded and booted fine; the config on disk was
+the whole story. The lockstep fix stands on [FU-246](follow-ups.md)'s own merits, and the first
+diagnosis that blamed the kernel was wrong.
+
+## CP8. The kubeconfig does not follow the endpoint (FU-259)
+
+`talos_cluster_kubeconfig` is a **resource, not a data source**: it calls the API once at create
+time and keeps what it got. Its arguments (`node`, `endpoint`, `client_configuration`) never
+mention `local.cluster_endpoint`, so moving the endpoint changes nothing it tracks — `plan` reads
+`No changes` while `tofu output -raw kubeconfig` keeps serving the old `server:` URL. The
+talosconfig half has no such problem: `data.talos_client_configuration` is a data source, re-read
+every plan, and it listed all three control planes correctly the same day.
+
+Measured on the 2026-09-21 cutover: the flip reached all 13 machine configs and every apiserver,
+and the kubeconfig output still read `https://192.168.2.51:6443` — so the jail and the
+[management box](management-box.md) kept dialling cp-01 and the VIP bought them nothing. A second
+bug hid it for a day (`client-configs.sh` printed success without writing the jail's copy, #1823).
+
+Two guards, both added 2026-09-21:
+
+- **`check "kubeconfig_endpoint_current"`** (`tofu/talos.tf`) compares the captured
+  `kubernetes_client_configuration.host` against `local.cluster_endpoint` and **warns on every
+  plan** while they differ — the sentinel's plan-on-PR and the box's apply loop both surface it.
+- **`scripts/client-configs.sh` refuses to write** a kubeconfig whose `server:` disagrees with the
+  `cluster_endpoint` output, on the box and in the jail, rather than reinstating the old address
+  on both sides.
+
+A warning rather than a failure, and no `replace_triggered_by`, because **this root cannot plan
+the fix unscoped**: the `kubernetes`/`helm` providers are configured from this resource, so a
+planned replacement puts their host and certs in `(known after apply)` and the whole plan errors.
+Blocking would wedge the apply loop on a condition it has no way to resolve. The recovery is the
+scoped pair, then the re-render, then a full apply to restamp the apply-loop baseline:
+
+```bash
+devbox run mgmt-tf -- plan -replace=talos_cluster_kubeconfig.this -target=talos_cluster_kubeconfig.this
+devbox run mgmt-tf -- apply <plan-id>   # the id that plan printed, after reading it
+devbox run kubeconfig
+devbox run mgmt-tf -- plan && devbox run mgmt-tf -- apply <plan-id>   # full — stamps applied-rev
+```
+
+⚠ A `-target` on this root is the FU-248 landmine — it once replaced three workers. The plan-id
+contract is what keeps that honest: the scope lives in the plan file, so the apply cannot be typed
+differently from the plan you read. Check the unscoped plan is `No changes` before starting.
+
+**Done 2026-09-21**, in that order and with the plan read first — the scoped plan touched exactly
+one resource (`talos_cluster_kubeconfig.this will be replaced, as requested`, `1 to add, 1 to
+destroy`) and nothing was dragged in. `tofu/kubeconfig` and the box's copy now read
+`https://192.168.2.50:6443`, an authenticated `kubectl get nodes` through it returns 13 `Ready`,
+and the full plan afterwards is `No changes`.
+
+## CP9. A control plane that misses the cluster patch is not inert (homelab#1845)
+
+The **cluster-scoped** CP patch (CNI `none`, kube-proxy off, the PodSecurity `runtimeClasses:
+[kata]` exemption, the scheduler/controller-manager metric binds) lived inline in the VM config
+only. `metal.tf` gave a metal CP the VIP and issuer patches, never this one, so wk-metal-02 ran
+Talos's defaults from its 2026-09-21 05:50Z reinstall. Two effects, both fleet-wide:
+
+- **Its apiserver refused every kata+dind ride.** It held the endpoint VIP, so every docker-mode
+  fixer dispatch hit it (oracle-fleet#679). Found from a stack issue; the belt it lacked is now
+  `PodSecurityEnforceDenied` (`argocd/resources/pod-admission-alerts/`), which fires per instance.
+- **As a control plane it applied the default bootstrap manifests:** a `kube-flannel` DaemonSet
+  on all 13 nodes beside Cilium. Mostly harmless only by luck: `cni-exclusive` kept Cilium as
+  the pod CNI, Cilium's identical per-node /24 routes won, and the VXLAN ports differ (4789 vs
+  8472). It still wired two pods that started before Cilium on wk-metal-02 onto a `cni0` bridge
+  outside Cilium. Setting `cni: none` later does **not** prune what Talos already applied: the
+  objects, `flannel.1`/`cni0` and `/etc/cni/net.d/10-flannel.conflist*` were removed by hand.
+
+Structural fix: `local.cp_common_patches` is the one list both configs consume (#1847, #1848).
+Per-apiserver acceptance, reusable for any admission question: `kubectl --server=https://<cp>:6443
+apply --dry-run=server -f <pod>` against each control plane, not the VIP.
+
+**Tracked by:** FU-268 — the belt for the next divergence (nothing fired for ~10 h this time).

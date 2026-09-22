@@ -7,6 +7,10 @@ locals {
   pve_nodes  = { for k, n in var.nodes : k => n if n.hypervisor == "pve" }
   nx02_nodes = { for k, n in var.nodes : k => n if n.hypervisor == "nx-02" }
 
+  # Every Proxmox VM's Talos install disk (talos.tf) — one home, because node_install_targets
+  # (outputs.tf) reports it as the VM half of the install-time declaration.
+  vm_install_disk = "/dev/sda"
+
   # IP (without CIDR mask) per node.
   node_ip = { for k, n in var.nodes : k => split("/", n.ip_cidr)[0] }
 
@@ -44,13 +48,22 @@ locals {
   # needs a cluster rebuild or a planned rotation of every token.
   sa_issuer = "https://192.168.2.51:6443"
 
-  # The Kubernetes API endpoint. Still cp-01's own address: the VIP cutover was applied and
-  # REVERTED on 2026-09-20, and it resumes only once (a) the issuer pin above is LIVE on every
-  # control plane — verify with `kubectl -n kube-system get pod -l component=kube-apiserver -o
-  # jsonpath='{.items[*].spec.containers[0].command}' | tr ',' '\n' | grep service-account-issuer`
-  # — and (b) there are three etcd members, so the apiserver restarts roll instead of taking the
-  # API down. Order and the rest of the mechanism: docs/controlplane-ha.md. Tracked by FU-243.
-  cluster_endpoint = "https://${local.first_cp_ip}:6443"
+  # The Kubernetes API endpoint — the VIP since 2026-09-21. Both preconditions the reverted
+  # 2026-09-20 attempt lacked were verified live first: (a) the issuer pin above is LIVE on ALL
+  # THREE control planes (`--service-account-issuer`/`--api-audiences` both read
+  # https://192.168.2.51:6443 on cp-01, cp-02 and wk-metal-02), so moving this string is
+  # token-neutral and does not even restart the apiserver (docs/controlplane-ha.md §CP4 phase 3);
+  # and (b) there are three etcd members, so the VIP can actually move. The address itself was
+  # proven end-to-end before the cutover: `.50:6443` served an AUTHENTICATED `kubectl get nodes`
+  # and the apiserver cert already carries `IP Address:192.168.2.50` (#1801's certSANs).
+  #
+  # ⚠ Moving this does NOT re-render kubeconfig/talosconfig — `talos_cluster_kubeconfig` does not
+  # re-read it and `plan` stays clean (FU-259). Run `devbox run kubeconfig` + `devbox run
+  # talosconfig` (scripts/client-configs.sh) after, or the jail and the management box keep
+  # dialling cp-01 and the whole point of the VIP is lost.
+  #
+  # ⚠⚠ local.sa_issuer above does NOT follow this string. That coupling is the outage (FU-243, archived — the issuer is pinned since).
+  cluster_endpoint = "https://${local.cp_vip}:6443"
 
   # Both kinds of control plane: the VM ones in var.nodes and the metal ones flagged in
   # machines.yaml (ADR-133's laptop CP). This feeds the talosconfig's endpoint list, so leaving

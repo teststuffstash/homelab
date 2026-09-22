@@ -130,8 +130,9 @@ _yq() { ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); }
 mgmt_policy_get() { _yq -r "$2" "$1"; }
 
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
-# A path under roots[X].dir/ (longest dir wins) → X; a path under a foreign_roots dir → none;
-# anything not under any root dir → none.
+# A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
+# root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
+# foreign_roots dir → none; anything else → none.
 # FAILS CLOSED (rc 1, a line on stderr) when the policy cannot be read — a yq/devbox hiccup, a
 # missing file, a roots map with no entries or a root without a dir. An EMPTY result here means
 # "no box-held surface touched" = a success status, so a read failure must never degrade into it
@@ -139,7 +140,7 @@ mgmt_policy_get() { _yq -r "$2" "$1"; }
 # not cover process substitution). Callers capture the output with `$(…) || …`, not mapfile.
 mgmt_roots_touched() {
   local pol="$1" f root dir best bestdir foreign n d out
-  local -a names dirs foreigns
+  local -a names dirs foreigns inputs=()
   out="$(mgmt_policy_get "$pol" '.roots | keys | .[]')" || { echo "policy: roots unreadable ($pol)" >&2; return 1; }
   [ -n "$out" ] || { echo "policy: no roots in $pol" >&2; return 1; }
   mapfile -t names <<<"$out"
@@ -147,6 +148,9 @@ mgmt_roots_touched() {
     d="$(mgmt_policy_get "$pol" ".roots.\"$n\".dir")" && [ -n "$d" ] && [ "$d" != null ] \
       || { echo "policy: root $n has no dir" >&2; return 1; }
     dirs+=("$d")
+    # the root's declared out-of-dir inputs ("<root>\t<path>"); `[]?` = none when the key is absent
+    d="$(mgmt_policy_get "$pol" ".roots.\"$n\".inputs[]?")" || { echo "policy: roots.$n.inputs unreadable" >&2; return 1; }
+    if [ -n "$d" ]; then while IFS= read -r f; do if [ -n "$f" ]; then inputs+=("$n"$'\t'"$f"); fi; done <<<"$d"; fi
   done
   out="$(mgmt_policy_get "$pol" '.foreign_roots[]?')" || { echo "policy: foreign_roots unreadable" >&2; return 1; }
   mapfile -t foreigns <<<"$out"
@@ -155,6 +159,7 @@ mgmt_roots_touched() {
     foreign=0
     for dir in "${foreigns[@]}"; do [ -n "$dir" ] || continue; case "$f" in "$dir"/*) foreign=1 ;; esac; done
     [ $foreign = 1 ] && continue
+    for dir in "${inputs[@]}"; do if [ "$f" = "${dir#*$'\t'}" ]; then printf '%s\n' "${dir%%$'\t'*}"; fi; done
     best=""; bestdir=""
     for i in "${!names[@]}"; do
       dir="${dirs[$i]}"
@@ -327,10 +332,24 @@ mgmt_plan_changes() {
     [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" show -json "$out" 2>&1
   )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | head -c 300)" >&2; return 1; }
-  printf '%s' "$json" | jq -e '.resource_changes' >/dev/null 2>&1 \
+  printf '%s' "$json" | mgmt_plan_digest "$out" \
     || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
+}
+# mgmt_plan_digest <plan-out> <`tofu show -json` on stdin> → writes the side channels beside
+# <plan-out> ($out.planned / .outputs / .install.json / .talos) and prints the changed-resource
+# lines "address<TAB>actions". rc 1 when the JSON carries no resource_changes. Pure — the fixture
+# tests (scripts/mgmt-policy-test.sh) feed it synthetic plans.
+mgmt_plan_digest() {
+  local out="$1" json rc
+  json="$(mktemp)"; cat >"$json"
+  _mgmt_plan_digest "$out" "$json"; rc=$?
+  rm -f "$json"; return $rc
+}
+_mgmt_plan_digest() {
+  local out="$1" json="$2"
+  jq -e '.resource_changes' "$json" >/dev/null 2>&1 || return 1
   # side channel for the verdict: every address the plan carried (no-ops included) — see mgmt_plan_root's $out.state
-  printf '%s' "$json" | jq -r '.resource_changes[]?.address' | sort > "$out.planned"
+  jq -r '.resource_changes[]?.address' "$json" | sort > "$out.planned"
   # second side channel: the OUTPUT changes. A plan can have exit code 2 with every resource a
   # no-op — an output-only plan ("You can apply this plan to save these new output values … without
   # changing any real infrastructure"), which is what a new `output` block produces. Read as
@@ -338,14 +357,73 @@ mgmt_plan_changes() {
   # #1629 rule installed against a silent zero — and it fired on the first such PR (#1774, the
   # `node_install_targets` output, 2026-09-18). NAMES AND ACTIONS ONLY: an output's VALUE is
   # exactly the kind of live detail the verdict never carries off the box (the #1635 rule).
-  printf '%s' "$json" | jq -r '.output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) | [.key, (.value.actions | join("+"))] | @tsv' > "$out.outputs"
-  printf '%s' "$json" | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv'
+  jq -r '.output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) | [.key, (.value.actions | join("+"))] | @tsv' "$json" > "$out.outputs"
+  # third side channel, LOCAL ONLY: node_install_targets' before/after (ADR-132 §MB4 layer 2 — the
+  # install-impact line). The VALUES stay in this file on the box; mgmt_install_impact reads it and
+  # the verdict carries node names + field names only. `null` = the plan has no such output.
+  jq -c '.output_changes.node_install_targets // null' "$json" > "$out.install.json"
+  # fourth side channel, LOCAL ONLY: the Talos config applies the plan would make — the apply
+  # loop's precondition (mgmt_talos_gate) reads it. "address<TAB>actions<TAB>node<TAB>apply_mode",
+  # apply_mode `(unknown)` when known only after apply, `(unset)` when absent (a delete, or a
+  # provider/config without the attribute — package A's `apply_mode = "no_reboot"` is what sets it).
+  jq -r '.resource_changes[]? | select(.type == "talos_machine_configuration_apply" and .change.actions != ["no-op"])
+    | [.address, (.change.actions | join("+")), ((.index // "") | tostring),
+       (if ((.change.after_unknown // {}) | if type == "object" then .apply_mode else false end) == true then "(unknown)"
+        else ((.change.after // {}).apply_mode // "(unset)") end)] | @tsv' "$json" > "$out.talos"
+  jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv' "$json"
 }
 # mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
 # changes; empty when none. Written by mgmt_plan_changes — call it first (an absent file here means
 # the summary never ran, and the caller has already failed the verdict on that).
 mgmt_plan_outputs() {
   [ -s "$1.outputs" ] && cat "$1.outputs" || return 0
+}
+# mgmt_install_impact <plan-out> → the install-time diff of this plan, one line per affected node:
+#   "<node>\t<kind>\t<fields, comma-joined>\t<fields whose value is known only after apply>"
+# kind: new (the head declares a node the applied state does not) | gone (it drops one) | changed.
+# Fields, named — never valued: schematic, installer, version, install disk, EPHEMERAL, role.
+# BEFORE is the applied state's value (what master last delivered), AFTER is the head's — so a
+# node that was ALREADY drifted from live does not show up here; that is the belt's job (§MB2).
+# A field present in only one side is skipped: an output that GROWS a field is not a fleet-wide
+# reinstall. Whole-output unknown → one line "*\tunknown\t\t". rc 1 = no side channel / no
+# output (the plan carries no node_install_targets) — the caller says "unreadable", never "none".
+mgmt_install_impact() {
+  local f="$1.install.json"
+  [ -s "$f" ] || return 1
+  [ "$(cat "$f")" != null ] || return 1
+  jq -r '
+    def fname: {schematic:"schematic", installer:"installer", version:"version",
+                install_disk:"install disk", ephemeral:"EPHEMERAL", role:"role"}[.] // .;
+    def fields: ["schematic","installer","version","install_disk","ephemeral","role"];
+    . as $c
+    | if ($c.after_unknown == true) then "*\tunknown\t\t"
+      else
+        (($c.before // {}) | keys) as $bk | (($c.after // {}) | keys) as $ak
+        | (($bk + $ak) | unique)[] as $n
+        | ($c.before[$n]) as $b | ($c.after[$n]) as $a
+        | ($c.after_unknown | if type == "object" then .[$n] else null end) as $u
+        | if $b == null then [$n, "new", "", ""] | @tsv
+          elif ($a == null and $u == null) then [$n, "gone", "", ""] | @tsv
+          else
+            [ fields[] as $k | select(($u == true) or (($u|type) == "object" and ($u[$k] // false) != false)) | $k ] as $unk
+            | [ fields[] as $k | select(($unk | index($k))
+                or (($b | has($k)) and (($a // {}) | has($k)) and ($b[$k] != $a[$k]))) | $k ]
+            # the installer URL is DERIVED from schematic + version (+ platform): name it only when
+            # it moves on its own (the platform half, the ADR-014 ghost class)
+            | (if (index("schematic") or index("version")) then map(select(. != "installer")) else . end) as $ch
+            | if ($ch | length) == 0 then empty
+              else [$n, "changed", ([$ch[] | fname] | join(", ")), ([$unk[] | fname] | join(", "))] | @tsv end
+          end
+      end' "$f"
+}
+# mgmt_install_after <plan-out> <node…> → JSON {node: <after value>} for the named nodes whose after
+# value is fully known — the NODE_TARGETS_JSON shape mgmt-probe.sh's check_nodes reads. Local only.
+mgmt_install_after() {
+  local f="$1.install.json"; shift
+  jq -c '. as $c | [$ARGS.positional[] as $n
+      | select(($c.after[$n] // null) != null
+               and ((($c.after_unknown // {}) | if type == "object" then .[$n] else null end) // null) == null)
+      | $n] | map({key: ., value: $c.after[.]}) | from_entries' "$f" --args "$@"
 }
 # mgmt_plan_not_planned <plan-out> → the state addresses the plan did NOT carry (explicit excludes +
 # their dependents), one per line; empty when nothing was excluded or the state list is unavailable
@@ -377,6 +455,71 @@ mgmt_apply_allowed() {
     [ $ok = 1 ] || printf '%s\n' "$addr"
   done
 }
+
+# mgmt_talos_gate <policy> <root> <plan-out> → the PRECONDITION on the Talos config applies inside
+# the apply allowlist (docs/management-box.md §MB3 "Talos config applies"). Prints one refusal per
+# offending change, "rule<TAB>address<TAB>detail"; empty = every one may be applied unattended.
+#   talos-action        not an in-place `update` — a create is an onboarding, a delete/replace a
+#                       node leaving: both human (the onboard-metal-node / reinstall windows)
+#   talos-apply-mode    the planned `apply_mode` is not `no_reboot` — a config Talos may reboot
+#                       for is a window, never a loop apply (§MB4 item 4). `(unset)` until the
+#                       resources declare it, so the loop refuses before package A lands
+#   talos-role-unknown  the node's role is not readable from the plan's node_install_targets
+#   talos-controlplane  the node's declared role is controlplane and the root's
+#                       `apply_controlplane_config` toggle is not true (default false — the
+#                       2026-09-20 CP apply took the API path down while every node read Ready)
+# Reads the $out.talos and $out.install.json side channels (mgmt_plan_digest). rc 1 = the side
+# channel or the toggle is unreadable — the caller refuses, never reads that as "no Talos change".
+mgmt_talos_gate() {
+  local pol="$1" root="$2" out="$3" cp addr acts node mode role
+  [ -f "$out.talos" ] || { echo "talos side channel missing ($out.talos)" >&2; return 1; }
+  [ -s "$out.talos" ] || return 0
+  cp="$(mgmt_policy_get "$pol" ".roots.\"$root\".apply_controlplane_config // false")" || return 1
+  while IFS=$'\t' read -r addr acts node mode; do
+    [ -n "$addr" ] || continue
+    if [ "$acts" != update ]; then printf 'talos-action\t%s\t%s\n' "$addr" "$acts"; continue; fi
+    if [ "$mode" != no_reboot ]; then printf 'talos-apply-mode\t%s\tapply_mode=%s\n' "$addr" "$mode"; continue; fi
+    role=""
+    [ -s "$out.install.json" ] && role="$(jq -r --arg n "$node" \
+      'if type == "object" then ((.after // {})[$n].role // (.before // {})[$n].role // "") else "" end' "$out.install.json" 2>/dev/null)"
+    case "$role" in
+      worker) ;;
+      controlplane) [ "$cp" = true ] || printf 'talos-controlplane\t%s\tapply_controlplane_config=%s\n' "$addr" "$cp" ;;
+      *) printf 'talos-role-unknown\t%s\tnode %s not in node_install_targets\n' "$addr" "${node:-?}" ;;
+    esac
+  done <"$out.talos"
+  return 0
+}
+
+# ── the post-apply health gate (the unattended /maintenance-window check) ───────────────────────
+# mgmt_health <snapshot|compare <file>> — scripts/maintenance-window.sh's probes (firing alert
+# names, sum(up), cilium's kubernetes-apiserver backend on every node, hard-failed pods, node
+# count), run from the TRUSTED tree like every other tool here. ONE home for the probes: the box
+# calls the same script the seat's window does. KUBECONFIG: the script falls back to
+# /var/lib/mgmt/kubeconfig on the box (devbox.json points it at a checkout path that is absent there).
+mgmt_health() { ( cd "$REPO" && devbox run --quiet -- bash "$REPO/scripts/maintenance-window.sh" "$@" ); }
+# mgmt_post_check <baseline-file> → polls `compare` after an apply. Waits MGMT_POSTCHECK_SETTLE s
+# (default 180: an apiserver restart drops the cilium backend within the first minute — reading
+# earlier would pass before the regression exists), then every MGMT_POSTCHECK_INTERVAL s (30)
+# until a clean reading or MGMT_POSTCHECK_TIMEOUT s (900) since the apply. rc 0 = a clean reading;
+# rc 2 = still regressed at the deadline, the LAST reading's ⚠ lines on stdout. An unreadable probe
+# is a regression (maintenance-window's rule: "we could not look" is never ok).
+mgmt_post_check() {
+  local base="$1" settle="${MGMT_POSTCHECK_SETTLE:-180}" every="${MGMT_POSTCHECK_INTERVAL:-30}"
+  local deadline="${MGMT_POSTCHECK_TIMEOUT:-900}" t0 out
+  t0="$(_mgmt_now)"
+  _mgmt_sleep "$settle"
+  while :; do
+    if out="$(mgmt_health compare "$base" 2>&1)"; then return 0; fi
+    [ $(( $(_mgmt_now) - t0 + every )) -le "$deadline" ] || break
+    _mgmt_sleep "$every"
+  done
+  printf '%s\n' "$out" | grep '⚠' | sed 's/^[[:space:]]*⚠[[:space:]]*//'
+  [ -n "$(printf '%s\n' "$out" | grep '⚠')" ] || printf '%s\n' "compare failed without a finding: $(printf '%s' "$out" | tail -1)"
+  return 2
+}
+_mgmt_sleep() { sleep "$1"; }   # the fixture test stubs these two with a FAKE clock
+_mgmt_now() { date +%s; }       # (a no-op sleep alone left the deadline on the wall clock: ~60 s of busy loop, #1875)
 
 # mgmt_git <git args…> — git with the App token as a per-invocation `http.extraHeader` (the
 # PR#1333 pattern: preemptive Basic auth, so GitHub never sees an ANONYMOUS request from this box —

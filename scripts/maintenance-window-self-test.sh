@@ -98,7 +98,9 @@ out="$(PROM_URL="$DEAD_PROM" bash "$SUT" open --reason "self-test" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ]; then ok "open refuses when Prometheus is unreadable (rc=$rc)"
 else bad "open banked a baseline with Prometheus down — rc=$rc"; fi
 grep -qi "UNREADABLE" <<<"$out" && ok "open says UNREADABLE" || bad "open did not report UNREADABLE: $out"
-[ -f "$MAINT_STATE_DIR/baseline.json" ] && bad "a baseline file was left behind" || ok "no baseline left behind"
+# no_slots: nothing banked — no slot dir, no pending dir, no pre-slot file.
+no_slots() { [ -z "$(find "$MAINT_STATE_DIR" -name baseline.json 2>/dev/null)" ]; }
+no_slots && ok "no baseline left behind" || bad "a baseline file was left behind"
 
 # 2. A hand-made GOOD baseline + unreachable Prometheus => check FAILS and says so.
 mkdir -p "$MAINT_STATE_DIR"
@@ -108,7 +110,8 @@ cat > "$TMP/baseline.fixture.json" <<'EOF'
  "nodes":1,"nodes_ok":true}
 EOF
 # Re-laid before every case: some cases run `open`, which deletes the baseline when it refuses.
-baseline() { cp "$TMP/baseline.fixture.json" "$MAINT_STATE_DIR/baseline.json"; }
+# One slot, keyed like a real window (the state layout is one slot per window id — §7).
+baseline() { mkdir -p "$MAINT_STATE_DIR/fixture"; cp "$TMP/baseline.fixture.json" "$MAINT_STATE_DIR/fixture/baseline.json"; }
 baseline
 out="$(PROM_URL="$DEAD_PROM" bash "$SUT" check 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && ok "check fails when the alert read fails (rc=$rc)" \
@@ -161,14 +164,13 @@ grep -qE "hard-failed pods|pods UNREADABLE" <<<"$out" && ok "check still reports
                 || bad "check died before the later probes on zero nodes: $out"
 
 # 3f. Same condition through `open`: a zero-node baseline is never banked.
-rm -f "$MAINT_STATE_DIR/baseline.json"
+rm -rf "$MAINT_STATE_DIR"/*
 out="$(PROM_URL="$DEAD_PROM" FAKE_NODES_FAIL=1 bash "$SUT" open --reason "self-test" 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && ok "open refuses a zero-node baseline (rc=$rc)" \
                 || bad "open banked a baseline with 0 nodes — rc=$rc"
 grep -q "nodes_ok=false" <<<"$out" && ok "open names the node read in its refusal" \
                 || bad "open's refusal did not name nodes_ok: $out"
-[ -f "$MAINT_STATE_DIR/baseline.json" ] && bad "a zero-node baseline was left behind" \
-                || ok "no zero-node baseline left behind"
+no_slots && ok "no zero-node baseline left behind" || bad "a zero-node baseline was left behind"
 
 # 3g. EVERY agent's exec fails => the backend check answered nothing about a single node, so it
 # must block. The three-way split's footnote ("unknown = exec did not answer twice") is the right
@@ -193,7 +195,7 @@ grep -q "unknown = exec did not answer twice" <<<"$out" && ok "the partial case 
                 || bad "the partial case lost its footnote: $out"
 
 # 3i. And open never banks a baseline the cilium read could not fill.
-rm -f "$MAINT_STATE_DIR/baseline.json"
+rm -rf "$MAINT_STATE_DIR"/*
 out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_EXEC_FAIL=all bash "$SUT" open --reason "self-test" 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && ok "open refuses a wholly-unread cilium baseline (rc=$rc)" \
                 || bad "open banked a baseline with have=0 unknown>0 — rc=$rc"
@@ -318,6 +320,127 @@ out="$(cp_run stuck FAKE_CILIUM_LOSE_ON_UPGRADE=1 FAKE_CILIUM_RECOVERS=0)"; rc=$
                 || bad "cp-upgrade rolled ds/cilium $(rolls stuck) time(s), expected exactly 1"
 grep -qi "NOT the known signature" <<<"$out" && ok "cp-upgrade says the signature does not match" \
                 || bad "cp-upgrade's failure did not distinguish this from the known bug: $out"
+
+# ---------------------------------------------------------------------------------------------
+# 6. The UNATTENDED pair — `snapshot` + `compare`, what the management box's apply loop brackets a
+# Talos config apply with (scripts/mgmt-apply.sh). A fake curl answers as Prometheus (FAKE_ALERTS
+# = the firing names, FAKE_UP = sum(up)); everything else is the stub kubectl above.
+REAL_CURL="$(PATH="${PATH#"$TMP/bin:"}" command -v curl)"
+cat > "$TMP/bin/curl" <<EOF
+#!/usr/bin/env bash
+[ "\${FAKE_PROM:-0}" = 1 ] || exec "$REAL_CURL" "\$@"
+case "\$*" in
+  *api/v1/alerts*) printf '{"status":"success","data":{"alerts":[%s]}}' "\$(for a in \${FAKE_ALERTS:-}; do printf '%s{"state":"firing","labels":{"alertname":"%s"}}' "\${sep:-}" "\$a"; sep=,; done)" ;;
+  *api/v1/query*)  printf '{"status":"success","data":{"result":[{"value":[0,"%s"]}]}}' "\${FAKE_UP:-100}" ;;
+esac
+EOF
+chmod +x "$TMP/bin/curl"
+FAKE_STATE="$TMP/snap"; mkdir -p "$FAKE_STATE"; export FAKE_STATE
+out="$(PROM_URL="$DEAD_PROM" bash "$SUT" snapshot 2>"$TMP/snap.err")"; rc=$?
+[ "$rc" -eq 1 ] && ok "snapshot exits 1 when Prometheus is unreadable" || bad "snapshot rc=$rc (want 1) with Prometheus down"
+grep -q "alerts_ok=false" "$TMP/snap.err" && ok "snapshot names the unread probe on stderr" || bad "snapshot's refusal did not name alerts_ok: $(cat "$TMP/snap.err")"
+FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" snapshot > "$TMP/base.json"; rc=$?
+[ "$rc" -eq 0 ] && jq -e '.alerts == ["Watchdog"] and .up == 100 and .cilium_have == 1' "$TMP/base.json" >/dev/null \
+  && ok "snapshot banks a readable baseline (rc=0)" || bad "snapshot rc=$rc on a readable cluster: $(cat "$TMP/base.json")"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && ok "compare exits 0 on an unchanged cluster" || bad "compare rc=$rc on an unchanged cluster: $out"
+grep -q "CI runs" <<<"$out" && bad "compare ran the CI probe (the box has no gh)" || ok "compare leaves the CI probe out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown" <<<"$out" && ok "compare exits 2 naming a new firing alert" \
+  || bad "compare rc=$rc on a new alert: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 FAKE_CILIUM_NO_BACKEND=1 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NO backend for 10.96.0.1:443" <<<"$out" && ok "compare exits 2 on the 2026-09-20 signature (cilium backend lost)" \
+  || bad "compare rc=$rc on a lost cilium backend: $out"
+out="$(FAKE_PROM=1 FAKE_UP=60 FAKE_ALERTS="Watchdog" bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "scrape targets DOWN: 100 -> 60" <<<"$out" && ok "compare exits 2 on lost scrape targets" \
+  || bad "compare rc=$rc on lost targets: $out"
+out="$(bash "$SUT" compare "$TMP/absent.json" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "compare refuses a missing baseline file (rc=$rc)" || bad "compare passed with no baseline: $out"
+unset FAKE_STATE
+
+# ---------------------------------------------------------------------------------------------
+# 7. ONE STATE SLOT PER WINDOW (GAPS maintenance-window-G1). On 2026-09-22 a seat and its subagent
+# had windows open at once; the single per-user slot let the second `open` overwrite the first's
+# baseline + window id, so the first `close` would have closed the SUBAGENT's window. Runs the REAL
+# script from a stub repo whose agents/seat-window.sh only mints ids and logs calls — DEVBOX_PROJECT_ROOT
+# is pinned to it, because `devbox run` exports the real checkout and the real one writes the cluster.
+WREPO="$TMP/wrepo"; mkdir -p "$WREPO/scripts" "$WREPO/agents"
+cp "$ROOT/scripts/maintenance-window.sh" "$WREPO/scripts/"
+cat > "$WREPO/agents/seat-window.sh" <<'EOF'
+#!/usr/bin/env bash
+log="$FAKE_STATE/seat-window.log"
+case "$1" in
+  open)  n=$(( $(cat "$FAKE_STATE/n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE_STATE/n"
+         echo "open w$n" >> "$log"; echo "✓ window w$n open until 2099-01-01T00:00:00Z — stub" ;;
+  close) echo "close $*" >> "$log"; echo "✓ closed 1 window(s)" ;;
+  *)     echo "$*" >> "$log" ;;
+esac
+EOF
+FAKE_STATE="$TMP/slots"; mkdir -p "$FAKE_STATE"; export FAKE_STATE
+export MAINT_STATE_DIR="$TMP/slot-state"
+mw() { DEVBOX_PROJECT_ROOT="$WREPO" FAKE_PROM=1 FAKE_UP=100 bash "$WREPO/scripts/maintenance-window.sh" "$@" 2>&1; }
+closes() { grep -c '^close' "$FAKE_STATE/seat-window.log" 2>/dev/null || true; }
+
+# 7a. Legacy single-window flow: open → check → close, no --id anywhere.
+out="$(FAKE_ALERTS="Watchdog" mw open --reason "single")"; rc=$?
+[ "$rc" -eq 0 ] && [ -f "$MAINT_STATE_DIR/w1/baseline.json" ] && ok "open banks its baseline in the window's slot (w1)" \
+  || bad "open rc=$rc did not bank a w1 slot: $out"
+grep -q "pass '--id w1'" <<<"$out" && ok "open prints the id to pass" || bad "open did not print the --id hint: $out"
+out="$(FAKE_ALERTS="Watchdog" mw check)"; rc=$?
+[ "$rc" -eq 0 ] && ok "check without --id uses the one open window" || bad "single-window check rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog" mw close)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '^close close --id w1$' "$FAKE_STATE/seat-window.log" && [ ! -e "$MAINT_STATE_DIR/w1" ] \
+  && ok "close without --id closes the one window and drops its slot" || bad "single-window close rc=$rc: $out / $(cat "$FAKE_STATE/seat-window.log")"
+
+# 7b. Two concurrent opens keep SEPARATE baselines: w2 before a Foo alert, w3 after it.
+FAKE_ALERTS="Watchdog" mw open --reason "seat" >/dev/null
+FAKE_ALERTS="Watchdog Foo" mw open --reason "subagent" >/dev/null
+jq -e '.alerts == ["Watchdog"]' "$MAINT_STATE_DIR/w2/baseline.json" >/dev/null \
+  && jq -e '.alerts == ["Foo","Watchdog"]' "$MAINT_STATE_DIR/w3/baseline.json" >/dev/null \
+  && ok "two concurrent opens keep separate baselines" || bad "the second open clobbered the first's baseline"
+out="$(FAKE_ALERTS="Watchdog Foo" mw check --id w2)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: Foo" <<<"$out" && ok "check --id w2 compares against w2's own baseline" \
+  || bad "check --id w2 rc=$rc did not flag Foo: $out"
+out="$(FAKE_ALERTS="Watchdog Foo" mw check --id w3)"; rc=$?
+[ "$rc" -eq 0 ] && ok "check --id w3 compares against w3's own baseline" || bad "check --id w3 rc=$rc: $out"
+
+# 7c. Without --id and two live windows: REFUSE and list both — never guess.
+n0="$(closes)"
+out="$(FAKE_ALERTS="Watchdog Foo" mw close)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "REFUSING" <<<"$out" && grep -q "w2" <<<"$out" && grep -q "w3" <<<"$out" \
+  && ok "close without --id refuses with 2 windows open, listing both" || bad "close without --id rc=$rc: $out"
+[ "$(closes)" -eq "$n0" ] && ok "the refused close closed no window" || bad "the refused close still called seat-window close"
+out="$(FAKE_ALERTS="Watchdog Foo" mw check)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "REFUSING" <<<"$out" && ok "check without --id refuses with 2 windows open" \
+  || bad "check without --id rc=$rc: $out"
+
+# 7d. close --id closes ONLY that window; the other slot survives, and is then the one.
+out="$(FAKE_ALERTS="Watchdog Foo" mw close --id w3)"; rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w3" ] && [ -f "$MAINT_STATE_DIR/w2/baseline.json" ] \
+  && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w3" ] \
+  && ok "close --id w3 closes only w3" || bad "close --id w3 rc=$rc: $out / $(cat "$FAKE_STATE/seat-window.log")"
+out="$(FAKE_ALERTS="Watchdog Foo" mw close)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "REFUSING to close" <<<"$out" && [ -e "$MAINT_STATE_DIR/w2" ] \
+  && ok "the remaining window's close still gates on ITS baseline (Foo is new to w2)" || bad "w2 close rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog Foo" mw close --force --id w2)"; rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w2" ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w2" ] \
+  && ok "close --force --id (either order) closes it" || bad "close --force --id w2 rc=$rc: $out"
+
+# 7e. Unknown / path-shaped ids are refused, not resolved.
+out="$(mw check --id nope)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "no maintenance-window slot for 'nope'" <<<"$out" && ok "an unknown --id is refused" || bad "unknown --id rc=$rc: $out"
+out="$(mw close --id ..)"; rc=$?
+[ "$rc" -eq 64 ] && ok "a path-shaped --id is refused" || bad "close --id .. rc=$rc: $out"
+
+# 7f. Pre-slot state (a window opened by the single-slot version) migrates and closes by its id.
+mkdir -p "$MAINT_STATE_DIR"; printf 'old-7' > "$MAINT_STATE_DIR/window-id"
+jq '.alerts=["Watchdog"]' "$TMP/baseline.fixture.json" > "$MAINT_STATE_DIR/baseline.json"
+out="$(FAKE_ALERTS="Watchdog" mw list)"
+grep -q "old-7" <<<"$out" && [ ! -e "$MAINT_STATE_DIR/baseline.json" ] && ok "a pre-slot baseline migrates into a slot" || bad "legacy migration: $out"
+out="$(FAKE_ALERTS="Watchdog" mw close)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id old-7" ] \
+  && ok "a migrated window closes by its recorded id" || bad "legacy close rc=$rc: $out"
+unset FAKE_STATE
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: PASS"; exit 0; }

@@ -41,12 +41,13 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn |
 | `nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin) | 192.168.2.59 | Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04` |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
+| `ci-runner-02` (VM on nx-02) | 192.168.2.66 | GitHub Actions runner VM — the second, on the other hypervisor (FU-266) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 <!-- END GENERATED hosts -->
 
 <!-- BEGIN GENERATED versions — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
-Cluster: **Talos v1.13.2 (control plane) / v1.13.10 (workers) / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
+Cluster: **Talos v1.14.1 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
 <!-- END GENERATED versions -->
 
 (Host table + version line above are generated from [`machines/machines.yaml`](machines/machines.yaml)
