@@ -1,1 +1,6 @@
-[{"body": "Fixes #80 — merged the janitor fix"}, {"body": "Implements #81 — merged the docs update"}]
+[
+  {"body": "Fixes #80 — merged the janitor fix", "mergedAt": "2026-08-25T05:00:00Z"},
+  {"body": "Implements #81 — merged the docs update", "mergedAt": "2026-08-25T05:05:00Z"},
+  {"body": "Fixes #84 — merged the merged-terminal belt fix", "mergedAt": "2026-08-25T06:00:00Z"},
+  {"body": "Touches the sibling seam in #85 but does not close it", "mergedAt": "2026-08-25T05:00:00Z"}
+]

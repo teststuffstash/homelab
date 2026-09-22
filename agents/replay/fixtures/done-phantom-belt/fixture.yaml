@@ -1,11 +1,27 @@
-# homelab#1106 — the agent/done phantom reconciler belt: a CLOSED issue with a merged PR
-# mentioning it, still labelled `agent/blocked` or `agent/review` past C4C5_PERSIST_S,
-# gets `agent/done`. Bookkeeping on dead state: the issue is already CLOSED, so a wrong
-# flip costs a mislabeled closed issue, not a duplicate ride.
+# homelab#1106 + homelab#1908 — the agent/done phantom reconciler belt: a CLOSED issue with a
+# STRONG-LINK merged PR (`implements|closes|fixes|resolves #N` — the C6 grammar), still wearing a
+# stale lifecycle label (`agent/blocked` | `agent/review` | `agent/in-progress`), gets
+# `agent/done`. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a
+# mislabeled closed issue, not a duplicate ride.
 #
-# CONDITION UNDER REPLAY. Two closed issues with stale labels in one world:
-#   #80 — CLOSED, `agent/blocked`, merged PR mentions it, persisted past C4C5_PERSIST_S → RECONCILES to agent/done.
-#   #81 — CLOSED, `agent/review`, merged PR mentions it, persisted past C4C5_PERSIST_S → RECONCILES to agent/done.
+# DISPATCH EXCLUSION ≠ RECONCILIATION EXCLUSION (Goal #1906 acceptance 1, homelab#1908): the
+# C4/C5 dispatch selector excludes `agent/blocked` (a human gate is never re-dispatched, IL-T06),
+# but that exclusion must not leak into reconciliation — a CLOSED issue wearing `agent/blocked`
+# whose PR merged is finished work. The belt reads CLOSED issues by ISSUE STATE + a strong-link
+# merged PR, whatever lifecycle label they wear. `agent/error` stays excluded.
+#
+# CONDITION UNDER REPLAY. Six closed issues in one world:
+#   #80 — CLOSED, `agent/blocked`, merged strong-link PR, persisted past C4C5_PERSIST_S → RECONCILES (persist path).
+#   #81 — CLOSED, `agent/review`, merged strong-link PR, persisted past C4C5_PERSIST_S → RECONCILES (persist path).
+#   #82 — CLOSED, `agent/blocked`, NO merged PR mentions it → HOLD (unrelated close).
+#   #83 — CLOSED, `agent/blocked`, no `agent-fix` → out of scope.
+#   #84 — CLOSED, `agent/blocked`, merged strong-link PR, CLOSED within ~60s of the merge → RECONCILES on the FIRST tick (closure-by-merge fast path; REDS on base, which holds it on the persist guard).
+#   #85 — CLOSED, `agent/blocked`, a merged PR only MENTIONS it (no strong link) → HOLD, no write (the circles#36 asymmetry; REDS on base, which fires on the bare mention).
+#
+# ⚠ #84's `updatedAt` is set in the FUTURE (2099) so the persist guard would HOLD it on base —
+# the fixture isolates the closure-by-merge fast path, which fires on `closedAt` ≈ the strong-link
+# PR's `mergedAt` regardless of `updatedAt`. (The 2099 idiom for "fresh" is the same one
+# `unblocked-unlabeled` uses; a fixed past timestamp cannot be "recent" against real replay time.)
 #
 # THE CONTRACT:
 #   1. #80 is WRITTEN in the IL-T16 order — `--add-label agent/done` FIRST, `--remove-label
@@ -14,6 +30,8 @@
 #   2. The audit comment names the phantom-reconciliation semantic.
 #   3. #81 follows the same pattern for agent/review.
 #   4. The belt runs AFTER the C4/C5 clause, as a separate clause operating on closed issues.
+#   5. #84 fires on closure-by-merge WITHOUT waiting out C4C5_PERSIST_S; #85 holds on a bare
+#      mention (strong link required).
 pins:
   - IL-T28
 name: done-phantom-belt
