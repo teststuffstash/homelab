@@ -1,0 +1,10 @@
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1540-x --workflow ci --status failure --limit 1 --json databaseId
+CALL gh run view 90000001540 --repo teststuffstash/homelab --json jobs
+CALL gh run list --repo teststuffstash/homelab --branch master --workflow ci --limit 1 --json databaseId,conclusion
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,comments
+OUT ORPHANS [homelab] ⏳ ci-red HELD (fleet-class) — PR #1540: ci/OpenTofu-formatting-(fmt--check,-all-roots)\n
+OUT UNITS 
+OUT ITEMS 
+OUT ITEM_CLASS homelab|pr-1540|ci-red-held|machine\n
+OUT REACHED: end
+RC 0
