@@ -51,8 +51,9 @@ def gh_json(args, token):
     if token:
         env["GH_TOKEN"] = token
     try:
-        p = subprocess.run(["gh"] + args, capture_output=True, text=True, env=env)
-    except OSError:
+        p = subprocess.run(["gh"] + args, capture_output=True, text=True, env=env,
+                           timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
         return None
     if p.returncode != 0:
         return None
