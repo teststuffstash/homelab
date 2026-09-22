@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-278** *(archived 2026-09-22)* — rollout workload-health hold (#1891): rollout-start snapshot keyed by
+  top owner + revision; a new unhealthy platform workload, or an important stack workload (≥2 replicas/
+  instances or a PDB) on its same revision, holds (never reverts); ack file; `MgmtRolloutHeldOnWorkloadHealth`.
+  Replay of 2026-09-22 holds on forgejo before cp-01. Operator ruling; §MB4 "Default forward" amended.
 - **FU-264** *(archived 2026-09-22)* — **Talos API CA rotated in production; the leaked `os:admin`
   identity is dead.** Scope `--talos` only (spike's reasoning), per [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md)
   §The recipe (#1888), run from the box 14:55–15:14Z: rotate-ca exit 0 on 13/13; state candidate A

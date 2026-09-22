@@ -1339,15 +1339,6 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
-- [ ] **FU-278** — **The rollout keeps taking nodes while a platform workload is down.** 2026-09-22:
-      wk-04's window moved Forgejo onto hp-01 (not Ready from 12:51Z, the FU-277 DNS trap); cp-01,
-      cp-02, wk-metal-02 went down after it. Between windows only node Ready + cilium + (ADR-140)
-      multi-node PDBs are read; §MB4's differential is the only halt. **Ruled (operator):** a
-      rollout-start fleet-wide snapshot of unhealthy workloads keyed by top owner + revision; hold
-      (never revert) on any NEW unhealthy platform workload (non-stack namespace), and on an
-      important stack workload (≥2 replicas/instances or a PDB) on its SAME revision; a new
-      revision or a stack singleton only logs. **Next:** the PR (node-maintenance verb + reconciler
-      hold + harness + replay of 2026-09-22). Relates FU-276, FU-273, ADR-140.
 - [ ] **FU-277** — **Talos ≥ v1.14 puts the DHCP search domain in every metal-node pod's resolv.conf.**
       v1.14.0 "applies DHCPv4 search domains": `teststuff.net` (dnsmasq) → pod search + ndots:5, so
       `x.ns.svc.cluster.local` tried `….teststuff.net` first → the CF `*.local` wildcard → 127.0.0.1.
