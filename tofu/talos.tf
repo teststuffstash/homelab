@@ -271,6 +271,15 @@ data "talos_machine_configuration" "node" {
     contains(local.ephemeral_nodes, each.key) ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/ephemeral" = "true" } }
     })] : [],
+    # FU-033 (a): Talos 1.14 mounts EPHEMERAL (/var) noexec, which kills Longhorn v1's
+    # instance-manager (longhorn.tf). Carried by every VM DECLARED at ≥ v1.14, so it lands (in the
+    # human apply) before the reconciler's upgrade — the verb refuses the upgrade without it.
+    tonumber(split(".", trimprefix(local.node_talos_version[each.key], "v"))[1]) >= 14 ? [yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "VolumeConfig"
+      name       = "EPHEMERAL"
+      mount      = { secure = false }
+    })] : [],
     # The endpoint VIP — control planes only (see local.cp_vip_patch).
     each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
     # The patches EVERY control plane carries, VM and metal alike (local.cp_common_patches).
