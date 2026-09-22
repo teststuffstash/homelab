@@ -388,14 +388,15 @@ six OVERSIZE items pointer-ized into
       diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
       `dependencyDashboard: false` by ruling 2026-08-18 (liveness = the exporter gauge ONLY).
       This item closes when that Goal launches and validates. Relates FU-046, FU-097, FU-016.
-- [ ] **FU-097** — **Write the per-surface ruling table** for the surfaces ArgoCD/tofu don't
-      reconcile (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
-      human-applied + a named drift belt. Inputs: `ROADMAP.md` §Deploy paths, the per-root split
-      in [`dependency-upgrades.md`](dependency-upgrades.md), the R12 build order it precedes
-      (ADR-129). **2026-09-13 (operator): the first rows are ruled** — OPNsense / CPs / Proxmox
-      host stay human until the CARP pair + third CP exist; the main root's raw-k8s residue is the
-      box's test surface; `provisioning` the canary — [`management-box.md`](management-box.md)
-      §The test surface. **Next:** write the table around those anchors. Relates FU-051, FU-012.
+- [ ] **FU-097** — **The box's capability ledger** (was: the per-surface ruling table). **Reshaped
+      2026-09-22 (operator):** per surface, record what the box has been TESTED doing on its own
+      (date + evidence) and its auto-apply TOGGLE. No codeowner column. On box-applied surfaces the
+      codeowner read becomes an **intent review**, a new reviewer instruction: does the plan +
+      install-impact line do what the issue asked, given what the fleet and the box already run?
+      Anchors (2026-09-13): router/CPs/Proxmox stay human; the raw-k8s residue belongs to the box; `provisioning` = canary.
+      The human `mgmt-tf apply` before a Talos config change is INTERIM. The first toggle, after the
+      wk-03 canary + rollback (FU-033), = `talos_machine_configuration_apply` for `reconcile: auto` nodes.
+      **Next:** the ledger section in [`management-box.md`](management-box.md) + the instruction. Relates FU-012, FU-235.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
