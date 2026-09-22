@@ -1,0 +1,52 @@
+# Behaviour fixture for the node reconciler's fleet-rollout belts (FU-273).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/reconcile-rollout.promtool-test
+#
+# The series are what scripts/mgmt-reconcile.sh emits (its own tests pin the emitting side).
+rule_files:
+  - reconcile-rollout.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── the canary stage ends on its timeout: advance anyway, and say so until the rollout ends ─────
+  - interval: 5m
+    name: "a canary timeout fires after 5m and clears when the rollout ends"
+    input_series:
+      - series: 'mgmt_reconcile_rollout_canary_timed_out{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x10 1x12 0x6"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: MgmtRolloutCanaryTimedOut
+        exp_alerts: []
+      - eval_time: 58m
+        alertname: MgmtRolloutCanaryTimedOut
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: MgmtRolloutCanaryTimedOut
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 2h
+        alertname: MgmtRolloutCanaryTimedOut
+        exp_alerts: []
+
+  # ── halted: the differential halt is NOT this belt's (MgmtRolloutDifferential already fires);
+  # an unreadable one is, after an hour ──────────────────────────────────────────────────────────
+  - interval: 5m
+    name: "a halt on the differential never fires HaltUnreadable; an unreadable one does after 1h"
+    input_series:
+      - series: 'mgmt_reconcile_rollout_halted{job="mgmt-node",instance="192.168.2.53:9100",reason="differential"}'
+        values: "1x30 0x30"
+      - series: 'mgmt_reconcile_rollout_halted{job="mgmt-node",instance="192.168.2.53:9100",reason="unreadable"}'
+        values: "0x30 1x30"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: MgmtRolloutHaltUnreadable
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: MgmtRolloutHaltUnreadable
+        exp_alerts: []
+      - eval_time: 3h40m
+        alertname: MgmtRolloutHaltUnreadable
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: unreadable }

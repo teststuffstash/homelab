@@ -3,7 +3,11 @@
 # FAKE verb and a FAKE live fleet: every transition the loop owns — idle, sync → idle, a gate's
 # refusal (retried), a failure (PARKED, never retried on the same key), a new key un-parking, a
 # zero-exit verb whose diff disagrees, a sync the loop died in, WIP 1 (windows, queueing), the
-# control-plane guard, manual nodes untouched, and a diff that cannot be read. No cluster, no box.
+# control-plane guard, manual nodes untouched, and a diff that cannot be read — run twice, with no
+# switch and with the rollout switch explicitly OFF. Then the FLEET ROLLOUT (switch ON, FU-273)
+# against a fake CP verb, ranking, evidence script, Prometheus and kubectl: canaries per type, the
+# evidence wait and its timeout, CPs last, halt/resume, the pressure taints, supersede, revert, and
+# the switch going off mid-rollout. No cluster, no box.
 #   devbox run mgmt-reconcile-test
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -34,20 +38,43 @@ if [ "$rc" = 0 ] && [ -z "${FAKE_NOOP:-}" ]; then
 fi
 exit "$rc"
 EOF
+# kubectl (the rollout's pressure taints; set for EVERY case, so the switch-off suite can assert it
+# is never called): `get nodes -o json` from $TAINTS ({node: [taint]}), `taint node <n> k=v:e
+# --overwrite`, `taint node <n> k:e-`, `taint node <n> k-`. Every call recorded in $KCALLS.
+export RECONCILE_KUBECTL="bash $T/kubectl.sh" TAINTS="$T/taints.json" KCALLS="$T/kcalls"
+echo '{}' >"$TAINTS"
+cat >"$T/kubectl.sh" <<'EOF'
+echo "$*" >>"$KCALLS"
+case "$1 $2" in
+  "get nodes") jq '{items: (to_entries | map({metadata: {name: .key}, spec: {taints: .value}}))}' "$TAINTS" ;;
+  "taint node")
+    n="$3"; spec="$4"
+    if [ "${spec%-}" != "$spec" ]; then
+      s="${spec%-}"; k="${s%%:*}"; e=""; [ "$k" != "$s" ] && e="${s#*:}"
+      jq --arg n "$n" --arg k "$k" --arg e "$e" '.[$n] |= map(select(.key != $k or ($e != "" and .effect != $e)))' "$TAINTS" >"$TAINTS.t"
+    else
+      kv="${spec%%:*}"; e="${spec#*:}"; k="${kv%%=*}"; v="${kv#*=}"
+      jq --arg n "$n" --arg k "$k" --arg v "$v" --arg e "$e" '.[$n] = ([.[$n][]? | select(.key != $k or .effect != $e)] + [{key: $k, value: $v, effect: $e}])' "$TAINTS" >"$TAINTS.t"
+    fi
+    mv "$TAINTS.t" "$TAINTS" ;;
+  *) exit 1 ;;
+esac
+EOF
 
-machines() { printf '{"machines":%s}' "$1" >"$RECONCILE_MACHINES_JSON"; }
+# SWITCH: extra top-level JSON (the reconcile_rollout block) — empty = the pre-rollout inventory.
+machines() { printf '{%s"machines":%s}' "${SWITCH:+$SWITCH,}" "$1" >"$RECONCILE_MACHINES_JSON"; }
 targets()  { printf '%s' "$1" >"$RECONCILE_TARGETS_JSON"; }
 live()     { printf '%s' "$1" >"$LIVE"; }
 windows()  { printf '%s' "$1" >"$RECONCILE_WINDOWS_JSON"; }
-reset()    { rm -rf "$RECONCILE_DIR" "$CALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*; unset FAKE_RC FAKE_NOOP FAKE_DIFF_FAIL; windows '[]'; }
+reset()    { rm -rf "$RECONCILE_DIR" "$CALLS" "$KCALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*; unset FAKE_RC FAKE_NOOP FAKE_DIFF_FAIL; windows '[]'; }
 tick()     { bash "$HERE/mgmt-reconcile.sh" >"$T/out" 2>&1; echo $? >"$T/rc"; }
 st()       { jq -r --arg n "$1" '.[$n].state // "none"' "$RECONCILE_DIR/state.json" 2>/dev/null || echo none; }
 calls()    { [ -f "$CALLS" ] && grep -c . "$CALLS" || echo 0; }
-metric()   { grep -F "$1" "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom" 2>/dev/null | awk '{print $NF}'; }
+metric()   { grep -v '^#' "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom" 2>/dev/null | grep -F "$1" | awk '{print $NF}'; }
 
 pass=0; fail=0
 check() {  # <name> <condition...>
-  local name="$1"; shift
+  local name="$1${SUFFIX:-}"; shift
   if "$@"; then pass=$((pass+1)); echo "PASS $name"
   else fail=$((fail+1)); echo "FAIL $name"; sed 's/^/     /' "$T/out"; fi
 }
@@ -58,6 +85,9 @@ D2='{"wk-03":{"version":"v2","schematic":"s","role":"worker"},"wk-01":{"version"
 D3='{"wk-03":{"version":"v3","schematic":"s","role":"worker"},"wk-01":{"version":"v3","schematic":"s","role":"worker"}}'
 V1='{"wk-03":{"version":"v1","schematic":"s"},"wk-01":{"version":"v1","schematic":"s"}}'
 
+# ── the pre-rollout suite, run twice — no switch key, and the switch explicitly OFF — so the
+# switch-off path is pinned to the old behaviour on every one of its cases ──
+legacy_suite() {
 # ── in sync ──
 reset; machines "[$W,$M]"; targets "$D1"; live "$V1"; tick
 check "in sync → idle, verb not called"      eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 0 ] && [ "$(cat $T/rc)" = 0 ]'
@@ -130,6 +160,175 @@ check "an unreadable diff → exit 1, nothing run, last-run not stamped" eval '[
 reset; machines "[$W]"; targets "$D2"; live "$V1"; tick
 machines "[$M]"; tick
 check "a node leaving auto leaves the state + metrics" eval '[ "$(st wk-03)" = none ] && ! grep -q "wk-03" "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom"'
+check "switch off: no rollout record, no rollout series, kubectl never called" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && ! grep -q mgmt_reconcile_rollout "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom" && [ ! -s "$KCALLS" ]'
+}
+SUFFIX="" SWITCH="" legacy_suite
+SUFFIX=" [switch off]" SWITCH='"reconcile_rollout":{"enabled":false}' legacy_suite
+unset SUFFIX SWITCH
+
+# ═══ THE FLEET ROLLOUT (switch ON, FU-273) ═══════════════════════════════════════════════════════
+# An eight-node fleet: four worker TYPES (class × role × schematic × storage) and two control planes.
+# The fake ranking (node-maintenance.sh order's TSV) ranks them least-risky first:
+#   wk-03 nx-01 wk-02 (compute) · wk-01 (vm, Longhorn replicas) · hp-01 m70s (metal, Garage zones) · cp-01 cp-02
+# so the canaries are wk-03 (vm/L/compute), nx-01 (metal/K/compute), wk-01 (vm/L/storage),
+# hp-01 (metal/M/storage); wk-02, m70s and the CPs are the fleet stage.
+export RECONCILE_CP_VERB="bash $T/cpverb.sh" RECONCILE_ORDER_CMD="bash $T/order.sh"
+export RECONCILE_EVIDENCE="$T/evidence.sh" RECONCILE_DIFFERENTIAL_CMD="bash $T/differential.sh"
+export EVID="$T/evid"
+cat >"$T/cpverb.sh" <<'EOF'
+echo "cp $1" >>"$CALLS"
+rc="${FAKE_CP_RC:-0}"
+if [ "$rc" = 0 ]; then
+  jq --arg n "$1" --slurpfile D "$RECONCILE_TARGETS_JSON" '.[$n] = {version: $D[0][$n].version, schematic: $D[0][$n].schematic}' "$LIVE" >"$LIVE.t" && mv "$LIVE.t" "$LIVE"
+fi
+exit "$rc"
+EOF
+cat >"$T/order.sh" <<'EOF'
+[ -n "${FAKE_ORDER_FAIL:-}" ] && exit 2
+printf '0\twk-03\tv\t0\t0\t-\t0\n0\tnx-01\tv\t0\t0\t-\t0\n0\twk-02\tv\t0\t0\t-\t0\n2\twk-01\tv\t0\t0\t-\t4\n5\thp-01\tv\t0\t0\tyes\t3\n5\tm70s\tv\t0\t0\tyes\t3\n20\tcp-01\tv\t0\t2\t-\t0\n20\tcp-02\tv\t0\t2\t-\t0\n'
+EOF
+# evidence: $EVID/<node> holds the exit code (absent = 1, not yet); every call is recorded.
+cat >"$T/evidence.sh" <<'EOF'
+echo "$1 $2" >>"$EVID/calls"
+exit "$(cat "$EVID/$1" 2>/dev/null || echo 1)"
+EOF
+cat >"$T/differential.sh" <<'EOF'
+[ -n "${FAKE_DIFFERENTIAL_UNREADABLE:-}" ] && exit 1
+echo "${FAKE_DIFFERENTIAL:-0}"
+EOF
+
+FLEET="wk-03 nx-01 wk-02 wk-01 hp-01 m70s cp-01 cp-02"
+ON='"reconcile_rollout":{"enabled":true}'
+fleet_machines() { SWITCH="${1:-$ON}" machines "$(for n in $FLEET; do printf '{"name":"%s","reconcile":"auto"}\n' "$n"; done | jq -sc .)"; }
+fleet_targets() {  # <version> [<node>=<version> …] — the declaration, with per-node overrides
+  local v="$1"; shift
+  targets "$(jq -nc --arg v "$v" --arg o "$*" '
+    {"wk-03":  {class:"vm",    role:"worker",       schematic:"L", version:$v},
+     "nx-01":  {class:"metal", role:"worker",       schematic:"K", version:$v},
+     "wk-02":  {class:"vm",    role:"worker",       schematic:"L", version:$v},
+     "wk-01":  {class:"vm",    role:"worker",       schematic:"L", version:$v},
+     "hp-01":  {class:"metal", role:"worker",       schematic:"M", version:$v},
+     "m70s":   {class:"metal", role:"worker",       schematic:"M", version:$v},
+     "cp-01":  {class:"vm",    role:"controlplane", schematic:"P", version:$v},
+     "cp-02":  {class:"vm",    role:"controlplane", schematic:"P", version:$v}}
+    | reduce ($o | split(" ")[] | select(length > 0) | split("=")) as $p (.; .[$p[0]].version = $p[1])')"
+}
+fleet_live() {  # <version> [<node>=<version> …]
+  local v="$1"; shift
+  live "$(jq -nc --arg v "$v" --arg o "$*" '
+    {"wk-03":"L","nx-01":"K","wk-02":"L","wk-01":"L","hp-01":"M","m70s":"M","cp-01":"P","cp-02":"P"}
+    | map_values({version:$v, schematic:.})
+    | reduce ($o | split(" ")[] | select(length > 0) | split("=")) as $p (.; .[$p[0]].version = $p[1])')"
+}
+# Every node starts with an unrelated taint the rollout must never touch.
+fleet_taints() { jq -nc --arg f "$FLEET" '$f | split(" ") | map({key: ., value: [{key:"homelab.io/other", value:"x", effect:"NoSchedule"}]}) | from_entries' >"$TAINTS"; }
+rreset() { reset; rm -rf "$EVID" "$KCALLS"; mkdir -p "$EVID"; fleet_taints
+           unset FAKE_CP_RC FAKE_ORDER_FAIL FAKE_DIFFERENTIAL FAKE_DIFFERENTIAL_UNREADABLE RECONCILE_CANARY_TIMEOUT; }
+ro()      { jq -r "$1" "$RECONCILE_DIR/rollout.json" 2>/dev/null; }
+behind()  { jq -r --arg n "$1" '[.[$n][]? | select(.key == "homelab.io/talos-behind") | .value] | join(",")' "$TAINTS"; }
+other_taints_intact() { [ "$(jq '[.[][] | select(.key == "homelab.io/other")] | length' "$TAINTS")" = 8 ]; }
+lastcall() { tail -1 "$CALLS" 2>/dev/null; }
+
+# ── the pilot: switch OFF with every node auto → only the pilot moves, exactly as before ──
+rreset; fleet_machines '"reconcile_rollout":{"enabled":false,"pilot":["wk-03"]}'; fleet_targets v2; fleet_live v1; tick
+check "switch off + pilot: only the pilot syncs; nothing else gets state" eval '[ "$(calls)" = 1 ] && [ "$(lastcall)" = "upgrade wk-03" ] && [ "$(st nx-01)" = none ] && [ "$(st cp-01)" = none ]'
+check "switch off + pilot: no rollout, no taints, kubectl never called" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && [ ! -s "$KCALLS" ] && [ -z "$(behind nx-01)" ]'
+
+# ── start: canary stage, one canary per type, least risky first; the pressure on everyone else ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick
+check "rollout starts at canary; the first canary is the least risky node (wk-03)" eval '[ "$(ro .target)" = v2 ] && [ "$(ro .stage)" = canary ] && [ "$(lastcall)" = "upgrade wk-03" ] && [ "$(st wk-03)" = idle ]'
+check "one canary per TYPE: wk-03 nx-01 wk-01 hp-01 (no CP, no second of a type)" eval '[ "$(ro "[.canaries[]] | sort | join(\" \")")" = "hp-01 nx-01 wk-01 wk-03" ]'
+check "pressure: every not-yet node tainted talos-behind=v2, the synced canary not" eval '[ "$(behind nx-01)" = v2 ] && [ "$(behind cp-02)" = v2 ] && [ "$(behind m70s)" = v2 ] && [ -z "$(behind wk-03)" ] && other_taints_intact'
+check "the rest wait behind the canary" eval '[ "$(st wk-02)" = pending ] && grep -q "queued behind the canary" "$RECONCILE_DIR/state.json"'
+check "metrics: stage canary=1, started stamped, per-node synced" eval '[ "$(metric "stage{target=\"v2\",kind=\"forward\",stage=\"canary\"}")" = 1 ] && [ "$(metric "rollout_started_timestamp_seconds{target=\"v2\"}")" -gt 0 ] && [ -n "$(metric "node_synced_timestamp_seconds{node=\"wk-03\",target=\"v2\"}")" ]'
+tick; tick; tick
+check "canaries synced one per tick, in rank order" eval '[ "$(sed -n 2,4p $CALLS | tr "\n" " ")" = "upgrade nx-01 upgrade wk-01 upgrade hp-01 " ] && [ -z "$(behind hp-01)" ]'
+tick
+check "all canaries synced, no evidence yet → no sync, the stage waits" eval '[ "$(calls)" = 4 ] && [ "$(ro .stage)" = canary ] && grep -q "waiting for evidence" "$RECONCILE_DIR/state.json" && [ "$(metric canary_wait_started_timestamp_seconds)" -gt 0 ]'
+check "evidence asked per canary with its own sync time as <since>" eval '[ "$(awk "\$1==\"nx-01\"{print \$2; exit}" $EVID/calls)" = "$(ro ".nodes[\"nx-01\"].synced_at")" ]'
+echo 0 >"$EVID/wk-03"; echo 0 >"$EVID/nx-01"; echo 2 >"$EVID/wk-01"; tick
+check "evidence for three of four (2 = cannot tell = not yet) → still waiting" eval '[ "$(calls)" = 4 ] && [ "$(ro .stage)" = canary ] && [ "$(metric "canary_exercised{node=\"wk-03\"")" = 1 ] && [ "$(metric "canary_exercised{node=\"wk-01\"")" = 0 ]'
+check "an exercised canary is not asked again" eval '[ "$(grep -c "^wk-03 " $EVID/calls)" = 2 ]'
+echo 0 >"$EVID/wk-01"; echo 0 >"$EVID/hp-01"; tick
+check "evidence for every canary → fleet stage, the next ranked node (wk-02) syncs the same tick" eval '[ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade wk-02" ] && [ "$(ro .canary_timed_out)" = false ]'
+check "control planes wait while a worker is left" eval '[ "$(st cp-01)" = pending ] && grep -q "control planes go last" "$RECONCILE_DIR/state.json"'
+
+# ── the halt: MgmtRolloutDifferential firing → no sync, pressure lifted; it resumes when it clears ──
+FAKE_DIFFERENTIAL=1 tick
+check "differential firing → HALTED, no sync, the pressure lifted" eval '[ "$(ro .stage)" = halted ] && [ "$(calls)" = 5 ] && [ -z "$(behind m70s)" ] && [ "$(metric "halted{reason=\"differential\"}")" = 1 ] && other_taints_intact'
+FAKE_DIFFERENTIAL_UNREADABLE=1 tick
+check "the differential unreadable → still halted (an unreadable gate is a no)" eval '[ "$(ro .stage)" = halted ] && [ "$(ro .halt_reason)" = unreadable ] && [ "$(calls)" = 5 ]'
+tick
+check "cleared → resumes the fleet stage: m70s syncs, pressure back on the rest" eval '[ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade m70s" ] && [ "$(behind cp-01)" = v2 ] && [ "$(metric "halted{reason=\"differential\"}")" = 0 ]'
+
+# ── control planes: last, one at a time, through the CP verb ──
+tick
+check "no worker left → the first control plane, through controlplane-upgrade.sh" eval '[ "$(lastcall)" = "cp cp-01" ] && [ "$(st cp-01)" = idle ] && [ "$(st cp-02)" = pending ]'
+FAKE_CP_RC=2 tick
+check "the CP verb refusing (exit 2) → pending, retried" eval '[ "$(lastcall)" = "cp cp-02" ] && [ "$(st cp-02)" = pending ]'
+tick
+check "…then synced" eval '[ "$(st cp-02)" = idle ] && [ "$(calls)" = 9 ]'
+tick
+check "nothing left → rollout DONE, every talos-behind taint gone, nothing else touched" eval '[ "$(ro .stage)" = done ] && [ "$(calls)" = 9 ] && [ -z "$(jq -r "[.[][] | select(.key == \"homelab.io/talos-behind\")] | length | select(. > 0)" $TAINTS)" ] && other_taints_intact && [ "$(metric "stage{target=\"v2\",kind=\"forward\",stage=\"done\"}")" = 1 ]'
+
+# ── the canary timeout: default forward, and the state says so ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick; tick; tick; tick; tick
+check "canaries synced, no evidence → waiting" eval '[ "$(ro .stage)" = canary ] && [ "$(calls)" = 4 ]'
+RECONCILE_CANARY_TIMEOUT=0 tick
+check "timeout → advance ANYWAY (wk-02 syncs), timed_out recorded + metric" eval '[ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade wk-02" ] && [ "$(ro .canary_timed_out)" = true ] && [ "$(metric canary_timed_out)" = 1 ]'
+
+# ── the evidence script not there yet: "not yet", logged once, the timeout ends the stage ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1
+for i in 1 2 3 4 5; do RECONCILE_EVIDENCE="$T/absent.sh" tick; done   # four canaries, then the first evidence read
+check "a missing evidence script → not yet (logged)" eval '[ "$(ro .stage)" = canary ] && [ "$(ro .evidence_missing)" = true ] && grep -q "does not exist" "$T/out"'
+RECONCILE_EVIDENCE="$T/absent.sh" tick
+check "…logged once per rollout, not every tick" eval '[ "$(ro .stage)" = canary ] && ! grep -q "does not exist" "$T/out"'
+
+# ── a canary override: a node already on the target is its type's canary, not synced again ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1 wk-03=v2; tick
+check "wk-03 already on v2 is the vm/L/compute canary; the first sync is nx-01, never wk-02" eval '[ "$(ro ".canaries[\"vm/worker/L/compute\"]")" = wk-03 ] && [ "$(lastcall)" = "upgrade nx-01" ] && [ "$(ro ".nodes[\"wk-03\"].already")" = true ]'
+
+# ── the ranking unreadable → refusal, nothing synced ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; FAKE_ORDER_FAIL=1 tick
+check "ranking unreadable → nothing synced, the nodes pending" eval '[ "$(calls)" = 0 ] && [ "$(st wk-03)" = pending ] && grep -q "ranking is unreadable" "$RECONCILE_DIR/state.json"'
+
+# ── supersede: a newer patch merges mid-rollout ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick; tick   # wk-03 + nx-01 on v2
+fleet_targets v3; tick
+check "newer target → SUPERSEDED, recorded, back to canary" eval '[ "$(ro .target)" = v3 ] && [ "$(ro .stage)" = canary ] && [ "$(ro ".superseded[0].from")" = v2 ] && [ "$(ro ".superseded[0].to")" = v3 ]'
+check "the not-yet nodes skip v2: the new vm/L/compute canary is wk-02 (wk-03 is deferred)" eval '[ "$(lastcall)" = "upgrade wk-02" ] && [ "$(ro ".canaries[\"vm/worker/L/compute\"]")" = wk-02 ] && [ "$(jq -r ".[\"wk-02\"].version" $LIVE)" = v3 ]'
+check "nodes already on v2 wait for the NEXT rollout" eval '[ "$(st wk-03)" = pending ] && grep -q "gets v3 in the next one" "$RECONCILE_DIR/state.json" && [ "$(behind wk-03)" = v3 ]'
+echo 0 | tee "$EVID/wk-02" "$EVID/wk-01" "$EVID/hp-01" >/dev/null
+for i in 1 2 3 4 5 6; do tick; done   # wk-01 hp-01 (canaries) · m70s (evidence → fleet) · cp-01 cp-02 · done
+check "the v3 rollout finishes without the deferred nodes" eval '[ "$(ro .stage)" = done ] && [ "$(st wk-03)" = pending ] && [ "$(jq -r ".[\"wk-03\"].version" $LIVE)" = v2 ]'
+tick
+check "…and the next rollout picks them up (same target: fleet stage, no second canary round)" eval '[ "$(ro .target)" = v3 ] && [ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade wk-03" ]'
+
+# ── a human revert commit: an OLDER target → a revert rollout, first the nodes the last one moved ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick; tick   # wk-03, nx-01 on v2
+fleet_targets v1; FAKE_DIFFERENTIAL=1 tick
+check "older target → a REVERT rollout: no canary, not halted by the differential" eval '[ "$(ro .target)" = v1 ] && [ "$(ro .kind)" = revert ] && [ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade wk-03" ]'
+FAKE_DIFFERENTIAL=1 tick
+check "…the moved nodes first, then done" eval '[ "$(lastcall)" = "upgrade nx-01" ]'
+
+# ── one rollout at a time: a node declared at another version waits ──
+rreset; fleet_machines; fleet_targets v2 cp-01=v1 cp-02=v1; fleet_live v1 cp-01=v0; tick
+check "cp-01 declared v1 (behind) waits for the v2 rollout" eval '[ "$(ro .target)" = v2 ] && [ "$(st cp-01)" = pending ] && grep -q "waits for the v2 rollout" "$RECONCILE_DIR/state.json" && [ -z "$(behind cp-01)" ]'
+
+# ── the CP verb's contract: exit 4 parks (impossible path), and a parked canary cannot block forever ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v2 cp-01=v1; FAKE_CP_RC=4 tick
+check "a CP-only rollout skips the canary stage; the CP verb's exit 4 → PARKED" eval '[ "$(lastcall)" = "cp cp-01" ] && [ "$(st cp-01)" = parked ] && [ "$(ro .stage)" = fleet ]'
+tick
+check "…and the rollout ends (parked is not retried)" eval '[ "$(ro .stage)" = done ] && [ "$(calls)" = 1 ]'
+
+# ── windows still gate a rollout sync ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; windows '[{"id":"m70s-1","node":"m70s","by":"seat"}]'; tick
+check "a declared window refuses the rollout's sync too" eval '[ "$(calls)" = 0 ] && [ "$(st wk-03)" = pending ] && grep -q "another window" "$RECONCILE_DIR/state.json"'
+
+# ── the switch flipped OFF mid-rollout: pressure lifted, the record retired, the pilot scope back ──
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick
+fleet_machines '"reconcile_rollout":{"enabled":false,"pilot":["wk-03"]}'; tick
+check "switch off mid-rollout → talos-behind lifted everywhere, rollout.json gone" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && [ -z "$(behind nx-01)" ] && other_taints_intact && ! grep -q mgmt_reconcile_rollout "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom"'
 
 echo "mgmt-reconcile-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

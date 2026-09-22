@@ -45,7 +45,22 @@ LAB="${LAB:-0}"
 SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/var/lib/mgmt/etcd-snapshots}"
 if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/tmp/controlplane-upgrade-snapshots}"; fi
 
-die() { echo "FAIL: $*" >&2; exit 2; }
+# EXIT CODES — the same contract as `node-maintenance.sh upgrade`, because the box's reconciler
+# (scripts/mgmt-reconcile.sh) calls this verb for a control plane and maps them identically:
+#   2  REFUSED — a gate said no BEFORE anything was touched (quorum, endpoint, etcd health, cilium,
+#      the snapshot, or the shared verb's own preflight/floors); a later attempt may pass
+#   4  IMPOSSIBLE — the declared version path (the shared verb's cross-minor downgrade / skipped
+#      minor); no retry passes it
+#   1  FAILED AFTER TOUCHING — the shared verb failed mid-window, or a post-install check (etcd
+#      membership, the cilium repair) failed on a node that was already upgraded; read it by hand
+# `die` is phase-aware: a refusal (2) until the shared verb has run, a post-install failure (1)
+# after it (PHASE=after). The shared verb's own exit is passed through unchanged (set -e exits with
+# its status). Reads that fail before the snapshot are refusals too — nothing was touched.
+PHASE=before
+die() {
+  if [ "$PHASE" = after ]; then echo "FAIL (after the install): $*" >&2; exit 1; fi
+  echo "FAIL: $*" >&2; exit 2
+}
 # 0 = every responsive agent holds the apiserver backend, 2 = one genuinely does not,
 # 3 = the reading answered nothing. The contract is maintenance-window.sh's; do not re-derive it.
 cilium_check() { bash "$REPO/scripts/maintenance-window.sh" cilium-check; }
@@ -72,16 +87,18 @@ assert_etcd_status() {
     || die "etcd reports a member error"
 }
 
-role="$(kubectl get node "$NODE" -o json | jq -r '.metadata.labels | has("node-role.kubernetes.io/control-plane")')"
+role="$(kubectl get node "$NODE" -o json | jq -r '.metadata.labels | has("node-role.kubernetes.io/control-plane")')" \
+  || die "cannot read $NODE from the API"
 [ "$role" = true ] || die "$NODE is not a control-plane node"
-ip="$(node_ip)"; [ -n "$ip" ] || die "cannot resolve $NODE's InternalIP"
+ip="$(node_ip)" || ip=""; [ -n "$ip" ] || die "cannot resolve $NODE's InternalIP"
 
 if [ "$LAB" = 1 ]; then
   [ "$KUBECONFIG" != "$REPO/tofu/kubeconfig" ] || die "LAB=1 refuses homelab's kubeconfig"
   [ -n "${INSTALL_TARGETS:-}" ] && [ -n "${ENDPOINT:-}" ] || die "LAB=1 requires INSTALL_TARGETS and ENDPOINT"
 else
   [ "$(ready_cps)" -ge 3 ] || die "need at least three Ready, schedulable control planes before a CP upgrade"
-  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o json | jq -r --arg n "$NODE" '.items[] | select(.metadata.name != $n) | select(.spec.unschedulable != true) | select(any(.status.conditions[]; .type=="Ready" and .status=="True")) | .status.addresses[] | select(.type=="InternalIP") | .address' | head -1)"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o json | jq -r --arg n "$NODE" '.items[] | select(.metadata.name != $n) | select(.spec.unschedulable != true) | select(any(.status.conditions[]; .type=="Ready" and .status=="True")) | .status.addresses[] | select(.type=="InternalIP") | .address' | head -1)" \
+    || die "cannot list the control planes"
   [ -n "$ENDPOINT" ] || die "no other healthy control plane endpoint"
   [ "$ENDPOINT" != "$ip" ] || die "a production CP upgrade may not endpoint the target itself"
 fi
@@ -105,11 +122,12 @@ else
   [ "$crc" -eq 0 ] || die "cilium apiserver backend is not clean BEFORE the upgrade (verdict $crc) — fix it first (kubectl -n kube-system rollout restart ds/cilium), re-run 'devbox run maint cilium-check', then start the window"
 fi
 
-mkdir -p "$SNAPSHOT_DIR"
+mkdir -p "$SNAPSHOT_DIR" || die "cannot create $SNAPSHOT_DIR"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 snapshot="$SNAPSHOT_DIR/${NODE}-${stamp}.snapshot"
 echo "Snapshotting etcd to $snapshot"
-talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd snapshot "$snapshot"
+talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd snapshot "$snapshot" \
+  || die "etcd snapshot failed — nothing touched"
 [ -s "$snapshot" ] || die "snapshot was not created"
 
 if [ "$LAB" = 1 ]; then
@@ -118,7 +136,8 @@ fi
 # This is deliberately set only after the CP-specific endpoint, quorum, health, and snapshot
 # gates above have all passed. The shared maintenance preflight otherwise refuses CP nodes.
 export CONTROLPLANE_GUARDED=1
-bash "$REPO/scripts/node-maintenance.sh" upgrade "$NODE"
+bash "$REPO/scripts/node-maintenance.sh" upgrade "$NODE"   # its 2/4/1 pass through (set -e)
+PHASE=after   # from here every failure is on an upgraded node: exit 1, never a retryable 2
 if [ "${DRY:-0}" = 1 ]; then
   echo "OK: dry run complete; no control-plane upgrade was attempted"
   exit 0

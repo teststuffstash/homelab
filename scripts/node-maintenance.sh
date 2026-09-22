@@ -1163,9 +1163,13 @@ order() {
   # anything on the left of `||`), so a failed kubectl above does not stop it — it carries on and
   # ranks an empty fleet. Found 2026-09-21: kubectl missing from PATH made upgrade-behind report
   # "nothing is behind". So the names mode refuses an empty ranking explicitly.
-  if [ "${ORDER_FORMAT:-table}" = names ]; then
+  # ORDER_FORMAT=tsv: the ranked rows themselves (RISK NODE DECLARED SOLO QUORUM GARAGE LH, tab-
+  # separated, no header) — what the box's reconciler reads to rank a rollout AND to type its
+  # canaries by storage-ness (GARAGE=yes or LH>0), so it never re-derives what this function knows.
+  if [ "${ORDER_FORMAT:-table}" = names ] || [ "${ORDER_FORMAT:-table}" = tsv ]; then
     [ -s "$d/ranked.tsv" ] || { fail "the fleet ranking came back EMPTY (kubectl unreachable?) — not a result"; return 2; }
-    cut -f2 "$d/ranked.tsv"; return 0
+    if [ "$ORDER_FORMAT" = tsv ]; then cat "$d/ranked.tsv"; else cut -f2 "$d/ranked.tsv"; fi
+    return 0
   fi
   awk -F'\t' '
         BEGIN{printf "%-5s %-14s %-10s %5s %7s %7s %4s\n","RISK","NODE","DECLARED","SOLO","QUORUM","GARAGE","LH"}

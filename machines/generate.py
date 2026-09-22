@@ -75,22 +75,40 @@ def vm_roles():
 
 def check_reconcile(m):
     """ADR-132 §MB4 layer 3: `reconcile: auto` hands a node to the management box's reconciler
-    (scripts/mgmt-reconcile.sh), which runs `node-maintenance.sh upgrade` on it unattended. Only a
-    Talos WORKER qualifies — control planes, hypervisors, the router and anything not Talos stay
-    manual until ADR-133's CPs and a CARP pair exist. Absent = manual."""
+    (scripts/mgmt-reconcile.sh), which runs `node-maintenance.sh upgrade` on a worker and
+    `controlplane-upgrade.sh` on a control plane, unattended. Only a Talos NODE qualifies (a
+    talos_metal_node, or a var.nodes VM) — hypervisors, the router and anything not Talos stay
+    manual until a CARP pair exists. Control planes are allowed since ADR-133's three CPs exist
+    (FU-273): the reconciler takes them LAST, one at a time, through the CP verb's etcd/snapshot/
+    cilium gates. Absent = manual."""
     name, rec = m["name"], m.get("reconcile", "manual")
     if rec not in ("auto", "manual"):
         die(f"{name}: reconcile must be auto or manual, got {rec!r}")
     if rec != "auto":
         return
     if m.get("talos_metal_node"):
-        if m.get("controlplane"):
-            die(f"{name}: reconcile: auto on a control plane — CPs stay manual (ADR-132)")
         return
     role = vm_roles().get(name) if m.get("kind") == "vm" else None
-    if role != "worker":
-        die(f"{name}: reconcile: auto needs a Talos worker (talos_metal_node, or a var.nodes VM with "
-            f"role = \"worker\"); found kind={m.get('kind')!r} role={role!r}")
+    if role not in ("worker", "controlplane"):
+        die(f"{name}: reconcile: auto needs a Talos node (talos_metal_node, or a var.nodes VM); "
+            f"found kind={m.get('kind')!r} role={role!r}")
+
+
+def check_rollout_switch(data, machines):
+    """The fleet-rollout switch (FU-273, docs/management-box.md §MB4): `reconcile_rollout.enabled`
+    gates the staged fleet rollout; while it is false the reconciler owns only `pilot` (the
+    pre-rollout scope). Both are read by scripts/mgmt-reconcile.sh — fail here, not on the box."""
+    sw = data.get("reconcile_rollout")
+    if sw is None:
+        return
+    if not isinstance(sw, dict) or set(sw) - {"enabled", "pilot"}:
+        die(f"reconcile_rollout must be a map of enabled/pilot, got {sw!r}")
+    if not isinstance(sw.get("enabled", False), bool):
+        die(f"reconcile_rollout.enabled must be true or false, got {sw.get('enabled')!r}")
+    auto = {m["name"] for m in machines if m.get("reconcile") == "auto"}
+    for p in sw.get("pilot") or []:
+        if p not in auto:
+            die(f"reconcile_rollout.pilot names {p!r}, which is not a reconcile: auto node")
 
 
 def tofu_default(var_name):
@@ -226,6 +244,7 @@ def main():
     data = load()
     machines = data["machines"]
     check(machines)
+    check_rollout_switch(data, machines)
 
     with open(os.path.join(HERE, "README.md"), "w") as f:
         f.write(render_md(machines))

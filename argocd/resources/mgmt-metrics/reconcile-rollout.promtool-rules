@@ -1,0 +1,21 @@
+# The mgmt-reconcile-rollout group, lifted VERBATIM out of reconcile-rollout.yaml (annotations
+# stripped — the manifest is their one home) — the rules file reconcile-rollout.promtool-test
+# loads. DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/reconcile-rollout.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-reconcile-rollout
+    rules:
+      - alert: MgmtRolloutCanaryTimedOut
+        expr: |
+          mgmt_reconcile_rollout_canary_timed_out == 1
+        for: 5m
+        labels:
+          severity: warning
+      - alert: MgmtRolloutHaltUnreadable
+        expr: |
+          mgmt_reconcile_rollout_halted{reason="unreadable"} == 1
+        for: 1h
+        labels:
+          severity: warning
