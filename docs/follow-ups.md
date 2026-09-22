@@ -1352,14 +1352,14 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
-- [ ] **FU-273** — **A substrate rollout has no soak, no halt and no attribution.** The reconciler
-      moves node to node on WIP 1 alone. A regression that shows 2 h later (stack networking) lands
-      with every worker already upgraded, and "blame the upgrade" can't be tested. The existing
-      ruling covers the revert half: auto-revert only where rollback is provably as safe as the
-      roll-forward (`agents/iac-lane.md` §Auto-revert does NOT generalize), and a fleet-wide
-      downgrade is not. **Proposed (awaiting operator):** HALT automatic, REVERT a human commit.
-      Canary soak measured in hours. Any new alert in the soak freezes the rollout. Attribution
-      compares upgraded vs not-yet nodes. **Next:** ruling, then §MB4. Relates FU-235, FU-097, G-D.
+- [ ] **FU-273** — **A substrate rollout has no soak and no attribution, so the pressure to roll back
+      wins by default.** The reconciler moves node to node on WIP 1 alone. A symptom 2 h later
+      (stack networking: a fluke, their own deploy…) meets "what changed in 24 h?", which always names
+      the upgrade (operator 2026-09-22). Firing on the first alert means never moving forward. **Direction
+      (operator 2026-09-22):** the responder never reverts; a new alert alone neither halts nor
+      reverts; the default is FORWARD. Halt only on a DIFFERENTIAL signal: worse on upgraded
+      nodes than on not-yet ones, starting after each node's own upgrade. Revert = a human commit
+      with that evidence. **Next:** the detector + soak design in §MB4. Relates FU-235, FU-097, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
