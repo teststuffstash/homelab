@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-279** (2026-09-22: FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-280** (2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -208,11 +208,21 @@ six OVERSIZE items pointer-ized into
       `quota − held ≥ 2×layer` — rule, both failures, storage read, retention ownership AND current
       status: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml);
       cap **48Gi** (#1578). **LIVE:** the quota belts (#1577), the collector (`registry-garbage-collect`,
-      Sundays 03:00Z, #1508), and since 2026-09-14 **the POLICY half** — oracle-fleet's nightly
-      `retention` CronWorkflow untags outside its keep-set (first prunable tag 09-16 02:31Z).
-      **Missing = the SCHEDULE MISMATCH (ours):** untag nightly vs reclaim weekly, so a tag waits up
-      to 6 days while `RegistryBucketCommitHeadroomLow` fires — 09-15→16 cost 20 h firing, a triage
-      and a handoff for a 45 s job. **Next:** pair the collector to the prune, or daily. ADR-121/-089/-085.
+      **daily 03:00Z** since 2026-09-22, #1902), and since 2026-09-14 **the POLICY half** —
+      oracle-fleet's nightly `retention` CronWorkflow untags outside its keep-set (02:30Z).
+      The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
+      **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
+      Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
+- [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
+      `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
+      accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
+      (~13 GB at rf=3), never headroom — `garage_bucket_bytes` counts completed objects only, so it
+      cannot move `RegistryBucketCommitHeadroomLow`. Mechanism + the 09-22 measurements: the header of
+      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml). Deferred by the
+      operator 2026-09-22: the reclaim command carries the ☠ in
+      [`2026-08-24-…-meta-wipe.md`](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md) (an abort
+      drops blocks it read to rc=0 — 3,952 blocks lost), scoped to a bucket under recovery, not this.
+      **Next:** decide when zone headroom presses (~79/150 GiB); if yes, age-gate + verify rc after.
 - [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
       tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
       2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
