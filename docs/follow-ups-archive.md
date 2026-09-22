@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-275** *(archived 2026-09-22)* — **A canary override no longer downloads/deletes seed images.**
+  `tofu/image.tf` splits the key: `vm_seed_key` (ROLE version) keys `proxmox_download_file` on pve +
+  nx-02 and the VMs' ignored `file_id`; `vm_image_key` (declared version) keeps the installer URL.
+  The override's `longhorn-v1.14.1` download pair left state in the same PR (fix/talos-apply-prereqs).
 - **FU-243** *(archived 2026-09-22)* — **Three control planes behind the Talos VIP (ADR-133/-136).**
   cp-01, cp-02, wk-metal-02: three etcd members, the `cluster_endpoint` on the `.50` VIP, all three
   at v1.13.10 (live-verified 2026-09-22; operator: "three-cp program is done"). Doc survives:
