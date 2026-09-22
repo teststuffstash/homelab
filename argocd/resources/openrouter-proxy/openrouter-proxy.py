@@ -286,6 +286,58 @@ def _go_semaphore_state() -> dict:
     return {"running": running, "max": OPENCODE_MAX_RUNNING,
             "limited": bool(OPENCODE_MAX_RUNNING > 0 and running is not None
                             and running >= OPENCODE_MAX_RUNNING)}
+
+
+def _go_window_status(now: float) -> dict:
+    """gometer.go_window_status wired to the router's Go ledger — the ONE composition behind both
+    readers of the Go windows: GET /opencode-limit (the launcher probe), GET /metrics, and
+    `_opencode_ok` (the /route walk's go_gate, Goal #1769 acceptance 1). Before the gate existed
+    each HTTP surface carried its own pair of local closures for this; a second copy is exactly
+    how the probe and the walk would come to disagree about what `limited` means."""
+    def _snapshot(name, win_start, _resets_at):
+        return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
+
+    # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the previous
+    # window expired; the ledger walk recovers the open epoch).
+    def _chain(span_s, lookback_s):
+        return router.go_usage_chain_open(span_s, lookback_s)
+
+    return gometer.go_window_status(now, _snapshot, chain_fn=_chain)
+
+
+def _opencode_ok() -> tuple[bool, str | None, int]:
+    """Goal #1769 acceptance 1: the GO rail's own capacity verdict for /route's walk, beside
+    `_subscription_ok`/`_openrouter_ok`. The composite is the SAME one /opencode-limit serves
+    (`limited`), read in the same precedence `_go_limit_reason` names it, so the gate and the
+    launcher probe can never disagree about whether the Go rail is open:
+
+      rail-disabled (FU-213 park) → observed 429/402 capacity latch → window draw past threshold
+      → the OPENCODE_MAX_RUNNING semaphore.
+
+    Returns (ok, reason, retry_after_s); `reason` is the /opencode-limit reason and the router
+    types it `go:<reason>` in `skipped`. FAIL-OPEN on an unreadable count (the semaphore's own
+    contract: an absent count is not zero), so a broken pod counter never wedges the Go rail."""
+    now = time.time()
+    if _rail_disabled("go"):
+        return False, "rail-disabled", 900
+    go_capacity = _go_capacity_snapshot(now)
+    if go_capacity["limited"]:
+        return False, (go_capacity["reason"] or "observed"), \
+            max(60, int(go_capacity["remaining_s"] or 900))
+    status = _go_window_status(now)
+    if status["limited"]:
+        # Name the crossing window and carry ITS reset, the same shape the anthropic gate types
+        # (`utilization-<w>` + the window's reset) so a launcher defers for the right duration.
+        reason = next((f"utilization-{w}" for w, d in status["windows"].items()
+                       if d["utilization"] >= status["thresholds"][w]), "utilization")
+        w = status["windows"].get(reason[len("utilization-"):]) or {}
+        reset = w.get("resets_at")
+        retry = 900 if reset is None else max(60, min(int(reset - now), 6 * 3600))
+        return False, reason, retry
+    go_semaphore = _go_semaphore_state()
+    if go_semaphore["limited"]:
+        return False, "semaphore", 300
+    return True, None, 0
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -2761,13 +2813,7 @@ class Proxy(BaseHTTPRequestHandler):
             # hold expires until a 2xx clears it, while `capacity.limited` (and the top-level
             # `limited`) are keyed on the hold's EXPIRY — consumers act on `limited`, never on
             # `reason != null`.
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: wire the CHAIN-anchor seam — the 5h window's open epoch comes from
-            # the ledger walk (first-use/expiry-chained), not a fixed grid.
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            status = _go_window_status(time.time())
             go_semaphore = _go_semaphore_state()
             go_capacity = _go_capacity_snapshot(time.time())
             limited = (status["limited"] or go_semaphore["limited"]
@@ -2835,14 +2881,9 @@ class Proxy(BaseHTTPRequestHandler):
             # Utilization is the WINDOW-DRAW number (list price on raw tokens, badge-halved — the
             # 2026-08-17 reconciliation); the billed-style estimate is a SEPARATE gauge so the two
             # cannot be conflated. TYPE/HELP emitted once per metric family (Prometheus strict
-            # parsing requirement).
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the
-            # previous window expired; the ledger walk recovers the open epoch).
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            go_status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            # parsing requirement). The window composition itself lives in _go_window_status —
+            # one home for /opencode-limit, /metrics and /route's go_gate (Goal #1769).
+            go_status = _go_window_status(time.time())
             lines += [
                 "# TYPE opencode_subscription_usage_usd gauge",
                 "# HELP opencode_subscription_usage_usd Go-rail subscription window DRAW usage in USD per window (list price, badge-halved).",
@@ -3345,6 +3386,10 @@ class Proxy(BaseHTTPRequestHandler):
             decision = router.route(req_body, {
                 "price": _price, "subscription_ok": _subscription_ok,
                 "openrouter_ok": _openrouter_ok,
+                # Goal #1769 acceptance 1: the Go rail's OWN gate. Before this the walk flattened
+                # an `opencode-go/*` candidate onto the OpenRouter rail, so a Go model's fate was
+                # decided by the OpenRouter key's state (headroom, a mint that never happened).
+                "opencode_ok": _opencode_ok,
             })
             if decision.get("decision") == "dispatch" \
                     and decision.get("rail") == "openrouter" \
