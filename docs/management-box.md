@@ -414,9 +414,9 @@ for a Talos config apply. Three more things stand between the plan and the apply
    a delete/replace is a node leaving: rule `talos-action`) whose planned **`apply_mode` is
    `no_reboot`** (rule `talos-apply-mode`; `(unset)` and `(unknown)` refuse too). `no_reboot` is
    what makes the §MB4 item 4 line mechanical: a config Talos can only take by rebooting fails
-   the apply and lands in a window instead. The resources declare the attribute in a separate
-   change; until that lands the plan carries no `no_reboot` and the loop keeps refusing, so the
-   two changes can merge in either order. A failure refuses the whole root as before (status
+   the apply and lands in a window instead. The resources declare the attribute (`tofu/talos.tf`,
+   `tofu/metal.tf`, #1874). The gate reads it from the PLAN, not from a belief about the source:
+   a resource that loses it plans without `no_reboot` and refuses to a human apply. A failure refuses the whole root as before (status
    `failure`, the rule named, the addresses in the journal).
 2. **The control-plane toggle**: `roots.main.apply_controlplane_config` in the policy, **default
    `false`**. It is the first FU-097 toggle. A node whose declared `role` in the plan's
@@ -477,9 +477,14 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
    state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
    mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
-   apply and lands in a window instead. **Enforced since 2026-09-22.** The apply loop auto-applies a Talos
-   config change only when its planned `apply_mode` is `no_reboot`, and only on workers unless
-   `apply_controlplane_config` is on. It brackets the apply with the health gate. See §MB3 "Talos config applies".
+   apply and lands in a window instead — **set 2026-09-22** as `apply_mode = "no_reboot"` on both
+   `talos_machine_configuration_apply` resources (`tofu/talos.tf`, `tofu/metal.tf`; the provider default
+   `auto` reboots). Talos judges only the v1alpha1 document; other documents (VolumeConfig, HostnameConfig)
+   are install-time and pass. The config is rendered against a pinned contract
+   (`local.talos_config_contract`, `tofu/talos.tf`), not the install version, so a version bump moves
+   installers and declared versions only. **Enforced by the apply loop since 2026-09-22:**
+   it auto-applies a Talos config change only when the planned `apply_mode` is `no_reboot`, only on workers
+   unless `apply_controlplane_config` is on, and brackets it with the health gate — §MB3 "Talos config applies".
 5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient

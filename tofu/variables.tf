@@ -168,8 +168,10 @@ variable "nodes" {
     # Per-node Talos version override — the CANARY lever (FU-033, 2026-09-22): the node's installer
     # image + declared version (node_install_targets, which the box reconciler syncs to) move ahead
     # of its role's version, one node at a time. Unset = the role version. It does NOT move the
-    # machine-config contract (talos.tf keeps the role version there): a newer Talos runs an older
-    # contract by design, and a 1.14 contract is where FU-033 (b)'s workloadIsolation default lives.
+    # machine-config contract (talos.tf `local.talos_config_contract`, pinned apart from every
+    # install version): a newer Talos runs an older contract by design, and a 1.14 contract is where
+    # FU-033 (b)'s workloadIsolation default lives. Nor does it move the seed disk images (image.tf,
+    # FU-275): those follow the role version only.
     talos_version = optional(string)
   }))
   default = {
