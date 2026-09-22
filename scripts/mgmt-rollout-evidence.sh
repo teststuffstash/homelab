@@ -29,8 +29,9 @@
 #             regular workers, where they would make every worker wait on the agent loop's pace
 #             → ≥1 ride CREATED after <since> reached phase Succeeded on this node
 #   longhorn  a Longhorn replica CR is placed on the node (any state)
-#             → ≥1 replica here running, healthy since <since> (spec.healthyAt: set when the
-#               replica (re)built after the node came back), its volume robustness `healthy`
+#             → ≥1 replica here running on a `healthy` volume AND either rebuilt since <since>
+#               (spec.healthyAt) or REUSED across the reboot under an instance-manager pod of the
+#               node's current boot (started ≥ min(<since>, the node's Ready lastTransitionTime))
 #   garage    the node is a Garage zone (cluster_layout_node_connected{role_zone=<node>})
 #             → the zone connected in EVERY peer's view for the last 10 minutes
 #   worker    none of the above and not a control plane

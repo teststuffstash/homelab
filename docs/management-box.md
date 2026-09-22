@@ -605,7 +605,7 @@ node from live facts, never a list, and every type that applies must hold:
 | control plane | label `node-role.kubernetes.io/control-plane` | etcd service healthy, its member a voter with no errors; `kube-apiserver-<node>` Ready and `/readyz` ok on the node's own IP |
 | ARC | label `homelab.io/ephemeral=true` **and** ≥ 14 runner pods there in the 7 d before | ≥ 1 job concluded `success` on a runner pod placed there |
 | ride | ≥ 14 worker rides (`agent-<project>-…`, controller-less) there in the 7 d before | ≥ 1 ride created since then reached `Succeeded` there |
-| Longhorn | a replica CR placed there | ≥ 1 replica running, `healthyAt` since then, on a `healthy` volume |
+| Longhorn | a replica CR placed there | ≥ 1 replica running on a `healthy` volume, either rebuilt since then (`healthyAt`) or reused across the reboot under an instance-manager pod of the current boot (started ≥ min(since, the node's Ready transition): Longhorn keeps a reused replica's old `healthyAt`) |
 | Garage | a Garage zone named after the node | the zone connected in every peer's view for 10 min |
 | worker | none of the above | ≥ 1 non-DaemonSet pod scheduled since then that is Ready or Succeeded |
 
