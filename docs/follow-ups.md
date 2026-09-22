@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-273** (2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-274** (2026-09-22: FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1363,6 +1363,14 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
+- [ ] **FU-273** — **A substrate rollout has no soak, no halt and no attribution.** The reconciler
+      moves node to node on WIP 1 alone. A regression that shows 2 h later (stack networking) lands
+      with every worker already upgraded, and "blame the upgrade" can't be tested. The existing
+      ruling covers the revert half: auto-revert only where rollback is provably as safe as the
+      roll-forward (`agents/iac-lane.md` §Auto-revert does NOT generalize), and a fleet-wide
+      downgrade is not. **Proposed (awaiting operator):** HALT automatic, REVERT a human commit.
+      Canary soak measured in hours. Any new alert in the soak freezes the rollout. Attribution
+      compares upgraded vs not-yet nodes. **Next:** ruling, then §MB4. Relates FU-235, FU-097, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
