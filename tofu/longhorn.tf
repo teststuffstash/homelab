@@ -19,12 +19,15 @@
 # ⚠️ BEFORE upgrading Talos to v1.14+: 1.14 mounts EPHEMERAL (/var) `noexec`, which breaks
 # Longhorn v1 — instance-manager exec's engine binaries the engine-image DaemonSet drops in
 # /var/lib/longhorn/engine-binaries/ (=> "permission denied", storage dies on the post-upgrade
-# reboot). We run the v1 data engine (v2-data-engine=false), so we're affected. Apply this
-# patch (machine config, all nodes) FIRST, then upgrade:
+# reboot). We run the v1 data engine (v2-data-engine=false), so we're affected. The fix is this
+# document, which must reach a node's config BEFORE it upgrades:
 #     apiVersion: v1alpha1
 #     kind: VolumeConfig
 #     name: EPHEMERAL
 #     mount: { secure: false }   # re-enables exec (also drops nosuid/nodev on /var)
+# WRITTEN (FU-033 (a)), keyed on the DECLARED version so it lands in the same apply as the bump:
+# VMs in talos.tf (per node, the canary override included), metal in metal.tf (the worker version;
+# merged into the nodes' own provisioning EPHEMERAL document where one exists).
 # (Longhorn v2 / SPDK runs the data plane in-process and is NOT affected — moot if we migrate.)
 # Ref: Talos v1.14.0-alpha.1 release notes ("noexec on EPHEMERAL").
 #
@@ -33,7 +36,10 @@
 # behaviour, so the upgrade itself is safe. With it ON the kubelet runs in its own PID+mount
 # namespace and cannot reach the host iscsid, which kills the in-tree iSCSI path Longhorn v1
 # rides. This is a BOOT-FROM-GIT hazard, not an upgrade one: a cluster rebuilt from scratch on
-# 1.14+ would isolate by default and break where this one does not (FU-033).
+# 1.14+ would isolate by default and break where this one does not (FU-033). A version bump no
+# longer re-renders configs against the new minor's contract: talos.tf pins
+# `local.talos_config_contract` apart from the install version, so moving it past 1.13 is its own
+# deliberate PR — read that plan for this document.
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string

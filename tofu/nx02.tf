@@ -55,11 +55,11 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     # The Micron NVMe thin pool, never the WD spinner `local-lvm` — this tier hosts the
     # containerd image store and a VM root, both of which the 5400-rpm disk would throttle.
     datastore_id = var.nx02_datastore_vms
-    # Same two axes as proxmox.tf (image.tf `local.vm_image_key`): `longhorn` means "this VM
+    # Same two axes as proxmox.tf (image.tf `local.vm_seed_key`): `longhorn` means "this VM
     # TOUCHES Longhorn volumes" (iscsi-tools + util-linux-tools in the image), not "it serves
     # replicas"; the role picks the version. ⚠ Flipping either on a live VM plans NOTHING now —
     # `file_id` is ignored below (ADR-138); see the longer note in proxmox.tf.
-    file_id     = proxmox_download_file.talos_nx02[local.vm_image_key[each.key]].id
+    file_id     = proxmox_download_file.talos_nx02[local.vm_seed_key[each.key]].id
     interface   = "scsi0"
     size        = each.value.disk_gb
     file_format = "raw"
