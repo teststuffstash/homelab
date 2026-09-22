@@ -3,7 +3,7 @@
 #      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
 #   2. a cloudflared Deployment (claim ns) consuming that token
 #   3. profile-specific Cloudflare resources (v1alpha2+):
-#      - consumer: edge caching rule (respect-origin; Cloudflare default TTL when the origin sends none) + RUM/client telemetry
+#      - consumer: edge caching rule (respect-origin at edge AND browser; Cloudflare default edge TTL when the origin sends none) + RUM/client telemetry
 #      - api: per-IP rate-limit rule (10 s windows — Free-plan entitlement) + never-challenge Skip (custom phase)
 #   4. the operational-path block (ADR-123, both profiles): /metrics + /healthz are non-public
 #      by default — refused at the connector on EVERY claim, and additionally at the edge for
@@ -329,6 +329,12 @@ spec:
                         # 2026-09-03, oracle-iac#530 → homelab#1334). A fixed TTL is `override_origin`
                         # + `default`, which is NOT the consumer profile's contract.
                         edge_ttl = {
+                          mode = "respect_origin"
+                        }
+                        # Browsers get the origin's max-age too: without this the zone's Browser
+                        # Cache TTL (4 h) rewrote `max-age=300` → 14400 and a rollout reached
+                        # returning browsers up to 4 h late (oracle-iac#613, ADR-119 profile default).
+                        browser_ttl = {
                           mode = "respect_origin"
                         }
                       }
