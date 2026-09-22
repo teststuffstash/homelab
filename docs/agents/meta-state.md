@@ -12,8 +12,14 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ NEXT (2026-09-22 evening — pickup list done; arc in TICK-LOG).** Garage PDB #1882 LIVE + tested on
   m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) FU-278 LANDED (#1891, 15:41Z) — the next rollout is the first with the workload-health hold. (2) **Operator:** check
   pop-os `~/.talos/config` for the dead identity; #1882's "3 flagged choices" (never recorded). (3)
-  FU-277 next step (drop the DHCP search on nodes? + an in-cluster DNS detector). (4) FU-097's ledger
-  section + the intent-review instruction. Stack-side: oracle-fleet#698 waits for a codeowner read.
+  FU-277 next step (drop the DHCP search on nodes? + an in-cluster DNS detector). (4) FU-097: ledger section in
+  #1893; the **intent-review instruction is DRAFTED for the operator** (`.agents/review.md` is
+  operator-direct), proposed as a bullet under "Judge these carefully": *"On a surface the box
+  applies on its own (management-box.md §The capability ledger: the main-root allowlist, Talos
+  versions, Talos config), your read replaces the codeowner read, so review INTENT: does the plan +
+  install-impact line do what the linked issue asked, given what the fleet and the box already run
+  (a version skipping the canary type, a config that needs a reboot under `no_reboot`, a CP change
+  while the CP toggle is off)? Intent and plan disagreeing is BLOCKING even when every check is green."* Stack-side: oracle-fleet#698 waits for a codeowner read.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
   arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
   should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was
