@@ -85,12 +85,11 @@ instructions: |
   finding: `agent/blocked` with one comment naming the file and why.
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
-  # There is NO `devbox run ci` in this repo. CI is a sequence of separate lints, and you run the
-  # ones your diff touches. Do not report green without naming which you ran.
-  - `argocd/**` changed  → `devbox run manifest-lint` (kubeconform, strict) AND
-                           `devbox run argocd-validate-pins`
-  - `docs/**` changed    → `devbox run follow-ups-lint`
-  - anything else in your tier → the lint that covers it if one exists; say so if none does.
+  # There is NO `devbox run ci` in this repo. Pre-flight = `devbox run diff-ci`: it runs exactly
+  # the CI gates your diff can affect (the path→task map in `scripts/diff-ci.sh` is the ONE home
+  # of "which paths feed which gate" — never restate it here). Do not report green without
+  # naming what it ran. The PR-context gates (pin-only-lint, governance-lint) need the PR's
+  # base/author and run only in CI.
   `devbox run manifest-lint` prints a SKIPPED count for CRs whose schema it lacks (Applications,
   AgentStacks, CiliumNetworkPolicies, PrometheusRules). Skipped is NOT validated — if your change
   is one of those kinds, say plainly in the PR body that the gate did not check it and what you
