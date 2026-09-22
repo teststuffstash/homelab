@@ -402,7 +402,7 @@ six OVERSIZE items pointer-ized into
       install-impact line do what the issue asked, given what the fleet and the box already run?
       Anchors (2026-09-13): router/CPs/Proxmox stay human; the raw-k8s residue belongs to the box; `provisioning` = canary.
       **First toggle BUILT 2026-09-22:** the loop auto-applies Talos config changes (`no_reboot` only,
-      health-gated); `apply_controlplane_config` defaults OFF for CPs, the operator flips it
+      health-gated); `apply_controlplane_config` built OFF, flipped ON 2026-09-22 (operator)
       ([`management-box.md`](management-box.md) §MB3 "Talos config applies").
       **Next:** the ledger section there + the instruction. Relates FU-012, FU-235.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
@@ -1368,8 +1368,8 @@ the block needs pruning, not more headings.
       rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
       only moves when evicted). One rollout per substrate, no per-component soak matrix. **Evidence +
       differential BUILT** (`mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`); **orchestration BUILT**
-      ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) behind
-      `reconcile_rollout.enabled` = off. **Next:** the operator flips the switch (after the attended bumps). Relates FU-235, G-D.
+      ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) ; the
+      switch `reconcile_rollout.enabled` ON 2026-09-22. **Next:** the first box-run rollout (Talos v1.14.1). Relates FU-235, G-D.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the

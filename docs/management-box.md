@@ -418,8 +418,8 @@ for a Talos config apply. Three more things stand between the plan and the apply
    `tofu/metal.tf`, #1874). The gate reads it from the PLAN, not from a belief about the source:
    a resource that loses it plans without `no_reboot` and refuses to a human apply. A failure refuses the whole root as before (status
    `failure`, the rule named, the addresses in the journal).
-2. **The control-plane toggle**: `roots.main.apply_controlplane_config` in the policy, **default
-   `false`**. It is the first FU-097 toggle. A node whose declared `role` in the plan's
+2. **The control-plane toggle**: `roots.main.apply_controlplane_config` in the policy, built
+   `false`, **flipped `true` 2026-09-22** (operator: "let it do everything"). It is the first FU-097 toggle. A node whose declared `role` in the plan's
    `node_install_targets` output is `controlplane` stays a human apply while the toggle is off
    (rule `talos-controlplane`). A node the output does not name is refused (`talos-role-unknown`).
    No list of node names exists anywhere in the gate. The operator flips the toggle; the reason it
@@ -473,8 +473,8 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    `machines/machines.yaml` (absent = manual; `machines/generate.py` refuses `auto` on anything but a Talos
    worker), and **`wk-03` is the one `auto` node** (operator: "live on one node"). **2026-09-22 (FU-273):**
    every Talos node is `auto`, control planes included (ADR-133's three CPs exist; `generate.py` now refuses
-   only non-Talos boxes), behind ONE switch — `reconcile_rollout.enabled` — that is off until the operator
-   flips it; off, the reconciler still owns only `reconcile_rollout.pilot` (wk-03). See
+   only non-Talos boxes), behind ONE switch — `reconcile_rollout.enabled` — **flipped on 2026-09-22** (operator); off, the
+   reconciler owns only `reconcile_rollout.pilot` (wk-03). See
    [The rollout as built](#the-rollout-as-built-fu-273-2026-09-22).
 4. **Runtime gates = `node-maintenance.sh`'s refusals plus a queue.** WIP 1: no second window before the
    first node is Ready, uncordoned and Longhorn healthy. Preflight refusals stay; above them a fleet floor (no
@@ -651,8 +651,8 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
 `restartIfChanged = false`, the metrics). What the switch adds is **which node a tick may sync**:
 
 - **The switch** is `reconcile_rollout.enabled` at the top of `machines/machines.yaml` — a commit,
-  so flipping it is reviewable and the box picks it up on its next pull. **Off** (the default as
-  merged): the reconciler owns only `reconcile_rollout.pilot` (wk-03), first candidate in inventory
+  so flipping it is reviewable and the box picks it up on its next pull. **On since 2026-09-22**
+  (operator; built off, #1876). **Off:** the reconciler owns only `reconcile_rollout.pilot` (wk-03), first candidate in inventory
   order, control planes refused — the pre-rollout behaviour, pinned by running the whole original
   test suite a second time with the switch explicitly off. **To flip:** set `enabled: true` in a
   one-line PR; nothing moves until a declared bump is applied. Flipping it off mid-rollout lifts the
