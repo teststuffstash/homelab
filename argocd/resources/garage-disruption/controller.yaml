@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: garage-disruption
+---
+# Exactly one object: read and patch the `garage` PDB. The signal is read over HTTP from
+# Prometheus (no RBAC); no pod, secret or admin-API access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: garage-disruption
+rules:
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    resourceNames: [garage]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: garage-disruption
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: garage-disruption }
+subjects:
+  - { kind: ServiceAccount, name: garage-disruption }
+---
+# Every minute, like garage-write-probe: the signal carries a 10-minute hysteresis of its own, so
+# the loop's job is only to not add much lag on top of it. A run is one query + one GET (+ a PATCH
+# on a change) and exits; Forbid + a short deadline keep a stuck run from stacking.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garage-disruption
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 90
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: garage-disruption
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: controller
+              # Stdlib-only Python; the same pinned image garage-meta-rotation and
+              # garage-write-probe already pull through the docker.io mirror.
+              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              command: ["python3", "-u", "/controller/controller.py"]
+              env:
+                - name: NAMESPACE
+                  valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+                - name: PROM_URL
+                  value: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: controller, mountPath: /controller }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: controller
+              configMap: { name: garage-disruption-controller }

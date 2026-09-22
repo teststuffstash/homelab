@@ -13,7 +13,7 @@
 #                the target AND was opened with --admit-reconciler (the attended canary). The
 #                check runs BEFORE the verb opens its own window, so a window on the target at
 #                that moment is always someone else's. The verb's own WIP 1 (no other node cordoned or
-#                NotReady) and its fleet floors (Longhorn degraded, Garage cluster_healthy, CNPG
+#                NotReady) and its fleet floors (Longhorn degraded, a multi-node PDB at 0 — Garage's, CNPG
 #                instances) stay the verb's — they are not re-implemented here.
 #   one attempt  keyed on the DECLARED target (version/schematic). A verb exit 2 is a REFUSAL
 #                (a gate said no, nothing was touched) and is retried on the next tick; exit 4 is an
