@@ -10504,4 +10504,6 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   `No changes`; leaked cert gets TLS `alert unknown ca` on every node. Recipe fixes: #1892.
 - **FU-195 DONE:** #1890 (fixer) — silence survived a pod restart (probe).
 - Found: maintenance-window.sh single state slot (GAPS maintenance-window-G1); the OPNsense API key+secret
-  printed into this session's transcript by a zsh no-word-split curl — ROTATE (operator).
+  printed into this session's transcript by a zsh no-word-split curl — ROTATED 16:1xZ by the seat: new
+  root key via `auth/user/add_api_key/root` (the uuid form fails), wallet entries edited, box env
+  `--push`ed, old key `del_api_key`'d → 401; new key 200; `opnsense-playbook --check` clean.

@@ -10,7 +10,7 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 - **⚑ NEXT (2026-09-22 evening — pickup list done; arc in TICK-LOG).** Garage PDB #1882 LIVE + tested on
-  m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) FU-278 LANDED (#1891, 15:41Z) — the next rollout is the first with the workload-health hold. (2) **Operator:** rotate the OPNsense API key (printed into a transcript 2026-09-22); check
+  m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) FU-278 LANDED (#1891, 15:41Z) — the next rollout is the first with the workload-health hold. (2) **Operator:** check
   pop-os `~/.talos/config` for the dead identity; #1882's "3 flagged choices" (never recorded). (3)
   FU-277 next step (drop the DHCP search on nodes? + an in-cluster DNS detector). (4) FU-097's ledger
   section + the intent-review instruction. Stack-side: oracle-fleet#698 waits for a codeowner read.
