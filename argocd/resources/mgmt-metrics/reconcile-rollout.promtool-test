@@ -50,3 +50,33 @@ tests:
         alertname: MgmtRolloutHaltUnreadable
         exp_alerts:
           - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: unreadable }
+
+  # ── the workload-health hold (FU-278): fires after 30m on either hold reason, never on the
+  # differential's, and clears the moment the hold releases (healthy again, or a human ack) ──────
+  - interval: 5m
+    name: "a workload-health hold fires after 30m and clears on release; the differential never fires it"
+    input_series:
+      - series: 'mgmt_reconcile_rollout_halted{job="mgmt-node",instance="192.168.2.53:9100",reason="differential"}'
+        values: "1x20 0x40"
+      - series: 'mgmt_reconcile_rollout_halted{job="mgmt-node",instance="192.168.2.53:9100",reason="workload-health"}'
+        values: "0x20 1x12 0x28"
+      - series: 'mgmt_reconcile_rollout_halted{job="mgmt-node",instance="192.168.2.53:9100",reason="workload-health-unreadable"}'
+        values: "0x40 1x20"
+    alert_rule_test:
+      - eval_time: 1h30m
+        alertname: MgmtRolloutHeldOnWorkloadHealth
+        exp_alerts: []
+      - eval_time: 2h05m
+        alertname: MgmtRolloutHeldOnWorkloadHealth
+        exp_alerts: []
+      - eval_time: 2h35m
+        alertname: MgmtRolloutHeldOnWorkloadHealth
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health }
+      - eval_time: 2h50m
+        alertname: MgmtRolloutHeldOnWorkloadHealth
+        exp_alerts: []
+      - eval_time: 4h05m
+        alertname: MgmtRolloutHeldOnWorkloadHealth
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health-unreadable }
