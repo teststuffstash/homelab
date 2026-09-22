@@ -221,7 +221,7 @@ if has_type longhorn; then
           and $rob[.spec.volumeName] == "healthy"
           and ($imnew or (((.spec.healthyAt // "") != "") and ((.spec.healthyAt | fromdateiso8601) >= $s))))
           | .spec.volumeName]
-      | if length == 0 then "" elif $imnew then "\(length) replica(s) healthy under the current boot's instance-manager, e.g. \(.[0])"
+      | if length == 0 then "" elif $imnew then "\(length) replica(s) healthy under the instance-manager of the current boot, e.g. \(.[0])"
         else "\(length) replica(s) rebuilt/healthy, e.g. \(.[0])" end')"
     if [ -n "$ok" ]; then have longhorn "$ok"
     else miss longhorn "none of the $lh_here replica(s) here is running+healthy since then on a healthy volume"; fi
