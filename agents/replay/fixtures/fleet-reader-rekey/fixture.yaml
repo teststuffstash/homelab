@@ -31,6 +31,12 @@
 #                       clean ride) ⇒ the strikes are REFUTED and dropped: no branch, no write.
 #   router-unreadable   `curl` fails ⇒ FAIL-CLOSED and LOUD (rule #6): one ⛔ report line, no
 #                       latch, no nomination, no `agent/error`.
+#   key-class-excluded  the keyclass world (two issues, each with `budget-403-key` AND
+#                       `budget-exhausted-key` strikes — the FU-202 key classes recorded as
+#                       AGENT_STRIKE: pre-#1233) ⇒ NO branch at all: a key class is a MINT defect,
+#                       never a provider, model or "us" fault. No latch, no nomination, no
+#                       `agent/error`, no filing. The re-key dropped this belt (its worlds carried
+#                       no key-class strike, so nothing noticed); this row pins IL-T30's guard.
 #
 # The router payload is a row's declared CONDITION (`ROUTER_STATUS_JSON`), never a live call: the
 # ClusterIP endpoint answers from inside the loop namespace, so a fixture that reached it would go

@@ -4326,6 +4326,18 @@ EOF_GTHEMES_OPEN
           now_s="$(date -u +%s)"
           while IFS= read -r ec; do
             [ -n "$ec" ] || continue
+            # FU-202 belt: key-class error_class values (budget-exhausted-key, budget-403-key)
+            # are MINT defects, not worker strikes. New rides post KEY-RETRY: (not AGENT_STRIKE:)
+            # so the ^AGENT_STRIKE: anchor already excludes them going forward. But the 24h
+            # window can span the #1233 merge, and historical corpus records key-class as
+            # AGENT_STRIKE:. Explicitly exclude them here so the fleet reader never counts a mint
+            # defect as a fleet strike — a key class is never a provider, model or "us" fault.
+            # (Dropped by the re-key on 2026-09-20 and put back with the `key-class-excluded`
+            # replay row that now pins it — the re-key's worlds carried no key-class strike, so
+            # nothing noticed; PR#1792.)
+            case "$ec" in
+              budget-exhausted-key|budget-403-key) continue;;
+            esac
             cls_records="$(printf '%s\n' "$records" | awk -F'|' -v ec="$ec" '$1 == ec' 2>/dev/null || true)"
             [ -n "$cls_records" ] || continue
             nums="$(printf '%s\n' "$cls_records" | awk -F'|' '{print $4}' | sort -u | tr '\n' ',' | sed 's/,$//')"

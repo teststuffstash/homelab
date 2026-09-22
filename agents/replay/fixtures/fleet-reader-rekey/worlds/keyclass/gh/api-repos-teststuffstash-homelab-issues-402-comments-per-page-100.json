@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: model=m/two error_class=budget-403-key round=1 session=pod-402 provider=p-two\n\nThe mint refused the key (historical pre-#1233 row).",
+    "created_at": "2026-09-01T15:30:00Z"
+  },
+  {
+    "id": 2,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: model=m/two error_class=budget-exhausted-key round=2 session=pod-402b provider=p-two\n\nThe key's budget was exhausted (historical pre-#1233 row).",
+    "created_at": "2026-09-01T15:40:00Z"
+  }
+]

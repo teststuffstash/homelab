@@ -404,8 +404,8 @@ transitions:
     guards:
       - desc: "the AGENT_STRIKE: marker is ANCHORED at the start of a COMMENT — same discipline as AGENT_INFEASIBLE: (homelab#257)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_STRIKE:"\)' }
-      - desc: "the Resumable branch pushed: line is read from the anchored strike comment — the branch is extracted and carried into the dispatch unit"
-        anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("Resumable branch pushed:"\)' }
+      - desc: "the Resumable branch pushed: line is read from the anchored strike comment — matched at line start through the finalizer's markdown bold, backticks stripped, cut at the first whitespace (FU-199 fold-in, the #1780 `work-branch=**` dispatch) — the bare branch is extracted and carried into the dispatch unit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'select\(test\("\^\\\\\*\{0,2\}Resumable branch pushed:\\\\\*\{0,2\}"\)\)' }
       - desc: "no strike / no resumable branch / unreadable probe keeps today's behaviour (rule #6 — never fail INTO a write)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "goal child in an undecidable state" }
       - desc: "loop guard — a resumed round that strikes again with the same (model, error_class) pair follows the existing second-strike rule"
