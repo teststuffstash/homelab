@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-280** (2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-281** (2026-09-22: FU-280 minted for the registry's S3-vs-filesystem backend question, opened by the second commit-refusal outage; FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -213,6 +213,16 @@ six OVERSIZE items pointer-ized into
       The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
       **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
       Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
+- [ ] **FU-280** — **Should the first-party registry move off the Garage S3 backend? POINTER.**
+      An S3 blob commit holds the layer TWICE (upload, then a server-side COPY into blobs/) — the
+      proximate cause of both commit-refusal outages (09-09, 09-22). A filesystem/PVC backend
+      renames on commit, so the double-hold cannot exist; ADR-121's rejection of the PVC rests on a
+      capacity clause that no longer binds and a misapplied principle (operator, 2026-09-22).
+      **Blocked on a TIER decision, not on the registry:** `std` is wrong for a store that must
+      reach hundreds of GB, `bulk` is 90% committed — ADR-shaped, belongs with fleet-roles/FU-137.
+      Evidence, the experiment, the naming trap and a cheaper side-question first:
+      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
+      **Next:** answer the tier question, then run phase 1. Relates FU-203, FU-274, FU-279, FU-137.
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
