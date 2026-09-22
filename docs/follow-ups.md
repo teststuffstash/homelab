@@ -200,7 +200,8 @@ six OVERSIZE items pointer-ized into
       X240 (the third std SFF, fleet-roles direction; ledger via FU-137); (2) THEN alerts on
       `garage:s3_latency_seconds:{p50,p99}_5m` per endpoint + the 30d burn rate, and re-read;
       (3) attribute one CI-hour window by bucket from the S3 access log (the #499 method).
-      Resight 09-22 16:28Z: a runner's allure+specs sync (3.9k req/min) stalled the ert parse ~2/16 min.
+      Resights: 09-16 (oracle handoff) CI PUT bursts 8–13/s → ~500 meta-volume writes/PUT on
+      garage-2's Longhorn meta, GetObject p99 17 s; 09-22 16:28Z a runner sync stalled the ert parse.
       Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
 - [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
       The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
