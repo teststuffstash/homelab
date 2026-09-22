@@ -414,17 +414,6 @@ six OVERSIZE items pointer-ized into
       guest-workload hypervisor, or nx-02 leaving after the R11 noise trial). **Next:** mint a
       second seed at the first reason to distinguish them; until then the DR step is written down
       in both `providers.tf` and the nx-02 row of `machines/machines.yaml`. Relates FU-012.
-- [ ] **FU-243** — **Three control planes behind the Talos VIP (ADR-133/-136) — POINTER.** Mechanism,
-      order, §CP6 defect, §CP7 recovery, §CP9 (#1845): [`docs/controlplane-ha.md`](controlplane-ha.md).
-      **2026-09-21: THREE control planes and three etcd members are LIVE** — cp-01, cp-02 and
-      wk-metal-02, all `Ready`, all BGP `established`. Getting there took #1818 (metal CPs need
-      `dhcp: true` beside the VIP, or the patch takes their only address source) and #1820 (the
-      STATE-partition wipe that §CP5 could not reach, cp-02's missing BGP neighbour, `mgmt-tf state`).
-      ⛔ The `cluster_endpoint` cutover is still reverted. **Next:** (a) flip `cluster_endpoint` to
-      the `.50` VIP — token-neutral now the issuer is pinned, and it does not restart the apiserver
-      (§CP4 phase 3) — then re-render the client configs or the jail and the box keep dialling `.51`
-      (FU-259); (b) `cp-upgrade` ×3, cp-01 still trails at v1.13.2. Relates FU-235, FU-258, FU-262.
-
 - [ ] **FU-244** — **Transient PXE flags leave git (ADR-132 consequence).** `tofu/provisioning/matchbox.tf`
       says groups are transient and holds none — yet `nx_01_diag` was committed 2026-09-16 (f844711a) because
       the live flag existed in git nowhere. Rule: a flag is procedure state, never a commit. Interim shape:
