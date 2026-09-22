@@ -1,3 +1,210 @@
+# The collector for the first-party registry (ADR-121, FU-203) — and the guard that keeps it from
+# sweeping a live push.
+#
+# WHY THE GUARD EXISTS. `registry garbage-collect --delete-untagged` is mark-and-sweep against a
+# LIVE registry: a blob already committed to blobs/ whose manifest has not been written yet is
+# indistinguishable from garbage, so a sweep takes it and the manifest arriving a moment later
+# points at a blob that is gone. That is the #116/#240 "serves 200 with 0 bytes" class, and it does
+# not heal.
+#
+# Until 2026-09-22 the only thing preventing it was the CLOCK: the collector ran Sundays 03:00Z and
+# the oracle release ran Tuesdays 07:17Z, so they could not meet. Both halves of that guarantee are
+# gone — the collector moved to daily (#1902) and oracle-fleet's releases became development-driven
+# rather than cron-driven (corpus regen 10h -> 1h, so fixes ship as they land, including at 03:00Z).
+# The guard replaces the coincidence with an actual check.
+#
+# WHAT IT CHECKS — two read-only signals that a push is active:
+#   1. objects under `<repo>/_uploads/` modified within WINDOW_SECONDS (a blob upload writes
+#      `startedat` at POST and `hashstates/<offset>` as it streams);
+#   2. multipart uploads INITIATED within WINDOW_SECONDS.
+# The MPU check is time-gated, not presence-gated, on purpose: this bucket carries stale incomplete
+# uploads from 2026-09-02/09-10 that nothing collects (FU-279), and a presence test would defer
+# forever.
+#
+# FAIL-SAFE: any error — cannot list, cannot parse, no credentials — DEFERS. "We did not look" must
+# never read as "nothing there": a skipped collection costs a day, a bad sweep is permanent. The
+# guard always exits 0 so a defer leaves the Job Successful; the verdict reaches the collector
+# through a shared decision file, and an unreadable file is itself read as DEFER.
+#
+# RESIDUAL RACE, stated plainly: a push that starts AFTER the check and commits a blob before the
+# sweep reaches it is still exposed. Collection takes ~45 s, so the window is small but not zero.
+# Closing it properly means putting the registry in read-only mode for the duration
+# (REGISTRY_STORAGE_MAINTENANCE_READONLY) — heavier, and a job dying mid-run would strand the
+# registry read-only. Revisit if this ever collects for a busier repo than one release stream.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-gc-guard
+  namespace: registry
+data:
+  gc-guard.py: |
+    #!/usr/bin/env python3
+    """Refuse to garbage-collect the registry while a push may be in flight.
+
+    Rationale, signals, fail-safe behaviour and the residual race: the comment header of
+    registry-gc-cronjob.yaml, which is this script's only other home.
+    """
+    import hashlib
+    import hmac
+    import os
+    import sys
+    import urllib.parse
+    import xml.etree.ElementTree as ET
+    from datetime import datetime, timezone
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    ENDPOINT = os.environ.get("S3_ENDPOINT", "http://garage.garage.svc.cluster.local:3900")
+    BUCKET = os.environ.get("S3_BUCKET", "registry")
+    ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "")
+    SECRET_KEY = os.environ.get("S3_SECRET_KEY", "")
+    REGION = os.environ.get("S3_REGION", "garage")
+    WINDOW_SECONDS = int(os.environ.get("WINDOW_SECONDS", "1800"))
+    PREFIX = "docker/registry/v2/repositories/"
+    DECISION_FILE = os.environ.get("DECISION_FILE", "/guard/decision")
+
+
+    def sign(method, query_params, timestamp):
+        """S3 SigV4, path-style, WITH a query string.
+
+        The garage-write-probe signer hardcodes an empty query string; listing needs real
+        parameters, and they must be RFC3986-encoded and key-sorted or the signature will not
+        match.
+        """
+        host = urllib.parse.urlparse(ENDPOINT).netloc
+        amz_date = timestamp.strftime("%Y%m%dT%H%M%SZ")
+        datestamp = timestamp.strftime("%Y%m%d")
+        payload_hash = hashlib.sha256(b"").hexdigest()
+
+        canonical_qs = "&".join(
+            "{}={}".format(
+                urllib.parse.quote(k, safe="-_.~"), urllib.parse.quote(v, safe="-_.~")
+            )
+            for k, v in sorted(query_params.items())
+        )
+        canonical_headers = (
+            "host:{}\nx-amz-content-sha256:{}\nx-amz-date:{}\n".format(host, payload_hash, amz_date)
+        )
+        signed_headers = "host;x-amz-content-sha256;x-amz-date"
+        canonical_request = "{}\n/{}\n{}\n{}\n{}\n{}".format(
+            method, BUCKET, canonical_qs, canonical_headers, signed_headers, payload_hash
+        )
+
+        scope = "{}/{}/s3/aws4_request".format(datestamp, REGION)
+        string_to_sign = "AWS4-HMAC-SHA256\n{}\n{}\n{}".format(
+            amz_date, scope, hashlib.sha256(canonical_request.encode()).hexdigest()
+        )
+
+        key = "AWS4{}".format(SECRET_KEY).encode()
+        for part in (datestamp, REGION, "s3", "aws4_request"):
+            key = hmac.new(key, part.encode(), hashlib.sha256).digest()
+        signature = hmac.new(key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+        return {
+            "Authorization": (
+                "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}".format(
+                    ACCESS_KEY, scope, signed_headers, signature
+                )
+            ),
+            "x-amz-date": amz_date,
+            "x-amz-content-sha256": payload_hash,
+        }
+
+
+    def get_xml(query_params):
+        headers = sign("GET", query_params, datetime.now(timezone.utc))
+        url = "{}/{}?{}".format(ENDPOINT, BUCKET, urllib.parse.urlencode(query_params))
+        with urlopen(Request(url, headers=headers, method="GET"), timeout=30) as resp:
+            return ET.fromstring(resp.read())
+
+
+    def local(tag):
+        """Strip the S3 XML namespace so lookups work however Garage declares it."""
+        return tag.rsplit("}", 1)[-1]
+
+
+    def children(node, name):
+        return [c for c in node if local(c.tag) == name]
+
+
+    def text_of(node, name):
+        found = children(node, name)
+        return found[0].text if found else None
+
+
+    def parse_ts(value):
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+
+
+    def recent_uploads(now):
+        hits, token = [], None
+        while True:
+            params = {"list-type": "2", "prefix": PREFIX, "max-keys": "1000"}
+            if token:
+                params["continuation-token"] = token
+            root = get_xml(params)
+            for item in children(root, "Contents"):
+                key = text_of(item, "Key") or ""
+                if "/_uploads/" not in key:
+                    continue
+                age = (now - parse_ts(text_of(item, "LastModified"))).total_seconds()
+                if age < WINDOW_SECONDS:
+                    hits.append((key, int(age)))
+            if (text_of(root, "IsTruncated") or "false").lower() != "true":
+                return hits
+            token = text_of(root, "NextContinuationToken")
+            if not token:
+                return hits
+
+
+    def recent_mpus(now):
+        root = get_xml({"uploads": ""})
+        hits = []
+        for item in children(root, "Upload"):
+            age = (now - parse_ts(text_of(item, "Initiated"))).total_seconds()
+            if age < WINDOW_SECONDS:
+                hits.append((text_of(item, "Key"), int(age)))
+        return hits
+
+
+    def decide():
+        if not ACCESS_KEY or not SECRET_KEY:
+            return "DEFER", "S3 credentials are missing - refusing to sweep blind"
+        now = datetime.now(timezone.utc)
+        found = recent_uploads(now) + recent_mpus(now)
+        if found:
+            detail = "; ".join("{} ({}s ago)".format(k, a) for k, a in found[:5])
+            return "DEFER", "push activity inside {}s: {}".format(WINDOW_SECONDS, detail)
+        return "PROCEED", "no _uploads object or multipart upload touched in {}s".format(
+            WINDOW_SECONDS
+        )
+
+
+    def main():
+        try:
+            verdict, reason = decide()
+        except (HTTPError, URLError, ET.ParseError, ValueError, OSError) as exc:
+            verdict = "DEFER"
+            reason = "guard could not read the bucket ({}: {})".format(type(exc).__name__, exc)
+
+        line = "{} {}".format(verdict, reason)
+        print("gc-guard: " + line, flush=True)
+        try:
+            with open(DECISION_FILE, "w") as handle:
+                handle.write(line + "\n")
+        except OSError as exc:
+            print(
+                "gc-guard: could not write {} ({}) - collector will defer".format(
+                    DECISION_FILE, exc
+                ),
+                flush=True,
+            )
+        sys.exit(0)
+
+
+    if __name__ == "__main__":
+        main()
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -9,8 +216,8 @@ spec:
   # 2026-09-22 (FU-203): the untag is nightly but the reclaim was weekly, so a prunable tag sat
   # up to six days while RegistryBucketCommitHeadroomLow fired — three times (09-07, 09-15→16,
   # 09-22), each costing a triage session and a hand-run of this job. --delete-untagged is
-  # hazardous only against a CONCURRENT push (a blob whose manifest is not yet written is
-  # indistinguishable from garbage), and 03:00Z carries no push on any day.
+  # hazardous only against a CONCURRENT push, which the gc-guard initContainer now checks for
+  # (header above) rather than leaving to the schedule.
   schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
   jobTemplate:
@@ -27,6 +234,36 @@ spec:
             runAsGroup: 1000
             fsGroup: 1000
             seccompProfile: { type: RuntimeDefault }
+          volumes:
+            - name: guard
+              emptyDir: {}
+            - name: gc-guard
+              configMap: { name: registry-gc-guard }
+          initContainers:
+            # Same image + stdlib-only approach as garage-write-probe (no boto3 in slim).
+            - name: gc-guard
+              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              command: ["python3", "-u", "/guard-src/gc-guard.py"]
+              env:
+                - { name: S3_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+                - { name: S3_BUCKET, value: "registry" }
+                - { name: S3_REGION, value: "garage" }
+                - { name: WINDOW_SECONDS, value: "1800" }
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef: { name: registry-garage-s3, key: access_key_id }
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef: { name: registry-garage-s3, key: secret_access_key }
+              volumeMounts:
+                - { name: guard, mountPath: /guard }
+                - { name: gc-guard, mountPath: /guard-src, readOnly: true }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: "50m", memory: "64Mi" }
+                limits:   { cpu: "500m", memory: "256Mi" }
           containers:
             - name: registry-gc
               image: registry:3.0.0
@@ -34,6 +271,13 @@ spec:
                 - /bin/sh
                 - -c
                 - |
+                  # An unreadable or non-PROCEED decision is a DEFER — never a silent sweep.
+                  if ! grep -q '^PROCEED' /guard/decision 2>/dev/null; then
+                    echo "=== DEFERRED: $(cat /guard/decision 2>/dev/null || echo 'no decision file') ==="
+                    echo "collector skipped; the next daily run retries"
+                    exit 0
+                  fi
+                  echo "=== GUARD: $(cat /guard/decision) ===" && \
                   echo "=== DRY RUN ===" && \
                   registry garbage-collect --dry-run --delete-untagged /etc/distribution/config.yml && \
                   echo "=== ACTUAL RUN ===" && \
@@ -59,6 +303,8 @@ spec:
                 - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
                 - { name: REGISTRY_HTTP_RELATIVEURLS, value: "true" }
                 - { name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:5002" }
+              volumeMounts:
+                - { name: guard, mountPath: /guard, readOnly: true }
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities: { drop: ["ALL"] }
