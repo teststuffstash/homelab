@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-278** (2026-09-22: FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-279** (2026-09-22: FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -1350,6 +1350,15 @@ the block needs pruning, not more headings.
       drops the upgrade fallback after a good boot — the §MB4 doc line, folded into the same issue.
       **Next:** #1884 — operator/seat lane, UNQUEUED (`scripts/**` is the ❌ `codeowner-author` set,
       no worker PR can deliver it). Relates FU-273, FU-267.
+- [ ] **FU-278** — **The rollout keeps taking nodes while a platform workload is down.** 2026-09-22:
+      wk-04's window moved Forgejo onto hp-01 (not Ready from 12:51Z, the FU-277 DNS trap); cp-01,
+      cp-02, wk-metal-02 went down after it. Between windows only node Ready + cilium + (ADR-140)
+      multi-node PDBs are read; §MB4's differential is the only halt. **Ruled (operator):** a
+      rollout-start fleet-wide snapshot of unhealthy workloads keyed by top owner + revision; hold
+      (never revert) on any NEW unhealthy platform workload (non-stack namespace), and on an
+      important stack workload (≥2 replicas/instances or a PDB) on its SAME revision; a new
+      revision or a stack singleton only logs. **Next:** the PR (node-maintenance verb + reconciler
+      hold + harness + replay of 2026-09-22). Relates FU-276, FU-273, ADR-140.
 - [ ] **FU-277** — **Talos ≥ v1.14 puts the DHCP search domain in every metal-node pod's resolv.conf.**
       v1.14.0 "applies DHCPv4 search domains": `teststuff.net` (dnsmasq) → pod search + ndots:5, so
       `x.ns.svc.cluster.local` tried `….teststuff.net` first → the CF `*.local` wildcard → 127.0.0.1.
