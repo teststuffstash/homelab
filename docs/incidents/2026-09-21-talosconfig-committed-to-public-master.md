@@ -57,3 +57,7 @@ state, so a later apply would push the old CA back.
 
 **Operator ruling 2026-09-21: rotate, but not now** — finish the three-control-plane rollout and
 let it stabilise first. Tracked as **FU-264**.
+
+**Resolved 2026-09-22:** the Talos API CA was rotated in production (`--talos` only), and every node
+now rejects the leaked identity at the TLS handshake (`alert unknown ca`). Run record:
+[`spikes/talos-ca-rotation.md`](../spikes/talos-ca-rotation.md) §Production run.

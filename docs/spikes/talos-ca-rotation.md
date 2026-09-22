@@ -2,7 +2,7 @@
 
 **Tracked by:** FU-264. **Status:** lab-probed 2026-09-22 on a disposable control plane (§Lab
 results). The state-reconciliation question is answered (candidate A), and the production recipe is
-§The recipe. The production rotation itself has **not** run.
+§The recipe. **Production rotation DONE 2026-09-22 14:55–15:14Z** (§Production run).
 **Why now:** a talosconfig carrying the `os:admin` certificate **and its private key** was
 committed to public master on 2026-09-21
 ([incident](../incidents/2026-09-21-talosconfig-committed-to-public-master.md)). Talos has no CRL,
@@ -137,9 +137,11 @@ inside a [declared window](../glossary.md), and the VM was destroyed after.
    `grep -vE '^\s+(key|crt|ca):'`.
 3. **Topology flags.** `--init-node X` together with `--control-plane-nodes X` lists X twice. Pass
    `--control-plane-nodes` and `--worker-nodes` only. A combined `--talos --kubernetes` **dry-run**
-   ends in `failed to create new client with rotated Talos CA: failed to determine endpoints`: the
-   Kubernetes half needs the talosconfig that a dry run never writes. That is a dry-run artefact;
-   each half dry-runs clean on its own, and the real combined run passed.
+   ends in `failed to create new client with rotated Talos CA: failed to determine endpoints`.
+   **So does a `--talos`-only dry run** (corrected by the production run, 2026-09-22): in v1.13.8
+   `rotateCA` re-creates its client from the talosconfig `rotateTalosCA` returns, and a dry run
+   returns nil (`cmd/talosctl/cmd/talos/rotate-ca.go`). Every Talos dry run therefore exits 1 AFTER
+   a clean pass. A real run saves the talosconfig before that call.
 4. **The real rotation took 12 s on one node**, exit 0. Afterwards:
    - The old tofu talosconfig and the installer's talosconfig were refused (`authentication handshake
      failed`), and the new one worked.
@@ -249,7 +251,9 @@ grep -vE '^\s+(key|crt|ca):' $R/dry-run.log
 - The topology lists 3 control planes + 10 workers, **each exactly once**.
 - Every "Verifying connectivity" line reads `OK (dry-run)`, one per node.
 - The mutations read `skipped (dry-run)`.
-- It ends with `Dry-run mode enabled, no changes were made`, `exit=0`.
+- It ends with `Dry-run mode enabled, no changes were made`, then `failed to create new client with
+  rotated Talos CA: failed to determine endpoints` and `exit=1`: the dry-run artefact of §Lab
+  results item 3. Any OTHER error, or a non-zero exit before the "Dry-run mode enabled" line, aborts.
 
 **Abort** on any of these:
 
@@ -346,7 +350,8 @@ If `import` or P1 is wrong, the state is still recoverable from the pre-`state r
 snapshot holds the old, dead identity: safe as a pause (applies hang, they cannot revert), but not a
 place to stay.
 
-`devbox run mgmt-tf -- apply <P1>`, then `devbox run mgmt-tf -- plan`, which gives plan id P2.
+`MGMT_YES=1 devbox run mgmt-tf -- apply <P1>` (without `MGMT_YES=1` it waits on a `[y/N]` prompt no
+non-interactive caller can answer), then `devbox run mgmt-tf -- plan`, which gives plan id P2.
 
 **Expected P2:**
 
@@ -397,8 +402,21 @@ The closure proof uses the leaked blob itself:
 ```bash
 git show 17424211:tofu/nix-shell-env > <scratch>/leaked; chmod 600 <scratch>/leaked
 talosctl --talosconfig <scratch>/leaked -n 192.168.2.51 -e 192.168.2.51 version   # must fail: authentication handshake failed
-shred -u <scratch>/leaked
 ```
+
+That failure is **client-side** (`x509: certificate signed by unknown authority`: the leaked config no
+longer trusts the server), and an attacker can skip server verification. The proof that matters is
+the server rejecting the leaked client cert. Carve its `crt`/`key` into 0600 files (rename the key's
+`ED25519 PRIVATE KEY` PEM header to `PRIVATE KEY` for openssl) and, per node:
+
+```bash
+(printf 'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00'; sleep 3) \
+  | openssl s_client -connect <ip>:50000 -cert leaked.crt -key leaked.key -alpn h2 | grep -a 'alert'   # must print: alert unknown ca
+shred -u <scratch>/leaked <scratch>/leaked.crt <scratch>/leaked.key
+```
+
+The new identity, run the same way with `-CAfile` from the new talosconfig, must read `Verify return
+code: 0 (ok)` and no alert.
 
 Then restore and clean up:
 
@@ -422,3 +440,25 @@ identity and a retired CA. Restoring one reproduces lab finding 5: a hang, not a
 - **Do not run `rotate-ca` through `devbox run`, or anywhere its stdout is captured.** devbox
   injects `TALOSCONFIG`/`KUBECONFIG` (on the box, paths that do not exist), and the output carries
   CA private keys (lab finding 2).
+
+## Production run (2026-09-22, seat, operator-authorized)
+
+Per §The recipe, from the box, `--talos=true --kubernetes=false`, 13 nodes (3 CP + 10 workers) on
+v1.14.1 with talosctl v1.13.8 (safe: the config contract is v1.13.10, so no config carries a v1.14-only
+field for the older client to drop).
+
+- **Pre:** etcd 3/3, one leader, no errors; etcd snapshot `pre-rotate-ca-20260922T145546Z.db`; state s331.
+- **Dry run:** 13 × OK in every phase, then the dry-run artefact (§Lab results item 3), exit 1.
+- **Rotate:** exit 0, every phase 13/13, "Removing old Talos CA from the accepted CAs", new talosconfig
+  written. Kubernetes untouched (`maint check` clean, cilium 13/13).
+- **State:** the three CP-derived bundles identical; `state rm` + `import` (s332/s333); P1 exactly the
+  expected single in-place change (its `+ aescbc_encryption_secret` is plan-time unknown: after apply
+  it stayed `null`, and all 13 secrets/CAs byte-matched the live bundle); P2 15 in-place (13 config
+  applies, `talos_cluster_kubeconfig`, and `talos_machine_bootstrap` whose only change is its client
+  credentials — bootstrap acts on create only); a cp-01 render dry-run against the node: `No changes`;
+  P2 applied clean on the first pass; the following plan: `No changes`.
+- **Redistributed:** `devbox run talosconfig` (jail + box, one fingerprint, notAfter 2027-09-22), the
+  nixos-anywhere seed re-staged. No `~/.talos` in the jail; the operator's host copy (if any) is theirs.
+- **Proof:** every node answers the leaked cert with TLS `alert unknown ca`; the new one verifies.
+- **Restore:** box timers on, one clean tick each of apply/reconcile/sentinel; the rotation working
+  files (old/new talosconfig, CP configs, bundles, logs, the plaintext pre-rotate state) shredded.
