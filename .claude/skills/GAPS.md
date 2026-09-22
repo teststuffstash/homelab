@@ -196,3 +196,10 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       2026-09-21 (seat, pve GPU swap). Next: ship the watch as a verb (`maint watch`, emits one
       line per new alert name, exits never) so it is run, not re-typed; and a `cp-down`/`cp-up`
       pair beside cp-upgrade with the same gates.
+## maintenance-window
+- [ ] maintenance-window-G1 — `maintenance-window.sh` keeps ONE state slot per user
+      (`baseline.json` + `window-id` under `~/.claude/maintenance-window/`), so a seat and its
+      subagent with windows open at once clobber each other: the second `open` overwrote the
+      first's baseline, and the first's `close` would have closed the SUBAGENT's window (worked
+      around by `seat-window.sh close --id`). Fix: key the slot by the window id, `close --id`,
+      and refuse `open` while this slot holds a live window. Sighted 2026-09-22.
