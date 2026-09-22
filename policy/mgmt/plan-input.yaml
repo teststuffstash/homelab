@@ -10,7 +10,13 @@
 # Stage 1 (this file, over the PR tree as DATA) is what makes stage 2 (the plan) safe to run.
 roots:                      # what the box plans; a PR path under the root's dir selects it
   main:         { dir: tofu,              apply: true,     # everything under tofu/ not claimed by another entry
-                  inputs: [machines/machines.yaml] }
+                  inputs: [machines/machines.yaml],
+                  apply_controlplane_config: false }
+                  # `apply_controlplane_config` — the FU-097 auto-apply TOGGLE for Talos config applies on
+                  # nodes whose declared role (node_install_targets, from the plan) is controlplane. false =
+                  # a CP config change stays a human `mgmt-tf apply` even when it passes every other part
+                  # of the precondition (scripts/mgmt-lib.sh mgmt_talos_gate): on 2026-09-20 a CP config
+                  # apply took the API path down while every node read Ready. The OPERATOR flips it.
                   # `inputs`: files OUTSIDE the dir the root reads at plan time (locals.tf yamldecodes the
                   # inventory — every metal node, flag, zone and taint). A PR touching only one of these
                   # selected NO root before 2026-09-21 and got "no box-held surface touched" — #1716
@@ -85,3 +91,13 @@ apply_addresses:            # resource addresses (globs) the box may APPLY unatt
     - "kubernetes_service.mongo"
     - "kubernetes_persistent_volume_claim.mongo"
     - "kubernetes_persistent_volume_claim.config"
+    # Seed images (ADR-014 nocloud/metal images, the ci-runner cloud image): a download is inert until
+    # a VM names it, and a VM that re-points at a new one is a proxmox_virtual_environment_vm change —
+    # outside this list, so that plan is refused whole (operator, 2026-09-22).
+    - "proxmox_download_file.*"
+    # Talos machine-config applies (FU-097's first toggle, 2026-09-22) — inside the allowlist is NOT
+    # enough: every change must also pass mgmt_talos_gate (in-place update, apply_mode = no_reboot,
+    # a worker unless apply_controlplane_config above), and the apply is bracketed by the health
+    # gate (docs/management-box.md §MB3 "Talos config applies"). `\[` = a literal `[` (case glob).
+    - 'talos_machine_configuration_apply.node\[*'
+    - 'talos_machine_configuration_apply.metal\[*'
