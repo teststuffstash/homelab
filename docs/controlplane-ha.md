@@ -103,8 +103,12 @@ bash scripts/controlplane-lab-install.sh 192.168.2.65 /tmp/cplab   # isolated cr
 ```
 
 Read the thin pool before creating it (`pvesm status` on the hypervisor — the pve pool has filled
-four times). `.65`/`.66` are **borrowed for an hour, not assigned**: a lab address is procedure
-state, so nothing about it enters `machines.yaml`, dnsmasq or [`ip-plan.md`](ip-plan.md).
+four times). A lab address is **borrowed for an hour, not assigned**: it is procedure state, so
+nothing about it enters `machines.yaml`, dnsmasq or [`ip-plan.md`](ip-plan.md).
+⚠ **The `.65`/`.66` above are the 2026-09-20 run's, and both are production now** (cp-02 and
+ci-runner-02). Pick a fresh address every time and clear it per `ip-plan.md` (`git grep` + `nmap -sn`).
+The FU-264 run (2026-09-22) used `.69` and the `talos-v1.14.1-nocloud` image, because the v1.13.2
+image is gone from nx-02 ([`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md)).
 Tear down with `qm stop 8199 && qm destroy 8199 --purge` and the addresses are free again.
 
 The probe: mint a token, move the endpoint, see whether the token still authenticates — with the
