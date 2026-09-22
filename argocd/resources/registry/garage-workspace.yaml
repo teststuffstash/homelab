@@ -55,16 +55,29 @@
 #     held tags were legitimately in the keep-set, so there was nothing to untag and the 09-13
 #     collector's 7 s no-op was CORRECT. (homelab#241 2026-09-16 07:40Z read it as a stall; corrected
 #     on the thread the same day.)
-#   ⚠ WHAT REMAINS IS A SCHEDULE MISMATCH, and it is the platform's half: the untag is NIGHTLY, the
-#     reclaim WEEKLY. A prunable tag sits up to six days while RegistryBucketCommitHeadroomLow fires
-#     on the 2× rule, and each round costs a responder session — 2026-09-15 13:15Z → 2026-09-16
-#     10:00Z was 20 h firing, one triage comment and one cross-jail handoff, to run a 45 s job.
-#     Run by hand on that handoff: 37.73 GB → 21.3 GB, i.e. 16.4 GB, more than the ~10.6 GB the stack
-#     projected because it also swept the 2026-09-01 lineage (untagged before the CronWorkflow era,
-#     no collector run behind it). The off-schedule precondition is "NO PUSH IN FLIGHT", not "only on
-#     Sunday": the Sunday slot dodges the Tuesday 07:17Z release window, and --delete-untagged is
-#     hazardous only against a concurrent push, where a blob whose manifest is not yet written is
-#     indistinguishable from garbage. Fix = pair the collector to the prune, or move it to daily.
+#   ✔ THE SCHEDULE MISMATCH IS FIXED (2026-09-22, the platform's half): the collector is DAILY
+#     03:00Z, 30 min behind the 02:30Z untag, so a prunable tag waits ~24 h instead of up to six
+#     days. It cost three firings to get here — 09-07, 09-15→16 (20 h firing, one triage comment
+#     and one cross-jail handoff to run a 45 s job), 09-22 — each a hand-run of the same job.
+#     Run by hand on the 09-16 handoff: 37.73 GB → 21.3 GB, i.e. 16.4 GB, more than the ~10.6 GB the
+#     stack projected because it also swept the 2026-09-01 lineage (untagged before the CronWorkflow
+#     era, no collector run behind it). The off-schedule precondition is "NO PUSH IN FLIGHT", not
+#     "only on Sunday": --delete-untagged is hazardous only against a concurrent push, where a blob
+#     whose manifest is not yet written is indistinguishable from garbage; 03:00Z carries none.
+#   ⚠ A COLLECTOR RUN IS ONLY HALF THE RECLAIM AFTER A FAILED PUSH (measured 2026-09-22). The
+#     refused upload's own bytes stay in `_uploads/` as a COMPLETED object — the first
+#     CompleteMultipartUpload succeeded, only the copy's commit was refused — so they count against
+#     the quota until REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING (age 1h, interval 15m) drops them.
+#     On 09-22 the GC reclaimed 10.6 GB (42.2 → 31.6 GB) and left headroom at 19.9 GB, still under
+#     the alert's 22 GB; the failed upload's further 9.8 GiB purged itself ~1 h after it started.
+#     Do not read a still-firing alert right after a GC as "the collector did not work".
+#   ⚠ Garage-side MULTIPART DEBRIS is a third, separate pool and neither mechanism touches it:
+#     upload purging deletes the `_uploads/` objects, never the incomplete MPUs underneath. 4.3 GB
+#     from 2026-09-02/09-10 was still held on 09-22. It does NOT count against the bucket quota
+#     (garage_bucket_bytes tracks completed objects only — verified: the gauge equalled the object
+#     listing exactly, MPU parts excluded), so it never moves this alert; it is raw disk on every
+#     zone at rf=3. FU-279 carries it — mind the ☠ in docs/incidents/2026-08-24-…-meta-wipe.md
+#     before running `garage bucket cleanup-incomplete-uploads`.
 apiVersion: tf.upbound.io/v1beta1
 kind: Workspace
 metadata:
