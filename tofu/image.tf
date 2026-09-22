@@ -23,9 +23,14 @@ locals {
     controlplane = var.talos_version_controlplane
     worker       = var.talos_version_worker
   }
+  # The version a VM is DECLARED to run: its canary override (variables.tf nodes.*.talos_version)
+  # or its role's.
+  node_talos_version = {
+    for name, n in var.nodes : name => coalesce(n.talos_version, local.talos_role_version[n.role])
+  }
   vm_image_key = {
     for name, n in var.nodes :
-    name => "${n.longhorn ? "longhorn" : "plain"}-${local.talos_role_version[n.role]}"
+    name => "${n.longhorn ? "longhorn" : "plain"}-${local.node_talos_version[name]}"
   }
   vm_images = {
     for key in distinct(values(local.vm_image_key)) :
