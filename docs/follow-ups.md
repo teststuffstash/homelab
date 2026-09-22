@@ -238,11 +238,6 @@ six OVERSIZE items pointer-ized into
       `argo.teststuff.net` already chose. Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack
       jail reads its logs.
 
-- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** (emptyDir `…-alertmanager-db`)
-      — found 2026-08-30; resighted 2026-09-22 as a rollout blocker: a fleet rollout's drains restart
-      Alertmanager by construction (~12:46Z) and wiped every maintenance silence mid-rollout.
-      **Next:** fixer lane: #1885 (Longhorn PVC via `alertmanagerSpec.storage`) — filed `agent-fix`,
-      QUEUED 2026-09-22 13:20Z, after the rollout ended.
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
@@ -1344,12 +1339,6 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
-- [ ] **FU-276** — **The reconciler's failure paths, as nx-01 showed them (first box-run rollout, 2026-09-22).**
-      (a) a failed-verb park clears on the version diff alone (nx-01 counted synced while cilium hung);
-      (b) a verb exiting 1 after the reboot leaves its window open, blocking the next tick; (c) Talos
-      drops the upgrade fallback after a good boot — the §MB4 doc line, folded into the same issue.
-      **Next:** #1884 — operator/seat lane, UNQUEUED (`scripts/**` is the ❌ `codeowner-author` set,
-      no worker PR can deliver it). Relates FU-273, FU-267.
 - [ ] **FU-278** — **The rollout keeps taking nodes while a platform workload is down.** 2026-09-22:
       wk-04's window moved Forgejo onto hp-01 (not Ready from 12:51Z, the FU-277 DNS trap); cp-01,
       cp-02, wk-metal-02 went down after it. Between windows only node Ready + cilium + (ADR-140)
@@ -1385,16 +1374,6 @@ the block needs pruning, not more headings.
       while it runs. It also touches machines.yaml, the dnsmasq reservation, `bgp_node_ips` and the
       generated tables. **Next:** do it with the box's NEXT reinstall for any other reason, never
       as its own outage. Relates FU-243.
-
-- [ ] **FU-264** — **Rotate the Talos API CA — an `os:admin` key reached public master (POINTER).**
-      A stray talosconfig was pushed to this PUBLIC repo 2026-09-21 and removed 15 min later; no
-      CRL in Talos, so the identity is valid to **2027-05-29** (the CA private key did NOT leak).
-      Incident: [`incidents/2026-09-21-talosconfig-committed-to-public-master.md`](incidents/2026-09-21-talosconfig-committed-to-public-master.md).
-      Design, and the unsolved half — tofu state still holds the OLD bundle after a live rotation:
-      [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md) (#1830).
-      **Why deferred (operator, 2026-09-21):** finish the three-CP rollout and let it stabilise.
-      **Next:** probe the state-reconciliation candidates on the disposable control plane
-      (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).

@@ -10,6 +10,15 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-264** *(archived 2026-09-22)* — **Talos API CA rotated in production; the leaked `os:admin`
+  identity is dead.** Scope `--talos` only (spike's reasoning), per [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md)
+  §The recipe (#1888), run from the box 14:55–15:14Z: rotate-ca exit 0 on 13/13; state candidate A
+  (bundle rebuilt from the 3 CP configs, identical; import byte-matched), P2 15 in-place, then `No changes`.
+  Proof: every node answers the leaked cert with TLS `alert unknown ca` (server-side, verification off).
+- **FU-276** *(archived 2026-09-22)* — failed-verb park clears only on `node-maintenance.sh verify`; the
+  reconciler closes the verb's own window at park time (option i); Talos fallback-removal fact in §MB4. #1887.
+- **FU-195** *(archived 2026-09-22)* — Alertmanager silences on a Longhorn PVC (`alertmanagerSpec.storage`),
+  #1890 by the fixer lane. End-state probe: a silence created, pod deleted, silence still `active` after.
 - **FU-033** *(archived 2026-09-22)* — **Talos 1.14 gate set: done, fleet on v1.14.1.** (a) `VolumeConfig
   EPHEMERAL mount.secure=false` on every node (VMs #1866, metal #1874 — `/var` exec verified on wk-03 and
   wk-metal-03); (b) contract pinned `talos_config_contract = v1.13.10` (#1874). Canary + rollback drill on
