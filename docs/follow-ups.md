@@ -218,12 +218,6 @@ six OVERSIZE items pointer-ized into
       first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
       third-party images only. **Next:** per-repo keep-sets + quota there first (FU-203: 48Gi cap,
       only oracle-fleet has a policy), then dual-publish → pin flip per image. Relates FU-196, FU-203.
-- [ ] **FU-275** — **A per-node Talos canary override downloads and deletes seed images.** `nodes.*.
-      talos_version` (#1866) feeds `vm_image_key`, which keys BOTH the installer URL (needed) and the
-      `proxmox_download_file` set on pve + nx-02 (seeds only, `file_id` ignored after creation, ADR-138).
-      So every canary version adds a download and the next bump deletes it (#1872's plan: 2 create +
-      2 delete). Deferred (operator, 2026-09-22). **Next:** key the downloads by ROLE version only and
-      keep the per-node version on the installer URL, in `tofu/image.tf`. Relates FU-033.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating

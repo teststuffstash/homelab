@@ -426,7 +426,12 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    window while Longhorn is degraded or a Garage zone is down). One attempt per diff, then a parked failed
    state with an alert — a bad disk must never become a reinstall loop. Talos gives the runtime/install line
    mechanically: the box applies machine configs in `no_reboot` mode, so anything needing a reboot fails the
-   apply and lands in a window instead.
+   apply and lands in a window instead — **set 2026-09-22** as `apply_mode = "no_reboot"` on both
+   `talos_machine_configuration_apply` resources (`tofu/talos.tf`, `tofu/metal.tf`; the provider default
+   `auto` reboots). Talos judges only the v1alpha1 document; other documents (VolumeConfig, HostnameConfig)
+   are install-time and pass. The config is rendered against a pinned contract
+   (`local.talos_config_contract`, `tofu/talos.tf`), not the install version, so a version bump moves
+   installers and declared versions only.
 5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
