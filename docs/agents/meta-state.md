@@ -9,14 +9,14 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ NEXT (2026-09-22 — canary + drill DONE; arc in TICK-LOG).** wk-03 at Talos v1.14.0 (declared, via
-  the reconciler; the rest of the fleet v1.13.10). Operator: "automate all the things, then monitor the
-  first rollout" — four subagent PRs in flight: A tofu prereqs (`apply_mode = "no_reboot"`, config
-  contract pin, FU-033 (a) on metal, FU-275), B apply loop applies Talos config (precondition no_reboot,
-  CP toggle default OFF, post-apply health gate), C1 reconciler rollout (all nodes auto incl. CPs, order,
-  canary-per-type, repel taint, supersede; behind a switch default OFF), C2 evidence script +
-  `MgmtRolloutDifferential`. **Then:** role versions → v1.14.1 (drop wk-03's override) → the box applies
-  → operator flips the rollout switch (+ the CP toggle) → monitor the first fleet rollout (FU-273/033).
+- **⚑ NEXT (2026-09-22 — first box-run fleet rollout DONE; arc in TICK-LOG).** Fleet 13/13 Talos v1.14.1,
+  rolled by the box (switch + CP toggle ON). Next session: (1) **Garage PDB #1882** — HELD, unmerged,
+  unreviewed (the reflex skips unarmed PRs): read it, arm, then TEST a zone-node window against the
+  PDB (operator: "test the garage rollout separately"); decide its 3 flagged choices. (2) **FU-264** CA
+  rotation — the lab probe on the disposable CP (`scripts/controlplane-lab-install.sh`), recipe first.
+  (3) **#1884** (FU-276) is seat/operator work (`scripts/**`); **#1885** (FU-195) is queued for the
+  fixer and MUST land before the next rollout. (4) FU-097's ledger section + the intent-review
+  instruction. Stack-side, unrelated: oracle-fleet#698 waits for a codeowner read.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
   arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
   should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was

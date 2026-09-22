@@ -10463,3 +10463,22 @@ taint, one rollout per substrate) → §MB4 (#1868); three-CP program done (FU-2
 - Next (operator: "automate all the things, then monitor the first rollout"): four subagents building
   A tofu prereqs / B apply loop / C1 reconciler rollout / C2 evidence+differential; then the fleet
   1.14.1 rollout by the box.
+
+## 2026-09-22 ~08:00–13:20Z — seat (operator present): automate the box, then the first box-run fleet rollout
+Operator: "automate all the things, then monitor the first rollout"; a Talos bump is ONE atomic commit;
+CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1 day, repel taint.
+- Subagents A/B/C1/C2 landed #1874 (apply_mode no_reboot — §MB4's claim had been unenforced; config
+  contract pinned v1.13.10; FU-033(a) on metal; FU-275), #1875 (apply loop applies Talos config,
+  health-gated, CP toggle), #1876 (reconciler rollout: canary per type, evidence, order, CPs last via
+  controlplane-upgrade.sh, repel taint, switch), #1877 (evidence script + MgmtRolloutDifferential +
+  github_ci_job_completed_timestamp). #1878 flipped the CP toggle + switch; #1879 = the bump.
+- Rollout (#1879): box auto-applied 09:43:54 (post-check clean); canaries wk-02, wk-metal-03,
+  wk-metal-01, wk-metal-04; fleet wk-03, nx-01, wk-01, m70s, hp-01, wk-04, then cp-01/cp-02/wk-metal-02;
+  done 13:16:59Z, 13/13 v1.14.1, cilium backend 13/13, no taints left.
+- Found + fixed live: wk-metal-04 went down with a 4.5–6.2k Garage resync backlog → #1880 (zone-node
+  backlog gate; the Garage-owned PDB redesign is #1882, HELD for a separate test); the longhorn
+  evidence could never pass for REUSED replicas → #1881; nx-01's cilium-agent hung at 510/512Mi +
+  100% throttled (FU-267) → rollout paused by a seat window, #1883 Burstable (150m req, no CPU limit,
+  1Gi mem; oom_score_adj -997 verified via node-critical), nx-01 recovered, rollout resumed.
+- Found, filed: park clears on version-only + failed verb's window (#1884, FU-276); Alertmanager
+  restart mid-rollout wiped every silence (#1885 queued, FU-195). NTP = WAN by decision (ARCHITECTURE).

@@ -242,8 +242,7 @@ six OVERSIZE items pointer-ized into
       — found 2026-08-30; resighted 2026-09-22 as a rollout blocker: a fleet rollout's drains restart
       Alertmanager by construction (~12:46Z) and wiped every maintenance silence mid-rollout.
       **Next:** fixer lane: #1885 (Longhorn PVC via `alertmanagerSpec.storage`) — filed `agent-fix`,
-      held UNQUEUED until the running rollout ends (the merge recreates the StatefulSet); seat adds
-      `agent/queued` between rollouts.
+      QUEUED 2026-09-22 13:20Z, after the rollout ended.
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
@@ -1318,19 +1317,6 @@ the block needs pruning, not more headings.
       existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
       v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
       in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
-- [ ] **FU-033** — **The Talos 1.14 gate set.** (a) apply the `VolumeConfig` `mount: {secure: false}`
-      patch to EVERY node FIRST or `noexec` on `/var` breaks Longhorn v1 (instance-manager exec's
-      engine binaries under `/var/lib/longhorn/engine-binaries/`); (b) `SecurityProfileConfig.
-      workloadIsolation` stays OFF — upgrades don't add it, but a cluster rebuilt from git on 1.14+
-      isolates by default and loses the host `iscsid` Longhorn v1 needs. Both written at
-      `tofu/longhorn.tf`. **Checked clean 2026-09-18:** k8s 1.36.1 is inside 1.14's 1.33–1.37 range
-      (no k8s move needed); etcd's metrics port 2379→2383 — we scrape neither; `apply-config
-      --mode=reboot` removal — unused. ⚠ 1.13 left community support at the 1.14.0 release
-      (2026-09-03), so this is a clock, not a nice-to-have. The rollout order and the installer
-      rules are ADR-014 (amended) and the recipe it links. **Canary + drill DONE 2026-09-22** (wk-03,
-      all unattended via the reconciler): 1.13.10→1.14.0 (#1866; `/var` exec, Longhorn IM running,
-      ARC job green) → 1.14.1 (#1872) → back to 1.14.0 (#1873, patch downgrade, #1867). (a) is written
-      for VMs only. **Next:** the FLEET rollout, run by the box (FU-273). Relates FU-246, FU-253, G-D.
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
@@ -1358,16 +1344,6 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
-- [ ] **FU-273** — **A substrate rollout has no soak and no attribution, so the pressure to roll back
-      wins by default.** **Ruled 2026-09-22 (operator):** default FORWARD, the responder never reverts, and a
-      revert is a human commit backed by a DIFFERENTIAL signal (upgraded nodes worse than not-yet ones,
-      cross-stack, never one stack's fixable CI). The whole rollout takes <1 day; drift from git is a tax. Soak = hours, and it
-      ends on EVIDENCE per canary type (nx-01: one ride + one ARC job passed), not wall time. The
-      rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
-      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Evidence +
-      differential BUILT** (`mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`); **orchestration BUILT**
-      ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) ; the
-      switch `reconcile_rollout.enabled` ON 2026-09-22. **Next:** the first box-run rollout (Talos v1.14.1). Relates FU-235, G-D.
 - [ ] **FU-276** — **The reconciler's failure paths, as nx-01 showed them (first box-run rollout, 2026-09-22).**
       (a) a failed-verb park clears on the version diff alone (nx-01 counted synced while cilium hung);
       (b) a verb exiting 1 after the reboot leaves its window open, blocking the next tick; (c) Talos
