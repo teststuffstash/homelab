@@ -10442,3 +10442,24 @@ rollback (ROADMAP G-D, memory). Four subagents, seat kept only verdicts:
 - D: reconciler layers 3–5 (#1864): `mgmt-reconcile` loop, wk-03 auto, idle; 21/21 fake-verb cases.
   No live sync: no genuine install diff exists short of the 1.14 canary (FU-033) — left for the
   attended sitting, not invented.
+
+## 2026-09-22 ~06:00–07:50Z — seat (attended, operator present): the 1.14 canary + rollback drill
+Operator rulings: FU-097 → the box's capability ledger (tested capabilities + auto-apply toggles, an
+INTENT review replaces the codeowner read); the human Talos-config apply is interim; FU-273 rollout
+policy (default forward, human revert on a DIFFERENTIAL signal, <1 day, evidence-ended soak, repel
+taint, one rollout per substrate) → §MB4 (#1868); three-CP program done (FU-243 archived).
+- #1865 target-node window blocks unless `--admit-reconciler`; verb exit 4 = impossible path → park.
+- #1866 per-node `talos_version` override, wk-03 → 1.14.0 + FU-033 (a) VolumeConfig for ≥1.14 VMs.
+  Human `mgmt-tf apply` 06:30Z; reconciler SYNC 06:35→06:38:19Z; `/var` exec; ARC `ci` green 07:00Z.
+- The first sync exposed node-maintenance declaring its window twice and closing EVERY window on the
+  node (ate the seat's admitting window) + same-second id collisions → #1869, proven live at step 2.
+- #1867 patch downgrade within a minor allowed (Talos' older installer refuses on its own if the
+  config needs the newer release); cross-minor stays exit 4.
+- #1872 → 1.14.1: SYNC 07:24→07:26:57Z. #1873 → back to 1.14.0 (the drill): SYNC 07:44→07:48:09Z.
+- Side: RegistryMirrorCacheAlmostFull = the 720h TTL left over from FU-196 v0 → #1870 (168h + 150Gi;
+  a lower TTL frees nothing already cached — absolute expiries); FU-274 (first-party off the mirror),
+  FU-275 (canary seed-image churn). Found: neither talos_machine_configuration_apply sets apply_mode —
+  §MB4's "no_reboot" was unenforced.
+- Next (operator: "automate all the things, then monitor the first rollout"): four subagents building
+  A tofu prereqs / B apply loop / C1 reconciler rollout / C2 evidence+differential; then the fleet
+  1.14.1 rollout by the box.
