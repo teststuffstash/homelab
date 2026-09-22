@@ -9,6 +9,10 @@
 #               stage 1 over the master diff too (an admin push bypasses the PR gate) → plan -out →
 #               show -json → allowlist → `tofu apply plan.bin` (never re-planned in between) → stamp
 #   refusal     status failure + refused-rev (no re-plan every tick; a NEW master sha re-evaluates)
+#   Talos       a talos_machine_configuration_apply change must ALSO pass mgmt_talos_gate (no_reboot,
+#               in-place, worker unless apply_controlplane_config) and is bracketed by the health
+#               gate: baseline before, bounded post-check after — a regression = status failure +
+#               mgmt_apply_post_check_failed, never a revert. Clear by hand: rm $ADIR/post-check-failed
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: scripts/mgmt-apply.sh   (the timer's unit). Env: scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
@@ -54,12 +58,13 @@ refuse() {  # <sha> <desc> <comment-lines>
 # (rc≠0) leaves last-ok-tick alone, so a loop that cannot fetch reads as stale, not as fresh.
 TEXTDIR="${MGMT_TEXTFILE_DIR:-/var/lib/node-exporter-textfile}"
 emit_metrics() {
-  local rc=$1 a r n=0 oldest=0 isref=0 addrs=0 okt=0 tmp
+  local rc=$1 a r n=0 oldest=0 isref=0 addrs=0 okt=0 pcf=0 tmp
   [ -d "$TEXTDIR" ] || return 0
   [ "$rc" = 0 ] && date +%s >"$ADIR/last-ok-tick"
   a="$(cat "$ADIR/applied-rev" 2>/dev/null)"; r="$(cat "$ADIR/refused-rev" 2>/dev/null)"
   [ -n "$r" ] && { isref=1; addrs="$(cat "$ADIR/refused-addresses" 2>/dev/null)"; addrs="${addrs:-0}"; }
   okt="$(cat "$ADIR/last-ok-tick" 2>/dev/null)"; okt="${okt:-0}"
+  [ -s "$ADIR/post-check-failed" ] && pcf=1
   if [ -n "$a" ] && [ -n "${sha:-}" ] && [ "$a" != "$sha" ]; then
     n="$(git -C "$REPO" rev-list --count "$a..$sha" 2>/dev/null)" || n=0
     oldest="$(git -C "$REPO" log --reverse --format=%ct "$a..$sha" 2>/dev/null | sed -n 1p)"
@@ -81,6 +86,9 @@ mgmt_apply_unapplied_commits ${n:-0}
 # HELP mgmt_apply_unapplied_oldest_timestamp_seconds Commit time of the oldest master commit past the baseline (0 = none).
 # TYPE mgmt_apply_unapplied_oldest_timestamp_seconds gauge
 mgmt_apply_unapplied_oldest_timestamp_seconds ${oldest:-0}
+# HELP mgmt_apply_post_check_failed 1 while the last Talos config apply's post-apply health check regressed (cleared by the next clean one, or by hand).
+# TYPE mgmt_apply_post_check_failed gauge
+mgmt_apply_post_check_failed $pcf
 PROM
   chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
@@ -140,11 +148,34 @@ for root in "${apply_roots[@]}"; do
       n=$(wc -l <<<"$outside")
       refuse "$sha" "$root: $n address(es) outside the apply allowlist — human apply" "$outside"; exit 0
     fi
+    # Inside the allowlist is not enough for a Talos config apply: the PRECONDITION (no_reboot,
+    # in-place, a worker unless apply_controlplane_config) — mgmt_talos_gate, §MB3.
+    thits="$(mgmt_talos_gate "$POL" "$root" "$out")" || { refuse "$sha" "$root: Talos precondition unreadable — human apply"; exit 0; }
+    if [ -n "$thits" ]; then
+      trule="$(head -1 <<<"$thits" | cut -f1)"; n=$(wc -l <<<"$thits")
+      refuse "$sha" "$root: $trule — $n Talos config change(s) fail the auto-apply precondition — human apply" "$thits"; exit 0
+    fi
   fi
+  # Talos config applies ride the post-apply health gate; nothing else in the residue does.
+  talos_n=0; [ -s "$out.talos" ] && talos_n=$(grep -c . "$out.talos")
   log "$root: +$a ~$c -$d ${rs}${osuf} — all inside the apply allowlist"
   [ -n "$changes" ] && printf '%s\n' "$changes" | sed 's/^/    /'
   [ -n "$outs" ] && printf '%s\n' "$outs" | sed 's/^/    output /'
-  if [ "${MGMT_SHADOW:-0}" = 1 ]; then log "[shadow] would apply $root now"; continue; fi
+  if [ "${MGMT_SHADOW:-0}" = 1 ]; then
+    tsuf=""; [ "$talos_n" -gt 0 ] && tsuf=" ($talos_n Talos config apply(s) — health baseline + post-check)"
+    log "[shadow] would apply $root now$tsuf"; continue
+  fi
+  # The health BASELINE, before any Talos config apply (the /maintenance-window `open`, unattended).
+  # An unreadable one is not a refusal — it is a probe failure: no apply, no stamp, the next tick
+  # retries (a check that measured nothing must never be the "before" of a comparison).
+  hbase="$ADIR/health-baseline.json"; rm -f "$hbase"
+  if [ "$talos_n" -gt 0 ]; then
+    if ! mgmt_health snapshot >"$hbase" 2>"$hbase.err"; then
+      log "PROBE-FAIL: health baseline unreadable before $talos_n Talos config apply(s) — not applying, not stamping; next run retries"
+      sed 's/^/    /' "$hbase.err"; exit 1
+    fi
+    log "$root: health baseline taken ($(jq -r '"alerts=\(.alerts|length) up=\(.up) pods_bad=\(.pods_bad) cilium_have=\(.cilium_have) nodes=\(.nodes)"' "$hbase"))"
+  fi
   # ⚠ a saved plan does NOT carry the -state= override (found on the box, 2026-09-13: apply read
   # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
   stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
@@ -156,7 +187,22 @@ for root in "${apply_roots[@]}"; do
     # logged, never allowed to turn a successful apply into a refusal.
     snap="${MGMT_SNAPSHOT:-/var/lib/homelab/scripts/mgmt-state-snapshot.sh}"
     if [ -x "$snap" ]; then "$snap" --lock-held "$root" || log "$root: WARN snapshot failed — the apply itself succeeded"; fi
-    mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box"
+    if [ "$talos_n" -gt 0 ]; then
+      # The post-apply health gate. A regression reports — status failure naming it, the
+      # post-check-failed marker (→ mgmt_apply_post_check_failed → MgmtApplyPostCheckFailed) — and
+      # does NOT revert (FU-273: default forward; a revert is a human commit). The apply HAPPENED,
+      # so the sha is still stamped below.
+      if regress="$(mgmt_post_check "$hbase")"; then
+        rm -f "$ADIR/post-check-failed"
+        mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box · post-check clean"
+      else
+        log "$root: POST-CHECK REGRESSED after $talos_n Talos config apply(s):"; printf '%s\n' "$regress" | sed 's/^/    /'
+        printf '%s\t%s\n' "$sha" "$(printf '%s' "$regress" | tr '\n' ';')" >"$ADIR/post-check-failed"
+        mgmt_post_status "$sha" "$CTX" failure "$root: applied, POST-CHECK regressed: $(printf '%s' "$regress" | tr '\n' ';' | sed 's/;/; /g')"
+      fi
+    else
+      mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box"
+    fi
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'
     refuse "$sha" "$root: apply errored — see the box journal (half-applied? human)"; exit 0

@@ -398,6 +398,57 @@ The probe that found the third gap (same day): a `provider "proxmox" {}` block p
 block. `deny_patterns` now carries `^[[:space:]]*provider[[:space:]]+"` (the `provider =` meta-argument on
 a resource stays allowed), with both cases in `mgmt-policy-test`.
 
+### Talos config applies — the precondition, the toggle, the health gate (FU-097, 2026-09-22)
+
+Until this change every install change needed a human `mgmt-tf apply`: the apply allowlist held
+only the raw-k8s residue. The operator ruled that interim (FU-097, the capability ledger with
+auto-apply toggles) and asked for a version-bump PR to roll out on merge with no human apply. So
+`apply_addresses.main` now also holds `proxmox_download_file.*` (seed images; a VM re-pointing at
+one is a `proxmox_virtual_environment_vm` change, which stays outside and refuses the plan whole)
+and `talos_machine_configuration_apply.node[…]` / `.metal[…]`. Inside the allowlist is not enough
+for a Talos config apply. Three more things stand between the plan and the apply:
+
+1. **The precondition** (`mgmt_talos_gate` in `scripts/mgmt-lib.sh`, read from the plan's own
+   `tofu show -json` through the `$out.talos` side channel). Every changed
+   `talos_machine_configuration_apply` must be an in-place `update` (a create is an onboarding and
+   a delete/replace is a node leaving: rule `talos-action`) whose planned **`apply_mode` is
+   `no_reboot`** (rule `talos-apply-mode`; `(unset)` and `(unknown)` refuse too). `no_reboot` is
+   what makes the §MB4 item 4 line mechanical: a config Talos can only take by rebooting fails
+   the apply and lands in a window instead. The resources declare the attribute (`tofu/talos.tf`,
+   `tofu/metal.tf`, #1874). The gate reads it from the PLAN, not from a belief about the source:
+   a resource that loses it plans without `no_reboot` and refuses to a human apply. A failure refuses the whole root as before (status
+   `failure`, the rule named, the addresses in the journal).
+2. **The control-plane toggle**: `roots.main.apply_controlplane_config` in the policy, **default
+   `false`**. It is the first FU-097 toggle. A node whose declared `role` in the plan's
+   `node_install_targets` output is `controlplane` stays a human apply while the toggle is off
+   (rule `talos-controlplane`). A node the output does not name is refused (`talos-role-unknown`).
+   No list of node names exists anywhere in the gate. The operator flips the toggle; the reason it
+   starts off is the [2026-09-20](../.claude/skills/maintenance-window/SKILL.md) lesson, where a
+   control-plane config apply took the cluster's API path down while every node read `Ready`.
+3. **The post-apply health gate**, the unattended form of the seat's `/maintenance-window`. Before
+   the apply the loop takes a baseline with `scripts/maintenance-window.sh snapshot`. That is the
+   window's own probes: firing alert names, `sum(up)`, cilium's `10.96.0.1:443` apiserver backend
+   on every agent, hard-failed pods and the node count. It is the same script with one set of
+   verdicts, minus the CI probe (the box has no `gh`). An unreadable baseline is a probe failure:
+   no apply, no stamp, and the next tick retries. After a successful apply the loop waits
+   `MGMT_POSTCHECK_SETTLE` (180 s), then runs `compare` every 30 s until it gets a clean reading or
+   900 s have passed. A clean reading gives `success … · post-check clean`. A regression still
+   standing at the deadline sets **`management-apply` to `failure`** with the regressed probes
+   named (`main: applied, POST-CHECK regressed: NEW firing alerts: …`). It also writes
+   `/var/lib/mgmt/apply/post-check-failed`, which sets `mgmt_apply_post_check_failed` to 1 and
+   fires **`MgmtApplyPostCheckFailed`** (`argocd/resources/mgmt-metrics/`, promtool-fixtured).
+   **Nothing is reverted.** Under the rollout policy below the default is forward and a revert is
+   a human commit. The sha is still stamped because the apply happened. The marker clears on the
+   next clean post-check, or by hand (`rm` it) once the cluster is whole. A known overlap: while
+   master's head carries that `failure`, the github-exporter reads it as a standing refusal, so
+   `MgmtApplyResidueStanding` would also fire if master stayed on that commit for 24 h.
+
+Fixtures: `mgmt-policy-test` feeds synthetic plans through the loop's own digest. It covers
+`no_reboot` allowed, `auto`/unset/unknown refused, a CP with the toggle off refused and on
+allowed, create/delete/replace refused, an unknown role refused, seed images allowed, a VM change
+outside, and the post-check polling (clean, transient, still regressed at the deadline).
+`maint-self-test` pins the `snapshot`/`compare` verbs.
+
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
 **Tracked by:** FU-235 (the diff), FU-244 (flags out of git). The ArgoCD model
@@ -431,7 +482,9 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    `auto` reboots). Talos judges only the v1alpha1 document; other documents (VolumeConfig, HostnameConfig)
    are install-time and pass. The config is rendered against a pinned contract
    (`local.talos_config_contract`, `tofu/talos.tf`), not the install version, so a version bump moves
-   installers and declared versions only.
+   installers and declared versions only. **Enforced by the apply loop since 2026-09-22:**
+   it auto-applies a Talos config change only when the planned `apply_mode` is `no_reboot`, only on workers
+   unless `apply_controlplane_config` is on, and brackets it with the health gate — §MB3 "Talos config applies".
 5. **Operation state is the controller's.** The open window, the PXE flag, the step reached: held on the box,
    surfaced as status (a metric, a commit status, a meta-event), never a commit. A flag is set and cleared
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient

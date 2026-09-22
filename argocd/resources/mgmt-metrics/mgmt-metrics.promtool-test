@@ -64,6 +64,29 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
 
+  # ── the post-apply health gate regressed after a Talos config apply ─────────────────────────────
+  - interval: 1m
+    name: "a regressed post-check fires after 5m; a clean one never does"
+    input_series:
+      - series: 'mgmt_apply_post_check_failed{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x10 1x20 0x10"
+      - series: 'mgmt_apply_post_check_failed{job="mgmt-node",instance="192.168.2.99:9100"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 35m
+        alertname: MgmtApplyPostCheckFailed
+        exp_alerts: []
+
   # ── the box stops answering ────────────────────────────────────────────────────────────────────
   - interval: 1m
     name: "a down box fires after 15m"

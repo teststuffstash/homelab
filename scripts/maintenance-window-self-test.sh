@@ -319,6 +319,43 @@ out="$(cp_run stuck FAKE_CILIUM_LOSE_ON_UPGRADE=1 FAKE_CILIUM_RECOVERS=0)"; rc=$
 grep -qi "NOT the known signature" <<<"$out" && ok "cp-upgrade says the signature does not match" \
                 || bad "cp-upgrade's failure did not distinguish this from the known bug: $out"
 
+# ---------------------------------------------------------------------------------------------
+# 6. The UNATTENDED pair — `snapshot` + `compare`, what the management box's apply loop brackets a
+# Talos config apply with (scripts/mgmt-apply.sh). A fake curl answers as Prometheus (FAKE_ALERTS
+# = the firing names, FAKE_UP = sum(up)); everything else is the stub kubectl above.
+REAL_CURL="$(PATH="${PATH#"$TMP/bin:"}" command -v curl)"
+cat > "$TMP/bin/curl" <<EOF
+#!/usr/bin/env bash
+[ "\${FAKE_PROM:-0}" = 1 ] || exec "$REAL_CURL" "\$@"
+case "\$*" in
+  *api/v1/alerts*) printf '{"status":"success","data":{"alerts":[%s]}}' "\$(for a in \${FAKE_ALERTS:-}; do printf '%s{"state":"firing","labels":{"alertname":"%s"}}' "\${sep:-}" "\$a"; sep=,; done)" ;;
+  *api/v1/query*)  printf '{"status":"success","data":{"result":[{"value":[0,"%s"]}]}}' "\${FAKE_UP:-100}" ;;
+esac
+EOF
+chmod +x "$TMP/bin/curl"
+FAKE_STATE="$TMP/snap"; mkdir -p "$FAKE_STATE"; export FAKE_STATE
+out="$(PROM_URL="$DEAD_PROM" bash "$SUT" snapshot 2>"$TMP/snap.err")"; rc=$?
+[ "$rc" -eq 1 ] && ok "snapshot exits 1 when Prometheus is unreadable" || bad "snapshot rc=$rc (want 1) with Prometheus down"
+grep -q "alerts_ok=false" "$TMP/snap.err" && ok "snapshot names the unread probe on stderr" || bad "snapshot's refusal did not name alerts_ok: $(cat "$TMP/snap.err")"
+FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" snapshot > "$TMP/base.json"; rc=$?
+[ "$rc" -eq 0 ] && jq -e '.alerts == ["Watchdog"] and .up == 100 and .cilium_have == 1' "$TMP/base.json" >/dev/null \
+  && ok "snapshot banks a readable baseline (rc=0)" || bad "snapshot rc=$rc on a readable cluster: $(cat "$TMP/base.json")"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && ok "compare exits 0 on an unchanged cluster" || bad "compare rc=$rc on an unchanged cluster: $out"
+grep -q "CI runs" <<<"$out" && bad "compare ran the CI probe (the box has no gh)" || ok "compare leaves the CI probe out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown" <<<"$out" && ok "compare exits 2 naming a new firing alert" \
+  || bad "compare rc=$rc on a new alert: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 FAKE_CILIUM_NO_BACKEND=1 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NO backend for 10.96.0.1:443" <<<"$out" && ok "compare exits 2 on the 2026-09-20 signature (cilium backend lost)" \
+  || bad "compare rc=$rc on a lost cilium backend: $out"
+out="$(FAKE_PROM=1 FAKE_UP=60 FAKE_ALERTS="Watchdog" bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "scrape targets DOWN: 100 -> 60" <<<"$out" && ok "compare exits 2 on lost scrape targets" \
+  || bad "compare rc=$rc on lost targets: $out"
+out="$(bash "$SUT" compare "$TMP/absent.json" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "compare refuses a missing baseline file (rc=$rc)" || bad "compare passed with no baseline: $out"
+unset FAKE_STATE
+
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: PASS"; exit 0; }
 echo "self-test: $fails FAILURE(S)"; exit 1
