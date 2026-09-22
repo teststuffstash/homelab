@@ -9,6 +9,17 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-22 late — retro r5 + Goal #1906; arc in TICK-LOG).** (1) **Goal #1906** (retro r5's
+  batch container, themed): #1908/#1909/#1911 queued; **#1910 is authored and UNQUEUED on purpose** —
+  it un-banks chainless-redesign's rung-0 corollary (b) for the no-op-after-directive case; the
+  operator reads Goal pin 3 and queues it (`agent/queued`) or rules it deferred on the store. Theme
+  #1907's assembly (`goal/1906-scan → master`, `Fixes #1907`) is the ONE codeowner read; acceptance 5
+  (FSM rows, brief paragraphs, the charter note) rides it. (2) **Subagent outcomes to verify** (they
+  report to the seat; if this file still says so, read the threads): PR#1792 merged + #1781 closed +
+  theme #1768's assembly PR open (`Fixes #1768`, parks on `agents/**` for the seat's read); Goal
+  #1769's #1768 edge removed + theme #1770's members filed and queued. (3) #1651 closes by hand when
+  #1908 lands (lineage rule 5 — it stays under #1101). (4) r5's ADR-103 trigger (bucket-A not falling
+  two weeks → revisit label-carried loop state) is the operator's design sitting — recorded on #1906.
 - **⚑ NEXT (2026-09-22 evening — pickup list done; arc in TICK-LOG).** Garage PDB #1882 LIVE + tested on
   m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) FU-278 LANDED (#1891, 15:41Z) — the next rollout is the first with the workload-health hold. (2) **Operator:** check
   pop-os `~/.talos/config` for the dead identity; #1882's "3 flagged choices" (never recorded). (3)
