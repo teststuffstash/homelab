@@ -39,6 +39,10 @@
 #   no-retry-no-strike      no strike at all ⇒ nothing to retry, and no decision line either.
 #   no-retry-router-unreachable  the serving set is unknown (no probe payload, no probe answer) ⇒
 #                           fail-closed to today's behaviour.
+#   no-retry-empty-provider the cell's PROVIDER component is empty — neither the strike marker nor
+#                           the finalizer's stats line carries one (the unverified cross-repo
+#                           contract breaking) ⇒ fail-closed: no retry, because which provider to
+#                           exclude is unknowable. Every other row leaves the provider populated.
 #
 # The doorbell block is composed AFTER the retry clause on purpose: the clause's `exit 0` on fire is
 # what makes "no scan re-queue" observable — a fired retry never reaches the ring, and `post.sh`'s

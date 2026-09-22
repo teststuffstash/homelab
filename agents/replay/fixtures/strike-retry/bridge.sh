@@ -45,6 +45,10 @@ ORIG_ARGS=(test-project --model deepseek/deepseek-v4-flash --openrouter-secret t
 RT_STRIKE="${RT_STRIKE:-launcher}"
 RT_CLASS="${RT_CLASS:-timeout}"
 RT_PROVIDER="${RT_PROVIDER-openrouter}"
+# RT_STATS_PROVIDER — the provider the finalizer folds into the pod's STATS line (the second of the
+# two cross-repo sources the cell reads). Empty = the field is ABSENT, which is the contract break
+# the `no-retry-empty-provider` row pins; every other row leaves it at the served provider.
+RT_STATS_PROVIDER="${RT_STATS_PROVIDER-openrouter}"
 RT_SALVAGE="${RT_SALVAGE:-none}"
 RT_PRIOR_CLASS="${RT_PRIOR_CLASS:-}"
 RT_PRIOR_N="${RT_PRIOR_N:-0}"
@@ -81,8 +85,12 @@ case "$RT_STRIKE" in
   pod)      STRIKE_BY_POD="true"
             _stats_merge error_class "$(jq -cn --arg c "$RT_CLASS" '$c')"
             _stats_merge exit_status '"no-output"'
-            # the finalizer folds the SERVED provider into the stats line (agent-finalize:router_report)
-            _stats_merge provider '"openrouter"';;
+            # the finalizer folds the SERVED provider into the stats line (agent-finalize:router_report).
+            # Parameterised by RT_STATS_PROVIDER so the family can express BOTH worlds: a populated
+            # provider (every row but the boundary one) and an ABSENT field (the contract break).
+            if [ -n "$RT_STATS_PROVIDER" ]; then
+              _stats_merge provider "$(jq -cn --arg p "$RT_STATS_PROVIDER" '$p')"
+            fi;;
 esac
 _strike_provider="$RT_PROVIDER"
 case "$RT_SALVAGE" in

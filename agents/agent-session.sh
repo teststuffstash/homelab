@@ -3195,6 +3195,13 @@ if [ -n "$RUN_CMD" ]; then
   #       per task. The counters ride the re-run's environment, so a second strike on the same cell
   #       does not retry again.
   #
+  # The cell's PROVIDER component is a cross-repo contract (agent-runtime's strike marker
+  # `_strike_provider`, else the finalizer's `stats.provider`) that nothing here verifies, so an
+  # EMPTY component fails closed: the cell would be ambiguous — distinct providers collapse into
+  # one (the cap fires too early) or a cell never re-matches (the cap never fires) — and we cannot
+  # tell which provider to exclude. No retry; the terminal strike path below runs, and the reason
+  # is on the log line. If the field later becomes guaranteed, this guard costs nothing.
+  #
   # On the predicate the launcher re-enters itself with the SAME argv (same `--round`, same task —
   # ADR-127: an infra failure consumes no logic round) and touches no label; the re-entry's own
   # `/route` consult is the re-route, and the router excludes the struck cell from its strike store
@@ -3248,7 +3255,9 @@ if [ -n "$RUN_CMD" ]; then
     if [ -n "$_rt_class" ]; then
       case " ${_rt_serving} turn-cap " in *" ${_rt_class} "*) _rt_serving_member=1;; esac
     fi
-    # (4) attempts — the cell is (model, provider, class); the counters survive the re-run.
+    # (4) attempts — the cell is (model, provider, class); the counters survive the re-run. Both
+    # provider sources are agent-runtime's (the strike marker, else the finalizer's stats line); an
+    # empty result is the unverified cross-repo contract breaking, and it fails CLOSED (no retry).
     _rt_provider="${_strike_provider:-}"
     [ -n "$_rt_provider" ] || _rt_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
     _rt_cell="${STRUCK_MODEL:-${MODEL:-}}|${_rt_provider}|${_rt_class}"
@@ -3271,9 +3280,12 @@ if [ -n "$RUN_CMD" ]; then
       _rt_can_retry=1
     fi
     if [ -n "$_rt_struck" ] && [ "$_rt_salvage" = "none" ] && [ -n "$_rt_serving_member" ] \
-       && [ -z "$_rt_cell_seen" ] && [ "$_rt_task_n" -lt 2 ] && [ -n "$_rt_can_retry" ]; then
+       && [ -n "$_rt_provider" ] && [ -z "$_rt_cell_seen" ] && [ "$_rt_task_n" -lt 2 ] \
+       && [ -n "$_rt_can_retry" ]; then
       RETRY_FIRE=1
       RETRY_CELL="$_rt_cell"
+    elif [ -n "$_rt_struck" ] && [ -z "$_rt_provider" ]; then
+      echo "→ no retry: strike on ${_rt_cell} — the cell's provider component is EMPTY (no strike-marker provider, no stats.provider): which provider to exclude is unknowable, so no retry (fail-closed; the coordinator decides, as today)"
     elif [ -n "$_rt_struck" ]; then
       echo "→ no retry: strike on ${_rt_cell} — salvage=${_rt_salvage} serving=${_rt_serving_member:-no} cell_seen=${_rt_cell_seen:-no} task_attempts=${_rt_task_n}/2 can_retry=${_rt_can_retry:-no} (the coordinator decides, as today)"
     fi
