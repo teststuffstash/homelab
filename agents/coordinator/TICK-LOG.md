@@ -10620,3 +10620,17 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   triage for a condition I was not causing and kept the box reconciler from syncing. Baseline
   otherwise clean; cilium re-read standalone after a flaky `unknown` in the close output:
   have=13 missing=0 unknown=0.
+- **☠ NEAR-MISS, and it validates #1904 the hard way.** `registry-garbage-collect-29834100`
+  (scheduled 03:00Z) was created **20:30:03Z** — one second after #1903 merged — because #1902's
+  Sunday→daily widening made today's 03:00Z a MISSED slot, so ArgoCD's sync made the controller fire
+  a catch-up run. It collected immediately, outside any window, 10 min after a release push, with
+  the **pre-#1904 guard**, which answered `PROCEED no _uploads object…` — its blind spot exactly.
+  It deleted the superseded 09-22 lineage (32d8280e + config + layer), which was correct, and was
+  safe ONLY because the new manifest had landed at 20:20:48 so `5fe97e67` was referenced. Had the
+  sync fallen in the 20:13:49→20:20:48 window, the collector would have deleted the layer of the
+  release just pushed — the #116/#240 class, in production. Nine minutes of luck. #1904 (whole-tree
+  signal) is live and verified in the cluster ConfigMap (`PREFIX = "docker/registry/v2/"`).
+  Recorded the generalisable half in the CronJob header: **a schedule change is itself a collection
+  event** — widening a cron creates missed slots that fire on sync, at an arbitrary time.
+- **End state:** bucket **21.0 GB / 17 objects**, headroom **30.5 GB**, two kept layers (09-17 +
+  09-22@`abb5c9ee`) — the design's intended steady state, and room for the next commit's 2× (21.2 GB).
