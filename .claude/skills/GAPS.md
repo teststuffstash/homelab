@@ -195,9 +195,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       command-in-a-variable never ran). Also improvised: there is no `down` verb for a CONTROL
       PLANE (node-maintenance refuses, cp-upgrade only upgrades) — cp-01 went down by hand (etcd
       status + leader/VIP read, snapshot, drain, `talosctl shutdown`, cilium-check). Sighted
-      2026-09-21 (seat, pve GPU swap). Next: ship the watch as a verb (`maint watch`, emits one
-      line per new alert name, exits never) so it is run, not re-typed; and a `cp-down`/`cp-up`
-      pair beside cp-upgrade with the same gates.
+      2026-09-21 (seat, pve GPU swap). RESIGHT 2026-09-22 (seat, registry GC window): the re-typed
+      watch carried a SECOND defect, one the first sighting's bug would have masked — no dedupe, so
+      a persistent new alert re-notified every poll (`GarageDisruptionBlocked`, already pending 90
+      min before the window opened, fired on its 2 h `for:`, then repeated each 45 s tick). Two
+      independent defects in two consecutive hand-written copies is the argument for shipping the
+      verb, not for a bigger snippet in the skill. Next: ship the watch as a verb (`maint watch`,
+      emits one line per new alert name ONCE — baseline-diff plus a seen-set — exits never) so it is
+      run, not re-typed; and a `cp-down`/`cp-up` pair beside cp-upgrade with the same gates.
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's
