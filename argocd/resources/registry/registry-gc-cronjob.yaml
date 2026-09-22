@@ -245,6 +245,13 @@ spec:
   # 09-22), each costing a triage session and a hand-run of this job. --delete-untagged is
   # hazardous only against a CONCURRENT push, which the gc-guard initContainer now checks for
   # (header above) rather than leaving to the schedule.
+  # ⚠ CHANGING THIS SCHEDULE IS ITSELF A COLLECTION EVENT. Widening Sunday -> daily made today's
+  # 03:00Z a MISSED slot, so the moment ArgoCD synced the change the CronJob controller fired a
+  # catch-up run: job -29834100 (scheduled 03:00Z) was created 2026-09-22T20:30:03Z and collected
+  # immediately, outside any window, ~10 min after a release push. It was safe by nine minutes —
+  # the manifest had landed at 20:20:48, so the new layer was referenced — and the guard in place
+  # at that moment was the pre-#1904 one, which answered PROCEED in exactly its blind spot. Treat a
+  # schedule edit here as a live collection: check for a push in flight first.
   schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
   jobTemplate:
