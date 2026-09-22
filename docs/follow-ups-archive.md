@@ -10,6 +10,17 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-033** *(archived 2026-09-22)* — **Talos 1.14 gate set: done, fleet on v1.14.1.** (a) `VolumeConfig
+  EPHEMERAL mount.secure=false` on every node (VMs #1866, metal #1874 — `/var` exec verified on wk-03 and
+  wk-metal-03); (b) contract pinned `talos_config_contract = v1.13.10` (#1874). Canary + rollback drill on
+  wk-03 (#1866/#1872/#1873), then the first box-run fleet rollout (#1879) 09:43→13:17Z.
+- **FU-273** *(archived 2026-09-22)* — **Rollout policy BUILT and proven**: §MB4 "The rollout policy" + "The
+  rollout as built" (#1868/#1876/#1877/#1881). First rollout: 4 canaries, evidence-gated, 13 nodes incl. 3
+  CPs unattended. Residuals: #1884 (FU-276), #1885 (FU-195), Garage PDB #1882 (hold), FU-097's ledger.
+- **FU-267** *(archived 2026-09-22)* — **cilium-agent Burstable: 150m request / no CPU limit / 512Mi→1Gi
+  memory.** Materialized in the first box-run Talos rollout: nx-01's restarted agent hung at 510/512 Mi,
+  100 % throttled at 500m, no pod network. Guaranteed was unnecessary for its protections (kubelet
+  -997 for system-node-critical; Talos OOM ranks memory-limited cgroups 0) — rationale in `tofu/cilium.tf`.
 - **FU-275** *(archived 2026-09-22)* — **A canary override no longer downloads/deletes seed images.**
   `tofu/image.tf` splits the key: `vm_seed_key` (ROLE version) keys `proxmox_download_file` on pve +
   nx-02 and the VMs' ignored `file_id`; `vm_image_key` (declared version) keeps the installer URL.

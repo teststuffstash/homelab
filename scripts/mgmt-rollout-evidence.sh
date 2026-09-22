@@ -29,8 +29,9 @@
 #             regular workers, where they would make every worker wait on the agent loop's pace
 #             → ≥1 ride CREATED after <since> reached phase Succeeded on this node
 #   longhorn  a Longhorn replica CR is placed on the node (any state)
-#             → ≥1 replica here running, healthy since <since> (spec.healthyAt: set when the
-#               replica (re)built after the node came back), its volume robustness `healthy`
+#             → ≥1 replica here running on a `healthy` volume AND either rebuilt since <since>
+#               (spec.healthyAt) or REUSED across the reboot under an instance-manager pod of the
+#               node's current boot (started ≥ min(<since>, the node's Ready lastTransitionTime))
 #   garage    the node is a Garage zone (cluster_layout_node_connected{role_zone=<node>})
 #             → the zone connected in EVERY peer's view for the last 10 minutes
 #   worker    none of the above and not a control plane
@@ -195,17 +196,34 @@ if has_type ride; then
   else cant ride "Prometheus at $PROM unreadable"; fi
 fi
 
-# ── longhorn: a replica here healthy since <since>, its volume healthy ──────────────────────────
+# ── longhorn: a replica here serving on the new install, its volume healthy ─────────────────────
+# Two ways a replica proves the node's storage path works on the new install: it was REBUILT since
+# <since> (healthyAt), or Longhorn REUSED it across the reboot — then healthyAt keeps its old date
+# (wk-metal-04, 2026-09-22: 6 healthy replicas, healthyAt 09-09/09-16) — and it runs under an
+# instance-manager pod of the node's CURRENT boot. The caller asks only about a node it verified on
+# the target, so the current boot IS the new install; but <since> is the sync's END and the upgrade
+# verb waits for Longhorn before ending, so that instance-manager always starts BEFORE <since>. The
+# boot marker is the node's Ready lastTransitionTime: threshold = min(<since>, that). An unreadable
+# instance-manager list falls back to the rebuilt-only rule (never a success-shaped 0).
 if has_type longhorn; then
+  im_new=false
+  boot="$(jq -r '[.status.conditions[]? | select(.type == "Ready") | .lastTransitionTime // empty | fromdateiso8601][0] // empty' <<<"$nj" 2>/dev/null)"
+  imfloor="$SINCE"; [ -n "$boot" ] && [ "$boot" -lt "$SINCE" ] && imfloor="$boot"
+  if $KUBECTL -n longhorn-system get pods -l longhorn.io/component=instance-manager \
+       --field-selector "spec.nodeName=$NODE" -o json >"$TMP/im.json" 2>/dev/null; then
+    im_new="$(jq -r --argjson s "$imfloor" '[.items[]? | .status.startTime // empty | fromdateiso8601 | select(. >= $s)] | length > 0' "$TMP/im.json" 2>/dev/null || echo false)"
+  fi
   if $KUBECTL -n longhorn-system get volumes.longhorn.io -o json >"$TMP/vols.json" 2>/dev/null \
      && jq -e '.items | type == "array"' "$TMP/vols.json" >/dev/null 2>&1; then
-    ok="$(jq -rn --slurpfile R "$TMP/reps.json" --slurpfile V "$TMP/vols.json" --arg n "$NODE" --argjson s "$SINCE" '
+    ok="$(jq -rn --slurpfile R "$TMP/reps.json" --slurpfile V "$TMP/vols.json" --arg n "$NODE" --argjson s "$SINCE" --argjson imnew "$im_new" '
       ($R[0]) as $r | ($V[0]) as $v
       | ($v.items | map({key: .metadata.name, value: (.status.robustness // "")}) | from_entries) as $rob
       | [$r.items[] | select(.spec.nodeID == $n and .status.currentState == "running"
-          and ((.spec.healthyAt // "") != "") and ((.spec.healthyAt | fromdateiso8601) >= $s)
-          and $rob[.spec.volumeName] == "healthy") | .spec.volumeName]
-      | if length == 0 then "" else "\(length) replica(s) rebuilt/healthy, e.g. \(.[0])" end')"
+          and $rob[.spec.volumeName] == "healthy"
+          and ($imnew or (((.spec.healthyAt // "") != "") and ((.spec.healthyAt | fromdateiso8601) >= $s))))
+          | .spec.volumeName]
+      | if length == 0 then "" elif $imnew then "\(length) replica(s) healthy under the instance-manager of the current boot, e.g. \(.[0])"
+        else "\(length) replica(s) rebuilt/healthy, e.g. \(.[0])" end')"
     if [ -n "$ok" ]; then have longhorn "$ok"
     else miss longhorn "none of the $lh_here replica(s) here is running+healthy since then on a healthy volume"; fi
   else cant longhorn "cannot list Longhorn volumes"; fi

@@ -9,16 +9,14 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ NEXT (2026-09-21 overnight — box applies: built; arc in TICK-LOG).** Landed: FU-235 axes (#1859/
-  #1861), the sentinel's install-impact line (#1858), the reconciler (#1864, `mgmt-reconcile`, wk-03 the
-  only `auto`, idle), FU-242 spike = NO (hand-rolled stays). **Next = the ATTENDED bump sitting**
-  (operator: attended bumps + a deliberate rollback before Renovate/G-D): wk-03 as the Talos 1.14 canary —
-  FU-033 (a) on wk-03 + a per-node version override → human `mgmt-tf plan/apply` → the reconciler syncs →
-  then revert the declaration and watch it roll BACK. **Operator questions:** (1) should an install impact
-  on a PR block auto-merge until a codeowner reads it (advisory today, #1858)? (2) every install change
-  needs a human `mgmt-tf apply` before the reconciler acts (the apply loop refuses
-  `talos_machine_configuration_apply`) — the intended gate? (3) a window on the TARGET node does not block
-  its sync, any other window does — right rule? Parked: FU-264 (CA rotation), the oracle inbox (7).
+- **⚑ NEXT (2026-09-22 — first box-run fleet rollout DONE; arc in TICK-LOG).** Fleet 13/13 Talos v1.14.1,
+  rolled by the box (switch + CP toggle ON). Next session: (1) **Garage PDB #1882** — HELD, unmerged,
+  unreviewed (the reflex skips unarmed PRs): read it, arm, then TEST a zone-node window against the
+  PDB (operator: "test the garage rollout separately"); decide its 3 flagged choices. (2) **FU-264** CA
+  rotation — the lab probe on the disposable CP (`scripts/controlplane-lab-install.sh`), recipe first.
+  (3) **#1884** (FU-276) is seat/operator work (`scripts/**`); **#1885** (FU-195) is queued for the
+  fixer and MUST land before the next rollout. (4) FU-097's ledger section + the intent-review
+  instruction. Stack-side, unrelated: oracle-fleet#698 waits for a codeowner read.
 - **⚑ PICKUP (2026-09-20 evening — oracle handoffs + devbox pin; arc in TICK-LOG).** (1) **PR#1810 MERGED 18:18Z** — the
   arc-runner pin is `2026.9.20-gd4aab3d8146a` (devbox 0.18.3), so Monday's 03:00Z `devbox-update`
   should write `plugin_version` 0.0.5; a PR flipping `nodejs_22` back to 0.0.4 means a runner was

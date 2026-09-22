@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-276** (2026-09-22: FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-277** (2026-09-22: FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -238,16 +238,11 @@ six OVERSIZE items pointer-ized into
       `argo.teststuff.net` already chose. Detail: [`loki-tenancy.md`](loki-tenancy.md) §How a stack
       jail reads its logs.
 
-- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** — the `…-alertmanager-db`
-      volume (nflog + silences) is a bare emptyDir, no volumeClaimTemplate. Found 2026-08-30: the
-      2026-08-25 17:31Z restart silently wiped both S7 silences (`a3628730` — moot, callers since
-      disabled at source; `5400ed94` — the #698 minutes mute, which let `GithubActionsMinutesHigh`
-      re-fire days early; re-created as `1ac4049c` to 09-01). Why deferred: storage needs a values
-      change + rollout on the monitoring stack, not a quickfix. **Next:** add
-      `alertmanagerSpec.storage` (small Longhorn PVC) in `kube-prometheus-stack.yaml` values, or
-      rule that silences are ephemeral-by-design and belt-worthy mutes must be PrometheusRule
-      changes instead.
-
+- [ ] **FU-195** — **Alertmanager silences do not survive a pod restart** (emptyDir `…-alertmanager-db`)
+      — found 2026-08-30; resighted 2026-09-22 as a rollout blocker: a fleet rollout's drains restart
+      Alertmanager by construction (~12:46Z) and wiped every maintenance silence mid-rollout.
+      **Next:** fixer lane: #1885 (Longhorn PVC via `alertmanagerSpec.storage`) — filed `agent-fix`,
+      QUEUED 2026-09-22 13:20Z, after the rollout ended.
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
@@ -1322,17 +1317,6 @@ the block needs pruning, not more headings.
       existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
       v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
       in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
-- [ ] **FU-033** — **The Talos 1.14 gate set.** (a) apply the `VolumeConfig` `mount: {secure: false}`
-      patch to EVERY node FIRST or `noexec` on `/var` breaks Longhorn v1 (instance-manager exec's
-      engine binaries under `/var/lib/longhorn/engine-binaries/`); (b) `SecurityProfileConfig.
-      workloadIsolation` stays OFF — upgrades don't add it, but a cluster rebuilt from git on 1.14+
-      isolates by default and loses the host `iscsid` Longhorn v1 needs. Both written at
-      `tofu/longhorn.tf`. **Checked clean 2026-09-18:** k8s 1.36.1 is inside 1.14's 1.33–1.37 range
-      (no k8s move needed); etcd's metrics port 2379→2383 — we scrape neither; `apply-config
-      --mode=reboot` removal — unused. ⚠ 1.13 left community support at the 1.14.0 release
-      (2026-09-03), so this is a clock, not a nice-to-have. The rollout order and the installer
-      rules are ADR-014 (amended) and the recipe it links. **Canary = wk-03 via the reconciler**
-      (#1864; attended, with a rollback drill — operator 2026-09-21). Relates FU-246, FU-253, ROADMAP G-D.
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
@@ -1360,16 +1344,12 @@ the block needs pruning, not more headings.
       attended 1.14 canary (FU-033); then the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
-- [ ] **FU-273** — **A substrate rollout has no soak and no attribution, so the pressure to roll back
-      wins by default.** **Ruled 2026-09-22 (operator):** default FORWARD, the responder never reverts, and a
-      revert is a human commit backed by a DIFFERENTIAL signal (upgraded nodes worse than not-yet ones,
-      cross-stack, never one stack's fixable CI). The whole rollout takes <1 day; drift from git is a tax. Soak = hours, and it
-      ends on EVIDENCE per canary type (nx-01: one ride + one ARC job passed), not wall time. The
-      rollout must create PRESSURE: not-yet nodes repel new pods, so evictions land on upgraded nodes (CNPG
-      only moves when evicted). One rollout per substrate, no per-component soak matrix. **Evidence +
-      differential BUILT** (`mgmt-rollout-evidence.sh`, `MgmtRolloutDifferential`); **orchestration BUILT**
-      ([§MB4 "The rollout as built"](management-box.md#the-rollout-as-built-fu-273-2026-09-22)) ; the
-      switch `reconcile_rollout.enabled` ON 2026-09-22. **Next:** the first box-run rollout (Talos v1.14.1). Relates FU-235, G-D.
+- [ ] **FU-276** — **The reconciler's failure paths, as nx-01 showed them (first box-run rollout, 2026-09-22).**
+      (a) a failed-verb park clears on the version diff alone (nx-01 counted synced while cilium hung);
+      (b) a verb exiting 1 after the reboot leaves its window open, blocking the next tick; (c) Talos
+      drops the upgrade fallback after a good boot — the §MB4 doc line, folded into the same issue.
+      **Next:** #1884 — operator/seat lane, UNQUEUED (`scripts/**` is the ❌ `codeowner-author` set,
+      no worker PR can deliver it). Relates FU-273, FU-267.
 - [ ] **FU-268** — **No detector for control planes that disagree, or for undeclared cluster components.**
       wk-metal-02 ran without the CP cluster patch for ~10 h (2026-09-21): flannel on all 13 nodes
       beside Cilium, and an apiserver refusing kata rides. Nothing fired; oracle's issue found the
@@ -1397,12 +1377,6 @@ the block needs pruning, not more headings.
       **Why deferred (operator, 2026-09-21):** finish the three-CP rollout and let it stabilise.
       **Next:** probe the state-reconciliation candidates on the disposable control plane
       (`scripts/controlplane-lab-install.sh`), then write the recipe. Relates FU-263, FU-243.
-
-- [ ] **FU-267** — **cilium-agent runs at 80–87 % of its 512 Mi Guaranteed limit fleet-wide.**
-      `tofu/cilium.tf:91` requests = limits 512 Mi; 2026-09-21 reads 410–446 Mi on the busy nodes,
-      and `ContainerMemoryNearLimit` fired on hp-01 as the pve drain landed pods there. An OOM kill
-      of the agent is a node-networking blip. **Next:** raise the limit (or go Burstable — the
-      fleet-roles "request-tax" lever) after reading a week of `max_over_time` per node.
 
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
       (ADR-041, Open).
