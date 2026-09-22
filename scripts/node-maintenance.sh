@@ -817,12 +817,12 @@ assert_upgrade_sane() {
   fmin="$(vminor "$from")"; tmin="$(vminor "$to")"
   # Refuse a downgrade outright: Talos has no downgrade path.
   if [ "$(printf '%s\n%s\n' "${from#v}" "${to#v}" | sort -V | tail -1)" = "${from#v}" ] && [ "$from" != "$to" ]; then
-    fail "$to is OLDER than $from — Talos does not downgrade"; return 1
+    fail "$to is OLDER than $from — Talos does not downgrade (back out with \`talosctl rollback\` while the previous install is still on the other slot, else a reinstall)"; return 4
   fi
   # One minor at a time: config migrations are only tested between adjacent minors.
   if [ "$fmin" != "$tmin" ]; then
     local fm tm; fm="${fmin#*.}"; tm="${tmin#*.}"
-    [ $((tm - fm)) -gt 1 ] && { fail "$from -> $to skips a minor; go one minor at a time"; return 1; }
+    [ $((tm - fm)) -gt 1 ] && { fail "$from -> $to skips a minor; go one minor at a time"; return 4; }
     # FU-033: 1.14+ mounts EPHEMERAL noexec, which kills Longhorn v1's instance-manager.
     if [ "$tm" -eq "$tm" ] && [ "$tm" -ge 14 ]; then
       local mc; mc="$(talosctl --talosconfig "$TALOSCONFIG" -n "$(node_ip)" -e "$ENDPOINT" get machineconfig -o yaml 2>/dev/null)"
@@ -1019,7 +1019,11 @@ upgrade() {
   fi
   # NOT FORCE-able either: a downgrade is impossible, a skipped minor is untested config
   # migration, and the FU-033 gate is "storage dies on the post-upgrade reboot".
-  if [ -n "$version" ]; then assert_upgrade_sane "$version" || return 2; fi
+  # Exit 4 = the declared path itself is impossible (downgrade, skipped minor): no retry can pass it,
+  # so an unattended caller parks instead of re-trying a refusal (mgmt-reconcile.sh). Exit 2 = a
+  # refusal that a later tick can pass (the FU-033 gate once the patch lands, the floors).
+  if [ -n "$version" ]; then local sr=0; assert_upgrade_sane "$version" || sr=$?
+    [ "$sr" = 4 ] && return 4; [ "$sr" = 0 ] || return 2; fi
 
   if [ "${LAB:-0}" != 1 ]; then settle || return $?; fi
   [ "$DRY" = 1 ] && { log "DRY=1: would now run talosctl upgrade --image $image — stopping"; return 0; }

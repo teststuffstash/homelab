@@ -445,10 +445,16 @@ Each tick, for the `auto` nodes only:
   unit is the window). Everything the verb already refuses on stays the verb's: preflight, its WIP 1
   (another node cordoned or NotReady), the fleet floors (Longhorn degraded, Garage `cluster_healthy`,
   CNPG instances), the FU-033 gate, the post-install verify. The loop adds WIP 1 across windows it did
-  not open — a live [declared window](glossary.md) (`agents/seat-window.sh`'s record) on any OTHER node refuses the tick
-  — and one sync per tick, the rest queued.
+  not open — ANY live [declared window](glossary.md) (`agents/seat-window.sh`'s record) refuses the tick,
+  the target's own included (the check runs before the verb opens its window, so a window there is a
+  person's hands-on work), unless it is on the target and opened with `--admit-reconciler` — the
+  attended sync, 2026-09-22 — and one sync per tick, the rest queued. The record is a sign on the
+  door, not a lock (`open` is a blind merge patch; an undeclared drain is invisible to it): the hard
+  serialization stays the verb's live WIP 1.
 - **One attempt per declared target** (`version/schematic`). The verb's exit 2 is a refusal with nothing
-  touched → `pending`, retried next tick. Any other failure, a zero exit that leaves the diff non-zero, or
+  touched → `pending`, retried next tick. Exit 4 is a declared path no retry can pass — a downgrade or a
+  skipped minor — → `parked` at once: Talos backs out only by `talosctl rollback` or a reinstall, so
+  "revert the declaration" is NOT a rollback the reconciler can execute. Any other failure, a zero exit that leaves the diff non-zero, or
   a sync the loop died in (found `syncing` by the next tick) → **`parked`** on that key, never retried; a
   new declared key, or the diff reaching zero by other means, clears it. By hand: `rm
   /var/lib/mgmt/reconcile/state.json` once the node is whole.

@@ -40,7 +40,10 @@ devbox run maint -- close
 `open` snapshots firing alerts, `sum(up)`, non-Running pods and the cilium apiserver-backend
 count, then writes the [declared window](../../../docs/glossary.md) (`agents/seat-window.sh` →
 the `responder-window` ConfigMap) so the responder does not burn triage sessions on alerts a
-person is causing. `check` diffs live against that baseline. `close` refuses while anything is
+person is causing. The box's node reconciler also reads that record and will NOT sync while any
+window is open — a window on a `reconcile: auto` node holds it off that node too. When the window
+exists to WATCH the reconciler act (an attended sync), open it with `--node <n>
+--admit-reconciler`. `check` diffs live against that baseline. `close` refuses while anything is
 still off baseline.
 
 A probe that **could not be read** prints `⚠ … UNREADABLE` and blocks exactly like a regression —
