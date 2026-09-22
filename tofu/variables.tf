@@ -223,10 +223,12 @@ variable "nodes" {
     # 36 G /var under ~4 concurrent runners; 80 G with maxRunners 4 (≤2 here) + the 60/50 image
     # GC. Grow-only in place; Talos grows EPHEMERAL into it on the next reboot (a stop/start —
     # the VM's pending disk resize lands at qemu start, not at a guest reboot).
-    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 80, longhorn = true, serial = true, talos_version = "v1.14.1" }
+    wk-03 = { role = "worker", vm_id = 8113, ip_cidr = "192.168.2.63/24", cores = 6, memory_mb = 8192, disk_gb = 80, longhorn = true, serial = true, talos_version = "v1.14.0" }
     # ↑ talos_version: the attended 1.14 canary (FU-033, operator 2026-09-22) — v1.14.0 first (the
     # minor bump through the reconciler), then v1.14.1 (the patch bump), then the role default.
     # v1.14.0 SYNCED 2026-09-22 06:38Z (3m25s, reconciler); exercised: ARC `ci` job green on it 07:00Z.
+    # v1.14.1 SYNCED 07:26Z (2m7s). NOW v1.14.0 AGAIN = the ROLLBACK DRILL: a reverted declaration the
+    # reconciler executes as a patch downgrade (#1867). Back to v1.14.1 after.
     # The first VM on the SECOND hypervisor (nx-02, 2026-09-15) — the untainted batch-compute
     # worker the fleet-role table (ROADMAP §Hardware strategy) wants from Xeon-class boxes. 16 of
     # nx-02's 40 threads and 32 of its 64 GiB, deliberately half the box: the other half is the
