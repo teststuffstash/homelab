@@ -1,0 +1,28 @@
+# ci-red-fleet-hold — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                      | world | patch (relpath @ patches/*.jq)          | env | expect | params
+# master-red-3prs         = the r5 world: master red at the SAME step as all three PRs → 0 units,
+#                           three held lines (one per PR, same fault named), three board rows
+# fleet-class-infra       = master GREEN; a sibling's class=infra marker names the same step → held
+# fleet-class-environment = the same, class=environment → held (the second class the arm reads)
+# content-negative        = the same marker, class=content → NOT held; the ordinary dispatch runs
+# fleet-window-lapsed     = a class=infra marker OUTSIDE the 24 h window → NOT held; dispatch runs
+# master-unreadable       = the master run probe FAILS (rule #6) → NOT held; dispatch runs
+# master-other-step       = master red at a DIFFERENT step of the same job → NOT held; dispatch runs
+# fleet-probe-unreadable  = the sibling-comment probe FAILS (rule #6) → NOT held; dispatch runs
+# pr-run-unreadable       = the PR's OWN run probe FAILS → no identifier, so neither arm can match
+#                           (fail-open) → NOT held; dispatch runs
+# malformed-marker-negative = a sibling's `ci-cause:` line WITHOUT the full grammar (the arbitrate
+#                           lane's live `ci-cause: policy-ambiguity` shape) → ignored, NOT held
+# malformed-beside-valid  = that malformed line BESIDE a valid class=infra marker → still held
+#                           (the malformed one must not abort the filter for the valid one)
+master-red-3prs         | | | IN_PRS=1540,1541,1545 | master-red-3prs |
+fleet-class-infra       | | gh/pr-list-open.json @ patches/add-infra-marker.jq       | IN_PRS=1540 | fleet-class-infra |
+fleet-class-environment | | gh/pr-list-open.json @ patches/add-environment-marker.jq | IN_PRS=1540 | fleet-class-environment |
+content-negative        | | gh/pr-list-open.json @ patches/add-content-marker.jq     | IN_PRS=1540 | dispatched |
+fleet-window-lapsed     | | gh/pr-list-open.json @ patches/add-stale-marker.jq       | IN_PRS=1540 | dispatched |
+master-unreadable       | | | IN_PRS=1540 STUB_GH_run_list_master_ci=fail | dispatched |
+master-other-step       | | | IN_PRS=1540 | dispatched-master-other-step |
+fleet-probe-unreadable  | | | IN_PRS=1540 STUB_GH_pr_list_open=fail | dispatched |
+pr-run-unreadable       | | | IN_PRS=1540 STUB_GH_run_list_fix_issue_1540_x_ci_failure=fail | dispatched-pr-run-unreadable |
+malformed-marker-negative | | gh/pr-list-open.json @ patches/add-malformed-marker.jq | IN_PRS=1540 | dispatched |
+malformed-beside-valid    | | gh/pr-list-open.json @ patches/add-malformed-beside-valid.jq | IN_PRS=1540 | fleet-class-infra |

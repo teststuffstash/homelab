@@ -388,9 +388,12 @@ transitions:
       - agents/replay/fixtures/ci-red-rounds-two-channels/ci-red-deferred-then-debounced
       - agents/replay/fixtures/ci-red-rounds-sibling-mention
       - agents/replay/fixtures/ci-red-goal-head-excluded
+      - agents/replay/fixtures/ci-red-fleet-hold
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
+      - desc: "fleet-class HOLD, read BEFORE the attempt counter (homelab#1909): a red the PR did not cause is ONE fleet fact — master's newest `ci` run failing the SAME <job>/<step>, or a sibling open PR's `ci-cause: <job>/<step> class=infra|environment` marker naming it inside 24 h — emits NO unit, NO `state-fp:` marker and counts NO attempt; one report line + a `who=machine` board row, level-triggered release (master green / window lapses). Both probes fail open (rule #6)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red HELD" }
       - desc: "unchanged-state debounce on the dispatch leg (before the per-repo cap, so a frozen PR never spends a slot a live red PR could use) — homelab#198"
         anchor: { file: agents/coordinator-scan.sh, pattern: "pr_state_fp_pair" }
       - desc: "exporter red edge-trigger: POST /coordinate on an armed agent PR going CI-red, deduped per head_sha (a no-op pushes no commit → no re-wake)"

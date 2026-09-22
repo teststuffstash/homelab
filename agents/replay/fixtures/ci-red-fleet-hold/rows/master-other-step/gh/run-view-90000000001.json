@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {
+      "name": "ci",
+      "conclusion": "failure",
+      "steps": [
+        { "number": 1, "name": "checkout", "conclusion": "success" },
+        { "number": 2, "name": "manifest-lint", "conclusion": "failure" }
+      ]
+    }
+  ]
+}

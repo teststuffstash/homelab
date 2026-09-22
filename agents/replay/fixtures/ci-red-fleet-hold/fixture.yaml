@@ -1,0 +1,48 @@
+# ci-red-fleet-hold — the ci-red clause's fleet-class HOLD (Goal #1906 acceptance 2, homelab#1909).
+#
+# THE CONTRACT (design pin 2 of Goal #1906; per-row intent in rows.psv). A red the PR did not
+# cause is ONE fleet fact, read BEFORE the attempt counter — so a shared red costs one report line
+# per PR and ZERO rides, instead of the r5 measurement's 11 arbitrate rides on 3 PRs from 2 reds.
+# Two arms, each independently fail-open (rule #6: a hold is a WRITE on the loop's throughput, so
+# an unreadable probe HOLDS NOTHING and falls through to today's behaviour):
+#   • master-red  — master's newest `ci` run fails the SAME `<job>/<step>` as this PR's red.
+#   • fleet-class — a line-anchored `ci-cause: <job>/<step> class=infra|environment …` marker
+#     naming the SAME `<job>/<step>` was posted on ANOTHER open PR of this repo inside 24 h.
+#     Only `class=` is read; `basis=` is DATA and stays unread (#1280).
+# On a hit: NO unit, NO `state-fp:` marker, NO attempt counted — one report line naming the fault
+# and the arm, plus a `who=machine` board row. Release is LEVEL-TRIGGERED (master green / the
+# window lapses → the ordinary ci-red flow resumes), so nothing has to be un-done.
+#
+# THE IDENTIFIER is the check-run's job + step name (`gh run view --json jobs`), NEVER a log
+# excerpt — shas, timestamps and paths make two instances of one fault look like two faults, and a
+# false match freezes a PR human-first whose red really is its own code. It is normalized to a
+# single token (whitespace runs → `-`) because the §ci-cause grammar's `<job>/<step>` is `\S+`
+# (agents/ledger.py's harvest regex): a real step name carries spaces, so a marker could never
+# name it otherwise and the fleet-class arm would be dead for exactly the fault this clause exists
+# for. One vocabulary for the report line, the comparison and the marker.
+#
+# WORLDS. `fleet` is the 2026-09-09 r5 world: PR#1540/#1541/#1545 red at
+# `ci/OpenTofu formatting (fmt -check, all roots)`, master's newest `ci` run GREEN, and no
+# `ci-cause:` marker anywhere. Rows overlay the master run (red / red-at-another-step) or patch a
+# sibling marker in. The clock is the family's (`CI_HOLD_CUTOFF` in `env:`), so the 24 h window is
+# a recorded fact rather than the day the suite happens to run.
+#
+# `block:ci-red-dispatch` is composed beside the hold so the negative rows assert the REAL
+# ordinary path — the unit line the clause emits when the hold does not fire — not merely the
+# absence of a hold line.
+pins:
+  - MP-T12
+name: ci-red-fleet-hold
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:ci-red-fleet-hold
+  - block:ci-red-dispatch
+  - file:post.sh
+world: fleet
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - CI_HOLD_CUTOFF=2026-09-09T00:00:00Z
+rows: rows.psv

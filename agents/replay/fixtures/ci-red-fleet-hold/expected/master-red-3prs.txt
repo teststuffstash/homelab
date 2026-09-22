@@ -1,0 +1,14 @@
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1540-x --workflow ci --status failure --limit 1 --json databaseId
+CALL gh run view 90000001540 --repo teststuffstash/homelab --json jobs
+CALL gh run list --repo teststuffstash/homelab --branch master --workflow ci --limit 1 --json databaseId,conclusion
+CALL gh run view 90000000001 --repo teststuffstash/homelab --json jobs
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1541-x --workflow ci --status failure --limit 1 --json databaseId
+CALL gh run view 90000001541 --repo teststuffstash/homelab --json jobs
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1545-x --workflow ci --status failure --limit 1 --json databaseId
+CALL gh run view 90000001545 --repo teststuffstash/homelab --json jobs
+OUT ORPHANS [homelab] ⏳ ci-red HELD (master-red) — PR #1540: ci/OpenTofu-formatting-(fmt--check,-all-roots)\n[homelab] ⏳ ci-red HELD (master-red) — PR #1541: ci/OpenTofu-formatting-(fmt--check,-all-roots)\n[homelab] ⏳ ci-red HELD (master-red) — PR #1545: ci/OpenTofu-formatting-(fmt--check,-all-roots)\n
+OUT UNITS 
+OUT ITEMS 
+OUT ITEM_CLASS homelab|pr-1540|ci-red-held|machine\nhomelab|pr-1541|ci-red-held|machine\nhomelab|pr-1545|ci-red-held|machine\n
+OUT REACHED: end
+RC 0
