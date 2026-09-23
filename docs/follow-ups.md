@@ -7,9 +7,10 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-285** (2026-09-23: FU-284 minted for fleet-wide disk-health metering —
-  nothing watched any drive's SMART and the fleet buys used drives with disclosed defects;
-  FU-283 minted for the hung-CI-run watchdog, from oracle's
+  Next free id: **FU-286** (2026-09-23: FU-285 minted for the replica co-location a disk pull
+  caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
+  fleet-wide disk-health metering — nothing watched any drive's SMART and the fleet buys used
+  drives with disclosed defects; FU-283 minted for the hung-CI-run watchdog, from oracle's
   fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
   record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
@@ -596,6 +597,17 @@ the block needs pruning, not more headings.
       homelab#1640 acceptances 1+3. The 09-23 round also exposed the identity questions UNDER the
       strike: [`docs/spikes/model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md).
       Relates FU-174, FU-186, ADR-094/096/115.
+
+- [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
+      `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
+      with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
+      with BOTH copies on one disk (498 G → 730 G scheduled, 147 %) — the ledger's soft-anti-affinity
+      trap, live — **despite the interval being raised 600 → 28800 s for exactly this.** So a replica
+      on a MISSING DISK takes a different path from one on a DOWN NODE; `replica-auto-balance:
+      least-effort` is a second untested candidate. Self-repaired on refit, no data lost (re-warmable
+      caches). **Next:** find which controller does it and name the knob that actually governs it in
+      [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
+      wrong lever. Relates FU-093, ADR-089.
 
 - [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
       Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod

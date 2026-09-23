@@ -306,6 +306,12 @@ hand-written inventory rows.
 
 ### Single worker maintenance window (cordon → drain → shutdown → wake)
 
+⚠ **Removing a Longhorn DISK (not just downing the node) co-locates replicas — Tracked by: FU-285.**
+Pulling a drive that holds replicas makes Longhorn rebuild them onto whatever node is left, and with
+`replica-soft-anti-affinity: true` it will happily put BOTH copies of a volume on one disk. Raising
+`replica-replenishment-wait-interval` does NOT stop this (measured 2026-09-23). Check replica
+placement per volume after any disk pull, and expect to rebalance by hand on refit.
+
 For one WORKER at a time (metal or VM) — a SATA cable, a RAM swap, a BIOS change — the
 deterministic path is **`devbox run node-maintenance {preflight|down|up} <node>`**
 (`scripts/node-maintenance.sh`; first run: wk-metal-04, 2026-09-06). `preflight` is read-only and

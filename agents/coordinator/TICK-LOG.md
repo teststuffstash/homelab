@@ -10723,3 +10723,60 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
   close-out action (strip `agent/error` on the affected issues) has no owner named anywhere —
   each side can read the split as the other's job. Worth a line in the brief when #1640 touches
   the reader.
+
+## 2026-09-23 — wk-metal-04 drive bench: four shelf drives measured, one replica co-location, two registers corrected
+
+Operator session, not the loop. Goal was "what drives go where" across the slots freed by the pve
+GPU removal and the NX adapters; it turned into a measurement session because every slot claim in
+both registers was inference.
+
+**Probed before planning.** SMBIOS type 9 off the live Talos nodes, PCIe link widths from sysfs,
+`smartctl` from ephemeral pods. Four register corrections came out of it, two of which had been
+steering decisions: both NX nodes run their NVMe at **x1 of a possible x4** (the adapter cards, not
+the slots); **hp-01 has a free x16** (its 7600p is in the x4); **wk-metal-01 has no PCIe expansion
+at all**, so its Garage zone can never get a dedicated disk. A fifth claim I made mid-session —
+`intel1` on a Gen1 x1 uplink — was wrong and retracted the same hour.
+
+**Three operator rulings, all recorded in the private hardware register:** LP brackets are struck
+as a constraint fleet-wide; the NX noise verdict is closed (it landed 2026-09-16 — six places here
+and two in homelab still read as if the trial were open, and a session reading `machines.yaml`'s
+burn-in comment concluded a Garage zone must not go on nx-02 because the box might leave);
+`nx-01` is the big kata/ARC box and holds no data by role.
+
+**The bench.** All four shelf drives A/B'd on wk-metal-04 over a 200 GiB span, two swaps. The
+headline is that the hardware register's "DRAM cache is the hard filter" **does not survive
+measurement**: the two DRAM-less HMB WD SN530s posted the fleet's best serial durable writes
+(2,524 IOPS / 0.40 ms) while the BC711 — no HMB, so presumably DRAM — was worst at that axis by
+4.5× and best at concurrency by 4×. The filter was learned on the Kingston SA400, a SATA drive,
+and does not transfer to NVMe. Also settled: HMB grant is deterministic (`hmmaxd: 8` × the kernel's
+4 MiB max chunk = 32 MiB, no knob raises it), and the register's "asks 50 MiB" was a 4 KiB-unit
+misread of `hmpre 51200` = 200 MiB. Numbers live in the private register, not here.
+
+**What it cost, and the platform lesson — FU-285.** With both 7600p out ~70 min, Longhorn rebuilt
+all four `bulk` cache volumes onto wk-metal-01 with BOTH copies on one disk (498 G disk, 730 G
+scheduled, 147 %) — the storage ledger's soft-anti-affinity trap, live — **despite
+`replica-replenishment-wait-interval` being raised 600 → 28800 s for exactly that.** So a replica on
+a missing DISK does not follow the same path as one on a down NODE; the knob a future session will
+reach for is the wrong one. Self-repaired on refit (auto-balance onto the returned disks, one
+surplus replica deleted by hand); no data lost, all four re-warmable caches. Warning + `Tracked by`
+added to `runbook.md` §Single worker maintenance, where someone about to pull a drive will read it.
+
+**Restore verified, not assumed:** both 7600p re-adopted by disk UUID with no resync, garage-0 back
+in 45 s with its data intact (3/3 zones, client write-probe green), 4/4 volumes at one copy per
+node, wk-metal-01 back to its exact pre-window 462 G / 93 %, cilium 13/13, no degraded volumes.
+
+**Shipped alongside: fleet-wide disk-health metering (FU-284, PR#1945)** — a `smartctl_exporter`
+DaemonSet on every Talos node plus the same metric names from a textfile collector on both
+hypervisors, nine promtool-fixtured belts alerting on defect GROWTH rather than absolute counts
+(the fleet buys used drives with disclosed defects). Two reds fixed in the PR: `iac-no-cluster-scoped`
+correctly refused a new Namespace (rehomed into `node-maintenance`, already in the baseline and
+already privileged-PSA), and the reviewer caught that the rehome's `*.yaml` glob skipped the two
+non-`.yaml` fixture files, leaving the alert's remediation text pointing at a deleted namespace
+while CI stayed green — the drift pin compares expr+for only, so a stale annotation in any of the
+41 hand-copies is invisible to it. That gap is a class issue, left unfixed and named.
+
+**Session hygiene, badly:** three hand-written alert watches, four defects — a probe that silently
+read nothing for 30 min (no `wget` in the prometheus container), the zsh word-split trap
+re-committed, and a replacement armed without stopping the original. GAPS
+`maintenance-window-G2` now carries three sightings and zero working copies; the entry's own
+conclusion — ship `maint watch` as a verb — is overdue.
