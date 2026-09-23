@@ -886,7 +886,10 @@ allowed) and `Goal → theme → child → sprout` reads 2 (suppressed).
 **THEN, assemble a complete theme (trigger (e) — ONLY when your unit carries
 `theme-complete=<theme-n>`).** The scan emits this for an open `theme:` container whose
 descendants are all closed and whose branch `goal/<goal-n>-<slug>` (its `Base`) has NO PR yet;
-the trigger retires once a PR for the branch exists. Re-read live state first: **if a PR for the
+the trigger retires once a PR for the branch exists. The walk reads RULINGS, not states: a
+`deferred` subtree is pruned (ADR-122 (4) — "not this Goal's" stays open by design and never
+holds an assembly; theme #1768 sat a day behind a deferred `agent-runtime#142` three levels
+down, 2026-09-22), and an unreadable store HOLDS the walk with one ⚠ (rule #6). Re-read live state first: **if a PR for the
 branch already exists, exit clean** — the trigger is stale (a sibling session or the seat got
 there first). Otherwise verify every member is CLOSED (re-list the theme's descendants) and that
 `ci` is green at the branch head (`gh run list --repo <slug> --branch goal/<goal-n>-<slug>`); a
@@ -911,14 +914,15 @@ naming the PR.
 **THEN, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
 re-fires the clause forever). Read the goal's findings-store comment; for every entry beyond
 `dispositioned-through:`, rule exactly one of — **fold** (the work belongs in an existing OPEN
-child: comment the fold target on the goal; the child's next round picks it up), **mint** (a
-REAL new child: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
+child: `bash /work/homelab/agents/goal-findings.sh rule <owner/repo> <goal-n> <entry-n> "fold →
+#<child> — <why, a few words>"`; the child's next round picks it up), **mint** (a
+REAL new child, then `rule <entry-n> "mint → #<new>"`: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
 (2); never the bucket pre-launch — body authored exactly as `goal-decompose` authors a child
 (`issue_body.py set "Touches=<narrowed>" "Base=<the goal's own, verbatim>" "Origin=<slug>#<the
 finding's origin issue>"`, then the `json` re-parse gate before `gh issue create` — §Authoring an
 issue body); label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
 and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flight enforces; over
-budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). **A finding that is REAL WORK but outside
+budget = mint UNLABELLED and say so), or **drop** (`rule <entry-n> "drop — <reason>"`). **A finding that is REAL WORK but outside
 THIS Goal's scope is still a `mint` — bound to its origin as a native sub-issue, written
 `deferred --by checkpoint` on the store, UNQUEUED — never filed standalone** (lineage contract
 rule 3: bind at filing regardless of door; rule 9: binding is dumb, the container rules scope).
@@ -926,6 +930,23 @@ homelab#1451 was filed standalone from Goal #1231's checkpoint as "out of scope"
 for three days with no container to adopt it (2026-09-08). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
 <total>`. A store you cannot read is a loud line on the goal, not a guess.
+
+**The write-back IS the store — the Goal's timeline gets NO ruling comment (operator,
+2026-09-23).** Every ruling lands as a store row: a member's is its disposition row, a finding's
+is the `⇒` suffix `rule` writes on its entry, and the ride itself is ONE header line —
+`bash /work/homelab/agents/goal-findings.sh checkpoint <owner/repo> <goal-n> "<ISO ts>
+(<triggers>) <n> minted · <m> folded · <k> dropped · <j> deferred"` — replaced in place. A ride
+that changed nothing stamps `… no change` and writes nothing else, so the timeline does not
+grow. Reasoning goes where it is actionable: a minted child's body says why it exists, a
+fold/drop reason is the few words after the arrow, the rest is the transcript's
+(`s3://agent-transcripts/`). Why: twelve prose rulings on Goal #1640 averaged 6 KB each — 70 KB
+of re-derived evidence nobody read, four of them ruling one row or nothing — and pushed the
+timeline past the 128 KiB single-argument cap the scan's store read hit (E2BIG → "dispositions
+unreadable" → trigger (c) dead, 2026-09-22). `gh issue comment` on the Goal is the wrong call
+here exactly as it is for "picking this up" (ADR-103 (2)); the `<!-- agent-summary -->` line
+the launcher writes is the ride's only timeline trace. The one exception is a ruling that needs
+the OPERATOR (an escalation, a design fork): one comment addressed to them is a message, not
+residue.
 **blockedBy filing-edge (homelab#1152)**: when a minted child wedges live work (a sibling or
 the goal itself is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the
 same act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
