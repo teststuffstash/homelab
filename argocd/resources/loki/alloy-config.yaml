@@ -131,15 +131,27 @@ data:
         // `source` gates the increment on the regex having matched (no extracted key → no
         // increment, and no metric child at all until the first match — which is why the alert
         // cannot be a plain increase(): see the KernelOopsCaptured comment in prometheusrule.yaml).
-        // No `max_idle_duration`: the series must NOT be pruned, because a kmsg-reader restart
-        // REPLAYS the ring buffer (kmsg-reader.yaml §RESTART REPLAY) and a re-created child series
-        // is exactly how one six-day-old oops would re-fire the alert forever.
+        // ⚠ `max_idle_duration` MUST BE SET, and omitting it does the OPPOSITE of "never prune".
+        // The first cut left it out believing absence meant no pruning; the live probe on
+        // 2026-09-23 measured the truth on the deployed Alloy v1.5.1 — the child series lived
+        // EXACTLY 300 s (Prometheus query_range: first 21:00:12Z, last 21:05:12Z, 6 samples at
+        // 1/min, with the Alloy pod up 40 min and never restarted), i.e. the stage's default
+        // 5-minute idle prune. KernelOopsCaptured fired and then resolved itself ~10 minutes
+        // later, which is the one behaviour a kernel-fault belt must not have: the page arrives
+        // while you sleep and the evidence is gone by morning.
+        // 24h, not "forever": the counter is in-memory anyway (an Alloy restart clears it — see
+        // the KernelOopsCaptured comment), so this is about surviving the QUIET between a fault
+        // and someone reading the alert, not about durability. A kmsg-reader restart still
+        // replays the ring buffer under a NEW pod label, and the rule's 6h-offset comparison is
+        // what keeps that replay from re-firing forever (it compares the node's TOTAL, not a
+        // child's value).
         stage.metrics {
           metric.counter {
-            name        = "kernel_oops_lines_total"
-            description = "kernel oops/BUG/fault-dump lines seen in this node's /dev/kmsg stream (FU-247)"
-            source      = "kernel_oops"
-            action      = "inc"
+            name              = "kernel_oops_lines_total"
+            description       = "kernel oops/BUG/fault-dump lines seen in this node's /dev/kmsg stream (FU-247)"
+            source            = "kernel_oops"
+            action            = "inc"
+            max_idle_duration = "24h"
           }
         }
       }

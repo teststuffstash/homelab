@@ -24,7 +24,7 @@ spec:
         # BUMP THIS IN THE SAME COMMIT AS ANY alloy-config.yaml CHANGE.
         # (The durable fix is a real content hash — needs a kustomize configMapGenerator here,
         # which this directory does not use today; FU-190.)
-        config-hash: v4-fu247-kernel-oops-metric
+        config-hash: v5-fu247-counter-not-pruned
     spec:
       serviceAccountName: alloy
       tolerations:
