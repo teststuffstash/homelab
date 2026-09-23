@@ -9,17 +9,15 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-23 ~10:00Z — write-back-is-the-store LIVE; arc in TICK-LOG).** (1) **PR#1934**
-  (theme #1768 assembly, `Fixes #1768`) — seat-approved, auto-merge armed: confirm MERGED, then Goal
-  #1640's burn-down moves and #1768 closes; the next checkpoint on #1640 should stamp
-  `last-checkpoint:` (PR#1936) — if the store header still lacks it after the next ride, that is a
-  play-compliance finding. (2) **PR#1932** (token broker 503 + curl retry + the reviewer's fetch-guard
-  fix) — CI pending on baa9e0ef; on a bot verdict fix in-PR, on green it auto-merges. (3) #1929 (rails
-  assembly) — updater brought it current after #1931; parks for the seat's read on `agents/**`/proxy
-  paths once bot-approved. (4) #1651 closes by hand when #1908 reaches master via theme #1907's
-  assembly (#1910 stays unqueued, operator: later). (5) **FU-281** = the trigger side, operator's.
-  (6) #1905: fix ADR-080 → ADR-091 at the spike's line 41, the bot's one blocking finding.
-  (7) `GoalTimelineNoisy` is live — a firing on a Goal means per-ride prose came back, read the authors.
+- **⚑ PICKUP (2026-09-23 ~10:30Z — write-back-is-the-store LIVE and proven; arc in TICK-LOG).**
+  DONE this sitting: PR#1933/#1936 (play), #1934 (theme #1768 assembly, CLOSED), #1932 (token broker
+  503 + retries + two masked export-guards), #1929 (rails assembly), #1931 override, #1916. The store
+  on #1640 carries `last-checkpoint:` (09:51Z ride) — the play holds. OPEN: (1) #1651 closes by hand
+  when #1908 reaches master via theme #1907's assembly (#1910 stays unqueued, operator: later).
+  (2) **FU-281** = the trigger side, operator's — finding 36 on #1640's store is the ride's own
+  "woke for nothing" diagnosis, evidence for it. (3) #1905: fix ADR-080 → ADR-091 at the spike's
+  line 41. (4) `GoalTimelineNoisy` is live — a firing means per-ride prose came back; read the authors.
+  (5) Next rollout is the first with the FU-278 workload-health hold (unchanged from 09-22).
 - **⚑ PICKUP (2026-09-22 late — retro r5 + Goal #1906; arc in TICK-LOG; items (2) and the #1768 tail are RESOLVED above).** (1) **Goal #1906** (retro r5's
   batch container, themed): #1908/#1909/#1911 queued; **#1910 is authored and UNQUEUED on purpose** —
   it un-banks chainless-redesign's rung-0 corollary (b) for the no-op-after-directive case; the
