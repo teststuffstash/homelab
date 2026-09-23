@@ -1316,14 +1316,13 @@ the block needs pruning, not more headings.
       the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
-      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
-      wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
-      **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
-      incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
-      unset, kata intact where declared. **2026-09-21:** cp-01/cp-02 + wk-metal-04 (FU-265) on v1.13.10;
-      m70s + hp-01 wait on #1839 (drain before install). **Next:** the 7 metal config updates (in place) + the remaining
-      metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
-      metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
+      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past
+      it — the fleet is on v1.14.1 since 2026-09-22 (FU-033's rollout), `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
+      unset wherever it was read, kata intact where declared. **PXE/USB assets done 2026-09-23:** the three
+      satellite pins now follow `var.talos_version_worker` and `machines-lint` fails on drift (they were at
+      v1.13.10 / v1.13.2 against a v1.14.1 fleet) — [`provisioning.md`](provisioning.md) §Upgrading a node's Talos.
+      **Next:** a week's soak of `NodeRebootingRepeatedly` clean from 2026-09-22 → archive. Subsumes FU-155 Option A.
+
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
       left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
       conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"
