@@ -195,8 +195,15 @@ spec:
                       description: Header name to assert, e.g. X-Oracle-Origin.
                     value:
                       type: string
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]*$
                       maxLength: 64
-                      description: Literal value set on homelab-originated requests, e.g. homelab.
+                      description: >-
+                        Literal value set on homelab-originated requests, e.g. homelab. The
+                        charset is deliberately narrow — no quote, `$`, backslash or whitespace:
+                        this string is interpolated into a quoted HCL string literal in the
+                        rendered Workspace module, so an unconstrained value would be an HCL
+                        injection applied with the platform's Cloudflare credential. Same guard
+                        as the sibling `header` field.
                 replicas:
                   type: integer
                   default: 1
