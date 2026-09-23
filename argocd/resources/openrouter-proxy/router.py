@@ -399,13 +399,30 @@ def _migrate_tier_thresholds() -> int:
     old = _classes.get("tier_thresholds")
     if not isinstance(old, dict):
         return 0
+    folded = {k: v for k, v in old.items() if not str(k).startswith("_")}
+    rails = _classes.get("rails")
+    seeded = False
+    if not isinstance(rails, dict):
+        # A file with the old top-level table and no `rails:` block at all (a partial revert of
+        # just model-classes.json). Popping the old key here would silently revert to
+        # RAIL_DEFAULTS. Seed the WHOLE canonical block — which is what rail_facts() already
+        # gives a rails-less file — because seeding one entry would make _assert_declared_rails()
+        # fail every class naming another rail.
+        rails = {r: dict(f) for r, f in RAIL_DEFAULTS.items()}
+        _classes["rails"] = rails
+        seeded = True
+    sub = rails.get(model_id.RAIL_SUBSCRIPTION)
     n = 0
-    sub = (_classes.get("rails") or {}).get(model_id.RAIL_SUBSCRIPTION)
-    if isinstance(sub, dict) and not sub.get("tier_thresholds"):
-        sub["tier_thresholds"] = {k: v for k, v in old.items() if not str(k).startswith("_")}
+    if isinstance(sub, dict) and (seeded or not sub.get("tier_thresholds")):
+        sub["tier_thresholds"] = folded
         n = 1
         _log("model-classes: top-level tier_thresholds → rails.anthropic-subscription."
-             "tier_thresholds (one-release migration; update the file)")
+             "tier_thresholds (one-release migration"
+             + ("; no `rails:` block — seeded from RAIL_DEFAULTS" if seeded else "")
+             + "; update the file)")
+    elif folded:
+        _log(f"model-classes: top-level tier_thresholds {sorted(folded)} dropped — "
+             f"rails.{model_id.RAIL_SUBSCRIPTION} already declares its own")
     _classes.pop("tier_thresholds", None)
     return n
 
@@ -3494,6 +3511,24 @@ def self_test() -> int:
                                                                         "heavy": 0.6}, \
         rail_facts(model_id.RAIL_SUBSCRIPTION)["tier_thresholds"]
     _classes["rails"][model_id.RAIL_SUBSCRIPTION]["tier_thresholds"] = _sub_tt_saved
+    # (g) the rails-LESS stale file (a partial revert of just model-classes.json): a top-level
+    # `tier_thresholds` with NO `rails:` block at all must still SURVIVE — the fold seeds the
+    # WHOLE canonical block from RAIL_DEFAULTS (so `_assert_declared_rails()` stays satisfied)
+    # and the file's declared value WINS over the hardcoded default, rather than being silently
+    # popped and reverting to RAIL_DEFAULTS. This is the reviewer's own repro, pinned.
+    _saved_classes_all = dict(_classes)
+    _classes.clear()
+    _classes.update({"tier_thresholds": {"dispatch": 0.7}, "classes": {}})
+    assert _migrate_tier_thresholds() == 1, "a rails-less stale table must still migrate once"
+    assert "tier_thresholds" not in _classes, "the old key must be dropped after migration"
+    assert set(_classes["rails"]) == set(RAILS), \
+        f"the seed must be the WHOLE canonical block: {sorted(_classes['rails'])}"
+    _assert_declared_rails()  # the seeded block keeps every class's rail declared
+    assert tier_threshold("dispatch", 0.42) == 0.7, \
+        f"a rails-less stale table must survive, not revert to RAIL_DEFAULTS: " \
+        f"{tier_threshold('dispatch', 0.42)}"
+    _classes.clear()
+    _classes.update(_saved_classes_all)
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
