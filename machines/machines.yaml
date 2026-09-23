@@ -595,12 +595,18 @@ machines:
     # ARC jobs (docs/incidents/2026-09-16-page-table-check-reboots.md, FU-246), NOT this hardware —
     # cordoned until it runs Talos ≥ v1.13.10. SEL notes: CMOS cell dead (VBAT 1.16 V), PS2 uncabled.
     # Bought 2026-09-14 (€399) against the hardware register's own "no" — the objections were noise
-    # and idle draw, never function. Onboarded 2026-09-15 as a BURN-IN: the open question is whether
-    # a 2U twin is liveable in the house over days and nights under moderate load, which is why it
-    # takes ordinary workloads but carries NO Longhorn disk — nothing here is load-bearing and a
-    # drain is instant. If the noise verdict is "no", this node leaves without taking data with it.
-    # ⚠ Only ONE of the two nodes in the chassis is cabled and running; the second is deliberately
-    # off until the trial concludes. The PSUs are chassis-level 1+1 SHARED by both nodes.
+    # and idle draw, never function. Onboarded 2026-09-15 as a BURN-IN; the **noise verdict landed
+    # 2026-09-16: the chassis STAYS** (operator; private register docs/nx-6035-g5.md §FIRST VERDICT
+    # — the acoustic criterion turned out to be modulation, not RPM, and the fans do not cycle).
+    # nx-02 has carried a control plane since 2026-09-20, so "the box might leave" is no longer a
+    # live constraint on either node.
+    # It still carries NO Longhorn disk, now by ROLE rather than by trial (operator, 2026-09-23):
+    # this is the big kata/ARC box and rides are what a storm kills — data does not belong on it.
+    # SCRATCH disks for rides are in scope; Longhorn replicas and Garage zones are not.
+    # ⚠ Before ANY Longhorn disk lands on either node — including replica-1 ride scratch — collapse
+    # nx-01/nx-02 to ONE zone name (docs/storage-ledger.md §Requirements): renaming a zone after
+    # replicas exist makes Longhorn see a new empty disk and declare the old one missing.
+    # ⚠ The PSUs are chassis-level 1+1 SHARED by both nodes; both nodes are now cabled and running.
     # ⚠ eno2 (ac:1f:6b:60:ed:9b) is intentionally unconfigured and uncabled — one address per node.
     # The install disk is pinned by SERIAL, not by wwn: this ADATA reports a NULL WWN
     # (naa.5000000000000000) through the SAS3008, so the wwn-* symlink is not unique and /dev/sda
