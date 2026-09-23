@@ -783,7 +783,7 @@ spec:
                         - |
                           set -e
                           SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
-                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                          GH_TOKEN="$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer ${SA_TOKEN}" \
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
                           export GH_TOKEN
@@ -856,9 +856,10 @@ spec:
                       args:
                         - |
                           set -e
-                          export GH_TOKEN="$(curl -fsS -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+                          GH_TOKEN="$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not polling blind"; exit 1; }
+                          export GH_TOKEN
                           rm -rf /work/homelab
                           _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
                           timeout 120 git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
@@ -926,7 +927,7 @@ spec:
                         - |
                           set -e
                           SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
-                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                          GH_TOKEN="$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer ${SA_TOKEN}" \
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not sweeping blind"; exit 1; }
                           export GH_TOKEN
