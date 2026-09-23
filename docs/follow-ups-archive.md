@@ -10,6 +10,13 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-261** *(archived 2026-09-23)* — **the PXE chainload's boot files are staged and PROBED.**
+  `roles/matchbox-ipxe-tftp` no longer installs/configures/starts tftpd-hpa (dnsmasq owns :69 and masks
+  it — that last task was what killed every run, leaving the copy before it unverified and
+  `undionly.kpxe` absent for months). The role now ends by fetching all three files back over TFTP and
+  comparing the served byte count with the staged file; `--tags verify` runs that probe alone. Applied
+  2026-09-23: `undionly.kpxe` 74213B / `ipxe.efi` 850528B / `snponly.efi` 173792B served, second run
+  `changed=0`. Recipe: [`provisioning.md`](provisioning.md) §The PXE pipeline.
 - **FU-248** *(archived 2026-09-22)* — (b) `mgmt-tf apply` takes a plan id only (#1827); (a) the VM-recreate
   recipe, `-exclude`-shaped, never `-target` a config apply while a VM replace is pending: runbook.md
   §Recreating a Talos VM (#1893).
