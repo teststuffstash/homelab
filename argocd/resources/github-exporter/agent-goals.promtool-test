@@ -258,4 +258,4 @@ tests:
               triage: "none"
             exp_annotations:
               summary: "Goal homelab#1640 carries 34 comments"
-              description: "Goal homelab#1640 has 34 timeline comments. The checkpoint's write-back is the store (rule suffix + last-checkpoint: line, edited in place), so a count past 30 means a session is posting per-ride prose again — read the newest comments' authors. Past ~128 KiB of comments the scan's store read fails (E2BIG) and trigger (c) stops firing (2026-09-22, homelab#1640). https://github.com/teststuffstash/homelab/issues/1640"
+              description: "Goal homelab#1640 has 34 timeline comments (SYMPTOM: the count, not who wrote them). Check the newest comments' authors and shapes: machine rulings belong in the two store comments edited in place (goal-findings, epic-dispositions), so per-ride prose from a session is one cause to rule out; operator escalations and human notes raise the count legitimately. Why it matters: past ~128 KiB of comments the scan's store read fails (E2BIG) and trigger (c) stops firing (2026-09-22, homelab#1640). https://github.com/teststuffstash/homelab/issues/1640"
