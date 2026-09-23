@@ -1,7 +1,8 @@
-# Postgres clusters (CNPG Cluster CRs). Wave 1: needs the operator (wave 0). The
-# Cluster's app-role password comes from the tofu-seeded `infisical-pg-app` secret
-# (so tofu can build the matching connection string). Raw manifests in
-# argocd/resources/postgres/.
+# Postgres clusters (CNPG Cluster CRs) and the Postgres credentials in-cluster consumers read.
+# Wave 1: needs the operator (wave 0). The Cluster's app-role password comes from the tofu-seeded
+# `infisical-pg-app` secret (so tofu can build the matching connection string). Raw manifests in
+# argocd/resources/postgres/ — each carries its own namespace (grafana-pg and the oracle-feedback
+# read-only credential land in `monitoring`, not the Application's default destination).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
