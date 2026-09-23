@@ -322,3 +322,38 @@ tests:
       - eval_time: 8d
         alertname: MgmtSubstrateBehind
         exp_alerts: []
+
+  # ── THE BELT'S OWN VERDICTS (2026-09-23) ──────────────────────────────────────────────────────
+  # MgmtBeltStale catches "the belt stopped running". Nothing read what it SAID: `mgmt_probe_check`
+  # has carried a per-check status all along with no rule consuming it, so the `talos` check failed
+  # on EVERY tick from the 2026-09-22 fleet move to v1.14.1 (box talosctl a minor behind) and the
+  # only reason anyone knew is a seat running the unit by hand. What is pinned here: a standing
+  # FAIL pages and names itself, a transient one does not, and a passing check never does.
+  # The transient's shape is real: the textfile is rewritten WHOLE each run, so a check that stops
+  # failing loses its status="fail" series — it does not sit at 0.
+  - interval: 1m
+    name: "a belt check failing for two hours pages and names itself; a transient one does not"
+    input_series:
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="talos",status="fail"}'
+        values: "1x200"
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="ansible",status="fail"}'
+        values: "1x30"
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="substrate",status="pass"}'
+        values: "1x200"
+    alert_rule_test:
+      # t=1h: talos is pending (30 min short of the 2h `for:`), ansible's series went away 25 min
+      # ago when the check passed. Nothing fires — a belt that fails a tick is not an incident.
+      - eval_time: 1h
+        alertname: MgmtBeltCheckFailing
+        exp_alerts: []
+      # t=2h5m: talos alone, named by its own label.
+      - eval_time: 2h5m
+        alertname: MgmtBeltCheckFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: mgmt-node
+              instance: "192.168.2.53:9100"
+              mode: belt
+              check: talos
+              status: fail

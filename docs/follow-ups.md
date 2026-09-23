@@ -7,7 +7,9 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-286** (2026-09-23: FU-285 minted for the replica co-location a disk pull
+  Next free id: **FU-287** (2026-09-23: FU-286 minted for the box's talosctl trailing the fleet by a
+  minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
+  FU-285 minted for the replica co-location a disk pull
   caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
   fleet-wide disk-health metering — nothing watched any drive's SMART and the fleet buys used
   drives with disclosed defects; FU-283 minted for the hung-CI-run watchdog, from oracle's
@@ -1309,6 +1311,16 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-286** — **The management box's `talosctl` is a MINOR behind the fleet, and the pin
+      cannot move yet.** The belt's `talos` check (client vs server, minor skew only — the skew that
+      breaks the API) has returned FAIL on every tick since the fleet moved to v1.14.1 on 2026-09-22:
+      client `v1.13.8`, server `v1.14.1`. The pin is `devbox.json`'s `talosctl: latest`, and devbox's
+      own index tops out at **1.13.8** (`devbox search talosctl`) while nixpkgs-unstable already
+      carries **1.14.1** — so `devbox update talosctl` reports "already up-to-date" and no version
+      string in devbox.json can reach it. **Next:** re-run `devbox update talosctl` once the index
+      catches up (the Monday `devbox-update` job is the natural carrier), or resolve talosctl from a
+      nixpkgs ref if it stays behind. Until then `MgmtBeltCheckFailing` stands on `check="talos"` —
+      that firing is this item, not a new fault. Relates FU-240, FU-246.
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
       is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
       wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
