@@ -10,6 +10,13 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-254** *(archived 2026-09-23)* — **the belt now asks whether the DECLARATION itself is stale.**
+  `check_substrate` (`scripts/mgmt-probe.sh`) compares `tofu/variables.tf`'s declared Talos / Kubernetes /
+  Cilium versions against each project's GitHub releases (cached 6 h — the belt ticks every 15 min) and
+  publishes `mgmt_substrate_minors_behind` + `mgmt_substrate_supported`; `MgmtSubstrateBehind` (7 d, still
+  supported) / `MgmtSubstrateUnsupported` (1 h) in `argocd/resources/mgmt-metrics/`. ⚠ The support windows
+  are hand-encoded constants — mechanism and that caveat: [`management-box.md`](management-box.md) §MB2.
+  First live read: talos current, kubernetes and cilium one minor behind, none out of support.
 - **FU-261** *(archived 2026-09-23)* — **the PXE chainload's boot files are staged and PROBED.**
   `roles/matchbox-ipxe-tftp` no longer installs/configures/starts tftpd-hpa (dnsmasq owns :69 and masks
   it — that last task was what killed every run, leaving the copy before it unverified and

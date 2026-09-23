@@ -125,7 +125,7 @@ install_impact() {
   if [ ${#nodes[@]} -gt 0 ]; then
     local tj dj; tj="$(mktemp)"; dj="$(mktemp)"
     if mgmt_install_after "$out" "${nodes[@]}" >"$tj" 2>/dev/null && [ "$(jq 'length' "$tj" 2>/dev/null || echo 0)" -gt 0 ]; then
-      SKIP="tofu talos ansible creds" DRY_RUN=1 NODE_TARGETS_JSON="$tj" NODE_DRIFT_OUT="$dj" \
+      SKIP="tofu talos ansible creds substrate" DRY_RUN=1 NODE_TARGETS_JSON="$tj" NODE_DRIFT_OUT="$dj" \
         bash "$REPO/scripts/mgmt-probe.sh" >"$out.live.log" 2>&1 || true
       drift="$(cat "$dj" 2>/dev/null)"
     fi

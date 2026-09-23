@@ -161,6 +161,49 @@ spec:
               node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_probe_belt.prom
               is missing, so MgmtBeltStale and the MgmtNode* drift alerts are blind. Check the belt
               has run since the change that publishes it landed (scripts/mgmt-probe.sh publish).
+    # FU-254 — IS OUR DECLARATION ITSELF STALE? Every other belt here asks "does live match git";
+    # these two ask "does git still match the world". mgmt_substrate_minors_behind{component} counts
+    # the upstream MINOR releases newer than the version tofu/variables.tf declares (0 = current) and
+    # mgmt_substrate_supported{component} is 1 while that minor is inside the project's support
+    # window — written by scripts/mgmt-probe.sh check_substrate on the belt (every 15 min,
+    # docs/management-box.md §MB2). A component whose upstream answer could not be fetched publishes
+    # NO series rather than a false "current", so absence here is silence, not a green.
+    # The two alerts are DISJOINT: Behind carries the `supported == 1` guard, so a fleet past the
+    # window is Unsupported's page alone and never both.
+    - name: mgmt-substrate
+      rules:
+        - alert: MgmtSubstrateBehind
+          expr: |
+            mgmt_substrate_minors_behind >= 1
+              and on (component) mgmt_substrate_supported == 1
+          for: 7d
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.component }} declares a version {{ $value }} upstream minor(s) old — for 7 days"
+            description: >-
+              What `tofu/variables.tf` declares for {{ $labels.component }} is {{ $value }} minor
+              release(s) behind the newest upstream release, and has been for a week — long enough
+              that it is nobody's turn rather than a window not yet taken. Still inside the project's
+              support window (`MgmtSubstrateUnsupported` owns the other side). The declared and
+              upstream versions are in the box's belt log: `journalctl -u mgmt-belt | grep substrate`
+              on 192.168.2.53. Bumping it is a maintenance-window act, not an auto-deploy — class 6
+              in docs/dependency-upgrades.md.
+        - alert: MgmtSubstrateUnsupported
+          expr: |
+            mgmt_substrate_supported == 0
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.component }} declares a version outside its project's support window"
+            description: >-
+              The minor `tofu/variables.tf` declares for {{ $labels.component }} is further behind
+              upstream than that project states it supports — no more patches, including security
+              ones, land for it. The support windows are hand-encoded constants in
+              scripts/mgmt-probe.sh check_substrate (Talos: current + previous; Kubernetes and
+              Cilium: three minors); if upstream changed its policy, that table is what is wrong.
+              The 2026-09-03 case this belt exists for: Talos 1.13 left community support at the
+              1.14.0 release and the fleet learned it from a conversation. `journalctl -u mgmt-belt
+              | grep substrate` on 192.168.2.53.
     # ADR-132 §MB4 layers 3–5 — the node reconciler (scripts/mgmt-reconcile.sh, a box loop every
     # 10 min). mgmt_reconcile_node_state{node,state} is one-hot per `reconcile: auto` node over
     # idle|pending|syncing|parked; mgmt_reconcile_sync_started_timestamp_seconds{node} is the

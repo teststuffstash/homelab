@@ -318,7 +318,9 @@ decl()   { jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // ""' "$tf"; }   # <node>
 # this call must never overwrite the belt's own textfile.
 diff_nodes() {  # <targets-file> <out>
   if [ -n "${RECONCILE_DIFF_CMD:-}" ]; then $RECONCILE_DIFF_CMD "$1" "$2"; return; fi
-  MODE=belt DRY_RUN=1 SKIP="tofu talos ansible creds" NODE_TARGETS_JSON="$1" NODE_DRIFT_OUT="$2" \
+  # `substrate` is in the SKIP list for the same reason as the rest (FU-254): these callers want
+  # the node diff, not the belt — and the substrate check reaches out to the GitHub API.
+  MODE=belt DRY_RUN=1 SKIP="tofu talos ansible creds substrate" NODE_TARGETS_JSON="$1" NODE_DRIFT_OUT="$2" \
     bash "$REPO/scripts/mgmt-probe.sh" >/dev/null 2>&1
   [ -s "$2" ]
 }

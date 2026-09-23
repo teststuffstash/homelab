@@ -1322,16 +1322,6 @@ the block needs pruning, not more headings.
       satellite pins now follow `var.talos_version_worker` and `machines-lint` fails on drift (they were at
       v1.13.10 / v1.13.2 against a v1.14.1 fleet) — [`provisioning.md`](provisioning.md) §Upgrading a node's Talos.
       **Next:** a week's soak of `NodeRebootingRepeatedly` clean from 2026-09-22 → archive. Subsumes FU-155 Option A.
-
-- [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
-      left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
-      conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"
-      auto-deploy and Renovate opens no homelab PRs at all — `dependency-upgrades.md` §Monitoring
-      already records the sibling hole ("Renovate liveness ❌"). **Next:** a check comparing
-      `var.talos_version_{controlplane,worker}` / `var.kubernetes_version` / `var.cilium_version`
-      against the upstream support matrix, firing on "a newer minor exists" and on "ours is EOL" —
-      a natural belt job for the management box once §MB2's metric transport is decided (FU-252).
-      Relates FU-033, FU-097, ROADMAP G-D.
 - [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable
       and it wedges every reconcile report.** `pr-oracle-fleet-minutark` fails with
       `POST …/rum/site_info → 403 "Authentication error"` from Cloudflare (the cf-api-proxy
