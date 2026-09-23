@@ -135,8 +135,8 @@ STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-
 SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm", "tool-loop"}
 
 # ── #1259: tier ordering for label_map tier_floor enforcement ──
-# Ordered from cheapest to most expensive. Used to compare a model's model_tiers grade against
-# the tier_floor from a resolved label_map entry. A model whose tier is below the floor is
+# Ordered from cheapest to most expensive. Used to compare a model's `models.<key>.tier` grade
+# against the tier_floor from a resolved label_map entry. A model whose tier is below the floor is
 # excluded from the candidate walk.
 _TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
 
@@ -360,6 +360,10 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
         # the subscription rail's declared table. A stale file's copy is folded in ONCE here, so
         # nothing downstream reads the old location.
         _migrate_tier_thresholds()
+        # Goal #1769 acceptance 3: the id→grade `model_tiers` table is retired into the canonical
+        # `models` table. A stale file's copy is folded in ONCE here (one-release alias), so
+        # nothing downstream reads the old location.
+        _migrate_model_tiers()
         # Goal #1769 acceptance 2/5: no class may name a rail the `rails:` block does not declare
         # — a load-time assert, so a typo is a startup failure, never a silently empty pool.
         _assert_declared_rails()
@@ -424,6 +428,36 @@ def _migrate_tier_thresholds() -> int:
         _log(f"model-classes: top-level tier_thresholds {sorted(folded)} dropped — "
              f"rails.{model_id.RAIL_SUBSCRIPTION} already declares its own")
     _classes.pop("tier_thresholds", None)
+    return n
+
+
+def _migrate_model_tiers() -> int:
+    """Goal #1769 acceptance 3: fold a stale file's id→grade `model_tiers` table into the
+    canonical `models` table ONCE at load, then drop the old key so nothing downstream reads it.
+    Returns how many ids it seeded (0 = the file is already migrated). The one-release alias: the
+    seeded entries carry `ids` (the id under its parsed rail), `tier` (the old grade) and null for
+    the three facts the old table never held — so a stale file still routes, and the two
+    router-self-test asserts still hold over it (the ids are keyed by model_family() and railed by
+    model_id.parse() by construction). Deleted next release, with the alias row."""
+    old = _classes.get("model_tiers")
+    if not isinstance(old, dict):
+        return 0
+    models = _classes.get("models")
+    if not isinstance(models, dict):
+        models = {}
+        _classes["models"] = models
+    n = 0
+    for mid, tier in old.items():
+        if str(mid).startswith("_"):
+            continue
+        key = model_family(str(mid))
+        rail = model_id.parse(str(mid))["rail"]
+        entry = models.setdefault(key, {"ids": {}, "tier": tier, "context_tokens": None,
+                                        "tool_verified": None, "pool_usd": None})
+        entry.setdefault("ids", {}).setdefault(rail, str(mid))
+        n += 1
+    _classes.pop("model_tiers", None)
+    _log(f"model-classes: model_tiers → models (one-release migration; {n} ids; update the file)")
     return n
 
 
@@ -858,6 +892,70 @@ def vendor_family(model: str) -> str:
     if raw in ("haiku", "sonnet", "opus") or raw.startswith("claude-"):
         return "anthropic"                         # bare alias / bare claude-* id
     return raw.split("/")[0] if "/" in raw else raw.split("-")[0]
+
+
+# ── Goal #1769 acceptance 3: the canonical `models` table, keyed by model_family() ─────────────
+# `model_tiers` (an id → grade map) retired into `models` (a family → {ids, tier, context_tokens,
+# tool_verified, pool_usd} map). The key is model_family()'s OWN output — no new naming scheme —
+# so a `modelDeny` of the canonical key binds across every rail serving the model, and the M11
+# cross-rail ladder can say "cheapest rail serving X". These three readers are the ONE place the
+# table is consulted; every former `model_tiers` reader goes through them.
+def _models_table() -> dict:
+    return _classes.get("models") or {}
+
+
+def _model_entry(model: str) -> dict | None:
+    """The canonical `models` entry for a model id, keyed by model_family(). None when the id's
+    family is not in the table (an unapproved model — the rotation universe's exclusion)."""
+    return _models_table().get(model_family(model))
+
+
+def _model_tier(model: str) -> str | None:
+    """The model's tier, read from `models.<key>.tier` (the retired `model_tiers` grade)."""
+    entry = _model_entry(model)
+    return entry.get("tier") if entry else None
+
+
+def _model_context_tokens(model: str) -> int | None:
+    """The model's declared harness context window, read from `models.<key>.context_tokens` —
+    the source the shell's CLAUDE_CODE_MAX_CONTEXT_TOKENS constant is deleted against (Goal #1769
+    acceptance 3). None when the model declares none (not yet declared, never a guess)."""
+    entry = _model_entry(model)
+    return entry.get("context_tokens") if entry else None
+
+
+def _denied(model: str, deny: set) -> bool:
+    """True when `model` is denied by the caller's `deny` set. A deny entry matches EITHER the
+    exact id (a bare rail id — no regression) OR the model's canonical family (a `models` key, so
+    `deny: [claude-sonnet]` excludes `claude/sonnet` AND `anthropic/claude-sonnet-4.6` in the same
+    route — Goal #1769 acceptance 3)."""
+    return model in deny or model_family(model) in deny
+
+
+def _assert_models_table(models: dict) -> None:
+    """Goal #1769 acceptance 3: the two CI asserts that pin the canonical `models` table to the
+    parser. For every entry and every `(rail, id)` under it:
+
+        model_family(id) == key   AND   model_id.parse(id).rail == rail
+
+    The expected values are COMPUTED from the parser, never read back from the table, so a
+    mis-keyed row (a wrong family or a wrong rail) trips this instead of silently mis-routing.
+    Raises AssertionError naming the offending entry; the self-test drives it over the live table
+    AND over a deliberately mis-keyed copy (the negative row — the test must be able to fail)."""
+    for key, entry in (models or {}).items():
+        if str(key).startswith("_"):
+            continue
+        ids = entry.get("ids") or {}
+        assert ids, f"models.{key} must declare `ids` per rail"
+        for rail, mid in ids.items():
+            fam = model_family(mid)
+            assert fam == key, \
+                f"models.{key}.ids.{rail} = {mid!r} parses to family {fam!r}, not {key!r}"
+            got_rail = model_id.parse(mid)["rail"]
+            assert got_rail == rail, \
+                f"models.{key}.ids.{rail} = {mid!r} parses to rail {got_rail!r}, not {rail!r}"
+        for fact in ("tier", "context_tokens", "tool_verified", "pool_usd"):
+            assert fact in entry, f"models.{key} must declare `{fact}`"
 
 
 def _repo_from_session(session: str) -> str | None:
@@ -1436,14 +1534,17 @@ def pair_cooldowns(now: float | None = None) -> dict[tuple[str, str], dict]:
 
 def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
-    model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
-    first, then daily-rankings rank order, then the git rotation_fallback belt. Models whose
-    canary verdict says broken are excluded."""
-    tiers = _classes.get("model_tiers") or {}
+    the canonical `models` table (the human-approved set; graduation stays human), ordered: class
+    chain_head first, then daily-rankings rank order, then the git rotation_fallback belt. Models
+    whose canary verdict says broken are excluded. A rotation row is approved when its FAMILY is a
+    `models` key (Goal #1769 acceptance 3) — the table is keyed canonically, so a `:free`/`:exacto`
+    variant of an approved model is approved too."""
+    models = _models_table()
     rows = _read("SELECT model, source, canary_verdict, rank FROM rotation")
     broken = {m for m, _s, v, _r in rows if v == "broken"}
     ranked = sorted(((r or 0, m) for m, s, _v, r in rows
-                     if s == "openrouter-daily-rankings" and m in tiers and m not in broken))
+                     if s == "openrouter-daily-rankings" and model_family(m) in models
+                     and m not in broken))
     kind = "reasoning" if cinfo.get("reasoning") else "coding"
     fallback = (_classes.get("rotation_fallback") or {}).get(kind) or []
     out: list[str] = []
@@ -1566,7 +1667,7 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     if (not any(c["rail"] == model_id.RAIL_SUBSCRIPTION for c in cands)
             and model_id.RAIL_SUBSCRIPTION in rails
             and (caller_block is None or caller_block(model_id.RAIL_SUBSCRIPTION) is None)
-            and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
+            and not _denied(sub_model, deny) and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
         # `subscription` here means the ANTHROPIC safety-net rail (the FU-088 gates' subject, and
@@ -1825,11 +1926,11 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": "never-free:label_map"})
             continue
         if tier_floor:
-            m_tier = (_classes.get("model_tiers") or {}).get(m)
+            m_tier = _model_tier(m)
             if m_tier and _TIER_ORDER.get(m_tier, -1) < _TIER_ORDER.get(tier_floor, -1):
                 skipped.append({"model": m, "reason": f"tier-floor:{tier_floor}>{m_tier}"})
                 continue
-        if m in deny:
+        if _denied(m, deny):
             skipped.append({"model": m, "reason": "claim-deny"})
         elif m in struck_models:
             skipped.append({"model": m, "reason": "strike"})
@@ -1996,6 +2097,10 @@ def route(payload: dict, ctx: dict) -> dict:
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
                     "strike_excluded": _picked_struck,
                     "cooldown_excluded": _picked_cooled,
+                    # Goal #1769 acceptance 3: the served model's declared context window, echoed
+                    # so the shell's CLAUDE_CODE_MAX_CONTEXT_TOKENS constant has a source to be
+                    # deleted against. None when the model declares none.
+                    "context_tokens": _model_context_tokens(result["model"]),
                     "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
@@ -2137,9 +2242,11 @@ def status_summary() -> dict:
         "decisions_24h": [
             # Goal #1769 acceptance 4: each row carries the CALLER facts the decision was made on
             # (`surface`/`key_ref`), beside the reason — so a `caller:*` skip is readable from
-            # /router-status without the sqlite file.
+            # /router-status without the sqlite file. Goal #1769 acceptance 3: the row also echoes
+            # the served model's declared `context_tokens` (the shell constant's source).
             {"decision": d, "rail": rl, "model": m, "reason": rs,
-             "surface": sf or "", "key_ref": kr or "", "n": n}
+             "surface": sf or "", "key_ref": kr or "",
+             "context_tokens": _model_context_tokens(m) if m else None, "n": n}
             for d, rl, m, rs, sf, kr, n in decisions_24h],
         "db_persistent": _persistent,
         "rows": counts,
@@ -2175,6 +2282,14 @@ def status_summary() -> dict:
         # Goal #1769 acceptance 3: the per-rail FU-109 table (the Anthropic-only top-level table
         # is retired). Kept under the old key for the readers that cite it, now sourced per rail.
         "tier_thresholds": rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {},
+        # Goal #1769 acceptance 3: the canonical `models` table, echoed whole so the per-model
+        # facts (tier, context_tokens, tool_verified, pool_usd) and the per-rail `ids` are
+        # expressible from /router-status without the sqlite file or the ConfigMap.
+        "models": {
+            k: {"tier": v.get("tier"), "context_tokens": v.get("context_tokens"),
+                "tool_verified": v.get("tool_verified"), "pool_usd": v.get("pool_usd"),
+                "ids": v.get("ids") or {}}
+            for k, v in _models_table().items() if not str(k).startswith("_")},
         # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
         # and where the would-be pick disagreed with what actually got served.
         "ladder_cells": [
@@ -3529,6 +3644,64 @@ def self_test() -> int:
         f"{tier_threshold('dispatch', 0.42)}"
     _classes.clear()
     _classes.update(_saved_classes_all)
+    # ── Goal #1769 acceptance 3: the canonical `models` table ──
+    # (h) the two table asserts over the LIVE table: every entry's every (rail, id) must parse to
+    # the entry's key (model_family) and its rail (model_id.parse). The expected values are
+    # COMPUTED from the parser, never read back from the table — so a mis-keyed row trips this.
+    _assert_models_table(_models_table())
+    # (i) the negative row: a deliberately mis-keyed entry MUST trip the assert (the test can
+    # fail). Two drifts, one per half of the assert: a wrong family and a wrong rail.
+    _bad_family = {"claude-sonnet": {"ids": {"openrouter": "anthropic/claude-opus-4.6"},
+                                     "tier": "large", "context_tokens": None,
+                                     "tool_verified": None, "pool_usd": None}}
+    _bad_rail = {"claude-sonnet": {"ids": {"opencode-go": "claude/sonnet"},
+                                   "tier": "large", "context_tokens": None,
+                                   "tool_verified": None, "pool_usd": None}}
+    for _bad, _want in ((_bad_family, "family"), (_bad_rail, "rail")):
+        try:
+            _assert_models_table(_bad)
+        except AssertionError as _e:
+            assert _want in str(_e), f"the {_want} drift must be named: {_e}"
+        else:
+            raise AssertionError(f"a mis-keyed models entry must trip the assert ({_want})")
+    # (j) the one-release `model_tiers` alias: a stale id→grade table folds into `models` ONCE,
+    # keyed by model_family() and railed by model_id.parse(), and the old key is dropped.
+    _models_saved = copy.deepcopy(_classes.get("models"))
+    _classes["model_tiers"] = {"claude/haiku": "cheap", "opencode-go/deepseek-v4-flash": "cheap"}
+    assert _migrate_model_tiers() == 2, "a stale model_tiers table must migrate once"
+    assert "model_tiers" not in _classes, "the old key must be dropped after migration"
+    assert _classes["models"]["claude-haiku"]["tier"] == "cheap", _classes["models"]["claude-haiku"]
+    assert _classes["models"]["deepseek-v4-flash"]["ids"] == \
+        {"opencode-go": "opencode-go/deepseek-v4-flash"}, _classes["models"]["deepseek-v4-flash"]
+    _assert_models_table(_classes["models"])  # the seeded table still satisfies the two asserts
+    _classes["models"] = _models_saved
+    # (k) /router-status echoes the canonical table (the per-model facts + per-rail ids).
+    _rs_models = status_summary()["models"]
+    assert _rs_models["deepseek-v4-flash"]["context_tokens"] == 1000000, \
+        _rs_models.get("deepseek-v4-flash")
+    assert _rs_models["claude-sonnet"]["ids"]["openrouter"] == "anthropic/claude-sonnet-4.6", \
+        _rs_models.get("claude-sonnet")
+    # (l) the cross-rail deny (acceptance 3): a deny of the CANONICAL key excludes every rail's id
+    # for that model in the same route; a deny of a bare rail id excludes just that id.
+    _deny_chain = ["claude/sonnet", "anthropic/claude-sonnet-4.6", "tencent/hy3"]
+    _dd = route(dict(base, chain=_deny_chain, deny=["claude-sonnet"]), CTX)
+    assert _dd["decision"] == "dispatch" and _dd["model"] == "tencent/hy3", _dd
+    assert {"model": "claude/sonnet", "reason": "claim-deny"} in _dd["skipped"], _dd["skipped"]
+    assert {"model": "anthropic/claude-sonnet-4.6", "reason": "claim-deny"} in _dd["skipped"], \
+        _dd["skipped"]
+    _dd2 = route(dict(base, chain=["claude/sonnet", "anthropic/claude-sonnet-4.6"],
+                      deny=["claude/sonnet"]), CTX)
+    assert _dd2["decision"] == "dispatch" and _dd2["model"] == "anthropic/claude-sonnet-4.6", _dd2
+    assert {"model": "claude/sonnet", "reason": "claim-deny"} in _dd2["skipped"], _dd2["skipped"]
+    assert not any(s.get("model") == "anthropic/claude-sonnet-4.6" for s in _dd2["skipped"]), \
+        _dd2["skipped"]
+    # (m) /route echoes the served model's declared context_tokens (acceptance 3): the Go flash's
+    # 1M window is the shell constant being retired, so it must be expressible from the decision.
+    _saved_rails_ctx = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
+    _ctx_go = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
+    assert _ctx_go["decision"] == "dispatch" and _ctx_go["context_tokens"] == 1000000, _ctx_go
+    _classes["classes"]["coding"]["rails"] = _saved_rails_ctx
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
@@ -4079,8 +4252,8 @@ def self_test() -> int:
             for k, v in (umap.get(scope) or {}).items():
                 assert str(v) in URGENCIES, f"urgency_map.{scope}[{k}] = {v!r} is not tight/elastic"
         lad = _ladder_cfg()
-        assert lad["subscription_model"] in (_classes.get("model_tiers") or {}), \
-            "the ladder's subscription candidate must be a graded model (model_tiers)"
+        assert model_family(lad["subscription_model"]) in _models_table(), \
+            "the ladder's subscription candidate must be a graded model (models.<key>.tier)"
         assert 0 <= lad["tight_floor_tier"] < len(LADDER)
         # ADR-104 POOL CURATION invariants (FU-162). The router deliberately does not enforce
         # these at request time — research is an operator-driven lane where visibility is the
@@ -4091,7 +4264,7 @@ def self_test() -> int:
             assert str(pools.get("version") or ""), \
                 "pools.version is missing — /route echoes it, and an arm table without it cannot be re-drawn"
             all_classes = _classes.get("classes") or {}
-            tiers = _classes.get("model_tiers") or {}
+            models = _models_table()
             band_of: dict[str, str] = {}
             for bname, entries in (pools.get("bands") or {}).items():
                 assert entries, f"pool {bname} is empty — a band with no depth is not a band"
@@ -4100,8 +4273,8 @@ def self_test() -> int:
                 assert selectors, f"pool {bname} has no class selecting it (/route's `class` is the selector)"
                 fams: set[str] = set()
                 for m in entries:
-                    assert m in tiers, \
-                        f"pool {bname}: {m} is not in model_tiers — pools draw from the human-approved universe only"
+                    assert model_family(m) in models, \
+                        f"pool {bname}: {m} is not in the models table — pools draw from the human-approved universe only"
                     assert m not in band_of, \
                         f"bands must be DISJOINT: {m} is in both {band_of[m]} and {bname} (the run-1 self-grading arm)"
                     band_of[m] = bname
@@ -4118,22 +4291,23 @@ def self_test() -> int:
         cb = _classes.get("circuit_breaker") or {}
         assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
             "auth breaker must trip before the generic one (auth never self-heals)"
-        # Chain ⊆ model_tiers parity (the invariant this file's _comment has CLAIMED since P3 but
+        # Chain ⊆ models parity (the invariant this file's _comment has CLAIMED since P3 but
         # nothing enforced — found 2026-08-03 when mimo graduated into sleep's chain and its tier
-        # entry became a human to-do item instead of a CI failure). model_tiers is the rotation
-        # path's human-approved universe (P5): a chain model missing from it silently loses
-        # rotation visibility. Jail/CI-only: in-pod runs have no stacks.json and skip.
+        # entry became a human to-do item instead of a CI failure). The `models` table is the
+        # rotation path's human-approved universe (P5): a chain model whose FAMILY is missing from
+        # it silently loses rotation visibility. Jail/CI-only: in-pod runs have no stacks.json and
+        # skip.
         stacks_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "agents", "stacks.json")
         if os.path.exists(stacks_path):
             with open(stacks_path) as fh:
                 stacks = json.load(fh).get("stacks") or []
-            tiers = _classes.get("model_tiers") or {}
+            models = _models_table()
             chain_models = set()
             for st in stacks:
                 if st.get("workerModel"):
                     chain_models.add(st["workerModel"])
                 chain_models.update(st.get("workerModelFallbacks") or [])
-            missing = sorted(m for m in chain_models if m not in tiers)
+            missing = sorted(m for m in chain_models if model_family(m) not in models)
             if missing:
                 reg_path = os.path.join(os.path.dirname(stacks_path), ".openrouter-registry.json")
                 prices = {}
@@ -4146,10 +4320,12 @@ def self_test() -> int:
                             "cheap" if p is not None and p < 0.5 else
                             "large" if p is not None and p < 3 else
                             "premium" if p is not None else "cheap?")
-                    print(f'  model_tiers MISSING chain entry — add: "{m}": "{tier}"'
+                    print(f'  models MISSING chain entry — add: "{model_family(m)}": '
+                          f'{{"ids": {{"{model_id.parse(m)["rail"]}": "{m}"}}, "tier": "{tier}", '
+                          f'"context_tokens": null, "tool_verified": null, "pool_usd": null}}'
                           f'{f"  (${p}/M prompt)" if p is not None else "  (not in registry — verify price)"}')
                 raise AssertionError(
-                    f"model_tiers must cover every stacks.json chain entry; missing: {missing}")
+                    f"the models table must cover every stacks.json chain entry; missing: {missing}")
     # ── homelab#1117: active_cooldowns() role filter on status/metrics call sites ──
     # A model with BOTH a worker-scoped and a probe-scoped cooldown must not collapse into one
     # entry. The status payload must show both roles; the metrics gauge must carry a role label.
@@ -4195,7 +4371,7 @@ def self_test() -> int:
     assert _lg["decision"] == "dispatch", f"lg must dispatch with a large candidate: {_lg}"
     assert _lg["model"] == "moonshotai/kimi-k3", \
         f"lg must pick the large-tier model, got {_lg['model']}"
-    _lg_tier = (_classes.get("model_tiers") or {}).get(_lg["model"])
+    _lg_tier = _model_tier(_lg["model"])
     assert _lg_tier and _TIER_ORDER.get(_lg_tier, -1) >= _TIER_ORDER.get("large", -1), \
         f"lg must pick at/above large tier, got {_lg['model']} (tier={_lg_tier})"
     assert not _lg["model"].endswith(":free"), \
@@ -4209,7 +4385,7 @@ def self_test() -> int:
     assert _md["decision"] == "dispatch", f"md must dispatch: {_md}"
     assert _md["model"] == "deepseek/deepseek-v4-flash", \
         f"md must pick the first cheap+ model, got {_md['model']}"
-    _md_tier = (_classes.get("model_tiers") or {}).get(_md["model"])
+    _md_tier = _model_tier(_md["model"])
     assert _md_tier and _TIER_ORDER.get(_md_tier, -1) >= _TIER_ORDER.get("cheap", -1), \
         f"md must pick at/above cheap tier, got {_md['model']} (tier={_md_tier})"
     assert any(s["reason"].startswith("tier-floor:") for s in _md["skipped"]), \
@@ -4229,7 +4405,7 @@ def self_test() -> int:
         f"multi-label (track/iac + lg) must dispatch: {_multi}"
     assert _multi["model"] == "moonshotai/kimi-k3", \
         f"multi-label must pick the large-tier model, got {_multi['model']}"
-    _multi_tier = (_classes.get("model_tiers") or {}).get(_multi["model"])
+    _multi_tier = _model_tier(_multi["model"])
     assert _multi_tier and _TIER_ORDER.get(_multi_tier, -1) >= _TIER_ORDER.get("large", -1), \
         f"multi-label must pick at/above large tier, got {_multi['model']} (tier={_multi_tier})"
     assert not _multi["model"].endswith(":free"), \
