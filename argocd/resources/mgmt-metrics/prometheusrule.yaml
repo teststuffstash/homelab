@@ -149,6 +149,32 @@ spec:
               mgmt-belt runs every 15 minutes; none has finished for over an hour, so every
               mgmt_node_drift series is frozen at its last value. On the box:
               `systemctl status mgmt-belt.timer`, `journalctl -u mgmt-belt -n 50`.
+        - alert: MgmtBeltCheckFailing
+          # THE BELT'S OWN VERDICTS WERE UNWATCHED. MgmtBeltStale catches "the belt stopped
+          # running"; nothing read what it SAID. `mgmt_probe_check{check,status}` has been
+          # published per check all along and no rule consumed it — so the `talos` check failed on
+          # every tick from the 2026-09-22 fleet move to v1.14.1 (the box's pinned talosctl is a
+          # MINOR behind, which is the one skew that breaks the API) and the only reason anyone
+          # knew is a seat running the unit by hand on 2026-09-23. A belt nobody reads is the
+          # thing this whole box exists to not be.
+          # ⚠ Per CHECK, not the mgmt_probe_checks{result="fail"} COUNT, so the alert can name
+          # which one. The textfile is rewritten whole each run, so a check that stops failing
+          # loses its status="fail" series rather than carrying it stale.
+          expr: |
+            mgmt_probe_check{mode="belt",status="fail"} == 1
+          # 2 h = 8 ticks. A single tick can fail on a transient (an upstream fetch, a
+          # port-forward, a node mid-reboot); eight in a row is a standing condition.
+          for: 2h
+          labels: { severity: warning }
+          annotations:
+            summary: "Management box belt check `{{ $labels.check }}` has been failing for 2 hours"
+            description: >-
+              The drift belt is running and one of its checks keeps returning FAIL — so whatever
+              that check compares has been out of agreement for at least eight consecutive ticks.
+              This alert says nothing about WHICH way: read the verdict line on the box,
+              `journalctl -u mgmt-belt -n 50 | grep FAIL` on 192.168.2.53. The belt is deliberately
+              report-only (it never acts), so nothing is being retried in the background — a
+              standing FAIL stays standing until a person moves it.
         - alert: MgmtBeltMetricsAbsent
           expr: |
             up{job="mgmt-node"} == 1
