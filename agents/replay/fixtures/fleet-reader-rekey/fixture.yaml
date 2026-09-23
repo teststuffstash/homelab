@@ -37,6 +37,20 @@
 #                       never a provider, model or "us" fault. No latch, no nomination, no
 #                       `agent/error`, no filing. The re-key dropped this belt (its worlds carried
 #                       no key-class strike, so nothing noticed); this row pins IL-T30's guard.
+#   serving-no-provider a SERVING class EVERY one of whose records has an empty `provider` column
+#                       ⇒ FAIL-CLOSED and report-only (rule #6): one ⛔ line, no latch, no
+#                       nomination, no `agent/error`, no filing. Both re-key keys read the
+#                       per-record provider (`$3`), so with none resolved the pair cell degrades
+#                       to `model|` and the distinct-provider count collapses — a serving strike
+#                       must not fall INTO the "us" write (homelab#1937, same class as #1917 one
+#                       seam over). This is the input the reader's own rule #6 did not cover.
+#   mixed-provider      the pair world with issue #402's provider token stripped ⇒ ≥1 record
+#                       resolved, so the class is NOT all-empty and the provider-latch branch
+#                       still fires on the resolvable `(model, provider)` cell (row reuses the
+#                       `provider-latch` verdict).
+#   mixed-model         the across world plus a third issue whose model carries no provider ⇒ the
+#                       model-nomination branch still evaluates over the resolvable records (one
+#                       model across two providers), ignoring the unresolved record.
 #
 # The router payload is a row's declared CONDITION (`ROUTER_STATUS_JSON`), never a live call: the
 # ClusterIP endpoint answers from inside the loop namespace, so a fixture that reached it would go

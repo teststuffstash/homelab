@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: model=deepseek/deepseek-v4-flash error_class=timeout round=1 session=pod-402\n\nMIXED set: this record carries NO provider token (issue #401's does), so the class is not all-empty — the provider-latch branch must still evaluate over the resolvable record.",
+    "created_at": "2026-09-01T15:30:00Z"
+  }
+]

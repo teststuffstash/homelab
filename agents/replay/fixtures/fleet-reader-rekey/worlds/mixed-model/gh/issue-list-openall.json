@@ -1,0 +1,38 @@
+[
+  {
+    "number": 401,
+    "title": "scan: fixture issue 401",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/in-progress"
+      }
+    ]
+  },
+  {
+    "number": 402,
+    "title": "scan: fixture issue 402",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/in-progress"
+      }
+    ]
+  },
+  {
+    "number": 403,
+    "title": "scan: fixture issue 403",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/in-progress"
+      }
+    ]
+  }
+]
