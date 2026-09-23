@@ -358,6 +358,33 @@ grafana:
       name: sleep-data
       type: frser-sqlite-datasource
       uid: sleep-data
+    # The oracle stack's feedback sink, READ-ONLY (oracle-fleet#713). The uid is the platform's
+    # promise — the stack's own dashboard ConfigMap binds `oracle-feedback` by uid, never by name
+    # (docs/patterns/observability.md §datasource uids). Why a datasource and not Prometheus: the
+    # gateway already exports give_feedback_total{category,tool}; the untriaged QUEUE needs the row
+    # text and the triage join, which are not metrics.
+    # Trust boundary = the Loki door's: LAN/VPN Grafana, a SELECT-only role, one namespace's data,
+    # no write path, nothing public-facing. The comment column is untrusted caller text — a
+    # dashboard renders it in a plain table cell, never as markdown/HTML.
+    # `postgresVersion` is deliberately UNSET: the server is CNPG 18.3, past the value list this
+    # Grafana (13.0.1) offers, and the knob only gates version-specific SQL the plain SELECTs
+    # behind this datasource never use.
+    # sslmode=require: CNPG serves TLS with its own CA — require encrypts without CA verification,
+    # the same dial the Grafana DB connection below uses for an in-cluster ClusterIP hop.
+    - access: proxy
+      editable: false
+      isDefault: false
+      name: oracle-feedback
+      type: postgres
+      uid: oracle-feedback
+      url: oracle-pg-ro.oracle-fleet.svc:5432
+      database: feedback
+      user: feedback_ro
+      jsonData:
+        sslmode: require
+        timescaledb: false
+      secureJsonData:
+        password: $__env{ORACLE_FEEDBACK_PG_RO_PASSWORD}
   admin:
     existingSecret: grafana-admin
     passwordKey: admin-password
@@ -378,6 +405,13 @@ grafana:
       secretKeyRef: { name: grafana-pg-app, key: username }
     GF_DATABASE_PASSWORD:
       secretKeyRef: { name: grafana-pg-app, key: password }
+    # The oracle-feedback datasource's password, resolved by provisioning's $__env{}.
+    # optional: true — Grafana must start before oracle-iac publishes the Infisical key
+    # (the ADR-108 GO_USAGE_INGEST_TOKEN shape); until then that ONE datasource cannot
+    # connect and nothing else is affected. Secret: argocd/resources/postgres/
+    # oracle-feedback-ro-externalsecret.yaml (ESO ← Infisical, never a cross-ns copy).
+    ORACLE_FEEDBACK_PG_RO_PASSWORD:
+      secretKeyRef: { name: oracle-feedback-pg-ro, key: password, optional: true }
   extraContainers: |
     - name: sleep-sqlite-sync
       image: amazon/aws-cli:2.17.0
