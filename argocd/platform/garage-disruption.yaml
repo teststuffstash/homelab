@@ -1,0 +1,35 @@
+# The Garage disruption gate — the `garage` PodDisruptionBudget + the CronJob that sets it from
+# Garage's own signal (docs/garage.md §Voluntary disruption; argocd/resources/garage-disruption/).
+# Wave 2: after the chart (the PDB selects its pods), alongside the rotation loop.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage-disruption
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/garage-disruption
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: garage
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - RespectIgnoreDifferences=true # or a sync re-applies git's 0 over the controller's value
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
+  # The PDB's maxUnavailable is RUNTIME-OWNED (the CronJob writes it every minute); git holds only
+  # the fail-closed value it is created with. The override annotation is the operator's, by hand.
+  ignoreDifferences:
+    - group: policy
+      kind: PodDisruptionBudget
+      name: garage
+      jsonPointers:
+        - /spec/maxUnavailable
+        - /metadata/annotations/garage.teststuff.net~1open-until

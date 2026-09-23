@@ -10,6 +10,89 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-248** *(archived 2026-09-22)* — (b) `mgmt-tf apply` takes a plan id only (#1827); (a) the VM-recreate
+  recipe, `-exclude`-shaped, never `-target` a config apply while a VM replace is pending: runbook.md
+  §Recreating a Talos VM (#1893).
+- **FU-238** *(archived 2026-09-22)* — external-provider roots plan READ-ONLY on the box: github (read-only
+  PAT + App keys) and cloudflare (`cloudflare-mgmt-read`, verified 2026-09-22 as the box's ONLY Cloudflare
+  credential, same hash as the wallet, active to 2027-01-01). The operator's host run exposed a `set -e`
+  exit before the store step in `cloudflare-token-tf.sh` — fixed in #1893.
+- **FU-278** *(archived 2026-09-22)* — rollout workload-health hold (#1891): rollout-start snapshot keyed by
+  top owner + revision; a new unhealthy platform workload, or an important stack workload (≥2 replicas/
+  instances or a PDB) on its same revision, holds (never reverts); ack file; `MgmtRolloutHeldOnWorkloadHealth`.
+  Replay of 2026-09-22 holds on forgejo before cp-01. Operator ruling; §MB4 "Default forward" amended.
+- **FU-264** *(archived 2026-09-22)* — **Talos API CA rotated in production; the leaked `os:admin`
+  identity is dead.** Scope `--talos` only (spike's reasoning), per [`spikes/talos-ca-rotation.md`](spikes/talos-ca-rotation.md)
+  §The recipe (#1888), run from the box 14:55–15:14Z: rotate-ca exit 0 on 13/13; state candidate A
+  (bundle rebuilt from the 3 CP configs, identical; import byte-matched), P2 15 in-place, then `No changes`.
+  Proof: every node answers the leaked cert with TLS `alert unknown ca` (server-side, verification off).
+- **FU-276** *(archived 2026-09-22)* — failed-verb park clears only on `node-maintenance.sh verify`; the
+  reconciler closes the verb's own window at park time (option i); Talos fallback-removal fact in §MB4. #1887.
+- **FU-195** *(archived 2026-09-22)* — Alertmanager silences on a Longhorn PVC (`alertmanagerSpec.storage`),
+  #1890 by the fixer lane. End-state probe: a silence created, pod deleted, silence still `active` after.
+- **FU-033** *(archived 2026-09-22)* — **Talos 1.14 gate set: done, fleet on v1.14.1.** (a) `VolumeConfig
+  EPHEMERAL mount.secure=false` on every node (VMs #1866, metal #1874 — `/var` exec verified on wk-03 and
+  wk-metal-03); (b) contract pinned `talos_config_contract = v1.13.10` (#1874). Canary + rollback drill on
+  wk-03 (#1866/#1872/#1873), then the first box-run fleet rollout (#1879) 09:43→13:17Z.
+- **FU-273** *(archived 2026-09-22)* — **Rollout policy BUILT and proven**: §MB4 "The rollout policy" + "The
+  rollout as built" (#1868/#1876/#1877/#1881). First rollout: 4 canaries, evidence-gated, 13 nodes incl. 3
+  CPs unattended. Residuals: #1884 (FU-276), #1885 (FU-195), Garage PDB #1882 (hold), FU-097's ledger.
+- **FU-267** *(archived 2026-09-22)* — **cilium-agent Burstable: 150m request / no CPU limit / 512Mi→1Gi
+  memory.** Materialized in the first box-run Talos rollout: nx-01's restarted agent hung at 510/512 Mi,
+  100 % throttled at 500m, no pod network. Guaranteed was unnecessary for its protections (kubelet
+  -997 for system-node-critical; Talos OOM ranks memory-limited cgroups 0) — rationale in `tofu/cilium.tf`.
+- **FU-275** *(archived 2026-09-22)* — **A canary override no longer downloads/deletes seed images.**
+  `tofu/image.tf` splits the key: `vm_seed_key` (ROLE version) keys `proxmox_download_file` on pve +
+  nx-02 and the VMs' ignored `file_id`; `vm_image_key` (declared version) keeps the installer URL.
+  The override's `longhorn-v1.14.1` download pair left state in the same PR (fix/talos-apply-prereqs).
+- **FU-243** *(archived 2026-09-22)* — **Three control planes behind the Talos VIP (ADR-133/-136).**
+  cp-01, cp-02, wk-metal-02: three etcd members, the `cluster_endpoint` on the `.50` VIP, all three
+  at v1.13.10 (live-verified 2026-09-22; operator: "three-cp program is done"). Doc survives:
+  [`controlplane-ha.md`](controlplane-ha.md). Enables: CPs as a reconciler question (ADR-132 layer 3).
+- **FU-242** *(archived 2026-09-21)* — **Spike: tofu-controller as the box's substrate — NO, keep
+  hand-rolling.** Run on throwaway VM 9420 on nx-02 (deleted). Fails Q1 (runner tofu 1.12.1 vs pin,
+  `upgradeOnInit` ignores the lock), Q2 (`backendConfig.disable` breaks saved plans), Q3 (in-repo
+  `approvePlan` re-plans forever), Q5 (unreachable provider silent 36+ min). Idle RSS ~1.4 GiB. Side
+  finding: a loopback-bound k3s API breaks in-cluster clients (§MB4 layer 7). #1862, spike doc §Verdict.
+- **FU-265** *(archived 2026-09-21)* — **wk-metal-04's unparseable firmware boot entry: handled by
+  `upgrade`.** The firmware re-writes `Boot0008` "UEFI OS" with 2 bytes after its end node on every
+  firmware boot; upgrades reboot by kexec, so `node-maintenance upgrade` now runs `efi-scrub` between
+  drain and install (deletes only entries whose path list does not parse; fails closed). Proven
+  18:47–18:59Z: scrub deleted it, installer passed, node declared. Fleet DRY: only this entry flagged.
+  Upstream issue deferred until the fleet is on the latest Talos (operator).
+- **FU-252** *(archived 2026-09-21)* — **A standing `management-apply` refusal is DETECTED.** Residue-age
+  belt `MgmtApplyResidueStanding` (github-exporter, from master's commit status, cdf01961 09-18);
+  box-side belts for what a status cannot show — `MgmtApplyLoopStale`/`MetricsAbsent`/`MgmtBoxDown`
+  on node_exporter + textfile, static job `mgmt-node` (#1850, #1851). Verified live 18:03Z: target
+  up, `mgmt_apply_*` series present, no Mgmt* alert. Mechanism: management-box.md §standing refusal.
+- **FU-266** *(archived 2026-09-21)* — **Second CI runner VM — DONE.** `ci-runner-02` on nx-02
+  (`tofu/ci-runner.tf`, PR#1841, 192.168.2.66, VMID 9002), same labels as ci-runner-01; both slots
+  "Listening for Jobs" 13:42Z. A pve outage is no longer a CI outage. nx-02 got `snippets` on `local`.
+- **FU-263** *(archived 2026-09-21)* — **Nocloud VMs could not be version-bumped — CLOSED by the
+  rollout.** #1829 made the disk image a birth seed (ADR-138), #1836 declared the CPs v1.13.10
+  (applied: 0 replacements, 0 PKI), and `upgrade-behind cp` (#1837) moved cp-02 then cp-01 in place
+  on the box — etcd 3/3 throughout, cilium backend 13/13. Two defects the first real run found:
+  a pure CP has no Longhorn to wait for (#1838), and single-replica WARNs needed FORCE (#1839).
+
+- **FU-253** *(archived 2026-09-21)* — **VMs declared a generic, stale `install.image` — FIXED and applied.**
+  All six VMs carried the provider default `ghcr.io/siderolabs/installer:v1.13.0` (wrong platform —
+  it reinstalls a nocloud VM as `metal` and ghosts it). #1829 sets it from
+  `data.talos_image_factory_urls.vm[...]`, the URL the upgrade verb passes; applied 2026-09-21 in a
+  window, wk-03 first (boot time unchanged, image == declared), then the rest (apiservers kept their
+  start times, 0 restarts). Declared == passed == installed; ADR-138.
+
+- **FU-259** *(archived 2026-09-21)* — **`talos_cluster_kubeconfig` renders a stale endpoint and
+  `plan` never notices — FIXED and recovered the same day.** It captures the kubeconfig at create
+  time and never re-reads it, so the ADR-133 VIP cutover left every client dialling `.51` while
+  `plan` said `No changes`. Guards (#1825): a `check "kubeconfig_endpoint_current"` block that
+  warns on every plan while the captured host disagrees with `local.cluster_endpoint` — verified
+  firing on the live condition — and `client-configs.sh` refusing to write a mismatched kubeconfig
+  *before* it reaches the box. `replace_triggered_by` was rejected: the fix cannot be planned
+  unscoped, because the kubernetes/helm providers are configured FROM the resource. Recovery ran
+  the same morning — scoped plan read first (exactly one resource), applied, `tofu/kubeconfig` and
+  the box's copy now `https://192.168.2.50:6443`, 13 nodes Ready through it, full plan clean.
+  Mechanism and the recipe: [`controlplane-ha.md`](controlplane-ha.md) §CP8.
+
 - **FU-233** *(archived 2026-09-18)* — **Codeowner-gate trial week (ADR-128): re-read done, ruled.**
   Measurement: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md) §Re-read — 6
   freed-path-only machine PRs, 0 human touches, one real cost (worker PR#1700 archived FU-213 on a

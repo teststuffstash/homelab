@@ -1,0 +1,48 @@
+# unit-fast-path-blocked-on (homelab#1772) — the doorbell fast-path's BLOCKED-ON and
+# BLOCKED-SOURCE holds, the rule-#6 parity port. The `blocked-on` predicate (homelab#1188/#1427)
+# and the two `agent/blocked` holds landed in the MAIN scan path only, and the doorbell takes THIS
+# path — so a PR whose terminal ruling wrote `blocked-on: human` was correctly held by a full scan
+# and STILL dispatched by the edge. Live receipt (homelab#1755): the ruling posted the marker at
+# 16:30:13Z and a coordinator pod spawned 3m17s later on `changes-requested|homelab|pr-1755`,
+# while the full scan's own predicate returns `blocked|human` on that PR.
+#
+# CONDITION UNDER REPLAY. Five PR-shaped units, one leg each, all on `circles`, all worker-authored,
+# OPEN, CHANGES_REQUESTED (the fast-path predicate), with no live worker pod and no coordinator
+# session pod:
+#   blocked-on     pr-396 — a terminal ruling's `blocked-on: human` with no engagement after it.
+#                  The edge must emit NO unit (acceptance leg 1). Its `Fixes #18` source issue is
+#                  ordinary, so the BLOCKED-SOURCE read below is exercised in its clear direction.
+#   cleared        pr-397 — the same marker plus a NEWER human comment. The hold clears and the
+#                  unit is emitted — #1188's resolution rule, unchanged (acceptance leg 2).
+#   control        pr-398 — no marker at all. Dispatches, so the two legs above are not green for
+#                  the wrong reason (acceptance leg 3, the negative control).
+#   pr-blocked     pr-399 — carries `agent/blocked`, the human-waiting label the main path excludes
+#                  in its `prsjson` selector. The edge now reads the same label off the same probe.
+#   source-blocked pr-400 — its `Fixes #19` source issue carries `agent/blocked`. The main path's
+#                  BLOCKED-SOURCE hold (2026-08-07: a human gate, re-judging its PR cannot move it).
+#   source-closed  pr-401 — its `Fixes #20` source issue carries a STALE `agent/blocked` on a
+#                  CLOSED issue. The main path reads the repo's OPEN issues (`openall`), so this is
+#                  not a hold there and must not become one here: the leg DISPATCHES, and the
+#                  ported predicate's OPEN conjunct is pinned by that dispatch.
+#
+# THE CONTRACT: both holds are the MAIN path's predicates, reached through the SAME shared helper
+# (`pr_blocked_on_check` — never a re-implementation of the marker grammar or its fail-closed
+# blocker-state reads) and the same label reads. A held leg ends at the read that decided it; the
+# absence of a dispatch IS the assertion. The two dispatching legs prove the holds self-release.
+name: unit-fast-path-blocked-on
+mode: actions
+source: agents/coordinator-scan.sh
+# Its composition reaches `agents/issue_body.py` — the ONE body parser is Python (ADR-113), so the
+# interpreter is DECLARED rather than discovered as a mystery red (hermeticity contract, move 6).
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - file:local-stubs.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=circles

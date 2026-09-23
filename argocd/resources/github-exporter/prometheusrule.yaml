@@ -411,7 +411,7 @@ spec:
             platform_machinery: "true"
           annotations:
             summary: "CI cannot dispatch: {{ $labels.runner }} runs queued {{ $value | humanizeDuration }}"
-            description: 'The oldest {{ $labels.runner }} workflow run in {{ $labels.owner }} has waited {{ $value | humanizeDuration }} for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+            description: 'The oldest {{ $labels.runner }} workflow run in {{ $labels.owner }} has waited {{ $value | humanizeDuration }} for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (the cap is maxRunners in argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
 
         # METERED usage only — the Team-plan seat license ($4/mo) is a subscription and never
         # shows in the usage API. Metered spend should stay $0 inside included usage (hosted
@@ -815,6 +815,37 @@ spec:
             unless on (project, role) (
               count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
             )
+        # ── FU-252: the management box's apply loop, standing-refusal detector ───────────────
+        # The box refuses an apply by posting a COMMIT STATUS on master (scripts/mgmt-apply.sh →
+        # mgmt_post_status). Until this alert NOTHING watched it: no mgmt_* series exists, nothing
+        # scrapes 192.168.2.53, and a status is not a check-run — so /commits/<sha>/check-runs
+        # reads green while master carries a failure (how a jail session called master green on
+        # 2026-09-18 with four days of refusal on HEAD).
+        #
+        # The condition is NOT liveness. Measured: the loop ran every five minutes and correctly
+        # refused from Sep 14 11:42Z to Sep 18, restating itself 1101 times, while the address
+        # count ratcheted 2 → 8 — a refusal does not stamp the baseline, so every later master
+        # commit joins its residue to the same pending apply and the human apply grows monotonically.
+        # A verdict + _last_run_timestamp alert stays GREEN through all of that, which is why this
+        # one reads the AGE of the oldest unapplied residue instead.
+        #
+        # 24h, not shorter: a refusal is the DESIGNED outcome for a non-allowlisted address, so it
+        # is normal for the hours between a merge and the operator's next session. A day of it is
+        # the thing nobody noticed for four.
+        # platform_machinery: a human applies this by construction (docs/management-box.md §The
+        # test surface) — the responder investigates, it never dispatches a fixer.
+        - alert: MgmtApplyResidueStanding
+          expr: |-
+            (github_mgmt_apply_refused == 1)
+              and on (repo, context)
+            (time() - max by (repo, context) (github_mgmt_apply_refused_since_timestamp)) > 86400
+          for: 1h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
+            description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
         - alert: AgentModelDrift
           expr: max by (project, role) (max_over_time(agent_model_drift[10m])) > 0
           for: 30m

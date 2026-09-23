@@ -100,7 +100,7 @@ deployment?" has a different answer per class, because homelab runs **three reco
 | 3 | **First-party images** (agent-base, agent-coordinator, arc-runner) | `agents/images.env`, `argocd/**`, `docker/arc-runner` | n/a — first-party | ✅ **yes, built** | The deploy-pin PR flow (ADR-084). Renovate deliberately never touches our own artifacts (git-sha is unorderable) |
 | 4 | **Helm charts, tofu-managed** — now only **cilium, longhorn, argo-cd** (metrics-server, kube-prometheus-stack, forgejo and garage all moved to class 1 on 2026-08-04 — the lever is complete, FU-136 archived) | `tofu/*.tf` | `terraform` (part of the 47) | ⚠ **plan only** | Merge deploys nothing until someone runs `tofu apply` from the jail. A path rule can open a **plan-report** PR comment; applying stays human. What remains is close to ADR-005's substrate — which is the point: "tofu = human-applied" becomes a coherent rule rather than a lump |
 | 5 | **Tofu providers** (bpg/proxmox ~0.107, cloudflare ~5.0, github ~6.0, infisical ~0.16) | `tofu/**/versions.tf` | `terraform` | ⚠ **plan only** | Same as 4. Note `~>` ranges mean the *lockfile* is the real pin |
-| 6 | **Cluster substrate** (Talos, Kubernetes v1.36.1, Cilium 1.19.1) | `tofu/variables.tf` defaults | `terraform` (weak) | ❌ **no, and must not** | A node-level rollout. ⚠ **Never `talosctl upgrade` a nocloud VM** (ADR-014) — bake the image and recreate. FU-033 gates any 1.14 move |
+| 6 | **Cluster substrate** (Talos, Kubernetes v1.36.1, Cilium 1.19.1) | `tofu/variables.tf` defaults | `terraform` (weak) | ❌ **no, and must not** | A node-level rollout. The installer must match (platform, schematic, version) or a node loses its identity or its extensions — **ADR-014 as amended 2026-09-18**, recipe in [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. FU-033 gates any 1.14 move; the class stays human-proposed until an automated rollout exists (operator, 2026-09-18 — ROADMAP G-D) |
 | 7 | **devbox/nix toolchain** (28 pkgs, all `@latest`) | `devbox.json` / `devbox.lock` | **disabled on purpose** | ❌ n/a | `@latest` is untrackable (it once proposed a 5-year-old gitleaks). Owned by the weekly `devbox-update.yaml` instead — see [`renovate.md`](renovate.md) §Gotchas |
 | 8 | **GitHub Actions** (16 deps, 7 files) | `.github/workflows/*` | `github-actions` | ✅ **self-deploying** | The next run uses the merged file. SHA-pinning is the Trivy mitigation — **and it is exactly what's stuck on the orphaned branch** |
 | 9 | **Ansible collections/roles** | `ansible/requirements.yml`, `collections/` | `ansible-galaxy` (1) | ❌ **no** | Merge deploys nothing; someone must run `scripts/opnsense-playbook.sh`. The FU-097 gap, sharpest here — this is the router |
@@ -327,7 +327,8 @@ This is where the three regimes diverge and where the design work is:
   today there is nowhere else that cron *can* run. (Or shrink the class instead: the ArgoCD lever
   above removes the need for the belt on everything it migrates.)
 - **Substrate (6)** — a deliberate, staged node rollout: one metal node first, `talosctl health`,
-  Longhorn rebuild-complete, then the rest. Never a nocloud VM in place (ADR-014).
+  Longhorn rebuild-complete, then the rest. VMs upgrade in place too since ADR-014's 2026-09-18
+  amendment, but only with the platform- and schematic-correct factory installer.
 - **Unreconciled (9)** — the FU-097 first deliverable. The candidate shape is already precedented:
   an **in-cluster ansible Job** (ArgoCD PostSync or CronWorkflow, creds via ESO), with a nightly
   `--check` diff → alert as the minimum belt even if apply stays manual. ⚠ For **OPNsense**

@@ -1,0 +1,378 @@
+# Behaviour fixture for the rollout differential (FU-273) — MgmtRolloutDifferential and the
+# mgmt-rollout recording rules, the rollout's ONE automatic halt.
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/mgmt-rollout.promtool-test
+#
+# Its own file (not mgmt-metrics.promtool-test) for the clock: "upgraded" means "the node's current
+# Talos version appeared within the 2-d horizon", so every case must run PAST 48 h for the old
+# version to read as older than the horizon — and 56 h of 1-min evaluations of a 2-d subquery is
+# needlessly slow (10-min evaluation: ~8 s for the file).
+#
+# The fleet: nodes a, b, c(, d) on Talos v1 since t=0. The canary `a` moves to v2 at 50 h and
+# reboots there; the others stay behind. The comparison may read it from 51h15m (75 min past the
+# change and the boot). 5-min input steps: index k is k × 5 min — 600 = 50 h, 618 = 51h30m.
+# Every guard is load-bearing here: loosening any one floor (containers, namespaces, nodes
+# behind), the settle window or the 2-d horizon fails at least one case (checked by mutation,
+# 2026-09-22).
+rule_files:
+  - mgmt-metrics.promtool-rules
+
+evaluation_interval: 10m
+
+tests:
+  # ── the halt: three containers in two namespaces keep restarting on the canary only ─────────────
+  - interval: 5m
+    name: "restarts on the settled canary, none behind: fires after 30 min"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="d",os_image="Talos (v1)",internal_ip="10.0.0.4"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'node_boot_time_seconds{instance="10.0.0.2:9100"}'
+        values: "0x672"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="b",namespace="x",pod="q1",uid="v1"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="q1",uid="v1",container="c"}'
+        values: "0x672"
+    alert_rule_test:
+      - eval_time: 51h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 52h            # true since ~51h35m — still pending
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 52h30m
+        alertname: MgmtRolloutDifferential
+        exp_alerts:
+          - exp_labels: { severity: warning, signal: container-restarts, side: upgraded }
+    promql_expr_test:
+      - expr: mgmt:node_rollout_upgraded:since
+        eval_time: 52h30m
+        exp_samples:
+          - labels: 'mgmt:node_rollout_upgraded:since{node="a",os_image="Talos (v2)"}'
+            value: 180000
+      - expr: count(mgmt:node_rollout_behind:since)
+        eval_time: 52h30m
+        exp_samples:
+          - labels: '{}'
+            value: 3
+
+  # ── flaky pods on the canary: below the floors (≥ 3 containers, ≥ 2 namespaces) ───────────────
+  # Each case is ABOVE the ratio (2 or 3 per node against 0 behind) — only its floor holds it.
+  - interval: 5m
+    name: "two crashlooping pods on the canary never halt the fleet (container floor)"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 55h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+  - interval: 5m
+    name: "one stack's pods (one namespace) restarting on the canary never halt the fleet (namespace floor)"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+
+  # ── the fleet is not split: nothing moved in the horizon, so there is no "upgraded" side ────────
+  - interval: 5m
+    name: "restarts on one node of an unsplit fleet are not a rollout differential"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+
+  # ── the rollout is complete: every node moved, nobody is behind to compare against ─────────────
+  - interval: 5m
+    name: "restarts after the whole fleet moved do not fire (no behind side)"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x580"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x580 1x91"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x590"
+      - series: 'kube_node_info{node="b",os_image="Talos (v2)",internal_ip="10.0.0.2"}'
+        values: "_x590 1x81"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="c",os_image="Talos (v2)",internal_ip="10.0.0.3"}'
+        values: "_x600 1x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+
+  # ── one node left behind is too few to compare against ─────────────────────────────────────────
+  - interval: 5m
+    name: "restarts on the upgraded side with a single node behind stay silent"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+
+  # ── the reboot transient: the upgrade restarts every DaemonSet pod on the canary ───────────────
+  # Five containers in three namespaces restart in the first 15 min after the upgrade — the
+  # PodSigkilled / NodeRebooted shape every upgrade produces. The canary is not compared until
+  # 75 min past its change and boot, by which time that burst has left the 1-h window.
+  - interval: 5m
+    name: "the upgrade's own restart burst is excluded — silent throughout"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="kube-system",pod="cilium-a",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="kube-system",pod="kube-proxy-a",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="longhorn-system",pod="longhorn-manager-a",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="longhorn-system",pod="engine-image-a",uid="u4"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="monitoring",pod="node-exporter-a",uid="u5"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="kube-system",pod="cilium-a",uid="u1",container="c"}'
+        values: "0x600 1 2 3x69"
+      - series: 'kube_pod_container_status_restarts_total{namespace="kube-system",pod="kube-proxy-a",uid="u2",container="c"}'
+        values: "0x600 1x70"
+      - series: 'kube_pod_container_status_restarts_total{namespace="longhorn-system",pod="longhorn-manager-a",uid="u3",container="c"}'
+        values: "0x601 1 2x68"
+      - series: 'kube_pod_container_status_restarts_total{namespace="longhorn-system",pod="engine-image-a",uid="u4",container="c"}'
+        values: "0x601 1x69"
+      - series: 'kube_pod_container_status_restarts_total{namespace="monitoring",pod="node-exporter-a",uid="u5",container="c"}'
+        values: "0x602 1x68"
+    alert_rule_test:
+      - eval_time: 50h45m
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 51h30m
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 52h30m
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 55h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+    promql_expr_test:
+      # while the burst is inside the 1-h window the canary is NOT on the compared side
+      - expr: mgmt:node_rollout_settled:since
+        eval_time: 50h45m
+        exp_samples: []
+      - expr: mgmt:rollout_signal:avg{signal="container-restarts",side="upgraded"}
+        eval_time: 52h30m
+        exp_samples:
+          - labels: 'mgmt:rollout_signal:avg{signal="container-restarts",side="upgraded"}'
+            value: 0
+
+  # ── pods that stop going Ready on the canary (the second signal) ───────────────────────────────
+  - interval: 5m
+    name: "two pods in two namespaces stuck not-Ready on the canary only: fires"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_status_phase{namespace="x",pod="p1",uid="u1",phase="Running"}'
+        values: "1x672"
+      - series: 'kube_pod_status_phase{namespace="y",pod="p2",uid="u2",phase="Running"}'
+        values: "1x672"
+      - series: 'kube_pod_status_ready{namespace="x",pod="p1",uid="u1",condition="false"}'
+        values: "0x618 1x53"
+      - series: 'kube_pod_status_ready{namespace="y",pod="p2",uid="u2",condition="false"}'
+        values: "0x618 1x53"
+    alert_rule_test:
+      - eval_time: 51h45m
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts:
+          - exp_labels: { severity: warning, signal: unready-pods, side: upgraded }
+
+  # ── a fleet-wide symptom is not a differential: the behind side suffers the same ──────────────
+  - interval: 5m
+    name: "the same restarts on every node, upgraded or not, stay silent"
+    input_series:
+      - series: 'kube_node_info{node="a",os_image="Talos (v1)",internal_ip="10.0.0.1"}'
+        values: "1x600"
+      - series: 'kube_node_info{node="a",os_image="Talos (v2)",internal_ip="10.0.0.1"}'
+        values: "_x600 1x71"
+      - series: 'kube_node_info{node="b",os_image="Talos (v1)",internal_ip="10.0.0.2"}'
+        values: "1x672"
+      - series: 'kube_node_info{node="c",os_image="Talos (v1)",internal_ip="10.0.0.3"}'
+        values: "1x672"
+      - series: 'node_boot_time_seconds{instance="10.0.0.1:9100"}'
+        values: "0x600 180000x71"
+      - series: 'kube_pod_info{node="a",namespace="x",pod="p1",uid="u1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p2",uid="u2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="a",namespace="y",pod="p3",uid="u3"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="b",namespace="x",pod="q1",uid="v1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="b",namespace="y",pod="q2",uid="v2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="b",namespace="y",pod="q3",uid="v3"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="c",namespace="x",pod="r1",uid="w1"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="c",namespace="y",pod="r2",uid="w2"}'
+        values: "1x672"
+      - series: 'kube_pod_info{node="c",namespace="y",pod="r3",uid="w3"}'
+        values: "1x672"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="p1",uid="u1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p2",uid="u2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="p3",uid="u3",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="q1",uid="v1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="q2",uid="v2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="q3",uid="v3",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="x",pod="r1",uid="w1",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="r2",uid="w2",container="c"}'
+        values: "0x618 1+1x53"
+      - series: 'kube_pod_container_status_restarts_total{namespace="y",pod="r3",uid="w3",container="c"}'
+        values: "0x618 1+1x53"
+    alert_rule_test:
+      - eval_time: 53h
+        alertname: MgmtRolloutDifferential
+        exp_alerts: []

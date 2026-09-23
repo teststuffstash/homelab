@@ -56,7 +56,14 @@ docker info >/dev/null 2>&1 || { echo "publicroute-tf-validate: FAIL — no reac
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 # ── the pins, each read from its one home ──────────────────────────────────────────────────────
-xp_version="v$(yq -r '.spec.source.targetRevision' argocd/platform/crossplane.yaml)"
+xp_ver_raw="$(yq -r '.spec.source.targetRevision' argocd/platform/crossplane.yaml)"
+xp_version="v${xp_ver_raw}"
+# By DIGEST, not the floating tag above (homelab#1739): a tag pull always revalidates live
+# against docker.io (mutable by definition) with no bounded mirror timeout, which intermittently
+# hung/timed out the render's 3m budget. Digest pulls are content-addressed — pure LAN-mirror
+# cache serve, no live check. Keyed by version so a bump with no matching annotation fails loud.
+xp_digest="$(yq -r ".metadata.annotations[\"crossplane.io/engine-image-digest.${xp_ver_raw}\"]" argocd/platform/crossplane.yaml)"
+[ -n "$xp_digest" ] && [ "$xp_digest" != "null" ] || { echo "publicroute-tf-validate: FAIL — no crossplane.io/engine-image-digest.${xp_ver_raw} annotation in argocd/platform/crossplane.yaml (homelab#1739 — the render must pull the crossplane engine by digest, never a floating tag). Resolve: crane digest docker.io/crossplane/crossplane:${xp_version}, add it as that annotation." >&2; exit 1; }
 cf_pin="$(yq -r '.spec.configuration' "$PROVIDERCONFIG" | awk '/cloudflare = \{/,/\}/' | sed -n 's/.*version *= *"\([^"]*\)".*/\1/p')"
 [ -n "$cf_pin" ] || { echo "publicroute-tf-validate: FAIL — no cloudflare provider version pin in $PROVIDERCONFIG (required_providers.cloudflare.version)" >&2; exit 1; }
 # the nix-packaged provider (devbox profile) — must be the SAME version the cluster pins, or the
@@ -92,7 +99,7 @@ export TF_CLI_CONFIG_FILE="$work/tofu.rc" TF_IN_AUTOMATION=1
 
 render() { # <xr-file> <out-file>
   crossplane composition render "$1" "$COMPOSITION" "$work/functions.yaml" \
-    --xrd "$XRD" --crossplane-image "docker.io/crossplane/crossplane:${xp_version}" \
+    --xrd "$XRD" --crossplane-image "docker.io/crossplane/crossplane@${xp_digest}" \
     --timeout 3m > "$2" 2> "$2.err"
 }
 

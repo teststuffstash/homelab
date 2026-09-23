@@ -37,6 +37,6 @@ spec:
               place before deleting it — header of argocd/resources/registry/prometheusrule.yaml).
               Below that the pusher gets an opaque 500 at the last byte after the whole upload
               (2026-09-09, 51 min). Either the stack untags what it no longer serves and the
-              registry-garbage-collect CronJob (Sun 03:00Z; ad-hoc recipe in docs/runbook.md
+              registry-garbage-collect CronJob (daily 03:00Z; ad-hoc recipe in docs/runbook.md
               §Registry) reclaims it, or the cap in garage-workspace.yaml grows — check
               `garage stats` DataAvail per zone first, every zone holds a full copy at rf=3.

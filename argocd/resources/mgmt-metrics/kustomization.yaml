@@ -1,0 +1,11 @@
+# mgmt-metrics — the management box (thinkcentre, 192.168.2.53) as a scrape target + the belts on
+# its loops (FU-252). The box is out of the cluster, so this is a static ScrapeConfig, the
+# hypervisors' pattern (argocd/resources/pve-metrics/), on its own job so no pve rule reads it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - scrapeconfig.yaml
+  - prometheusrule.yaml
+  - reconcile-rollout.yaml   # the fleet rollout's own belts (FU-273) — a file of its own

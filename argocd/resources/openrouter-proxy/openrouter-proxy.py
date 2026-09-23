@@ -28,7 +28,7 @@ ADR-096 phases.
 homelab#158: the OpenRouter leg has an ACCOUNT-scope capacity latch beside the FU-088(a) subscription
 one (see the `_or_capacity_*` block). It is what makes "the provider is down" a *typed* /route
 defer (`or-capacity-down:*`) instead of one more silent deferral — the launcher degrades a
-class=fix ride to the haiku subscription rail on it (docs/agents/model-routing.md §M12).
+class=fix ride to the haiku subscription rail on it (docs/spikes/model-routing-history.md §M12).
 
 Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter pattern).
 """
@@ -1856,7 +1856,7 @@ def _headroom_loop() -> None:
 #   ACCOUNT capacity down   → `or-capacity-down:<what>` — an INFRA failure, no different in kind
 #                             from a 5xx. Typed so the launcher may DEGRADE a class=fix ride to
 #                             the haiku subscription rail instead of deferring the fleet
-#                             (agents/agent-session.sh, docs/agents/model-routing.md §M12).
+#                             (agents/agent-session.sh, docs/spikes/model-routing-history.md §M12).
 # Three inputs, all account-scope, all from data this proxy already holds:
 #   credit   — the account balance under OPENROUTER_MIN_CREDIT (the same floor the launcher's
 #              FU-088(b) gate uses). This is what 2026-08-08 actually looked like. Its SOURCE is
@@ -3437,7 +3437,7 @@ class Proxy(BaseHTTPRequestHandler):
             # THE M11 SHADOW LINE (homelab#159) — what the cross-rail ladder WOULD have picked,
             # beside what was actually served. Nothing acts on it: this line, the shadow_decisions
             # table and the router_shadow_* series ARE the deliverable, and the P4 flip happens
-            # only after a soak review reads them (docs/agents/model-routing.md §M11).
+            # only after a soak review reads them (docs/spikes/model-routing-history.md §M11).
             sh = decision.get("shadow") or {}
             if sh:
                 # FU-127: the shadow line carries its own resolved object (computed from the

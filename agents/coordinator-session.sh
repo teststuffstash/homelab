@@ -77,7 +77,7 @@ done
 # (route consulted, fail-OPEN if the proxy is unreachable); an explicit operator --model is an
 # OVERRIDE (route skipped). GOAL_MODEL env survives as the explicit escape hatch for
 # goal-decompose items (deleted in the sweep).
-# Override-rule home: docs/agents/model-routing.md §M10.
+# Override-rule home: docs/spikes/model-routing-history.md §M10.
 RESOLVE_CLASS=""
 if [ -n "$ITEM" ]; then
   # Parse the clause from --item to set the routing class:
@@ -243,6 +243,20 @@ BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the st
 # defaultMode does NOT — anthropics/claude-code#52501). Pass `--permission-mode default` for a
 # supervised session. (rm -rf / and ~ still trip hard circuit breakers; deny rules + hooks still
 # apply, regardless of mode.)
+# opencode-go/* ids are UNKNOWN to the claude CLI: it assumes a 200k context window and
+# auto-compacts a 1M-window model ~5x early (warning observed on a Go-rail coordinator tick,
+# oracle-fleet PR#632 pod, 2026-09-18 — the same #523 class agent-session.sh fixed for worker
+# rides on 2026-08-18, never carried to this launcher). Emit the harness's own remedy for unknown
+# ids — CLAUDE_CODE_MAX_CONTEXT_TOKENS — as a command prefix. The `[1m]`-suffix alternative the
+# warning itself suggests is RULED OUT here: the shim strips only the `opencode-go/` prefix and
+# forwards the REST verbatim as the upstream model id (scripts/claude-model-shim.py), so a
+# suffixed id would 400 at the rail. An unmapped Go model emits NOTHING — the harness's
+# conservative default, never another model's window (qwen3.7-plus's real window is unprobed,
+# docs/spikes/opencode-model-matrix.md §Cross-cutting quirks).
+# ⚠ Window table DUPLICATED from agents/agent-session.sh (rationale for the copies at its
+# harness-run-cmd clause: replay clauses run self-contained).
+case "${MODEL:-}" in opencode-go/deepseek-v4-flash) GO_CTX_ENV="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) GO_CTX_ENV="";; esac
+
 COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permission-mode ${PERM_MODE}"
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
@@ -374,23 +388,38 @@ SNIP
     WRAPPED="CS_SESSION_START=\$(date -u +%s); ${PREP}
 ${UPLOAD_FN}
 ${DETACH_FN}
-set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
+set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
   else
     WRAPPED="${PREP}
 ${UPLOAD_FN}
-set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
+set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
   fi
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
 fi
 
+# >>>REPLAY:coordinator-rail-gate>>>
 # FU-088(a): defer the tick while the subscription is 429-latched — the cron re-fires; a spawn
 # now would just die on the same limit. Fail-open from the jail (proxy unreachable = proceed).
-if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh"; then
-  echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
-  exit 0
-fi
+# homelab#439 leg 3 (2026-09-18): a GO-RAIL session is not gated by the Anthropic latch — it does
+# not draw that window at all, and gating it there is what kept the coordinator deferring while
+# every other role had already failed over. The scan picked the rail seconds ago
+# (coordinator-scan.sh `coordinator_rail`) and handed it down as --model, so re-probing here would
+# only re-ask a question already answered. A manual/jail run with an explicit Go --model takes the
+# same branch, deliberately.
+case "${MODEL:-}" in
+  opencode-go/*)
+    echo "→ coordinator tick on the Go rail (${MODEL}) — the Anthropic FU-088 latch does not gate it"
+    ;;
+  *)
+    if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh"; then
+      echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
+      exit 0
+    fi
+    ;;
+esac
+# <<<REPLAY:coordinator-rail-gate<<<
 
 # ── DISPATCH PHASE TIMINGS — the coordinator's own two rows (FU-160, homelab#319) ───────────────
 # The other half of `agent_dispatch_phase_seconds`; the design note (own metric name, per-stack
@@ -472,13 +501,26 @@ if [ -n "$ITEM" ]; then
 else
   CREATE_CMD="apply"
 fi
+# >>>REPLAY:coordinator-rail-label>>>
+# A coordinator served from the Go rail draws the OPENCODE windows, not the Anthropic
+# subscription — so it must NOT carry the FU-088 semaphore's label (that selector counts
+# Anthropic slots, agents/subscription-latch.sh) and MUST carry the rail label the Go
+# semaphore counts (OPENCODE_MAX_RUNNING, openrouter-proxy.py GO_SESSION_SELECTOR). Same
+# inversion the reviewer's pod template shipped until 2026-09-17 (reviewer-rail-label): the
+# failover fires precisely BECAUSE the Anthropic window is latched, so a mislabelled ride
+# consumes the slot it was meant to free — and is invisible to the Go bound.
+case "${MODEL:-}" in
+  opencode-go/*) COORD_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+  *)             COORD_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
+esac
+# <<<REPLAY:coordinator-rail-label<<<
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" "$CREATE_CMD" -f - \
   || { echo "PREFLIGHT REFUSED (atomic): ${CREATE_CMD} of ${POD} failed — a racing dispatcher won the (repo, item) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-coordinator, "homelab.teststuff.net/subscription-session": claude }
+  labels: { app: agent-coordinator${COORD_RAIL_LABEL} }
 spec:
   restartPolicy: Never
   # This is a BARE pod — no Job, no controller, no owner. Without a deadline a wedge at any phase
@@ -675,7 +717,7 @@ else
   # attach is a separate exec that can outrun the clone). Poll for the brief file so we never attach
   # `claude --append-system-prompt-file ${BRIEF}` before the clone has written it.
   "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "until [ -f ${BRIEF_PATH} ]; do sleep 0.5; done" 2>/dev/null || true
-  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO} 2>/dev/null || cd /work/homelab; exec claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO} 2>/dev/null || cd /work/homelab; exec ${GO_CTX_ENV:+env ${GO_CTX_ENV}}claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
   echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL}${SEED:+; seeded})."
   if [ -n "$NO_ATTACH" ]; then
     echo "→ attach the interactive coordinator from a real terminal:"
@@ -683,6 +725,6 @@ else
     echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
   else
     echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
-    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"' 2>/dev/null || cd /work/homelab; exec claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"' 2>/dev/null || cd /work/homelab; exec '"${GO_CTX_ENV:+env ${GO_CTX_ENV}}"'claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
   fi
 fi

@@ -1,0 +1,5 @@
+OUT REACHED: ladder
+OUT   capacity: BOTH rails limited (FU-088) — no dispatch this pass (level-triggered; next scan re-checks).
+OUT REACHED: end
+ERR both rails latched (Anthropic: 429/utilization, Go: limited)
+RC 0

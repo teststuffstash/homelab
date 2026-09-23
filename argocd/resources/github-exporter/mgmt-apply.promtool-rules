@@ -1,0 +1,27 @@
+# MgmtApplyResidueStanding, lifted VERBATIM out of prometheusrule.yaml — the rules file that
+# mgmt-apply.promtool-test loads. Not a manifest and not applied to anything: `promtool test rules`
+# needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under `.spec`.
+# Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY *.yaml
+# under argocd/resources and a non-manifest there would fail it.
+#
+# THE COPY CANNOT DRIFT SILENTLY: `devbox run exporter-self-test` reads the alert out of both files
+# and asserts expr/for/labels/annotations are identical.
+#
+# Regenerate after editing the alert in prometheusrule.yaml:
+#   yq '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "MgmtApplyResidueStanding")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+groups:
+  - name: github
+    rules:
+      - alert: MgmtApplyResidueStanding
+        expr: |-
+          (github_mgmt_apply_refused == 1)
+            and on (repo, context)
+          (time() - max by (repo, context) (github_mgmt_apply_refused_since_timestamp)) > 86400
+        for: 1h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
+          description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'

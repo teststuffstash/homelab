@@ -284,7 +284,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
 fi
 
 # ── homelab#158: an OpenRouter capacity outage DEGRADES to the haiku subscription rail ────────────────
-# (Operator directive, 2026-08-08; the reasoning and the doctrine amendment: model-routing.md §M12.)
+# (Operator directive, 2026-08-08; the reasoning and the doctrine amendment: model-routing-history.md §M12.)
 #
 # The evening it comes from: OpenRouter went hard-down for workers (provisioning keys-modify daily
 # limit + a $0.17 balance) and the ENTIRE fleet's dispatch deferred for hours, while the
@@ -643,10 +643,99 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # Absent = no MCP attached; the env card and the harness attach flag are gated on this being non-empty.
     MCP_ENDPOINT="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.endpoint] | first // empty' 2>/dev/null)"
     MCP_TOOLS="$(printf '%s' "$claims_json" | jq -rc --arg p "$PROJECT" '[.items[] | select(any(.spec.repos[]; .name == $p)) | .spec.mcp.tools] | first // empty' 2>/dev/null)"
+    # ADR-135: the repo's fixer.imageVolumes from the SAME claim read — resolved (validated +
+    # probed) by resolve_image_volumes below, before the env card renders.
+    IV_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .fixer.imageVolumes // []] | first // []' 2>/dev/null)" || { IV_CLAIM_JSON="[]"; echo "WARN: could not read fixer.imageVolumes off the claims (a malformed sibling AgentStack?) — no image volumes this ride (ADR-135)" >&2; }
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
 fi
+# >>>REPLAY:image-volumes>>>
+# ADR-135 — fixer.imageVolumes: stack-owned OCI artifacts mounted READ-ONLY into the ride as native
+# k8s image volumes (the FU-096 mechanism as a claim knob; first consumer the oracle served corpus,
+# homelab#1807). Three rules, all here because the XRD pattern is only the FIRST fence — a claim
+# applied before the schema tightened, or a hand-passed IV_CLAIM_JSON, must meet the same one:
+#   1. DIGEST-PINNED + registry allow-list (the LAN registry, the org's ghcr namespace) — a claim
+#      cannot mount an arbitrary image into a ride;
+#   2. mountPath under /corpus|/data|/mnt, no dot-led segment (`/mnt/../work` is a traversal, not a
+#      sub-directory), no path nested in another entry's — never a path the ride lives on;
+#   3. PROBE-THEN-MOUNT (FU-096's rule): an unpullable reference would fail the WHOLE pod at image
+#      pull, so a manifest the registry does not serve anonymously degrades LOUDLY to an unmounted
+#      ride. Anonymous is the auth the kubelet pull uses (no imagePullSecrets on ride pods).
+# Outputs: IV_MOUNT / IV_VOLUME (pod-manifest fragments, the SC_MOUNT shape) and IV_CARD (env-card
+# lines — what IS mounted, and what was declared but is NOT, so a ride never guesses).
+IV_ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json'
+iv_probe() {  # <registry-host> <repo-path> <sha256:digest> → rc 0 iff the manifest is anonymously served
+  # EXACTLY 200: `curl -f` alone passes a 3xx, and the registry 301s a path containerd would
+  # reject (`a//b`) — a probe that says yes to what the kubelet cannot pull is the wedge itself.
+  local host="$1" repo="$2" dig="$3" tok="" code=""
+  if [ "$host" = "ghcr.io" ]; then
+    tok="$(curl -fsS --max-time 5 "https://ghcr.io/token?scope=repository:${repo}:pull" 2>/dev/null | jq -r '.token // empty')" || tok=""
+    [ -n "$tok" ] || return 1
+    code="$(curl -sSI --max-time 5 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" -H "Accept: $IV_ACCEPT" "https://ghcr.io/v2/${repo}/manifests/${dig}" 2>/dev/null)" || code=""
+  else
+    code="$(curl -sSI --max-time 5 -o /dev/null -w '%{http_code}' -H "Accept: $IV_ACCEPT" "https://${host}/v2/${repo}/manifests/${dig}" 2>/dev/null)" || code=""
+  fi
+  [ "$code" = "200" ]
+}
+resolve_image_volumes() {
+  IV_MOUNT=""; IV_VOLUME=""; IV_CARD=""
+  local rows name ref mp host repo dig seen_names=" " seen_paths="" p clash US
+  US="$(printf '\037')"   # unit separator: NOT IFS whitespace, so an empty field stays a field
+  # Every field is coerced to a string HERE — one object-valued field must refuse ONE entry, not
+  # make `@tsv`-style rendering fail and silently drop the whole list.
+  if ! rows="$(printf '%s' "${IV_CLAIM_JSON:-[]}" | jq -r '(if type=="array" then . else [] end)[] | [(.name, .reference, .mountPath) | if type=="string" then gsub("[\u001f\n\r]";" ") else "" end] | join("\u001f")' 2>/dev/null)"; then
+    echo "WARN: fixer.imageVolumes is unreadable (not a JSON list of objects) — ride continues with NO image volumes (ADR-135)" >&2
+    IV_CARD="- **Data volumes: the claim's \`fixer.imageVolumes\` was unreadable at launch — none mounted.** Say so if the task needed one."$'\n'
+    return 0
+  fi
+  [ -n "$rows" ] || return 0
+  while IFS="$US" read -r name ref mp; do
+    if ! printf '%s' "$name" | grep -Eq '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$' \
+       || ! printf '%s' "$ref" | grep -Eq '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$' \
+       || ! printf '%s' "$mp" | grep -Eq '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'; then
+      # The refused entry's text is UNVALIDATED claim input headed for two prompts (this log is
+      # read by the dispatching session, the card by the ride) — only its [a-z0-9-] residue leaves.
+      name="$(printf '%s' "$name" | tr -cd 'a-z0-9-' | cut -c1-32)"; [ -n "$name" ] || name="unnamed"
+      echo "WARN: image volume '${name}' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it" >&2
+      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it."$'\n'
+      continue
+    fi
+    # One name, one path, and no path inside another — for EVERY fenced entry, mounted or not, so
+    # a duplicate of an entry whose probe failed cannot mount under its name and contradict its line.
+    clash=""
+    case "$seen_names" in *" $name "*) clash="name";; esac
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      case "$mp/" in "$p/"*) clash="${clash:-path}";; esac
+      case "$p/" in "$mp/"*) clash="${clash:-path}";; esac
+    done <<EOF_IVP
+$seen_paths
+EOF_IVP
+    if [ -n "$clash" ]; then
+      echo "WARN: image volume '${name}' at ${mp} REFUSED — duplicate ${clash} (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry" >&2
+      IV_CARD="${IV_CARD}- **A second claim entry (\`${name}\` at \`${mp}\`) was IGNORED** — its ${clash} collides with an earlier entry. Only the earlier entry's line above describes what is mounted."$'\n'
+      continue
+    fi
+    seen_names="${seen_names}${name} "; seen_paths="${seen_paths}${mp}"$'\n'
+    host="${ref%%/*}"; repo="${ref#*/}"; repo="${repo%@*}"; dig="${ref##*@}"
+    if iv_probe "$host" "$repo" "$dig"; then
+      echo "→ image volume ${name}: mounting ${ref} at ${mp} (read-only, ADR-135)"
+      IV_MOUNT="${IV_MOUNT}"$'\n'"        - { name: iv-${name}, mountPath: ${mp}, readOnly: true }"
+      IV_VOLUME="${IV_VOLUME}"$'\n'"    - name: iv-${name}"$'\n'"      image: { reference: \"${ref}\", pullPolicy: IfNotPresent }"
+      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: mounted READ-ONLY at \`${mp}\`** (OCI image \`${ref}\`). It is the stack's published artifact, not a checkout — never try to write there; list it (\`ls -R ${mp}\`) to find the files. For a SQLite file open it immutable: \`sqlite3.connect(\"file:<path>?immutable=1\", uri=True)\`."$'\n'
+    else
+      echo "WARN: image volume '${name}' NOT mounted — ${ref} is not anonymously served (HTTP 200) by its registry (dangling digest? private package?); cold ride without it (ADR-135 probe-then-mount)" >&2
+      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the registry did not serve its digest at launch). Do not look for \`${mp}\`; say so if the task needed it."$'\n'
+    fi
+  done <<EOF_IV
+$rows
+EOF_IV
+}
+# <<<REPLAY:image-volumes<<<
+IV_MOUNT=""; IV_VOLUME=""; IV_CARD=""
+resolve_image_volumes
+
 # >>>REPLAY:harness-enforce-default>>>
 # homelab#990 DURABLE WORKAROUND (operator, 2026-08-26): opencode's SDK-init fetches
 # (models.opencode.ai / registry.npmjs.org — no kill knob on the pinned build, the L1812 block)
@@ -801,6 +890,8 @@ render_env_card() {
   # Both lines are gated on the MCP knob being present AND the harness actually attaching the
   # config (no MCP = no feedback tool to direct). All three harnesses (claude, goose, opencode)
   # now attach MCP (#1276), so the card claims the tool is available on any harness with the knob.
+  # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
+  [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
     printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
@@ -1823,7 +1914,7 @@ fi
 # standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
 # to prevent). The per-op proxy fetch TokenReviews the pod's SA (GIT_TOKEN_REQUIRE_AUTH=1).
 
-# FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
+# FU-018 interim leg (FU-062 / model-routing-history.md §M4, OPENCODE ONLY): the prompt cache lives at the
 # provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
 # effective-cheapest cache-supporting tools-capable provider. Rendered as a per-session opencode
 # config (OPENCODE_CONFIG merges under the repo's own opencode.json, so a project override wins);
@@ -2245,7 +2336,7 @@ if [ "$HARNESS" = "claude" ]; then
           *)
             # CAPACITY: a window is latched (the monthly reset is ~25 days out) or homelab#600's
             # observed-429/402 fired — deferring parks every Go-primary dispatch for the whole
-            # window. REROUTE through the M12 degrade path (docs/agents/model-routing.md §M12)
+            # window. REROUTE through the M12 degrade path (docs/spikes/model-routing-history.md §M12)
             # instead, with the SAME bounds. ⚠ This is a FAITHFUL DUPLICATION of the rail-degrade
             # block's bounds (:404-438) — the replay ratchet extracts the two sentinels
             # independently, so a shared helper defined in one block is invisible to the other's
@@ -2644,8 +2735,8 @@ ${CLAUDE_ENV}
       resources:
         requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${PF_CM_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${PF_CM_VOLUME}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}
 EOF
 
 PF_POD_CREATED="1"
@@ -2832,7 +2923,7 @@ if [ -n "$RUN_CMD" ]; then
   # <<<REPLAY:post-merge-push<<<
 
   # >>>REPLAY:strike-scope>>>
-  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates with a
+  # STRIKE BOOKKEEPING (FU-062, docs/spikes/model-routing-history.md §M1): a run that terminates with a
   # harness death is an infra strike candidate — classify it and post ONE structured comment to the ISSUE.
   # That comment IS the strike store: state lives in GitHub, and the coordinator greps `AGENT_STRIKE:`
   # in issue comments to blacklist the model for this task and pick the next chain entry. Keep the first

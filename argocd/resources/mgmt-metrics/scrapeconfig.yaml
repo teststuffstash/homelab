@@ -1,0 +1,19 @@
+# The management box's node_exporter (nixos/hosts/mgmt/default.nix, FU-252) — node metrics plus
+# the textfile the apply loop writes (mgmt_apply_*). A static LAN target like pve-node, but its
+# OWN job: pve-metrics' rules select job="pve-node" (PveHostMemoryLow would read this box as a
+# hypervisor). `release` label: the chart's scrapeConfigSelector (see pve-metrics/scrapeconfig.yaml).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: mgmt-node
+  namespace: monitoring
+  labels:
+    app: mgmt-metrics
+    release: kube-prometheus-stack
+spec:
+  jobName: mgmt-node
+  scrapeInterval: 60s
+  metricsPath: /metrics
+  staticConfigs:
+    - targets: ["192.168.2.53:9100"]
+      labels: { host: mgmt }

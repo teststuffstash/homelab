@@ -94,6 +94,104 @@ head_still() {
 }
 human_stamp=""
 
+# install_impact <plan-out> <sha> → appends the install-impact section to $bodyf and sets
+# $impact_desc (the status-description suffix). ADR-132 §MB4 layer 2, docs/management-box.md §MB3
+# "The install-impact line": the class `tofu plan` cannot see — Talos honours schematic, install
+# disk, the EPHEMERAL VolumeConfig and machine_type only on the next install, so a head changing
+# them plans as a clean in-place config apply. Declared at the head (node_install_targets' AFTER)
+# vs the applied declaration (its BEFORE) names the nodes this head moves; for those, the head's
+# declaration is then diffed against LIVE by mgmt-probe.sh's own check_nodes (NODE_TARGETS_JSON),
+# so a head that only codifies what already runs costs no window. Node + field NAMES leave the
+# box, never values (the #1635 rule — the schematic ids and disk selectors stay in the journal).
+impact_desc=""
+install_impact() {
+  local out="$1" sha="$2" rows node kind fields unk nodes=() drift="" line w win reinstall=0 upgrade=0 install=0 gone=0 codified=0
+  local -a lines=() headline=()
+  impact_desc=""
+  if ! rows="$(mgmt_install_impact "$out")"; then
+    { echo; echo "**Install impact: UNREADABLE** — this plan carries no \`node_install_targets\` output, so the install-time diff (schematic, install disk, EPHEMERAL, role) was not computed. Read the head's \`machines/machines.yaml\` / \`image.tf\` changes by hand."; } >>"$bodyf"
+    impact_desc=" · install: UNREADABLE"; return 0
+  fi
+  if [ -z "$rows" ]; then
+    { echo; echo "**Install impact: none** — no node's install-time declaration (schematic, installer, version, install disk, EPHEMERAL, role) changes at this head."; } >>"$bodyf"
+    return 0
+  fi
+  if [ "$rows" = "$(printf '*\tunknown\t\t')" ]; then
+    { echo; echo "**Install impact: UNKNOWN until apply** — the whole \`node_install_targets\` output is computed at apply time on this head; every node may move. Read the plan by hand."; } >>"$bodyf"
+    impact_desc=" · install: UNKNOWN"; return 0
+  fi
+  while IFS=$'\t' read -r node kind fields unk; do [ "$kind" = changed ] && nodes+=("$node"); done <<<"$rows"
+  # the live half: only the changed nodes, only their fully-known head values
+  if [ ${#nodes[@]} -gt 0 ]; then
+    local tj dj; tj="$(mktemp)"; dj="$(mktemp)"
+    if mgmt_install_after "$out" "${nodes[@]}" >"$tj" 2>/dev/null && [ "$(jq 'length' "$tj" 2>/dev/null || echo 0)" -gt 0 ]; then
+      SKIP="tofu talos ansible creds" DRY_RUN=1 NODE_TARGETS_JSON="$tj" NODE_DRIFT_OUT="$dj" \
+        bash "$REPO/scripts/mgmt-probe.sh" >"$out.live.log" 2>&1 || true
+      drift="$(cat "$dj" 2>/dev/null)"
+    fi
+    rm -f "$tj" "$dj"
+  fi
+  # live_axis <node> <axis> → ok | drift | unread
+  live_axis() { local v; v="$(awk -F'\t' -v k="$1 $2" '$1==k{print $2; exit}' <<<"$drift")"; printf '%s' "${v:-unread}"; }
+  while IFS=$'\t' read -r node kind fields unk; do
+    [ -n "$node" ] || continue
+    case "$kind" in
+      new)  install=$((install+1)); lines+=("| \`$node\` | new node | — | install |"); headline+=("$node (new)") ;;
+      gone) gone=$((gone+1));       lines+=("| \`$node\` | leaves the declaration | — | none (the plan's destroys, above) |") ;;
+      changed)
+        w=upgrade; live=""
+        case ", $fields," in *", install disk,"*|*", EPHEMERAL,"*|*", role,"*) w=reinstall ;; esac
+        if [ "$w" = upgrade ]; then
+          # schematic/version are the axes check_nodes compares; an installer-only change (the
+          # platform half) has no live reader here and always counts as a window
+          local sv=() a lv allok=1 anyunread=0
+          case ", $fields," in *", schematic,"*) sv+=(schematic) ;; esac
+          case ", $fields," in *", version,"*) sv+=(version) ;; esac
+          [ ${#sv[@]} -gt 0 ] || allok=0   # installer alone: no live reader for the platform half
+          for a in "${sv[@]}"; do
+            case ", $unk," in *", $a,"*) allok=0; anyunread=1; continue ;; esac
+            lv="$(live_axis "$node" "$a")"
+            [ "$lv" = ok ] || allok=0; [ "$lv" = unread ] && anyunread=1
+          done
+          if [ ${#sv[@]} = 0 ]; then live="not compared (installer/platform)"
+          elif [ $allok = 1 ]; then w="none — live already runs it"; live="matches the head"
+          elif [ $anyunread = 1 ]; then live="not read"
+          else live="differs"; fi
+        else
+          live="not compared (install-time layout)"
+        fi
+        [ -n "$unk" ] && fields="$fields (known after apply: $unk)"
+        case "$w" in
+          reinstall) reinstall=$((reinstall+1)); headline+=("$node ($fields)") ;;
+          upgrade)   upgrade=$((upgrade+1));     headline+=("$node ($fields)") ;;
+          *)         codified=$((codified+1)) ;;
+        esac
+        lines+=("| \`$node\` | $fields | $live | $w |") ;;
+    esac
+  done <<<"$rows"
+  win=$((reinstall+upgrade+install))
+  local parts=() num
+  [ $reinstall -gt 0 ] && parts+=("$reinstall reinstall"); [ $upgrade -gt 0 ] && parts+=("$upgrade upgrade"); [ $install -gt 0 ] && parts+=("$install install")
+  num="$(printf '%s + ' "${parts[@]}" | sed 's/ + $//')"; [ "$num" = "1 reinstall" ] && num="one reinstall"; [ "$num" = "1 upgrade" ] && num="one upgrade"; [ "$num" = "1 install" ] && num="one install"
+  {
+    echo
+    if [ $win -gt 0 ]; then
+      w=windows; [ $win = 1 ] && w=window
+      echo "**Install impact — this head changes the install of $(printf '%s, ' "${headline[@]}" | sed 's/, $//') → $num $w.**"
+    else
+      echo "**Install impact: no window** — the install declaration moves, but live already matches it (or the nodes only leave the declaration)."
+    fi
+    echo
+    echo "\`tofu plan\` cannot see this class (Talos applies install-time fields only on the next install — ADR-132). Before = the applied declaration, after = this head; the live column is the head vs the running node (\`mgmt-probe.sh\` check_nodes). Node and field names only — values stay on the box."
+    echo; echo "| node | install-time change | live | window |"; echo "|---|---|---|---|"
+    printf '%s\n' "${lines[@]}"
+  } >>"$bodyf"
+  if [ $win -gt 0 ]; then
+    if [ ${#headline[@]} = 1 ]; then impact_desc=" · install: ${headline[0]%% (*} $( [ $reinstall = 1 ] && echo reinstall || { [ $upgrade = 1 ] && echo upgrade || echo install; })"
+    else impact_desc=" · install: $win windows"; fi
+  fi
+}
+
 while IFS=$'\t' read -r pr sha; do
   [ -n "$pr" ] || continue
   if [ $HUMAN = 0 ] && verdicted "$sha"; then continue; fi
@@ -172,11 +270,17 @@ while IFS=$'\t' read -r pr sha; do
       { echo; echo "### \`$root\` — plan SUMMARY failed (the plan ran; its summary did not — see the box journal)"; } >>"$bodyf"
       log "[#$pr] $root plan summary failed"; continue
     fi
-    if [ $rc = 2 ] && [ -z "$changes" ]; then   # the plan says "changes", the summary says none — never trust the zero
+    # OUTPUT-ONLY plans are rc=2 with zero resource changes and are NOT inconsistent (#1774, the
+    # `node_install_targets` output): a new `output` block changes state, not infrastructure. The
+    # inconsistency is rc=2 with NEITHER — that is still the silent zero #1629 ruled on.
+    outs="$(mgmt_plan_outputs "$out")"; o=0; [ -n "$outs" ] && o=$(grep -c . <<<"$outs")
+    op=s; [ "$o" = 1 ] && op=""
+    if [ $rc = 2 ] && [ -z "$changes" ] && [ -z "$outs" ]; then   # the plan says "changes", the summary says none — never trust the zero
       state=failure; failed_roots="$failed_roots $root"
       { echo; echo "### \`$root\` — INCONSISTENT: plan exit 2 (changes) but an empty summary — see the box journal"; } >>"$bodyf"
       log "[#$pr] $root inconsistent: plan rc=2, summary empty"; continue
     fi
+    os=""; oh=""; [ "$o" -gt 0 ] && { os=" ⇢$o output$op"; oh=", $o output value$op to save"; }
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
     excl_n=0; excl_types=""
     notplanned="$(mgmt_plan_not_planned "$out")"
@@ -186,17 +290,22 @@ while IFS=$'\t' read -r pr sha; do
       excl_types="$(sed -E 's/^((data\.)?[^.]+)\..*/\1/' <<<"$notplanned" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
     fi
     excl_note=""; [ "$excl_n" -gt 0 ] && excl_note=" ($excl_n not planned)"
-    desc="$desc$root: +$a ~$c -$d ${rs}${excl_note} "
-    { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}"
+    desc="$desc$root: +$a ~$c -$d ${rs}${os}${excl_note} "
+    { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}${oh}"
       if [ "$excl_n" -gt 0 ]; then
         note="$(mgmt_root_exclude_note "$POL" "$root")" || note="(reason unreadable this run)"
         echo; echo "⚠ **Not planned on the box** (policy \`plan_exclude_types\`${note:+ — $note}): $excl_types."
       fi
-      if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"; else echo; echo "No changes."; fi
+      if [ -n "$changes" ]; then echo; echo "| address | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$changes"
+      elif [ -n "$outs" ]; then echo; echo "No resource changes."
+      else echo; echo "No changes."; fi
+      # output NAMES and actions, never values (the #1635 rule: a value is an existence oracle)
+      if [ -n "$outs" ]; then echo; echo "| output | actions |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | %s |\n", $1, $2}' <<<"$outs"; fi
       echo
       ap="$(mgmt_root_apply "$POL" "$root")" || ap=unknown   # a failed read must not print "plan only" for an apply:true root
       if [ "$ap" = unknown ]; then echo "apply: UNKNOWN — the apply flag could not be read from the policy this run; the apply loop reads it again after merge."
       elif [ "$ap" != true ]; then echo "apply: plan only — this root is not on the box's apply list."
+      elif [ -z "$changes" ] && [ -n "$outs" ]; then echo "apply: output values only — the box applies after merge (no infrastructure changes)."
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
         outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
@@ -204,7 +313,9 @@ while IFS=$'\t' read -r pr sha; do
         else n=$(wc -l <<<"$outside"); echo "apply: $n address(es) OUTSIDE the apply allowlist — human apply: $(tr '\n' ' ' <<<"$outside" | sed 's/ $//' | sed 's/ /, /g')"; fi
       fi
     } >>"$bodyf"
-    log "[#$pr] $root: +$a ~$c -$d ${rs}"
+    # the install-impact line: only a root whose plan carries node_install_targets (main)
+    if [ "$root" = main ]; then install_impact "$out" "$sha"; [ -n "$impact_desc" ] && desc="${desc% }${impact_desc} "; fi
+    log "[#$pr] $root: +$a ~$c -$d ${rs}${os}${impact_desc}"
   done
   if [ "$state" = failure ]; then desc="plan errored:$failed_roots — see the PR comment"; [ $HUMAN = 1 ] && desc="human plan: $desc"; fi
   if [ -n "$overridden" ] && [ "$state" = success ]; then

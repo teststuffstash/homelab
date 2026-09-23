@@ -1,0 +1,9 @@
+# ADR-135 — the knob ABSENT (every stack today): no probe, no fragment, no card line. Pins that a
+# claim without fixer.imageVolumes renders a byte-identical pod manifest and env card, for both an
+# empty list and an unset IV_CLAIM_JSON (the kubectl-less dispatch path under `set -u`).
+name: image-volumes-absent
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:image-volumes
+  - file:post.sh

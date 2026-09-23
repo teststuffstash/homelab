@@ -1,0 +1,68 @@
+# Belts on the node reconciler's FLEET ROLLOUT (FU-273, docs/management-box.md §MB4 "The rollout as
+# built") — only the states the rollout itself owns. Deliberately NOT here:
+#   - the 24 h deadline: TalosFleetVersionSplit (talos-substrate, a version split for 24 h) and
+#     MgmtNodeInstallDrift (a schematic gap for 24 h) already ARE it — the policy names them so;
+#   - the halt on a differential: MgmtRolloutDifferential is the halt's own cause and already fires;
+#   - a parked node / a stuck sync / a dead loop: MgmtReconcile* in prometheusrule.yaml.
+# The workload-health HOLD (FU-278) is here: the named workloads carry their own alerts, but nothing
+# else says the ROLLOUT stopped on them, or that the hold needs a person (fix, or ack).
+# Series: scripts/mgmt-reconcile.sh's emit(), through the box's node_exporter textfile (job mgmt-node).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-reconcile-rollout
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-reconcile-rollout
+      rules:
+        - alert: MgmtRolloutCanaryTimedOut
+          expr: |
+            mgmt_reconcile_rollout_canary_timed_out == 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The fleet rollout left its canary stage on the TIMEOUT, not on evidence"
+            description: >-
+              The node reconciler's rollout waited out its canary timeout (default 4h) and at least
+              one canary type was never shown exercised on the new version by
+              scripts/mgmt-rollout-evidence.sh — so it advanced to the fleet anyway (default
+              forward, FU-273: a wall-clock soak never blocks). Nothing is broken by itself; the
+              point is that the new version reached the fleet UNPROVEN for that type. Read which
+              canary lacked evidence (`mgmt_reconcile_rollout_canary_exercised == 0`, `jq .
+              /var/lib/mgmt/reconcile/rollout.json` on 192.168.2.53): an idle node type, or an
+              evidence predicate that cannot see it. Clears when the rollout ends.
+              docs/management-box.md §MB4.
+        - alert: MgmtRolloutHaltUnreadable
+          expr: |
+            mgmt_reconcile_rollout_halted{reason="unreadable"} == 1
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "The fleet rollout is halted because the box cannot read MgmtRolloutDifferential"
+            description: >-
+              The reconciler checks MgmtRolloutDifferential before every rollout sync and treats an
+              unreadable answer as a halt (an unreadable gate is a no). It has not been able to
+              query Prometheus (NM_PROM, default http://192.168.40.13:9090) from the management box
+              for an hour, so the rollout is stopped for a reason no other alert names. `journalctl
+              -u mgmt-reconcile -n 50` on 192.168.2.53; `curl $NM_PROM/-/ready` from the box.
+        - alert: MgmtRolloutHeldOnWorkloadHealth
+          expr: |
+            mgmt_reconcile_rollout_halted{reason=~"workload-health|workload-health-unreadable"} == 1
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "The fleet rollout is held: a workload went unhealthy after the rollout started"
+            description: >-
+              The node reconciler compares every workload's health with the snapshot it took at the
+              rollout's start (FU-278) and holds — no new window, pressure taints lifted, nothing
+              reverted — on a PLATFORM workload that went unhealthy since, or on an important stack
+              workload unhealthy on the same revision it had then (reason="workload-health"); or
+              when it cannot read the workloads at all (reason="workload-health-unreadable"). The
+              held workloads, their revision and since-when: `mgmt_reconcile_rollout_workload_held`,
+              or `jq .wh.held /var/lib/mgmt/reconcile/rollout.json` on 192.168.2.53. It releases by
+              itself when they are healthy again. If the workload's breakage is not the rollout's
+              and the rollout should go on, ack it on the box: `touch
+              /var/lib/mgmt/reconcile/workload-health.ack` (every workload held at that moment stops
+              holding for the rest of this rollout). docs/management-box.md §MB4.

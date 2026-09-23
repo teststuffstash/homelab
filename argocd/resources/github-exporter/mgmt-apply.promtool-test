@@ -1,0 +1,76 @@
+# Behaviour fixture for MgmtApplyResidueStanding (FU-252) — replays the REAL condition:
+# mgmt-apply refused homelab master continuously from 2026-09-14 11:42Z (7d9949ee, 2 addresses)
+# to 2026-09-18 (e63b0073, 8), restating itself 1101 times, with nothing watching.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/mgmt-apply.promtool-test
+#
+# `devbox run prometheus-rules-lint` checks that the alert PARSES; this checks that it FIRES on
+# the shape it was written for and stays QUIET on the shape that looks like it — a refusal in the
+# hours after a merge is the DESIGNED outcome, not an incident, and an alert that cannot tell the
+# two apart is the noise that made the real one invisible.
+#
+# CLOCK: promtool's test clock starts at 0, so `_refused_since_timestamp: 0` is "the refusal began
+# at t=0" and `time()` is seconds since then — which is exactly why the exporter publishes a
+# TIMESTAMP and lets the alert do the arithmetic, instead of precomputing an age.
+rule_files:
+  - mgmt-apply.promtool-rules
+
+evaluation_interval: 10m
+
+tests:
+  # ── Shape 1 — the 2026-09-14 condition: refused, and it has been days ───────────────────────
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+        values: "1+0x220"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",since_sha="7d9949ee"}'
+        values: "0+0x220"
+      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply"}'
+        values: "2 2 4 4 8+0x216"
+    alert_rule_test:
+      # 20h in: still inside the designed post-merge window — silence is CORRECT here.
+      - eval_time: 20h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+      # 25h in: past the threshold but inside `for: 1h` — still pending, not firing.
+      - eval_time: 25h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+      # 26h in: the day-plus refusal the operator never saw.
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+            exp_annotations:
+              summary: "The management box has been refusing to apply homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure on homelab master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="homelab"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/homelab/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
+
+  # ── Shape 2 — the loop applied cleanly: refused=0, no since-timestamp published ─────────────
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+        values: "0+0x220"
+      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply"}'
+        values: "0+0x220"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+
+  # ── Shape 3 — a refusal that CLEARS: the operator applied at ~25h, the alert never fires ────
+  # `for: 1h` is what buys this. Without it the 25h..26h window would page on a condition a human
+  # was already resolving.
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+        values: "1+0x150 0+0x70"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",since_sha="7d9949ee"}'
+        values: "0+0x150 _x70"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []

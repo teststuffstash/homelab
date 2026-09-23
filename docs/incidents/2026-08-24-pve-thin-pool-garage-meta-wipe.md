@@ -203,6 +203,8 @@ file also exists as a member inside the intact `corpus-image.oci.tar`.
 
 - **FU-093** — pve thin-pool metering (the third sum) + periodic guest fstrim.
 - **FU-137** — offsite/backup gap; now carries the #884 restore decision and backup cadence.
+- **FU-279** — the ☠ above is why the registry bucket's stale multipart uploads are still uncollected.
+  Tracked by: FU-279.
 
 ## Addendum (2026-08-31): the restore left oracle-specs frozen for a week
 

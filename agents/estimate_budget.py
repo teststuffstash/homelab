@@ -13,7 +13,7 @@ a legit fix.
 
     cost ≈ rounds × requests/round × context_tokens × eff_$/M_input × (1 − cache_hit) / 1e6
 
-Pricing (FU-062, docs/agents/model-routing.md §M3): a LIVE registry of OpenRouter's /models +
+Pricing (FU-062, docs/spikes/model-routing-history.md §M3): a LIVE registry of OpenRouter's /models +
 /models/<id>/endpoints, cached 24h in one JSON file, prices any model by its cache-aware effective
 input $/M — min over cache-supporting providers ≥95% uptime of (1−h)·prompt + h·cache_read.
 Lookup order: --price-per-mtok override > registry > the static offline table > $1.0/M default —
@@ -72,7 +72,7 @@ _REQ_TINY = 50  # < 500 tok  — a one-liner / config tweak
 _REQ_SMALL = 90  # < 2000 tok — a normal bug fix
 _REQ_LARGE = 160  # ≥ 2000 tok — a multi-file change
 
-# ── Live model registry (FU-062, docs/agents/model-routing.md §M3) ───────────────────────────────
+# ── Live model registry (FU-062, docs/spikes/model-routing-history.md §M3) ───────────────────────────────
 OPENROUTER_API = "https://openrouter.ai/api/v1"
 REGISTRY_TTL_HOURS = 24.0
 # Skip providers having a bad half hour — the autopsy's Google-Vertex-at-37%-uptime trap.
@@ -701,14 +701,14 @@ def _run_cli(argv: list[str]) -> int:
             ensure_endpoints(registry, args.model, cache_path, refresh=args.refresh)
     price, source, note = resolve_price(args.model, args.price_per_mtok, registry, h=h)
 
-    # Chain models must drive tools (model-routing.md §M2) — warn loudly, don't block (the estimator
+    # Chain models must drive tools (model-routing-history.md §M2) — warn loudly, don't block (the estimator
     # sizes budgets; the dispatch decision is the coordinator's).
     if registry is not None:
         tools = registry_tools(registry, args.model)
         if tools is False:
             print(
                 f"⚠ {normalize_model(args.model)} does NOT advertise `tools` support — "
-                "it cannot drive a goose/opencode worker (model-routing.md §M2)",
+                "it cannot drive a goose/opencode worker (model-routing-history.md §M2)",
                 file=sys.stderr,
             )
         elif tools is None:
@@ -861,7 +861,7 @@ def _self_test() -> None:
     else:  # pragma: no cover
         raise AssertionError("expected ValueError for unknown label tier")
 
-    # ── registry math, on a FIXTURE dict (the qwen3-coder measurement from model-routing.md §M3,
+    # ── registry math, on a FIXTURE dict (the qwen3-coder measurement from model-routing-history.md §M3,
     #    plus the uptime trap + a tools-less endpoint) — pure, no network ────────────────────────
     fixture = {
         "fetched_at": "2099-01-01T00:00:00Z",

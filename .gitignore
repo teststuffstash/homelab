@@ -30,3 +30,6 @@ __pycache__/
 .opencode-go.env
 scripts/mermaid-lint/node_modules/
 CLAUDE.local.md
+
+# Transient PXE flags / per-node procedure state (FU-244) — never committed
+*.local.tf

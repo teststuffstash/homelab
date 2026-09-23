@@ -40,6 +40,10 @@ context-prefetch/ci-red	context-prefetch
 context-prefetch/ci-red-unreadable	context-prefetch
 context-prefetch/fix-round	context-prefetch
 context-prefetch/fix-round-unreadable	context-prefetch
+coordinator-pick-rail-anthropic	coordinator-pick-rail
+coordinator-pick-rail-both	coordinator-pick-rail
+coordinator-pick-rail-go	coordinator-pick-rail
+coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-token-clone/set	deploy-revert-token-clone
 deploy-revert-token-clone/unset	deploy-revert-token-clone
@@ -122,8 +126,6 @@ reviewer-go-failover-limited	reviewer-go-failover
 reviewer-mcp-prep-absent	reviewer-mcp-prep
 reviewer-mcp-prep-present	reviewer-mcp-prep
 reviewer-optout	reviewer-optout
-
-
 reviewer-touches-escapes-computed	reviewer-touches
 reviewer-touches-escapes-none	reviewer-touches
 reviewer-touches-unavailable	reviewer-touches
