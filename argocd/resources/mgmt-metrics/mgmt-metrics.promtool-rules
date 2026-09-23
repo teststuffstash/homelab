@@ -69,6 +69,21 @@ groups:
         for: 1h
         labels:
           severity: warning
+  - name: mgmt-substrate
+    rules:
+      - alert: MgmtSubstrateBehind
+        expr: |
+          mgmt_substrate_minors_behind >= 1
+            and on (component) mgmt_substrate_supported == 1
+        for: 7d
+        labels:
+          severity: warning
+      - alert: MgmtSubstrateUnsupported
+        expr: |
+          mgmt_substrate_supported == 0
+        for: 1h
+        labels:
+          severity: warning
   - name: mgmt-reconcile
     rules:
       - alert: MgmtReconcileParked

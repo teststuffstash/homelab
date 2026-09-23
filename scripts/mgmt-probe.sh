@@ -53,7 +53,12 @@
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds
+#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds substrate
+#   GITHUB_TOKEN  the read-only PAT the env file already carries for tofu/github — also used to
+#                 authenticate the substrate check's upstream release reads (5000/hr vs 60/hr);
+#                 absent or insufficient falls back to anonymous
+#   MGMT_CACHE_DIR     where the substrate check caches the upstream release answer (default
+#                 /var/lib/mgmt/cache; falls back to $TMPDIR when that is not writable)
 #   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
 #   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
 #   NODE_K8S_JSON      pre-fetched `node_declared_k8s` JSON — the same for the registered/labels/
@@ -89,6 +94,9 @@ declare -a RESULTS=()
 # The node diff publishes per-node gauges rather than one pass/fail, so it accumulates its own
 # (node, axis) pairs: DRIFT = declared and live disagree, DRIFT_OK = they match.
 declare -a DRIFT=() DRIFT_OK=()
+# The substrate-currency check (FU-254) accumulates one "<component> <behind> <supported> <fetched>"
+# row per component it could actually compare; a component it could not fetch contributes none.
+declare -a SUBSTRATE=()
 
 log()  { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 skipped() { RESULTS+=("$1 skip"); SKIPPED=$((SKIPPED+1)); log "SKIP $1 — $2"; }
@@ -412,6 +420,198 @@ JQ
   done <<< "$rows"
 }
 
+# ── check: is the declared substrate still current, and still in support? (FU-254) ───────────────
+# The belt's other checks ask "does live match git". This one asks the question NOTHING asked
+# before: **does git still match the world.** Talos 1.13 left community support at the 1.14.0
+# release (2026-09-03) and the fleet learned it from a conversation. Renovate cannot fill the gap —
+# class 6 in docs/dependency-upgrades.md is deliberately "must not auto-deploy", and Renovate opens
+# no homelab PRs at all.
+#
+# DECLARED = the `default` of the tofu variables in tofu/variables.tf, read straight out of the
+# CHECKOUT. Deliberately NOT a `tofu output`: no output carries kubernetes_version or
+# cilium_version, and node_install_targets needs the main state + an initialised root (the box's
+# own checkout has neither — check_nodes carries that scar). Git is the declaration here, so a
+# plain HCL read of the four defaults is both sufficient and credential-free.
+#
+# UPSTREAM = the GitHub releases of each project, filtered to real releases (draft/prerelease
+# dropped, and again by an `X.Y.Z`-only tag match so an `-rc`/`-beta` tag mislabelled upstream
+# cannot sneak in). Cached on disk with a TTL — see SUBSTRATE_CACHE_TTL below.
+#
+# ⚠ It REPORTS, it never FAILS the probe — the check_nodes rule. "A minor behind" is the normal
+# state of a fleet between windows, and a belt that reds the box for it teaches everyone to ignore
+# it. The judgement of "too long" belongs to the `for:` of MgmtSubstrateBehind /
+# MgmtSubstrateUnsupported (argocd/resources/mgmt-metrics/).
+check_substrate() {
+  skip_requested substrate && { skipped substrate "SKIP requested"; return; }
+
+  # ══ OPERATOR-VISIBLE CONSTANTS — the upstream support policies, encoded by hand ═══════════════
+  # Nothing here discovers a policy; each number is a SUPPORTED MINOR COUNT (the current minor
+  # included), so "EOL" means `minors_behind >= count`. **If an upstream changes its policy, this
+  # table is the one place to correct it** — a wrong number here makes the EOL gauge lie quietly.
+  #   siderolabs/talos    1 — ONLY the current minor has community support: the support matrix
+  #                           gives 1.13's "End of Community Support" as the 1.14.0 RELEASE DATE
+  #                           (and 1.12's as 1.13.0's). One minor behind is already EOL — which is
+  #                           precisely the 2026-09-03 case this check exists for, so a `2` here
+  #                           would miss it by a whole release cycle (review finding, #1949).
+  #                           Consequence, deliberate: Talos can never be `Behind`-but-supported,
+  #                           so it skips MgmtSubstrateBehind's 7-day grace and goes straight to
+  #                           MgmtSubstrateUnsupported. That is what the policy says.
+  #   kubernetes/kubernetes 3 — the three most recent minors receive patch releases (EOL at n-3).
+  #   cilium/cilium       3 — the three most recent minors receive fixes (EOL at n-3).
+  # Columns: component label | GitHub repo | tofu variable | supported minors.
+  local components=(
+    "talos-controlplane|siderolabs/talos|talos_version_controlplane|1"
+    "talos-worker|siderolabs/talos|talos_version_worker|1"
+    "kubernetes|kubernetes/kubernetes|kubernetes_version|3"
+    "cilium|cilium/cilium|cilium_version|3"
+  )
+
+  [ -f "$REPO/tofu/variables.tf" ] || { skipped substrate "no tofu/variables.tf in this checkout"; return; }
+
+  local row comp repo var window declared ours upstream minors fetched behind supported
+  local n=0 nbehind=0 neol=0 unread=() detail=""
+  for row in "${components[@]}"; do
+    IFS='|' read -r comp repo var window <<< "$row"
+    declared="$(substrate_declared "$var")"
+    if [ -z "$declared" ]; then
+      # A RENAMED OR DELETED variable must be loud, not silently "not checked" (the #1831
+      # discrimination): the declaration this belt exists to compare has moved.
+      failed substrate "tofu/variables.tf has no readable default for var.$var"
+      return
+    fi
+    ours="$(printf '%s' "$declared" | sed 's/^v//' | cut -d. -f1,2)"
+    # ⚠ The answer comes back as ONE string, timestamp first — NOT through a global: this runs in
+    # a command substitution, i.e. a SUBSHELL, so a variable the callee sets never reaches here
+    # (the first fixture run published a fetched-timestamp of 0 for every component).
+    if ! upstream="$(substrate_upstream_minors "$repo")"; then
+      # The probe could not look at upstream and has no cached answer. NO series for this
+      # component — an absent gauge, never a false "current" (the mgmt_node_drift rule).
+      unread+=("$comp"); continue
+    fi
+    fetched="$(printf '%s\n' "$upstream" | head -1)"
+    minors="$(printf '%s\n' "$upstream" | tail -n +2)"
+    [ -n "$minors" ] && [ -n "$fetched" ] || { unread+=("$comp"); continue; }
+    # How many distinct upstream minors are strictly newer than ours. ⚠ Bounded by the release
+    # page (100 entries): if our minor predates the whole page this is a LOWER bound — which only
+    # under-reports when we are already many minors past EOL, where the EOL gauge is 0 regardless.
+    behind="$(printf '%s\n' "$minors" | awk -F. -v om="$ours" '
+      BEGIN { split(om, o, ".") }
+      NF == 2 && (($1 + 0) > (o[1] + 0) || (($1 + 0) == (o[1] + 0) && ($2 + 0) > (o[2] + 0))) { c++ }
+      END { print c + 0 }')"
+    supported=1
+    [ "$behind" -ge "$window" ] && supported=0
+    SUBSTRATE+=("$comp $behind $supported $fetched")
+    n=$((n + 1))
+    [ "$behind" -gt 0 ] && { nbehind=$((nbehind + 1)); detail="$detail, $comp $declared is $behind minor(s) behind"; }
+    [ "$supported" -eq 0 ] && { neol=$((neol + 1)); log "substrate: $comp $declared is EOL — $behind minor(s) behind, upstream supports $window"; }
+  done
+
+  if [ "$n" -eq 0 ]; then
+    skipped substrate "upstream release lists unreachable and nothing cached (${unread[*]:-all})"
+    return
+  fi
+  [ ${#unread[@]} -gt 0 ] && detail="$detail, not checked: ${unread[*]}"
+  passed substrate "$n component(s) compared, $nbehind behind, $neol out of support${detail}"
+}
+
+# The declared half: the `default` of one variable in tofu/variables.tf. An HCL read, not `tofu
+# output` (see check_substrate's header for why). Prints nothing when the variable or its default
+# is absent — which the caller treats as a FAIL, not as "not checked".
+substrate_declared() {
+  local name="$1"
+  awk -v v="$name" '
+    $0 ~ ("^variable[[:space:]]+\"" v "\"[[:space:]]*\\{") { inb = 1; next }
+    inb && /^}/ { exit }
+    inb && /^[[:space:]]*default[[:space:]]*=/ {
+      sub(/^[^=]*=[[:space:]]*/, "")
+      sub(/[[:space:]]*#.*$/, "")
+      gsub(/"/, "")
+      sub(/[[:space:]]+$/, "")
+      print; exit
+    }
+  ' "$REPO/tofu/variables.tf"
+}
+
+# ⚠ CACHE, and it is not an optimisation. The belt runs every 15 minutes (nixos/hosts/mgmt:
+# mgmt-belt.timer, OnCalendar=*:0/15) = 96 runs a day; three upstream repos fetched every tick is
+# ~288 GitHub API calls a day for an answer that changes a few times a YEAR, and unauthenticated
+# the per-IP budget is 60/hour for the whole box. **6 h** (below): 3 repos × 4 refreshes = 12 calls
+# a day, and a new upstream minor is at most 6 h old before the belt sees it — two orders of
+# magnitude finer than MgmtSubstrateBehind's 7-day `for:`, so the TTL is never the limiting term.
+SUBSTRATE_CACHE_TTL="${SUBSTRATE_CACHE_TTL:-21600}"   # 6 h, in seconds
+SUBSTRATE_CACHE_DIR="${SUBSTRATE_CACHE_DIR:-${MGMT_CACHE_DIR:-/var/lib/mgmt/cache}}"
+
+# <owner/repo> → the unix time the answer was fetched on the FIRST line, then the distinct
+# released MINORs ("X.Y", one per line). One stream, because the caller reads it through a command
+# substitution and a subshell cannot hand a variable back. Non-zero exit = no answer at all (no
+# network AND no cache), which the caller turns into "no series", never a value.
+#
+# A refresh that FAILS while a cached answer exists serves the cache: the answer is at most one
+# TTL stale, and its true age is published as mgmt_substrate_upstream_fetched_timestamp_seconds —
+# so a GitHub blip degrades the freshness series, not the verdict.
+substrate_upstream_minors() {
+  local repo="$1" cache now age raw
+  mkdir -p "$SUBSTRATE_CACHE_DIR" 2>/dev/null || SUBSTRATE_CACHE_DIR="${TMPDIR:-/tmp}/mgmt-substrate-cache"
+  mkdir -p "$SUBSTRATE_CACHE_DIR" 2>/dev/null || return 1
+  cache="$SUBSTRATE_CACHE_DIR/$(printf '%s' "$repo" | tr '/' '_').minors"
+  now="$(date -u +%s)"
+  if [ -s "$cache" ]; then
+    age=$((now - $(stat -c %Y "$cache" 2>/dev/null || echo 0)))
+    if [ "$age" -lt "$SUBSTRATE_CACHE_TTL" ]; then
+      stat -c %Y "$cache" 2>/dev/null || echo 0
+      cat "$cache"; return 0
+    fi
+  fi
+  # AUTHENTICATED when the box has a token (GITHUB_TOKEN — the read-only `github-mgmt-readonly-pat`
+  # the env file already carries for tofu/github, docs/management-box.md §Credentials): 5000/hour
+  # instead of 60. It is a FINE-GRAINED PAT owned by teststuffstash, so its reach over another
+  # org's public repo is not guaranteed — an authenticated attempt that comes back empty retries
+  # anonymously rather than reporting upstream as unreachable.
+  local url="https://api.github.com/repos/$repo/releases?per_page=100"
+  raw=""
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    raw="$(_substrate_curl -H "Authorization: Bearer $GITHUB_TOKEN" "$url")" || raw=""
+  fi
+  [ -n "$raw" ] || raw="$(_substrate_curl "$url")" || raw=""
+  local parsed=""
+  if [ -n "$raw" ]; then
+    # Real releases only: not draft, not prerelease, AND an exact X.Y.Z tag — belt and braces,
+    # because an upstream that forgets the prerelease flag on an `-rc` tag would otherwise read as
+    # a new minor and page the fleet over a release candidate.
+    parsed="$(printf '%s' "$raw" | _substrate_jq -r '
+        .[]? | select((.draft // false) == false and (.prerelease // false) == false) | .tag_name' 2>/dev/null \
+      | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | awk -F. '{ print $1 "." $2 }' \
+      | sort -u -t. -k1,1n -k2,2n)"
+  fi
+  if [ -n "$parsed" ]; then
+    printf '%s\n' "$parsed" >"$cache" 2>/dev/null || true
+    printf '%s\n' "$now"
+    printf '%s\n' "$parsed"; return 0
+  fi
+  if [ -s "$cache" ]; then
+    # ⚠ >&2 on every log in THIS function: it prints its answer on stdout inside the caller's
+    # command substitution, so an unredirected log line would become the answer's first line.
+    log "substrate: $repo refresh failed — serving the cached answer from $(date -u -d "@$(stat -c %Y "$cache")" +%FT%TZ 2>/dev/null || echo unknown)" >&2
+    stat -c %Y "$cache" 2>/dev/null || echo 0
+    cat "$cache"; return 0
+  fi
+  log "substrate: $repo release list unreachable and nothing cached — no series for it" >&2
+  return 1
+}
+
+# curl and jq are in the belt unit's closure (nixos/hosts/mgmt/default.nix) but not on the jail's
+# bare PATH; devbox is the other way round. Try the binary, fall back to the pinned one — and NOT
+# through tool(), which merges stderr into stdout and would corrupt the JSON.
+_substrate_curl() {
+  if have curl; then curl -fsS --max-time 30 -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" "$@" 2>/dev/null
+  else devbox run --quiet -- curl -fsS --max-time 30 -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" "$@" 2>/dev/null; fi
+}
+_substrate_jq() {
+  if have jq; then jq "$@"; else devbox run --quiet -- jq "$@"; fi
+}
+
 # ── check: the OPNsense play still parses and connects (--check, no writes) ──────────────────────
 # Class 9 in docs/dependency-upgrades.md is the sharpest FU-097 gap and it is the ROUTER: a merged
 # group_vars change sits until a human remembers. Running it in check mode makes this probe the
@@ -573,6 +773,31 @@ publish() {
     for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 1"$'\n'; done
     for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 0"$'\n'; done
   fi
+  # FU-254 — the substrate-currency gauges. Same rule as mgmt_node_drift: a 0 is a POSITIVE
+  # statement ("compared, and current" / "compared, and supported"), which "no series" cannot make,
+  # so every component that was actually compared publishes all three; a component whose upstream
+  # answer could not be obtained publishes none.
+  if [ ${#SUBSTRATE[@]} -gt 0 ]; then
+    body+="# HELP mgmt_substrate_minors_behind Upstream MINOR releases newer than the declared version (0 = current)."$'\n'
+    body+="# TYPE mgmt_substrate_minors_behind gauge"$'\n'
+    local srow scomp sbehind ssup sfetched
+    for srow in "${SUBSTRATE[@]}"; do
+      read -r scomp sbehind ssup sfetched <<< "$srow"
+      body+="mgmt_substrate_minors_behind{component=\"$scomp\"} $sbehind"$'\n'
+    done
+    body+="# HELP mgmt_substrate_supported 1 = the declared minor is inside the project's support window, 0 = EOL."$'\n'
+    body+="# TYPE mgmt_substrate_supported gauge"$'\n'
+    for srow in "${SUBSTRATE[@]}"; do
+      read -r scomp sbehind ssup sfetched <<< "$srow"
+      body+="mgmt_substrate_supported{component=\"$scomp\"} $ssup"$'\n'
+    done
+    body+="# HELP mgmt_substrate_upstream_fetched_timestamp_seconds Unix time the cached upstream release list was fetched."$'\n'
+    body+="# TYPE mgmt_substrate_upstream_fetched_timestamp_seconds gauge"$'\n'
+    for srow in "${SUBSTRATE[@]}"; do
+      read -r scomp sbehind ssup sfetched <<< "$srow"
+      body+="mgmt_substrate_upstream_fetched_timestamp_seconds{component=\"$scomp\"} $sfetched"$'\n'
+    done
+  fi
   # Atomic (tmp + rename in the same dir — the collector must never read a half file). Never fail
   # the probe on a reporting failure: the deadman's verdict is about the BOX, and Prometheus is
   # in-cluster — exactly the thing that may be down. (The staleness alert notices, from the other side.)
@@ -607,6 +832,7 @@ case "$MODE" in
     dump_drift
     check_ansible
     check_creds
+    check_substrate
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the
     # jail's 0.17.5 wrote — package pins unchanged, but the checkout is left dirty (2026-09-13).
     # Put it back so the tree stays "what git says".

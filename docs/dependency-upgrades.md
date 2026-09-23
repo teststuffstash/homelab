@@ -360,6 +360,7 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
 | Storage-cap breach visibility | ✅ | Garage admin metrics scraped + `garage-alerts` belts since #965 (2026-08-25); Longhorn metering since 2026-08-04 — the pve thin-pool `Data%` is FU-093's remaining gap ([`storage-ledger.md`](storage-ledger.md)) |
 | **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc |
+| **Substrate currency / support window** | ✅ | the management box's belt compares the declared Talos / Kubernetes / Cilium versions against upstream releases and alerts on "a newer minor exists" and on "ours is EOL" — [`management-box.md`](management-box.md) §MB2 (FU-254). The sibling of the row above, and **not** a thing Renovate could have covered: class 6 must not auto-deploy |
 | Drift between tofu applies | ❌ | FU-097 |
 
 **The observation window** (`iac-lane.md` §Progressive delivery) is the frame to reuse: sync → health
