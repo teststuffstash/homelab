@@ -170,9 +170,16 @@ def _gh_comments_raw(slug: str, issue: int) -> str:
 
     May be overridden by EPIC_DISPOSITIONS_COMMENTS env var (the goal lane folds two reads
     into one; it passes pre-fetched comments to avoid duplicate API calls, FU-084 / #1439).
+    The value `-` means "the payload is on STDIN" — the form the scan uses, because an env var
+    is ONE execve argument and Linux caps a single argument at 128 KiB (MAX_ARG_STRLEN):
+    Goal #1640's timeline reached 175 KB on 2026-09-22 and every env-var read died E2BIG
+    before Python started, which the scan could only report as "dispositions unreadable".
     """
     import os
+    import sys
     cached = os.environ.get("EPIC_DISPOSITIONS_COMMENTS", "")
+    if cached == "-":
+        return sys.stdin.read()
     if cached:
         return cached
     try:
@@ -367,6 +374,22 @@ def self_test() -> int:
               {"42": {"disposition": "adopted", "at": "2026-09-05T12:00:00Z", "by": "closeout"}})
     finally:
         _gh_comments_raw = _real_raw
+
+    # ── the STDIN form, end-to-end through a real subprocess ── the payload is deliberately
+    # larger than MAX_ARG_STRLEN (128 KiB): as an env var this exact call dies E2BIG before
+    # Python starts (the 2026-09-22 Goal #1640 shape); on stdin it must parse to its one row.
+    import os
+    import subprocess as _sp
+    import sys as _sys
+    _big = json.dumps([{"id": i, "body": "x" * 1500} for i in range(1, 101)]
+                      + [{"id": 7, "body": MARK + "\n#42 adopted 2026-09-05T12:00:00Z by=closeout\n"}])
+    check("stdin self-test payload exceeds the 128 KiB single-argument cap", len(_big) > 131072, True)
+    _r = _sp.run([_sys.executable, __file__, "read", "o/r", "1"], input=_big, capture_output=True,
+                 text=True, env={**os.environ, "EPIC_DISPOSITIONS_COMMENTS": "-"})
+    check("EPIC_DISPOSITIONS_COMMENTS=- reads the payload from stdin (rc 0)", _r.returncode, 0)
+    check("…and the store on the last page parses to its one row",
+          json.loads(_r.stdout or "{}"),
+          {"42": {"disposition": "adopted", "at": "2026-09-05T12:00:00Z", "by": "closeout"}})
 
     # ── the UNREADABLE path, through the real seam ── find() must RAISE, so that set_disposition
     # can never reach _put on a blind read (the second-store-comment failure mode). Driven by

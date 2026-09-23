@@ -987,7 +987,8 @@ _GOAL_FIELDS = """
         goalIssues: issues(labels:["task/goal"], states:[OPEN,CLOSED], first:$goals,
                            orderBy:{field:UPDATED_AT, direction:DESC}) {
           nodes { number title state stateReason closedAt body
-                  labels(first:20){ nodes { name } } }
+                  labels(first:20){ nodes { name } }
+                  comments { totalCount } }
         }
         issueTree: issues(states:[OPEN,CLOSED], first:$issues,
                           orderBy:{field:UPDATED_AT, direction:DESC}) {
@@ -1474,6 +1475,8 @@ def collect_goals(lines):
         "# HELP goal_descendant_info 1 per (goal, descendant) edge incl. the goal itself at depth 0 — the membership series `goal_spent_usd` joins against agent_run_cost_usd on (project, issue).",
         "# TYPE goal_verdict gauge",
         "# HELP goal_verdict 1 per goal, state enum on the `verdict` label: open | validated | reverted | abandoned (ADR-102 terminals, read from goal/* labels once the taxonomy carries them) | completed | not_planned (the GitHub-native close reason, all that is knowable until then).",
+        "# TYPE goal_timeline_comments gauge",
+        "# HELP goal_timeline_comments Comments on the goal issue itself. The checkpoint's write-back is the STORE (two machine comments, edited in place), so a count that climbs ride by ride is a session posting prose rulings again — the noise that pushed homelab#1640 past the 128 KiB store-read cap on 2026-09-22 (GoalTimelineNoisy).",
         "# TYPE goal_tree_truncated gauge",
         "# HELP goal_tree_truncated 1 = this repo has more issues than GOAL_ISSUE_WINDOW, so a descendant that has not been updated recently can be missing from the counts above. Not a silent cap.",
     ]
@@ -1504,6 +1507,9 @@ def collect_goals(lines):
             budget = parse_budget_usd(goal.get("body"))
             if budget is not None:
                 lines.append(metric("goal_budget_usd", ident, budget))
+            comments = ((goal.get("comments") or {}).get("totalCount"))
+            if isinstance(comments, int):
+                lines.append(metric("goal_timeline_comments", ident, comments))
             depths = descendants_by_depth(tree["parent"], number)
             states = {n: tree["issue"].get(n, {}).get("state", "") for n in depths}
             lines.append(metric("goal_descendants_open", ident,

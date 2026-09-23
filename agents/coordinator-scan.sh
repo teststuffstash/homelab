@@ -3113,7 +3113,11 @@ EOF_GOVERNANCE
           # PR#1462). Report unreadable off the one failure instead of retrying twice.
           gdisp_rc=2; gdisp_json=""
         else
-          gdisp_json="$(EPIC_DISPOSITIONS_COMMENTS="$gcomments" python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
+          # The pre-fetched comments travel on STDIN (`EPIC_DISPOSITIONS_COMMENTS=-`), never in the
+          # environment: an env var is ONE execve argument, and Linux caps a single argument at
+          # 128 KiB (MAX_ARG_STRLEN). Goal #1640's timeline crossed that at 175 KB on 2026-09-22
+          # and every read answered E2BIG — "dispositions unreadable", trigger (c) held for good.
+          gdisp_json="$(printf '%s' "$gcomments" | EPIC_DISPOSITIONS_COMMENTS=- python3 "${HERE}/epic_dispositions.py" read "$slug" "$g" 2>/dev/null)" && gdisp_rc=0 || gdisp_rc=$?
         fi
         if [ "${gdisp_rc:-2}" -ne 0 ] || [ -z "$gdisp_json" ]; then
           # rule #6, never fail INTO a dispatch: an unreadable store counts as "no rows" for the
@@ -3289,11 +3293,16 @@ EOF_GOVERNANCE
           # repos is not a shared surface), the theme branch + its assembly PR live in the goal's
           # repo, and the `themes=` side value carries bare numbers — so a cross-repo member is
           # never nominated. `.repo` rides along so the body read names the candidate's own repo.
-          gcands="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
+          # A `deferred` member is "not this Goal's" (ADR-122 (4)) — never a theme candidate either:
+          # nominating it would re-home work the container already ruled out of scope.
+          gcands="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg df "$gdisp_df" --arg GREPO "$repo" \
             '(($d | split(" ") | map(select(. != "")))) as $D
+             | ($df | split(" ") | map(select(. != ""))) as $DF
              | ["agent/in-progress","agent/review","agent/done","agent/error","agent/blocked"] as $LC
              | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
                     | select(.state == "OPEN")
+                    | ("\(.repo)#\(.number)") as $qk | (.number | tostring) as $bk
+                    | select(($DF | index($qk)) == null and ($DF | index($bk)) == null)
                     | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
                     | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
              | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
@@ -3330,17 +3339,34 @@ EOF_GTHEMES
           # Same repo scope as the candidates (#1451): a theme is a level-2 of the goal in the
           # goal's repo — its branch and assembly PR live there, and `theme-complete=` carries
           # bare numbers. The theme's OWN descendants may sit in any repo (`parentKey` walk).
+          # The walk PRUNES a `deferred` subtree (ADR-122 (4): the completion predicate counts
+          # ADOPTED-OPEN members only, and (e) is a completion predicate): a member the checkpoint
+          # ruled "real work, not this Goal's — lineage kept, unqueued" stays OPEN by design and
+          # must not hold the theme's assembly. Goal #1640's theme #1768 sat complete for a day
+          # behind `agent-runtime#142` (deferred 2026-09-22T21:54Z, three levels down) because
+          # the walk counted states, not rulings. rule #6: with the store unreadable the walk
+          # cannot tell a deferred subtree from a live one — HOLD with one ⚠, never guess either way.
+          if [ "${gdisp_ok:-0}" != 1 ]; then
+            gthemes_open=""
+            echo "  [$repo] ⚠ goal #${g}: dispositions unreadable — the theme-complete walk (trigger e) is HELD this pass"
+          else
           gthemes_open="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg GREPO "$repo" \
             '(($d | split(" ") | map(select(. != "")))) as $D
              | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.repo == $GREPO)
                     | select(.state == "OPEN") | select((.title // "") | test("^theme:"; "i"))]
              | sort_by(.number) | .[] | "\(.repo) \(.number)"' 2>/dev/null || true)"
+          fi
           while read -r trepo tn; do
             [ -n "$tn" ] || continue
-            # the theme's OWN descendants (walked by qualified parentKey, depth-bounded like gdesc): ≥ 1, all closed
-            tstate="$(printf '%s' "$kidsall" | jq -r --arg p "${trepo}#${tn}" '
+            # the theme's OWN descendants (walked by qualified parentKey, depth-bounded like gdesc): ≥ 1,
+            # all closed — a `deferred` node is pruned WITH its subtree (the store keys a same-repo
+            # member bare and a cross-repo member `repo#n`, the same two spellings gopen_n_ckpt reads)
+            tstate="$(printf '%s' "$kidsall" | jq -r --arg p "${trepo}#${tn}" --arg df "$gdisp_df" --arg GREPO "$repo" '
               . as $all
-              | def kids($x): [$all[] | select(.parentKey == $x) | "\(.repo)#\(.number)"];
+              | ($df | split(" ") | map(select(. != ""))) as $DF
+              | def deferred($n): (("\(.repo)#\(.number)") as $qk | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                                   | (($DF | index($qk)) != null) or ($bk != null and ($DF | index($bk)) != null));
+                def kids($x): [$all[] | select(.parentKey == $x) | select(deferred(.) | not) | "\(.repo)#\(.number)"];
                 def desc($x; $depth): if $depth > 6 then [] else (kids($x) as $k | $k + ([$k[] | desc(.; $depth + 1)] | add // [])) end;
               (desc($p; 0) | unique) as $T
               | [$all[] | select(("\(.repo)#\(.number)") as $k | ($T | index($k)) != null)]
