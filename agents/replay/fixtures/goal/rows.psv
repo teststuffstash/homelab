@@ -187,3 +187,18 @@ theme-nominated          | open-pre | openall.json @ patches/theme-sprouts.jq   
 theme-singleton          | open-pre | openall.json @ patches/theme-sprouts.jq   | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-singleton
 theme-complete           | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete
 theme-complete-pr-exists | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete-pr-exists
+# theme-complete-deferred-pruned = the theme-complete world plus an OPEN grandchild #313 (parent #311) that the
+#                           checkpoint ruled `deferred` on the Goal's store (2026-09-22: "real work, not
+#                           this Goal's — lineage kept, unqueued"). ADR-122 (4): a completion predicate
+#                           counts ADOPTED-OPEN members only, so the walk PRUNES the deferred subtree and
+#                           the theme still reads complete — Goal #1640's theme #1768 sat a day behind
+#                           `agent-runtime#142` because the walk counted states, not rulings.
+# theme-complete-open-grandchild-holds = the SAME tree with NO store row for #313: an open, unruled
+#                           descendant at depth 2 holds the theme (no (e) line, no unit) — the
+#                           control row that proves the prune is the RULING's doing, not the depth's.
+# theme-complete-store-unreadable = the all-closed theme-complete tree with the comments GET refused:
+#                           rule #6 — the walk cannot tell a deferred subtree from a live one, so (e)
+#                           is HELD with one ⚠ beside trigger (c)'s, never guessed either way.
+theme-complete-deferred-pruned       | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete-deferred-pruned
+theme-complete-open-grandchild-holds | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles | theme-complete-open-grandchild-holds
+theme-complete-store-unreadable      | open-pre | openall.json @ patches/theme-complete.jq  | IN_SLUG=teststuffstash/circles IN_REPO=circles STUB_GH_api_repos_teststuffstash_circles_issues_29_comments_per_page_100=fail | theme-complete-store-unreadable

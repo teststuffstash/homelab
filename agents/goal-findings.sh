@@ -7,6 +7,8 @@
 #   bash agents/goal-findings.sh counts  <owner/repo> <goal-n>     # → "total dispositioned"
 #   bash agents/goal-findings.sh advance <owner/repo> <goal-n> <N> # marker → N (checkpoint close)
 #   bash agents/goal-findings.sh burndown <owner/repo> <goal-n> "<open> open / <closed> closed of <total> descendants"
+#   bash agents/goal-findings.sh rule    <owner/repo> <goal-n> <entry-n> "<verb> → <target> — <reason>"   # ⇒ suffix on entry n
+#   bash agents/goal-findings.sh checkpoint <owner/repo> <goal-n> "<ISO ts> (<trigger>) <outcome>"   # the last-checkpoint: line
 #   bash agents/goal-findings.sh --self-test
 #
 # Shape (a single issue comment, edited in place — ADR-103: ONE machine comment, no per-event
@@ -14,7 +16,14 @@
 #   <!-- goal-findings v1 -->
 #   dispositioned-through: 0
 #   burn-down: —
-#   1. origin=#123 surface=agents/replay class=fold — <one line of substance>
+#   last-checkpoint: 2026-09-22T21:54:00Z (a+c) 1 minted · 3 dropped · 1 deferred
+#   1. origin=#123 surface=agents/replay class=fold — <one line of substance> ⇒ fold → #456 — already in review
+#
+# The `rule` suffix and the `last-checkpoint:` line ARE the checkpoint's write-back (2026-09-23,
+# operator): a ruling is a store row, not a prose comment. Twelve checkpoint rulings on Goal
+# #1640 averaged 6 KB each — 70 KB of re-derived evidence nobody read — and four of them ruled
+# one row or nothing. The store is bounded by the Goal's real size (members + findings); a
+# ride that changes nothing edits ONE header line in place, so the timeline does not grow.
 #
 # Fail-closed everywhere (rule #6): an unreadable store is "" counts, never invented zeros that
 # would arm or disarm a checkpoint; a failed edit is loud and leaves the old comment intact.
@@ -119,6 +128,36 @@ gf_burndown() {   # $1 slug, $2 issue, $3 text [, $4 id, $5 body — pre-fetched
   echo "goal-findings: ${1}#${2} burn-down updated"
 }
 
+gf_rule() {   # $1 slug, $2 issue, $3 entry number, $4 ruling text → "N. … ⇒ <ruling>" (replaces an earlier ⇒)
+  local id body n
+  case "${3:-}" in ''|*[!0-9]*) echo "goal-findings: rule needs a numeric entry, got '${3:-}'" >&2; return 1;; esac
+  [ -n "${4:-}" ] || { echo "goal-findings: rule needs a ruling text" >&2; return 1; }
+  _gf_find "$1" "$2" || { echo "goal-findings: no store on ${1}#${2} — nothing to rule" >&2; return 1; }
+  id="$GF_ID"; body="$GF_BODY"
+  n="$(printf '%s\n' "$body" | awk -v n="$3" '$0 ~ ("^" n "\\. ") {c++} END{print c+0}')"
+  [ "$n" -eq 1 ] || { echo "goal-findings: entry ${3} not found (or not unique) on ${1}#${2}" >&2; return 1; }
+  printf '%s\n' "$body" | awk -v n="$3" -v r="$4" '
+    $0 ~ ("^" n "\\. ") { sub(/ ⇒ .*$/, ""); print $0 " ⇒ " r; next }
+    { print }' | _gf_put "$1" "$id" "$2"
+  echo "goal-findings: ${1}#${2} entry ${3} ⇒ ${4}"
+}
+
+gf_checkpoint() {   # $1 slug, $2 issue, $3 text → the ONE `last-checkpoint:` header line, replaced in place
+  local id body
+  [ -n "${3:-}" ] || { echo "goal-findings: checkpoint needs a text" >&2; return 1; }
+  _gf_find "$1" "$2" || { echo "goal-findings: no store on ${1}#${2} — nothing to stamp" >&2; return 1; }
+  id="$GF_ID"; body="$GF_BODY"
+  printf '%s\n' "$body" | gf_stamp_checkpoint "$3" | _gf_put "$1" "$id" "$2"
+  echo "goal-findings: ${1}#${2} last-checkpoint → ${3}"
+}
+
+gf_stamp_checkpoint() {   # store body on stdin, $1 text → body with the header line replaced or inserted after burn-down:
+  awk -v t="$1" '
+    /^last-checkpoint:/ { if (!done) { print "last-checkpoint: " t; done = 1 }; next }
+    { print }
+    /^burn-down:/ && !done { print "last-checkpoint: " t; done = 1 }'
+}
+
 _gf_self_test() {
   # Pure-parse checks over a fixture body — no network, no credential.
   local body counts
@@ -130,7 +169,22 @@ _gf_self_test() {
   [ "$next" = "3" ] || { echo "self-test: next-entry got '$next' want 3" >&2; return 1; }
   adv="$(printf '%s\n' "$body" | awk -v n=2 '{ if ($0 ~ /^dispositioned-through:/) print "dispositioned-through: " n; else print }' | grep -c '^dispositioned-through: 2$')"
   [ "$adv" = "1" ] || { echo "self-test: advance rewrite failed" >&2; return 1; }
-  echo "goal-findings self-test: OK (counts, append numbering, advance rewrite)"
+  # rule: the ⇒ suffix lands on the numbered entry only, and a second ruling REPLACES the first
+  ruled="$(printf '%s\n' "$body" | awk -v n=2 -v r="fold → #9 — already filed" '$0 ~ ("^" n "\\. ") { sub(/ ⇒ .*$/, ""); print $0 " ⇒ " r; next } { print }')"
+  [ "$(printf '%s\n' "$ruled" | grep -c ' ⇒ ')" = "1" ] || { echo "self-test: rule suffix count wrong" >&2; return 1; }
+  printf '%s\n' "$ruled" | grep -q '^2\. origin=#13 surface=b class=child — y ⇒ fold → #9 — already filed$' || { echo "self-test: rule suffix not on entry 2" >&2; return 1; }
+  reruled="$(printf '%s\n' "$ruled" | awk -v n=2 -v r="mint → #77" '$0 ~ ("^" n "\\. ") { sub(/ ⇒ .*$/, ""); print $0 " ⇒ " r; next } { print }')"
+  printf '%s\n' "$reruled" | grep -q '^2\. origin=#13 surface=b class=child — y ⇒ mint → #77$' || { echo "self-test: re-rule did not replace" >&2; return 1; }
+  [ "$(printf '%s\n' "$reruled" | gf_parse_counts)" = "2 0" ] || { echo "self-test: a ruled entry still counts once" >&2; return 1; }
+  # checkpoint: inserted after burn-down: on first stamp, replaced in place on the next, never a second line
+  st1="$(printf '%s\n' "$body" | gf_stamp_checkpoint "2026-09-23T06:00:00Z (c) no change")"
+  [ "$(printf '%s\n' "$st1" | grep -c '^last-checkpoint:')" = "1" ] || { echo "self-test: checkpoint stamp missing" >&2; return 1; }
+  printf '%s\n' "$st1" | sed -n '4p' | grep -q '^last-checkpoint: 2026-09-23T06:00:00Z (c) no change$' || { echo "self-test: checkpoint line not after burn-down:" >&2; return 1; }
+  st2="$(printf '%s\n' "$st1" | gf_stamp_checkpoint "2026-09-23T07:00:00Z (a) 2 minted")"
+  [ "$(printf '%s\n' "$st2" | grep -c '^last-checkpoint:')" = "1" ] || { echo "self-test: checkpoint re-stamp grew a second line" >&2; return 1; }
+  printf '%s\n' "$st2" | grep -q '^last-checkpoint: 2026-09-23T07:00:00Z (a) 2 minted$' || { echo "self-test: checkpoint re-stamp did not replace" >&2; return 1; }
+  [ "$(printf '%s\n' "$st2" | gf_parse_counts)" = "2 0" ] || { echo "self-test: the header line disturbed the counts parse" >&2; return 1; }
+  echo "goal-findings self-test: OK (counts, append numbering, advance rewrite, rule suffix, checkpoint stamp)"
 }
 
 # Source-guard: the scan sources this file for the fns (checkpoint counts, burn-down); the CLI
@@ -141,6 +195,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     counts)   shift; gf_counts "$@";;
     advance)  shift; gf_advance "$@";;
     burndown) shift; gf_burndown "$@";;
+    rule)     shift; gf_rule "$@";;
+    checkpoint) shift; gf_checkpoint "$@";;
     --self-test) _gf_self_test;;
     *) echo "usage: goal-findings.sh append|counts|advance|burndown|--self-test ..." >&2; exit 2;;
   esac

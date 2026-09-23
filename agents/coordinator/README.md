@@ -130,45 +130,39 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
 > `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
 
-> **MODEL — walk the stack's chain; do not freelance.** The chain's AUTHORITATIVE source is the
-> stack's **cluster claim**: `kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}
-> {.spec.workerModelFallbacks}'` — read it FRESH each dispatch (a chain redirect lands as a claim
-> change and syncs in minutes; `agents/stacks.json` is only the fallback when the claim read
-> fails, and it CAN lag — found live 2026-08-02: a #103 redispatch rode the file's stale
-> laguna-first chain two hours after the claim moved to mimo-first). `workerModel` is the
-> primary, `workerModelFallbacks` the ordered fallbacks.
-> Use the CURRENT chain model for BOTH `--model` flags below. Full design:
-> [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
 > - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
 >   max 5 since ADR-127). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
 >   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. The launcher posts the
 >   strike FOR you: a PR-less run gets one structured issue comment —
 >   `AGENT_STRIKE: model=<m> error_class=<c> round=<r> session=<pod>` (+ the log tail). That comment
->   IS the strike store (state lives in GitHub, not your head). To pick the model for any
->   (re-)dispatch, grep the issue's comments for `AGENT_STRIKE:` and take the first chain entry not
->   yet struck **for this task**, then **re-dispatch the same round immediately** with a fresh
->   session key. **Key-class errors** (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
->   marker instead of an `AGENT_STRIKE:` — skip these when walking struck entries; they are mint
->   defects, not model strikes, and the re-dispatch uses the **same model** with a fresh key.
+>   IS the strike store (state lives in GitHub, not your head) — grep it for what has already struck
+>   **for this task**; you do not pick a model from it, because there is no chain to walk: the
+>   launcher's `/route` call excludes the task's struck cells and owns the pick (ADR-094). Then
+>   **re-dispatch the same round immediately** with a fresh session key. **Key-class errors**
+>   (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
+>   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
+>   re-dispatch mints a fresh key.
 >   **Re-grade the budget label as escalation carrier**: when strikes suggest the
->   chain's model tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
+>   served model's tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
 >   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
 >   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
->   `agent/blocked` for a pure infra failure while chain entries remain;
->   only a fully-struck chain escalates (comment the strike list — that IS a human's problem).
+>   `agent/blocked` for a pure infra failure while the router still has an eligible candidate;
+>   only a `chain-exhausted` `/route` answer escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
 >   $/M — FU-062 §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
 >   provider pin. A `$1.0/M (source: default)` price means the model is *unpriced/unknown to the
 >   registry* (typo? rotated out?) — fix the model id, or pass `--price-per-mtok` if you truly know
 >   better. `:free` models are $0 → smallest tier by design.
-> - Do **not** swap in models you happen to know outside the chain (especially **reasoning** models
->   like `deepseek-r1*` — slow, verbose, pricier). Changing the chain itself is the human's call
->   (stacks.json is policy).
+> - Do **not** swap in models you happen to know outside the routed decision (especially
+>   **reasoning** models like `deepseek-r1*` — slow, verbose, pricier). Changing what the router may
+>   serve is the human's call (class policy in `model-classes.json` + the claim's knobs; `stacks.json`
+>   is the mirror, never the policy home).
 
-> **RAIL — the chain's rail decides whether steps 3–4 apply at all. Read it before you read them.**
-> The `workerModel` you just read tells you: a **`claude/` prefix** means this dispatch rides the
-> **subscription** rail (`kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}'` →
-> `claude/haiku` on the platform claim), and the launcher self-derives `--harness claude` from it.
+> **RAIL — the model's rail decides whether steps 3–4 apply at all. Read it before you read them.**
+> The model this dispatch will ride tells you: a **`claude/` prefix** means it rides the
+> **subscription** rail, and the launcher self-derives `--harness claude` from that prefix. A
+> chainless claim carries no model field to read — the router's `/route` answer names the served
+> model, and the claim's per-repo `fixer.claudeTier` is the knob that lets it serve a `claude/*` one.
 > For such a ride, **the OpenRouter key is the FALLBACK rail, never the prerequisite** — steps 3–4
 > (estimate + mint) do not apply, and a key that is absent, unminted, deferred or rate-limited must
 > **not** defer the dispatch. `agents/agent-session.sh` already encodes exactly this: it sends no
@@ -179,7 +173,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > (homelab#158). The **only** capacity condition that defers a subscription ride is the FU-088
 > latch, which the launcher probes itself — you dispatch and let it decide. Full procedure:
 > step 5 §**Claude tier**.
-> An **OpenRouter-primary** chain (any non-`claude/` `workerModel`) takes steps 3–4 as written.
+> An **OpenRouter-primary** ride (any non-`claude/` served model) takes steps 3–4 as written.
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
@@ -217,20 +211,20 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    comment names the SPECIFIC unshipped half; if the round needs more than that half, file a
    sibling issue instead of widening — **the sibling's parent is this issue (the issue you are working on),
    bound at filing** (lineage contract rule 3; use the native `sub_issues` POST edge, regardless of door).
-3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
-   next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
-   estimator:
+3. **Read + estimate — OpenRouter-primary rides only** (a `claude/` served model skips this step
+   and the next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the
+   budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
-     | python3 agents/estimate_budget.py --model <chain-model> \
+     | python3 agents/estimate_budget.py --model <served-model> \
            --project <project> --session issue-<N>-round-<r> --emit-cr
    ```
    **Read the estimator's stderr verdict.** If it prints `⚠ ESCALATE` (estimate exceeds the **top**
    tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
-4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary chains only**
-   (a `claude/` chain has no key to mint; the turn cap is its spend bound — RAIL note above) — by
+4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary rides only**
+   (a `claude/` served model has no key to mint; the turn cap is its spend bound — RAIL note above) — by
    re-running the estimate command from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
    no reset, ~4h `expiresAt` (was 2h — a laguna:free ride at ~306s/turn outlasted its key,
    sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
@@ -256,12 +250,12 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `task/*` label yourself and map the same way; no label → `fix.yaml`. Never pick a recipe on
    your own judgment of the issue's content.
    ```sh
-   bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
+   bash agents/agent-session.sh <project> --harness goose --model <served-model> \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
-   **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — this is
+   **Claude tier** (a `claude/<alias>` served model — FU-066): **skip steps 3–4 entirely** — this is
    the procedure for the rail rule stated at the head of this runbook. There
    is no OpenRouter key (auth = `ref:<project>/claude-session` via the egress proxy; the estimator
    and the budget CR have no role; the turn cap below is the spend bound), so nothing about the key
@@ -409,7 +403,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
           task being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
-       **step 3** with a fresh pod + fresh session key (on a `claude/` chain, steps 3–4 are skipped
+       **step 3** with a fresh pod + fresh session key (on a `claude/` served model, steps 3–4 are skipped
        as always and you re-enter at **step 5**), **passing the reviewer's comments to the
        fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
        **Widen the footprint first when the review names paths outside the issue's `Touches`
@@ -892,7 +886,10 @@ allowed) and `Goal → theme → child → sprout` reads 2 (suppressed).
 **THEN, assemble a complete theme (trigger (e) — ONLY when your unit carries
 `theme-complete=<theme-n>`).** The scan emits this for an open `theme:` container whose
 descendants are all closed and whose branch `goal/<goal-n>-<slug>` (its `Base`) has NO PR yet;
-the trigger retires once a PR for the branch exists. Re-read live state first: **if a PR for the
+the trigger retires once a PR for the branch exists. The walk reads RULINGS, not states: a
+`deferred` subtree is pruned (ADR-122 (4) — "not this Goal's" stays open by design and never
+holds an assembly; theme #1768 sat a day behind a deferred `agent-runtime#142` three levels
+down, 2026-09-22), and an unreadable store HOLDS the walk with one ⚠ (rule #6). Re-read live state first: **if a PR for the
 branch already exists, exit clean** — the trigger is stale (a sibling session or the seat got
 there first). Otherwise verify every member is CLOSED (re-list the theme's descendants) and that
 `ci` is green at the branch head (`gh run list --repo <slug> --branch goal/<goal-n>-<slug>`); a
@@ -917,14 +914,15 @@ naming the PR.
 **THEN, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
 re-fires the clause forever). Read the goal's findings-store comment; for every entry beyond
 `dispositioned-through:`, rule exactly one of — **fold** (the work belongs in an existing OPEN
-child: comment the fold target on the goal; the child's next round picks it up), **mint** (a
-REAL new child: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
+child: `bash /work/homelab/agents/goal-findings.sh rule <owner/repo> <goal-n> <entry-n> "fold →
+#<child> — <why, a few words>"`; the child's next round picks it up), **mint** (a
+REAL new child, then `rule <entry-n> "mint → #<new>"`: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
 (2); never the bucket pre-launch — body authored exactly as `goal-decompose` authors a child
 (`issue_body.py set "Touches=<narrowed>" "Base=<the goal's own, verbatim>" "Origin=<slug>#<the
 finding's origin issue>"`, then the `json` re-parse gate before `gh issue create` — §Authoring an
 issue body); label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
 and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flight enforces; over
-budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). **A finding that is REAL WORK but outside
+budget = mint UNLABELLED and say so), or **drop** (`rule <entry-n> "drop — <reason>"`). **A finding that is REAL WORK but outside
 THIS Goal's scope is still a `mint` — bound to its origin as a native sub-issue, written
 `deferred --by checkpoint` on the store, UNQUEUED — never filed standalone** (lineage contract
 rule 3: bind at filing regardless of door; rule 9: binding is dumb, the container rules scope).
@@ -932,6 +930,25 @@ homelab#1451 was filed standalone from Goal #1231's checkpoint as "out of scope"
 for three days with no container to adopt it (2026-09-08). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
 <total>`. A store you cannot read is a loud line on the goal, not a guess.
+
+**The write-back IS the store — the Goal's timeline gets NO ruling comment (operator,
+2026-09-23).** Every ruling lands as a store row: a member's is its disposition row, a finding's
+is the `⇒` suffix `rule` writes on its entry, and the ride itself is ONE header line —
+`bash /work/homelab/agents/goal-findings.sh checkpoint <owner/repo> <goal-n> "<ISO ts>
+(<triggers>) <n> minted · <m> folded · <k> dropped · <j> deferred"` — replaced in place. **That
+stamp is the LAST act of every ride, whatever fired — (a), (b), (c), (e) or an assembly-cr
+alike, not only a store-disposing ride** (theme #1768's assembly ride, 2026-09-23T08:27Z, wrote
+its index row and its finding and skipped it). A ride that changed nothing stamps `… no change`
+and writes nothing else, so the timeline does not grow. Reasoning goes where it is actionable: a minted child's body says why it exists, a
+fold/drop reason is the few words after the arrow, the rest is the transcript's
+(`s3://agent-transcripts/`). Why: twelve prose rulings on Goal #1640 averaged 6 KB each — 70 KB
+of re-derived evidence nobody read, four of them ruling one row or nothing — and pushed the
+timeline past the 128 KiB single-argument cap the scan's store read hit (E2BIG → "dispositions
+unreadable" → trigger (c) dead, 2026-09-22). `gh issue comment` on the Goal is the wrong call
+here exactly as it is for "picking this up" (ADR-103 (2)); the `<!-- agent-summary -->` line
+the launcher writes is the ride's only timeline trace. The one exception is a ruling that needs
+the OPERATOR (an escalation, a design fork): one comment addressed to them is a message, not
+residue.
 **blockedBy filing-edge (homelab#1152)**: when a minted child wedges live work (a sibling or
 the goal itself is stuck on it), wire the native `blockedBy` edge FROM the stuck issue in the
 same act (`gh api -X POST repos/<slug>/issues/<STUCK>/dependencies/blocked_by -F
@@ -1324,7 +1341,7 @@ harness-death rounds across 9 of 40 ledger rows, clustering hard (openrouter-ope
 strikes, 4 issues, 2h15m, one day — each triaged and model-swapped independently). So: when
 the same `error_class=` appears in `AGENT_STRIKE:` comments on **≥2 distinct ISSUES inside
 24h** (match on the structured `error_class=` field of the comment, never on log excerpts),
-stop swapping the chain per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
+stop swapping the model per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
 error_class=<c>` comment listing the issues, apply the `agent/error` label per affected item
 (the breaker stays per-item), and make the human ask ONCE. **That comment carries the same
 un-latch marker as the ci-red sibling** — `<!-- fleet-fault cause=<owner/repo>#<n> prs=<items> -->`

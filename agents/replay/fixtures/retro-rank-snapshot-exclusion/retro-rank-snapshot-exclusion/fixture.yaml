@@ -11,6 +11,11 @@
 #
 # This pins the retro-argo.yaml change: the workflow now calls `python3 agents/retro-rank.py
 # /tmp/ledger.jsonl /tmp/ledger-ranked.json 40` (the inline python block is gone).
+#
+# r5 F1 (homelab#1911) extends the same suite: the top-KEEP candidates are re-read LIVE, and a
+# CLOSED issue with a strong-link merged PR is dropped from the rank whatever its terminal_label
+# says and counted in the same no-silent-caps line; an unreadable probe keeps its row and is
+# counted unverified. The suite serves the `gh` reads from a PATH stub (offline).
 name: retro-rank-snapshot-exclusion
 mode: suite
 entrypoint: agents/retro-rank-test.sh

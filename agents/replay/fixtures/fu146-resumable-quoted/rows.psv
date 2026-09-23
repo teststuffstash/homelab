@@ -1,0 +1,7 @@
+# fu146-resumable-quoted — the decision table (family contract in fixture.yaml; FU-199).
+# The `env` column carries the branch SHAPE the row wants (`RB_SHAPE`); the bridge assembles the
+# repo-qualified entry. The glob row's value matches a file the bridge creates in the scratch cwd.
+#
+# id         | world | patch | env                | expect     | params
+whitespace   |       |       | RB_SHAPE=whitespace | whitespace |
+glob         |       |       | RB_SHAPE=glob       | glob       |

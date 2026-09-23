@@ -61,21 +61,33 @@ its anchor and its evidence:
 
 ### Rail rules
 
-- **A class names its rails.** `classes.<cls>.rails` (default `["openrouter","subscription"]`);
-  a candidate's rail is derived from its id (`claude/*` → `subscription`, else `openrouter`), and a
-  candidate whose rail the class does not list is skipped.
-  - anchor: `router.py:route`; `model-classes.json` → `classes`.
-  - evidence: decision row `skipped[{reason: "rail-<rail>-not-in-class-<cls>"}]`; `devbox run
-    router-self-test` (the eligibility rows).
+- **A class names its rails.** `classes.<cls>.rails` is written in the CANONICAL rail vocabulary —
+  `anthropic-subscription` · `opencode-go` · `openrouter` · `opencode-zen` (default
+  `["openrouter","anthropic-subscription"]`; the pre-Goal-#1769 spelling `subscription` still loads
+  through the one-release alias `router.py:RAIL_ALIASES`, deleted next release). A candidate's rail
+  is whatever `model_id.parse()` says it is — the parser owns the rule, and the walk reads it at the
+  one place that decides (`router.py:route`) — and a candidate whose rail the class does not list is
+  skipped. `opencode-zen` is the one member no parse rule produces yet (the `opencode/` leg, parked
+  by `OPENCODE_RAIL_DISABLED`): a class may name it, no candidate parses onto it, so the walk finds
+  an empty pool and moves on.
+  - anchor: `router.py:route` (`model_id.parse(m)["rail"]`); `model-classes.json` → `classes`.
+  - evidence: decision row `rail` (the parser's name — the same vocabulary `resolved.rail` uses);
+    `skipped[{reason: "rail-<rail>-not-in-class-<cls>"}]`; `devbox run router-self-test` (the
+    eligibility rows).
 - **Rails are walked in class order; the first rail with an eligible, priced candidate wins.**
   - anchor: `router.py:route` (the `for rail in rails` walk).
   - evidence: decision row `rail` + `jitter_pool`; `/router-status` → `decisions_24h`.
 - **Each rail has a capacity gate; a gate that closes refuses the whole rail with a typed defer —
-  it never falls through to a cheaper-but-unwired model.** The subscription gate is the FU-088
-  latch/utilization/semaphore triple; the OpenRouter gate is the key/credit state.
-  - anchor: `router.py:route` (`sub_gate`/`or_gate`, memoized to at most one read each) and the
-    capacity state in `openrouter-proxy.py`.
-  - evidence: `router_decisions_total{decision="defer",reason=…}`; replay
+  it never falls through to a cheaper-but-unwired model.** Three gates sit beside each other in the
+  walk, memoized to at most one read each: `sub_gate` (the `anthropic-subscription` rail — the
+  FU-088 latch/utilization/semaphore triple), `go_gate` (the `opencode-go` rail's OWN capacity, the
+  proxy's `/opencode-limit` composite: the observed 429/402 latch, the gometer window draw,
+  `OPENCODE_MAX_RUNNING` and the FU-213 park), and `or_gate` (the `openrouter` rail — the
+  key/credit state). A Go candidate is gated by `go_gate`, never by the OpenRouter key's state, and
+  a Go refusal is skipped with a typed `go:<reason>` — never an `openrouter:…` reason.
+  - anchor: `router.py:route` (`sub_gate`/`go_gate`/`or_gate`) and the capacity state in
+    `openrouter-proxy.py` (`/anthropic-limit`, `/opencode-limit`, the key/credit state).
+  - evidence: `router_decisions_total{decision="defer",reason=…}` (a Go defer reads `go:…`); replay
     `agents/replay/fixtures/fu088-ladder`.
 - **A chainless stack draws from the rotation universe** — `model_tiers` keys ordered by the
   class's `chain_head` first, then the ranked rotation — and the launcher refuses a chainless
@@ -308,12 +320,17 @@ scope.
   repeated serving strike latches the PROVIDER (or nominates the MODEL for the ledger) instead of
   labelling issues; `agent/error` on issues stays for the "us" case only, and a clean retry
   refutes a counted strike.
-  - **`unenforced`** — Goal #1640 acceptance 5 (the reader half). What runs today is the
-    comment-walking reader: **the scan counts the same `error_class` on ≥2 distinct issues inside
-    24 h, latches `agent/error` on the affected issues and files ONE `fleet-strike:` issue with a
-    `fleet-strike-fp:` marker.**
-  - anchor (the enforced-today rule): `agents/coordinator-scan.sh` (the fleet-strike reader).
-  - evidence: replay `agents/replay/fixtures/fleet-strike-reader`; the `fleet-strike:` issue title.
+  - anchor: `agents/coordinator-scan.sh` (the fleet reader — Goal #1640 acceptance 5, the reader
+    half, landed via homelab#1781): the scan still counts the same `error_class` on ≥2 distinct
+    issues inside 24 h, but it ASKS `/router-status` (`serving_classes`, `pair_cooldowns`,
+    `generations_24h`) and keys the group — a cooled pair ⇒ provider latch (report only), a model
+    struck across providers ⇒ ONE `model-nomination:` record issue, neither ⇒ `agent/error` +
+    ONE `fleet-strike:` issue with a `fleet-strike-fp:` marker; an unreadable router status is
+    fail-closed and loud.
+  - evidence: replay `agents/replay/fixtures/fleet-reader-rekey` (the three branches, the clean-retry
+    refutation, the unreadable router, the FU-202 key-class exclusion) +
+    `agents/replay/fixtures/fleet-strike-reader` (the us-case ticks); the `fleet-strike:` /
+    `model-nomination:` issue titles.
 - **The strike comment remains the store FOR NOW, with a named debt**: migrate the strike READERS
   (the chain-walk, the ≥2-in-24h rule) to the router store's `strikes` table, then demote the
   comment to one appended line on the `agent-summary` index.
@@ -421,7 +438,7 @@ owner per fact; every other consumer ASKS:
 
 | fact | owner | rule | anchor / evidence |
 |---|---|---|---|
-| live cell state — the `(model, provider)` cooldown + the per-cell hold | **the router** (`router.py`), served on `GET /router-status` and `/metrics` | the scan *asks* the router which cells are cooled; it never walks strike comments to reconstruct it — **`unenforced`** today (Goal #1640 acceptance 5's reader half: the scan still walks `AGENT_STRIKE:` comments) | anchor: `router.py:pair_cooldowns`, `router.py:status_summary`; evidence: `router_cell_cooldown{model,provider}`, `/router-status` → `pair_cooldowns` |
+| live cell state — the `(model, provider)` cooldown + the per-cell hold | **the router** (`router.py`), served on `GET /router-status` and `/metrics` | the scan *asks* the router which cells are cooled; it never walks strike comments to reconstruct it (Goal #1640 acceptance 5's reader half — the fleet reader reads `/router-status` → `pair_cooldowns` each pass and fails closed when it cannot) | anchor: `router.py:pair_cooldowns`, `router.py:status_summary`, `agents/coordinator-scan.sh` (the fleet reader's `/router-status` ask); evidence: replay `fleet-reader-rekey`, `router_cell_cooldown{model,provider}`, `/router-status` → `pair_cooldowns` |
 | the GitHub-side facts (labels, PR state, checks) | **github-exporter** — and only these | the monitoring surface for routing is the router's own gauge, not a GitHub-derived one | anchor: `argocd/` github-exporter resources; evidence: `router_cell_cooldown` scrape |
 | key and budget lifecycle (mint, cap, credit, top-up) | **openrouter-operator** | nothing else mints or budgets a key; the proxy only *reads* the resulting balance | anchor: `agents/fixer/openrouter-operator/`; evidence: `router_account_credit_usd` |
 | durable history (what happened, per run) | **the ledger / the router store** | history is never a live signal: a decision reads the cooldown/strike state, never "what the comments said" | anchor: `agents/ledger.py`; evidence: `/router-status` → `rows`, `generations_24h` |
@@ -445,7 +462,6 @@ homelab#1665/#1666 via PR#1734. The rows below are the residue:
 | `goose-32602-truncation` as a per-cell signal | proposed, no owner (operator direction 2026-09-14) |
 | the finalizer/watchdog producer half of the strike vocabulary, and the storm-watchdog kill | Goal #1640 acceptance 1 (agent-runtime half) |
 | launcher retry at worker-terminal | Goal #1640 acceptance 4 |
-| FU-200 fleet reader re-keyed on `(class, provider)` / `(class, model)` | Goal #1640 acceptance 5 (reader half) |
 | strike READERS migrated off the comment to the router store | proposed, no owner (operator ruling 2026-08-19; blocked on the storage-engine question) |
 | the platform stack chainless + `routerMode: authoritative` | Goal #1640 acceptance 6 |
 

@@ -100,13 +100,11 @@ ZEN_PREFIX = "opencode/"
 
 
 def _rail_disabled(leg: str) -> bool:
-    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213)."""
-    v = os.environ.get("OPENCODE_RAIL_DISABLED", "").strip().lower()
-    if v in ("", "0", "false", "no", "off"):
-        return False
-    if v in ("1", "true", "yes", "on", "all", "both"):
-        return True
-    return leg in v.replace(",", " ").split()
+    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213). The parse is
+    the router's ONE home (Goal #1769 acceptance 2) — the same predicate the /route walk uses to
+    skip a parked rail `rail:parked`, so this forward-path belt and the walk cannot disagree about
+    which rail an env value parks."""
+    return router.rail_parked_leg(leg)
 # homelab#791: the OpenRouter translation leg — `openrouter/` prefixed model ids on the
 # /anthropic/* path get their Anthropic-format /v1/messages request translated to an
 # OpenAI-format /chat/completions call and forwarded to OpenRouter. The prefix is STRIPPED
@@ -220,7 +218,10 @@ def _dispatch_verdict(now: float, tier: str | None = None) -> tuple[bool, str | 
 # absent count (None), not zero — a broken counter must never stop dispatch.
 SUBSCRIPTION_MAX_RUNNING = int(os.environ.get("SUBSCRIPTION_MAX_RUNNING", "3"))
 SUBSCRIPTION_SESSION_SELECTOR = "homelab.teststuff.net/subscription-session=claude"
-OPENCODE_MAX_RUNNING = int(os.environ.get("OPENCODE_MAX_RUNNING", "3"))
+# Goal #1769 acceptance 2: the Go rail's concurrency bound is DECLARED in model-classes.json
+# (`rails.opencode-go.concurrency`); OPENCODE_MAX_RUNNING is the ENV OVERRIDE (0 = disabled), not
+# the only home. Read at CALL time (below) so the block — loaded by router.init() in main() — is
+# the home and the env is the override.
 GO_SESSION_SELECTOR = "homelab.teststuff.net/rail=opencode-go"
 SEMAPHORE_TTL_S = int(os.environ.get("SEMAPHORE_TTL_S", "10"))
 # One cache slot PER SELECTOR — the anthropic and Go rails share the listing code path but never
@@ -279,13 +280,81 @@ def _semaphore_state() -> dict:
                             and running >= SUBSCRIPTION_MAX_RUNNING)}
 
 
+def _go_max_running() -> int:
+    """The Go rail's concurrency bound (Goal #1769 acceptance 2): the DECLARED
+    `rails.opencode-go.concurrency` from model-classes.json, with OPENCODE_MAX_RUNNING as the ENV
+    OVERRIDE (0 = disabled). Read at CALL time so the block is the home and the env is the
+    override — the module global this replaced was the only home, which is the subtraction."""
+    env = os.environ.get("OPENCODE_MAX_RUNNING")
+    if env not in (None, ""):
+        try:
+            return int(env)
+        except ValueError:
+            pass
+    return int(router.rail_concurrency("opencode-go", 3) or 0)
+
+
 def _go_semaphore_state() -> dict:
-    """FU-170: the Go-rail concurrency bound — max from OPENCODE_MAX_RUNNING (0 = disabled),
-    fail-open on an unreadable count just like _semaphore_state."""
+    """FU-170: the Go-rail concurrency bound — max from the declared rail block, overridden by
+    OPENCODE_MAX_RUNNING (0 = disabled), fail-open on an unreadable count just like
+    _semaphore_state."""
     running = _go_running()
-    return {"running": running, "max": OPENCODE_MAX_RUNNING,
-            "limited": bool(OPENCODE_MAX_RUNNING > 0 and running is not None
-                            and running >= OPENCODE_MAX_RUNNING)}
+    max_running = _go_max_running()
+    return {"running": running, "max": max_running,
+            "limited": bool(max_running > 0 and running is not None
+                            and running >= max_running)}
+
+
+def _go_window_status(now: float) -> dict:
+    """gometer.go_window_status wired to the router's Go ledger — the ONE composition behind both
+    readers of the Go windows: GET /opencode-limit (the launcher probe), GET /metrics, and
+    `_opencode_ok` (the /route walk's go_gate, Goal #1769 acceptance 1). Before the gate existed
+    each HTTP surface carried its own pair of local closures for this; a second copy is exactly
+    how the probe and the walk would come to disagree about what `limited` means."""
+    def _snapshot(name, win_start, _resets_at):
+        return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
+
+    # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the previous
+    # window expired; the ledger walk recovers the open epoch).
+    def _chain(span_s, lookback_s):
+        return router.go_usage_chain_open(span_s, lookback_s)
+
+    return gometer.go_window_status(now, _snapshot, chain_fn=_chain)
+
+
+def _opencode_ok() -> tuple[bool, str | None, int]:
+    """Goal #1769 acceptance 1: the GO rail's own capacity verdict for /route's walk, beside
+    `_subscription_ok`/`_openrouter_ok`. The composite is the SAME one /opencode-limit serves
+    (`limited`), read in the same precedence `_go_limit_reason` names it, so the gate and the
+    launcher probe can never disagree about whether the Go rail is open:
+
+      rail-disabled (FU-213 park) → observed 429/402 capacity latch → window draw past threshold
+      → the OPENCODE_MAX_RUNNING semaphore.
+
+    Returns (ok, reason, retry_after_s); `reason` is the /opencode-limit reason and the router
+    types it `go:<reason>` in `skipped`. FAIL-OPEN on an unreadable count (the semaphore's own
+    contract: an absent count is not zero), so a broken pod counter never wedges the Go rail."""
+    now = time.time()
+    if _rail_disabled("go"):
+        return False, "rail-disabled", 900
+    go_capacity = _go_capacity_snapshot(now)
+    if go_capacity["limited"]:
+        return False, (go_capacity["reason"] or "observed"), \
+            max(60, int(go_capacity["remaining_s"] or 900))
+    status = _go_window_status(now)
+    if status["limited"]:
+        # Name the crossing window and carry ITS reset, the same shape the anthropic gate types
+        # (`utilization-<w>` + the window's reset) so a launcher defers for the right duration.
+        reason = next((f"utilization-{w}" for w, d in status["windows"].items()
+                       if d["utilization"] >= status["thresholds"][w]), "utilization")
+        w = status["windows"].get(reason[len("utilization-"):]) or {}
+        reset = w.get("resets_at")
+        retry = 900 if reset is None else max(60, min(int(reset - now), 6 * 3600))
+        return False, reason, retry
+    go_semaphore = _go_semaphore_state()
+    if go_semaphore["limited"]:
+        return False, "semaphore", 300
+    return True, None, 0
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -2805,13 +2874,7 @@ class Proxy(BaseHTTPRequestHandler):
             # hold expires until a 2xx clears it, while `capacity.limited` (and the top-level
             # `limited`) are keyed on the hold's EXPIRY — consumers act on `limited`, never on
             # `reason != null`.
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: wire the CHAIN-anchor seam — the 5h window's open epoch comes from
-            # the ledger walk (first-use/expiry-chained), not a fixed grid.
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            status = _go_window_status(time.time())
             go_semaphore = _go_semaphore_state()
             go_capacity = _go_capacity_snapshot(time.time())
             limited = (status["limited"] or go_semaphore["limited"]
@@ -2879,14 +2942,9 @@ class Proxy(BaseHTTPRequestHandler):
             # Utilization is the WINDOW-DRAW number (list price on raw tokens, badge-halved — the
             # 2026-08-17 reconciliation); the billed-style estimate is a SEPARATE gauge so the two
             # cannot be conflated. TYPE/HELP emitted once per metric family (Prometheus strict
-            # parsing requirement).
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the
-            # previous window expired; the ledger walk recovers the open epoch).
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            go_status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            # parsing requirement). The window composition itself lives in _go_window_status —
+            # one home for /opencode-limit, /metrics and /route's go_gate (Goal #1769).
+            go_status = _go_window_status(time.time())
             lines += [
                 "# TYPE opencode_subscription_usage_usd gauge",
                 "# HELP opencode_subscription_usage_usd Go-rail subscription window DRAW usage in USD per window (list price, badge-halved).",
@@ -2938,7 +2996,7 @@ class Proxy(BaseHTTPRequestHandler):
             if go_semaphore["running"] is not None:
                 lines.append(f"opencode_subscription_semaphore_running {go_semaphore['running']}")
             lines += ["# TYPE opencode_subscription_semaphore_max gauge",
-                      f"opencode_subscription_semaphore_max {OPENCODE_MAX_RUNNING}"]
+                      f"opencode_subscription_semaphore_max {_go_max_running()}"]
             # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
             semaphore = _semaphore_state()
             lines += ["# TYPE anthropic_subscription_semaphore_running gauge",
@@ -3405,6 +3463,10 @@ class Proxy(BaseHTTPRequestHandler):
             decision = router.route(req_body, {
                 "price": _price, "subscription_ok": _subscription_ok,
                 "openrouter_ok": _openrouter_ok,
+                # Goal #1769 acceptance 1: the Go rail's OWN gate. Before this the walk flattened
+                # an `opencode-go/*` candidate onto the OpenRouter rail, so a Go model's fate was
+                # decided by the OpenRouter key's state (headroom, a mint that never happened).
+                "opencode_ok": _opencode_ok,
             })
             if decision.get("decision") == "dispatch" \
                     and decision.get("rail") == "openrouter" \
@@ -3983,7 +4045,7 @@ def _self_test() -> int:
         return s
 
     # Override globals for test
-    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response, OPENCODE_MAX_RUNNING
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response
     _go_response = {"type": "sse", "body": b'data: {"ok":true}\n\ndata: [DONE]\n\n'}  # default
     ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
     GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
@@ -4667,17 +4729,22 @@ def _self_test() -> int:
           f"semaphore-fail-open: semaphore dict running=None limited=False (got {resp['semaphore']})")
 
     # Test 10c: OPENCODE_MAX_RUNNING=0 disables the bound — a full count must NOT limit.
-    # Contract: limited requires max > 0 (the `0 = disabled` arm of the dispatch). Restore the
-    # module global afterwards so the remaining tests see the default max=3.
-    _old_go_max = OPENCODE_MAX_RUNNING
-    OPENCODE_MAX_RUNNING = 0
+    # Contract: limited requires max > 0 (the `0 = disabled` arm of the dispatch). Goal #1769
+    # acceptance 2: the bound is read at CALL time from the declared rail block, with the env as
+    # the override — so the toggle is the ENV, not a module global. Restore it afterwards so the
+    # remaining tests see the declared default (3).
+    _old_go_max = os.environ.get("OPENCODE_MAX_RUNNING")
+    os.environ["OPENCODE_MAX_RUNNING"] = "0"
     _semaphore_caches[GO_SESSION_SELECTOR] = (time.time(), 3)
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/opencode-limit")
     r = c.getresponse()
     resp = json.loads(r.read())
     c.close()
-    OPENCODE_MAX_RUNNING = _old_go_max
+    if _old_go_max is None:
+        os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    else:
+        os.environ["OPENCODE_MAX_RUNNING"] = _old_go_max
     check(resp["limited"] is False,
           f"semaphore-disabled: limited={resp['limited']} (OPENCODE_MAX_RUNNING=0, running 3 → disabled)")
     check(resp["reason"] is None,
@@ -6614,6 +6681,23 @@ data: [DONE]
     print("\n=== Pair cooldown feeds the pin (Goal #1640 acceptance 5) ===")
     router.init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "model-classes.json"))
+    # ── Goal #1769 acceptance 2/3: the Go concurrency bound is READ from the `rails:` block ──
+    # The declared value is the home; OPENCODE_MAX_RUNNING is the env override. With the env
+    # unset, the effective bound is the declared one (3) — the module global this replaced was
+    # the only home, which is the subtraction.
+    check(router.rail_concurrency("opencode-go", None) == 3,
+          f"rails.opencode-go.concurrency must be declared 3 (got "
+          f"{router.rail_concurrency('opencode-go', None)})")
+    _saved_env_max = os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    check(_go_max_running() == 3,
+          f"the Go bound must read the declared value with the env unset (got {_go_max_running()})")
+    os.environ["OPENCODE_MAX_RUNNING"] = "7"
+    check(_go_max_running() == 7,
+          f"OPENCODE_MAX_RUNNING must OVERRIDE the declared value (got {_go_max_running()})")
+    if _saved_env_max is None:
+        os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    else:
+        os.environ["OPENCODE_MAX_RUNNING"] = _saved_env_max
     _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01),
                              _endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
     for _t in ("issue-1668-a", "issue-1668-b"):
