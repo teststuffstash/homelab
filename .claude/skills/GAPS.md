@@ -222,6 +222,18 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       finding — a hand-managed watch has no notion of "replaces". Four defects across three copies,
       zero successful ones: **stop re-typing it, ship `maint watch`** (one verb, one process, a
       dedupe set, a loud-on-unreadable probe, and an id so re-arming replaces rather than duplicates).
+- [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
+      acceptance for any detector-first item (the standing build order: detector, let it fire on
+      the real condition, then the fix) is to make the new alert fire on purpose — but `check`
+      diffs firing alerts against the baseline with no notion of an EXPECTED one, so the window's
+      own product reads as a regression and `close` refuses. `open --alerts` does not help: it is
+      the responder's skip list, never consulted by `check`. The only exit is `--force`, which the
+      skill documents for a stale slot from a dead session — so the seat either forces (and the
+      word stops meaning what it says) or leaves a window open for the alert's whole window.
+      Sighted 2026-09-23 (seat, FU-247's kernel-oops acceptance: `KernelOopsCaptured` fired as
+      designed on wk-03, silenced 7h in Alertmanager, self-clears ~6h). Next: an expected-alert
+      declaration that `check` honours (`open --expect <alert>`, reported as "expected, firing"
+      rather than NEW), and the skill's detector-acceptance path should name it.
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's
