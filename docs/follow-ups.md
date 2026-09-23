@@ -7,7 +7,9 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-280** (2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-282** (2026-09-23: FU-281 minted for the goal-checkpoint trigger side waking on
+  nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
+  2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -483,6 +485,18 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
+- [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.**
+      Fleet read 2026-09-23 (comments on the six Goals with a store): 19 checkpoint rulings, 11 of
+      them on #1640, where 4 fired on trigger (c) for ONE new member (two were sprouts filed
+      minutes after the previous checkpoint; one re-fired on rulings already written) and the
+      (a) rides found two thirds of their findings already filed / folded / fixed. Every ride
+      cost a sonnet session. The WRITE side is fixed (PR #1933: rulings are store rows, the
+      timeline stays flat); this is the READ side. Operator-owned: the pendulum went from
+      "not enough" (goal #278 stalled) to "too much". Candidate levers, undecided: debounce (c)
+      by member age or fold it into the next (a)/(e) wake; let the scan pre-rule the
+      deterministic findings (origin closed by a merged PR, surface+origin matching an open
+      issue) so the session sees only the residue. **Next:** operator picks the lever; measure
+      rulings-per-Goal before/after on `goal_timeline_comments` + the `last-checkpoint:` line.
 - [ ] **FU-178** — **Two readers, one mirror: the doorbells read `agents/stacks.json` while the
       scan reads the live cluster claim** — a claim change (chain redirect, knob flip) reaches
       the scan in minutes and the doorbell side only when someone remembers to sync the file

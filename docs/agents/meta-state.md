@@ -9,7 +9,16 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
-- **⚑ PICKUP (2026-09-22 late — retro r5 + Goal #1906; arc in TICK-LOG).** (1) **Goal #1906** (retro r5's
+- **⚑ PICKUP (2026-09-23 morning — write-back-is-the-store; arc in TICK-LOG).** (1) **PR#1933** (checkpoint
+  write-back = store rows, stdin store read, (e) prunes deferred, `GoalTimelineNoisy`) — auto-merge armed;
+  after it lands, the FIRST platform scan (`*/30`) must open theme #1768's assembly PR
+  (`goal/1640-launcher → master`, `Fixes #1768`) on its own — if it does not, that is a finding; open it by
+  hand only then. (2) **PR#1932** (token broker 503 + curl retry, subagent's) — in review. (3) #1929 (rails
+  assembly) should go MERGEABLE now that #1931 is in; it parks on `agents/**`/proxy paths for a seat read.
+  (4) #1916 approved → lands; #1651 closes by hand when #1908 reaches master via theme #1907's assembly
+  (#1910 stays unqueued, operator: later). (5) **FU-281** = the trigger side, operator's. (6) #1905: fix
+  ADR-080 → ADR-091 at the spike's line 41, the bot's one blocking finding.
+- **⚑ PICKUP (2026-09-22 late — retro r5 + Goal #1906; arc in TICK-LOG; items (2) and the #1768 tail are RESOLVED above).** (1) **Goal #1906** (retro r5's
   batch container, themed): #1908/#1909/#1911 queued; **#1910 is authored and UNQUEUED on purpose** —
   it un-banks chainless-redesign's rung-0 corollary (b) for the no-op-after-directive case; the
   operator reads Goal pin 3 and queues it (`agent/queued`) or rules it deferred on the store. Theme
