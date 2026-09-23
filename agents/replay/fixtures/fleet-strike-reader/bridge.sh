@@ -30,6 +30,18 @@ orphans=""
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }
 
+# ── stub ── the router's `/router-status`. Goal #1640 acceptance 5: the reader ASKS the router
+# for live CELL state (`pair_cooldowns`, `serving_classes`, `generations_24h`) instead of
+# rebuilding it from the comment timeline. A fixture must never reach the live endpoint
+# (hermeticity — the ClusterIP URL answers from inside the loop namespace), so `curl` is stubbed
+# and RECORDED. This world has NO cooled pair and NO clean ride, so every class falls to the "us"
+# branch — the pre-re-key behaviour, now keyed on the cell.
+curl() {
+  printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"
+  printf '%s' "${ROUTER_STATUS_JSON:-{\"serving_classes\":[\"auth-storm\",\"provider-5xx\",\"timeout\",\"tool-loop\"],\"pair_cooldowns\":[],\"generations_24h\":[]}}"
+  return 0
+}
+
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 # TICK 1 — first pass against the #326 four-strike world (no prior action).
 # All four issues have agent-fix label, no agent/error yet, no fleet-strike-fp: marker.

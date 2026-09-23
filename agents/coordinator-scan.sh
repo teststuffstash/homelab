@@ -78,6 +78,11 @@ rail_model() {
 goal_lane_clause() {
   case "${1:-}" in goal-decompose|goal-checkpoint) return 0;; *) return 1;; esac
 }   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
+# Goal #1640 acceptance 5: the router's `/router-status` — the ONE home of live CELL state
+# (`pair_cooldowns`, `serving_classes`, `generations_24h`). ClusterIP-local, unauthenticated, the
+# same endpoint the launcher's FU-088 probe reads. The fleet reader ASKS it; it never rebuilds the
+# state from a comment timeline. An unreadable status is fail-closed (rule #6).
+ROUTER_STATUS_URL="${ROUTER_STATUS_URL:-${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}}"
 # ── the ONE issue-body parser (ADR-122 (3), homelab#1431) ──────────────────────────────────────
 # Every body-grammar READ in this file goes through `agents/issue_body.py`; no reader here carries
 # its own line-anchored regex any more (`Touches:` alone had four spellings in this file). The
@@ -4150,16 +4155,30 @@ EOF_GTHEMES_OPEN
                   # discipline as AGENT_INFEASIBLE: (homelab#257).
                   strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
                   if [ -n "$strike" ]; then
+                    # FU-199 (folded in, 2026-09-20): the finalizer writes the line in MARKDOWN —
+                    # `**Resumable branch pushed:** \`<branch>\`` + trailing prose. The old
+                    # `sub(".*Resumable branch pushed:[ \t]*"; "")` was greedy up to the opening
+                    # `**`, so the extracted value was `** \`agent/<branch>\` — the next round can
+                    # resume…`, which then word-split in the dispatch loop (the #1780 dispatch
+                    # arrived carrying `work-branch=**`). Anchor the match, strip the backticks,
+                    # and cut at the FIRST whitespace: the bare branch name and nothing else.
                     branch="$(jq -rn --arg s "$strike" '
-                      $s | if test("Resumable branch pushed:") then
-                        (split("\n")[] | select(test("Resumable branch pushed:"))
-                         | sub(".*Resumable branch pushed:[ \t]*"; "") | .[0:200])
-                      else "" end
+                      $s
+                      | [ split("\n")[]
+                          | select(test("^\\*{0,2}Resumable branch pushed:\\*{0,2}"))
+                          | sub("^\\*{0,2}Resumable branch pushed:\\*{0,2}[ \t]*"; "")
+                          | gsub("`"; "")
+                          | sub("[ \t].*$"; "")
+                          | select(. != "")
+                        ] | first // ""
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
                       # repo-qualified key: issue numbers are only unique per repo
-                      resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch} "
+                      # NEWLINE-separated (not space): the dispatch loop reads this list with
+                      # `IFS= read -r`, so a value carrying whitespace or a glob character can
+                      # neither word-split nor expand (FU-199, folded in 2026-09-20).
+                      resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch}"$'\n'
                     fi
                   fi
                 fi
@@ -4336,117 +4355,172 @@ EOF_GTHEMES_OPEN
       fi
     fi
     # <<<REPLAY:done-phantom-belt<<<
-    # ── FLEET-STRIKE READER (FU-200, Goal #1231 acceptance 4) ─────────────────────────────────
-    # A scan-side window count: same `error_class=` on ≥2 distinct issues inside 24h ⇒ apply
-    # `agent/error` per affected item + ONE comment listing them + ONE deduped inert platform
-    # filing per the brief's filing contract. Match on the structured `error_class=` field only,
-    # never log excerpts. Forward-compatible with the G2 key-class split: the reader counts
-    # strike-class rows only (AGENT_STRIKE: comments), never key-class rows.
+    # ── FLEET-STRIKE READER (FU-200 re-keyed, Goal #1640 acceptance 5) ─────────────────────────
+    # The reader used to walk `AGENT_STRIKE:` comments to reconstruct CELL state the router already
+    # owns, and its only verb was "label issues". It now keys on the strike's `(class, provider)`,
+    # `(class, model)`, or NEITHER, and acts accordingly:
     #
-    # The scan already reads AGENT_STRIKE comments per issue for the C4/C5 chain-walk (the
-    # ambig-decidable block). This clause extends that read to a CROSS-ISSUE window: same
-    # error_class on ≥2 distinct issues inside 24h.
+    #   (class, provider) — a repeated serving strike on one provider LATCHES THE PROVIDER. The
+    #       router's (model, provider) pair cooldown IS that state (`/router-status` →
+    #       `pair_cooldowns`); the scan ASKS for it, it does not rebuild it from a timeline.
+    #   (class, model)    — a repeated serving strike ACROSS providers NOMINATES THE MODEL for the
+    #       ledger: a record, never a label.
+    #   neither           — the "us" case: our recipe, our repo, our task. This, and ONLY this,
+    #       puts `agent/error` on issues (the fleet-fault rule's ≥2-in-24h shape stays; its verb
+    #       changes).
     #
-    # DEDUP: before filing, check for an existing OPEN issue in the repo whose title starts
-    # with "fleet-strike:" and whose body names the same error_class. If one exists, extend it
-    # (add a comment listing the new affected issues) instead of creating a new filing.
+    # A CLEAN RETRY REFUTES A COUNTED STRIKE: a cell that rode successfully after a strike is no
+    # longer counted toward a latch or a nomination. The router's `pair_cooldowns` already excludes
+    # clean-ride-refuted pairs; the scan additionally drops any strike whose (model, provider) cell
+    # rode cleanly in the window (`/router-status` → `generations_24h`).
+    #
+    # RULE #6: an unreadable `/router-status` is FAIL-CLOSED and LOUD — no latch, no nomination, no
+    # `agent/error`. The reader never fails INTO a write. The vocabulary (`serving_classes`) is read
+    # from the endpoint, never a second copy.
+    #
+    # Match on the structured `error_class=`/`model=`/`provider=` fields only, never log excerpts.
+    # Forward-compatible with the G2 key-class split: the reader counts strike-class rows only
+    # (AGENT_STRIKE: comments), never key-class rows.
+    #
+    # DEDUP (us case): before filing, check for an existing OPEN issue in the repo whose title
+    # starts with "fleet-strike:" and whose body names the same error_class. If one exists, extend
+    # it (add a comment listing the new affected issues) instead of creating a new filing.
     # RESOLUTION SUBTRACTION (homelab#1712): a CLOSED filing for the same error_class whose
     # `issues=` marker covers the affected set, closed NEWER than the newest strike in the set,
     # means the class was resolved inside the window — the reader neither re-files nor re-applies
     # `agent/error`. Closing a filing is the resolution signal; it is not a licence to mint the next.
     # >>>REPLAY:fleet-strike-reader>>>
-    # Read all open issues with agent-fix label (already fetched as $openall). For each, fetch
-    # comments and extract AGENT_STRIKE lines with error_class=. Group by error_class and check
-    # for ≥2 distinct issues within 24h.
-    fleet_strike_issues=""   # space-separated "error_class=issue_nums" pairs
+    fleet_strike_issues=""       # us-case: "error_class=issue_nums" → label + comment + file
+    fleet_model_nominations=""   # model-case: "model=providers" → a record (filing), never a label
+    fleet_provider_latches=""    # provider-case: "model|provider" → report only (the router owns it)
     if [ -n "$dispatchable" ]; then
-      # Get all agent-fix issues (not just queued/in-progress — strikes can be on any state)
-      all_fix="$(printf '%s' "$openall" | jq -r '[.[]|(.labels|map(.name)) as $L|select($L|index("agent-fix"))|.number] | unique | .[]' 2>/dev/null || true)"
-      if [ -n "$all_fix" ]; then
-        # Fetch comments for each issue and extract AGENT_STRIKE error_class values.
-        # Collect (error_class, issue_number) pairs, then group by error_class using jq.
-        pairs=""
-        for fn in $all_fix; do
-          icmt="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null)" || icmt=""
-          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
-            # Extract error_class from AGENT_STRIKE comments. Anchored at start-of-comment,
-            # same discipline as AGENT_INFEASIBLE: (homelab#257) and AGENT_STRIKE: (FU-199).
-            # Match the structured `error_class=` field only, never log excerpts.
-            classes="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:")) | capture("error_class=(?<ec>[^ \\t\\n]+)") | .ec] | unique | .[]' <<<"$icmt" 2>/dev/null || true)"
-            if [ -n "$classes" ]; then
-              while IFS= read -r ec; do
-                [ -n "$ec" ] || continue
-                # FU-202 belt: key-class error_class values (budget-exhausted-key, budget-403-key)
-                # are MINT defects, not worker strikes. New rides post KEY-RETRY: (not AGENT_STRIKE:)
-                # so the ^AGENT_STRIKE: anchor already excludes them going forward. But the 24h
-                # window can span the #1233 merge, and historical corpus records key-class as
-                # AGENT_STRIKE:. Explicitly exclude them here so the fleet-strike reader never
-                # counts a mint defect as a fleet strike.
-                case "$ec" in
-                  budget-exhausted-key|budget-403-key) continue;;
-                esac
-                pairs="${pairs}${ec}:${fn}\n"
-              done <<< "$classes"
+      # ── ASK THE ROUTER FIRST (rule #6: fail-closed and loud) ────────────────────────────────
+      router_status="$(curl -fsS --max-time 5 "${ROUTER_STATUS_URL}/router-status" 2>/dev/null)" || router_status=""
+      if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"${router_status:-null}"; then
+        orphans="${orphans}[$repo] ⛔ FLEET READER: /router-status unreadable — pair_cooldowns unknown; no latch, no nomination, no agent/error this tick (rule #6 — never fail INTO a write)\n"
+      else
+        serving_classes="$(jq -r '(.serving_classes // []) | join(" ")' <<<"$router_status" 2>/dev/null || true)"
+        pair_cooldowns="$(jq -r '(.pair_cooldowns // [])[] | "\(.model)|\(.provider)"' <<<"$router_status" 2>/dev/null || true)"
+        clean_cells="$(jq -r '(.generations_24h // [])[] | "\(.model)|\(.provider)"' <<<"$router_status" 2>/dev/null || true)"
+        # Get all agent-fix issues (not just queued/in-progress — strikes can be on any state)
+        all_fix="$(printf '%s' "$openall" | jq -r '[.[]|(.labels|map(.name)) as $L|select($L|index("agent-fix"))|.number] | unique | .[]' 2>/dev/null || true)"
+        # Collect one record per (class, model, provider) per issue: `class|model|provider|issue|ts`.
+        # Anchored at start-of-comment, same discipline as AGENT_INFEASIBLE: (homelab#257) and
+        # AGENT_STRIKE: (FU-199). The newest such comment per cell wins.
+        raw_records=""
+        if [ -n "$all_fix" ]; then
+          for fn in $all_fix; do
+            icmt="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null)" || icmt=""
+            if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
+              rows="$(jq -r --arg fn "$fn" '
+                def f($k): [ capture("(?:^|[ \t])" + $k + "=(?<v>[^ \t\n]+)") | .v ] | first // "";
+                [ .[] | select((.body // "") | test("^AGENT_STRIKE:"))
+                  | (.body // "") as $b
+                  | { ec: ($b | f("error_class")), model: ($b | f("model")),
+                      provider: ($b | f("provider")), ts: (.created_at // "") } ]
+                | group_by([.ec, .model, .provider])
+                | .[] | (sort_by(.ts) | last)
+                | select(.ec != "")
+                | "\(.ec)|\(.model)|\(.provider)|\($fn)|\(.ts)"
+              ' <<<"$icmt" 2>/dev/null || true)"
+              [ -n "$rows" ] && raw_records="${raw_records}${rows}\n"
             fi
-          fi
-        done
-        # Group by error_class using awk: collect comma-separated issue numbers per class
-        strike_map="$(printf '%b' "$pairs" | awk -F: '
-          { ec = $1; fn = $2 }
-          { if (ec != "") { seen[ec] = seen[ec] ? seen[ec] "," fn : fn } }
-          END { for (ec in seen) print ec "=" seen[ec] }
+          done
+        fi
+        # CLEAN-RETRY REFUTATION: drop any strike whose (model, provider) cell rode cleanly in the
+        # window. A cell that rides successfully after a strike is no longer counted.
+        records="$(printf '%b' "$raw_records" | awk -F'|' -v clean="$clean_cells" '
+          BEGIN { n = split(clean, c, "\n"); for (i = 1; i <= n; i++) if (c[i] != "") clean_set[c[i]] = 1 }
+          NF >= 5 && $1 != "" {
+            cell = $2 "|" $3
+            if (cell in clean_set) next
+            print
+          }
         ' 2>/dev/null || true)"
-        # Check each error_class for ≥2 distinct issues
-        if [ -n "$strike_map" ]; then
-          while IFS= read -r entry; do
-            [ -n "$entry" ] || continue
-            ec="${entry%%=*}"
-            nums="${entry#*=}"
-            # Count distinct issues
-            count="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ')"
-            if [ "$count" -ge 2 ]; then
-              # Check 24h window: fetch the newest AGENT_STRIKE comment's timestamp for each issue
-              # and verify all are within 24h of each other
-              now_s="$(date -u +%s)"
-              timestamps=""
-              all_within_24h=1
-              for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
-                [ -n "$fn" ] || continue
-                icmt="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null)" || icmt=""
-                if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
-                  # Find the newest AGENT_STRIKE: comment with this error_class
-                  ts="$(jq -r --arg ec "$ec" '
-                    [.[] | select((.body // "") | test("^AGENT_STRIKE:") and
-                      contains("error_class=\($ec)"))
-                     | .created_at] | last // ""
-                  ' <<<"$icmt" 2>/dev/null || true)"
-                  if [ -n "$ts" ]; then
-                    ts_s="$(jq -rn --arg t "$ts" '($t | fromdateiso8601? // null) // -1' 2>/dev/null || echo -1)"
-                    timestamps="${timestamps}${fn}=${ts_s}\n"
-                  fi
-                fi
-              done
-              # Check that all timestamps are within 86400s (24h) of each other
-              if [ -n "$timestamps" ]; then
-                min_ts="" max_ts=""
-                while IFS= read -r ts_entry; do
-                  [ -n "$ts_entry" ] || continue
-                  ts_val="${ts_entry#*=}"
-                  case "$ts_val" in ''|*[!0-9-]*) continue;; esac
-                  if [ -z "$min_ts" ] || [ "$ts_val" -lt "$min_ts" ]; then min_ts="$ts_val"; fi
-                  if [ -z "$max_ts" ] || [ "$ts_val" -gt "$max_ts" ]; then max_ts="$ts_val"; fi
-                done <<< "$(printf '%b' "$timestamps")"
-                if [ -n "$min_ts" ] && [ -n "$max_ts" ]; then
-                  span="$(( max_ts - min_ts ))"
-                  [ "$span" -le 86400 ] || all_within_24h=0
-                  # The window must also be LIVE, not merely historical: the NEWEST strike in the
-                  # group has to fall inside 24h of now. Without this, `max_ts - min_ts` is
-                  # immutable historical data and a group that once clustered stays "detected"
-                  # on every future tick forever.
-                  [ "$(( now_s - max_ts ))" -le 86400 ] || all_within_24h=0
-                  fi
+        classes="$(printf '%s\n' "$records" | awk -F'|' 'NF >= 5 && $1 != "" { print $1 }' | sort -u 2>/dev/null || true)"
+        if [ -n "$classes" ]; then
+          now_s="$(date -u +%s)"
+          while IFS= read -r ec; do
+            [ -n "$ec" ] || continue
+            # FU-202 belt: key-class error_class values (budget-exhausted-key, budget-403-key)
+            # are MINT defects, not worker strikes. New rides post KEY-RETRY: (not AGENT_STRIKE:)
+            # so the ^AGENT_STRIKE: anchor already excludes them going forward. But the 24h
+            # window can span the #1233 merge, and historical corpus records key-class as
+            # AGENT_STRIKE:. Explicitly exclude them here so the fleet reader never counts a mint
+            # defect as a fleet strike — a key class is never a provider, model or "us" fault.
+            # (Dropped by the re-key on 2026-09-20 and put back with the `key-class-excluded`
+            # replay row that now pins it — the re-key's worlds carried no key-class strike, so
+            # nothing noticed; PR#1792.)
+            case "$ec" in
+              budget-exhausted-key|budget-403-key) continue;;
+            esac
+            cls_records="$(printf '%s\n' "$records" | awk -F'|' -v ec="$ec" '$1 == ec' 2>/dev/null || true)"
+            [ -n "$cls_records" ] || continue
+            nums="$(printf '%s\n' "$cls_records" | awk -F'|' '{print $4}' | sort -u | tr '\n' ',' | sed 's/,$//')"
+            count="$(printf '%s' "$nums" | tr ',' '\n' | grep -c . || true)"
+            [ "$count" -ge 2 ] || continue
+            # 24h window: the newest strike per issue, all within 24h of each other, and the newest
+            # within 24h of now (a group that once clustered must not stay "detected" forever).
+            per_issue_ts="$(printf '%s\n' "$cls_records" | awk -F'|' '{ if ($5 > m[$4]) m[$4] = $5 } END { for (i in m) print m[i] }')"
+            min_ts=""; max_ts=""
+            while IFS= read -r ts; do
+              [ -n "$ts" ] || continue
+              ts_s="$(jq -rn --arg t "$ts" '($t | fromdateiso8601? // null) // -1' 2>/dev/null || echo -1)"
+              case "$ts_s" in ''|*[!0-9-]*) continue;; esac
+              [ "$ts_s" -lt 0 ] && continue
+              if [ -z "$min_ts" ] || [ "$ts_s" -lt "$min_ts" ]; then min_ts="$ts_s"; fi
+              if [ -z "$max_ts" ] || [ "$ts_s" -gt "$max_ts" ]; then max_ts="$ts_s"; fi
+            done <<< "$per_issue_ts"
+            if [ -z "$min_ts" ] || [ -z "$max_ts" ]; then continue; fi
+            [ "$(( max_ts - min_ts ))" -le 86400 ] || continue
+            [ "$(( now_s - max_ts ))" -le 86400 ] || continue
+            # ── CLASSIFY: (class, provider) / (class, model) / neither ────────────────────────
+            serving_member=""
+            case " ${serving_classes} " in *" ${ec} "*) serving_member=1;; esac
+            branch="us"; hit=""
+            if [ -n "$serving_member" ]; then
+              # ── FAIL-CLOSED ON AN UNRESOLVED PROVIDER (rule #6: never fail INTO a write) ──────
+              # Both keys below read the per-record provider column ($3): the pair cell is
+              # `model|provider` and the model key counts DISTINCT providers. `agent-session.sh`
+              # appends the `provider=` token only when `_strike_provider` resolved, so a class
+              # every one of whose records has an empty provider yields only the cell `model|`
+              # (never a real `pair_cooldowns` entry) and a collapsed distinct-provider count —
+              # a genuinely serving-shaped strike would fall through to the "us" branch and write
+              # `agent/error` (human-first) for state the ROUTER owns. Same defect class #1917
+              # fixed one seam over. Skip the class this tick; report only, in the same shape as
+              # the /router-status-unreadable branch above.
+              if ! printf '%s\n' "$cls_records" | awk -F'|' 'NF >= 3 && $3 != "" { found = 1 } END { exit !found }'; then
+                orphans="${orphans}[$repo] ⛔ FLEET READER: error_class=${ec} serving-shaped but no strike record carries a resolved provider — pair/model state unknown; no latch, no nomination, no agent/error this tick (rule #6 — never fail INTO a write)\n"
+                continue
               fi
-              if [ "$all_within_24h" = 1 ]; then
+              # (class, provider): a pair in this class's records is COOLED by the router.
+              while IFS= read -r cell; do
+                [ -n "$cell" ] || continue
+                case " ${pair_cooldowns} " in *" ${cell} "*) hit="$cell"; break;; esac
+              done <<< "$(printf '%s\n' "$cls_records" | awk -F'|' '{print $2"|"$3}' | sort -u)"
+              if [ -n "$hit" ]; then
+                branch="provider"
+              else
+                # (class, model): a model struck across ≥2 distinct providers.
+                while IFS= read -r m; do
+                  [ -n "$m" ] || continue
+                  pc="$(printf '%s\n' "$cls_records" | awk -F'|' -v m="$m" '$2 == m {print $3}' | sort -u | grep -c . || true)"
+                  if [ "$pc" -ge 2 ]; then hit="$m"; break; fi
+                done <<< "$(printf '%s\n' "$cls_records" | awk -F'|' '{print $2}' | sort -u)"
+                if [ -n "$hit" ]; then branch="model"; fi
+              fi
+            fi
+            case "$branch" in
+              provider)
+                fleet_provider_latches="${fleet_provider_latches}${hit} "
+                orphans="${orphans}[$repo] ⚠ FLEET STRIKE (provider): error_class=${ec} — pair ${hit} is COOLED by the router (pair_cooldowns); the router holds the state, no issue labelled\n"
+                ;;
+              model)
+                providers="$(printf '%s\n' "$cls_records" | awk -F'|' -v m="$hit" '$2 == m {print $3}' | sort -u | tr '\n' ',' | sed 's/,$//')"
+                fleet_model_nominations="${fleet_model_nominations}${hit}=${providers} "
+                orphans="${orphans}[$repo] ⚠ FLEET STRIKE (model): error_class=${ec} — model ${hit} struck across providers ${providers}; NOMINATED for the ledger (a record, no issue labelled)\n"
+                ;;
+              *)
                 # RESOLUTION SUBTRACTION (homelab#1712) — the BACKWARD half of the dedup below.
                 # Dedup looks only for an OPEN filing, so CLOSING a filing for this class minted the
                 # next one on the following tick, and the `agent/error` apply loop undid a human's
@@ -4499,14 +4573,56 @@ EOF_GTHEMES_OPEN
                   continue
                 fi
                 fleet_strike_issues="${fleet_strike_issues}${ec}=${nums} "
-                orphans="${orphans}[$repo] ⚠ FLEET STRIKE: error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — applying agent/error, commenting, filing\n"
-              fi
-            fi
-          done <<< "$strike_map"
+                orphans="${orphans}[$repo] ⚠ FLEET STRIKE (us): error_class=${ec} on issues $(printf '%s' "$nums" | tr ',' '\n' | sed 's/^/#/' | tr '\n' ' ' | sed 's/ $//') — our recipe/repo/task; applying agent/error, commenting, filing\n"
+                ;;
+            esac
+          done <<< "$classes"
         fi
       fi
     fi
-    # Apply actions for each fleet strike
+    # ── MODEL NOMINATION (a RECORD, never a label) ─────────────────────────────────────────────
+    # A repeated serving strike on one model across providers nominates the model for the ledger.
+    # ONE deduped inert filing per model; no issue carries `agent/error` for a model-class repeat.
+    if [ -n "$fleet_model_nominations" ]; then
+      for mn_entry in $fleet_model_nominations; do
+        mn_model="${mn_entry%%=*}"
+        mn_providers="${mn_entry#*=}"
+        [ -n "$mn_model" ] || continue
+        mn_marker="model-nomination-fp: model=${mn_model}"
+        mn_existing="$(gh issue list --repo "$slug" --state open --limit 50 --json number,title \
+          --jq "[.[] | select(.title | startswith(\"model-nomination: ${mn_model}\"))] | first | .number // \"\"" 2>/dev/null || true)"
+        case "$mn_existing" in ''|*[!0-9]*) mn_existing="";; esac
+        if [ -n "$mn_existing" ]; then
+          mn_cmt="$(gh api "repos/${slug}/issues/${mn_existing}/comments?per_page=100" 2>/dev/null || true)"
+          mn_posted=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${mn_cmt:-null}"; then
+            if jq -e --arg m "$mn_marker" '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$mn_cmt" >/dev/null 2>&1; then mn_posted=1; fi
+          fi
+          if [ "$mn_posted" = 0 ]; then
+            gh issue comment "$mn_existing" --repo "$slug" --body "$(printf '%s\n' \
+              "${mn_marker}" \
+              "" \
+              "Additional providers observed: ${mn_providers}" \
+              "" \
+              "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
+          fi
+        else
+          gh issue create --repo "$slug" \
+            --title "model-nomination: ${mn_model}" \
+            --label "agent-fix" \
+            --body "$(printf '%s\n' \
+              "${mn_marker}" \
+              "" \
+              "🤖 **Model nomination** — a repeated serving strike on \`${mn_model}\` across providers (${mn_providers}) (Goal #1640 acceptance 5)." \
+              "" \
+              "This is a RECORD, not a label: no issue carries \`agent/error\` for a model-class repeat. The model is a candidate for the router's ledger deny." \
+              "" \
+              "**Detected at:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`" )" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+    # ── US CASE: label + comment + file (the ONLY branch that writes `agent/error`) ────────────
     if [ -n "$fleet_strike_issues" ]; then
       for fs_entry in $fleet_strike_issues; do
         ec="${fs_entry%%=*}"
@@ -5660,7 +5776,12 @@ EOF
       # >>>REPLAY:fu146-resumable-match>>>
       uworkbranch=""
       if [ "$uclause" = "c4c5-redispatch" ] && [ -n "${resumable_branches:-}" ]; then
-        for rb_entry in $resumable_branches; do
+        # FU-199 (folded in, 2026-09-20): the list is NEWLINE-separated and read with
+        # `IFS= read -r`, so a value carrying whitespace or a glob character can neither
+        # word-split nor expand — the old `for rb_entry in $resumable_branches` did both, which is
+        # how the #1780 dispatch arrived carrying `work-branch=**`. The assignment below is quoted.
+        while IFS= read -r rb_entry; do
+          [ -n "$rb_entry" ] || continue
           rb_n="${rb_entry%%=*}"
           rb_branch="${rb_entry#*=}"
           # match on repo#number — the bare-number match was the cross-repo collision
@@ -5668,7 +5789,7 @@ EOF
             uworkbranch=" work-branch=${rb_branch}"
             break
           fi
-        done
+        done <<< "$resumable_branches"
       fi
       # <<<REPLAY:fu146-resumable-match<<<
       # ADR-126 v1.3.1 (homelab#1423): a goal-checkpoint unit carries the goal lane's theme

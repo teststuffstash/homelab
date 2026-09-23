@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: model=deepseek/deepseek-v4-flash error_class=timeout round=1 session=pod-402 provider=open-inference\n\nThe worker went terminal without pushing.",
+    "created_at": "2026-09-01T15:30:00Z"
+  }
+]

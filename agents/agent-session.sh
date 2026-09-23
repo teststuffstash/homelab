@@ -77,6 +77,11 @@ ib_refuse_malformed() {   # <key> <ref>
 # reasoning that used to sit here lives in the helper's header.
 . "${HERE}/kube.sh"
 
+# Goal #1640 acceptance 4: this launcher's own argv, kept VERBATIM before the parse loop consumes
+# it. The retry re-run re-enters the launcher with exactly these args, so the round does not
+# advance (same --round, same task) and no label is touched — an infra failure consumes no logic
+# round (ADR-127).
+ORIG_ARGS=("$@")
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
   echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
@@ -3143,10 +3148,165 @@ if [ -n "$RUN_CMD" ]; then
     fi
   fi
 
+  # Goal #1640 acceptance 4: the retry's re-run. A FUNCTION so the clause-replay fixture can stub
+  # the callee and assert the CALL (the "stub the callee, assert the assembled string" doctrine) —
+  # the re-run itself is this launcher's own `/route` consult. In production it re-enters the launcher
+  # with a rebuilt argv: strip the --model pin (so /route can actually pick a different cell), strip
+  # rail-specific flags if a claude/* model lands (harness/key minted for OpenRouter), and verify the
+  # stack is chainless + authoritative (else the stripped pin is a no-op and the default model rides in).
+  retry_rerun() {
+    local _rr_argv=() _rr_i=0 _rr_model_next=0
+    # Rebuild argv with --model and rail flags stripped. Walk ORIG_ARGS and drop both elements of
+    # the --model pair; drop --openrouter-secret <name> and --harness goose (harness=claude is ok).
+    for (( _rr_i=0; _rr_i < ${#ORIG_ARGS[@]}; _rr_i++ )); do
+      case "${ORIG_ARGS[$_rr_i]}" in
+        --model) (( _rr_i++ )); continue;;  # skip both --model and its value
+        --openrouter-secret) (( _rr_i++ )); continue;;  # skip both --openrouter-secret and its value
+        --harness)
+          # Only skip --harness if it's "goose" (minted for OpenRouter). --harness claude is OK.
+          if [ $(( _rr_i + 1 )) -lt ${#ORIG_ARGS[@]} ] && [ "${ORIG_ARGS[$(( _rr_i + 1 ))]}" = "goose" ]; then
+            (( _rr_i++ )); continue
+          fi
+          _rr_argv+=("${ORIG_ARGS[$_rr_i]}")
+          ;;
+        *) _rr_argv+=("${ORIG_ARGS[$_rr_i]}");;
+      esac
+    done
+    bash "$0" "${_rr_argv[@]}"
+  }
+  # >>>REPLAY:strike-retry>>>
+  # ── Goal #1640 acceptance 4: RETRY A DEAD RIDE AT THE SAME ROUND ─────────────────────────────
+  # A ride that died without producing anything used to hand back to the scan for a coordinator hop
+  # (a reasoning-tier session to re-derive "infra, not a round; walk the chain; ride again"). The
+  # launcher already holds every input for that decision, so it takes it here.
+  #
+  # THE TERMINAL PREDICATE — all four conjuncts required:
+  #   (1) the run posted `AGENT_STRIKE:` — the launcher's own line (STRIKE_LINE) or the pod's
+  #       (STRIKE_BY_POD, agent-finalize's in-pod strike);
+  #   (2) the salvage verdict is `none` — nothing committed is worth resuming, so a retry loses no
+  #       work. Computed EXACTLY as agent-finalize's `resumable_branch()` does, from the same three
+  #       facts it reads (salvaged_branch → pushed; WORK_BRANCH → resuming; salvage_undetermined →
+  #       unknown; else none). A `pushed`/`resuming`/`unknown` verdict is NOT a "no" and never
+  #       retries — #33's failure direction: a false "nothing to resume" loses work;
+  #   (3) the strike's `error_class` is SERVING-SHAPED — a member of the router's SERVING_CLASSES
+  #       (read from `/router-status`, never a second copy) or `turn-cap`. An unreachable router
+  #       leaves the set unknown and the ride falls through to today's behaviour (fail-closed);
+  #   (4) attempts are under the cap: ONE automatic retry per `(model, provider, class)` cell, TWO
+  #       per task. The counters ride the re-run's environment, so a second strike on the same cell
+  #       does not retry again.
+  #
+  # The cell's PROVIDER component is a cross-repo contract (agent-runtime's strike marker
+  # `_strike_provider`, else the finalizer's `stats.provider`) that nothing here verifies, so an
+  # EMPTY component fails closed: the cell would be ambiguous — distinct providers collapse into
+  # one (the cap fires too early) or a cell never re-matches (the cap never fires) — and we cannot
+  # tell which provider to exclude. No retry; the terminal strike path below runs, and the reason
+  # is on the log line. If the field later becomes guaranteed, this guard costs nothing.
+  #
+  # On the predicate the launcher re-enters itself with the SAME argv (same `--round`, same task —
+  # ADR-127: an infra failure consumes no logic round) and touches no label; the re-entry's own
+  # `/route` consult is the re-route, and the router excludes the struck cell from its strike store
+  # (fed by the `/report` above). Cap reached ⇒ today's behaviour byte for byte: the strike list +
+  # the doorbell, no retry, the coordinator decides. The strike comment stays the audit twin — it
+  # was posted above whether or not this retry fires.
+  #
+  # The re-entry lands on the SAME (task, round) idempotency key, which is the key the scan's own
+  # post-strike re-dispatch lands on today: this ride's pod is terminal by now (the log-follow above
+  # only returns once its container has), so the atomic gate reaps it and re-creates it. Anything
+  # that still refuses the re-entry (a phase that has not flipped yet, a fresh duplicate-PR or
+  # budget guard, the `kubectl create` race) makes `retry_rerun` non-zero, and the clause then does
+  # exactly what it did before this existed — ring the doorbell and let the coordinator decide. The
+  # retry can therefore never cost the hop it was built to save; the fixture's `retry-dispatch-failed`
+  # row is that arm.
+  RETRY_FIRE=""
+  RETRY_CELL=""
+  if [ -n "${STRIKE_APPLIES:-}" ]; then
+    # (1) struck?
+    _rt_struck=""
+    [ -n "${STRIKE_LINE:-}" ] && _rt_struck=1
+    [ "${STRIKE_BY_POD:-false}" = "true" ] && _rt_struck=1
+    # the strike's error_class, exactly as the strike line carries it: the launcher's classifier
+    # when it ran, else the finalizer's own (with its failed/ci-failed → unknown rewrite).
+    _rt_class=""
+    if [ -n "${STRIKE_LINE:-}" ]; then
+      _rt_class="${ERR_CLASS:-}"
+    elif [ "${STRIKE_BY_POD:-false}" = "true" ]; then
+      _rt_class="$(printf '%s' "${STATS:-}" | jq -r '
+        (.error_class // "") as $e
+        | if ((.exit_status // "") == "failed" or (.exit_status // "") == "ci-failed") then "unknown"
+          elif $e == "" then "unknown" else $e end' 2>/dev/null || echo unknown)"
+    fi
+    # (2) the salvage verdict, from the same three facts agent-finalize reads.
+    _rt_salvage="none"
+    if [ -n "$(printf '%s' "${STATS:-}" | jq -r '.salvaged_branch // ""' 2>/dev/null || true)" ]; then
+      _rt_salvage="pushed"
+    elif [ -n "${WORK_BRANCH:-}" ]; then
+      _rt_salvage="resuming"
+    elif [ "$(printf '%s' "${STATS:-}" | jq -r '.salvage_undetermined // false' 2>/dev/null || true)" = "true" ]; then
+      _rt_salvage="unknown"
+    fi
+    # (3) serving-shaped. The FU-088 capacity probe already fetched this payload; a sub-rail ride
+    # skipped that probe, so fall back to one ClusterIP-local read. Empty set ⇒ no retry.
+    _rt_serving="$(printf '%s' "${_or_status:-}" | jq -r '(.serving_classes // []) | join(" ")' 2>/dev/null || true)"
+    if [ -z "$_rt_serving" ] && [ -n "${_or_probe_url:-}" ]; then
+      _rt_serving="$(curl -fsS --max-time 5 "${_or_probe_url}/router-status" 2>/dev/null \
+        | jq -r '(.serving_classes // []) | join(" ")' 2>/dev/null || true)"
+    fi
+    _rt_serving_member=""
+    if [ -n "$_rt_class" ]; then
+      case " ${_rt_serving} turn-cap " in *" ${_rt_class} "*) _rt_serving_member=1;; esac
+    fi
+    # (4) attempts — the cell is (model, provider, class); the counters survive the re-run. Both
+    # provider sources are agent-runtime's (the strike marker, else the finalizer's stats line); an
+    # empty result is the unverified cross-repo contract breaking, and it fails CLOSED (no retry).
+    _rt_provider="${_strike_provider:-}"
+    [ -n "$_rt_provider" ] || _rt_provider="$(printf '%s' "${STATS:-}" | jq -r '.provider // ""' 2>/dev/null || true)"
+    _rt_cell="${STRUCK_MODEL:-${MODEL:-}}|${_rt_provider}|${_rt_class}"
+    _rt_cells="${AGENT_RETRY_CELLS:-}"
+    _rt_task_n="${AGENT_RETRY_TASK_N:-0}"
+    case "$_rt_task_n" in ''|*[!0-9]*) _rt_task_n=0;; esac
+    _rt_cell_seen=""
+    case " ${_rt_cells} " in *" ${_rt_cell} "*) _rt_cell_seen=1;; esac
+    # CHAINLESS + AUTHORITATIVE guard: the retry only makes sense when the stack is chainless (no
+    # hardcoded model pin) and the router is authoritative (so /route will actually be consulted for
+    # the re-run). A chained stack in shadow mode does not benefit from a retry — it will re-dispatch
+    # the same struck model verbatim. A chainless stack in shadow mode falls through to today's
+    # behaviour (the chainless guard at L509-515 will exit 1). For non-chainless stacks or shadow
+    # mode, we do not retry — the coordinator is the right place for that decision. This is the
+    # ADR-096 override rule being explicit: an explicit --model wins, which means the retry's
+    # stripped --model only changes the dispatch when there was no explicit pin to strip.
+    _rt_chainless="$(printf '%s' "$_srow" | jq -r '.workerModel // ""' 2>/dev/null || echo '')"
+    _rt_can_retry=""
+    if [ -z "$_rt_chainless" ] && [ "$AGENT_ROUTER" = "authoritative" ]; then
+      _rt_can_retry=1
+    fi
+    if [ -n "$_rt_struck" ] && [ "$_rt_salvage" = "none" ] && [ -n "$_rt_serving_member" ] \
+       && [ -n "$_rt_provider" ] && [ -z "$_rt_cell_seen" ] && [ "$_rt_task_n" -lt 2 ] \
+       && [ -n "$_rt_can_retry" ]; then
+      RETRY_FIRE=1
+      RETRY_CELL="$_rt_cell"
+    elif [ -n "$_rt_struck" ] && [ -z "$_rt_provider" ]; then
+      echo "→ no retry: strike on ${_rt_cell} — the cell's provider component is EMPTY (no strike-marker provider, no stats.provider): which provider to exclude is unknowable, so no retry (fail-closed; the coordinator decides, as today)"
+    elif [ -n "$_rt_struck" ]; then
+      echo "→ no retry: strike on ${_rt_cell} — salvage=${_rt_salvage} serving=${_rt_serving_member:-no} cell_seen=${_rt_cell_seen:-no} task_attempts=${_rt_task_n}/2 can_retry=${_rt_can_retry:-no} (the coordinator decides, as today)"
+    fi
+  fi
+  if [ -n "$RETRY_FIRE" ]; then
+    echo "→ retry: strike on ${RETRY_CELL} with salvage=none — re-routing and re-running round ${ROUND} (attempt $(( ${_rt_task_n:-0} + 1 ))/2, no coordinator hop)"
+    if AGENT_RETRY_CELLS="${AGENT_RETRY_CELLS:+${AGENT_RETRY_CELLS} }${RETRY_CELL}" \
+       AGENT_RETRY_TASK_N="$(( ${_rt_task_n:-0} + 1 ))" \
+       retry_rerun; then
+      rm -f "$RUNLOG"
+      exit 0
+    fi
+    echo "→ retry dispatch did not complete — falling through to the doorbell (today's behaviour)"
+  fi
+  # <<<REPLAY:strike-retry<<<
+
   # FU-085: ring the coordinator doorbell — a tasked worker's terminal state is scan-actionable
   # (C4/C5 re-dispatch, strike chain-walk, C6 bookkeeping). Doorbell, never a work item: the scan
   # re-lists and re-applies the full predicate; a false wake costs `gh` calls, not an LLM tick.
   # Fail-open: unreachable off-cluster (jail runs — the cron backstop covers those).
+  # >>>REPLAY:doorbell-ring>>>
   if [ -n "$STRIKE_APPLIES" ]; then
     # FU-080 doorbell routing: if PROJECT belongs to a GRADUATED stack, carry {stack,loop_ns} so the
     # global `coordinator` Sensor's per-stack trigger inlines a Workflow INTO <loop_ns> (data-driven).
@@ -3170,6 +3330,7 @@ if [ -n "$RUN_CMD" ]; then
       "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
       >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
   fi
+  # <<<REPLAY:doorbell-ring<<<
   # FU-160 / homelab#324: no `run_phase bookkeeping` either. It measured 0s on 5 of the 5 rides
   # that ever reached it, and that is correct rather than broken — FU-064/FU-043 moved arming, the
   # stats comment and the strike INTO the pod, so everything above is the fallback-not-taken plus
