@@ -1,0 +1,98 @@
+# Behaviour fixture for kernel-oops.promtool-rules (FU-158 shape): `devbox run prometheus-rules-lint`
+# runs it. The series is the Alloy-side counter from alloy-config.yaml as Prometheus sees it after
+# podmonitor-alloy.yaml: `node` is the TARGET label (the Alloy pod's node), and the counter's own
+# stream labels arrive renamed — hence `exported_pod`/`exported_container` below, which is also why
+# a kmsg-reader restart shows up as a NEW child series rather than a bump of the old one.
+#
+# WHAT IS BEING PINNED (each case is a restart/appearance semantic the expr had to be built around):
+#   1. THE FIRST OOPS ON A NODE FIRES. The counter DOES NOT EXIST until the first matching line, so
+#      the alerting event is a series being BORN at 1 — one sample, no delta. A plain increase()
+#      cannot see that, which is the whole reason for the `or <current> * 0` fallback. Case 1 also
+#      pins the SELF-CLEAR: 6 h after the last line the alert goes quiet on its own, with no
+#      reliance on Alloy pruning the metric.
+#   2. A FLAT COUNTER IS SILENT. A node that oopsed days ago keeps a non-zero counter forever (no
+#      max_idle_duration, deliberately — a pruned-and-recreated series is how a six-day-old oops
+#      would re-fire on every kmsg-reader ring-buffer replay). "Non-zero" must therefore not mean
+#      "firing", and case 2 asserts exactly that for wk-01 while nx-01 re-fires beside it.
+#   3. A SECOND OOPS AFTER THE ALERT CLEARED RE-FIRES, and names only the node that oopsed.
+#   4. A COUNTER RESET (Alloy pod restart) FOLLOWED BY A NEW OOPS STILL FIRES — the level is LOWER
+#      than 6 h ago there, so this case is carried by the increase() disjunct alone.
+#
+# The clock: 5 min per sample. `_` runs are the series not existing yet (cases 1-3) or the gap
+# across an Alloy restart (case 4).
+rule_files:
+  - kernel-oops.promtool-rules
+
+evaluation_interval: 5m
+
+tests:
+  # ── 1. The first oops on a node: born at 1 at t=2h, flat after; fires at once, clears at +6h ───
+  - interval: 5m
+    name: a single oops fires the moment the counter appears and self-clears six hours later
+    input_series:
+      # absent for 2 h (the node has never oopsed under this Alloy process), then one line at t=2h
+      - series: 'loki_process_custom_kernel_oops_lines_total{job="alloy",namespace="loki",pod="alloy-4kq7d",node="nx-01",exported_pod="kmsg-reader-8xv2n",exported_container="kmsg-reader"}'
+        values: '_x24 1+0x144'
+    alert_rule_test:
+      # t=2h05m: the series exists now and did not 6 h ago → 1 - 0 = 1 → fires, value 1.
+      - eval_time: 2h5m
+        alertname: KernelOopsCaptured
+        exp_alerts:
+          - exp_labels: { severity: warning, node: nx-01 }
+            exp_annotations:
+              summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
+      # t=7h55m: 6 h ago is t=1h55m — still before the series existed → still firing.
+      - eval_time: 7h55m
+        alertname: KernelOopsCaptured
+        exp_alerts:
+          - exp_labels: { severity: warning, node: nx-01 }
+            exp_annotations:
+              summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
+      # t=8h10m: 6 h ago is t=2h10m, where the counter already read 1 → 1 - 1 = 0, and increase()
+      # over a flat counter is 0 → quiet. Self-cleared, without the metric going anywhere.
+      - eval_time: 8h10m
+        alertname: KernelOopsCaptured
+        exp_alerts: []
+  # ── 2+3. A flat old counter stays silent; a genuinely new line on the neighbour re-fires ───────
+  - interval: 5m
+    name: a second oops re-fires and names only its node; the node with an old flat counter is quiet
+    input_series:
+      # nx-01: born at 1 at t=2h (as in case 1), then a SECOND line at t=10h05m
+      - series: 'loki_process_custom_kernel_oops_lines_total{job="alloy",namespace="loki",pod="alloy-4kq7d",node="nx-01",exported_pod="kmsg-reader-8xv2n",exported_container="kmsg-reader"}'
+        values: '_x24 1+0x96 2+0x96'
+      # wk-01: oopsed long before this window and has read 5 ever since — never fires again
+      - series: 'loki_process_custom_kernel_oops_lines_total{job="alloy",namespace="loki",pod="alloy-p2m9x",node="wk-01",exported_pod="kmsg-reader-l4dd7",exported_container="kmsg-reader"}'
+        values: '5+0x216'
+    alert_rule_test:
+      # t=8h10m: nx-01 has cleared (case 1) and wk-01's flat 5 has never fired → nothing at all.
+      - eval_time: 8h10m
+        alertname: KernelOopsCaptured
+        exp_alerts: []
+      # t=10h10m: nx-01 is at 2, was at 1 six hours ago → 1 new line → fires, and ONLY nx-01 does.
+      - eval_time: 10h10m
+        alertname: KernelOopsCaptured
+        exp_alerts:
+          - exp_labels: { severity: warning, node: nx-01 }
+            exp_annotations:
+              summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
+      # t=16h15m: 6 h ago the counter already read 2 → quiet again. Two events, two alerts, no latch.
+      - eval_time: 16h15m
+        alertname: KernelOopsCaptured
+        exp_alerts: []
+  # ── 4. An Alloy restart resets the counter; the next oops still fires ─────────────────────────
+  - interval: 5m
+    name: a new oops after a counter reset fires although the level is lower than six hours ago
+    input_series:
+      # 3 until t=6h (an earlier, already-cleared oops burst), Alloy restarts (55 min of no series
+      # — the metric only comes back when a line matches again), then a new line at t=7h05m.
+      - series: 'loki_process_custom_kernel_oops_lines_total{job="alloy",namespace="loki",pod="alloy-4kq7d",node="nx-01",exported_pod="kmsg-reader-8xv2n",exported_container="kmsg-reader"}'
+        values: '3+0x72 _x11 1+0x72'
+    alert_rule_test:
+      # t=7h20m: level 1 vs 3 six hours ago → the subtraction disjunct is NEGATIVE and contributes
+      # nothing; increase() sees the reset (3 → 1) and reports the one new line.
+      - eval_time: 7h20m
+        alertname: KernelOopsCaptured
+        exp_alerts:
+          - exp_labels: { severity: warning, node: nx-01 }
+            exp_annotations:
+              summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"

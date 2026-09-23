@@ -1363,11 +1363,14 @@ the block needs pruning, not more headings.
       `responder_triage_sessions_today` for a day. Relates FU-230, FU-231, ADR-122.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
-      2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
-      **Next:** ruler + one `KernelOopsCaptured` rule per node, or an Alloy-side counter metric the
-      existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
-      v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
-      in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
+      2026-09-10 09:38 and nothing read it for six days. **Detector LANDED 2026-09-23**: an Alloy
+      `stage.match`/`stage.metrics` counter on the kmsg stream, a PodMonitor on Alloy (nothing
+      scraped it before) and `KernelOopsCaptured` per node — a sender-side metric, NOT a ruler (gone,
+      ADR-118; [`loki-tenancy.md`](loki-tenancy.md) §The belt could not stay in the ruler). Verify
+      post-merge by injecting a line into one node's `/dev/kmsg` (probe in the PR body).
+      **Next (install-time, the console half):** nx-01's BMC SOL is `ttyS1` and the v1.13.10 metal
+      image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200` in the
+      image-factory `extraKernelArgs`. Incident above; relates FU-155 (kmsg tenancy).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers

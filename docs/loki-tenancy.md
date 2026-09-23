@@ -176,6 +176,20 @@ discriminates at the coarser grain. What it can no longer see is one chatty pod 
 busy namespace, which is accepted: pod attribution is one Grafana query away and the alert carries
 it.
 
+**The kernel-log stream took the same route (FU-247, 2026-09-23).** A `page_table_check` oops sat in
+the `kmsg-reader` stream for six days with nothing reading it
+([incident](incidents/2026-09-16-page-table-check-reboots.md)); the obvious fix — a ruler rule per
+node — is the shape this section rules out, and would additionally have needed the `loki` tenant's
+own directory. Instead the count is produced at the SENDER: a `stage.match` on the kmsg stream in
+[`alloy-config.yaml`](../argocd/resources/loki/alloy-config.yaml) increments a counter, a
+[`PodMonitor`](../argocd/resources/loki/podmonitor-alloy.yaml) scrapes Alloy (nothing did before —
+which is also what made `loki_write_sent_entries_total{tenant=""}` above a hand-probe rather than a
+series), and `KernelOopsCaptured` in
+[`prometheusrule.yaml`](../argocd/resources/loki/prometheusrule.yaml) fires per node. The pattern
+set, the restart/replay semantics and the expression's two disjuncts are documented where they
+live; what belongs here is the precedent: **a new log-derived belt is a sender-side metric plus an
+ordinary PrometheusRule, never a ruler rule.**
+
 ## What tenancy costs the operator
 
 Two regressions land with step 2. Neither is a defect to file; both are properties of tenant ==

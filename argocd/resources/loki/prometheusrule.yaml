@@ -67,3 +67,66 @@ spec:
           annotations:
             summary: "Loki ingest {{ $value | humanize }}B/s is >8x its own 7d average — a new log flood is ramping"
             description: "Log volume deviates hard from this system's own trailing week. Fires only above a 25KB/s (~2GiB/day) floor, so a quiet system growing its first real workload stays silent — this alert is for the 30-100x pathological ramps (#811: 0.9→48.7GiB/day over 5 days while under every static radar until the bucket hit its cap). Attribute per-namespace via LokiNamespaceLogVolumeHigh, then per-pod via the volume API."
+    # ── The kernel-log belt (FU-247) ─────────────────────────────────────────────────────────────
+    # WHY THIS EXISTS: the `page_table_check` oops sat in Loki from 2026-09-10 09:38, node-labelled,
+    # matching `{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"` — and nothing
+    # read it for six days while wk-03 and then nx-01 rebooted themselves every ~15 min
+    # (docs/incidents/2026-09-16-page-table-check-reboots.md). Shipping the kernel log was never the
+    # gap; READING it was.
+    # WHERE THE COUNTER COMES FROM: a stage.match + stage.regex + stage.metrics counter in
+    # argocd/resources/loki/alloy-config.yaml, scraped by podmonitor-alloy.yaml — NOT a Loki ruler.
+    # The ruler is gone by decision (ADR-118 / docs/loki-tenancy.md §The belt could not stay in the
+    # ruler): its rules are per-tenant DIRECTORIES, so it needs one static mount per namespace and
+    # covers every namespace added later with nothing, silently. Same reasoning that moved the
+    # #811 volume belt above out of it; the pattern set's own rationale lives with the stage.
+    # THE SERIES NAME IS HALF-INHERITED — Alloy prefixes a stage.metrics counter with its own
+    # default and the stage names only the suffix. Nothing in devbox ships an `alloy` binary, so
+    # this was pinned OUT of band before merge: `nix shell nixpkgs#grafana-alloy` (1.17.1) running
+    # THIS ConfigMap's rendered config against a fake kmsg file, 2026-09-23. It exposed exactly
+    #     loki_process_custom_kernel_oops_lines_total{namespace="loki",container="kmsg-reader",node="…"} 1
+    # for a `kernel BUG at` line and did not move for two ordinary ones. ⚠ The deployed Alloy is
+    # v1.5.1 (alloy.yaml), so the version that emits the name in production is not the version that
+    # was measured — the post-merge probe in the FU-247 PR still reads the name off a pod's own
+    # /metrics before this belt is trusted. A wrong prefix here is a silent no-op, which is the one
+    # failure this belt must not have.
+    - name: kernel-oops
+      rules:
+        - alert: KernelOopsCaptured
+          # RESTART SEMANTICS — why this is not a plain increase(). Two restarts move this counter:
+          #   • ALLOY restarts (config-hash bump, node reboot) → the counter RESETS. increase()
+          #     bridges resets, which is the second disjunct's job.
+          #   • KMSG-READER restarts → it REPLAYS the kernel ring buffer (kmsg-reader.yaml §RESTART
+          #     REPLAY), so an old oops is counted again — under a NEW pod label, i.e. a new child
+          #     series starting at 1. `sum by (node)` first, then compare to 6 h ago, is what keeps
+          #     one six-day-old oops from re-firing this alert on every replay: the node's total
+          #     only has to be HIGHER than it was 6 h ago.
+          # And why not `> 0` alone: the metric does not exist until the first matching line (the
+          # stage's `source` gate), so a plain increase() misses the FIRST oops on a node — a single
+          # sample, never a delta — which is the exact event this alert is for. The
+          # `or <current> * 0` fallback supplies the missing 6 h-ago value as zero, so a series that
+          # was BORN inside the window fires; 6 h after the last line both disjuncts fall to 0 and
+          # the alert self-clears without any reliance on metric pruning.
+          expr: |
+            (sum by (node) (loki_process_custom_kernel_oops_lines_total)
+               - (sum by (node) (loki_process_custom_kernel_oops_lines_total offset 6h)
+                  or sum by (node) (loki_process_custom_kernel_oops_lines_total) * 0)) > 0
+            or sum by (node) (increase(loki_process_custom_kernel_oops_lines_total[6h])) > 0
+          # No `for:` — one captured fault dump IS the event (the incident shipped only 3 of 7), and
+          # the 6 h window already debounces it. Same reasoning as node-reboots' changes() rules.
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.node }} printed {{ $value | printf \"%.0f\" }} kernel fault-dump line(s) in the last 6 h"
+            description: >-
+              The kernel on {{ $labels.node }} printed oops/BUG/fault-dump lines into /dev/kmsg — a
+              SYMPTOM, not a diagnosis: this matches a fatal oops, a #GP, a NULL-deref AND a
+              non-fatal WARN_ON backtrace, so read the lines before concluding anything. They are in
+              Loki (Grafana Explore, tenant `loki`):
+              {namespace="loki",container="kmsg-reader",node="{{ $labels.node }}"} |~ "kernel BUG at|Oops:|general protection fault|BUG: unable to handle kernel|Call Trace:"
+              — widen to the whole stream for the ~20 lines around the dump. If the box also
+              rebooted (NodeRebootedTwiceIn24h / NodeRebootingRepeatedly, pve-metrics), the dump is
+              the reboot's cause and the panic line itself is NOT here: a userspace reader cannot
+              ship it, only a console can. The known instance of this class was the upstream
+              PAGE_TABLE_CHECK bug on Talos < v1.13.10 (docs/incidents/2026-09-16-page-table-check-reboots.md);
+              a new one starts by reading the RIP/Comm lines, not by assuming that one.

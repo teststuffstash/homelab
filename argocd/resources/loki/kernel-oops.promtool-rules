@@ -1,0 +1,21 @@
+# HAND COPY of the kernel-oops group in prometheusrule.yaml (this dir) — the drift pin in
+# scripts/prometheus-rules-lint.sh asserts expr+for equality per alert name against the CR. The
+# rationale is NOT copied: it lives with the CR (and with the Alloy stage that feeds the counter).
+# Re-render with:
+#   devbox run -- yq '[.spec.groups[] | select(.name == "kernel-oops") | del(.rules[].annotations.description)] | ... comments=""' argocd/resources/loki/prometheusrule.yaml
+# (the summary is kept: kernel-oops.promtool-test asserts it, which is what pins $value's meaning.)
+# Loaded by kernel-oops.promtool-test.
+groups:
+  - name: kernel-oops
+    rules:
+      - alert: KernelOopsCaptured
+        expr: |
+          (sum by (node) (loki_process_custom_kernel_oops_lines_total)
+             - (sum by (node) (loki_process_custom_kernel_oops_lines_total offset 6h)
+                or sum by (node) (loki_process_custom_kernel_oops_lines_total) * 0)) > 0
+          or sum by (node) (increase(loki_process_custom_kernel_oops_lines_total[6h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.node }} printed {{ $value | printf \"%.0f\" }} kernel fault-dump line(s) in the last 6 h"
