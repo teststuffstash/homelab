@@ -1,8 +1,11 @@
 ---
-# Matchbox iPXE TFTP (PXE stage-1). Thin role-caller — logic in
+# Matchbox iPXE boot files (PXE stage-1). Thin role-caller — logic in
 # roles/matchbox-ipxe-tftp, config in group_vars/matchbox.yml.
+# dnsmasq (matchbox-proxydhcp) serves :69 — this play only STAGES the binaries and the entry
+# script, then verifies all three are actually served (FU-261). Run proxydhcp first.
 # Run: devbox run -- ansible-playbook ansible/matchbox-ipxe-tftp.yml
-- name: Matchbox iPXE TFTP (PXE stage-1)
+#      devbox run -- ansible-playbook ansible/matchbox-ipxe-tftp.yml --tags verify   # probe only
+- name: Matchbox iPXE boot files (PXE stage-1)
   hosts: matchbox
   gather_facts: false
   roles:

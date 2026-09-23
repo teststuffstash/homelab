@@ -1299,17 +1299,6 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-261** — **The BIOS PXE chainload was silently broken, and the role that serves it has
-      been failing for months.** `/srv/tftp/undionly.kpxe` was MISSING on the Matchbox LXC (only the
-      two UEFI binaries there), so a legacy PXE client got a filename it could not fetch and fell back
-      to disk — three reboots of `wk-metal-02` read as "PXE just doesn't take" (2026-09-20). Why nobody
-      saw it: `ansible/matchbox-ipxe-tftp.yml` ends with *Enable tftpd-hpa*, which `matchbox-proxydhcp`
-      MASKS (dnsmasq owns :69), so every run fails at the last task and the copy before it went
-      unverified. Re-running restored the file (74 KB, TFTP-served). **Next:** guard/drop the
-      tftpd-hpa tasks (the role header already says dnsmasq owns TFTP) + probe that all three boot
-      files are served — onboarding depends on it, nothing tests it. Relates FU-244.
-
-
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
       is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
       wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
