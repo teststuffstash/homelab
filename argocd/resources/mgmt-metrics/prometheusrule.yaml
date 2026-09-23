@@ -199,8 +199,8 @@ spec:
               The minor `tofu/variables.tf` declares for {{ $labels.component }} is further behind
               upstream than that project states it supports — no more patches, including security
               ones, land for it. The support windows are hand-encoded constants in
-              scripts/mgmt-probe.sh check_substrate (Talos: current + previous; Kubernetes and
-              Cilium: three minors); if upstream changed its policy, that table is what is wrong.
+              scripts/mgmt-probe.sh check_substrate (Talos: the CURRENT minor only — 1.13's end of
+              community support was the 1.14.0 release date; Kubernetes and Cilium: three minors); if upstream changed its policy, that table is what is wrong.
               The 2026-09-03 case this belt exists for: Talos 1.13 left community support at the
               1.14.0 release and the fleet learned it from a conversation. `journalctl -u mgmt-belt
               | grep substrate` on 192.168.2.53.

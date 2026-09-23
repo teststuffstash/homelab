@@ -448,14 +448,20 @@ check_substrate() {
   # Nothing here discovers a policy; each number is a SUPPORTED MINOR COUNT (the current minor
   # included), so "EOL" means `minors_behind >= count`. **If an upstream changes its policy, this
   # table is the one place to correct it** — a wrong number here makes the EOL gauge lie quietly.
-  #   siderolabs/talos    2 — Talos supports the current and the PREVIOUS minor; a minor goes EOL
-  #                           when the next-but-one ships (n-2). This is the 1.13-at-1.14.0 case.
+  #   siderolabs/talos    1 — ONLY the current minor has community support: the support matrix
+  #                           gives 1.13's "End of Community Support" as the 1.14.0 RELEASE DATE
+  #                           (and 1.12's as 1.13.0's). One minor behind is already EOL — which is
+  #                           precisely the 2026-09-03 case this check exists for, so a `2` here
+  #                           would miss it by a whole release cycle (review finding, #1949).
+  #                           Consequence, deliberate: Talos can never be `Behind`-but-supported,
+  #                           so it skips MgmtSubstrateBehind's 7-day grace and goes straight to
+  #                           MgmtSubstrateUnsupported. That is what the policy says.
   #   kubernetes/kubernetes 3 — the three most recent minors receive patch releases (EOL at n-3).
   #   cilium/cilium       3 — the three most recent minors receive fixes (EOL at n-3).
   # Columns: component label | GitHub repo | tofu variable | supported minors.
   local components=(
-    "talos-controlplane|siderolabs/talos|talos_version_controlplane|2"
-    "talos-worker|siderolabs/talos|talos_version_worker|2"
+    "talos-controlplane|siderolabs/talos|talos_version_controlplane|1"
+    "talos-worker|siderolabs/talos|talos_version_worker|1"
     "kubernetes|kubernetes/kubernetes|kubernetes_version|3"
     "cilium|cilium/cilium|cilium_version|3"
   )

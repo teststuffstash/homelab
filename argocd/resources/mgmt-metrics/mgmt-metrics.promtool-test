@@ -298,15 +298,17 @@ tests:
         alertname: MgmtSubstrateUnsupported
         exp_alerts: []
 
-  # The 2026-09-03 shape: Talos 1.13 left community support at the 1.14.0 release. An EOL verdict
-  # does not flap (it moves only when upstream ships a minor), so the hour is a bad-tick filter.
-  # It is Unsupported's page ALONE: without Behind's `supported == 1` guard this input would fire
-  # BOTH at 8 days, which is the assertion at the end.
+  # The 2026-09-03 shape, exactly: Talos 1.13 with 1.14.0 shipped — ONE minor behind and already out
+  # of community support (the window constant for talos is 1; #1949's review). An EOL verdict does
+  # not flap (it moves only when upstream ships a minor), so the hour is a bad-tick filter. It is
+  # Unsupported's page ALONE: without Behind's `supported == 1` guard this input would fire BOTH at
+  # 8 days, which is the assertion at the end — and for talos that guard is the whole separation,
+  # since one minor behind is simultaneously "behind" and "EOL".
   - interval: 5m
     name: "an out-of-support minor fires Unsupported after 1h and never Behind"
     input_series:
       - series: 'mgmt_substrate_minors_behind{job="mgmt-node",instance="192.168.2.53:9100",component="talos-controlplane"}'
-        values: "3x2400"
+        values: "1x2400"
       - series: 'mgmt_substrate_supported{job="mgmt-node",instance="192.168.2.53:9100",component="talos-controlplane"}'
         values: "0x2400"
     alert_rule_test:
