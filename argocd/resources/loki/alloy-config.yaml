@@ -72,6 +72,71 @@ data:
     loki.process "tenant" {
       forward_to = [loki.write.default.receiver]
 
+      // FU-247, the KERNEL-OOPS DETECTOR: count oops-shaped lines in the kmsg-reader stream so an
+      // ordinary PrometheusRule can fire on them. WHY A COUNTER AND NOT A RULER: the Loki ruler is
+      // GONE (docs/loki-tenancy.md §The belt could not stay in the ruler, ADR-118 — a ruler rule is
+      // per-tenant-DIRECTORY, so it needs one static mount per namespace and silently covers no
+      // namespace added afterwards). The whole belt reads Prometheus; this stage is what puts the
+      // kernel-log stream on that belt. Driver: the `page_table_check` oops sat in Loki from
+      // 2026-09-10 09:38 with a node label on it and nothing read it for six days
+      // (docs/incidents/2026-09-16-page-table-check-reboots.md).
+      //
+      // ⚠ PLACED BEFORE stage.tenant ON PURPOSE. stage.match does NOT drop non-matching entries
+      // (action defaults to `keep`: a non-matching entry skips the nested stages and passes through
+      // untouched), and neither stage.regex nor stage.metrics writes a LABEL — regex writes the
+      // EXTRACTED map, metrics only reads it. So ADR-118's write half below is unaffected, and the
+      // counter carries the clean stream label set (namespace/pod/container/node/app) rather than
+      // the `__tenant_id__` the stamp adds. Do not reorder these two without re-reading both.
+      //
+      // ⚠ Labels, not `__`-prefixed metadata — the trap the stage.tenant comment below records.
+      // `namespace`/`container` here are the real entry labels discovery.relabel sets above, which
+      // is why a selector can match on them at all.
+      stage.match {
+        selector = "{namespace=\"loki\", container=\"kmsg-reader\"}"
+
+        // THE PATTERN SET, and why each entry is in it. This fires an alert, so every pattern is a
+        // kernel-source string, not a word that could ride in on a service log line (Talos routes
+        // service logs into kmsg too — KmsgLogStorageController — so this stream is not only the
+        // kernel's).
+        //   • `kernel BUG at ` — BUG_ON()/VM_BUG_ON(): the incident's own first line
+        //     ("kernel BUG at mm/page_table_check.c:143!"). Printed with a source path; nothing
+        //     else emits it.
+        //   • `Oops: `        — the oops header ("Oops: invalid opcode: 0000 [#1] SMP PTI"). Every
+        //     oops prints it, whatever the cause, so it is the one pattern that generalises.
+        //   • `general protection fault` and `BUG: unable to handle kernel` — the two fault headers
+        //     that PRECEDE the `Oops:` line (#GP, and the NULL-deref/paging class). Kept separately
+        //     because the stream is batched and the LAST line shipped before a panic-reboot is
+        //     often the only one that arrives.
+        //   • `Call Trace:`   — the backtrace marker, i.e. the line AFTER the header. Same reason,
+        //     from the other side: the incident shipped the oops only 3 times out of 7 because the
+        //     box rebooted mid-batch. This is the NOISIEST entry — a non-fatal WARN_ON(), a lockdep
+        //     splat or a hung-task dump also prints it — and that is accepted deliberately: the
+        //     alert says "the kernel printed a fault dump", and the annotation sends the reader to
+        //     the lines. A missed oops costs six days (it did); a WARN_ON costs one read.
+        // DELIBERATELY ABSENT: `Kernel panic - not syncing`. A userspace reader can never ship the
+        // panic itself (panic_on_oops=1 + panic=10 → the box is in POST), so matching it would
+        // advertise a coverage this path does not have — the console half of FU-247 is what covers
+        // panics, install-time.
+        stage.regex {
+          expression = "(?P<kernel_oops>kernel BUG at |Oops: |general protection fault|BUG: unable to handle kernel|Call Trace:)"
+        }
+
+        // `source` gates the increment on the regex having matched (no extracted key → no
+        // increment, and no metric child at all until the first match — which is why the alert
+        // cannot be a plain increase(): see the KernelOopsCaptured comment in prometheusrule.yaml).
+        // No `max_idle_duration`: the series must NOT be pruned, because a kmsg-reader restart
+        // REPLAYS the ring buffer (kmsg-reader.yaml §RESTART REPLAY) and a re-created child series
+        // is exactly how one six-day-old oops would re-fire the alert forever.
+        stage.metrics {
+          metric.counter {
+            name        = "kernel_oops_lines_total"
+            description = "kernel oops/BUG/fault-dump lines seen in this node's /dev/kmsg stream (FU-247)"
+            source      = "kernel_oops"
+            action      = "inc"
+          }
+        }
+      }
+
       stage.tenant {
         label = "namespace"
       }
