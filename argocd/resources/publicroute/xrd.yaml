@@ -174,6 +174,29 @@ spec:
                       items:
                         type: string
                         enum: ["/metrics", "/healthz"]
+                originMark:
+                  type: object
+                  required: [header, value]
+                  description: >-
+                    Edge-asserted origin mark (profile-agnostic, oracle-fleet#667). When set, the
+                    platform renders a request-header transform on this hostname: a request from
+                    the homelab's own WAN egress gets `header: value`; from any other source that
+                    header is REMOVED, so a client-supplied copy never reaches the origin. Lets an
+                    origin tell OUR traffic (probers, rides, the jail seat) from a stranger's
+                    without any client stamping a header on the way out. The egress address is a
+                    PLATFORM fact — read at every reconcile, never carried in the claim. ⚠ ONE
+                    claim per zone may set this: http_request_late_transform takes one entry-point
+                    ruleset per zone like every other phase (FU-039).
+                  properties:
+                    header:
+                      type: string
+                      pattern: ^[A-Za-z][A-Za-z0-9-]*$
+                      maxLength: 64
+                      description: Header name to assert, e.g. X-Oracle-Origin.
+                    value:
+                      type: string
+                      maxLength: 64
+                      description: Literal value set on homelab-originated requests, e.g. homelab.
                 replicas:
                   type: integer
                   default: 1

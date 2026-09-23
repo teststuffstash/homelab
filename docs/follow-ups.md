@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-282** (2026-09-23: FU-281 minted for the goal-checkpoint trigger side waking on
+  Next free id: **FU-283** (2026-09-23: FU-282 minted for the origin mark's `wg.`-named egress
+  record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
   2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
@@ -363,6 +364,15 @@ six OVERSIZE items pointer-ized into
       checked (cloudflare.md completion table, homelab#1334).
       Program: `ROADMAP.md` → "Platform self-service via Crossplane".
       Relates ADR-076, ADR-085, ADR-092, ADR-101.
+- [ ] **FU-282** — The PublicRoute **origin mark** reads the homelab's WAN address from
+      `wg.teststuff.net` — the WireGuard endpoint's ddclient record (ADR-090). Correct value,
+      misleading name: a reader of the Composition has no reason to expect the VPN endpoint to be
+      load-bearing for an edge header, and renaming/retiring that record would silently break the
+      mark. **Next:** give ddclient a second target (`egress.teststuff.net`,
+      `ansible/group_vars/opnsense.yml` + a router apply) and repoint `$egressRecord` in
+      `argocd/resources/publicroute/composition.yaml` — one line each, but it needs a live
+      OPNsense apply, which is why it is not in the build. Cosmetic until then: the mark works.
+      Detail: [`docs/cloudflare.md`](cloudflare.md) §PublicRoute — origin mark.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on

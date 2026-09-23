@@ -1,6 +1,7 @@
 # publicroute-tf-validate fixture — the api profile on a PRODUCT zone with every optional field
-# set (rate limit + CORS origins), so all api-branch resources render: rate-limit ruleset,
-# no-challenge Skip, CORS preflight block, CORS headers rewrite. Mirrors the second document in
+# set (rate limit + CORS origins + origin mark), so all api-branch resources render: rate-limit
+# ruleset, no-challenge Skip, CORS preflight block, CORS headers rewrite, and the profile-agnostic
+# origin-mark transform (its dns_records data source + late-transform ruleset). Mirrors the second document in
 # argocd/resources/publicroute/example-claim.yaml.example; keep the two in step.
 apiVersion: platform.teststuff.net/v1alpha2
 kind: XPublicRoute
@@ -25,3 +26,6 @@ spec:
   origins:
     - https://app.minutark.ee
     - https://dashboard.minutark.ee
+  originMark:
+    header: X-Oracle-Origin
+    value: homelab
