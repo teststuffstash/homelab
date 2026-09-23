@@ -6138,12 +6138,21 @@ data: [DONE]
     def _api_away(*_a, **_k):  # the control plane is away
         raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
     urllib.request.urlopen = _api_away
-    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    c.request("GET", "/git-token?ns=test-neg-cache")
-    r = c.getresponse()
-    r.read()
-    retry_after = r.getheader("Retry-After")
-    c.close()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r = c.getresponse()
+        r.read()
+        retry_after = r.getheader("Retry-After")
+        c.close()
+        # A cached transient miss inside the TTL is still 503 (the blip is not a verdict)
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r2 = c.getresponse()
+        r2.read()
+        c.close()
+    finally:
+        urllib.request.urlopen = _real_urlopen
     check(r.status == 503,
           "negative-cache _resolve_git_token: second request 503 (re-resolution attempted, transient)")
     check(retry_after == "2",
@@ -6151,15 +6160,8 @@ data: [DONE]
     check(_miss_reason(git_ref) == "transient",
           "negative-cache _resolve_git_token: miss reason re-recorded as transient")
 
-    # A cached transient miss inside the TTL is still 503 (the blip is not a verdict)
-    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    c.request("GET", "/git-token?ns=test-neg-cache")
-    r = c.getresponse()
-    r.read()
-    c.close()
-    check(r.status == 503,
+    check(r2.status == 503,
           "negative-cache _resolve_git_token: cached transient miss answers 503")
-    urllib.request.urlopen = _real_urlopen
 
     # _classify_miss: the k8s API's 404/403 are definitive, everything else is a blip
     _h404 = urllib.error.HTTPError("u", 404, "nf", {}, None)
