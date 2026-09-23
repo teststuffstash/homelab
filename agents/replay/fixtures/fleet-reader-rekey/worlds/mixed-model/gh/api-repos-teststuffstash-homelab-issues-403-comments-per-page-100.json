@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "user": {
+      "login": "homelab-agents-1234"
+    },
+    "body": "AGENT_STRIKE: model=deepseek/deepseek-v4.1-flash error_class=timeout round=1 session=pod-403\n\nMIXED set: this record carries NO provider token, but its MODEL is only struck once — the model-nomination branch still evaluates over the resolvable records (deepseek/deepseek-v4-flash across open-inference,openrouter).",
+    "created_at": "2026-09-01T15:45:00Z"
+  }
+]

@@ -4479,6 +4479,20 @@ EOF_GTHEMES_OPEN
             case " ${serving_classes} " in *" ${ec} "*) serving_member=1;; esac
             branch="us"; hit=""
             if [ -n "$serving_member" ]; then
+              # ── FAIL-CLOSED ON AN UNRESOLVED PROVIDER (rule #6: never fail INTO a write) ──────
+              # Both keys below read the per-record provider column ($3): the pair cell is
+              # `model|provider` and the model key counts DISTINCT providers. `agent-session.sh`
+              # appends the `provider=` token only when `_strike_provider` resolved, so a class
+              # every one of whose records has an empty provider yields only the cell `model|`
+              # (never a real `pair_cooldowns` entry) and a collapsed distinct-provider count —
+              # a genuinely serving-shaped strike would fall through to the "us" branch and write
+              # `agent/error` (human-first) for state the ROUTER owns. Same defect class #1917
+              # fixed one seam over. Skip the class this tick; report only, in the same shape as
+              # the /router-status-unreadable branch above.
+              if ! printf '%s\n' "$cls_records" | awk -F'|' 'NF >= 3 && $3 != "" { found = 1 } END { exit !found }'; then
+                orphans="${orphans}[$repo] ⛔ FLEET READER: error_class=${ec} serving-shaped but no strike record carries a resolved provider — pair/model state unknown; no latch, no nomination, no agent/error this tick (rule #6 — never fail INTO a write)\n"
+                continue
+              fi
               # (class, provider): a pair in this class's records is COOLED by the router.
               while IFS= read -r cell; do
                 [ -n "$cell" ] || continue

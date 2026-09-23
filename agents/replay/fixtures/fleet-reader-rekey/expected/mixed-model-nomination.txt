@@ -1,0 +1,13 @@
+CALL curl -fsS --max-time 5 http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status
+CALL gh api repos/teststuffstash/homelab/issues/401/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/402/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/403/comments?per_page=100
+CALL gh issue list --repo teststuffstash/homelab --state open --limit 50 --json number,title --jq [.[] | select(.title | startswith("model-nomination: deepseek/deepseek-v4-flash"))] | first | .number // ""
+CALL date -u +%Y-%m-%dT%H:%M:%SZ
+CALL gh issue create --repo teststuffstash/homelab --title model-nomination: deepseek/deepseek-v4-flash --label agent-fix --body model-nomination-fp: model=deepseek/deepseek-v4-flash\n\n🤖 **Model nomination** — a repeated serving strike on `deepseek/deepseek-v4-flash` across providers (open-inference,openrouter) (Goal #1640 acceptance 5).\n\nThis is a RECORD, not a label: no issue carries `agent/error` for a model-class repeat. The model is a candidate for the router's ledger deny.\n\n**Detected at:** `2026-09-01T18:00:00Z`
+OUT PROVIDER-LATCHES <empty>
+OUT MODEL-NOMINATIONS deepseek/deepseek-v4-flash=open-inference,openrouter 
+OUT US-CASE <empty>
+OUT ORPHAN [homelab] ⚠ FLEET STRIKE (model): error_class=timeout — model deepseek/deepseek-v4-flash struck across providers open-inference,openrouter; NOMINATED for the ledger (a record, no issue labelled)
+OUT REACHED: end
+RC 0
