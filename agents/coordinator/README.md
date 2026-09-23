@@ -937,6 +937,15 @@ for three days with no container to adopt it (2026-09-08). Then
 advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
 <total>`. A store you cannot read is a loud line on the goal, not a guess.
 
+**LAST, whatever fired — stamp the ride.** Every goal-checkpoint ride, (a)/(b)/(c)/(e) alike
+and including a ride that changed nothing, ends with ONE store write:
+`bash /work/homelab/agents/goal-findings.sh checkpoint <owner/repo> <goal-n> "<ISO ts>
+(<triggers>) <n> minted · <m> folded · <k> dropped · <j> deferred"` (or `… no change`). It
+replaces the `last-checkpoint:` header line in place, so the store — not the timeline — says
+when the Goal was last judged and what came of it. The first ride under this play (theme #1768's
+assembly, 2026-09-23T08:27Z) wrote its index row and its finding but skipped the stamp because
+the stamp sat inside the dispose-the-store paragraph; it is its own step now.
+
 **The write-back IS the store — the Goal's timeline gets NO ruling comment (operator,
 2026-09-23).** Every ruling lands as a store row: a member's is its disposition row, a finding's
 is the `⇒` suffix `rule` writes on its entry, and the ride itself is ONE header line —
