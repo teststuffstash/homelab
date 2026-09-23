@@ -79,12 +79,16 @@ spec:
     # ruler): its rules are per-tenant DIRECTORIES, so it needs one static mount per namespace and
     # covers every namespace added later with nothing, silently. Same reasoning that moved the
     # #811 volume belt above out of it; the pattern set's own rationale lives with the stage.
-    # ⚠ THE SERIES NAME IS HALF-INHERITED. Alloy prefixes a stage.metrics counter with its own
-    # default (`loki_process_custom_`) and the stage only names the suffix — and NOTHING in this
-    # repo can check that offline (devbox ships no `alloy` binary and the jail has no container
-    # runtime, so the config is not even parsed before it reaches a node). The post-merge probe in
-    # the FU-247 PR therefore reads the name off a pod's own /metrics BEFORE trusting this expr; a
-    # wrong prefix here is a silent no-op, which is the one failure this belt must not have.
+    # THE SERIES NAME IS HALF-INHERITED — Alloy prefixes a stage.metrics counter with its own
+    # default and the stage names only the suffix. Nothing in devbox ships an `alloy` binary, so
+    # this was pinned OUT of band before merge: `nix shell nixpkgs#grafana-alloy` (1.17.1) running
+    # THIS ConfigMap's rendered config against a fake kmsg file, 2026-09-23. It exposed exactly
+    #     loki_process_custom_kernel_oops_lines_total{namespace="loki",container="kmsg-reader",node="…"} 1
+    # for a `kernel BUG at` line and did not move for two ordinary ones. ⚠ The deployed Alloy is
+    # v1.5.1 (alloy.yaml), so the version that emits the name in production is not the version that
+    # was measured — the post-merge probe in the FU-247 PR still reads the name off a pod's own
+    # /metrics before this belt is trusted. A wrong prefix here is a silent no-op, which is the one
+    # failure this belt must not have.
     - name: kernel-oops
       rules:
         - alert: KernelOopsCaptured

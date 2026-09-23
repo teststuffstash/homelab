@@ -88,6 +88,13 @@ data:
       // counter carries the clean stream label set (namespace/pod/container/node/app) rather than
       // the `__tenant_id__` the stamp adds. Do not reorder these two without re-reading both.
       //
+      // MEASURED, not reasoned (2026-09-23, `nix shell nixpkgs#grafana-alloy` 1.17.1 against this
+      // file's rendered config + a fake kmsg file, pushing to a local sink): three entries in, ONE
+      // matching → `loki_write_sent_entries_total{tenant="loki"} 3` and the counter at 1. So the
+      // match drops nothing, the tenant stamp still fires, and the counter carries the stream
+      // labels. The deployed Alloy is v1.5.1 and the measurement was on 1.17.1 — the shape is
+      // pinned, the exact production string is confirmed by the post-merge probe (FU-247).
+      //
       // ⚠ Labels, not `__`-prefixed metadata — the trap the stage.tenant comment below records.
       // `namespace`/`container` here are the real entry labels discovery.relabel sets above, which
       // is why a selector can match on them at all.
