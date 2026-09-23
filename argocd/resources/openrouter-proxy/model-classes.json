@@ -1,5 +1,45 @@
 {
- "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human. provider_policy (FU-186): per-class key; absent = today's pin behaviour (provider.order injected). \"exacto\" skips pin injection — the completion path appends :exacto to the served model id, which the proxy forwards UNTOUCHED with the M4 pin skipped, letting upstream's tool-call-quality ordering own provider selection. Priced classes carry no policy by construction. `rails` is written in the CANONICAL rail vocabulary (Goal #1769 acceptance 1) — `anthropic-subscription` | `opencode-go` | `openrouter` | `opencode-zen` — the same names `model_id.parse()` produces and every decision row echoes; the router derives a candidate's rail from that parser and gates it on ITS OWN rail's capacity (a Go candidate on /opencode-limit, never on the OpenRouter key's state). The pre-Goal-#1769 spelling (`subscription`) still loads through a one-release alias in router.py:RAIL_ALIASES and is deleted next release. CALLER CAPABILITY (Goal #1769 acceptance 4, router half, 2026-09-22): a candidate is filtered by what the CALLER can ride, not only by what the account can buy — `/route` takes the caller's `surface` (claude-cli | opencode-cli | openai-api) and its `key_ref`, and a candidate whose rail needs a fact the caller did not send is skipped `caller:no-key_ref` (openrouter) or `caller:surface` (anthropic-subscription / opencode-go / opencode-zen) BEFORE any capacity gate is consulted. Sending NEITHER fact filters nothing, so an un-adopted caller walks exactly as before. The requirement table is router.py:RAIL_SURFACE until Goal #1769 acceptance 2's `rails:` block externalizes it into this file.",
+ "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds (per rail, in the `rails:` block) = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human. provider_policy (FU-186): per-class key; absent = today's pin behaviour (provider.order injected). \"exacto\" skips pin injection — the completion path appends :exacto to the served model id, which the proxy forwards UNTOUCHED with the M4 pin skipped, letting upstream's tool-call-quality ordering own provider selection. Priced classes carry no policy by construction. `rails` is written in the CANONICAL rail vocabulary (Goal #1769 acceptance 1) — `anthropic-subscription` | `opencode-go` | `openrouter` | `opencode-zen` — the same names `model_id.parse()` produces and every decision row echoes; the router derives a candidate's rail from that parser and gates it on ITS OWN rail's capacity (a Go candidate on /opencode-limit, never on the OpenRouter key's state). The pre-Goal-#1769 spelling (`subscription`) still loads through a one-release alias in router.py:RAIL_ALIASES and is deleted next release. CALLER CAPABILITY (Goal #1769 acceptance 4, router half, 2026-09-22): a candidate is filtered by what the CALLER can ride, not only by what the account can buy — `/route` takes the caller's `surface` (claude-cli | opencode-cli | openai-api) and its `key_ref`, and a candidate whose rail needs a fact the caller did not send is skipped `caller:no-key_ref` (openrouter) or `caller:surface` (anthropic-subscription / opencode-go / opencode-zen) BEFORE any capacity gate is consulted. Sending NEITHER fact filters nothing, so an un-adopted caller walks exactly as before. The requirement table is the `rails:` block below (Goal #1769 acceptance 2 externalized router.py's RAIL_SURFACE into it).",
+ "rails": {
+  "_comment": "Goal #1769 acceptance 2 — the ONE declared table of rail facts. Before this, a rail's gate/cost/windows/thresholds/concurrency lived as scattered env constants (OPENCODE_MAX_RUNNING, ANTHROPIC_UTIL_THRESHOLD_*) and an Anthropic-only top-level tier_thresholds; a rail we chose not to use was simply OMITTED. Now every rail is DECLARED, and one we do not use is declared `enabled: false` with its reason (Zen). PRECEDENCE — two authorities, two skip reasons: `enabled: false` in git is `rail:disabled` and CANNOT be overridden from env; OPENCODE_RAIL_DISABLED (the FU-213 env kill switch, openrouter-proxy.py) is `rail:parked` and beats `enabled: true` — a kill switch beats a git round-trip. `gate` names the capacity probe the /route walk consults (sub | go | or | none); `surfaces` is the caller surfaces the rail serves (acceptance 4's predicate reads THIS, not an in-router table); `cost` is flat-window | flat-pool | per-token; `windows` are the utilization windows the gate reads; `tier_thresholds` is the per-rail FU-109 table (the Anthropic-only top-level table is retired — a stale file's copy is folded in once at load by router.py:_migrate_tier_thresholds); `concurrency` is the rail's bound (the Go rail's OPENCODE_MAX_RUNNING is now the ENV OVERRIDE of this declared value, not its only home).",
+  "anthropic-subscription": {
+   "gate": "sub",
+   "surfaces": ["claude-cli"],
+   "cost": "flat-window",
+   "windows": ["5h", "7d"],
+   "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+   "concurrency": null,
+   "enabled": true
+  },
+  "opencode-go": {
+   "gate": "go",
+   "surfaces": ["claude-cli"],
+   "cost": "flat-pool",
+   "windows": ["5h", "7d", "30d"],
+   "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+   "concurrency": 3,
+   "enabled": true
+  },
+  "openrouter": {
+   "gate": "or",
+   "surfaces": ["claude-cli", "opencode-cli", "openai-api"],
+   "cost": "per-token",
+   "windows": [],
+   "tier_thresholds": {},
+   "concurrency": null,
+   "enabled": true
+  },
+  "opencode-zen": {
+   "gate": "none",
+   "surfaces": ["opencode-cli"],
+   "cost": "per-token",
+   "windows": [],
+   "tier_thresholds": {},
+   "concurrency": null,
+   "enabled": false,
+   "_reason": "reachable and unmetered: pay-per-token USD with no pricing table, no spend meter, no ledger bucket — ledger.py:_model_rail folds it into \"openrouter\"; un-parking rides FU-170 (b)+(c), not this Goal."
+  }
+ },
  "classes": {
   "coding": {
    "chain_source": "stack",
@@ -177,11 +217,6 @@
   "subscription_model": "claude/haiku",
   "promote_after": 3,
   "tight_floor_tier": 1
- },
- "tier_thresholds": {
-  "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold — the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
-  "dispatch": 0.9,
-  "heavy": 0.8
  },
  "cooldown": {
   "_comment": "ADR-096 addendum 4: model-level temporary blacklist. Trip when >= min_events in window_s and the non-2xx share >= bad_share (reason = dominant class); hold base_s doubling per consecutive trip up to max_s; ANY 2xx clears + resets the streak (half-open recovery: an expired hold makes the model eligible again and cheapest-effective ordering re-picks it — natural traffic is the probe). Keyed on OUR passive events, never upstream uptime (laguna measured 100% upstream while 81% 429 for our account, 2026-08-02).",
