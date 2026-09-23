@@ -9,6 +9,14 @@
 # rank normally; the historical `rounds` INT shape and the new per-round ARRAY shape both rank by
 # count (the emitter changed `rounds` int→array, and the whole ledger is read every run).
 #
+# WHAT IT ALSO PINS (retro r5 F1, homelab#1911): the ledger's `issue_state`/`terminal_label` are
+# DISPATCH-TIME snapshots, so before cutting the brief the top-KEEP candidates are re-read LIVE.
+# A CLOSED issue with a strong-link merged PR (the C6 grammar `implements|closes|fixes|resolves
+# #n`) is DROPPED from the rank whatever its `terminal_label` says and COUNTED in the same
+# no-silent-caps line; an OPEN row and a CLOSED-without-strong-link row stay ranked; an
+# unreadable probe KEEPS its row and is counted unverified (rule #6). The `gh` reads are served
+# by a PATH stub below — the replay harness runs offline.
+#
 # THE EXPECTED VALUES ARE COMPUTED FROM THE INPUTS + THE CONTRACT (the sort key in
 # retro-rank.py: blocked first, then rounds desc, then cost desc, then wall desc; KEEP=2), never
 # from running the rank — an expectation derived by running the code pins the code's bugs.
@@ -26,6 +34,37 @@ done
 [ -f "$RANK" ] || { echo "retro-rank-test: $RANK not found" >&2; exit 2; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+# ── the `gh` PATH stub (offline) ───────────────────────────────────────────────────────────────
+# retro-rank.py re-reads live state for the top-KEEP candidates (r5 F1). The harness runs offline,
+# so the two reads it makes are served here, keyed by issue number (`issue view`) and repo slug
+# (`pr list`). Unknown issues read OPEN (scenario 1's rows); 101 is CLOSED + `Fixes #101` merged,
+# 103 is CLOSED with only a bare mention, 104 is unreadable.
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "issue view")
+    case "$3" in
+      101) printf '%s\n' '{"state":"CLOSED","closedAt":"2026-09-01T00:00:00Z"}' ;;
+      103) printf '%s\n' '{"state":"CLOSED","closedAt":"2026-09-02T00:00:00Z"}' ;;
+      104) echo "gh: could not resolve to a Repository" >&2; exit 1 ;;
+      *)   printf '%s\n' '{"state":"OPEN","closedAt":null}' ;;
+    esac
+    ;;
+  "pr list")
+    slug=""
+    while [ $# -gt 0 ]; do case "$1" in --repo) slug="$2"; shift 2 ;; *) shift ;; esac; done
+    case "$slug" in
+      */proj2) printf '%s\n' '[{"number":900,"body":"Fixes #101"},{"number":901,"body":"Related to #103"}]' ;;
+      *)       printf '%s\n' '[]' ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+STUB
+chmod +x "$TMP/bin/gh"
+export PATH="$TMP/bin:$PATH"
 
 # ── the ranked-input world (small, constructed) ────────────────────────────────────────────────
 # Row S: blocked + 3 rounds + $9.9 + 999s — WOULD be rank 1 on the contract sort, but
@@ -81,6 +120,54 @@ if printf '%s' "$out" | grep -q 'excluded 1 snapshot rows from the rank'; then
   ok "log line counts the exclusion: 'excluded 1 snapshot rows from the rank'"
 else
   bad "exclusion not logged loudly" "no 'excluded 1 snapshot rows' in: $out"
+fi
+
+# ── scenario 2: the live-state re-read (r5 F1, homelab#1911) ───────────────────────────────────
+# The ledger's issue_state/terminal_label are DISPATCH-TIME snapshots. A CLOSED issue with a
+# strong-link merged PR is merged work: it must be DROPPED from the rank whatever its
+# terminal_label says, and COUNTED. An OPEN row and a CLOSED-without-strong-link row stay ranked;
+# an unreadable probe keeps its row and is counted unverified (rule #6).
+cat > "$TMP/ledger2.jsonl" <<'JSONL'
+{"key":"proj2#101","project":"proj2","issue":101,"terminal_label":"agent/blocked","rounds":3,"total_cost_usd":5.0,"wall_time_s":500}
+{"key":"proj2#102","project":"proj2","issue":102,"terminal_label":"agent/blocked","rounds":2,"total_cost_usd":4.0,"wall_time_s":400}
+{"key":"proj2#103","project":"proj2","issue":103,"terminal_label":"agent/done","rounds":2,"total_cost_usd":3.0,"wall_time_s":300}
+{"key":"proj2#104","project":"proj2","issue":104,"terminal_label":"agent/done","rounds":1,"total_cost_usd":2.0,"wall_time_s":200}
+JSONL
+
+out2="$(python3 "$RANK" "$TMP/ledger2.jsonl" "$TMP/ranked2.json" 10 2>&1)"; rc2=$?
+if [ "$rc2" != 0 ]; then
+  bad "retro-rank.py exited $rc2 on the live-state ledger" "$out2"
+else
+  # 101 is CLOSED + `Fixes #101` merged → dropped whatever its agent/blocked label says.
+  if jq -e '[.[].key] | index("proj2#101")' "$TMP/ranked2.json" >/dev/null 2>&1; then
+    bad "closed+merged row proj2#101 stayed in the rank" \
+        "r5 F1: a CLOSED issue with a strong-link merged PR is merged work — it must be dropped."
+  else
+    ok "closed+merged row proj2#101 dropped from the rank"
+  fi
+  # 102 OPEN, 103 CLOSED but only a bare mention, 104 unreadable → all stay ranked.
+  keys2="$(jq -r '.[].key' "$TMP/ranked2.json" | tr '\n' ' ')"
+  if [ "$keys2" = "proj2#102 proj2#103 proj2#104 " ]; then
+    ok "OPEN, closed-without-strong-link and unreadable rows stay ranked"
+  else
+    bad "live-state survivors unexpected" "want 'proj2#102 proj2#103 proj2#104 ', got '$keys2'"
+  fi
+  ranks2="$(jq -r '.[].rank' "$TMP/ranked2.json" | tr '\n' ' ')"
+  if [ "$ranks2" = "1 2 3 " ]; then
+    ok "ranks stay dense after the merged-work drop (1, 2, 3)"
+  else
+    bad "ranks after drop unexpected" "want '1 2 3 ', got '$ranks2'"
+  fi
+  if printf '%s' "$out2" | grep -q 'excluded 1 merged-work rows from the rank'; then
+    ok "log line counts the merged-work exclusion: 'excluded 1 merged-work rows from the rank'"
+  else
+    bad "merged-work exclusion not logged loudly" "no 'excluded 1 merged-work rows' in: $out2"
+  fi
+  if printf '%s' "$out2" | grep -q 'kept 1 rows on an unreadable probe'; then
+    ok "log line counts the unreadable probe: 'kept 1 rows on an unreadable probe'"
+  else
+    bad "unreadable probe not counted" "no 'kept 1 rows on an unreadable probe' in: $out2"
+  fi
 fi
 
 printf '\n  %s passed, %s failed\n' "$PASS" "$FAIL"
