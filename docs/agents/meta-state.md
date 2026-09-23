@@ -9,6 +9,17 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-23 late — the mechanical FU sweep; arc in TICK-LOG).** Six PRs merged
+  (#1946/#1947/#1948/#1949/#1950/#1951) plus the parked spike #1905. Three things a fresh session
+  should expect rather than chase: (1) **`KernelOopsCaptured` is firing on wk-03 by design** — two
+  synthetic probe lines, silenced in Alertmanager to ~04:30Z, self-clears ~6 h after the last
+  injection (~04:00Z). (2) **`MgmtBeltCheckFailing` will fire on `check="talos"`** once the box
+  picks up #1950 — that is FU-286 (devbox cannot resolve talosctl past 1.13.8 while the fleet runs
+  v1.14.1), not a new fault; it clears when the pin moves. (3) **FU-287 needs a decision** —
+  every Alloy restart re-counts old oops lines (positions on an emptyDir), so the new belt re-fires
+  after any config bump; the fork is a hostPath positions dir (DaemonSet change) vs a
+  restart-insensitive rule. Also open from this sitting: GAPS `maintenance-window-G4` (a window
+  opened to prove a detector fires cannot close — `--force` is the only exit).
 - **⚑ PICKUP (2026-09-23 ~10:30Z — write-back-is-the-store LIVE and proven; arc in TICK-LOG).**
   DONE this sitting: PR#1933/#1936 (play), #1934 (theme #1768 assembly, CLOSED), #1932 (token broker
   503 + retries + two masked export-guards), #1929 (rails assembly), #1931 override, #1916. The store

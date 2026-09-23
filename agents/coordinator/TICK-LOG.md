@@ -10780,3 +10780,56 @@ read nothing for 30 min (no `wget` in the prometheus container), the zsh word-sp
 re-committed, and a replacement armed without stopping the original. GAPS
 `maintenance-window-G2` now carries three sightings and zero working copies; the entry's own
 conclusion — ship `maint watch` as a verb — is overdue.
+
+## 2026-09-23 late — the mechanical Hardware-&-nodes sweep: six PRs, and two defects the acceptance probes found
+
+Operator asked for mechanical follow-ups, `docs/follow-ups.md` §Hardware & nodes, subagents where
+they fit. Six PRs merged: **#1946** (FU-261), **#1947** (FU-246's PXE leg), **#1948** + **#1951**
+(FU-247), **#1949** (FU-254), **#1950** (the belt's own verdicts). Two subagents authored #1948 and
+#1949 in clones and stopped at commit, as their card says; the seat integrated, reviewed and owned
+both PR cycles. The spike PR **#1905** — a meta-state pickup, not part of the sweep — merged after
+its one blocking finding (ADR-080 → ADR-091 at line 41) was fixed and master merged in.
+
+**FU-261, the role that had been failing for months.** `matchbox-ipxe-tftp` ended with *Enable and
+start tftpd-hpa*, a unit `matchbox-proxydhcp` MASKS, so every run died there and the copy before it
+went unverified: `/srv/tftp/undionly.kpxe` was absent and every BIOS PXE client fell back to disk.
+Dropped the tftpd tasks; the role now fetches all three boot files back over TFTP and compares
+byte counts (`--tags verify` alone). Applied: 74213B / 850528B / 173792B served, second run
+`changed=0`.
+
+**FU-246's PXE leg — and the lockstep is now a check, not a comment.** All three satellite pins had
+drifted again: PXE assets and Matchbox profile at v1.13.10, `scripts/talos-usb.sh` still at v1.13.2,
+against a v1.14.1 fleet — the same class that cost wk-metal-02 a boot on 09-21, recurring within a
+day of its own fix. `machines-lint` (already the currency gate, already in CI) now checks each pin
+against `var.talos_version_worker` and names the apply that must follow. It fired on all three
+before anything was bumped; assets downloaded, profile applied, re-plan clean.
+
+**The probes are where the value was.** Both new detectors were accepted by making them fire, and
+both acceptances found a defect the fixtures could not:
+
+- FU-247's synthetic `kernel BUG at` line on wk-03 fired `KernelOopsCaptured` — and the alert then
+  **resolved itself ~10 min later**. `query_range` gave the series' whole life: 300 s exactly, six
+  samples, Alloy up 40 min with 0 restarts. The counter had no `max_idle_duration` on the reading
+  that omitting it means "never prune"; it means the 5-minute default. Fixed in #1951 and re-proven
+  live (still exported and firing at t+9m).
+- Re-injecting after the v5 roll returned the counter at **2**, not 1. Deleting the Alloy pod with
+  no new line brought it back at 2 again: Alloy re-reads the reader's container log from the start
+  (positions on an `emptyDir`), so every restart re-counts old faults → **FU-287**.
+- FU-254's acceptance meant running one belt tick on the box by hand, which showed `FAIL talos —
+  MINOR skew: client=v1.13.8 server=v1.14.1` — standing on every tick since the 09-22 fleet move,
+  and **nothing alerts on a belt verdict**: `mgmt_probe_check{check,status}` had been published all
+  along with no rule consuming it. #1950 is that alert; **FU-286** is the pin it will fire on
+  (devbox's index tops out at talosctl 1.13.8 while nixpkgs has 1.14.1, so no version string in
+  `devbox.json` can reach it today).
+
+**A reviewer catch worth recording as mine.** #1949 encoded Talos's support window as 2 minors —
+from the seat's own dispatch prompt. Siderolabs ends community support when the next minor ships,
+so the constant is 1; at 2 the check would have reported Talos supported straight through the
+2026-09-03 event the FU is written about. Reproduced with the fix against a fake checkout
+(`talos-controlplane v1.13.10 is EOL — 1 minor(s) behind, upstream supports 1`).
+
+**Jail note:** `nix shell nixpkgs#grafana-alloy` runs a real Alloy in the jail, which pinned the
+metric name and proved `stage.match` drops nothing (3 entries in, 1 counted, `sent_entries 3`)
+BEFORE #1948 merged — the class of check the subagent had correctly reported as impossible here.
+Two windows closed with `--force`: in both, the known-open item was the alert the probe existed to
+produce. That is GAPS `maintenance-window-G4` — `check` has no notion of an expected alert.

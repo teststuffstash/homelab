@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-287** (2026-09-23: FU-286 minted for the box's talosctl trailing the fleet by a
+  Next free id: **FU-288** (2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
   caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
@@ -1311,6 +1312,16 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-287** — **Every Alloy restart re-counts the kernel-oops lines still in the kmsg-reader's
+      container log, so `KernelOopsCaptured` re-fires on old faults.** Measured 2026-09-23 at
+      FU-247's acceptance: with NO new line injected, deleting the `alloy` pod on wk-03 brought the
+      counter back at **2** — both synthetic lines re-read from the start of the reader's container
+      log (Alloy's positions live on the pod's `emptyDir`). Two consequences: a config-hash bump or
+      a node reboot re-fires the alert for any node whose reader log still holds a fault dump, and
+      for ~5 min after a restart BOTH series exist (old one stale-pending), so `sum by (node)`
+      transiently doubles. **Next:** decide between persisting Alloy's positions (a hostPath dir on
+      the node, which is a DaemonSet change) and making the rule restart-insensitive; the lines
+      themselves are never lost — they are in Loki. Relates FU-247, FU-190.
 - [ ] **FU-286** — **The management box's `talosctl` is a MINOR behind the fleet, and the pin
       cannot move yet.** The belt's `talos` check (client vs server, minor skew only — the skew that
       breaks the API) has returned FAIL on every tick since the fleet moved to v1.14.1 on 2026-09-22:
@@ -1369,8 +1380,8 @@ the block needs pruning, not more headings.
       (#1948): an Alloy `stage.match`/`stage.metrics` counter on the kmsg stream, a PodMonitor on
       Alloy (nothing scraped it before), `KernelOopsCaptured` per node — a sender-side metric, NOT a
       ruler (gone, ADR-118; [`loki-tenancy.md`](loki-tenancy.md) §The belt could not stay in the
-      ruler). Acceptance: a synthetic `kernel BUG at` line into wk-03's `/dev/kmsg` → counter 1 →
-      `ALERTS{…,node="wk-03"} firing`. **Next (install-time, the console half):** nx-01's BMC SOL is
+      ruler). Acceptance: a synthetic `kernel BUG at` line into wk-03's `/dev/kmsg` → counter →
+      `ALERTS{…,node="wk-03"} firing`; it also caught the 5-min idle prune (#1951) and FU-287. **Next (install-time, the console half):** nx-01's BMC SOL is
       `ttyS1` and the metal image ships `console=tty0` only — a panic capture needs
       `console=ttyS1,115200` in the image-factory `extraKernelArgs`. Relates FU-155 (kmsg tenancy).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
