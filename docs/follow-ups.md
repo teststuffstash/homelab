@@ -220,6 +220,16 @@ six OVERSIZE items pointer-ized into
       The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
       **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
       Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
+- [ ] **FU-280** — **Should the first-party registry move off the Garage S3 backend? POINTER.**
+      An S3 blob commit holds the layer TWICE (upload, then a server-side COPY into blobs/) — the
+      proximate cause of both commit-refusal outages (09-09, 09-22). A filesystem/PVC backend
+      renames on commit, so the double-hold cannot exist; ADR-121's rejection of the PVC rests on a
+      capacity clause that no longer binds and a misapplied principle (operator, 2026-09-22).
+      **Blocked on a TIER decision, not on the registry:** `std` is wrong for a store that must
+      reach hundreds of GB, `bulk` is 90% committed — ADR-shaped, belongs with fleet-roles/FU-137.
+      Evidence, the experiment, the naming trap and a cheaper side-question first:
+      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
+      **Next:** answer the tier question, then run phase 1. Relates FU-203, FU-274, FU-279, FU-137.
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
@@ -1343,11 +1353,14 @@ the block needs pruning, not more headings.
       `responder_triage_sessions_today` for a day. Relates FU-230, FU-231, ADR-122.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
-      2026-09-10 09:38 and nothing read it for six days. Loki has no ruler today (`loki-config.yaml`);
-      **Next:** ruler + one `KernelOopsCaptured` rule per node, or an Alloy-side counter metric the
-      existing Prometheus rules can fire on. Also the console half: nx-01's BMC SOL is `ttyS1` and the
-      v1.13.10 metal image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200`
-      in the image-factory `extraKernelArgs` (install-time). Incident above; relates FU-155 (kmsg tenancy).
+      2026-09-10 09:38 and nothing read it for six days. **Detector LANDED 2026-09-23**: an Alloy
+      `stage.match`/`stage.metrics` counter on the kmsg stream, a PodMonitor on Alloy (nothing
+      scraped it before) and `KernelOopsCaptured` per node — a sender-side metric, NOT a ruler (gone,
+      ADR-118; [`loki-tenancy.md`](loki-tenancy.md) §The belt could not stay in the ruler). Verify
+      post-merge by injecting a line into one node's `/dev/kmsg` (probe in the PR body).
+      **Next (install-time, the console half):** nx-01's BMC SOL is `ttyS1` and the v1.13.10 metal
+      image ships `console=tty0` only — a metal panic capture needs `console=ttyS1,115200` in the
+      image-factory `extraKernelArgs`. Incident above; relates FU-155 (kmsg tenancy).
 - [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
       Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
       `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
