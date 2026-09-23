@@ -1,0 +1,22 @@
+# loop-fetch-guard/reviewer-fetch-retry — the reviewer's LOOP_FETCH (reviewer-session.sh) retries
+# a broker blip and still fails closed (2026-09-23, PR#1932).
+#
+# The token broker answers 503 + Retry-After for a TRANSIENT miss (a k8s Secret read that timed
+# out — the 05:00Z cron burst served the platform scan a 404 for exactly that, one second before
+# serving the same namespace) and connection-refused while it restarts (nine FATALs in 7 days).
+# curl retries neither without `--retry 3 --retry-delay 2 --retry-connrefused`, so every fetch
+# site carries the flags; this fixture pins the reviewer form the way loop-fetch-guard pins the
+# coordinator form. The two CronWorkflow sites (agents/coordinator/coordinate-argo.yaml,
+# review-argo.yaml) hold the same curl line inside YAML `args:` — no sentinel block can be
+# extracted from YAML by run.sh, so they are covered by review, not replay (recorded here so the
+# ADR-103 ratchet's "why none applies" is written down where it looks).
+#
+# THE CONTRACT: (1) with a reviewer namespace the fetch carries the retry flags; (2) a fetch that
+# still fails after retrying fires the FATAL guard and exits 1 — retrying never opens a blind path.
+name: loop-fetch-guard-reviewer-fetch-retry
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:loop-fetch-guard
+  - file:post.sh

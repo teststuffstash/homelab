@@ -301,6 +301,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
+| `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
