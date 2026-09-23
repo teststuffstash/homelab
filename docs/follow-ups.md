@@ -220,6 +220,16 @@ six OVERSIZE items pointer-ized into
       The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
       **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
       Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
+- [ ] **FU-280** — **Should the first-party registry move off the Garage S3 backend? POINTER.**
+      An S3 blob commit holds the layer TWICE (upload, then a server-side COPY into blobs/) — the
+      proximate cause of both commit-refusal outages (09-09, 09-22). A filesystem/PVC backend
+      renames on commit, so the double-hold cannot exist; ADR-121's rejection of the PVC rests on a
+      capacity clause that no longer binds and a misapplied principle (operator, 2026-09-22).
+      **Blocked on a TIER decision, not on the registry:** `std` is wrong for a store that must
+      reach hundreds of GB, `bulk` is 90% committed — ADR-shaped, belongs with fleet-roles/FU-137.
+      Evidence, the experiment, the naming trap and a cheaper side-question first:
+      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
+      **Next:** answer the tier question, then run phase 1. Relates FU-203, FU-274, FU-279, FU-137.
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
