@@ -12,7 +12,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: smartctl-exporter
-  namespace: disk-health
+  namespace: node-maintenance
   labels: { app.kubernetes.io/name: smartctl-exporter }
 spec:
   selector:

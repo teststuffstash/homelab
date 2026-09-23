@@ -1,8 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# No Namespace object here ON PURPOSE. `iac-no-cluster-scoped` (policy/iac/) forbids cluster-scoped
+# kinds, and its homelab baseline is a tier-3 CODEOWNERS path so every NEW namespace crosses the
+# operator by design. This exporter needs no new one: `node-maintenance` already exists, is already
+# in that baseline, and already carries `pod-security.kubernetes.io/enforce: privileged` for
+# node-fstrim's CAP_SYS_ADMIN hostPath jobs. smartctl's CAP_SYS_RAWIO passthrough on raw device
+# nodes is the same class of privilege, so sharing the namespace also keeps the cluster's privileged
+# surface at ONE namespace instead of two. node-fstrim's Application owns the Namespace object;
+# this one ships only namespaced resources into it, so neither app prunes the other's.
+
 resources:
-  - namespace.yaml
   - daemonset.yaml
   - service.yaml
   - servicemonitor.yaml

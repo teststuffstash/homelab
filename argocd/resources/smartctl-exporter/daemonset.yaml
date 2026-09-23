@@ -11,6 +11,12 @@
 # WHAT IT REPLACES: nothing. This is additive — the Longhorn/Garage/pool belts all meter CAPACITY
 # and IO; none of them can see a drive degrading underneath.
 #
+# ⚠ `runAsUser: 0` is REQUIRED, measured not assumed: the upstream image runs as `nobody`, and a
+# PRIVILEGED container as nobody still gets `Permission denied` opening /dev/sda (probed on hp-01,
+# 2026-09-23). privileged alone is not enough. It lands in `node-maintenance` because that namespace
+# already enforces the privileged PSA level for node-fstrim — see kustomization.yaml for why no new
+# namespace is created.
+#
 # Upstream exporter, not DIY, deliberately: smartmontools is baked into the image (an `apk add` at
 # pod start would make every restart depend on a CDN), and it already exports the two things a
 # hand-rolled script would have to re-derive — the per-attribute raw/value/worst/thresh split and
@@ -31,7 +37,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: smartctl-exporter
-  namespace: disk-health
+  namespace: node-maintenance
   labels: { app.kubernetes.io/name: smartctl-exporter }
 spec:
   selector:
