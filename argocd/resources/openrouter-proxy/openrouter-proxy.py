@@ -552,6 +552,38 @@ def _is_negative_cache_hit(ref: str) -> bool:
         return hit is not None and hit[1] is None and hit[0] > time.time()
 
 
+# Why a token is unresolvable, kept beside the negative cache entry (same lock, same lifetime):
+# "absent"    — the k8s API said 404/403 for the Secret, or it exists but its labels refuse the
+#               namespace: a definitive verdict, the handler answers 404 and no retry helps.
+# "transient" — a read timeout, a connection error, a 5xx, anything else: the handler answers
+#               503 + Retry-After so the fetcher's `curl --retry` tries again after the blip.
+# 2026-09-23: `coordinate-platform-1790139600` died on a 404 the proxy served for a 10 s k8s read
+# timeout at the :00 cron burst; the same ns was served one second later. A miss reason that the
+# cache cannot carry is a blip reported as a verdict.
+_miss_reasons: dict[str, str] = {}
+
+
+def _loop_git_ref(secret_name: str) -> str:
+    return f"agent-coordinator/{secret_name}#loop"
+
+
+def _git_token_ref(ns: str) -> str:
+    return f"agent-coordinator/agent-git-{ns}#git"
+
+
+def _miss_reason(ref: str) -> str:
+    """The reason the last resolve of `ref` missed — "absent" or "transient" (the default when
+    nothing was recorded: a negative entry with no verdict is a blip until proven otherwise)."""
+    with _refs_lock:
+        return _miss_reasons.get(ref, "transient")
+
+
+def _classify_miss(e: BaseException) -> str:
+    if isinstance(e, urllib.error.HTTPError) and e.code in (403, 404):
+        return "absent"
+    return "transient"
+
+
 GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
 # FU-080 loop tokens: per-STACK coordinator/reviewer git tokens (issues:write over one stack's
 # repos — strictly more privilege than a worker token), minted centrally in agent-coordinator by
@@ -595,13 +627,14 @@ def _token_review(token: str) -> str | None:
 def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
     """Read `agent-coordinator/<secret_name>`; honor it only when it carries LOOP_GIT_LABEL and
     its LOOP_NS_LABEL equals the namespace it is being served to (belt against a mis-mint)."""
-    ref = f"agent-coordinator/{secret_name}#loop"
+    ref = _loop_git_ref(secret_name)
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
         if hit and hit[0] > now:
             return hit[1]
     token_value = None
+    miss = "absent"
     try:
         sa_token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -615,14 +648,19 @@ def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
             b64 = (secret.get("data") or {}).get("GH_TOKEN", "")
             token_value = base64.b64decode(b64).decode() if b64 else None
         else:
-            log(f"loop-git: {secret_name} exists but labels refuse it for ns {for_ns}")
+            log(f"loop-git: {secret_name} exists but labels refuse it for ns {for_ns} (absent)")
     except Exception as e:  # noqa: BLE001
-        log(f"loop-git: resolve failed for {secret_name}: {e}")
+        miss = _classify_miss(e)
+        log(f"loop-git: resolve failed for {secret_name}: {e} ({miss})")
     with _refs_lock:
         # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
         # API blip doesn't poison the cache for the full window — the next request retries naturally.
         ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
         _refs[ref] = (now + ttl, token_value)
+        if token_value is None:
+            _miss_reasons[ref] = miss
+        else:
+            _miss_reasons.pop(ref, None)
     return token_value
 
 
@@ -632,13 +670,14 @@ def _resolve_git_token(ns: str) -> str | None:
     in a stack-reachable namespace any more). Honors only Secrets carrying GIT_TOKEN_LABEL AND
     whose WORKER_NS_LABEL equals the namespace being served (belt against a mis-mint). Cached
     briefly like refs."""
-    ref = f"agent-coordinator/agent-git-{ns}#git"
+    ref = _git_token_ref(ns)
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
         if hit and hit[0] > now:
             return hit[1]
     token_value = None
+    miss = "absent"
     try:
         sa_token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -653,14 +692,19 @@ def _resolve_git_token(ns: str) -> str | None:
             b64 = (secret.get("data") or {}).get("token", "")
             token_value = base64.b64decode(b64).decode() if b64 else None
         else:
-            log(f"git-token: agent-git-{ns} exists but labels refuse it for ns {ns}")
+            log(f"git-token: agent-git-{ns} exists but labels refuse it for ns {ns} (absent)")
     except Exception as e:  # noqa: BLE001
-        log(f"git-token: resolve failed for {ns}: {e}")
+        miss = _classify_miss(e)
+        log(f"git-token: resolve failed for {ns}: {e} ({miss})")
     with _refs_lock:
         # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
         # API blip doesn't poison the cache for the full window — the next request retries naturally.
         ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
         _refs[ref] = (now + ttl, token_value)
+        if token_value is None:
+            _miss_reasons[ref] = miss
+        else:
+            _miss_reasons.pop(ref, None)
     return token_value
 
 
@@ -3112,6 +3156,7 @@ class Proxy(BaseHTTPRequestHandler):
             caller = _token_review(auth[len("Bearer "):]) if auth.startswith("Bearer ") else None
             expected = f"system:serviceaccount:{ns}:agentstack-loop"
             token_value = None
+            miss = "absent"   # an unknown role / non-stack ns is a definitive miss, not a blip
             # role → secret-name prefix. "intake" (homelab#1095/ADR-119) is the issues-only
             # homelab token for cross-boundary dedup-and-extend; same TokenReview + label belt.
             _loop_roles = {"coordinator": "loop-git",
@@ -3121,6 +3166,8 @@ class Proxy(BaseHTTPRequestHandler):
                 stack = ns[: -len("-agents")]
                 name = f"{_loop_roles[role]}-{stack}"
                 token_value = _resolve_loop_git(name, ns)
+                if token_value is None:
+                    miss = _miss_reason(_loop_git_ref(name))
             elif caller != expected:
                 log(f"GET /loop-git-token ns={ns} → 403 (caller={caller or 'unauthenticated'})")
                 payload = b"forbidden"
@@ -3133,10 +3180,17 @@ class Proxy(BaseHTTPRequestHandler):
                 payload = token_value.encode()
                 self.send_response(200)
                 log(f"GET /loop-git-token ns={ns} role={role} → served (TokenReview ok)")
+            elif miss == "transient":
+                # A blip, not a verdict: 503 + Retry-After so `curl --retry` at the fetch site
+                # tries again once the k8s read recovers (never a 404 the caller fails closed on).
+                payload = b"unresolvable (transient)"
+                self.send_response(503)
+                self.send_header("Retry-After", "2")
+                log(f"GET /loop-git-token ns={ns} role={role} → 503 (transient)")
             else:
                 payload = b"unresolvable"
                 self.send_response(404)
-                log(f"GET /loop-git-token ns={ns} role={role} → 404")
+                log(f"GET /loop-git-token ns={ns} role={role} → 404 (absent)")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -3175,14 +3229,20 @@ class Proxy(BaseHTTPRequestHandler):
                 log(f"GET /git-token ns={ns} → UNAUTHENTICATED caller (allowed until "
                     f"GIT_TOKEN_REQUIRE_AUTH=1 — FU-089 migration)")
             token_value = _resolve_git_token(ns) if ns else None
+            miss = _miss_reason(_git_token_ref(ns)) if ns and token_value is None else "absent"
             if token_value:
                 payload = token_value.encode()
                 self.send_response(200)
                 log(f"GET /git-token ns={ns} → served")
+            elif miss == "transient":
+                payload = b"unresolvable (transient)"
+                self.send_response(503)
+                self.send_header("Retry-After", "2")
+                log(f"GET /git-token ns={ns} → 503 (transient)")
             else:
                 payload = b"unresolvable"
                 self.send_response(404)
-                log(f"GET /git-token ns={ns} → 404")
+                log(f"GET /git-token ns={ns} → 404 (absent)")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -6112,17 +6172,20 @@ data: [DONE]
     # Seed the cache with a negative entry, verify it's used, then verify re-resolution
     # after TTL expiry via the /git-token HTTP handler.
     git_ref = "agent-coordinator/agent-git-test-neg-cache#git"
+    check(git_ref == _git_token_ref("test-neg-cache"), "negative-cache _resolve_git_token: ref helper agrees")
     now = time.time()
     _refs[git_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+    with _refs_lock:
+        _miss_reasons[git_ref] = "absent"   # a cached DEFINITIVE miss (k8s said 404)
 
-    # First request: negative cache hit → 404 (unresolvable)
+    # First request: negative cache hit, absent → 404 (unresolvable)
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/git-token?ns=test-neg-cache")
     r = c.getresponse()
     r.read()
     c.close()
     check(r.status == 404,
-          "negative-cache _resolve_git_token: first request 404 (negative cache hit)")
+          "negative-cache _resolve_git_token: first request 404 (negative cache hit, absent)")
 
     # Record the cache entry's expiry
     with _refs_lock:
@@ -6133,14 +6196,49 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Second request: cache expired, re-resolution attempted → 404 again (no K8s API)
-    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    c.request("GET", "/git-token?ns=test-neg-cache")
-    r = c.getresponse()
-    r.read()
-    c.close()
-    check(r.status == 404,
-          "negative-cache _resolve_git_token: second request 404 (re-resolution attempted)")
+    # Second request: cache expired, re-resolution attempted with the K8s API AWAY (forced: the
+    # self-test runs both outside the cluster, where no SA token exists, and INSIDE it on the ARC
+    # runner, where the API is reachable and answers 403 — a definitive miss. Only a refused
+    # connection is the transient shape this block pins) → 503 + Retry-After (2026-09-23:
+    # never a 404 for a blip)
+    _real_urlopen = urllib.request.urlopen
+    def _api_away(*_a, **_k):  # the control plane is away
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+    urllib.request.urlopen = _api_away
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r = c.getresponse()
+        r.read()
+        retry_after = r.getheader("Retry-After")
+        c.close()
+        # A cached transient miss inside the TTL is still 503 (the blip is not a verdict)
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r2 = c.getresponse()
+        r2.read()
+        c.close()
+    finally:
+        urllib.request.urlopen = _real_urlopen
+    check(r.status == 503,
+          "negative-cache _resolve_git_token: second request 503 (re-resolution attempted, transient)")
+    check(retry_after == "2",
+          "negative-cache _resolve_git_token: transient miss carries Retry-After: 2")
+    check(_miss_reason(git_ref) == "transient",
+          "negative-cache _resolve_git_token: miss reason re-recorded as transient")
+
+    check(r2.status == 503,
+          "negative-cache _resolve_git_token: cached transient miss answers 503")
+
+    # _classify_miss: the k8s API's 404/403 are definitive, everything else is a blip
+    _h404 = urllib.error.HTTPError("u", 404, "nf", {}, None)
+    _h503 = urllib.error.HTTPError("u", 503, "busy", {}, None)
+    check(_classify_miss(_h404) == "absent", "_classify_miss: HTTP 404 → absent")
+    check(_classify_miss(urllib.error.HTTPError("u", 403, "fb", {}, None)) == "absent",
+          "_classify_miss: HTTP 403 → absent")
+    check(_classify_miss(_h503) == "transient", "_classify_miss: HTTP 503 → transient")
+    check(_classify_miss(TimeoutError("read timed out")) == "transient",
+          "_classify_miss: timeout → transient")
 
     # Verify cache entry was refreshed
     with _refs_lock:
@@ -6151,6 +6249,8 @@ data: [DONE]
           f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
     # Clean up
     _refs.pop(git_ref, None)
+    with _refs_lock:
+        _miss_reasons.pop(git_ref, None)
 
     print("\n=== Negative-cache TTL test for _resolve_loop_git (homelab#1004 / #1021) ===")
     # Same negative-cache TTL pattern in the sibling path _resolve_loop_git.
@@ -6171,10 +6271,18 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Call _resolve_loop_git directly — it will try K8s API (fails), cache new negative entry
-    result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    # Call _resolve_loop_git directly with the K8s API AWAY (forced, see the git-token block: in
+    # the cluster the API answers 403, which is a definitive miss, not this transient one)
+    _real_urlopen = urllib.request.urlopen
+    urllib.request.urlopen = _api_away
+    try:
+        result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    finally:
+        urllib.request.urlopen = _real_urlopen
     check(result is None,
           "negative-cache _resolve_loop_git: re-resolution returns None (no K8s API)")
+    check(_miss_reason(loop_ref) == "transient",
+          "negative-cache _resolve_loop_git: an unreachable K8s API is a transient miss")
 
     # Verify cache entry was refreshed
     with _refs_lock:
@@ -6185,6 +6293,8 @@ data: [DONE]
           f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
     # Clean up
     _refs.pop(loop_ref, None)
+    with _refs_lock:
+        _miss_reasons.pop(loop_ref, None)
 
     # ── #1020: cred-unresolved → circuit breaker accounting ─────────────────────────────────
     # PR #1019 landed the cred-unresolved → 502 fix but the 502 path returns before ever

@@ -170,7 +170,7 @@ spec:
                           set -e
                           echo "coordinate(perstack): stack={{workflow.parameters.stack}} ns={{workflow.parameters.loop_ns}} (doorbell edge)"
                           SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
-                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                          GH_TOKEN="$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer ${SA_TOKEN}" \
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{workflow.parameters.loop_ns}}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
                           export GH_TOKEN

@@ -63,3 +63,24 @@ bash -c "$PREP5" 2>&1
 RC5=$?
 set -e
 echo "EXIT: $RC5"
+
+echo ">>> Case 6: the fetch retries a blip (2026-09-23, PR#1932)"
+# The proxy answers 503 + Retry-After for a transient k8s read miss and connection-refused during
+# its own restarts; curl only retries either with these flags. Both LOOP_FETCH fetches
+# (role=coordinator, role=intake) must carry them — the mock reads its own argv ("$*").
+curl() {
+  role="unknown"; case "$*" in *role=intake*) role=intake ;; *role=coordinator*) role=coordinator ;; esac
+  case "$*" in
+    *"--retry 3 --retry-delay 2 --retry-connrefused"*) echo "RETRY_FLAGS_OK ${role}" >&2 ;;
+    *)                                                  echo "RETRY_FLAGS_MISSING ${role}" >&2 ;;
+  esac
+  printf 'mock-token-for-test'
+  return 0
+}
+export -f curl
+PREP6="set -e; ${LOOP_FETCH}echo REACHED6"
+set +e
+bash -c "$PREP6" 2>&1
+RC6=$?
+set -e
+echo "EXIT: $RC6"
