@@ -1,0 +1,168 @@
+# Disk-health belts (FU-284). Metric names + label shapes are VERIFIED against the running
+# exporter on hp-01 (2026-09-23), not read off upstream docs — see daemonset.yaml's header.
+#
+# The design call that shapes every rule here: THIS FLEET BUYS USED DRIVES WITH DISCLOSED DEFECTS
+# (the 6 × Intel S4510 lot shipped with retired blocks on every unit; teststuff/hardware
+# market/2026-09-20-intel-s4510-ssd-lot.md). So an ABSOLUTE threshold on defect counters is the
+# wrong belt — it would fire on day one for a drive that is behaving exactly as bought. What
+# matters is GROWTH, which is also the exact thing that read leaves owed ("compare SMART
+# before/after, including retired blocks"). Hence max_over_time − min_over_time over a window,
+# not `> 0`.
+#
+# Why max−min and not increase()/delta(): those extrapolate and assume counter semantics; SMART
+# raw values are gauges that step. max−min over the window is exact and needs no assumption.
+# ⚠ Known, accepted false positive: swapping a drive in the same slot keeps `device="sda"` while
+# the counter jumps, so a replacement can fire DiskDefectsGrowing once. That is a box changing
+# underneath the fleet and is worth one alert; `smartctl_device` carries the new serial.
+#
+# Longhorn's iSCSI VIRTUAL-DISKs are scraped (72 of hp-01's 299 series) and can fire NOTHING here:
+# they carry no attributes, no NVMe fields and no interface_speed. Measured, not assumed.
+#
+# TWO JOBS, ONE RULE SET. `smartctl-exporter` is the in-cluster DaemonSet (every Talos node);
+# `pve-node` is the hypervisors' node_exporter textfile collector, whose SMART script
+# (ansible/roles/pve-node-exporter/files/smart-textfile-metrics.py) deliberately emits the SAME
+# metric names so a drive in pve or nx-02 is not a second vocabulary to alert on. Both carry a
+# `node` label — the DaemonSet's from the pod's nodeName (servicemonitor.yaml), the hypervisors'
+# written into the textfile by the script itself, because the pve ScrapeConfig labels targets
+# `host` and that label is owned by the pool belts.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: disk-health
+  namespace: disk-health
+  labels: { release: kube-prometheus-stack }
+spec:
+  groups:
+    - name: disk-health
+      rules:
+        # ── the drive's own verdict ────────────────────────────────────────────────────────────
+        - alert: DiskSmartFailing
+          expr: smartctl_device_smart_status{job=~"smartctl-exporter|pve-node"} == 0
+          for: 15m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: SMART overall-health says FAILING"
+            description: >-
+              The drive's own self-assessment flipped to failed. This is the drive predicting its
+              own death, not a threshold we chose. Identify it (model + serial) with
+              `smartctl_device{node="{{ $labels.node }}",device="{{ $labels.device }}"}`, then
+              docs/runbook.md §Reading a fleet disk's identity and health for the full read.
+              If it carries Longhorn replicas, evict the node's disk BEFORE the drive goes, not after.
+
+        # ── the belt the S4510 class actually needs ────────────────────────────────────────────
+        - alert: DiskDefectsGrowing
+          expr: |
+            (
+              max_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector|Reported_Uncorrect|Offline_Uncorrectable"}[7d])
+              -
+              min_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector|Reported_Uncorrect|Offline_Uncorrectable"}[7d])
+            ) > 0
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: {{ $labels.attribute_name }} grew by {{ $value }} in 7 d"
+            description: >-
+              A defect counter that was stable is moving. A non-zero standing count is normal here
+              (drives are bought used, with disclosed defects) — GROWTH is not. Read the drive
+              (docs/runbook.md §Reading a fleet disk's identity and health) and record the numbers in
+              the private hardware register's inventory row before deciding.
+
+        # ── the cable detector: two of this fleet's expensive faults were links, not media ──────
+        - alert: DiskCrcErrorsGrowing
+          expr: |
+            (
+              max_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name="UDMA_CRC_Error_Count"}[1h])
+              -
+              min_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name="UDMA_CRC_Error_Count"}[1h])
+            ) > 0
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }} new SATA interface CRC error(s) in 1 h"
+            description: >-
+              Interface CRC errors are the CABLE, not the drive (docs/storage-ledger.md §2026-09-05 —
+              wk-metal-04's SA400 sat on 1,867 of these at a negotiated 3.0 of 6.0 Gb/s, and NCQ
+              retries after them stalled the queue on large writes). Reseat or replace the data cable
+              for this device; do not condemn the drive on this alert alone.
+
+        - alert: DiskInterfaceSpeedDegraded
+          expr: |
+            smartctl_device_interface_speed{job=~"smartctl-exporter|pve-node", speed_type="current"}
+              < ignoring(speed_type)
+            smartctl_device_interface_speed{job=~"smartctl-exporter|pve-node", speed_type="max"}
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: SATA link negotiated below its rating"
+            description: >-
+              The link came up slower than the drive and port can do — the wk-metal-04 signature,
+              found by hand in 2026-09 only after a 9-hour Garage write job had already paid for it.
+              Pair with DiskCrcErrorsGrowing: CRC errors alongside this means the cable.
+              ⚠ This covers SATA only. NVMe PCIe LANE WIDTH is not exported and is not covered —
+              see FU-284's residual and docs/runbook.md's fit-time check.
+
+        # ── NVMe ───────────────────────────────────────────────────────────────────────────────
+        - alert: NvmeCriticalWarning
+          expr: smartctl_device_critical_warning{job=~"smartctl-exporter|pve-node"} > 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: NVMe critical warning bitfield = {{ $value }}"
+            description: >-
+              The controller raised its own critical-warning flag — spare below threshold, thermal
+              limit, degraded reliability, read-only media, or failed volatile-memory backup. Read
+              the drive for which bit (docs/runbook.md §Reading a fleet disk's identity and health).
+
+        - alert: NvmeSpareBelowThreshold
+          expr: smartctl_device_available_spare{job=~"smartctl-exporter|pve-node"} < smartctl_device_available_spare_threshold{job=~"smartctl-exporter|pve-node"}
+          for: 15m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: NVMe available spare {{ $value }}% is below the drive's own threshold"
+            description: >-
+              The controller has burned through its spare block pool past the point IT calls
+              critical. Plan the replacement now — a drive here is close to going read-only.
+
+        - alert: DiskWearHigh
+          expr: smartctl_device_percentage_used{job=~"smartctl-exporter|pve-node"} >= 80
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }}% of rated endurance used"
+            description: >-
+              Standardized wear indicator past 80%. Not urgent on its own — plan the replacement into
+              the hardware register rather than reacting. ⚠ Trust THIS field, not a vendor
+              SSD_Life_Left attribute: they disagree on the same drive (Kingston SA400 read 6 vs 5%,
+              and the ADATA SU630's raw field is unusable — docs/runbook.md).
+
+        - alert: DiskMediaErrorsGrowing
+          expr: |
+            (
+              max_over_time(smartctl_device_media_errors{job=~"smartctl-exporter|pve-node"}[24h])
+              -
+              min_over_time(smartctl_device_media_errors{job=~"smartctl-exporter|pve-node"}[24h])
+            ) > 0
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }} new NVMe media/data-integrity error(s) in 24 h"
+            description: >-
+              The NVMe controller logged unrecovered data-integrity errors. Unlike wear, this is not
+              a planning signal — check what sits on the drive (Longhorn replicas, a Garage zone)
+              and read the drive before deciding whether to evict.
+
+        # ── the meter's own liveness (PveMetricsAbsent's shape: a belt that cannot say it is blind
+        #    is not a belt) ──────────────────────────────────────────────────────────────────────
+        - alert: DiskHealthMetricsAbsent
+          expr: absent(smartctl_devices{job="smartctl-exporter"}) or absent(smartctl_devices{job="pve-node"})
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "No disk-health metrics from {{ $labels.job }} for 15m — those drives are unwatched"
+            description: >-
+              smartctl_devices is absent for a whole half of the fleet. If `job=smartctl-exporter`
+              is missing, the DaemonSet is down, the ServiceMonitor lost its target, or the image
+              cannot start — `kubectl -n disk-health get ds,pod`. If `job=pve-node` is missing, the
+              hypervisors' smart-textfile-metrics timer has stopped or node_exporter is down —
+              `systemctl status smart-textfile-metrics.timer` on pve and nx-02. While this fires,
+              the drives on that side are not being watched at all.

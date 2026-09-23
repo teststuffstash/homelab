@@ -1,0 +1,67 @@
+# smartctl_exporter — per-drive SMART for every Talos node (FU-284).
+#
+# WHY. Nothing in this fleet watched media health. Every wear/fault read in the repo has been a
+# hand-run ephemeral pod (docs/runbook.md §Reading a fleet disk's identity and health, FU-222's
+# "re-improvised twice"), which means the two storage faults that actually cost time were each
+# found by hand, late: wk-metal-04's SA400 on a degraded 3.0-of-6.0 Gb/s link with 1,867 CRC errors
+# (docs/storage-ledger.md §2026-09-05 — 5.8 h of a single ERT parse spent waiting on it), and
+# thinkcentre's flapping NIC cable before it. The fleet also BUYS used drives with disclosed
+# defects, so "compare SMART before/after" is a standing need, not a one-off.
+#
+# WHAT IT REPLACES: nothing. This is additive — the Longhorn/Garage/pool belts all meter CAPACITY
+# and IO; none of them can see a drive degrading underneath.
+#
+# Upstream exporter, not DIY, deliberately: smartmontools is baked into the image (an `apk add` at
+# pod start would make every restart depend on a CDN), and it already exports the two things a
+# hand-rolled script would have to re-derive — the per-attribute raw/value/worst/thresh split and
+# `smartctl_device_interface_speed{speed_type=max|current}`, which IS the degraded-link detector.
+#
+# Verified on hp-01 2026-09-23 before this manifest was written (throwaway pod, same image):
+#   - smartctl 7.4 reaches every disk class through the host /dev — NVMe, AHCI SATA, and SATA
+#     behind the SAS3008 on nx-01 (`--scan-open` resolves that one to `-d sat` by itself).
+#   - 299 series on hp-01, the fleet's busiest node by device count (11 devices: 3 real + 8 of
+#     Longhorn's iSCSI VIRTUAL-DISKs). The iSCSI devices cost 72 series and CANNOT fire any rule
+#     below: they carry no SATA attributes, no NVMe fields and no interface_speed, and their
+#     smart_status is a constant 1. So they are left in rather than excluded by a /dev/sdX regex
+#     that would go stale the first time attach order changed.
+#   - `--smartctl.scan-device-type=by-id` does NOT give stable names here (the container's /dev has
+#     no by-id tree), so it is not used. Device identity comes from the `smartctl_device` info
+#     metric's model_name/serial_number instead.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: smartctl-exporter
+  namespace: disk-health
+  labels: { app.kubernetes.io/name: smartctl-exporter }
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: smartctl-exporter }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: smartctl-exporter }
+    spec:
+      # Every node, including the tainted ride/ephemeral tier and the control planes — a drive is a
+      # drive. The pve-pool VMs report virtio disks with no SMART; that is correct and harmless
+      # (their PHYSICAL disk is the hypervisor's, metered by the ansible leg in roles/pve-node-exporter).
+      tolerations: [{ operator: Exists }]
+      priorityClassName: system-node-critical
+      containers:
+        - name: smartctl-exporter
+          image: docker.io/prometheuscommunity/smartctl-exporter:v0.14.0@sha256:cfe22c36d7d2fac48ebf619707305acb65eb0fb670656eb80f356e606d782bc1
+          args:
+            # SMART polling is not free and media health does not move in a minute. 10m rescan for
+            # new/disappeared devices; the scrape interval (servicemonitor.yaml) is what paces the
+            # smartctl calls themselves.
+            - --smartctl.rescan=10m
+            - --web.listen-address=:9633
+          ports: [{ name: metrics, containerPort: 9633 }]
+          securityContext:
+            privileged: true
+            runAsUser: 0          # ⚠ see namespace.yaml — privileged alone is NOT enough
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            initialDelaySeconds: 10
+            periodSeconds: 30
