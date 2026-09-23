@@ -420,6 +420,24 @@ PVC); operator call, since the 09-05 pin was operator-approved. Requirement-regi
   `GarageAdminMetricsAbsent` as the scrape-coverage belt, promtool-fixtured. ⚠ Shared-fate
   caveat stands: on the day, Prometheus was dark while the wipe happened — the belt is for the
   NEXT one. Defect tail riding the loop: #977/#978 (+ their #1015/#1016 sprouts).
+- **Disk HEALTH metering — BUILT 2026-09-23 (FU-284)**, and until that day nothing in the fleet
+  watched a drive's media at all. Every meter above counts BYTES; none of them can see the disk
+  underneath degrading. Two of this repo's expensive storage episodes were exactly that blind spot:
+  wk-metal-04's SA400 on a degraded 3.0-of-6.0 Gb/s link with 1,867 interface CRC errors
+  (§2026-09-05 — found by hand, after ~5.8 h of an ERT parse had already been spent on it) and
+  thinkcentre's flapping NIC cable before it. **What runs:** a privileged `smartctl_exporter`
+  DaemonSet on every Talos node (`argocd/resources/smartctl-exporter/`, image pinned by digest),
+  and the SAME metric names from a 15-minute textfile collector on the two hypervisors
+  (`ansible/roles/pve-node-exporter/files/smart-textfile-metrics.py`) — one rule group covers both
+  via `job=~"smartctl-exporter|pve-node"`. **The design call:** this fleet buys used drives with
+  disclosed defects (the S4510 lot's retired blocks), so the defect belts read
+  `max_over_time − min_over_time` over a window, never an absolute threshold — a standing non-zero
+  count is normal here and only GROWTH is a signal. That also discharges the buying discipline's
+  standing "compare SMART before/after" as a belt instead of an intention. Nine alerts,
+  promtool-fixtured, including the meter's own per-half liveness. ⚠ **Not covered: NVMe PCIe lane
+  width.** `smartctl_device_interface_speed` is SATA-only, which is why two x1-wired M.2 adapters
+  sat unnoticed in the NX boxes; it is a fit-time property and the check is in
+  [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health — FU-284's residual.
 - **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
   `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and

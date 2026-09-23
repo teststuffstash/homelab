@@ -8,8 +8,9 @@ tracker.
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
   Next free id: **FU-286** (2026-09-23: FU-285 minted for the replica co-location a disk pull
-  caused, which `replica-replenishment-wait-interval` did NOT prevent; **FU-284 is taken by the
-  disk-health metering build, PR #1945 in flight**; FU-283 minted for the hung-CI-run watchdog, from oracle's
+  caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
+  fleet-wide disk-health metering — nothing watched any drive's SMART and the fleet buys used
+  drives with disclosed defects; FU-283 minted for the hung-CI-run watchdog, from oracle's
   fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
   record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
@@ -607,6 +608,17 @@ the block needs pruning, not more headings.
       caches). **Next:** find which controller does it and name the knob that actually governs it in
       [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
       wrong lever. Relates FU-093, ADR-089.
+
+- [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
+      Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod
+      (FU-222) — while the fleet buys used drives with *disclosed* defects, so the belts alert on
+      GROWTH, never absolute counts. Built: a `smartctl_exporter` DaemonSet on every Talos node +
+      the same metric names from a textfile collector on pve/nx-02, nine promtool-fixtured belts.
+      Mechanism, evidence and the design call: [`storage-ledger.md`](storage-ledger.md) §Build.
+      **Next:** `smartctl_device_interface_speed` is SATA-only, so **NVMe lane width is uncovered**
+      — the trap that left x1-wired adapters in both NX boxes. Fit-time check is in
+      [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health; decide whether it
+      also wants a standing metric. Relates FU-222, FU-093.
 
 - [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
       fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run
@@ -1287,17 +1299,6 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-261** — **The BIOS PXE chainload was silently broken, and the role that serves it has
-      been failing for months.** `/srv/tftp/undionly.kpxe` was MISSING on the Matchbox LXC (only the
-      two UEFI binaries there), so a legacy PXE client got a filename it could not fetch and fell back
-      to disk — three reboots of `wk-metal-02` read as "PXE just doesn't take" (2026-09-20). Why nobody
-      saw it: `ansible/matchbox-ipxe-tftp.yml` ends with *Enable tftpd-hpa*, which `matchbox-proxydhcp`
-      MASKS (dnsmasq owns :69), so every run fails at the last task and the copy before it went
-      unverified. Re-running restored the file (74 KB, TFTP-served). **Next:** guard/drop the
-      tftpd-hpa tasks (the role header already says dnsmasq owns TFTP) + probe that all three boot
-      files are served — onboarding depends on it, nothing tests it. Relates FU-244.
-
-
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
       is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
       wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
@@ -1315,14 +1316,13 @@ the block needs pruning, not more headings.
       the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
-      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
-      wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
-      **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
-      incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
-      unset, kata intact where declared. **2026-09-21:** cp-01/cp-02 + wk-metal-04 (FU-265) on v1.13.10;
-      m70s + hp-01 wait on #1839 (drain before install). **Next:** the 7 metal config updates (in place) + the remaining
-      metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
-      metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
+      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past
+      it — the fleet is on v1.14.1 since 2026-09-22 (FU-033's rollout), `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
+      unset wherever it was read, kata intact where declared. **PXE/USB assets done 2026-09-23:** the three
+      satellite pins now follow `var.talos_version_worker` and `machines-lint` fails on drift (they were at
+      v1.13.10 / v1.13.2 against a v1.14.1 fleet) — [`provisioning.md`](provisioning.md) §Upgrading a node's Talos.
+      **Next:** a week's soak of `NodeRebootingRepeatedly` clean from 2026-09-22 → archive. Subsumes FU-155 Option A.
+
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
       left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
       conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"

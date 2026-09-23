@@ -1,0 +1,28 @@
+# Disk health for every Talos node (FU-284) — a privileged DaemonSet running the upstream
+# smartctl_exporter, plus the belts over it. The hypervisors' half is NOT here: pve and nx-02 are
+# not Kubernetes nodes, so they get the same metrics from their node_exporter textfile collector
+# (ansible/roles/pve-node-exporter). One PrometheusRule group covers both.
+# Raw manifests in argocd/resources/smartctl-exporter/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smartctl-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/smartctl-exporter
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: node-maintenance
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false     # node-fstrim's Application owns the namespace; see the resources' kustomization.yaml
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

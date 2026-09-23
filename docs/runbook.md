@@ -275,6 +275,35 @@ Which fields actually decide something:
 `nodeName` + `tolerations: Exists` are the two lines people drop; without them the pod schedules
 somewhere else or refuses to land on the tainted node you wanted to read.
 
+**Most of this is now standing, not on demand (FU-284).** `smartctl_exporter` runs as a DaemonSet on
+every node and a textfile collector on both hypervisors, so wear, defect growth, CRC errors and
+SATA link speed are in Prometheus and alerted on — reach for the pod above when you need a field the
+exporter does not carry (Opal/PSID state, `nvme id-ctrl` `hmpre`, a full attribute dump), or when
+reading a drive that is not yet in a node.
+
+#### After fitting an NVMe on a PCIe adapter: check the negotiated WIDTH
+
+The one disk property no exporter here carries. `smartctl_device_interface_speed` is SATA-only, and
+an M.2 adapter card that is wired x1 looks perfectly healthy in every other reading — it just runs
+at a quarter or a sixteenth of the speed. Both NX boxes ran that way unnoticed until 2026-09-23.
+It is a fit-time property, so check it **in the window that fitted the card**, never later:
+
+```bash
+# Talos node — no shell needed, sysfs is enough
+devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> read /sys/class/block/nvme0n1/device/address
+devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> read /sys/bus/pci/devices/<bdf>/current_link_width
+devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> read /sys/bus/pci/devices/<bdf>/max_link_width
+# Debian/Proxmox host
+lspci -vv -s <bdf> | grep -E 'LnkCap|LnkSta'
+```
+
+`current_link_width` below `max_link_width` means the **card or the slot**, not the drive. Read the
+slot's own width too (`max_link_width` on the parent bridge): an x4 card in an x16 slot reporting
+x1 is a card to replace; an x4 card in an x1 slot is the slot. The board's own view —
+`dmidecode -t 9` on Debian, or SMBIOS type 9 read off `/sys/firmware/dmi/tables/DMI` on Talos —
+says which physical slots exist and which are `In Use`, and it has already contradicted two
+hand-written inventory rows.
+
 ### Single worker maintenance window (cordon → drain → shutdown → wake)
 
 ⚠ **Removing a Longhorn DISK (not just downing the node) co-locates replicas — Tracked by: FU-285.**
