@@ -10663,3 +10663,52 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
 - **PR#1932 (token broker):** the subagent fixed the ADR-103 ratchet red (loop-fetch-guard pins the retry flags) and on the way caught the reviewer launcher's masked fetch guard (`export X="$(…)" || fatal` never fires — the #617 twin). Its second red was environmental: the proxy self-test assumed "no K8s API ⇒ transient", but the ARC runner is in-cluster and the API answers 403 (definitive) — the seat took the PR over (the subagent's watcher had died) and forced the API away for the transient assertions (baa9e0ef). CI pending at writing.
 - **Parks ruled:** #1931 override-merged 07:35Z; #1916 approved + merged; #1910 left; **FU-281** filed (trigger side, operator's). Lesson for the seat's own watches: GitHub keeps a CHANGES_REQUESTED `reviewDecision` until the bot re-reviews the new head — key a watch on a review AT the head, and on CI, never on the decision alone.
 - **Close (10:25Z):** #1934 MERGED 09:53Z (theme #1768 CLOSED), #1932 MERGED 10:20Z after round 2 (the composition renders FOUR fetch sites, one per CronWorkflow template — the subagent had patched only probe's; the review template carried the same masked `export` guard), #1929 MERGED 08:03Z on bot approval (no owned paths). The 09:51Z assembly-cr ride stamped `last-checkpoint:` on #1640's store and diagnosed its own wake as finding 36 — FU-281's first datum from the machine itself.
+
+## 2026-09-23 ~12:30–14:00Z — seat session: the oracle handoff inbox (3 new), all three answered
+
+- **Diagnosed before building, on operator direction.** Three inbox items; the 09-11 minutark
+  README link stayed parked (operator, 09-22). Handoff protocol followed end to end: claim →
+  `doing/` → Result → `done/`.
+- **#1943 MERGED 13:28Z — the `oracle-feedback` Grafana datasource** (oracle-fleet#713). The
+  stack's proposed shape does not work: `grafana.envValueFrom` is a same-ns `secretKeyRef`, and
+  the bridge is closed twice — ESO's Infisical path is read-only BY DESIGN (`eso-reader` viewer)
+  and BY CAPABILITY (`ClusterSecretStore` ReadOnly, `PushSecret` unsupported), with no reflector
+  in-cluster. **Platform ruling, not a menu handed back to the stack** (operator: "I dont want to
+  give the decision back to a stack, this our a platform decision"): Infisical is the source of
+  truth, oracle-iac's Workspace publishes via `crossplane-tf-writer` (ADR-076 — the sleep-iac
+  snore-recorder path, live 98 d, whose own comment says it replaced the manual
+  `infisical-secret` step), CNPG reads the password BACK for `managed.roles`. Nothing copied,
+  ESO stays read-only. `optional: true` on the secretKeyRef (ADR-108 shape) so Grafana starts
+  before the key exists.
+- **#1942 MERGED 13:41Z — `.spec.originMark`, the edge-asserted origin mark** (oracle-fleet#667).
+  Set + strip in ONE `http_request_late_transform` ruleset, profile-agnostic. **The design moved
+  from A (literal IP, rots) to A+D (edge rule, DNS-derived fact) on the operator's question "where
+  would the updater/reconciler be?" — answer: nowhere new.** A `cloudflare_dns_records` data
+  source reads the ddclient A record every reconcile; the reconciler is provider-terraform's own
+  drift poll (`--poll=10m`, jitter 1m, read off the live binary). Fail-closed via `postcondition`.
+  Probed BEFORE building (doctrine: only the API proves entitlement — gotcha 9): the exact two
+  rules created on `minutark.ee`, DELETE 204, zero residue; `http_request_late_transform` was the
+  last free request phase on that zone. Then `tofu validate` + a read-only `tofu plan` through
+  cf-api-proxy that interpolated the live address. **Bot round 1 BLOCKED and was right:**
+  `originMark.value` had `maxLength` but no `pattern` while its sibling `header` did, and both
+  reach generated HCL — pattern added. FU-282 filed (the fact is read from the WireGuard-named
+  record; repointing needs a live OPNsense apply).
+- **oracle-iac#970 MERGED — the free deepseek cell denied, in THEIR repo.** The handoff asked
+  homelab to drop it from a chain in `model-classes.json`; there is no chain — oracle is CHAINLESS
+  and the cell comes from the live rankings rotation, present in none of our curated lists. The
+  only lever is `modelDeny` on the claim. ⚠ Two spellings are load-bearing: the served id carries
+  the PERMASLUG date (`-20260731`), so **our own platform deny spelled `-0731` is INERT against
+  it**; and it must stay an exact id, since `model_family()` collapses `:free` and `:exacto` onto
+  one key (a family deny would kill the `:exacto` cell the 09-14 measurement says to keep).
+- **The strike never reached the router** — `repetition-loop` ∉ `strike_classes`, so nothing was
+  recorded, no cooldown formed, and the router re-picked the cell `[free+half-open]` at 13:05:01Z
+  (#713's "since-excluded" note was not true at the router level). THIRD instance of FU-201 (c)'s
+  built-but-dead class → Goal #1640. **Operator ruled against a small fix now** ("free vs paid and
+  model vs family is a bigger topic, there is a lot of deepseek-flash out there") → PR#1944, the
+  spike `docs/spikes/model-identity-free-vs-paid.md`, + FU-283 for the hung-CI-run watchdog.
+- Measured while spiking (reverted): `never_free` on `xs`+`sm` passes `router-self-test`; adding it
+  to `md` FAILS it — an assertion pins the skip reason to `tier-floor:` and `never_free` is checked
+  first. `md`/`lg` already exclude free, so only two rows would ever need it.
+- ⚠ `publicroute-tf-validate` cannot run in the jail (no docker, per its own header). Substitute
+  used: hand-render the template, `tofu validate` against the pinned provider, then plan through
+  cf-api-proxy. It covers the schema surface; CI owns the Go-template render half.
