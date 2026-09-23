@@ -109,7 +109,7 @@ work survivable.
    the declared-vs-live diff (FU-235) → the controller-substrate spike (FU-242) → the pre-merge impact line →
    `reconcile: auto` on the compute tier, one node at a time. Transient PXE flags leave git (FU-244).
 1. **Control-plane HA — three CPs behind a Talos shared VIP** (ADR-133 as amended 2026-09-20, FU-243): `cp-01` (pve), `wk-metal-02`
-   (laptop — a battery is a UPS for etcd), a VM on `nx-02` once its drives are in. VIP first on cp-01, then
+   (laptop — a battery is a UPS for etcd), and `cp-02`, a VM on `nx-02` — all three LIVE since 2026-09-22. VIP first on cp-01, then
    the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
    back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
    [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
