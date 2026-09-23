@@ -10712,3 +10712,14 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
 - ⚠ `publicroute-tf-validate` cannot run in the jail (no docker, per its own header). Substitute
   used: hand-render the template, `tofu validate` against the pinned provider, then plan through
   cf-api-proxy. It covers the schema surface; CI owns the Go-template render half.
+- **Post-wind-down (14:1xZ): #712/#713 were still `agent/error` and BOTH sides had stood down.**
+  The oracle session relayed "#724 belongs to homelab, so I'm leaving #712/#713's agent/error and
+  strike resolution untouched" — and #713's own round-4 comment had claimed the seat already
+  cleared it at 13:20Z. Neither was true: the label was live on both. Read the labels instead of
+  either account, verified the deny had actually reached the cluster
+  (`modelDeny: ['deepseek/deepseek-v4-flash-20260731:free']`, Synced/Ready/Responsive) rather
+  than trusting the merge, then stripped both and commented why. ⚠ The ownership seam is the
+  lesson: an FU-200 filing lives on the STACK repo but is the PLATFORM's to close, and its
+  close-out action (strip `agent/error` on the affected issues) has no owner named anywhere —
+  each side can read the split as the other's job. Worth a line in the brief when #1640 touches
+  the reader.
