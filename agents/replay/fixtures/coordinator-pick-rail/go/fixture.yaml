@@ -1,0 +1,13 @@
+# coordinator-pick-rail-go (homelab#439 leg 3) — Anthropic latched, Go rail clear.
+#
+# CONDITION: the ladder returns an opencode-go id (the model literal's ONE home is
+# agents/subscription-latch.sh, stubbed here).
+# EXPECTED: rail_model REPLACES the stack's coordinatorModel with the Go id, and the dispatch says
+# so out loud. This is the arm the whole leg exists for: on 2026-09-18 the Anthropic 7d window sat
+# at 0.95 while Go sat at 0.03, and the coordinator — alone among the roles — deferred, which stops
+# dispatch for the entire loop.
+name: coordinator-pick-rail-go
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh

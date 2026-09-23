@@ -1,0 +1,11 @@
+{
+  "state": "CLOSED",
+  "labels": [
+    {
+      "name": "agent-fix"
+    },
+    {
+      "name": "agent/blocked"
+    }
+  ]
+}

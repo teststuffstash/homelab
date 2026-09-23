@@ -5529,7 +5529,7 @@ first live ADR-110 maintenance session before the ADR existed.
   (subtractive — drop the pin, keep max_price); priced classes get pin-v2 (band +
   quality tie-break + benchmark floor + live tool-call-error floor + #783 pair-cooldowns);
   experiments keep the `@` arms; the scout canary rides its class's provider policy
-  (representativeness = same policy). Doc: model-routing.md §M14; build pointer FU-186;
+  (representativeness = same policy). Doc: model-routing-history.md §M14; build pointer FU-186;
   live decision-table receipts: today's pick = Relace-fp4 over first-party for $0.0012/M.
 - **PR#963 (scout intake + @arms) review round:** all four findings fixed (void stays void;
   intake-honest digest intro; :free @slot resolution past pin_for's sidestep; @-pin
@@ -9801,3 +9801,836 @@ the truncation, so that history is gone. Pro for minutark priced and DECLINED: $
 `available_plans`) buys `botScore` on NEITHER plan — refused on our own Pro zone too — and its
 full WAF would land in the phase the api profile already skips. Also offered an FU for the
 one-line sentinel fix against the seat card's own ≲5-minute rule; operator caught it.
+
+## 2026-09-18 — the coordinator was the last boolean-latch role; Zen parked; the rail-policy Goal launched
+
+**Condition (measured, not inferred):** `/anthropic-limit?tier=dispatch` → `limited: true,
+reason: utilization-7d, 7d: 0.95`; `/opencode-limit` → `limited: false`, Go 7d at 0.03 of its $30
+budget. `review-*` workflows were landing every few minutes; `coordinate-*` finished clean and
+dispatched nothing. PR#1755 sat CHANGES_REQUESTED, CI green, BEHIND, with no fix round.
+
+**Why:** `--pick-rail` (homelab#439) had reached `review-reflex.sh`, `agent-session.sh`,
+`responder-argo.yaml` and `fix-debounce-argo.yaml`. The coordinator lane still asked the Anthropic
+BOOLEAN at four sites — janitor, per-stack spawn, the ADR-125 per-dispatch re-probe, the FU-143
+unit fast path — so every other role failed over and the one role that schedules the loop deferred.
+Fixed the same way, in the config-defaults block so compositions inherit the helpers
+(`coordinator_rail` / `rail_model`), plus the pod rail label: a Go ride labelled
+`subscription-session: claude` consumes the Anthropic slot it fired to free and is invisible to
+`OPENCODE_MAX_RUNNING` — the identical inversion the reviewer's template carried until 09-17.
+
+**Zen parked** (`OPENCODE_RAIL_DISABLED` `"0"` → `"zen"`, e92d9410; operator). It works, which is
+the hazard: pay-per-token USD with no pricing table, no meter (gometer covers the GO windows only)
+and no ledger bucket — `ledger.py:_model_rail` folds every non-`claude/*`/non-`opencode-go/*` id
+into "openrouter", so Zen spend would have billed silently against the OpenRouter dollar line. Go
+spend tracking (FU-170 b+c) closes before Zen earns membership. ⚠ Proxy-side only: the jail shim
+routes `opencode/` ids on its own path.
+
+**Verified live, not from the diff:** `opencode-go/deepseek-v4-flash` through the proxy on the
+coordinator's own `ref:agent-coordinator/coordinator-claude` → HTTP 200 before the commit; the
+Deployment env and the running pod both read `zen` after the ArgoCD sync.
+
+**What the corpus sitting found, recorded because none of it is visible from a diff:**
+`router.py` derives a candidate's rail with a TWO-way split (`:494`, `:1516`, `:3444`) while
+`model_id.py` — imported at `:39` and called at `:1688` for the response's `resolved` field — has
+owned the three-way parse since FU-127; so no class can name `opencode-go` and the rail lives in
+shell. Five class knobs in `model-classes.json` have ZERO readers repo-wide (`decorrelate`,
+`min_tier_rule`, `dual_model`, `never_roles`, `chain_source`) — which means the "a family must not
+review its own worker's work" rule holds today only by luck of three hand-picked constants.
+`resolve-model.sh` sends three fields of thirteen, and `cell` is read by nobody. The Sensor review
+path (`review-argo.yaml:272`) passes no `--decorrelate-from` at all. And the scan passes `--model`
+at every coordinator dispatch site, which sets `MODEL_SET_EXPLICIT` and skips `/route` — the
+coordinator lane has never actually routed.
+
+**Filed:** #1768 `theme: launcher` (Goal #1640's theme 2, overdue since #1641 closed — it owns
+acceptance 6, the platform chainless flip, which blocks everything below); Goal #1769 with theme 1
+#1770 `theme: rails`, Budget 20, branches cut. Both goal-lint 0 FAIL.
+
+## 2026-09-18 evening seat — the Talos upgrade verb, built from two probes
+
+**Condition:** the management box had refused `main` for four days (FU-252's ratchet, 2 → 8
+addresses). **Command:** `devbox run mgmt-tf apply -auto-approve` of `origin/master` — 0 add, 8
+change, 0 destroy, all in-place (7 metal `install.image` `v1.13.2 → v1.13.10`, the nx-01 taint's
+field-manager rename). Baseline stamped, `refused-rev` cleared, verified live on three nodes.
+
+**Then two probes, because ADR-014 and siderolabs/talos#9882 both shaped the design and neither
+had been tested here.** Target `wk-03` (the disposable ephemeral VM), one variable each.
+
+*#9882 — does Talos's drain respect PodDisruptionBudgets?* Fixture: a 1-replica Deployment pinned
+to the node under a `minAvailable: 1` PDB (`disruptionsAllowed=0`). Control: `kubectl drain` errors.
+Probe: `talosctl reboot --drain=true` retried the blocked pod, then **exited 1 without rebooting**.
+So PDBs ARE respected on v1.13.10 and the drain FAILS CLOSED — #9882 describes the legacy node-side
+path, still reachable via `--legacy`, which we must never pass. Consequence: a Longhorn last replica
+is a STUCK upgrade, not data loss, and `settle` is what makes the upgrade possible rather than safe.
+
+*ADR-014 — does an upgrade ghost a nocloud VM?* With the generic
+`ghcr.io/siderolabs/installer` (talosctl's own default when `--image` is omitted): **yes** — the
+node rejoined as `talos-24w-v8j` on DHCP. But `get platformmetadata` said **`platform: metal`** and
+the machine config had SURVIVED (node labels carried over), so the 2026-06 reading of this as a
+wiped STATE partition was wrong. Re-running with
+`factory.talos.dev/nocloud-installer/<schematic>:<v>` restored `platform: nocloud`, the hostname and
+the static IP **in place** — no recreate. ADR-014 amended: the hazard is the IMAGE, not the VM.
+
+**Then the schematic bit, twice, from opposite directions.** Probe 1b used the PLAIN schematic on a
+`longhorn = true` VM and silently stripped iscsi-tools; the only symptom was longhorn-manager
+crashlooping on `nsenter … iscsiadm: No such file or directory`. Fixed by re-upgrading with the
+longhorn schematic. Later, `wk-metal-01` declared plain metal while running the kata image — the
+deliberate 2026-09-16 divergence — and the verb would have converged it silently. Both produced the
+same guard: an upgrade that changes the schematic is REFUSED, and the operator names
+`KEEP_SCHEMATIC=1` or `ALLOW_SCHEMATIC_CHANGE=1`.
+
+**What got built.** `tofu/outputs.tf` `node_install_targets` (the declared half, also FU-235's) and
+`node-maintenance.sh upgrade` — the gate and the queue, not the upgrader, since talosctl already
+cordons, drains, installs, reboots, rejoins and uncordons. Gates: preflight+settle, WIP 1, the
+Garage floor, the CNPG floor, version path (no downgrade, no skipped minor), FU-033, declaration
+consistency, the schematic guard; post-check on version AND schematic. Plus `order`, which RANKS
+the fleet from live placement instead of carrying a list.
+
+**The Garage floor is `cluster_healthy`, not pod-Ready** — rf=3 over three zones at quorum 2 means
+one zone down leaves every partition it holds at 2/3, available and pod-Ready, while the next zone
+takes it to 1/3. Watched live during the `wk-metal-01` window: `cluster_healthy` 1 → **0** while
+`cluster_available` stayed 1, and the node reached `Ready` while it was still 0 — which is exactly
+the moment a Ready-based rollout would start the next zone. ⚠ Recorded honestly: the gate VERIFIED
+rather than BLOCKED on that run, because `wait_storage_back` ran ahead of it and absorbed the time.
+It has not yet been exercised under load.
+
+**Alerts through both windows:** nothing new fired. The window silences caught PodSigkilled ×4 and
+NodeRebooted; the one unsilenced node alert was `NodeRebootingRepeatedly` on nx-01, `startsAt`
+2026-09-16T18:59Z — the 7-day lookback tail of the pre-fix reboots, FU-246's stated soak, clears
+~09-23. **And the gap: a Garage zone was down ~10 minutes and NOTHING alerted** — `cluster_healthy`
+had zero consumers before the verb.
+
+**Ruled (operator):** Renovate on class 6 waits for the automated ROLLOUT — an automatic bump PR
+buys nothing while landing it still costs a manual sitting (ROADMAP G-D). And rollout order must be
+COMPUTED, never listed.
+
+**Filed:** FU-253 (every VM declares a generic, stale `install.image` — what an upgrade controller
+would use, and it would ghost all five), FU-254 (nothing detects a substrate going stale or EOL;
+Talos 1.13 left community support at the 1.14.0 release, 2026-09-03). FU-033 grew into the whole
+1.14 gate set with the checks that came back clean.
+
+## 2026-09-19 — #1774 was red on two gates; one was a record, the other was the sentinel's own blind spot
+
+Both reds on the upgrade-verb PR, neither the PR's fault.
+
+**CI, the ADR-103 ratchet.** `agents/coordinator/review-argo.yaml` is a clause path (the review
+reflex's Sensor and WorkflowTemplate live in it), so the eventbus anti-affinity + PDB tripped
+"clause files changed with NO replay fixture change". Both added objects are scheduler and
+eviction inputs — the Sensor, EventSource and WorkflowTemplate are byte-identical, no action
+stream in the tree moves, and a fixture could only assert that a manifest the harness never
+applies contains the fields it plainly contains: the cosmetic fixture the ratchet exists to
+prevent. Took the escape the gate names — a record in `agents/replay/fixtures/README.md`, the
+fourth of that shape. Its evidence is the measured PRE-state, not a promise: `-js-1` and `-js-2`
+both on **hp-01** and `get pdb` empty, i.e. the defect still live, with the post-merge reading of
+the same two commands as the check.
+
+**management-sentinel: an output-only plan read as the silent zero (#1777).** The verb's declared
+half is a new `output` (`node_install_targets`), and a plan that adds one exits **2 with every
+RESOURCE a no-op** — "save these new output values … without changing any real infrastructure".
+The sentinel modelled a plan as its resource changes alone, so that is exit-2-with-an-empty-
+summary: the INCONSISTENT verdict the 2026-09-13 false negative installed against a silent zero
+(#1629), firing on the first PR ever to add an output. **The same read would have wedged
+`management-apply` into a standing refusal after merge — the FU-252 shape, four days unseen.**
+Fix: `mgmt_plan_changes` writes a second side channel (`$out.outputs` — output NAMES and actions
+from `.output_changes`, never values, the #1635 rule); INCONSISTENT is exit 2 with NEITHER; and
+the apply loop APPLIES such a plan instead of skipping it, because outputs live in the state and
+an unapplied one leaves §MB2's drift belt (the same `plan`, rc 2 = alarm) reporting `main` as
+drifted forever. No address is touched, so the allowlist is not consulted — it has nothing to judge.
+
+**The re-judge is a head bump, and that is worth knowing.** The sentinel dedups by the presence of
+its OWN status on the sha (`verdicted()`, not the `done/` ledger — clearing the marker does
+nothing), so a verdict posted by broken code cannot be re-judged in place. Sequence that worked:
+merge #1777 → `systemctl start mgmt-pull` on the box (the units run the SYSTEM checkout, hourly by
+itself) → empty-commit bump → `main: +0 ~0 -0 ⇢1 output`, green, with the output named in its own
+table.
+
+Verified before commit, on the box against the real head: plan rc=2, resource summary empty,
+output channel `node_install_targets create`. Review finding on #1777 (doc named the
+`.output_changes` JSON key where a reader looks for the `$out.outputs` file) fixed in the PR.
+
+**Both halves then ran for real on the merge** (#1774 merged 07:51Z). Apply loop 07:52:43:
+`main: +0 ~0 -0 ⇢1 output — all inside the apply allowlist` → `APPLIED`, `management-apply=success`,
+baseline advanced to e5934fd1, no refusal. End-state check: `mgmt-tf -- plan` of master is **"No
+changes"** — the output reached the state, so the drift belt is clean rather than alarming forever,
+which was the whole argument for applying instead of skipping. And ArgoCD took the eventbus
+change: `-js-2` moved off hp-01 to wk-02, one replica per node (wk-04 / hp-01 / wk-02), `get pdb
+eventbus-default-js` → `ALLOWED DISRUPTIONS 1`. hp-01's drain — last in the upgrade order — now
+costs the bus one replica instead of its quorum.
+
+## 2026-09-19/20 — homelab#1739: master `ci` reds were a mirror with no upstream timeout, not a break
+
+Filed inert by #1712's merged-closeout (three `publicroute-tf-validate` reds on 2026-09-16, two
+with no log blob at all). Queued it `agent-fix`+`agent/queued` first, then reversed: the likely
+fix lands in `scripts/publicroute-tf-validate.sh`, a worker-lane NEVER-TOUCH governance path
+(ADR-106 (4)), and the fixer boundary has no kubectl/cluster access to diagnose it anyway
+(`docs/agents/roles.md` — repo-scoped git token + OpenRouter key + egress CNP only). Unqueued,
+picked it up seat-side.
+
+**Root cause, verified live, not guessed:** `crossplane composition render --crossplane-image
+docker.io/crossplane/crossplane:v2.3.2 --timeout 3m` pulls a *tag*. distribution's proxy mode
+(`mirror-docker-io`, ADR-091) always revalidates a tag manifest against the real upstream — its
+own `registry_http_request_duration_seconds` shows a ~1s p99 floor on manifest-HEAD ALL day, not
+just 2026-09-16 — and neither mirror sets a `REGISTRY_PROXY_*` upstream timeout, so blob-GET p99
+randomly spikes to 9–52s (measured, same day) against a normal 0.2–0.9s baseline. Every CI job
+gets a fresh per-job dind (no carried cache), so the render's fixed 3m timeout is genuinely at the
+mercy of docker.io's live latency on every run. One red got a log ("context deadline exceeded" —
+crossplane's own `--timeout` firing mid-read); the other two hung past the job's ~10-13m kill with
+no log blob at all — same cause, the underlying HTTP read not unwinding cleanly on cancel.
+
+**Fix: digest-pin, not a mirror change.** A digest pull is content-addressed — pure cache serve,
+no live check — and it's already this platform's convention everywhere else (`provider.yaml`'s
+FU-011 pin was the direct precedent, not a new pattern). #1779 pinned the crossplane engine image
+(`crossplane.io/engine-image-digest.<targetRevision>` annotation on `argocd/platform/crossplane.yaml`,
+keyed by version so a bump with no matching entry fails the gate loud instead of silently
+rendering stale); #1796 pinned both composition function packages the same way `provider.yaml`
+already does (`tag@sha256:digest` in `functions.yaml` directly — that file is BOTH the render's
+source and what ArgoCD actually applies, so no separate CI-only copy to keep in sync). All digests
+cross-verified three ways before writing them: the mirror, the real upstream (docker.io / ghcr.io
+directly, bypassing the mirror), and — for the functions — the live pod's `imageID`. Zero content
+drift; ArgoCD sync left both Function revisions unchanged.
+
+**Reviewer hit #1779 with a real TOUCHES-ESCAPE** (`.agents/review.md`): #1739 was filed inert
+with no `Touches:`, and `scripts/publicroute-tf-validate.sh` is a governance path. Its own review
+called the fix correct and merge-ready otherwise. Widened #1739's footprint (`Touches:` added to
+its machine block) and pushed an empty round-2 commit to give the reflex new content to
+re-evaluate against — editing the issue alone doesn't retrigger review (MP-T04 keys on
+`newest_commit_at`, a non-merge commit since the verdict, not on the referenced issue changing).
+Re-reviewed clean, merged. #1796 (`argocd/resources/**`, CI-gated only, no CODEOWNERS) never hit
+the block at all. Master `ci` green on both merge commits (67c80d5, 2cfb085f).
+
+**Wind-down:** ADR-091 got an `_Update 2026-09-20_` (the no-timeout + tag-revalidation facts, so
+the next reader evaluating tag-vs-digest through either mirror doesn't have to re-derive this) plus
+a stale-line fix (it still claimed ci-runner-01/ARC mirror wiring "deferred" — FU-073 archived that
+complete 2026-07-26). FU-255 filed for the residual: every OTHER floating-tag consumer of either
+mirror carries the same latent exposure, unaudited.
+
+## 2026-09-20 — oracle handoff: rides cannot read the stack's own corpus bucket → `fixer.egress.ownServices`
+
+**Condition:** oracle's design handoff (`20260920-0704-worker-reviewer-rides-cannot-read-…`):
+oracle-fleet#636/PR#640 invented a wire shape for six rounds because no ride can read
+`ert-snapshots`; #637 declared `AGENT_INFEASIBLE` and sat `agent/in-progress`+`agent/error`.
+Operator asked whether agents were not already in their own namespace — half: FU-080 moved the
+LOOP to `<stack>-agents`, workers stayed in the repo ns by design (README role table), and no
+FU/ADR planned moving them.
+
+**Ruling (operator):** option D (keyless signing proxy, built in oracle-iac) + the network leg as
+a claim knob, not a stack-authored additive CNP. Namespace move deferred → **FU-256**.
+
+**Shipped:** PR #1798 (`c0c5bcbd`) — `fixer.egress.ownServices [{podLabels, port}]`, namespace
+pinned to the repo's own by the Composition (the handoff's free `namespace` field dropped), no XRD
+default (stamping lesson), rendered into the worker CNP AND the loop-ns CNP. Proven by rendering
+the go-template under helm against oracle's claim (`.observed.composite.resource` → values):
+no-knob render identical bar a comment, sample entry lands in both CNPs. Live after sync: XRD +
+Composition carry the knob, four AgentStacks SYNCED/READY. Not yet exercised by a ride — oracle's
+acceptance rides are the live proof. Stale doc fixed in passing: the egress-dial MCP row still
+said "NOT into the loop-ns CNP" (#1283 changed that).
+
+**Found:** the infeasible-terminal clause draws candidates through `C4C5_SEL`, which drops
+`agent/error` — a ride that declares infeasible and then dies on the same wall is never parked.
+Filed homelab#1797. Handoff asks 5/6 not acted on (6 is stack-side; 5 is one sighting).
+
+**Wind-down:** operator asked for a quick would-be-blocked read before filing anything for the
+ownerless loop-CNP enforce flip — `sum by (source, query) (increase(hubble_dns_queries_total{source=~".*-agents"}[7d]))`
+diffed against the `agent-loop-egress` allowlist. NOT clean: the `/coordinate` doorbell
+(`agent-loop-eventsource-svc.agent-coordinator`), `mcp.minutark.ee` (a worker `extraFQDNs` entry
+the loop CNP never receives) and an unclassified `cafe.github.com` → **FU-257**; the Composition
+comment citing closed Goal #1162 repointed to it. Seen, not pursued: `agent-coordinator` resolves
+a far wider set (`api.segment.io`, `openrouter.ai`, `ghcr.io`) and is outside the claim-composed
+policy; enforced `oracle-fleet` workers drop `mcp.minutark.ee` despite the `extraFQDNs` entry.
+Handoff closed to `done/`. Session worked from scratchpad worktrees throughout — the shared
+checkout sat on `docs/controlplane-program-upgrade-note` (not this session's) and was left there.
+
+## 2026-09-20 — the three-CP program: VIP live, endpoint cutover reverted, two self-inflicted outages
+
+Operator brought a GPU for the pve box, which needs cp-01's hypervisor down — so the three-CP
+program (ADR-133) got its session. Order agreed: ip-plan ruling → metal CP flag → VIP → endpoint →
+joins → failover test → `cp-upgrade` ×3 → GPU. Operator settled the open questions: nx-02 takes a CP
+now (reinstall later), noise verdict solved, `wk-metal-03` as the laptop CP, rehearsal lab skipped.
+
+**Landed:** #1799 the `192.168.2.50` ip-plan ruling · #1800 a `controlplane:` flag for metal
+(mechanism only) · #1801 the VIP + apiserver certSANs, LIVE on cp-01 · #1803 `devbox run kubeconfig`
+reading the BOX's state (it was reading a Sep-12 leftover `terraform.tfstate` in the jail and would
+have silently reverted the cutover) · #1805 FU-258 + the Cilium spike.
+
+**Reverted:** #1802, the `cluster_endpoint` cutover. Talos derives `--service-account-issuer` and
+`--api-audiences` from that value, so every pre-existing ServiceAccount token 401'd. Cluster-wide
+controller outage within a minute (11:34Z); `up` 48 → 0; ARC runners wedged, CI stopped. Reverted
+live at 12:06Z, git matched to live in `19e393e4`, wedged pods recycled. **The operator found it, not
+the session** — nodes read 12/12 `Ready` throughout and the session had reported success.
+
+A second, smaller disruption followed at 12:41Z: a `--mode=try` probe of `apiServer.extraArgs` to
+test a dual-issuer migration. It answered the question (Talos REPLACES the derived flag; a list value
+is rejected outright) but **try-mode did not revert** — the patch was still live seven minutes later
+and needed `$patch: delete` by hand. Operator caught that one too.
+
+**Found underneath both:** every apiserver restart drops Cilium's `10.96.0.1:443` backend
+fleet-wide and it does not re-sync — twice, fixed twice with `rollout restart ds/cilium`. Prior-art
+searched; not unique in class, no matching upstream issue. Parked behind the 1.20.2 upgrade by
+operator ruling: characterising 1.19.1 describes a version we should not run, and reproducing costs
+a deliberate live outage. FU-258 + `docs/spikes/cilium-apiserver-restart-backend-loss.md`.
+
+**Process outcome (operator-ordered):** `/maintenance-window` — the parts existed (`seat-window.sh`,
+`node-maintenance.sh`'s silences) but were wired for NODE maintenance only, and `tofu-apply/SKILL.md`
+had no mention of window, silence, alert or monitor. Now a skill + `devbox run maint` with a
+baseline/diff gate and a required background alert watch; `tofu-apply`, `onboard-metal-node` and
+`opnsense-as-code` all route through it. #1804, three review rounds, still open at wind-down.
+
+**The session's own recurring failure, filed as `maintenance-window-G1`:** fixing the instances in
+view and then declaring the CLASS closed. The reviewer caught it three times — the write-order race,
+then "all three reads" when the tool has five checks, then the two that were still fail-open. Each
+was the same shape the previous fix claimed to have eliminated.
+
+Also filed: FU-259 (`talos_cluster_kubeconfig` renders a stale endpoint while `plan` reads clean —
+hit twice, both directions). ADR-133's step list is missing certSANs entirely.
+
+Cluster at wind-down: 12/12 Ready, 151 scrape targets, cilium 12/12, `tofu plan` clean, no windows
+open. CP program PAUSED at the endpoint step; next session starts with the `cp-upgrade` Cilium check.
+
+### 2026-09-20, later — #1804 through rounds 4–5, merged; the CI step landed
+
+A follow-on seat session took #1804 the rest of the way. Two more review rounds, both the same
+fail-open class the round-3 fix had claimed to close:
+
+- **round 4** — `snapshot()` refused a zero-node read with a script-level `exit`. `cmd_open` calls
+  it by redirection (fine); `cmd_check` calls it in a command substitution, where the `exit` kills
+  only the subshell and `set -e` then kills the script on the bare assignment: one stderr line, no
+  header, none of the four probes that were still reading fine — while `close` printed the full
+  breakdown for the identical cluster, because it calls `cmd_check` under `||`. Same call-site
+  accident as round 3's `stranded_ci`, on the worst input there is. Now a `nodes_ok` flag.
+- **round 5** — cilium `have=0 missing=0 unknown=N` (every agent's exec failed) printed `ok` with a
+  footnote; `close` gates on check's exit, so a window could close clean on the signal the tool
+  exists for. Blocks below `have > 0`; the footnote is correct only while some agent answered.
+
+Merged `ed9940d2`. Self-test 14 → 28 assertions; both rounds' paths had no coverage at all (the
+fake `kubectl` always returned a healthy node and a succeeding exec). Live-verified after each
+round: nodes 12, targets 151, cilium have=12 missing=0 unknown=0.
+
+Then the operator-direct half: `.github/workflows/ci.yaml` runs `devbox run maint-self-test` after
+`sentinel-smoke` (`aa6644d4`; master CI green, the step itself `success`). Direct because the
+reviewer executes the PR branch's own workflows — a PR gating a change to its own gate is not a
+gate. The gap that step closes is literal: every finding above landed in a diff whose CI was green
+because nothing executed the script.
+
+`maintenance-window-G1` extended with the resight — the count claim ("three reads", "all five now")
+was wrong three rounds running.
+
+## 2026-09-20 — oracle handoffs: the stack's definition of done (ADR-134) + the corpus image-volume ask
+
+**Closeout handoff (`20260920-1358`).** `merged-closeout` closed oracle-fleet#637 `COMPLETED` four
+minutes after PR #647 merged, marking an "after the next regen" acceptance item done from the PR's
+`agent-acceptance` fixture reproduction; the sibling #644 was left open 16 minutes earlier on the
+same class. Read both closeout comments from the seat — session judgment, not a keyword. Shipped
+as PR #1806 (brief-only): a LIVE acceptance item is never satisfied from the PR; the play reads
+`<mainRepo>/.agents/closeout.md` from the default-branch clone (tightens only); the IL-G06 open leg
+now says when it closes. Checked rather than assumed: OPEN+`agent/done` is a quiet scan state (every
+C6 candidate set needs `in-progress|review`), and the coordinator pod already clones every claim
+repo, so delivery is free. Corrections sent back: the coordinator holds NO stack MCP (their rule 2
+assumed one), and `git merge-base` needs history the `--depth 1` clones lack. Created the
+`awaiting-regen` label on oracle-fleet (named by their file, absent on the repo).
+
+**Corpus-mount handoff (`20260920-1524`).** Verdict yes-but-opt-in, nothing built, homelab#1807.
+Measured: one 10.53 GB uncompressed layer; 7.4 MB/s from the registry ⇒ ≈24 min cold pull per
+node per release; wk-metal-02 (126 GB `/var`, 60 free) goes over the 60 % imageGC ceiling with two
+versions resident, wk-03 marginal. kata+virtiofs on a 10 GB SQLite file stays unmeasured — the
+canary is the gate. Told oracle to build the Datasette pod on `ownServices` meanwhile.
+
+**Correction, same day (operator: "I am on wifi right now, dont measure directly from this host").**
+The 7.4 MB/s / ≈24 min cold-pull figure above was the seat host's wifi, not the registry. From wired
+nodes (curl pod, 60 s): 86.8 MB/s on wk-04 and 89.8 MB/s on wk-metal-03 through
+`registry.teststuff.net` (the kubelet path, router HAProxy), 109–111 MB/s straight to the LB VIP —
+≈2 min per node per release. Opt-in-per-ride withdrawn on #1807; a correction file sits next to the
+handoff Result in oracle's `done/`. Lesson: a throughput number names its vantage point, and the
+jail host is never a vantage point for cluster-path rates.
+
+### 2026-09-20, later — the kata canary passed, `fixer.imageVolumes` built (PR #1808, ADR-135); ADR-133 amended
+
+**Canary** (operator: "run the kata virtiofs sqlite canary"), wk-metal-03, inside `maint open/close`
+(baseline 151 targets / 8 alerts / 12 nodes, identical after; alert Monitor armed for the window):
+one pod with the served `ert-corpus` digest as an `image:` volume, runc then kata. Cold pull+unpack
+3m21s; kata mounts it as virtiofs `ro`; count(17.4 M) 8.4 s vs 9.1 s, full LIKE scan 26.7 s vs
+21.5 s, FTS top-20 3.2 s vs 2.3 s, sequential 475 vs 1296 MB/s, RSS 35 MiB. Table on #1807.
+
+**Build** (operator: "if it comes back good then implement it. Use sub-agents if it makes sense"):
+XRD knob + launcher resolver (`REPLAY:image-volumes`) + the loop-CNP registry-host leg + two
+fixtures + ADR-135 + the stack docs section. The one subagent that made sense was an adversarial
+reviewer over the staged diff BEFORE the PR — it found six real defects the green fixtures did not:
+`/mnt/../work/repo` through the path fence, `a//b` through the grammar AND the probe (`curl -f`
+passes the registry's 301), one object-valued field silently dropping the whole list, an empty
+name shifting columns under tab-IFS, a silent duplicate arm, and a duplicate of a probe-failed
+entry mounting under its name. All fixed, each now a fixture row; the 301 case re-verified live.
+
+**ADR-133 amended** (operator, same session): the laptop CP is `wk-metal-02` (its 126 GB disk is
+the ride pool's tightest and ample for a CP); `wk-metal-03` stays a ride node. The amendment lists
+what moves off -02 before its reinstall.
+
+**#1808 merged (`23ebfe88`)** after one review round: the only block was procedural — #1807 declared
+no `Touches:`, so `agents/agent-session.sh` read as a governance escape (ADR-097). Declared through
+`issue_body.py`, stale verdict dismissed with an audit message, reflex rung ONCE. Live end state:
+XRD carries `imageVolumes`; CompositionRevision 73 `ValidPipeline=True`; all four AgentStacks
+Synced/Ready; oracle's loop CNP unchanged (no claim declares the knob yet). The swap threw one burst
+of `does not have a valid function pipeline: pipeline status unknown` warnings on all four XRs at
+revision creation — transient (none recurred in the next reconcile), worth knowing as the normal
+shape of a Composition roll. Claim snippet left for oracle as a SHIPPED file in their `done/`.
+### 2026-09-20, night — the three-CP program resumes: the Cilium guard, then the issuer frozen
+
+Operator: "continue with 3 control plane build". Picked up the paused program at the step list the
+morning session left (meta-state), in its order.
+
+**(a) #1811 — `cp-upgrade` gates the Cilium apiserver backend, both sides of the reboot.** FU-258's
+only near-term work, unblocked by #1804's merge. Refuses to START on a fleet already missing the
+`10.96.0.1:443` backend; after the rejoin rolls `ds/cilium` ONLY on a genuinely missing one, waits
+for the rollout, re-reads, and fails hard if it is still gone (not this bug) or if the reading
+itself failed (a blind roll during exactly the apiserver instability that makes the read flaky).
+The reading has ONE home — `maintenance-window.sh cilium-check`, exit 0/2/3 — which is the spike's
+mitigation §2. `maint-self-test` 28 → 46 assertions: the exit-code contract plus the CP verb's five
+branches, run against a stub repo (real `maintenance-window.sh`, stub `node-maintenance` that only
+marks the reboot, so the cilium answer can differ before and after it).
+
+**(b) ADR-136 — the endpoint cutover's blocker, solved by NOT migrating.** `/design` on FU-243's
+"dual-issuer transition vs planned token rotation". Findings: the dual-issuer path is **not
+expressible** (Talos `extraArgs` is a string map, a list is rejected, and the upstream flag is a
+repeatable array so a comma value reads as one issuer); nothing in this cluster consumes the issuer
+(zero legacy `service-account-token` Secrets, no OIDC/JWKS/custom-audience consumer, in-cluster API
+traffic on KubePrism); therefore only its STABILITY is worth anything → freeze it and pin it in git,
+and `cluster_endpoint` stops being token identity. Also de-fuses `first_cp_key = sort(...)[0]`: a VM
+CP named before `cp-01` would silently move the issuer.
+
+**Rehearsed on a disposable one-node lab CP on nx-02** (VMID 8199, `.65`, destroyed after; the
+creation recipe was undocumented and is now in `docs/controlplane-ha.md` §CP4) — the surface the
+morning's worker rehearsal structurally could not be. Control case first: endpoint flip with the
+issuer derived 401s a pre-flip token; with the pin it authenticates; and the apiserver's `startedAt`
+did not move across the pinned flip or a flip back — **pinned, an endpoint change does not restart
+the apiserver at all**. PR#1812 carries the tofu pin (VM + metal CPs), ADR-136, FU-243 as a pointer,
+and `docs/controlplane-ha.md` — the design doc ADR-133 never had, which is why the trap lived in a
+code comment. Box plan of the branch: **1 to change**, cp-01 only.
+
+
+### 2026-09-20, night (cont.) — the pin landed, the laptop did not
+
+**Applied the ADR-136 pin on cp-01 (19:08Z, declared window).** It behaved exactly as the lab said:
+a token minted BEFORE the apply still authenticated after, `tofu plan` clean. Collateral was the
+known list and nothing else — FU-258 took the `10.96.0.1:443` backend off **10 of 12** agents (one
+`ds/cilium` roll restored all 12, verified per node), kube-scheduler/kube-controller-manager on cp-01
+crashlooped while the API was down and self-recovered in ~6 min, three scrape targets followed them
+down and back. FU-260's Argo flood did NOT recur. #1813 records it.
+
+**Then the laptop.** #1814 (ride pool → wk-metal-03) + #1815 (`controlplane: true`) + #1816 (cp-02
+declared) + #1817 (Forgejo unpinned, operator ask) all merged; #1815 and #1817 each took a review
+round — the first for stating an unmerged sibling PR's effect as fact, the second for leaving three
+artifacts asserting the tier the diff removes. Both fair; both fixed in-PR.
+
+**wk-metal-02 is stuck and needs a human at the box.** The arc, because every step of it is a trap
+worth knowing: (1) `talosctl reset --wipe-mode all` WEDGED — stage `resetting` for 45 min with ~88 KB
+of disk writes in 10 s, i.e. not wiping, and neither `reset --reboot` nor `reboot --mode powercycle`
+moved it (uptime kept climbing). (2) The smart plug cannot cycle a laptop — it ran on battery at
+0 W from mains. Operator power-cycled it by hand. (3) It then booted **off disk** three times: PXE
+was attempted and fell through, because **`/srv/tftp/undionly.kpxe` was missing** — the BIOS
+chainload file — while `ansible/matchbox-ipxe-tftp.yml` has been failing at its last task
+(*Enable tftpd-hpa*, masked by the proxydhcp role) for long enough that nobody noticed the copy
+before it was unverified. FU-261. Re-running the playbook restored the file and TFTP served it.
+(4) The way out of needing PXE at all: `reset --system-labels-to-wipe STATE --system-labels-to-wipe
+EPHEMERAL` — a config-less Talos boots into MAINTENANCE off its own disk. That worked first try.
+(5) The CP config applied cleanly to the maintenance node (`1 changed`), Matchbox was unflagged, and
+the node then went off the network entirely: no ARP on `.183`, 7.3 W at the plug. Powered, not
+booting a NIC. That is where it sits.
+
+**Left deliberately at ONE etcd member.** cp-02 is declared and merged but NOT created: resting at
+two members is worse than one (ip-plan §VIP), so the third join waits for the second. Cluster at
+wind-down: 11/11 Ready, cilium 11/11, one etcd member, window closed `--force` with the two known
+deltas named.
+
+## 2026-09-21 — wk-metal-02's missing address: the VIP patch takes DHCP with the interface
+
+Condition: the operator walked up to `wk-metal-02` (stuck since its 2026-09-20 CP reinstall) and read
+the console — Talos healthy, NTP lookups failing against **8.8.8.8**. That is Talos's compiled-in
+fallback resolver, so the node had no DHCP-supplied DNS, i.e. no lease.
+
+Commands (all read-only, none touched the box):
+- OPNsense `dnsmasq/leases/search` — every metal node holds a lease, `68:f7:28:80:84:09` holds none.
+- `talosctl get operatorspecs` — wk-metal-03: `dhcp4/enp0s31f6`, `layer: default`. cp-01: **only**
+  `vip/eth0`, `layer: configuration`. No dhcp4 operator exists on cp-01 at all.
+- `talosctl get addressspecs` — cp-01 `.51/24` `layer: platform` (nocloud) vs wk-metal-03 `.184/24`
+  `layer: operator`. `talosctl get deviceconfigspecs` on cp-01 shows the VIP device with no `dhcp` key.
+- `read /proc/cmdline` on a disk-booted metal node: `talos.platform=metal`, no `ip=`.
+
+Conclusion: `local.cp_vip_patch` names the physical link, which puts it in
+`ConfigMachineConfiguration` — and Talos emits the default `dhcp4` operator only for links that NO
+layer configures. The nocloud VMs were immune (their link is already `ConfigPlatform`), which is
+exactly why the `--mode=try` rehearsal on cp-01 passed. PR#1818 splits the patch: `cp_vip_patch_dhcp`
+(`dhcp: true`) for metal, the VM variant unchanged. `docs/controlplane-ha.md` §CP6 carries the
+post-mortem; §CP5 step 8 now waits on the lease before unflagging; FU-235 gains the absent-node
+detector gap (nothing fired for ~12 h while the fleet read 11/11 Ready).
+
+Recovery still needs the operator at the box — reflag, PXE to maintenance, re-apply, verify the lease.
+
+## 2026-09-21 (cont.) — the recovery: wipe STATE, three CPs, and a wrong first diagnosis
+
+Condition: wk-metal-02 flagged in Matchbox and PXE-booted — and it came up as `controlplane` with the
+broken config anyway, three times. **Talos reads its machine config from the STATE partition**, so PXE
+without `talos.config` boots the network kernel and then runs whatever is on disk; the kernel version
+was the only thing that changed between boots. `talosctl reset`, the documented way back to
+maintenance, needs the network the node had just lost.
+
+⚠ Wrong first diagnosis, recorded on purpose: the PXE assets were pinned at v1.13.2 while
+`talos_version_worker` was v1.13.10, and I read the failed boot as the `page_table_check` kernel
+(FU-246). The matchbox log disproved it — every chainload succeeded. The lockstep bump (`19138c44`)
+was still worth doing on FU-246's own terms, but its commit message asserts a cause it did not have;
+docs/controlplane-ha.md §CP7 carries the correction.
+
+What actually worked: `talos.experimental.wipe=system` on the PXE profile, with the group swapped back
+to the plain profile *during* the wipe (15 s, against ~90 s of wipe-plus-reboot) so the post-wipe boot
+could not re-read the arg. Wipe 05:47:42Z → maintenance apid 05:49:20Z → corrected config applied →
+`Ready` control plane 05:52:09Z with `.183` at `layer: operator`. cp-02 followed: three CPs, three etcd
+members, 06:02 BGP established.
+
+Caught on the way: `-target` on ONE node label planned cp-02's whole VM (FU-248 resight); cp-02 was
+missing from `bgp_node_ips` and sat `idle` with 0 routes (4th miss, §CP5 step 9 now says ADD not
+CONFIRM); `mgmt-tf -- state list`, an example in its own usage header, had never worked; and the stale
+`kubernetes_node_taint` entry was cleared with `state rm`, never `force` (`.spec.taints` is atomic).
+
+PRs: #1818 (the dhcp fix), #1820 (recovery recipe + BGP + mgmt-tf). FU-262 filed for the name.
+
+## 2026-09-21 (cont.) — the VIP cutover, and two claims that did not survive contact
+
+Condition: three CPs live, so ADR-133's last step was unblocked. Flipped `cluster_endpoint` to the
+`.50` VIP (#1822) after verifying both preconditions live — the issuer pin on ALL THREE apiservers,
+and the VIP itself proven with an AUTHENTICATED `kubectl get nodes` plus a ServiceAccount read, not
+a `Ready` column. Plan was 13 in-place config updates, nothing replaced. Applied 06:25.
+
+⚠ **§CP4 said the flip would not restart the apiserver. It restarted all three, together** — a ~2 min
+full API outage; `.51`, `.65`, `.183` and `.50` all refused. kube-scheduler and cnpg-operator
+crashlooped and recovered on their own, the §CP3 list exactly. The lab finding that predicted no
+restart came from a ONE-NODE cluster, and three control planes did NOT make the restarts roll. The
+doc still claims otherwise.
+
+⚠ **"bump everything to 1.13.10" turned out to be a cluster rebuild.** The plan showed BOTH CP VMs
+replaced (`disk.file_id` forces replacement) and `talos_machine_secrets` regenerated — every CA and
+client cert to `(known after apply)`. Stopped and asked; operator ruled stop-and-design (FU-263).
+The workers only ever reached v1.13.10 by being REPLACED, in the FU-248 incident.
+
+Also: `client-configs.sh` had been printing `wrote … + tofu/<name>` without writing the jail's copy
+for a day — `local name="$1" dest="$ROOT/tofu/$name"` builds dest from an empty name because a shell
+expands all of `local`'s arguments before assigning any. The box's copy was right, the jail's was a
+day stale: the exact split state the script exists to prevent (#1823). After the fix the jail's
+talosconfig carries all three CP endpoints; the kubeconfig is still `.51`, which is FU-259 itself.
+
+Cleared on the way: the committed `nx_01_diag` PXE flag on a RUNNING worker (#1822).
+
+## 2026-09-21 (cont.) — a leaked admin key, the substrate fork closed, and a box that had never been watching
+
+Operator handed three items (FU-263 substrate fork, FU-259 kubeconfig, FU-262 rename); the session
+widened on the operator's direction into "3 CPs stable, key rotated, management box working".
+
+**Incident first.** PR#1825's CI red was gitleaks, not the PR: the previous wind-down commit
+`17424211` had swept `tofu/nix-shell-env` — a full talosconfig, `os:admin` cert + KEY — onto PUBLIC
+master at 06:55. Removed 07:10 (`80fc47ab`); `63b69194` put gitleaks on the pushed range in
+`githooks/pre-push` (the direct lane had no secret scan). Operator: rotate the CA, but after the
+rollout is stable → FU-264 + spike. Incident doc written.
+
+**Substrate.** PKI frozen (`talos_version` constant + `prevent_destroy`, #1825). `/design` on VM
+upgrades → the disk image is a birth seed, `install.image` is the declaration (ADR-138, #1829);
+operator asked for the FU-235 belt "together, not later" → #1828. #1829 APPLIED in a window: wk-03
+first (boot time unchanged), then five (apiservers kept start times). The box apply loop's refusal
+of it cleared by the human apply (baseline 717c4d32). The CP bump (#1836) now plans 0 replacements /
+0 PKI where it used to plan both CP VMs rebuilt and a new cluster PKI.
+
+**The box.** Plan-id apply contract (#1827 — reviewer caught the stamp comparing a just-reset HEAD).
+Running the belt by hand found it had been MASKED since 09-13 (`enable = false`, "creds not here
+yet") and that the new node diff could not read its input there → #1831 armed it; green 6/6 now.
+No state snapshot existed for ANY root (main's newest copy 55 serials stale, Garage bucket
+unversioned) → #1834: box + wallet, verified twice, restore-drilled (137 = 137 addresses).
+`upgrade-behind` (#1837) after the operator's "we have node maintenance already?" — dry runs on the
+box found a false all-clear (set -e off left of `||`) and that the box path had NEVER worked
+(devbox's KUBECONFIG=$PWD/tofu/* → localhost:8080; cp-upgrade's documented box usage included).
+
+**Also:** ADR-137 `cp-NN` (operator ruling, #1826); FU-259 recovered (kubeconfig → `.50`); ARC
+maxRunners 4 → 8 (the old arithmetic counted two nodes that had left the tier; nx-01 never counted).
+
+Reviewer catches this session, all real: set -e fallback unreachable (#1825), stamp on reset HEAD
+(#1827), alert text asserting a cause (#1828), three comments made false (#1829), retry swallowing
+a renamed output (#1831), a missed sibling `moved` pair (#1836). Mine: the known_hosts vanished
+(pinned from the wallet since), worktrees pruned twice, a zsh word-split false alarm in the watch.
+
+## 2026-09-21 ~10:00–11:40Z — seat: the Talos rollout, finished (maintenance window)
+
+Window opened at a clean baseline (159 targets, cilium 13/13). #1836 applied from plan
+`20260921T100114Z-4f915b9f` (ISO swap on both hypervisors + two CP config hashes; no VM touched).
+#1837 reviewed + merged by the operator. `upgrade-behind cp` on the box: its first transient unit died
+on "unable to source Nix profile" (systemd's bare PATH — recipe fixed, `--setenv=PATH`); cp-02
+rebooted clean but `upgrade` timed out waiting for driver.longhorn.io, which never registers on a
+control plane → #1838 (skip a node with no nodes.longhorn.io; a failed read still stops). cp-01 then
+refused on a single-replica WARN (cilium-operator); FORCE=1 took it through, etcd 3/3 and cilium 13/13
+after. wk-metal-04: the v1.13.10 installer died on firmware entry Boot0008 ("dangling bytes at the end
+of device path") AFTER setting LoaderEntryDefault — node up on v1.13.2 with a pending boot flip.
+Operator chose a planned reboot → v1.13.10 (FU-265 for the entry). Operator's question — "unattended
+for years, no service logic: how do primaries fail over?" — answered by the eviction API: CNPG
+switches over ahead of a drain by default; our fault was ORDER (talosctl installs, then drains) and
+FORCE doubling as a floor bypass → #1839. m70s + hp-01 then ran with no FORCE: drain-first moved
+infisical/grafana/oracle primaries unaided, Longhorn resync ~18 min + ~10 min. 13/13 on v1.13.10.
+FU-263 archived. Operator's garage.md 4 KiB range-read ceiling committed as theirs.
+Mine: read a stale journal line through a Monitor's `--since -30s` overlap and briefly misdiagnosed
+FORCE as not propagating; reported wk-metal-04 ~8 min after it was actually Ready (the operator
+caught it).
+
+## 2026-09-21 ~11:45–14:00Z — seat: pve GPU swap window, headless finding, CNPG zone spread, ci-runner-02
+Operator asked whether pve could go down for a GPU swap. Read: etcd 3 members (cp-01 neither leader
+nor VIP holder), no Longhorn replicas on pve's VMs, ~2.5 cores of requests to rehome against ~7.7
+free → no extra node. Window opened; wk-01/02/03 via `node-maintenance down`, cp-01 by hand (etcd
+snapshot, drain, shutdown), ci-runner-01 waited out an oracle e2e, Matchbox, then pve poweroff.
+Found on the way: forgejo-pg hard-pinned to wk-01/wk-02 (both pve) — pg-4 relanded on wk-02 and went
+Pending; operator: fix the affinity → #1840 (required anti-affinity on topology.kubernetes.io/zone
+for forgejo/grafana/infisical-pg; patched live first — infisical/grafana primaries restarted in
+place, infisical ~3.5 min unready). dex segfaulted (139) on hp-01, fine on wk-04 — unexplained.
+BIOS: CSM/UEFI-video attempts blocked (no card on hand with GOP); a CMOS clear to defaults (CSM on,
+Legacy) then BOOTED WITH NO GPU — "refuses to POST" was a prior-settings artefact. Docs corrected;
+operator's slot count: free x16 + x1, 3 SATA (one SATA3) still firmware-disabled. Power 133–135 →
+105.6 W (card ≈25–28 W), NVMe sensor 1 75.8 → 63 °C. All back: etcd 3/3, cilium 13/13, 159 targets;
+window closed --force over three unrelated alerts (NodeRebooted, FU-267 cilium-agent at 512 Mi,
+wk-metal-01 Garage LMDB faults = storage-ledger's known 8 GB-zone need). Operator: "second runner
+now" → #1841, ci-runner-02 on nx-02 (192.168.2.66), both slots listening 13:42Z; FU-266 minted
+and archived same day.
+Mine: the alert Monitor sat silent 30 min (zsh `for a in $cur`), the ping watch never worked
+(`ping`/`nc` not in the jail) — my "pve dark" was an unverified claim that happened to be true;
+the #1841 CI red was my own unpushed FU-266 definition (the batching rule vs a PR that cites a new
+id) — GAPS maintenance-window-G2.
+
+## 2026-09-21 ~15:15–16:35Z — seat: CNPG replica-1 (FU-137), then homelab#1845 (maintenance window)
+FU-137's next: #1843 adds `longhorn-local-std` (r1, strict-local, std-fenced, XFS, WFFC) and pins
+the platform three to zones [hp-01, m70s] (the only untainted boxes with a std disk; plain
+local-xfs could land on m70s's Garage PM961), with `primaryUpdateMethod: switchover`. Stage 1
+refused #1843 on a false positive (`provisioner[[:space:]]` matched `storage_provisioner`), cleared
+by `mgmt-human-plan`; policy fix #1844 is parked for the codeowner. Rebuilt all six instances one
+at a time (delete pvc+pod → join → `cnpg promote` 10–15 s → old primary). Primaries now on m70s;
+forgejo/grafana 200, ESO Ready; oracle-pg untouched (theirs).
+Operator: "check #1845 + oracle handoff", then "fix it while I'm away". Oracle's reading
+(exemption lost at the rollout) was wrong in cause, right in effect. A per-apiserver dry-run gave
+cp-01 ✅ cp-02 ✅ wk-metal-02 ❌: the metal CP never got talos.tf's inline VM-only cluster patch,
+and it holds the VIP. Same gap: as a CP it applied Talos's default flannel DaemonSet to all 13
+nodes at 05:50Z, beside Cilium. Detector first: #1846 `PodSecurityEnforceDenied` (a new-series
+branch, because the deny counter is born at the first deny); replay fires 15:39Z, and a live
+probe fired it 16:04Z. Then #1847 (dry-run: no reboot), applied 16:15Z; the dry-run is admitted on
+all three plus the VIP; cilium-check 13/13. Flannel objects deleted; `flannel.1`/`cni0`/conflist
+removed on all nodes via one-shot pods; two loki pods re-wired onto Cilium. Class fix #1848
+(`cp_common_patches`) + controlplane-ha §CP9. Handoff answered to oracle's `done/`; #1845 closed.
+
+## 2026-09-21 ~16:40–18:40Z — seat: proxy-roll clone death, ADR-139, FU-252 closed, FU-265 probed
+oracle-fleet#679-r2 died at clone ("Invalid username or token"): its agent started 16:59:04Z while
+openrouter-proxy rolled for #1755's comment-only sync (Recreate + Multi-Attach, ~30 s); the broker
+curl failed once and the helper fell back to an EMPTY password. A kata probe on nx-01 proved the path
+healthy after; r3 ran and opened oracle-fleet#683. agent-runtime#144 retries the broker across a roll
+(stub-tested) and prints NO TOKEN when none results. ⚠ Mine: the dead-broker test fell back to the
+jail's own GH_TOKEN and printed it into the transcript — operator told to rotate. Operator design
+thread → ADR-139 (#1853): broker split (FU-269), FU-127 before any repo split, `agent-gateway`
+extraction (FU-270), HA deferred to a measured store (FU-271), vendor-status out of github-exporter
+(FU-272). FU-252: #1850 duplicated github-exporter's 09-18 `MgmtApplyResidueStanding` (stale FU text,
+prior-art read only the tracker) → #1851 kept only the box-side belts; box rebuilt at its 18:00 pull,
+target + series live 18:03Z, FU-252 archived. GarageZoneDegraded (#1849) + docs-graph #4b enforcing
+(#1755 merged; two §C3 strays). FU-265: Boot0008 deleted, same-version upgrade PASSED, but a firmware
+boot recreates it (kexec upgrades never meet the firmware) → next = scrub-before-install in `upgrade`.
+GarageZoneDegraded fired correctly at 18:36 on the unsilenced power-cycle; window closed --force over
+NodeRebooted (mine) + BlockingCodeownerParkWaiting (oracle-fleet#683, theirs).
+
+## 2026-09-21 ~19:30–23:00Z — seat (overnight, subagent-orchestrated): the management box's applies
+PAT rotation checked (fine-grained, exp 2026-12-20; push dry-run OK). Operator rulings: spike on nx-02
+not pve; `reconcile: auto` live on ONE node; Renovate waits on attended bumps incl. a deliberate
+rollback (ROADMAP G-D, memory). Four subagents, seat kept only verdicts:
+- A: FU-235 axes registered/labels/taints/ephemeral_disk + textfile transport + Mgmt* alerts (#1859,
+  #1861 — devbox's KUBECONFIG pointed at a missing path on the box). 91 series all 0 live.
+- B: sentinel install-impact line (#1858), proven on dummy #1860 (m70s kata → "one upgrade window"),
+  closed; inventory-only PRs now plan (policy roots.main.inputs).
+- C: FU-242 spike on VM 9420/nx-02 (deleted) → NO on tofu-controller (#1862); FU-242 archived.
+  Its `maint close` ran `seat-window close --all` → #1863 closes only the tool's own window.
+- D: reconciler layers 3–5 (#1864): `mgmt-reconcile` loop, wk-03 auto, idle; 21/21 fake-verb cases.
+  No live sync: no genuine install diff exists short of the 1.14 canary (FU-033) — left for the
+  attended sitting, not invented.
+
+## 2026-09-22 ~06:00–07:50Z — seat (attended, operator present): the 1.14 canary + rollback drill
+Operator rulings: FU-097 → the box's capability ledger (tested capabilities + auto-apply toggles, an
+INTENT review replaces the codeowner read); the human Talos-config apply is interim; FU-273 rollout
+policy (default forward, human revert on a DIFFERENTIAL signal, <1 day, evidence-ended soak, repel
+taint, one rollout per substrate) → §MB4 (#1868); three-CP program done (FU-243 archived).
+- #1865 target-node window blocks unless `--admit-reconciler`; verb exit 4 = impossible path → park.
+- #1866 per-node `talos_version` override, wk-03 → 1.14.0 + FU-033 (a) VolumeConfig for ≥1.14 VMs.
+  Human `mgmt-tf apply` 06:30Z; reconciler SYNC 06:35→06:38:19Z; `/var` exec; ARC `ci` green 07:00Z.
+- The first sync exposed node-maintenance declaring its window twice and closing EVERY window on the
+  node (ate the seat's admitting window) + same-second id collisions → #1869, proven live at step 2.
+- #1867 patch downgrade within a minor allowed (Talos' older installer refuses on its own if the
+  config needs the newer release); cross-minor stays exit 4.
+- #1872 → 1.14.1: SYNC 07:24→07:26:57Z. #1873 → back to 1.14.0 (the drill): SYNC 07:44→07:48:09Z.
+- Side: RegistryMirrorCacheAlmostFull = the 720h TTL left over from FU-196 v0 → #1870 (168h + 150Gi;
+  a lower TTL frees nothing already cached — absolute expiries); FU-274 (first-party off the mirror),
+  FU-275 (canary seed-image churn). Found: neither talos_machine_configuration_apply sets apply_mode —
+  §MB4's "no_reboot" was unenforced.
+- Next (operator: "automate all the things, then monitor the first rollout"): four subagents building
+  A tofu prereqs / B apply loop / C1 reconciler rollout / C2 evidence+differential; then the fleet
+  1.14.1 rollout by the box.
+
+## 2026-09-22 ~08:00–13:20Z — seat (operator present): automate the box, then the first box-run fleet rollout
+Operator: "automate all the things, then monitor the first rollout"; a Talos bump is ONE atomic commit;
+CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1 day, repel taint.
+- Subagents A/B/C1/C2 landed #1874 (apply_mode no_reboot — §MB4's claim had been unenforced; config
+  contract pinned v1.13.10; FU-033(a) on metal; FU-275), #1875 (apply loop applies Talos config,
+  health-gated, CP toggle), #1876 (reconciler rollout: canary per type, evidence, order, CPs last via
+  controlplane-upgrade.sh, repel taint, switch), #1877 (evidence script + MgmtRolloutDifferential +
+  github_ci_job_completed_timestamp). #1878 flipped the CP toggle + switch; #1879 = the bump.
+- Rollout (#1879): box auto-applied 09:43:54 (post-check clean); canaries wk-02, wk-metal-03,
+  wk-metal-01, wk-metal-04; fleet wk-03, nx-01, wk-01, m70s, hp-01, wk-04, then cp-01/cp-02/wk-metal-02;
+  done 13:16:59Z, 13/13 v1.14.1, cilium backend 13/13, no taints left.
+- Found + fixed live: wk-metal-04 went down with a 4.5–6.2k Garage resync backlog → #1880 (zone-node
+  backlog gate; the Garage-owned PDB redesign is #1882, HELD for a separate test); the longhorn
+  evidence could never pass for REUSED replicas → #1881; nx-01's cilium-agent hung at 510/512Mi +
+  100% throttled (FU-267) → rollout paused by a seat window, #1883 Burstable (150m req, no CPU limit,
+  1Gi mem; oom_score_adj -997 verified via node-critical), nx-01 recovered, rollout resumed.
+- Found, filed: park clears on version-only + failed verb's window (#1884, FU-276); Alertmanager
+  restart mid-rollout wiped every silence (#1885 queued, FU-195). NTP = WAN by decision (ARCHITECTURE).
+
+## 2026-09-22 ~13:20–15:40Z — seat (operator present, then away): the pickup list, a DNS incident, the CA rotation
+- **Garage PDB #1882 (ADR-140):** read against live (no prior garage PDB/netpol, prom svc right), hold
+  lifted, armed, merged 13:54Z. Live test via a same-version `upgrade m70s` (not `down`: no plug, WoL
+  untested, operator away): PDB allowed 1→0 at eviction 14:13:23, signal 0 at 14:14, controller maxU
+  1→0 14:15, wk-metal-01 `DRY=1 preflight` FAIL rc 2 naming `garage/garage`, controller 0→1 at 14:27:01
+  (10-min hysteresis after cluster_healthy=1). Short reboot: backlog peaked ~115, so the >1000 clause is
+  replay-proven only. The PR's "3 flagged choices" were never written down anywhere — not decided.
+- **Incident (FU-277):** Talos v1.14.0 applies DHCPv4 search domains → metal-node pods search
+  `teststuff.net`; ndots:5 sends `x.ns.svc.cluster.local` to `….teststuff.net` → the CF `*.local`
+  wildcard → 127.0.0.1. Forgejo (drained wk-04 → hp-01 12:50Z) + Alertmanager→responder down ~1 h; the
+  fixer's #1885 ride died on it too (#1886, its own correct diagnosis). Fix: Unbound DNSBL NXDOMAIN for
+  `local.teststuff.net` (opnsense-unbound role, operator: the wildcard need not work at home).
+- **Operator ruling → FU-278:** the rollout took 3 more nodes while Forgejo was down. Rollout-start
+  fleet-wide workload snapshot (top owner + revision); hold (never revert) on a new unhealthy platform
+  workload, or an important stack workload (≥2 replicas/instances or a PDB) on its SAME revision.
+  Subagent: #1887 (FU-276) merged; #1891 (FU-278; replay holds on forgejo before cp-01) in review.
+- **FU-264 DONE:** subagent lab probe + recipe (#1888, GO, --talos only); production rotation by the seat
+  14:55–15:14Z from the box — rotate-ca 13/13 exit 0, state candidate A byte-matched, P2 15 in-place,
+  `No changes`; leaked cert gets TLS `alert unknown ca` on every node. Recipe fixes: #1892.
+- **FU-195 DONE:** #1890 (fixer) — silence survived a pod restart (probe).
+- Found: maintenance-window.sh single state slot (GAPS maintenance-window-G1); the OPNsense API key+secret
+  printed into this session's transcript by a zsh no-word-split curl — ROTATED 16:1xZ by the seat: new
+  root key via `auth/user/add_api_key/root` (the uuid form fails), wallet entries edited, box env
+  `--push`ed, old key `del_api_key`'d → 401; new key 200; `opnsense-playbook --check` clean.
+- **16:00–16:40Z (mgmt box tail):** OPNsense API key ROTATED (above). FU-238 closed: the box's only
+  Cloudflare credential is `cloudflare-mgmt-read` (hash-matched); the operator's host run died on a
+  `set -e` exit before the store step → fixed in #1893, which also landed the FU-097 capability
+  ledger (management-box.md) and the FU-248 (a) VM-recreate recipe (runbook). #1894: maintenance-
+  window.sh keys state per window id (`--id`, `list`) — filed as G1, closed as G3 (id clash).
+  Box reconciler confirmed on the new code (FU-276/278) after the 16:05Z pull. A subagent's
+  `until ! pgrep -f 'pr-wait.sh …'` loop matched itself and never ended — killed; never use it.
+
+## 2026-09-22 ~16:40Z — ert parse diagnosis (oracle-fleet#684 A/B, regen-2zqn7)
+- Parse on wk-04: CPU-bound (0.63→0.85 core, 1-thread ceiling), no throttling; ~20 % synchronous
+  window-GET wait (by design, #680 latency accepted); rate decay = per-byte CPU cost rising deeper in
+  `xml.2026.zip`, not Garage. Two ~1-min stalls 16:28–30 / 16:32–33 = a runner (nx-01) syncing
+  `allure-reports` + `oracle-specs` at up to 3.9k req/min → block-read p99 15→240 ms → FU-229 resight.
+- Operator hardware question (5950X/9950X): no single-thread-bound critical path today; the parse
+  lever is #684's deferred worker pool. No decision taken.
+
+## 2026-09-22 ~17:15–18:10Z — the oracle handoff inbox drained (10 open, oldest 09-08)
+- Triaged all 10 against master + tracker + issues; 9 processed, the minutark README link (`20260911-1142`)
+  parked in `inbox/` by operator direction. Old `done/` reaped (21 files, ≤09-19).
+- **Closed as no-action:** uv-cache EIO (`20260908-1857`) — no recurrence in any of the 63 failed
+  oracle-fleet runs since 09-08; Garage lifecycle "inert" (`20260910-0920`) — the worker completes
+  daily, the 08-25 object-copy restore reset every clock (docs/garage.md already says so, first
+  deletions ~09-24); the #114 ground-truth comment (`20260913-1050`) — dropped, #114 closed 09-14.
+- **Filed:** #1896 updater strands armed+BEHIND `automerge` PRs on no-approval repos (#1452's arm 2
+  assumes a bot review the -iac mechanical classes never get; detector first, then the arm; pins-first
+  priority left as an operator question), #1897 goal-lint applies homelab's governance set to stack
+  repos (UNQUEUED — codeowner-author), #1898 ride clone's master-only refspec + `/git-token` mint
+  without checks:read (a MINT question — the App declares it).
+- **Shipped:** #1895 publicroute consumer `browser_ttl = respect_origin` (oracle-iac#613 ACCEPTED +
+  closed; live `no-cache` passed through, was `max-age=14400`) and #1899 pre-flight is the repo's own
+  gate (diff-ci out of the universal card into homelab's recipes). #1889 closed by #1895's map row.
+- FU-229 gained the 09-16 PUT-burst numbers (~500 meta writes/PUT, GetObject p99 17 s).
+- **Readonly-token hazard (`20260922-0813`) fixed detector-first:** #1900 the belt
+  (`kube_externalsecret_refresh_time` via KSM custom-resource-state + `GithubTokenMirrorBehind`
+  /`MintStale`/`MetricAbsent`, promtool fixture; went firing at 18:30Z on the real pairs before the
+  fix — the series is new, so 09-21/22 could not be replayed), then #1901 mint 30m / mirror 5m.
+  Second instance found and fixed: `openrouter-operator/retro-git` (same 45m/45m, also 401). Live:
+  all four ES at 30m/5m, the oracle-fleet mirror probes 200 (seat, 18:5xZ), no GithubToken* firing.
+  Open: oracle-fleet's 02:30Z `retention` tick is the end-to-end confirmation.
+- ⚠ `devbox run -- gh` re-parses args under dash: an apostrophe in `--title` swallowed the line
+  ("Title is too long"), `scripts/**` globbed and the create silently no-op'd → use
+  `gh api repos/<slug>/issues --input <json>`.
+- **Registry commit-refusal (operator relay, 19:1xZ): the report's two proposed actions were one
+  half-fix and one no-op; the thing that cleared it was listed by neither.** oracle-fleet's 18:51Z
+  ert-corpus push died at 19:01:32 with the ADR-121 shape — first `CompleteMultipartUpload` lands,
+  the server-side COPY's commit is refused on quota, registry maps 403 → opaque 500. NOT an
+  untag failure: held was 3 distinct blobs (09-15/09-17/09-22) because the morning release landed
+  07:32 and the nightly untag wasn't due till 02:30. Ran the collector by hand under window
+  `seat-1790104641-7697` (dry run gated at storage level: the two marked manifests were exactly the
+  two tag-served digests) → 42.2 → 31.6 GB, but headroom 19.9 GB, still UNDER the alert's 22 GB.
+  The other half was the failed upload's own 9.8 GiB sitting in `_uploads/` as a COMPLETED object,
+  which `UPLOADPURGING` (1h/15m) dropped by itself at 19:59:28Z → 21.1 GB held, 30.5 GB headroom,
+  alert cleared 20:01:07Z. **Proposed action 2 (cleanup-incomplete-uploads) would have moved
+  nothing:** `garage_bucket_bytes` = 42232648384 equalled the completed-object sum exactly, MPU
+  parts outside it — they are raw disk at rf=3, never quota. Deferred by the operator → FU-279.
+- **Shipped:** #1902 collector Sunday → DAILY 03:00Z, 30 min behind the 02:30Z untag (FU-203's
+  remaining half, on this failure's third firing: 09-07, 09-15→16, 09-22); then `05d5329` for two
+  stale "Sunday" references #1902 itself missed (alert annotation + workspace header — both would
+  have sent a triage after a weekly job that no longer exists; 2 sites enumerated, 2 fixed).
+  ⚠ #1902's first CI was RED and it was mine: the branch referenced FU-279 while that id existed
+  only in an unpushed local commit → dangling ref. Fix = move the tracker entry onto the branch so
+  id and fix land atomically. Root lesson: I had pipe-filtered the lint's exit earlier and read
+  pre-existing STALE-ARCHIVE noise as "master is red too".
+- **Operator reframing, twice, each time correcting a premise of mine (assessment only, nothing
+  applied):** (1) cadence is NOT 2/day-steady — regen went 10h → 1h so fixes ship as development
+  needs, bursty, weekly baseline with spiking active days. A cron reclaim is sized for the average;
+  the cost lands on the spike. (2) "corpus is data → S3" (ADR-121's PVC rejection) is about the
+  corpus in the PIPELINE (staged on Garage, `corpus-image.oci.tar`, Argo artifact passing), NOT the
+  registry's backing store — a category error I repeated. The LAN registry is not canonical (the
+  release dual-pushes ghcr), so its store is rebuildable, which is the pull-through mirrors' class
+  and those sit on PVCs by decision (ADR-080/#116). ADR-121's PVC rejection therefore rests on one
+  real clause (bulk 88% committed — measured today: std has 227G/295G avail) and one misapplied
+  principle. A filesystem backend renames on commit → the double-hold, and today's whole failure
+  class, structurally cannot occur. ⚠ operator then corrected the durability half too: replica=1
+  "rebuild from ghcr" is circular, since ghcr outage resilience is part of why the mirror exists →
+  2-replica `longhorn` (std), which is also FEWER writes/release (21.2 GB) than today's Garage path.
+  ADR-shaped; not written yet.
+- Found by the same read, un-owned: no ADR/spec decides image-as-transport for the corpus (only an
+  explicitly undecided research note); the written cadence is still weekly + an 8-day freshness
+  promise, contradicted by measurement; no pre-flight capacity gate and no retry anywhere in the
+  release path (the 09-08 instance burned 51 min before its 500).
+- ⚠ **A registry GC's block deletions reach the Garage resync queue ~40 min later, on EVERY zone.**
+  First check after the GC looked clean; by 20:05 all three peers read 10079 ≈ the ~10.6k 1 MB
+  blocks deleted, sustaining `GarageDisruptionBlocked` (pre-existing since 17:43Z, but this is the
+  tail). Window held open until it drains rather than closed on a stale diagnosis.
+- **Release landed on the retry, 20:12:57Z–20:20:46Z:** the same commit that 500'd at 19:01 returned
+  **201** (layer), then config blob 201, then `PUT manifests/2026-09-22` 201. Tag now serves a NEW
+  digest `abb5c9ee` (was `32d8280e`) — the same-day re-release under one tag. It fit with ~5 GB of
+  margin ONLY because the collector had freed the 09-15 lineage first; without tonight's reclaim the
+  retry would have died exactly as the first attempt did. The double-hold was visible and transient
+  (46 GB combined mid-copy, then the upload object deleted by the registry itself).
+  ⚠ Bucket is back to 31.6 GB / 3 distinct corpus layers → 19.9 GB headroom, so
+  `RegistryBucketCommitHeadroomLow` re-fires on the next gauge push and clears at 03:00Z on the new
+  daily collector (under the old Sunday slot it would have sat until 09-27). **A second release
+  tonight would fail again** — 19.9 GB against the ~21 GB a commit needs. That is the prune-BEFORE-push
+  ordering gap, not a capacity one.
+- **#1903 (gc-guard) — the bot found a real defect and the contract was FALSE, not just loosely
+  worded.** Header claimed "any error DEFERS"; `main()` caught a tuple, and `parse_ts(None)` raises
+  TypeError when a listing omits LastModified — with `restartPolicy: Never`/`backoffLimit: 0` that
+  fails the initContainer, so the collector never starts and no decision file is written. Sweep still
+  safe, invariant not. Enumerated the class instead of patching the line: **4** escapes (module-level
+  `int(WINDOW_SECONDS)` at IMPORT; parse_ts in recent_uploads; in recent_mpus; `http.client.HTTPException`
+  which is neither URLError nor OSError) → `except Exception`, the sibling probe.py pattern. 7 paths
+  mechanically tested. ⚠ This is the SECOND self-reported-complete thing tonight that wasn't (#1902's
+  stale "Sunday" strings were the first) — `maintenance-window-G1`, resighted twice in one session.
+- **Window `seat-1790104641-7697` force-closed, deliberately, with a known-open item:**
+  `GarageDisruptionBlocked` was still firing. It was NOT mine at close time — pending since 17:43Z
+  (before the window), then briefly fed by my GC's block deletions (all three peers hit ~10079 ≈ the
+  ~10.6k blocks deleted, surfacing ~40 min late), and by 20:1xZ driven by the release push writing
+  new blocks (17510, draining to 12446). Holding the window open would have suppressed responder
+  triage for a condition I was not causing and kept the box reconciler from syncing. Baseline
+  otherwise clean; cilium re-read standalone after a flaky `unknown` in the close output:
+  have=13 missing=0 unknown=0.
+- **☠ NEAR-MISS, and it validates #1904 the hard way.** `registry-garbage-collect-29834100`
+  (scheduled 03:00Z) was created **20:30:03Z** — one second after #1903 merged — because #1902's
+  Sunday→daily widening made today's 03:00Z a MISSED slot, so ArgoCD's sync made the controller fire
+  a catch-up run. It collected immediately, outside any window, 10 min after a release push, with
+  the **pre-#1904 guard**, which answered `PROCEED no _uploads object…` — its blind spot exactly.
+  It deleted the superseded 09-22 lineage (32d8280e + config + layer), which was correct, and was
+  safe ONLY because the new manifest had landed at 20:20:48 so `5fe97e67` was referenced. Had the
+  sync fallen in the 20:13:49→20:20:48 window, the collector would have deleted the layer of the
+  release just pushed — the #116/#240 class, in production. Nine minutes of luck. #1904 (whole-tree
+  signal) is live and verified in the cluster ConfigMap (`PREFIX = "docker/registry/v2/"`).
+  Recorded the generalisable half in the CronJob header: **a schedule change is itself a collection
+  event** — widening a cron creates missed slots that fire on sync, at an arbitrary time.
+- **End state:** bucket **21.0 GB / 17 objects**, headroom **30.5 GB**, two kept layers (09-17 +
+  09-22@`abb5c9ee`) — the design's intended steady state, and room for the next commit's 2× (21.2 GB).

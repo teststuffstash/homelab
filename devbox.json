@@ -131,11 +131,22 @@
       "mgmt-tf": [
         "bash scripts/mgmt-tf.sh \"$@\""
       ],
+      "mgmt-state-pull": [
+        "bash scripts/mgmt-state-pull.sh \"$@\""
+      ],
       "mgmt-human-plan": [
         "bash scripts/mgmt-human-plan.sh \"$@\""
       ],
       "mgmt-policy-test": [
-        "bash scripts/mgmt-policy-test.sh"
+        "bash scripts/mgmt-policy-test.sh",
+        "bash scripts/mgmt-reconcile-test.sh",
+        "bash scripts/mgmt-rollout-evidence-test.sh"
+      ],
+      "mgmt-reconcile-test": [
+        "bash scripts/mgmt-reconcile-test.sh"
+      ],
+      "mgmt-rollout-evidence-test": [
+        "bash scripts/mgmt-rollout-evidence-test.sh"
       ],
       "labels-handoff": [
         "bash scripts/labels-handoff.sh \"$@\""
@@ -252,11 +263,23 @@
       "node-maintenance": [
         "bash scripts/node-maintenance.sh \"$@\""
       ],
+      "maint": [
+        "bash scripts/maintenance-window.sh \"$@\""
+      ],
+      "maint-self-test": [
+        "bash scripts/maintenance-window-self-test.sh"
+      ],
+      "cp-upgrade": [
+        "bash scripts/controlplane-upgrade.sh \"$@\""
+      ],
       "opnsense": [
         "echo 'Run an OPNsense playbook with creds+httpx interpreter:' && echo '  bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml'"
       ],
       "kubeconfig": [
-        "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
+        "bash scripts/client-configs.sh kubeconfig"
+      ],
+      "talosconfig": [
+        "bash scripts/client-configs.sh talosconfig"
       ],
       "talos-usb": [
         "bash scripts/talos-usb.sh"

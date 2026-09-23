@@ -1,0 +1,29 @@
+# The Garage storage pods' disruption budget — docs/garage.md §Voluntary disruption.
+#
+# Every voluntary eviction of a Garage pod (a `kubectl drain`, the node-maintenance verbs, anything
+# PDB-respecting) asks THIS object. Its maxUnavailable is RUNTIME-OWNED: the garage-disruption
+# CronJob (controller.py) copies Garage's own signal `garage:disruption_allowed` onto it every
+# minute — 1 while a zone may be lost (cluster healthy AND the resync backlog caught up, the rule's
+# threshold), 0 otherwise or when the signal is unreadable. The 0 below is only the value it is
+# CREATED with (fail closed until the first tick); ArgoCD ignores the field afterwards
+# (argocd/platform/garage-disruption.yaml ignoreDifferences + RespectIgnoreDifferences).
+#
+# What it does NOT gate: the StatefulSet's own rolling update (readiness + minReadySeconds serialize
+# that — argocd/platform/garage.yaml), the metadata rotation loop's pod delete (garage-meta-rotation
+# has its own, stricter health gate), kubelet node-pressure eviction, and `kubectl delete pod`.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: garage
+spec:
+  maxUnavailable: 0
+  # The same pair the StatefulSet's zone anti-affinity keys on; the rotation/probe Job pods in this
+  # namespace carry neither label.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: garage
+      app.kubernetes.io/instance: garage
+  # A Garage pod that is NOT Ready is already the missing zone (its /health readiness = this node
+  # has quorum): evicting it cannot take a second zone, and refusing would block the obvious repair
+  # — rebooting the node that holds a wedged pod. The healthy pods stay under the budget.
+  unhealthyPodEvictionPolicy: AlwaysAllow

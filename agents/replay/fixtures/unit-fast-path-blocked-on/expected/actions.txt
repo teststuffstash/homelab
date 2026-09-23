@@ -1,0 +1,57 @@
+CALL gh pr view 396 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 18 --repo teststuffstash/circles --json state,labels
+CALL gh pr view 396 --repo teststuffstash/circles --json comments,reviews
+CALL gh pr view 397 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 18 --repo teststuffstash/circles --json state,labels
+CALL gh pr view 397 --repo teststuffstash/circles --json comments,reviews
+CALL dispatch_phase circles changes-requested
+CALL scan_phase dispatch
+CALL coordinator-session --stack circles --repos circles-iac circles --main-repo circles --model sonnet --loop-ns circles-agents --wip 1 --detach --item repo=circles item=pr-397 clause=changes-requested
+CALL scan_phase deterministic
+CALL gh pr view 398 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 18 --repo teststuffstash/circles --json state,labels
+CALL gh pr view 398 --repo teststuffstash/circles --json comments,reviews
+CALL dispatch_phase circles changes-requested
+CALL scan_phase dispatch
+CALL coordinator-session --stack circles --repos circles-iac circles --main-repo circles --model sonnet --loop-ns circles-agents --wip 1 --detach --item repo=circles item=pr-398 clause=changes-requested
+CALL scan_phase deterministic
+CALL gh pr view 399 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL gh pr view 400 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 19 --repo teststuffstash/circles --json state,labels
+CALL gh pr view 401 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author,headRefName
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL gh issue view 20 --repo teststuffstash/circles --json state,labels
+CALL gh pr view 401 --repo teststuffstash/circles --json comments,reviews
+CALL dispatch_phase circles changes-requested
+CALL scan_phase dispatch
+CALL coordinator-session --stack circles --repos circles-iac circles --main-repo circles --model sonnet --loop-ns circles-agents --wip 1 --detach --item repo=circles item=pr-401 clause=changes-requested
+CALL scan_phase deterministic
+OUT REACHED: blocked-on: human, no engagement after the marker — the edge emits no unit
+OUT unit fast-path: held — circles pr-396 blocked-on: human (a terminal ruling's own predicate, homelab#1188); no ride re-derives the same answer
+OUT RETURN 0
+OUT REACHED: a newer human comment cleared the marker — the hold releases
+OUT → unit fast-path dispatch for circles: circles pr-397 (changes-requested, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: negative control — no marker at all, the unit dispatches
+OUT → unit fast-path dispatch for circles: circles pr-398 (changes-requested, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: agent/blocked on the PR itself (the main path's selector exclusion) — held
+OUT unit fast-path: agent/blocked on the PR — human-waiting
+OUT RETURN 0
+OUT REACHED: the linked source issue #19 is agent/blocked (the main path's BLOCKED-SOURCE hold) — held
+OUT unit fast-path: held — source issue #19 is agent/blocked (human-gated); PR 400
+OUT RETURN 0
+OUT REACHED: the linked issue #20 is CLOSED with a stale agent/blocked label — the main path reads OPEN issues, so this dispatches
+OUT → unit fast-path dispatch for circles: circles pr-401 (changes-requested, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: end
+RC 0

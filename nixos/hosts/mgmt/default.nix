@@ -80,6 +80,29 @@ in
     allowedTCPPorts = [ 22 ];
   };
 
+  # ── metrics (FU-252) ───────────────────────────────────────────────────────────────────────────
+  # The box's loops had no series at all: a four-day standing refusal of `main` restated itself
+  # 1101 times with nothing watching (docs/management-box.md §"A standing refusal is a THIRD
+  # verdict shape"). Transport = the hypervisors' pattern (operator, 2026-09-21): node_exporter +
+  # the textfile collector, scraped by the cluster Prometheus as a static target (job mgmt-node,
+  # argocd/resources/mgmt-metrics/). The loops write /var/lib/node-exporter-textfile/*.prom.
+  # Port 9100 opens to the LAN only (below) — cluster scrapes leave the pod network masqueraded to
+  # a node address in 192.168.2.0/24.
+  services.prometheus.exporters.node = {
+    enable = true;
+    port = 9100;
+    extraFlags = [ "--collector.textfile.directory=/var/lib/node-exporter-textfile" ];
+  };
+  # NOT the module's openFirewall/firewallFilter: it wraps the filter in ip46tables, so an IPv4
+  # `-s` is also fed to ip6tables, which rejects it — the firewall unit fails, systemd goes
+  # degraded, and mgmt-confirm's gate reboots the box back (read from the evaluated
+  # extraCommands, 2026-09-21). IPv4 only, by hand; the add is preceded by a delete so a firewall
+  # reload never stacks duplicates.
+  networking.firewall.extraCommands = ''
+    iptables -D nixos-fw -s 192.168.2.0/24 -p tcp -m tcp --dport 9100 -j nixos-fw-accept 2>/dev/null || true
+    iptables -A nixos-fw -s 192.168.2.0/24 -p tcp -m tcp --dport 9100 -j nixos-fw-accept
+  '';
+
   # ── boot + rollback ───────────────────────────────────────────────────────────────────────────
   # ⚠ DECIDE `bootMode` AT INSTALL TIME, when the firmware is finally known. The pilot is a ~2011
   # ThinkCentre Edge and its firmware is UNVERIFIED. There is no "safely covers both": GRUB with
@@ -175,7 +198,12 @@ in
   nix.settings.min-free = 5 * 1024 * 1024 * 1024;
   nix.settings.max-free = 20 * 1024 * 1024 * 1024;
 
-  systemd.tmpfiles.rules = [ "d /var/lib/mgmt 0700 root root -" ];
+  systemd.tmpfiles.rules = [
+    "d /var/lib/mgmt 0700 root root -"
+    # node_exporter's textfile dir (FU-252). Its own dir because /var/lib/mgmt is 0700 and holds the
+    # credential env files — the exporter (a DynamicUser) must read these metrics and nothing else.
+    "d /var/lib/node-exporter-textfile 0755 root root -"
+  ];
 
   # ── the checkout the whole loop depends on ────────────────────────────────────────────────────
   systemd.services.mgmt-checkout = {
@@ -295,8 +323,8 @@ in
   # ── the DRIFT BELT: reports, never acts ───────────────────────────────────────────────────────
   # FU-097's belt and this box's fleet-facing health check, on a timer. A failure here means
   # something OUT THERE is wrong (or genuinely drifted); it changes no generation and reboots
-  # nothing. ⚠ Publishing is unbuilt — Pushgateway is cluster-internal and never BGP-advertised,
-  # so PUSHGATEWAY stays unset until that exposure is decided (docs/management-box.md §D1).
+  # nothing. Publishes through node_exporter's textfile collector (mgmt_probe_belt.prom — the node
+  # diff's mgmt_node_drift and the belt's own liveness), scraped as job mgmt-node (FU-252).
   systemd.services.mgmt-belt = {
     description = "drift belt: tofu plan + talosctl skew + opnsense --check (report only)";
     after = [ "mgmt-checkout.service" ];
@@ -316,11 +344,46 @@ in
     script = "${repoPath}/scripts/mgmt-probe.sh";
   };
   systemd.timers.mgmt-belt = {
-    enable = false; # phase A: built, not armed (the creds it probes are not here yet)
+    # ARMED 2026-09-21. It was parked at phase A "the creds it probes are not here yet" — they have
+    # been here since the 09-13 state migration, and the timer stayed masked, so the belt last ran
+    # on 2026-09-13 09:32 and nothing said so for eight days. Evidence before arming: started by
+    # hand on the box, 5 checks green in ~90 s (tofu:provisioning, tofu:github, talos skew, the
+    # OPNsense --check, creds). Report-only by construction — it changes no generation and reboots
+    # nothing (§Rollback layer 1), so the cost of arming it is one 90 s run per quarter hour.
+    enable = true;
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*:0/15";
       RandomizedDelaySec = "2m";
+      Persistent = true;
+    };
+  };
+
+  # ── state snapshots (docs/tofu-state.md §Snapshots, FU-012) ─────────────────────────────────
+  # The level backstop. mgmt-tf and mgmt-apply already snapshot the root they just wrote, inside
+  # their own lock span; this timer catches every state change made ANYWHERE else — the four
+  # Garage-backed roots are applied from the host and the jail, never from here. Idempotent by
+  # (serial, lineage), so an hour in which nothing changed costs a few jq reads and five S3 GETs.
+  # Takes the loops' lock itself (standalone run), so it can never read main mid-write.
+  systemd.services.mgmt-state-snapshot = {
+    description = "tofu state snapshots: dated, encrypted, round-trip verified (every root)";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" ];
+    path = with pkgs; [ bash git devbox nix coreutils gnugrep gnused findutils util-linux ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # TOFU_STATE_PASSPHRASE + the Garage state key
+    };
+    script = "${repoPath}/scripts/mgmt-state-snapshot.sh";
+  };
+  systemd.timers.mgmt-state-snapshot = {
+    enable = true;
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "hourly";
+      RandomizedDelaySec = "5m";
       Persistent = true;
     };
   };
@@ -375,6 +438,40 @@ in
     timerConfig = {
       OnCalendar = "*:2/5";
       RandomizedDelaySec = "30s";
+      Persistent = true;
+    };
+  };
+
+  # ── the NODE RECONCILER (ADR-132 §MB4 layers 3–5): reconcile:auto nodes → the upgrade verb ─────
+  # For each node machines/machines.yaml declares `reconcile: auto`, diff the declared install
+  # (main's applied node_install_targets) against live (mgmt-probe.sh's check_nodes) and, on a
+  # version/schematic gap, run `node-maintenance.sh upgrade <node>` — WIP 1, the verb's floors, one
+  # attempt per declared target, then PARKED (state in /var/lib/mgmt/reconcile/, metrics via the
+  # textfile). The sync runs INSIDE this oneshot, so the unit is the window: runs serialize and
+  # the timer cannot start a second one. Two settings are load-bearing:
+  #   restartIfChanged = false — a mgmt-pull activation that changes this unit must NEVER restart
+  #     it: that would kill a window mid-install. A change takes effect at the next tick.
+  #   TimeoutStartSec = 5h — past the verb's own bounds (settle 1h + drain + install + Ready 15m +
+  #     storage/Garage/CNPG waits); a sync killed here is found "syncing" by the next tick and parked.
+  systemd.services.mgmt-reconcile = {
+    description = "node reconciler: reconcile:auto nodes to their declared install (report + one attempt)";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssh util-linux coreutils findutils gnugrep gawk gnused ];
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "5h";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/scripts/mgmt-reconcile.sh";
+  };
+  systemd.timers.mgmt-reconcile = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:4/10";
+      RandomizedDelaySec = "1m";
       Persistent = true;
     };
   };

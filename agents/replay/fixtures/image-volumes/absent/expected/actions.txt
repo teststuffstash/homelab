@@ -1,0 +1,7 @@
+OUT empty-list: []
+OUT unset: []
+OUT object-not-list: []
+OUT WARN: fixer.imageVolumes is unreadable (not a JSON list of objects) — ride continues with NO image volumes (ADR-135)
+OUT unparseable: MOUNT[] VOLUME[] CARD[- **Data volumes: the claim's `fixer.imageVolumes` was unreadable at launch — none mounted.** Say so if the task needed one.
+OUT ]
+RC 0

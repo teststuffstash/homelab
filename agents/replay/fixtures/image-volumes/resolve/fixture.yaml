@@ -1,0 +1,22 @@
+# ADR-135 / homelab#1807 — fixer.imageVolumes, the launcher's resolver (agents/agent-session.sh,
+# REPLAY:image-volumes). One claim list that walks every arm: a good digest MOUNTS; a digest the
+# registry does not serve degrades LOUDLY (probe-then-mount — an unpullable image volume would
+# fail the whole pod at image pull); a TAG, a foreign registry and a mountPath the ride lives on
+# are REFUSED by the launcher's own fence (the XRD pattern is only the first one); a duplicate
+# name is refused; and a refused entry's raw text never reaches the env card (it is prompt input).
+# The second half of the list is the pre-merge adversarial review's failing inputs, each one a bug
+# the first draft shipped: `/mnt/../work/repo` passed the path fence (dot-led segments); `a//b`
+# passed the repo grammar AND the probe (the registry 301s it, `curl -f` passes a 3xx); ONE
+# object-valued field dropped the WHOLE list silently; an EMPTY name shifted the reference into the
+# name column (tab is IFS whitespace); a path nested in a mounted one; and a duplicate of an entry
+# whose probe FAILED mounted under its name, contradicting its own card line.
+#
+# The probe is the ONE network seam — pre.sh replaces iv_probe with a recorded stub (S3: the read
+# is a CALL line), so validation, ordering and all three rendered fragments stay under assertion.
+name: image-volumes-resolve
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:image-volumes
+  - file:pre.sh
+  - file:post.sh

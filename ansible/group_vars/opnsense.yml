@@ -37,6 +37,10 @@ bgp_node_ips:                                # Talos nodes that peer (BGP neighb
                    # found 2026-09-15 by review: its CiliumBGPNodeConfig peer sat `idle` for 8 h.
                    # Third time this list was the miss (wk-03, wk-metal-04, now nx-01).
   - 192.168.2.64   # wk-04 (VM on nx-02, the second hypervisor, onboarded 2026-09-15)
+  - 192.168.2.65   # cp-02 (VM on nx-02, the THIRD control plane, ADR-133, created 2026-09-21)
+                   # — MISSED at creation, found the same hour: peer `idle`, 0 routes. FOURTH
+                   # miss on this list (wk-03, wk-metal-04, nx-01, now cp-02). A control plane
+                   # needs it exactly like a worker: the BGP nodeSelector is all-nodes.
 
 # --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
 acme_account_name: "TestStuff OPNSense"
@@ -173,6 +177,21 @@ unbound_hosts:
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
   - { hostname: argo, domain: teststuff.net, value: 192.168.3.24, description: "Argo Workflows UI (HAProxy VIP; backend LB 40.24)" }
   - { hostname: apps, domain: teststuff.net, value: 192.168.3.25, description: "GitHub Apps declared-vs-live page (HAProxy VIP; backend LB 40.25, github-exporter)" }
+
+# Zones Unbound answers NXDOMAIN for, the zone AND every name under it (one DNSBL policy).
+# cluster.local.teststuff.net (2026-09-22): Talos ≥ v1.14.0 applies the DHCP search domain
+# (dnsmasq's `teststuff.net`) to the node resolver, so every pod on a DHCP node searches it, and
+# with ndots:5 a name like `x.ns.svc.cluster.local` tries `x.ns.svc.cluster.local.teststuff.net`
+# BEFORE the absolute name. That hits the Cloudflare `*.local.teststuff.net -> 127.0.0.1` wildcard
+# (docs/cloudflare.md, rollout gotcha 1), so Alertmanager and Forgejo dialled loopback after the
+# 1.14.1 rollout. NXDOMAIN here makes the resolver fall through to the real name. The whole
+# local.teststuff.net zone, not just cluster.local.…: the public wildcard is for OTHER people's
+# work machines; on this LAN it serves nothing (operator 2026-09-22; the one work laptop uses
+# /etc/hosts), and every `<x>.local` name (mDNS) hits the same trap. LAN overrides under it
+# (transcripts.local.teststuff.net, unbound_hosts / the haproxy role) still answer — local-data
+# wins over the DNSBL policy (verified 2026-09-22).
+unbound_nxdomain_wildcards:
+  - local.teststuff.net
 
 # Unbound "Advanced" settings we pin (Services → Unbound DNS → Advanced). Keys are the
 # `unbound.advanced.<key>` field names of `unbound/settings/get`; values are the API's

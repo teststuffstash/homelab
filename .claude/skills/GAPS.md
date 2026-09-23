@@ -168,3 +168,44 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `scripts/node-maintenance.sh settle` (or `down`) first — the reboot itself is fine, doing it
       undrained is not.
 
+## maintenance-window
+
+- [ ] maintenance-window-G1 — **a fix that addresses only the instances in view, then reports the
+      CLASS as closed.** Three separate review rounds in one session caught the same shape: the
+      `client-configs.sh` write-order race (#1803) landed after the local/box split had been
+      "handled"; #1804's first fix hardened three of five read paths and its commit message said
+      "all three reads now distinguish 'queried and found nothing' from 'the query failed'" — the
+      tool has FIVE checks, and the two left untouched had the identical fail-open bug, one of them
+      the cilium backend check the whole tool exists for. The reviewer found each by enumerating
+      the call sites; the seat found none of them. Sighted 2026-09-20 (seat, homelab#1803/#1804).
+      RESIGHT, same day, same PR: rounds 4 and 5 found two MORE fail-open sites after the round-3
+      fix had again claimed the set ("all five now") — `snapshot()`'s zero-node `exit`, which the
+      call site turned into a silent death, and cilium `have=0 unknown=N` reading as `ok`. The
+      count claim was wrong three times running; a claimed count is worth nothing without the
+      enumeration and a test per site behind it.
+      Next: when a fix names a failure CLASS, the skill should require enumerating every call site
+      of that class and stating the count — "5 reads, 5 guarded" — before the class may be called
+      closed; and a mechanical test per site, since the self-test added here initially pinned 3 of
+      5 while its own docstring claimed the set.
+- [ ] maintenance-window-G2 — **the skill's alert watch is a snippet the seat re-types, and it went
+      silent for 30 min.** The `Monitor` loop written for the 2026-09-21 pve window used
+      `for a in $cur` — zsh does not word-split, so the whole alert list compared as ONE name and
+      nothing was ever emitted while `maint check` showed four new alerts. The ping-based "is pve
+      up" watch failed the same way twice (`ping`/`nc` absent from the jail's bare PATH; a `$PV`
+      command-in-a-variable never ran). Also improvised: there is no `down` verb for a CONTROL
+      PLANE (node-maintenance refuses, cp-upgrade only upgrades) — cp-01 went down by hand (etcd
+      status + leader/VIP read, snapshot, drain, `talosctl shutdown`, cilium-check). Sighted
+      2026-09-21 (seat, pve GPU swap). RESIGHT 2026-09-22 (seat, registry GC window): the re-typed
+      watch carried a SECOND defect, one the first sighting's bug would have masked — no dedupe, so
+      a persistent new alert re-notified every poll (`GarageDisruptionBlocked`, already pending 90
+      min before the window opened, fired on its 2 h `for:`, then repeated each 45 s tick). Two
+      independent defects in two consecutive hand-written copies is the argument for shipping the
+      verb, not for a bigger snippet in the skill. Next: ship the watch as a verb (`maint watch`,
+      emits one line per new alert name ONCE — baseline-diff plus a seen-set — exits never) so it is
+      run, not re-typed; and a `cp-down`/`cp-up` pair beside cp-upgrade with the same gates.
+- [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
+      kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
+      each other's baseline + window id (the first `close` would have closed the SUBAGENT's
+      window). Sighted 2026-09-22. **fixed→** state keyed by window id (`$STATE_DIR/<id>/`),
+      `check`/`close --id`, no-`--id` refuses + lists when several are open, `list` verb; skill
+      says to note the id; self-test §7 — same commit.

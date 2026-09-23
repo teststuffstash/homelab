@@ -1,0 +1,7 @@
+OUT REACHED: ladder
+OUT rail=opencode-go/deepseek-v4-flash
+OUT model=opencode-go/deepseek-v4-flash
+OUT   capacity: Anthropic latched — this pass dispatches on the Go rail (opencode-go/deepseek-v4-flash)
+OUT REACHED: end
+ERR → Anthropic latched — Go rail clear (opencode-go/deepseek-v4-flash)
+RC 0

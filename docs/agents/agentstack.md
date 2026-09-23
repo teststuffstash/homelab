@@ -117,9 +117,10 @@ issue delivers the claim knob + egress leg, born together.
 
 ## The egress dial (the FU-020 rollout, encoded)
 
-`fixer.egress` renders the worker CNP from **five tiers** — baseline (every ride, every stack),
+`fixer.egress` renders the worker CNP from **six tiers** — baseline (every ride, every stack),
 capability-gated (docker-mode rides only), the claim-selected ecosystem profile, harvest-earned
-`extraFQDNs`, and the **stack-declared MCP endpoint** (`spec.mcp`). This table is the **audit surface**
+`extraFQDNs`, the **stack-declared MCP endpoint** (`spec.mcp`), and the **stack's own services**
+(`ownServices`). This table is the **audit surface**
 a human or auditor reads; the claim stays the per-stack policy surface. Keep it in sync with the
 composed legs
 ([`argocd/resources/agentstack/composition.yaml`](../../argocd/resources/agentstack/composition.yaml))
@@ -131,7 +132,8 @@ leg-by-leg.
 | **capability-gated** (`fixer.docker: true`) | kata LAN-resolver DNS leg (`192.168.2.1` — ⚠ DEAD since 2026-09-04, `dnsPolicy: None` removed with the FU-072 workaround; delete after soak) · kata LAN-VIP belt (nix-cache `.40.23` / devbox-search `.40.27` — kata rides install via them) · upstream registry FQDN `ghcr.io` (dockerd's `registry-mirrors` is Hub-only, so the dind's own ghcr pulls go direct until the gate configs route ghcr through the mirror per-tool; then this leg is deleted — the recorded plan) | gated ONLY for risk, cost, or genuine capability-specificity — the gate's reason is written at the leg |
 | **ecosystem profile** | `python` → pypi.org / files.pythonhosted.org (the `.40.34` mirror VIP is baseline; ⚠ these legs are NOT merely a fallback — a python ride runs `UV_FROZEN=1`, so a project's locked install fetches the URLs its committed `uv.lock` carries and lands HERE by design, [`../patterns/python-stack.md`](../patterns/python-stack.md) §caches) · `node` → registry.npmjs.org | claim-selected |
 | **harvest-earned** | `extraFQDNs` | per-stack, monitor-phase evidence, never speculation (unchanged) |
-| **stack-declared MCP** (`spec.mcp`) | MCP endpoint HOST, derived from `spec.mcp.endpoint` (a URL — the launcher passes it verbatim to the harness's attach flag, #1041) — the agent session's tool server; the derived host must be an FQDN, never a service VIP (FU-072/kata) | present when the stack declares `spec.mcp`; the endpoint is rendered into EVERY fixer repo's CNP (stack-wide knob, per-repo leg). ⚠ NOT into the loop-ns `agent-loop-egress` CNP (#1213, monitor-mode): REVIEWER pods attach MCP too (since #1186) and reach the host today only because the loop CNP does not enforce — the enforce flip must add this leg first or every reviewer MCP attach hangs (the 2026-09-01 #1039 evidence comment's caveat, made a prerequisite) |
+| **stack-declared MCP** (`spec.mcp`) | MCP endpoint HOST, derived from `spec.mcp.endpoint` (a URL — the launcher passes it verbatim to the harness's attach flag, #1041) — the agent session's tool server; the derived host must be an FQDN, never a service VIP (FU-072/kata) | present when the stack declares `spec.mcp`; the endpoint is rendered into EVERY fixer repo's CNP (stack-wide knob, per-repo leg). Also rendered into the loop-ns `agent-loop-egress` CNP (#1283) — REVIEWER pods attach MCP too (since #1186), so the leg is in place before that policy's enforce flip |
+| **own services** (`fixer.egress.ownServices`) | one `toEndpoints` leg per entry — `{podLabels, port}` — to pods in the repo's **own namespace**; first consumer: oracle-fleet's keyless signing proxy in front of its corpus bucket (a ride reads the stack's data with plain `GET`+`Range`; the S3 key lives only in the proxy pod) | stack-declared. The namespace is pinned by the Composition, never claim-supplied — the deny-all widens only toward the stack's own workloads, and `podLabels` needs ≥1 label so a leg can never open the whole namespace (the database included). Rendered into the repo's worker CNP **and** the loop-ns CNP, so reviewer/coordinator verify against the same bytes. The target pod's ingress policy is the stack's to write. A leg to a PLATFORM namespace is never this knob — that is a Composition change |
 
 **Why the mirrors are baseline** (homelab#520): read-only in-cluster pull-through caches — no
 exfil surface (nothing writable), content-in parity with baseline's existing github/pypi reach.
@@ -342,6 +344,16 @@ GitHub and the authoritative claim fights it back.
   `AgentStackNotSynced`** (kube-state-metrics custom-resource-state on the XR conditions,
   [`agentstack/prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml),
   2026-09-14): every instance above was found by hand, none by an alert.
+- **⚠ A mirrored App token is only as fresh as the two refresh clocks allow.** A
+  `readOnlyGrants` token (and `retro-git`'s) is minted by a central ES in agent-coordinator and
+  COPIED into the consumer namespace by a second ES; the clocks are independent, so a mirror that
+  refreshes φ minutes after each mint serves a token aged up to φ + its own interval — with
+  45m/45m and φ > 15m the copy is dead (401) for a fixed window of every cycle while both ES read
+  SecretSynced (oracle-fleet's 02:30Z retention cron, 2026-09-21/22). Both pairs now mint at 30m
+  and mirror at 5m, so the served token is ≤ ~35m old whatever the phase. **The belt is
+  `GithubTokenMirrorBehind`** (+ `GithubTokenMintStale` for a stalled mint), on
+  kube-state-metrics' `kube_externalsecret_refresh_time` — same
+  [`prometheusrule.yaml`](../../argocd/resources/agentstack/prometheusrule.yaml).
 - **⚠ Argo Events string data-filter values are REGEX**, not literals. `""` and `!=` are rejected;
   use `.+` to mean "present and non-empty" (this is how the graduated-loop routing selects on
   `body.loop_ns`).

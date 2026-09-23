@@ -110,7 +110,7 @@ RAIL_DEFAULTS = {
 RAIL_ENV_LEG = {model_id.RAIL_OPENCODE_GO: "go", RAIL_OPENCODE_ZEN: "zen"}
 
 # ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
-# These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
+# These error classes are INFRA failures (model-routing-history.md §M1): they blacklist the (task, model)
 # pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
 # member of it, the finalizer (agent-runtime `agent-finalize`) reports a member of it, and the
 # scan's fleet-strike reader keys on a member of it. Neither keeps a second copy: the router
@@ -141,7 +141,7 @@ SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm", "tool-loop"}
 _TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
 
 # ── STRIKE ENFORCEMENT IS UNCONDITIONAL (Goal #1640 acceptance 3) ─────────────────────────────
-# The 2026-08-23 ruling (model-routing.md §M1a) RETIRED the strike-enforcement env knob as a
+# The 2026-08-23 ruling (model-routing-history.md §M1a) RETIRED the strike-enforcement env knob as a
 # blacklist knob: the 16-day store read showed six strikes, five one harness class, and
 # enforcement would have changed ~1 decision for cents. The knob was left as dead code for the
 # G-A sweep, and the 2026-09-13 checkpoint on #1231 read it `False` in production on every
@@ -215,7 +215,7 @@ CREATE INDEX IF NOT EXISTS ix_pe_model_ts ON provider_events(model, ts);
 # in-rail ordering uses: a :free model costs nothing, the claude subscription is already bought (so
 # a slot with headroom is also ~$0 at the margin — bounded by the FU-088 gates, which are the
 # safety net's, not the ladder's, to spend), and paid OpenRouter is the reliable spender of last
-# resort. See docs/agents/model-routing.md §M11.
+# resort. See docs/spikes/model-routing-history.md §M11.
 LADDER = ("free", "subscription", "paid")
 URGENCIES = ("tight", "elastic")
 
@@ -633,7 +633,7 @@ def record_report(d: dict, session_ref: str = "") -> tuple[bool, bool, str]:
     # infra death never struck: router_strikes_total sat at 1 while three harness deaths landed on
     # 2026-08-06/07. Two of this set's own members (`harness-death`, `no-pr`) are `outcome`
     # vocabulary, so it was never coherent with the single field it was compared against.
-    # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
+    # model-routing-history.md §M1 settles that this is a bug, not a policy: its taxonomy table names
     # "harness-death (goose -32602)" as ONE thing.
     # FU-201 c: the served provider is sourced proxy-side from provider_events via the session
     # key ref (not the pod name — those two id-spaces never intersect). provider_events is
@@ -1550,9 +1550,17 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
     the canonical `models` table (the human-approved set; graduation stays human), ordered: class
     chain_head first, then daily-rankings rank order, then the git rotation_fallback belt. Models
-    whose canary verdict says broken are excluded. A rotation row is approved when its FAMILY is a
-    `models` key (Goal #1769 acceptance 3) — the table is keyed canonically, so a `:free`/`:exacto`
-    variant of an approved model is approved too."""
+    whose canary verdict says broken are excluded — on ALL THREE legs, chain_head included
+    (homelab#1786). A rotation row is approved when its FAMILY is a `models` key (Goal #1769
+    acceptance 3) — the table is keyed canonically, so a `:free`/`:exacto` variant of an approved
+    model is approved too.
+
+    The chain_head leg is NOT exempt. A head is a model like any other, and a broken canary is
+    exactly the evidence the head ordering should yield to: a head is human-curated POLICY, but
+    the canary verdict is the fleet's own serving evidence, and serving a known-broken head ahead
+    of everything else is the router's thesis inverted (Goal #1640 acceptance 3). The exclusion
+    removes a head from MEMBERSHIP only — the head ORDER is untouched: surviving heads still
+    precede the ranked rotation. One rule for every chain_head class, never a per-class knob."""
     models = _models_table()
     rows = _read("SELECT model, source, canary_verdict, rank FROM rotation")
     broken = {m for m, _s, v, _r in rows if v == "broken"}
@@ -1562,7 +1570,8 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     kind = "reasoning" if cinfo.get("reasoning") else "coding"
     fallback = (_classes.get("rotation_fallback") or {}).get(kind) or []
     out: list[str] = []
-    for m in (list(cinfo.get("chain_head") or []) + [m for _r, m in ranked]
+    for m in ([m for m in (cinfo.get("chain_head") or []) if m not in broken]
+              + [m for _r, m in ranked]
               + [m for m in fallback if m not in broken]):
         if m not in out:
             out.append(m)
@@ -3484,7 +3493,38 @@ def self_test() -> int:
                     [{"model": "poolside/laguna-s-2.1:free", "canary_verdict": "broken"}])
     dv = route(dict(base, chain=[]), {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
-    assert dv["model"] == "tencent/hy3", dv
+    # homelab#1783: `coding` now carries a chain_head (v4-flash → v4.1-flash), and
+    # _rotation_candidates puts the head AHEAD of the ranked rotation — that IS the class's
+    # ordering policy on a chainless stack, so the old `tencent/hy3` (rank 1) expectation is
+    # deliberately repinned. The ranked rotation still FEEDS (hy3 is in the pool) and both the
+    # broken canary and the ungraded model are still excluded, which is what this fixture is for.
+    assert dv["model"] == "deepseek/deepseek-v4-flash", dv
+    assert dv["jitter_pool"] == ["deepseek/deepseek-v4-flash",
+                                 "deepseek/deepseek-v4.1-flash", "tencent/hy3"], dv
+    # homelab#1786: the broken-canary exclusion applies to the chain_head leg too — a head is a
+    # model like any other, and a broken canary is exactly the evidence the head ordering yields
+    # to (Goal #1640 acceptance 3: the exclusion surface). Mark the coding head's FIRST entry
+    # broken and the head leg must skip it, falling to the NEXT head — membership only, the head
+    # ORDER is untouched (v4.1-flash still precedes the ranked rotation). This is the fixture the
+    # pre-fix source fails: it fed only the ranked and fallback legs, so the head leg's missing
+    # exclusion stayed green.
+    record_rotation("provider-events",
+                    [{"model": "deepseek/deepseek-v4-flash", "canary_verdict": "broken"}])
+    db = route(dict(base, chain=[]),
+               {**CTX, "price": lambda m, exclude=frozenset(): (0.05, "market", None)})
+    assert db["decision"] == "dispatch" and db["source"] == "rotation", db
+    assert db["model"] == "deepseek/deepseek-v4.1-flash", db
+    assert db["jitter_pool"] == ["deepseek/deepseek-v4.1-flash", "tencent/hy3"], db
+    # …and it is ONE rule for every chain_head class, not a per-class knob: the same broken verdict
+    # removes a head from the review class (claude/sonnet) too.
+    record_rotation("provider-events",
+                    [{"model": "claude/sonnet", "canary_verdict": "broken"}])
+    _rc = _rotation_candidates({"chain_head": ["claude/sonnet"], "reasoning": True})
+    assert "claude/sonnet" not in _rc, _rc
+    # cleanup: clear both broken verdicts so later fixtures see the unbroken rotation
+    record_rotation("provider-events",
+                    [{"model": "deepseek/deepseek-v4-flash", "canary_verdict": ""},
+                     {"model": "claude/sonnet", "canary_verdict": ""}])
     # ── Goal #1769 acceptance 4 (router half): CALLER CAPABILITY in the rail walk ──
     # The 2026-08-26 world, REPLAYED (docs/incidents/2026-08-26-reviewer-404-loop.md). The
     # reviewer sends NO chain — candidates come from the class's chain_head + the rotation, which

@@ -1,0 +1,194 @@
+rule_files:
+  - garage-disruption.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── the signal opens only once the backlog has sat under 1000 for 10 whole minutes ─────────
+  # garage-2 rejoined with a 5000-block backlog on its peers; it drains at t=20m. Every node
+  # reports cluster_healthy=1 throughout (the 2026-09-22 shape: connected ≠ caught up).
+  - interval: 1m
+    name: "garage:disruption_allowed waits out the resync backlog, then 10 minutes more"
+    input_series:
+      - series: 'cluster_healthy{pod="garage-0"}'
+        values: "1x45"
+      - series: 'cluster_healthy{pod="garage-1"}'
+        values: "1x45"
+      - series: 'cluster_healthy{pod="garage-2"}'
+        values: "1x45"
+      - series: 'cluster_storage_nodes{pod="garage-0"}'
+        values: "3x45"
+      - series: 'cluster_storage_nodes{pod="garage-1"}'
+        values: "3x45"
+      - series: 'cluster_storage_nodes{pod="garage-2"}'
+        values: "3x45"
+      - series: 'block_resync_queue_length{pod="garage-0"}'
+        values: "5000x19 50x25"
+      - series: 'block_resync_queue_length{pod="garage-1"}'
+        values: "4500x19 40x25"
+      - series: 'block_resync_queue_length{pod="garage-2"}'
+        values: "60x45"
+    promql_expr_test:
+      # backlog: closed
+      - expr: garage:disruption_allowed
+        eval_time: 15m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 0
+      # caught up at 20m, but not yet for 10 minutes: still closed
+      - expr: garage:disruption_allowed
+        eval_time: 25m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 0
+      # ten clean minutes: open
+      - expr: garage:disruption_allowed
+        eval_time: 32m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 1
+
+  # ── a zone down (cluster_healthy 0 on the survivors) closes it, backlog or not ─────────────
+  - interval: 1m
+    name: "garage:disruption_allowed is 0 while a partition is missing a replica"
+    input_series:
+      - series: 'cluster_healthy{pod="garage-0"}'
+        values: "1x14 0x5 1x20"
+      - series: 'cluster_healthy{pod="garage-1"}'
+        values: "1x14 0x5 1x20"
+      - series: 'cluster_storage_nodes{pod="garage-0"}'
+        values: "3x40"
+      - series: 'block_resync_queue_length{pod="garage-0"}'
+        values: "50x40"
+      - series: 'block_resync_queue_length{pod="garage-1"}'
+        values: "50x40"
+      - series: 'block_resync_queue_length{pod="garage-2"}'
+        values: "50x40"
+    promql_expr_test:
+      - expr: garage:disruption_allowed
+        eval_time: 13m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 1
+      # five 0-minutes at 15..19m keep it closed for the 10 minutes after
+      - expr: garage:disruption_allowed
+        eval_time: 26m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 0
+
+  # ── a peer we cannot scrape is not a peer we know is caught up ─────────────────────────────
+  - interval: 1m
+    name: "garage:disruption_allowed is 0 while a storage node's queue is not scraped"
+    input_series:
+      - series: 'cluster_healthy{pod="garage-0"}'
+        values: "1x30"
+      - series: 'cluster_healthy{pod="garage-1"}'
+        values: "1x30"
+      - series: 'cluster_storage_nodes{pod="garage-0"}'
+        values: "3x30"
+      - series: 'block_resync_queue_length{pod="garage-0"}'
+        values: "50x30"
+      - series: 'block_resync_queue_length{pod="garage-1"}'
+        values: "50x30"
+    promql_expr_test:
+      - expr: garage:disruption_allowed
+        eval_time: 20m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 0
+
+  # ── no Garage data at all: 0, never absent and never 1 (fail closed in the rule itself) ────
+  - interval: 1m
+    name: "garage:disruption_allowed is 0 with no Garage series"
+    input_series:
+      - series: 'up{job="unrelated"}'
+        values: "1x20"
+    promql_expr_test:
+      - expr: garage:disruption_allowed
+        eval_time: 15m
+        exp_samples:
+          - labels: 'garage:disruption_allowed'
+            value: 0
+
+  # ── the budget closed for 2h fires; another namespace's PDB at 0 (CNPG primaries) never does ─
+  - interval: 5m
+    name: "GarageDisruptionBlocked fires on the garage PDB at 0 for 2h"
+    input_series:
+      - series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="garage",poddisruptionbudget="garage"}'
+        values: "0x40"
+      - series: 'kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="infisical",poddisruptionbudget="infisical-pg-primary"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 1h50m
+        alertname: GarageDisruptionBlocked
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: GarageDisruptionBlocked
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: garage
+              poddisruptionbudget: garage
+            exp_annotations:
+              summary: "Garage has refused voluntary disruption for 2h, so no zone node can be drained"
+
+  # ── budget OPEN (maxUnavailable 1: expected 3, desired healthy 2) while the signal reads 0 ──
+  - interval: 1m
+    name: "GarageDisruptionBudgetOpenAgainstSignal fires when the PDB is open and the signal is 0"
+    input_series:
+      - series: 'kube_poddisruptionbudget_status_expected_pods{namespace="garage",poddisruptionbudget="garage"}'
+        values: "3x20"
+      - series: 'kube_poddisruptionbudget_status_desired_healthy{namespace="garage",poddisruptionbudget="garage"}'
+        values: "2x20"
+      # a backlog: the signal is 0
+      - series: 'cluster_healthy{pod="garage-0"}'
+        values: "1x20"
+      - series: 'cluster_storage_nodes{pod="garage-0"}'
+        values: "3x20"
+      - series: 'block_resync_queue_length{pod="garage-0"}'
+        values: "6000x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: GarageDisruptionBudgetOpenAgainstSignal
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: GarageDisruptionBudgetOpenAgainstSignal
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: garage
+              poddisruptionbudget: garage
+            exp_annotations:
+              summary: "The garage PodDisruptionBudget lets a zone go while Garage's signal says it must not"
+
+  # ── budget open AND the signal says 1: correct, silent. Budget closed, signal 0: silent too ─
+  - interval: 1m
+    name: "GarageDisruptionBudgetOpenAgainstSignal stays quiet when the PDB follows the signal"
+    input_series:
+      - series: 'kube_poddisruptionbudget_status_expected_pods{namespace="garage",poddisruptionbudget="garage"}'
+        values: "3x40"
+      # closed (maxUnavailable 0) for the first 15 minutes while the signal is still 0, then open
+      - series: 'kube_poddisruptionbudget_status_desired_healthy{namespace="garage",poddisruptionbudget="garage"}'
+        values: "3x14 2x25"
+      - series: 'cluster_healthy{pod="garage-0"}'
+        values: "1x40"
+      - series: 'cluster_healthy{pod="garage-1"}'
+        values: "1x40"
+      - series: 'cluster_healthy{pod="garage-2"}'
+        values: "1x40"
+      - series: 'cluster_storage_nodes{pod="garage-0"}'
+        values: "3x40"
+      - series: 'block_resync_queue_length{pod="garage-0"}'
+        values: "50x40"
+      - series: 'block_resync_queue_length{pod="garage-1"}'
+        values: "50x40"
+      - series: 'block_resync_queue_length{pod="garage-2"}'
+        values: "50x40"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: GarageDisruptionBudgetOpenAgainstSignal
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: GarageDisruptionBudgetOpenAgainstSignal
+        exp_alerts: []

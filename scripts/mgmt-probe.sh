@@ -23,9 +23,9 @@
 # Read-only by construction in both modes: plan/--check/version only, never an apply.
 #
 # Usage:
-#   scripts/mgmt-probe.sh                  # belt: every applicable check, push metrics if configured
+#   scripts/mgmt-probe.sh                  # belt: every applicable check, metrics to the textfile dir
 #   MODE=gate scripts/mgmt-probe.sh        # the box-local gate (what mgmt-confirm.service runs)
-#   DRY_RUN=1 scripts/mgmt-probe.sh        # never push (the jail default — see PUSHGATEWAY below)
+#   DRY_RUN=1 scripts/mgmt-probe.sh        # never publish (the textfile dir is absent in the jail anyway)
 #   ROOTS="provisioning" scripts/mgmt-probe.sh
 #
 # Env:
@@ -48,15 +48,28 @@
 #                 terraform.tfvars in the jail's checkout is invisible to a fresh clone)
 #                 ⛔ `main` is LOCAL state until FU-012's out-of-cone copy lands here; planning it
 #                 from the box is a phase-A deliverable, not a probe.
-#   PUSHGATEWAY   e.g. http://192.168.40.x:9091 — unset means "do not push" (jail-safe default)
+#   MGMT_TEXTFILE_DIR  node_exporter textfile dir (default /var/lib/node-exporter-textfile); absent
+#                 means "do not publish" — the jail-safe default, as the dir exists only on the box
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos ansible creds
+#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds
+#   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
+#   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
+#   NODE_K8S_JSON      pre-fetched `node_declared_k8s` JSON — the same for the registered/labels/
+#                      taints axes. With NODE_TARGETS_JSON set and this unset, those axes are NOT
+#                      checked: the two halves of a declaration must come from the same source (the
+#                      sentinel passes a PR head's node_install_targets alone)
+#   NODE_DRIFT_OUT     write the node diff's (node, axis) verdicts here, one "<node> <axis>\t<drift|ok>"
+#                      per line — how the management sentinel reuses THIS diff for its install-impact
+#                      line (NODE_TARGETS_JSON = the PR head's declaration; ADR-132 §MB4 layer 2)
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
-[ -n "$REPO" ] && [ -d "$REPO/.git" ] || { echo "FATAL not a checkout: '$REPO'" >&2; exit 1; }
+# `-e`, not `-d`: in a git WORKTREE .git is a file pointing at the real gitdir, and the jail's PR
+# lane runs entirely out of worktrees (a branch is never checked out in the shared tree), so the
+# `-d` form made this script the one thing that could not be exercised before it shipped.
+[ -n "$REPO" ] && [ -e "$REPO/.git" ] || { echo "FATAL not a checkout: '$REPO'" >&2; exit 1; }
 cd "$REPO" || exit 1
 
 # ⚠ systemd does not set $HOME for a system unit without User= (systemd.exec(5)), and BOTH devbox
@@ -66,7 +79,6 @@ export HOME="${HOME:-/root}"
 
 ROOTS="${ROOTS:-provisioning github}"   # github: read-only PAT + Garage state since 2026-09-13 (FU-238)
 TOFU_VAR_DIR="${TOFU_VAR_DIR:-}"
-PUSHGATEWAY="${PUSHGATEWAY:-}"
 TALOS_NODE="${TALOS_NODE:-192.168.2.51}"
 SKIP="${SKIP:-}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -74,6 +86,9 @@ MODE="${MODE:-belt}"
 
 PASS=0 FAIL=0 SKIPPED=0
 declare -a RESULTS=()
+# The node diff publishes per-node gauges rather than one pass/fail, so it accumulates its own
+# (node, axis) pairs: DRIFT = declared and live disagree, DRIFT_OK = they match.
+declare -a DRIFT=() DRIFT_OK=()
 
 log()  { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 skipped() { RESULTS+=("$1 skip"); SKIPPED=$((SKIPPED+1)); log "SKIP $1 — $2"; }
@@ -175,6 +190,226 @@ check_talos() {
   else
     failed talos "MINOR skew: client=$client server=$server"
   fi
+}
+
+# ── check: declared node state vs live (FU-235, ADR-132 §MB4 layer 1) ───────────────────────────
+# `talos_machine_configuration_apply` records DELIVERY, not installation: Talos honours the
+# install-time fields (schematic, install disk, EPHEMERAL VolumeConfig) only on the next install,
+# so state is truthful, `plan` is clean, and the node still runs the wrong image. nx-01 after
+# #1717 is the worked example — `nodeLabels` took, the schematic did not. This check is the diff
+# that sees it: DECLARED (`tofu output node_install_targets`, the same expression the upgrade verb
+# passes as `--image`) vs LIVE (`talosctl version` + the `schematic` extension), one line and one
+# gauge per node per axis.
+#
+# ⚠ It reports, it never FAILS the probe. A declared-vs-live version gap is the normal state of a
+# rollout in progress ("the progress bar, not drift" — tofu/variables.tf), and a belt that reds the
+# box every time a node is mid-upgrade teaches everyone to ignore it. The judgement of "too long"
+# belongs to the alerts with a `for:` that read mgmt_node_drift (argocd/resources/mgmt-metrics/;
+# the version axis stays with the fleet-split rule in argocd/resources/talos-substrate/).
+check_nodes() {
+  skip_requested nodes && { skipped nodes "SKIP requested"; return; }
+  local statef="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}"
+  local tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
+  [ -f "$tc" ] || { skipped nodes "no talosconfig at $tc"; return; }
+  local declared
+  if [ -n "${NODE_TARGETS_JSON:-}" ]; then
+    # The declared half, pre-fetched. Exists so the diff can be exercised from the jail (where the
+    # main state deliberately is not) against the live fleet — `devbox run mgmt-tf -- output -json
+    # node_install_targets > /tmp/d.json` then NODE_TARGETS_JSON=/tmp/d.json.
+    declared="$(cat "$NODE_TARGETS_JSON")" || { failed nodes "cannot read $NODE_TARGETS_JSON"; return; }
+  else
+    [ -f "$statef" ] || { skipped nodes "no main state at $statef — this check runs on the box"; return; }
+    # ⚠ The box's OWN checkout has never had the main root initialised — only the apply clone
+    # (/var/lib/mgmt/apply/homelab) is, because that is where mgmt-tf and mgmt-apply run. The
+    # first real run of this check on the box therefore died with "Required plugins are not
+    # installed" (2026-09-21, found by starting mgmt-belt by hand right after #1828 merged).
+    # Decided UP FRONT from the missing directory, exactly as check_tofu does — not by retrying
+    # on any failure, which would also swallow a real regression (review, #1831): a renamed or
+    # removed `node_install_targets` must stay a loud FAIL.
+    if [ ! -d "$REPO/tofu/.terraform" ]; then
+      log "nodes: main root not initialised in this checkout — init once (-lockfile=readonly)"
+      if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
+        # The one case that is a tool problem rather than a finding (the sentinel's 2026-08-19
+        # discrimination): the probe could not read its input, so it has not seen the fleet.
+        # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
+        skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
+      fi
+    fi
+    declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
+      failed nodes "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
+  fi
+  # The output is a map node => {ip, class, installer, schematic, version}; anything else means the
+  # output moved and this check is reading a shape that no longer exists.
+  # EPHEMERAL placement's declared half rides node_install_targets (`.ephemeral.disk_selector`,
+  # #1858). "?" = the field is absent (a state written before that output grew it) → not checked,
+  # never read as "no selector", which would false-drift nx-01.
+  local nk sk
+  while IFS=$'\t' read -r nk sk; do [ -n "$nk" ] && DK_SEL[$nk]="$sk"; done \
+    <<< "$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, (if (.value | has("ephemeral")) then (.value.ephemeral.disk_selector // "-") else "?" end)] | @tsv' 2>/dev/null)"
+  # The Kubernetes-facing half (registered/labels/taints) is its own output, so a missing one
+  # degrades those axes to "not checked" without touching the others.
+  local dk="" k8s_note=""
+  if [ -n "${NODE_TARGETS_JSON:-}" ] && [ -z "${NODE_K8S_JSON:-}" ]; then
+    k8s_note=" (registered/labels/taints not checked: no NODE_K8S_JSON beside NODE_TARGETS_JSON)"
+  else
+    dk="$(node_declared_k8s "$statef")"
+    [ -n "$dk" ] || k8s_note=" (registered/labels/taints not checked)"
+  fi
+  local rows
+  rows="$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, .value.ip, .value.version, .value.schematic] | @tsv' 2>/dev/null)" || true
+  [ -n "$rows" ] || { failed nodes "node_install_targets did not parse as the expected map"; return; }
+  local n=0 drift=0 node ip dver dsch live_v live_s clean
+  while IFS=$'\t' read -r node ip dver dsch; do
+    [ -n "$node" ] || continue
+    n=$((n+1))
+    clean="$(tool talosctl --talosconfig "$tc" -n "$ip" version --short | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
+    live_v="$(printf '%s' "$clean" | awk '/Tag:/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
+    if [ -z "$live_v" ]; then
+      # A declared node that does not answer at all is the EXTREME case of this diff, and the one
+      # that went unseen for ~12 h on 2026-09-21 (wk-metal-02 declared, no Node object, nothing
+      # fired). It is reported as its own axis, not folded into "version".
+      DRIFT+=("$node reachable"); drift=$((drift+1)); continue
+    fi
+    DRIFT_OK+=("$node reachable")
+    [ "$live_v" = "$dver" ] && DRIFT_OK+=("$node version") || { DRIFT+=("$node version"); drift=$((drift+1)); }
+    live_s="$(tool talosctl --talosconfig "$tc" -n "$ip" get extensions | awk '$(NF-1)=="schematic"{print $NF; exit}')"
+    if [ -z "$live_s" ]; then
+      DRIFT+=("$node schematic"); drift=$((drift+1))
+    elif [ "$live_s" = "$dsch" ]; then
+      DRIFT_OK+=("$node schematic")
+    else
+      DRIFT+=("$node schematic"); drift=$((drift+1))
+    fi
+    # EPHEMERAL placement (install-time, nx-01 2026-09-16).
+    case "${DK_SEL[$node]-?}" in
+      "?") log "nodes: $node declares no .ephemeral (pre-#1858 state) — ephemeral_disk not checked" ;;
+      -)   node_ephemeral_disk "$node" "$ip" "" && drift=$((drift+EPH_GAP)) ;;
+      *)   node_ephemeral_disk "$node" "$ip" "${DK_SEL[$node]}" && drift=$((drift+EPH_GAP)) ;;
+    esac
+  done <<< "$rows"
+  [ -n "$dk" ] && { node_k8s_axes "$dk"; drift=$((drift+K8S_GAPS)); }
+  local detail=""
+  [ "$drift" -gt 0 ] && detail=" — $(printf '%s, ' "${DRIFT[@]}" | sed 's/, $//')"
+  passed nodes "$n declared, $drift axis-level gap(s)${k8s_note}$detail"
+}
+
+# ── node diff, the Kubernetes-facing axes (FU-235's second step) ───────────────────────────────
+# DECLARED = `tofu output node_declared_k8s` (tofu/outputs.tf — the labels/taints tofu itself
+# declares) and node_install_targets' `.ephemeral.disk_selector`; LIVE = the Node objects (kubectl) and the Talos
+# `volumestatus` / `systemdisk` / `disks` resources. Axes, one gauge each per node:
+#   registered      a Node object exists — the wk-metal-02 case (2026-09-21): the machine
+#                   answered talosctl, the cluster had no Node for ~12 h
+#   labels / taints compared over the UNION of the keys any node declares, so a declared key
+#                   missing live and an undeclared one present live (an imperative
+#                   `kubectl label`) are both drift; keys nobody declares are not looked at
+#   ephemeral_disk  EPHEMERAL sits where the VolumeConfig says: no selector = the system disk;
+#                   a selector = OFF the system disk AND, for the `disk.<field> == "<value>"` form
+#                   (the only one in machines.yaml), that disk's field matching
+# A read failure (kubectl, a talosctl get) emits NO series for that axis rather than a 1: the
+# probe did not see the fleet, and a false drift is worse than an absent one (the stale-belt
+# alert watches the probe itself).
+declare -A DK_SEL=()
+EPH_GAP=0 K8S_GAPS=0
+
+# Read the declaration once. Prints the JSON, or nothing (with a log line) when it is unreadable.
+node_declared_k8s() {
+  local statef="$1" out
+  if [ -n "${NODE_K8S_JSON:-}" ]; then
+    cat "$NODE_K8S_JSON" 2>/dev/null || log "nodes: cannot read NODE_K8S_JSON=$NODE_K8S_JSON"
+    return
+  fi
+  [ -f "$statef" ] || return 0
+  out="$(tool tofu -chdir=tofu output -state="$statef" -json node_declared_k8s)" || {
+    # Transitional, and named: the output exists in git before the apply loop has written it
+    # into the state (it applies output-only plans on its next tick, mgmt-apply.sh).
+    log "nodes: node_declared_k8s unreadable — registered/labels/taints axes not checked: $(printf '%s' "$out" | tail -1)"
+    return 0; }
+  printf '%s' "$out" | tool jq -e 'type == "object"' >/dev/null 2>&1 || {
+    log "nodes: node_declared_k8s is not a map — registered/labels/taints axes not checked"; return 0; }
+  printf '%s' "$out"
+}
+
+node_ephemeral_disk() {
+  local node="$1" ip="$2" sel="$3" tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}" parent sysd field want got
+  EPH_GAP=0
+  parent="$(tool talosctl --talosconfig "$tc" -n "$ip" get volumestatus EPHEMERAL -o jsonpath='{.spec.parentLocation}' | grep -o '/dev/[A-Za-z0-9._/-]*' | tail -1)"
+  sysd="$(tool talosctl --talosconfig "$tc" -n "$ip" get systemdisk -o jsonpath='{.spec.devPath}' | grep -o '/dev/[A-Za-z0-9._/-]*' | tail -1)"
+  if [ -z "$parent" ] || [ -z "$sysd" ]; then
+    log "nodes: $node EPHEMERAL/system disk unreadable — ephemeral_disk not checked"; return 1
+  fi
+  if [ -z "$sel" ]; then
+    [ "$parent" = "$sysd" ] && { DRIFT_OK+=("$node ephemeral_disk"); return 0; }
+    log "nodes: $node EPHEMERAL on $parent, declared on the system disk ($sysd)"
+    DRIFT+=("$node ephemeral_disk"); EPH_GAP=1; return 0
+  fi
+  if [ "$parent" = "$sysd" ]; then
+    log "nodes: $node EPHEMERAL on the system disk $sysd, declared off it ($sel)"
+    DRIFT+=("$node ephemeral_disk"); EPH_GAP=1; return 0
+  fi
+  if [[ "$sel" =~ ^[[:space:]]*disk\.([a-z_]+)[[:space:]]*==[[:space:]]*\"([^\"]*)\"[[:space:]]*$ ]]; then
+    field="${BASH_REMATCH[1]}"; want="${BASH_REMATCH[2]}"
+    got="$(tool talosctl --talosconfig "$tc" -n "$ip" get disks "${parent#/dev/}" -o jsonpath="{.spec.$field}" | tail -1 | tr -d '\r')"
+    if [ "$got" = "$want" ]; then DRIFT_OK+=("$node ephemeral_disk")
+    else log "nodes: $node EPHEMERAL on $parent ($field=$got), declared $sel"; DRIFT+=("$node ephemeral_disk"); EPH_GAP=1; fi
+  else
+    # A selector this parser does not model: the off-system-disk half above is all it asserts.
+    log "nodes: $node selector '$sel' not modelled — asserted only that EPHEMERAL is off the system disk"
+    DRIFT_OK+=("$node ephemeral_disk")
+  fi
+  return 0
+}
+
+node_k8s_axes() {
+  local dk="$1" live rows node reg ldiff tdiff
+  K8S_GAPS=0
+  # A FILE, not --argjson: the Node list (status.images included) is past the kernel's 128 KiB
+  # single-argument limit. stderr dropped, not merged (tool() merges it): a kubectl warning would
+  # corrupt the JSON.
+  # --kubeconfig EXPLICIT, like --talosconfig everywhere above: devbox.json's env block sets
+  # KUBECONFIG=$PWD/tofu/kubeconfig inside `devbox run`, overriding the box's /var/lib/mgmt one —
+  # the first box run hit localhost:8080 (2026-09-21; the jail has tofu/kubeconfig, so it passed).
+  live="$(mktemp)" || return 0
+  devbox run --quiet -- kubectl --kubeconfig "${KUBECONFIG:-$REPO/tofu/kubeconfig}" get nodes -o json >"$live" 2>/dev/null
+  tool jq -e '.items | type == "array"' "$live" >/dev/null 2>&1 || {
+    rm -f "$live"; log "nodes: kubectl get nodes failed — registered/labels/taints axes not checked"; return 0; }
+  # One row per declared node: name, present|absent, label diff, taint diff ("-" = none — bash
+  # `read` collapses empty tab-separated fields).
+  # The program goes in a FILE too: `devbox run` re-parses its arguments through a shell, which
+  # expanded every jq `$var` to nothing and joined the lines (found running this from the jail).
+  local prog; prog="$(mktemp)" || { rm -f "$live"; return 0; }
+  cat >"$prog" <<'JQ'
+. as $d
+| ([$d[].labels | keys[]] | unique) as $lk
+| ([$d[].taints[] | sub("=.*"; "")] | unique) as $tk
+| ($live[0].items | map({key: .metadata.name, value: .}) | from_entries) as $L
+| $d | to_entries[] | .key as $n | .value as $v
+| if $L[$n] == null then [$n, "absent", "-", "-"]
+  else
+    ($L[$n].metadata.labels // {}) as $ll
+    | ([$lk[] | select(($ll[.] // null) != ($v.labels[.] // null))
+        | "\(.) declared=\($v.labels[.] // "none") live=\($ll[.] // "none")"] | join("; ")) as $ld
+    | ([$L[$n].spec.taints[]? | "\(.key)=\(.value // ""):\(.effect)"
+        | select(sub("=.*"; "") as $k | any($tk[]; . == $k))] | sort) as $lt
+    | ($v.taints | sort) as $dt
+    | [$n, "present", (if $ld == "" then "-" else $ld end),
+       (if $lt == $dt then "-" else "declared=\($dt | join(",")) live=\($lt | join(","))" end)]
+  end
+| @tsv
+JQ
+  rows="$(printf '%s' "$dk" | tool jq -r --slurpfile live "$live" -f "$prog")" || {
+    rm -f "$live" "$prog"; log "nodes: the k8s diff did not evaluate — registered/labels/taints axes not checked"; return 0; }
+  rm -f "$live" "$prog"
+  while IFS=$'\t' read -r node reg ldiff tdiff; do
+    [ -n "$node" ] || continue
+    if [ "$reg" = absent ]; then
+      DRIFT+=("$node registered"); K8S_GAPS=$((K8S_GAPS+1)); continue
+    fi
+    DRIFT_OK+=("$node registered")
+    if [ "$ldiff" = "-" ]; then DRIFT_OK+=("$node labels")
+    else DRIFT+=("$node labels"); K8S_GAPS=$((K8S_GAPS+1)); log "nodes: $node labels: $ldiff"; fi
+    if [ "$tdiff" = "-" ]; then DRIFT_OK+=("$node taints")
+    else DRIFT+=("$node taints"); K8S_GAPS=$((K8S_GAPS+1)); log "nodes: $node taints: $tdiff"; fi
+  done <<< "$rows"
 }
 
 # ── check: the OPNsense play still parses and connects (--check, no writes) ──────────────────────
@@ -292,35 +527,62 @@ gate_store() {
   fi
 }
 
+# NODE_DRIFT_OUT: the diff's verdicts as data, for a caller that is not Prometheus (mgmt-sentinel.sh)
+dump_drift() {
+  [ -n "${NODE_DRIFT_OUT:-}" ] || return 0
+  local d
+  { for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && printf '%s\tdrift\n' "$d"; done
+    for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && printf '%s\tok\n' "$d"; done; } >"$NODE_DRIFT_OUT" || true
+}
+
 # ── publish ─────────────────────────────────────────────────────────────────────────────────────
 # Same shape as the Garage write probe: the verdict AND a last-run timestamp, so a staleness alert
-# catches "the box is wedged" and not only "the box says no".
+# catches "the box is wedged" and not only "the box says no". TRANSPORT (FU-252, ruled 2026-09-21):
+# node_exporter's textfile collector on the box, scraped by the cluster Prometheus as the static
+# job `mgmt-node` (argocd/resources/mgmt-metrics/) — the same one mgmt-apply.sh writes through.
+# One file PER MODE with a `mode` label, so the gate and the belt never overwrite each other.
+TEXTDIR="${MGMT_TEXTFILE_DIR:-/var/lib/node-exporter-textfile}"
 publish() {
   local ts; ts="$(date -u +%s)"
-  if [ "$DRY_RUN" = "1" ] || [ -z "$PUSHGATEWAY" ]; then
-    log "not pushing (DRY_RUN=$DRY_RUN, PUSHGATEWAY=${PUSHGATEWAY:-unset})"
+  if [ "$DRY_RUN" = "1" ] || [ ! -d "$TEXTDIR" ]; then
+    log "not publishing (DRY_RUN=$DRY_RUN, textfile dir $TEXTDIR $([ -d "$TEXTDIR" ] && echo present || echo absent))"
     return 0
   fi
-  local body=""
+  local m="mode=\"$MODE\"" body=""
+  body+="# HELP mgmt_probe_last_run_timestamp Unix time the probe last finished (any verdict)."$'\n'
   body+="# TYPE mgmt_probe_last_run_timestamp gauge"$'\n'
-  body+="mgmt_probe_last_run_timestamp $ts"$'\n'
+  body+="mgmt_probe_last_run_timestamp{$m} $ts"$'\n'
+  body+="# HELP mgmt_probe_checks Checks by result in the last run."$'\n'
   body+="# TYPE mgmt_probe_checks gauge"$'\n'
-  body+="mgmt_probe_checks{result=\"pass\"} $PASS"$'\n'
-  body+="mgmt_probe_checks{result=\"fail\"} $FAIL"$'\n'
-  body+="mgmt_probe_checks{result=\"skip\"} $SKIPPED"$'\n'
+  body+="mgmt_probe_checks{$m,result=\"pass\"} $PASS"$'\n'
+  body+="mgmt_probe_checks{$m,result=\"fail\"} $FAIL"$'\n'
+  body+="mgmt_probe_checks{$m,result=\"skip\"} $SKIPPED"$'\n'
+  body+="# HELP mgmt_probe_check 1 per check of the last run, labelled with its status."$'\n'
+  body+="# TYPE mgmt_probe_check gauge"$'\n'
   local r name status
   for r in "${RESULTS[@]}"; do
     name="${r% *}"; status="${r##* }"
-    body+="mgmt_probe_check{check=\"$name\",status=\"$status\"} 1"$'\n'
+    body+="mgmt_probe_check{$m,check=\"$name\",status=\"$status\"} 1"$'\n'
   done
-  if printf '%s' "$body" | curl -sf --max-time 10 --data-binary @- \
-      "$PUSHGATEWAY/metrics/job/mgmt-probe/instance/$(uname -n)" >/dev/null; then
-    log "pushed to $PUSHGATEWAY"
+  # One series per (node, axis), both states present: a 0 is a positive statement that the node
+  # was checked and matched, which "no series" cannot make.
+  if [ ${#DRIFT[@]} -gt 0 ] || [ ${#DRIFT_OK[@]} -gt 0 ]; then
+    body+="# HELP mgmt_node_drift 1 = declared and live disagree on this axis, 0 = checked and matched (FU-235)."$'\n'
+    body+="# TYPE mgmt_node_drift gauge"$'\n'
+    local d
+    for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 1"$'\n'; done
+    for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 0"$'\n'; done
+  fi
+  # Atomic (tmp + rename in the same dir — the collector must never read a half file). Never fail
+  # the probe on a reporting failure: the deadman's verdict is about the BOX, and Prometheus is
+  # in-cluster — exactly the thing that may be down. (The staleness alert notices, from the other side.)
+  local tmp
+  if tmp="$(mktemp "$TEXTDIR/.mgmt_probe_$MODE.XXXXXX" 2>/dev/null)" \
+      && printf '%s' "$body" >"$tmp" && chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_probe_$MODE.prom"; then
+    log "published $TEXTDIR/mgmt_probe_$MODE.prom"
   else
-    # Never fail the probe on a reporting failure: the deadman's verdict is about the BOX, and
-    # Prometheus is in-cluster — exactly the thing that may be down. (The staleness alert is what
-    # notices this, from the other side.)
-    log "WARN could not push metrics (reporting only, verdict unaffected)"
+    [ -n "${tmp:-}" ] && rm -f "$tmp"
+    log "WARN could not write metrics (reporting only, verdict unaffected)"
   fi
 }
 
@@ -341,6 +603,8 @@ case "$MODE" in
     have devbox || { log "FATAL devbox not on PATH — the toolchain pin is unreachable"; exit 1; }
     check_tofu
     check_talos
+    check_nodes
+    dump_drift
     check_ansible
     check_creds
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the
