@@ -935,9 +935,11 @@ advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/r
 2026-09-23).** Every ruling lands as a store row: a member's is its disposition row, a finding's
 is the `⇒` suffix `rule` writes on its entry, and the ride itself is ONE header line —
 `bash /work/homelab/agents/goal-findings.sh checkpoint <owner/repo> <goal-n> "<ISO ts>
-(<triggers>) <n> minted · <m> folded · <k> dropped · <j> deferred"` — replaced in place. A ride
-that changed nothing stamps `… no change` and writes nothing else, so the timeline does not
-grow. Reasoning goes where it is actionable: a minted child's body says why it exists, a
+(<triggers>) <n> minted · <m> folded · <k> dropped · <j> deferred"` — replaced in place. **That
+stamp is the LAST act of every ride, whatever fired — (a), (b), (c), (e) or an assembly-cr
+alike, not only a store-disposing ride** (theme #1768's assembly ride, 2026-09-23T08:27Z, wrote
+its index row and its finding and skipped it). A ride that changed nothing stamps `… no change`
+and writes nothing else, so the timeline does not grow. Reasoning goes where it is actionable: a minted child's body says why it exists, a
 fold/drop reason is the few words after the arrow, the rest is the transcript's
 (`s3://agent-transcripts/`). Why: twelve prose rulings on Goal #1640 averaged 6 KB each — 70 KB
 of re-derived evidence nobody read, four of them ruling one row or nothing — and pushed the
