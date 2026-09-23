@@ -157,7 +157,11 @@ cluster-internal plumbing) and is gone. Alerts, in `argocd/resources/mgmt-metric
 each axis may legitimately differ: `MgmtNodeMissing` (reachable/registered, 2 h — longer than a
 reinstall window), `MgmtNodeLiveStateDrift` (labels/taints, 1 h — applied live), `MgmtNodeInstallDrift`
 (schematic/ephemeral_disk, 24 h — only a window fixes them), and `MgmtBeltStale` /
-`MgmtBeltMetricsAbsent` for the belt itself. The **version** axis has no box-side alert:
+`MgmtBeltMetricsAbsent` for the belt itself. **`MgmtBeltCheckFailing` (2 h = 8 ticks) reads the
+belt's own VERDICTS** — `mgmt_probe_check{check,status}`, published since the beginning with no
+rule consuming it, so a check could fail on every tick and say so to nobody: the `talos` skew
+check did exactly that from the 2026-09-22 move to v1.14.1 until a seat ran the unit by hand
+([FU-286](follow-ups.md)). The **version** axis has no box-side alert:
 `TalosFleetVersionSplit` (`argocd/resources/talos-substrate/`, `for: 24h`) already owns the
 stalled-rollout case from `kube_node_info`, with no transport at all.
 
