@@ -198,11 +198,11 @@ if [ -n "${LOOP_NS_ARG:-}" ]; then
   # homelab#617: split assignment from export so the curl status reaches the || guard. If `export`
   # masks the curl's exit (the old form), a blind coordinator starts. The assignment propagates
   # the failure, triggering the abort.
-  LOOP_FETCH="GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator\")\" || { echo 'FATAL: loop-git token fetch refused/failed — not running blind'; exit 1; }; export GH_TOKEN; "
+  LOOP_FETCH="GH_TOKEN=\"\$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator\")\" || { echo 'FATAL: loop-git token fetch refused/failed — not running blind'; exit 1; }; export GH_TOKEN; "
   # homelab#1095/ADR-119: the issues-only homelab INTAKE token (dedup-and-extend on the platform
   # repo). NON-FATAL by design — absent/refused degrades to the old create-only behavior, never a
   # new hard dependency (the #1136 clone-token precedent).
-  LOOP_FETCH="${LOOP_FETCH}GH_TOKEN_INTAKE=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=intake\")\" || { echo 'WARN: intake token fetch failed — homelab issue mutations degrade to create-only (homelab#1095)'; GH_TOKEN_INTAKE=\"\"; }; export GH_TOKEN_INTAKE; "
+  LOOP_FETCH="${LOOP_FETCH}GH_TOKEN_INTAKE=\"\$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=intake\")\" || { echo 'WARN: intake token fetch failed — homelab issue mutations degrade to create-only (homelab#1095)'; GH_TOKEN_INTAKE=\"\"; }; export GH_TOKEN_INTAKE; "
   # <<<REPLAY:loop-fetch-guard<<<
 else
   LOOP_FETCH=""

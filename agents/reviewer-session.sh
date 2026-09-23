@@ -184,7 +184,7 @@ POD_SA="default"
 LOOP_FETCH=""
 if [ -n "${LOOP_NS_ARG:-}" ]; then
   POD_SA="agentstack-loop"
-  LOOP_FETCH="export GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=reviewer\")\" || { echo 'FATAL: loop-reviewer token fetch refused/failed — not reviewing blind'; exit 1; }; "
+  LOOP_FETCH="export GH_TOKEN=\"\$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=reviewer\")\" || { echo 'FATAL: loop-reviewer token fetch refused/failed — not reviewing blind'; exit 1; }; "
 fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper

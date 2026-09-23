@@ -1147,7 +1147,7 @@ spec:
                           # 2026-09-02 (the #1136 idiom sweep, incident postmortem): SOFT token fetch — this
                           # template had no GH_TOKEN at all, and anonymous git from our IP 401-throttles under
                           # load. Absent/refused token degrades to the old anonymous clone, never a new FATAL.
-                          GH_TOKEN="$(curl -fsS --max-time 10 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator" 2>/dev/null || true)"
+                          GH_TOKEN="$(curl -fsS --max-time 10 --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator" 2>/dev/null || true)"
                           _hu="https://github.com/teststuffstash/homelab.git"; _mu="https://github.com/teststuffstash/{{ $xr.spec.mainRepo }}.git"
                           _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
                           timeout 120 git clone -c "$_ah" --depth 1 -b master "$_hu" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
