@@ -1,0 +1,10 @@
+# Per-drive SMART for the hypervisor (FU-284): one run writes smart.prom for node_exporter's
+# textfile collector. Driven by smart-textfile-metrics.timer. Managed by
+# ansible/roles/pve-node-exporter — edit there.
+[Unit]
+Description=SMART textfile metrics (per-drive health, wear, link speed) for node_exporter
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/smart-textfile-metrics.py /var/lib/prometheus/node-exporter/smart.prom

@@ -9,6 +9,26 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-23 ~10:30Z — write-back-is-the-store LIVE and proven; arc in TICK-LOG).**
+  DONE this sitting: PR#1933/#1936 (play), #1934 (theme #1768 assembly, CLOSED), #1932 (token broker
+  503 + retries + two masked export-guards), #1929 (rails assembly), #1931 override, #1916. The store
+  on #1640 carries `last-checkpoint:` (09:51Z ride) — the play holds. OPEN: (1) #1651 closes by hand
+  when #1908 reaches master via theme #1907's assembly (#1910 stays unqueued, operator: later).
+  (2) **FU-281** = the trigger side, operator's — finding 36 on #1640's store is the ride's own
+  "woke for nothing" diagnosis, evidence for it. (3) #1905: fix ADR-080 → ADR-091 at the spike's
+  line 41. (4) `GoalTimelineNoisy` is live — a firing means per-ride prose came back; read the authors.
+  (5) Next rollout is the first with the FU-278 workload-health hold (unchanged from 09-22).
+- **⚑ PICKUP (2026-09-22 late — retro r5 + Goal #1906; arc in TICK-LOG; items (2) and the #1768 tail are RESOLVED above).** (1) **Goal #1906** (retro r5's
+  batch container, themed): #1908/#1909/#1911 queued; **#1910 is authored and UNQUEUED on purpose** —
+  it un-banks chainless-redesign's rung-0 corollary (b) for the no-op-after-directive case; the
+  operator reads Goal pin 3 and queues it (`agent/queued`) or rules it deferred on the store. Theme
+  #1907's assembly (`goal/1906-scan → master`, `Fixes #1907`) is the ONE codeowner read; acceptance 5
+  (FSM rows, brief paragraphs, the charter note) rides it. (2) **Subagent outcomes to verify** (they
+  report to the seat; if this file still says so, read the threads): PR#1792 merged + #1781 closed +
+  theme #1768's assembly PR open (`Fixes #1768`, parks on `agents/**` for the seat's read); Goal
+  #1769's #1768 edge removed + theme #1770's members filed and queued. (3) #1651 closes by hand when
+  #1908 lands (lineage rule 5 — it stays under #1101). (4) r5's ADR-103 trigger (bucket-A not falling
+  two weeks → revisit label-carried loop state) is the operator's design sitting — recorded on #1906.
 - **⚑ NEXT (2026-09-22 evening — pickup list done; arc in TICK-LOG).** Garage PDB #1882 LIVE + tested on
   m70s; FU-264 CA rotated in production; FU-195/FU-276 landed. Open: (1) FU-278 LANDED (#1891, 15:41Z) — the next rollout is the first with the workload-health hold. (2) **Operator:** check
   pop-os `~/.talos/config` for the dead identity; #1882's "3 flagged choices" (never recorded). (3)
@@ -829,3 +849,28 @@ standing set below; what differs is cadence and the act rule:
   activated commit / belt / sentinel — settles §MB2's "transport UNBUILT"; offered, not built.
   **Seat next:** FU-012's scoped kubeconfig; FU-237 (c) per-role env; `/fu-sweep` (33 STALE
   archive entries, FU-227 oversize).
+
+- **Oracle handoff inbox drained (2026-09-23 seat, ~12:30–14:00Z; arc in TICK-LOG).** All three
+  new items answered and moved to `done/`; only the operator-parked 09-11 minutark README link
+  is left in `inbox/`. MERGED: **#1942** `.spec.originMark` (PublicRoute edge-asserted origin
+  mark — set+strip in one `http_request_late_transform` ruleset, egress address read from the
+  `wg.teststuff.net` A record by a `cloudflare_dns_records` data source at every reconcile, so
+  the reconciler is provider-terraform's own `--poll=10m` drift loop and there is NO new
+  updater); **#1943** the `oracle-feedback` Grafana datasource (uid + ExternalSecret in
+  `monitoring`); **oracle-iac#970** the free deepseek cell denied on THEIR claim.
+  **OPEN at hand-off: PR#1944** (the model-identity spike + FU-201 (c) third instance + FU-283),
+  auto-merge armed, `REVIEW_REQUIRED` at writing — it lands on its own; check it, don't re-open it.
+  **Owed and visible only to oracle: the origin mark's SERVE-TIME check.** Entitlement at create
+  is not behaviour at serve time (the 09-03 custom-429 precedent). Once oracle-iac sets the knob,
+  the next prober tick either shows `homelab` in the feedback `origin` column or it does not — a
+  null there means the header is not surviving the tunnel hop, the one link that could not be
+  tested without mutating live config. The Result asks them to report either way.
+  **Operator rulings this session, both load-bearing:** (1) a platform decision does not go back
+  to a stack as a menu — the Infisical-publish shape for oracle-iac#953 was RULED, not offered;
+  (2) no small router fix now — "free vs paid and model vs family is a bigger topic, there is a
+  lot of deepseek-flash out there" → written up as `docs/spikes/model-identity-free-vs-paid.md`,
+  with the actionable half on Goal #1640 via FU-201 (c). **Seat next:** FU-283 (hung-CI-run
+  watchdog — pick the 2×p95 belt before the runner-side dig); FU-282 (repoint the origin mark off
+  the WireGuard-named record, needs a live OPNsense apply); and ⚠ our own platform-stack deny
+  `deepseek/deepseek-v4-flash-0731` is INERT against the permaslug-spelled cell — worth checking
+  whether it was ever meant to cover it.

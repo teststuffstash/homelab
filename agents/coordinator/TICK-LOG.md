@@ -10549,3 +10549,234 @@ CP toggle ON; rollout policy = default forward, evidence-ended soak in hours, <1
 - ⚠ `devbox run -- gh` re-parses args under dash: an apostrophe in `--title` swallowed the line
   ("Title is too long"), `scripts/**` globbed and the create silently no-op'd → use
   `gh api repos/<slug>/issues --input <json>`.
+- **Registry commit-refusal (operator relay, 19:1xZ): the report's two proposed actions were one
+  half-fix and one no-op; the thing that cleared it was listed by neither.** oracle-fleet's 18:51Z
+  ert-corpus push died at 19:01:32 with the ADR-121 shape — first `CompleteMultipartUpload` lands,
+  the server-side COPY's commit is refused on quota, registry maps 403 → opaque 500. NOT an
+  untag failure: held was 3 distinct blobs (09-15/09-17/09-22) because the morning release landed
+  07:32 and the nightly untag wasn't due till 02:30. Ran the collector by hand under window
+  `seat-1790104641-7697` (dry run gated at storage level: the two marked manifests were exactly the
+  two tag-served digests) → 42.2 → 31.6 GB, but headroom 19.9 GB, still UNDER the alert's 22 GB.
+  The other half was the failed upload's own 9.8 GiB sitting in `_uploads/` as a COMPLETED object,
+  which `UPLOADPURGING` (1h/15m) dropped by itself at 19:59:28Z → 21.1 GB held, 30.5 GB headroom,
+  alert cleared 20:01:07Z. **Proposed action 2 (cleanup-incomplete-uploads) would have moved
+  nothing:** `garage_bucket_bytes` = 42232648384 equalled the completed-object sum exactly, MPU
+  parts outside it — they are raw disk at rf=3, never quota. Deferred by the operator → FU-279.
+- **Shipped:** #1902 collector Sunday → DAILY 03:00Z, 30 min behind the 02:30Z untag (FU-203's
+  remaining half, on this failure's third firing: 09-07, 09-15→16, 09-22); then `05d5329` for two
+  stale "Sunday" references #1902 itself missed (alert annotation + workspace header — both would
+  have sent a triage after a weekly job that no longer exists; 2 sites enumerated, 2 fixed).
+  ⚠ #1902's first CI was RED and it was mine: the branch referenced FU-279 while that id existed
+  only in an unpushed local commit → dangling ref. Fix = move the tracker entry onto the branch so
+  id and fix land atomically. Root lesson: I had pipe-filtered the lint's exit earlier and read
+  pre-existing STALE-ARCHIVE noise as "master is red too".
+- **Operator reframing, twice, each time correcting a premise of mine (assessment only, nothing
+  applied):** (1) cadence is NOT 2/day-steady — regen went 10h → 1h so fixes ship as development
+  needs, bursty, weekly baseline with spiking active days. A cron reclaim is sized for the average;
+  the cost lands on the spike. (2) "corpus is data → S3" (ADR-121's PVC rejection) is about the
+  corpus in the PIPELINE (staged on Garage, `corpus-image.oci.tar`, Argo artifact passing), NOT the
+  registry's backing store — a category error I repeated. The LAN registry is not canonical (the
+  release dual-pushes ghcr), so its store is rebuildable, which is the pull-through mirrors' class
+  and those sit on PVCs by decision (ADR-080/#116). ADR-121's PVC rejection therefore rests on one
+  real clause (bulk 88% committed — measured today: std has 227G/295G avail) and one misapplied
+  principle. A filesystem backend renames on commit → the double-hold, and today's whole failure
+  class, structurally cannot occur. ⚠ operator then corrected the durability half too: replica=1
+  "rebuild from ghcr" is circular, since ghcr outage resilience is part of why the mirror exists →
+  2-replica `longhorn` (std), which is also FEWER writes/release (21.2 GB) than today's Garage path.
+  ADR-shaped; not written yet.
+- Found by the same read, un-owned: no ADR/spec decides image-as-transport for the corpus (only an
+  explicitly undecided research note); the written cadence is still weekly + an 8-day freshness
+  promise, contradicted by measurement; no pre-flight capacity gate and no retry anywhere in the
+  release path (the 09-08 instance burned 51 min before its 500).
+- ⚠ **A registry GC's block deletions reach the Garage resync queue ~40 min later, on EVERY zone.**
+  First check after the GC looked clean; by 20:05 all three peers read 10079 ≈ the ~10.6k 1 MB
+  blocks deleted, sustaining `GarageDisruptionBlocked` (pre-existing since 17:43Z, but this is the
+  tail). Window held open until it drains rather than closed on a stale diagnosis.
+- **Release landed on the retry, 20:12:57Z–20:20:46Z:** the same commit that 500'd at 19:01 returned
+  **201** (layer), then config blob 201, then `PUT manifests/2026-09-22` 201. Tag now serves a NEW
+  digest `abb5c9ee` (was `32d8280e`) — the same-day re-release under one tag. It fit with ~5 GB of
+  margin ONLY because the collector had freed the 09-15 lineage first; without tonight's reclaim the
+  retry would have died exactly as the first attempt did. The double-hold was visible and transient
+  (46 GB combined mid-copy, then the upload object deleted by the registry itself).
+  ⚠ Bucket is back to 31.6 GB / 3 distinct corpus layers → 19.9 GB headroom, so
+  `RegistryBucketCommitHeadroomLow` re-fires on the next gauge push and clears at 03:00Z on the new
+  daily collector (under the old Sunday slot it would have sat until 09-27). **A second release
+  tonight would fail again** — 19.9 GB against the ~21 GB a commit needs. That is the prune-BEFORE-push
+  ordering gap, not a capacity one.
+- **#1903 (gc-guard) — the bot found a real defect and the contract was FALSE, not just loosely
+  worded.** Header claimed "any error DEFERS"; `main()` caught a tuple, and `parse_ts(None)` raises
+  TypeError when a listing omits LastModified — with `restartPolicy: Never`/`backoffLimit: 0` that
+  fails the initContainer, so the collector never starts and no decision file is written. Sweep still
+  safe, invariant not. Enumerated the class instead of patching the line: **4** escapes (module-level
+  `int(WINDOW_SECONDS)` at IMPORT; parse_ts in recent_uploads; in recent_mpus; `http.client.HTTPException`
+  which is neither URLError nor OSError) → `except Exception`, the sibling probe.py pattern. 7 paths
+  mechanically tested. ⚠ This is the SECOND self-reported-complete thing tonight that wasn't (#1902's
+  stale "Sunday" strings were the first) — `maintenance-window-G1`, resighted twice in one session.
+- **Window `seat-1790104641-7697` force-closed, deliberately, with a known-open item:**
+  `GarageDisruptionBlocked` was still firing. It was NOT mine at close time — pending since 17:43Z
+  (before the window), then briefly fed by my GC's block deletions (all three peers hit ~10079 ≈ the
+  ~10.6k blocks deleted, surfacing ~40 min late), and by 20:1xZ driven by the release push writing
+  new blocks (17510, draining to 12446). Holding the window open would have suppressed responder
+  triage for a condition I was not causing and kept the box reconciler from syncing. Baseline
+  otherwise clean; cilium re-read standalone after a flaky `unknown` in the close output:
+  have=13 missing=0 unknown=0.
+- **☠ NEAR-MISS, and it validates #1904 the hard way.** `registry-garbage-collect-29834100`
+  (scheduled 03:00Z) was created **20:30:03Z** — one second after #1903 merged — because #1902's
+  Sunday→daily widening made today's 03:00Z a MISSED slot, so ArgoCD's sync made the controller fire
+  a catch-up run. It collected immediately, outside any window, 10 min after a release push, with
+  the **pre-#1904 guard**, which answered `PROCEED no _uploads object…` — its blind spot exactly.
+  It deleted the superseded 09-22 lineage (32d8280e + config + layer), which was correct, and was
+  safe ONLY because the new manifest had landed at 20:20:48 so `5fe97e67` was referenced. Had the
+  sync fallen in the 20:13:49→20:20:48 window, the collector would have deleted the layer of the
+  release just pushed — the #116/#240 class, in production. Nine minutes of luck. #1904 (whole-tree
+  signal) is live and verified in the cluster ConfigMap (`PREFIX = "docker/registry/v2/"`).
+  Recorded the generalisable half in the CronJob header: **a schedule change is itself a collection
+  event** — widening a cron creates missed slots that fire on sync, at an arbitrary time.
+- **End state:** bucket **21.0 GB / 17 objects**, headroom **30.5 GB**, two kept layers (09-17 +
+  09-22@`abb5c9ee`) — the design's intended steady state, and room for the next commit's 2× (21.2 GB).
+
+## 2026-09-22 ~20:50–21:30Z — CORPUS session (operator present): retro r5 landed, Goal #1906 authored from it, three parks handed to subagents
+
+- **Operator invocation:** "the retro PR and doing a Goal based on the retro"; then PR#1792, then "unblock #1769, finish the #1768 theme — why has it not queued on its own — use subagents". Full design-agents corpus loaded (`/design-agents`).
+- **PR#1819 (platform r5, two cell reports) — MERGED 21:18Z** on the bot's re-approval. The bot's blocking finding (deepseek F6: `agents/model-scout.sh` "bare `-m "$MODEL"`" — false since `65803ce9`/PR#963) and the coordinator's `changes-requested` arbitration (escalated `blocked-on: human`, two exits offered) were acted on IN-PR by the seat: F6 annotated **CAUSE WRONG** in place, the table row struck VOID, the cell's text kept verbatim (the cross-review contract's datum). No cross-review ride bought. **The symptom was re-probed**: `/router-status` → `rotation` shows source `canary` 14 entries, newest ~1.6 d; the OLD source name `scout-canary` last wrote ~08-17 — a source RENAME at the §M7 v3 redesign, not a stalled rotation. `docs/**` is unowned since the ADR-128 trial ruling (FU-233, "leave as is"), so bot approval + auto-merge landed it after the seat's comment.
+- **Seat read of the rest of r5 (what is already owned):** opus F4 → the 158-ride strike table posted on #1669 as the evidence its re-read waits on (44 % strikes on unsuffixed deepseek-v4-flash vs 0/6 on `:exacto`, n=6 caveat); opus F5 / deepseek F5 (`DEFAULT_ROUNDS` 3→5) = already answered by PR#1650 (caps minted at 2×, thresholds unchanged — both cells scored pre-#1650 rows); opus F6's `state:all` dedup half = #1715 (landed 09-16), its `unknown` half = #1781/#1640 theme 2; deepseek F1/F2 = #1640's retry ladder / per-cell signal; deepseek F3 (pre-push `clause-replay` line) + opus win 1 (`docs-fix` rubric row, #1794) = `.agents/**`, operator-direct, seat notes on the Goal; r4's #1104 still unscored (no post-merge repeat-pair world). Opus KPI: bucket-A 31→15→20, second week without a fall = ADR-103's named trigger to revisit label-carried loop state — recorded on the Goal as the operator's design sitting, not a child.
+- **Goal #1906 "nothing-happened costs no ride — the scan decides the empty cases (retro r5)" AUTHORED + queued** — r5's process-change batch container (the §B2 round container run as a THEMED Goal, ADR-126, instead of a `retro-batch:` stint). Budget 24, human verdict, `Base: master`; theme 1 **#1907 `scan`** on `goal/1906-scan` (cut from master) with **#1908** (IL-T28 reconciles CLOSED+`agent/blocked` on closure-by-merge — absorbs #1651 by lineage rule 5, Fixes link), **#1909** (ci-red HOLDS a master-red / fleet-class red before the counter — class-keyed, `basis=` unread per #1280), **#1910** (first no-op after an ARBITRATE directive re-run once by the launcher, no session — **UNQUEUED**: it un-banks the charter's rung-0 corollary (b) for this case only, the one design fork, operator reads pin 3 first); singleton **#1911** (`retro-rank.py` drops+counts closed-with-merged-PR rows, `Base: master`). Edges #1909←#1908, #1910←#1909; dispositions on the Goal's store; `goal-lint` 0 FAIL / 0 WARN; #1908/#1909/#1911 queued (`agent-fix`+`agent/queued`+`task/*`), doorbell NOT rung by the seat (the exporter's queued-label edge rings — #505).
+- **Three parks handed to two subagents (fresh context; the seat's was ~full):** (1) **PR#1792** (#1781, Goal #1640 acceptance 5 scan half, base `goal/1640-launcher`) — the operator's 09-20 `devbox.lock` revert (4edf75a7) cleared the governance red; the FIRST complete CI verdict then failed `merge-path-lint`: IL-T29 `/test\("Resumable branch pushed:"\)/` and IL-T30 `/budget-exhausted-key\|budget-403-key/` anchors no longer match the re-keyed `coordinator-scan.sh` + a stale generated `issue-lifecycle-fsm.md` (reproduced in a seat worktree). Subagent: re-anchor the FSM (or fix the scan if the FU-202 key-class exclusion was dropped), lint, push, clear `agent/arbitrate`, pr-wait to merge, then **unpark #1781 by hand** (its `agent/blocked` from the escalate ruling makes C6 skip it — the r5-F1 defect itself) and open/verify theme #1768's assembly PR (`Fixes #1768`). **Why #1768 never queued on its own:** it is not a queue question — three of four members are closed; the last (#1781) sat `agent/blocked` behind PR#1792's red since 09-20. (2) **Goal #1769** — held by the `blockedBy` edge the 09-19 checkpoint wired from #1768 (the Goal declared it) and, to verify, theme #1770 `rails` possibly with no level-3 members minted; subagent removes the edge on the operator's ruling, files/queues the theme members, rings platform.
+- Loop-visible writes this sitting: #1819 merge, #1669 comment, #1906–#1911 (+ edges, store, branch), PR#1819 label/comment. Bookkeeping batched; one push at wind-down.
+
+## 2026-09-23 ~05:50–07:45Z — seat session (operator present): the state after the 09-22 recap, two durable-fix PRs, three parks ruled
+
+- **Operator invocation:** "This did not happen … Look at open PRs and stalled goals for what the state is now", then "Durable fixes for the problems?", then the root-cause correction: *"too much noise, nobody has the time or context to read all of that"*, then "go", then rulings on the five parks.
+- **What the recap's tail left:** PR#1792 merged 22:01Z, #1781 closed, #1917 (checkpoint-minted 21:54Z) merged 22:56Z — theme #1768's assembly PR was NEVER opened; bookkeeping was pushed. Goal #1769: edge removed, theme #1770's four members all merged overnight, assembly PR#1929 opened 02:30Z **CONFLICTING** (207 master commits under the branch); the machine filed #1930 → PR#1931 (master-sync into `goal/1769-rails`), structurally red on `ci`/`iac-sentinel` (its diff is master's 100 commits), parked `agent/blocked` asking for a human override.
+- **Two stalls on Goal #1640, both found in the 05:30Z scan log (Loki) and reproduced:** (1) the Goal's comments JSON is 175 KB; the scan hands it to `epic_dispositions.py` as ONE env var → `Argument list too long` (128 KiB MAX_ARG_STRLEN) → "dispositions unreadable — trigger (c) HELD". (2) theme #1768 all five members closed, branch 0 behind master, but `agent-runtime#142` (ruled deferred 21:54Z, parent #140 → #1780 → #1768) is OPEN and the (e) walk counted states, not rulings. **Operator's root cause: the volume.** Measured: 11 checkpoint rulings on #1640, ~6 KB each (~70 KB); 4 fired on (c) for one member (two within minutes of the previous checkpoint, one a pure re-fire); the (a) rides found ~2/3 of their findings already filed/folded/fixed. Fleet: 19 rulings on six Goals, 11 on this one. The coordinator rail is the subscription, so the router's run store cannot count rides — the timeline is the count.
+- **05:00Z `coordinate-platform` run died before scanning:** loop-git token broker answered 404 on a 10 s k8s API read timeout (`loop-git: resolve failed … The read operation timed out`), served the same ns one second later. Nine other FATALs in 7 d were `curl: (7)` connection-refused during proxy restarts; no fetch site retries.
+- **PR#1933 (seat, auto-merge armed, watched in background):** the checkpoint's write-back is the STORE — `goal-findings.sh rule` (⇒ suffix per finding) + `goal-findings.sh checkpoint` (ONE `last-checkpoint:` header line, replaced in place; a no-change ride stamps and writes nothing else), no prose ruling comment; store read on stdin (`EPIC_DISPOSITIONS_COMMENTS=-`, self-test >128 KiB); trigger (e) prunes `deferred` subtrees, never nominates a deferred member, HOLDS on an unreadable store; three replay rows (goal family 29/29); `goal_timeline_comments` + `GoalTimelineNoisy` (>30 for 1h, triage none) with a promtool behaviour test; FSM IL-T12 three guard rows. **Fair test pending:** the first scan after the merge should open theme #1768's assembly PR on its own — the seat deliberately did NOT open it by hand.
+- **PR#1932 (subagent, in review):** the broker answers 503 + Retry-After on a transient resolve failure, 404 only on a definitive miss; the fetch sites gain `--retry 3 --retry-connrefused`.
+- **Parks ruled by the operator:** #1931 **override-merged 07:35Z** (`--admin --merge`, never squash — a squashed master-sync re-conflicts at assembly); #1929 now updates on its own. #1916 **approved by the seat on a light read** (operator: design-agents corpus load is deprecated for cost until reworked) — bounded top-KEEP re-read, rule #6 on unreadable probes, four-case stub; auto-merge lands it. #1910: "too deep in the woods, not blocking — leave for later" (with #1933 a deferred ruling no longer holds theme #1907). #1905 (operator's spike): bot's one blocking finding = ADR-080 cited where ADR-091 is meant, line 41.
+- **FU-281 filed** — the trigger side (operator-owned: "not enough" → "too much"); prior-art grep negative on `trigger (c)|GOAL_CHECKPOINT_N|checkpoint.*wake`. FU-280 is the spike PR's, counter moved to 282.
+- Side alerts left as is: `AgentDispatchCronWoken` (homelab + oracle-fleet master lanes), `NodeRebootingRepeatedly` nx-01, `GarageBucketQuotaNear` allure-reports, oracle-fleet #706/#707 codeowner parks (oracle's).
+
+## 2026-09-23 ~07:45–10:00Z — seat session, continued: the fair test passed, the assembly rode the loop, two PRs took review rounds
+
+- **PR#1933 merged 08:22Z** (one bot round: the alert description asserted a cause — rewritten as symptom + what-to-check). **Fair test PASSED without a hand:** the 08:23Z doorbell scan read the store (33/33), pruned `agent-runtime#142`, emitted `THEME #1768 complete`, dispatched a checkpoint ride (opus) that opened **assembly PR#1934 at 08:28Z**, auto-merge armed, ONE ADR-103 index row on the Goal and no prose. The racing 08:26Z scan was refused by the FU-146 guard. Two follow-throughs: the ride could not refresh the branch (finding 34: `update-branch` 422 — `goal/**` rulesets, no bypass actor) → the seat pushed the master merge; the ride skipped the `last-checkpoint:` stamp → **PR#1936 merged 09:17Z** (round 1: the seat had duplicated the command — folded into the one paragraph).
+- **#1934's bot round:** BLOCKING in-diff finding — the re-keyed fleet reader fell through to an "us" fault on an all-empty provider. The loop handled it itself: assembly-cr checkpoint → #1937 → PR#1938 merged into the theme branch (fail-closed before classify, three replay rows), the updater merged master in, bot re-approved 09:47Z; **seat codeowner read (light) → APPROVED ~09:55Z**, auto-merge lands it.
+- **PR#1932 (token broker):** the subagent fixed the ADR-103 ratchet red (loop-fetch-guard pins the retry flags) and on the way caught the reviewer launcher's masked fetch guard (`export X="$(…)" || fatal` never fires — the #617 twin). Its second red was environmental: the proxy self-test assumed "no K8s API ⇒ transient", but the ARC runner is in-cluster and the API answers 403 (definitive) — the seat took the PR over (the subagent's watcher had died) and forced the API away for the transient assertions (baa9e0ef). CI pending at writing.
+- **Parks ruled:** #1931 override-merged 07:35Z; #1916 approved + merged; #1910 left; **FU-281** filed (trigger side, operator's). Lesson for the seat's own watches: GitHub keeps a CHANGES_REQUESTED `reviewDecision` until the bot re-reviews the new head — key a watch on a review AT the head, and on CI, never on the decision alone.
+- **Close (10:25Z):** #1934 MERGED 09:53Z (theme #1768 CLOSED), #1932 MERGED 10:20Z after round 2 (the composition renders FOUR fetch sites, one per CronWorkflow template — the subagent had patched only probe's; the review template carried the same masked `export` guard), #1929 MERGED 08:03Z on bot approval (no owned paths). The 09:51Z assembly-cr ride stamped `last-checkpoint:` on #1640's store and diagnosed its own wake as finding 36 — FU-281's first datum from the machine itself.
+
+## 2026-09-23 ~12:30–14:00Z — seat session: the oracle handoff inbox (3 new), all three answered
+
+- **Diagnosed before building, on operator direction.** Three inbox items; the 09-11 minutark
+  README link stayed parked (operator, 09-22). Handoff protocol followed end to end: claim →
+  `doing/` → Result → `done/`.
+- **#1943 MERGED 13:28Z — the `oracle-feedback` Grafana datasource** (oracle-fleet#713). The
+  stack's proposed shape does not work: `grafana.envValueFrom` is a same-ns `secretKeyRef`, and
+  the bridge is closed twice — ESO's Infisical path is read-only BY DESIGN (`eso-reader` viewer)
+  and BY CAPABILITY (`ClusterSecretStore` ReadOnly, `PushSecret` unsupported), with no reflector
+  in-cluster. **Platform ruling, not a menu handed back to the stack** (operator: "I dont want to
+  give the decision back to a stack, this our a platform decision"): Infisical is the source of
+  truth, oracle-iac's Workspace publishes via `crossplane-tf-writer` (ADR-076 — the sleep-iac
+  snore-recorder path, live 98 d, whose own comment says it replaced the manual
+  `infisical-secret` step), CNPG reads the password BACK for `managed.roles`. Nothing copied,
+  ESO stays read-only. `optional: true` on the secretKeyRef (ADR-108 shape) so Grafana starts
+  before the key exists.
+- **#1942 MERGED 13:41Z — `.spec.originMark`, the edge-asserted origin mark** (oracle-fleet#667).
+  Set + strip in ONE `http_request_late_transform` ruleset, profile-agnostic. **The design moved
+  from A (literal IP, rots) to A+D (edge rule, DNS-derived fact) on the operator's question "where
+  would the updater/reconciler be?" — answer: nowhere new.** A `cloudflare_dns_records` data
+  source reads the ddclient A record every reconcile; the reconciler is provider-terraform's own
+  drift poll (`--poll=10m`, jitter 1m, read off the live binary). Fail-closed via `postcondition`.
+  Probed BEFORE building (doctrine: only the API proves entitlement — gotcha 9): the exact two
+  rules created on `minutark.ee`, DELETE 204, zero residue; `http_request_late_transform` was the
+  last free request phase on that zone. Then `tofu validate` + a read-only `tofu plan` through
+  cf-api-proxy that interpolated the live address. **Bot round 1 BLOCKED and was right:**
+  `originMark.value` had `maxLength` but no `pattern` while its sibling `header` did, and both
+  reach generated HCL — pattern added. FU-282 filed (the fact is read from the WireGuard-named
+  record; repointing needs a live OPNsense apply).
+- **oracle-iac#970 MERGED — the free deepseek cell denied, in THEIR repo.** The handoff asked
+  homelab to drop it from a chain in `model-classes.json`; there is no chain — oracle is CHAINLESS
+  and the cell comes from the live rankings rotation, present in none of our curated lists. The
+  only lever is `modelDeny` on the claim. ⚠ Two spellings are load-bearing: the served id carries
+  the PERMASLUG date (`-20260731`), so **our own platform deny spelled `-0731` is INERT against
+  it**; and it must stay an exact id, since `model_family()` collapses `:free` and `:exacto` onto
+  one key (a family deny would kill the `:exacto` cell the 09-14 measurement says to keep).
+- **The strike never reached the router** — `repetition-loop` ∉ `strike_classes`, so nothing was
+  recorded, no cooldown formed, and the router re-picked the cell `[free+half-open]` at 13:05:01Z
+  (#713's "since-excluded" note was not true at the router level). THIRD instance of FU-201 (c)'s
+  built-but-dead class → Goal #1640. **Operator ruled against a small fix now** ("free vs paid and
+  model vs family is a bigger topic, there is a lot of deepseek-flash out there") → PR#1944, the
+  spike `docs/spikes/model-identity-free-vs-paid.md`, + FU-283 for the hung-CI-run watchdog.
+- Measured while spiking (reverted): `never_free` on `xs`+`sm` passes `router-self-test`; adding it
+  to `md` FAILS it — an assertion pins the skip reason to `tier-floor:` and `never_free` is checked
+  first. `md`/`lg` already exclude free, so only two rows would ever need it.
+- ⚠ `publicroute-tf-validate` cannot run in the jail (no docker, per its own header). Substitute
+  used: hand-render the template, `tofu validate` against the pinned provider, then plan through
+  cf-api-proxy. It covers the schema surface; CI owns the Go-template render half.
+- **Post-wind-down (14:1xZ): #712/#713 were still `agent/error` and BOTH sides had stood down.**
+  The oracle session relayed "#724 belongs to homelab, so I'm leaving #712/#713's agent/error and
+  strike resolution untouched" — and #713's own round-4 comment had claimed the seat already
+  cleared it at 13:20Z. Neither was true: the label was live on both. Read the labels instead of
+  either account, verified the deny had actually reached the cluster
+  (`modelDeny: ['deepseek/deepseek-v4-flash-20260731:free']`, Synced/Ready/Responsive) rather
+  than trusting the merge, then stripped both and commented why. ⚠ The ownership seam is the
+  lesson: an FU-200 filing lives on the STACK repo but is the PLATFORM's to close, and its
+  close-out action (strip `agent/error` on the affected issues) has no owner named anywhere —
+  each side can read the split as the other's job. Worth a line in the brief when #1640 touches
+  the reader.
+
+## 2026-09-23 — wk-metal-04 drive bench: four shelf drives measured, one replica co-location, two registers corrected
+
+Operator session, not the loop. Goal was "what drives go where" across the slots freed by the pve
+GPU removal and the NX adapters; it turned into a measurement session because every slot claim in
+both registers was inference.
+
+**Probed before planning.** SMBIOS type 9 off the live Talos nodes, PCIe link widths from sysfs,
+`smartctl` from ephemeral pods. Four register corrections came out of it, two of which had been
+steering decisions: both NX nodes run their NVMe at **x1 of a possible x4** (the adapter cards, not
+the slots); **hp-01 has a free x16** (its 7600p is in the x4); **wk-metal-01 has no PCIe expansion
+at all**, so its Garage zone can never get a dedicated disk. A fifth claim I made mid-session —
+`intel1` on a Gen1 x1 uplink — was wrong and retracted the same hour.
+
+**Three operator rulings, all recorded in the private hardware register:** LP brackets are struck
+as a constraint fleet-wide; the NX noise verdict is closed (it landed 2026-09-16 — six places here
+and two in homelab still read as if the trial were open, and a session reading `machines.yaml`'s
+burn-in comment concluded a Garage zone must not go on nx-02 because the box might leave);
+`nx-01` is the big kata/ARC box and holds no data by role.
+
+**The bench.** All four shelf drives A/B'd on wk-metal-04 over a 200 GiB span, two swaps. The
+headline is that the hardware register's "DRAM cache is the hard filter" **does not survive
+measurement**: the two DRAM-less HMB WD SN530s posted the fleet's best serial durable writes
+(2,524 IOPS / 0.40 ms) while the BC711 — no HMB, so presumably DRAM — was worst at that axis by
+4.5× and best at concurrency by 4×. The filter was learned on the Kingston SA400, a SATA drive,
+and does not transfer to NVMe. Also settled: HMB grant is deterministic (`hmmaxd: 8` × the kernel's
+4 MiB max chunk = 32 MiB, no knob raises it), and the register's "asks 50 MiB" was a 4 KiB-unit
+misread of `hmpre 51200` = 200 MiB. Numbers live in the private register, not here.
+
+**What it cost, and the platform lesson — FU-285.** With both 7600p out ~70 min, Longhorn rebuilt
+all four `bulk` cache volumes onto wk-metal-01 with BOTH copies on one disk (498 G disk, 730 G
+scheduled, 147 %) — the storage ledger's soft-anti-affinity trap, live — **despite
+`replica-replenishment-wait-interval` being raised 600 → 28800 s for exactly that.** So a replica on
+a missing DISK does not follow the same path as one on a down NODE; the knob a future session will
+reach for is the wrong one. Self-repaired on refit (auto-balance onto the returned disks, one
+surplus replica deleted by hand); no data lost, all four re-warmable caches. Warning + `Tracked by`
+added to `runbook.md` §Single worker maintenance, where someone about to pull a drive will read it.
+
+**Restore verified, not assumed:** both 7600p re-adopted by disk UUID with no resync, garage-0 back
+in 45 s with its data intact (3/3 zones, client write-probe green), 4/4 volumes at one copy per
+node, wk-metal-01 back to its exact pre-window 462 G / 93 %, cilium 13/13, no degraded volumes.
+
+**Shipped alongside: fleet-wide disk-health metering (FU-284, PR#1945)** — a `smartctl_exporter`
+DaemonSet on every Talos node plus the same metric names from a textfile collector on both
+hypervisors, nine promtool-fixtured belts alerting on defect GROWTH rather than absolute counts
+(the fleet buys used drives with disclosed defects). Two reds fixed in the PR: `iac-no-cluster-scoped`
+correctly refused a new Namespace (rehomed into `node-maintenance`, already in the baseline and
+already privileged-PSA), and the reviewer caught that the rehome's `*.yaml` glob skipped the two
+non-`.yaml` fixture files, leaving the alert's remediation text pointing at a deleted namespace
+while CI stayed green — the drift pin compares expr+for only, so a stale annotation in any of the
+41 hand-copies is invisible to it. That gap is a class issue, left unfixed and named.
+
+**Session hygiene, badly:** three hand-written alert watches, four defects — a probe that silently
+read nothing for 30 min (no `wget` in the prometheus container), the zsh word-split trap
+re-committed, and a replacement armed without stopping the original. GAPS
+`maintenance-window-G2` now carries three sightings and zero working copies; the entry's own
+conclusion — ship `maint watch` as a verb — is overdue.

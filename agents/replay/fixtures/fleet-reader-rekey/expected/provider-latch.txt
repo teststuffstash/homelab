@@ -1,0 +1,9 @@
+CALL curl -fsS --max-time 5 http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status
+CALL gh api repos/teststuffstash/homelab/issues/401/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/402/comments?per_page=100
+OUT PROVIDER-LATCHES deepseek/deepseek-v4-flash|open-inference 
+OUT MODEL-NOMINATIONS <empty>
+OUT US-CASE <empty>
+OUT ORPHAN [homelab] ⚠ FLEET STRIKE (provider): error_class=timeout — pair deepseek/deepseek-v4-flash|open-inference is COOLED by the router (pair_cooldowns); the router holds the state, no issue labelled
+OUT REACHED: end
+RC 0

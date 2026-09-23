@@ -10,7 +10,11 @@ node is a repeatable recipe. See `docs/runbook.md` for general ops.
   (LXC) + `ansible/matchbox*.yml` (install + TLS). Serves HTTP `:8080` (read API + `/assets`) and
   gRPC `:8081` (for the `poseidon/matchbox` tofu provider).
 - **Boot lives on the LXC, not OPNsense** — a dnsmasq **proxy-DHCP + TFTP** on the LXC
-  (`ansible/matchbox-proxydhcp.yml`); OPNsense's dnsmasq plugin won't emit the bootfile.
+  (`ansible/matchbox-proxydhcp.yml`); OPNsense's dnsmasq plugin won't emit the bootfile. The three
+  boot files dnsmasq hands out are *staged* by `ansible/matchbox-ipxe-tftp.yml`, which runs no TFTP
+  server of its own and ends by fetching each one back over TFTP — `--tags verify` is that probe
+  standalone. Nothing tested this before 2026-09-23 and `undionly.kpxe` was missing for months, so
+  every BIOS PXE client silently fell back to disk (FU-261).
 - **Disk-by-default, install-on-match.** Chain: PXE ROM → iPXE binary (`undionly.kpxe` BIOS /
   `ipxe.efi` UEFI) → `http://192.168.2.30:8080/assets/boot-or-disk.ipxe` → Matchbox `/ipxe`. A MAC
   with a **`matchbox_group`** matches the `talos-worker` profile → boots Talos **maintenance mode**
@@ -204,6 +208,17 @@ ephemeral and must never be committed.
 on the node is a *stuck upgrade*, not data loss; clear it first with
 `scripts/node-maintenance.sh settle <node>`. Never pass `--legacy`: that forces the old node-side
 drain, the one siderolabs/talos#9882 reported ignoring PDBs.
+
+**A version move has three satellites outside `tofu/`** — the Matchbox PXE assets
+(`ansible/group_vars/matchbox.yml`), the Matchbox boot profile
+(`tofu/provisioning/variables.tf`) and the USB fallback (`scripts/talos-usb.sh`). All three must
+follow `var.talos_version_worker`, and a "keep in lockstep" comment was the only thing holding
+them: the profile served v1.13.2 while the fleet ran v1.13.10, and the next box to PXE-boot got
+the `page_table_check` kernel and never came up ([FU-246](follow-ups.md), 2026-09-21); the bump that fixed it drifted
+again a day later when the fleet moved to v1.14.1, and `talos-usb.sh` had been missed entirely.
+`devbox run machines-lint` now fails naming each stale pin and the apply that follows it — the
+asset download (`ansible/matchbox-talos-assets.yml`) and
+`tofu -chdir=tofu/provisioning apply`. CI runs that lint, so the drift cannot reach master.
 
 ## Recovering a node whose INSTALLED config is broken
 

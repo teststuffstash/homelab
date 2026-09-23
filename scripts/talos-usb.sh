@@ -13,7 +13,7 @@
 # ansible/matchbox-talos-assets.yml so USB-onboarded nodes match PXE-onboarded ones.
 set -euo pipefail
 
-TALOS_VERSION="${TALOS_VERSION:-v1.13.2}"
+TALOS_VERSION="${TALOS_VERSION:-v1.14.1}"
 TALOS_SCHEMATIC="${TALOS_SCHEMATIC:-613e1592b2da41ae5e265e8789429f22e121aab91cb4deb6bc3c0b6262961245}"
 ISO_URL="https://factory.talos.dev/image/${TALOS_SCHEMATIC}/${TALOS_VERSION}/metal-amd64.iso"
 OUT="${TALOS_ISO_OUT:-/tmp/talos-${TALOS_VERSION}-metal-amd64.iso}"

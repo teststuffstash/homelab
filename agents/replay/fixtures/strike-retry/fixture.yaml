@@ -1,0 +1,61 @@
+# strike-retry — Goal #1640 acceptance 4: the launcher retries a dead ride at the SAME round.
+#
+# CONDITION UNDER REPLAY. A ride that dies without producing anything used to hand back to the scan
+# for a coordinator hop — a reasoning-tier session to re-derive "infra, not a round; walk the chain;
+# ride again". The launcher's terminal block now takes that decision itself, on a four-conjunct
+# predicate (all required):
+#
+#   (1) the run posted `AGENT_STRIKE:` — the launcher's own line (STRIKE_LINE) or the pod's
+#       (STRIKE_BY_POD, agent-finalize's in-pod strike);
+#   (2) the salvage verdict is `none` — computed exactly as agent-finalize's `resumable_branch()`
+#       does (stats.salvaged_branch → pushed; WORK_BRANCH → resuming; stats.salvage_undetermined →
+#       unknown; else none). A pushed/resuming/unknown verdict is NOT a "no" and never retries;
+#   (3) the strike's `error_class` is SERVING-SHAPED — a member of the router's SERVING_CLASSES
+#       (read out of the /router-status payload the FU-088 capacity probe already fetched, never a
+#       second copy of the set) or `turn-cap`;
+#   (4) attempts are under the cap — one automatic retry per `(model, provider, class)` cell, two
+#       per task; the counters ride the re-run's environment, so they survive it.
+#
+# THE CONTRACT, one leg each:
+#   fires-serving-timeout   a serving class (timeout), salvage none, no prior attempt ⇒ the clause
+#                           re-runs the round: the CALL carries the cell and the incremented task
+#                           counter, and the clause EXITS before the doorbell — no scan re-queue.
+#   fires-by-pod-tool-loop  the COMMON production path: the pod posted the strike (STRIKE_BY_POD),
+#                           so STRIKE_LINE is empty and the class comes from the STATS line the pod
+#                           wrote (with the finalizer's failed/ci-failed → unknown rewrite).
+#   fires-turn-cap          `turn-cap` is serving-shaped by the issue's own wording, though it is
+#                           not a member of SERVING_CLASSES.
+#   fires-probe-fallback    the FU-088 probe payload is absent (a sub-rail ride skipped it) but
+#                           /router-status answers ⇒ the set is read from the fallback probe.
+#   retry-dispatch-failed   the re-run itself did not complete ⇒ fall through to the doorbell, i.e.
+#                           today's behaviour — a retry can never cost the coordinator hop.
+#   no-retry-cell-seen      the same `(model, provider, class)` cell already retried once ⇒ no
+#                           second retry (the counter survived the re-run).
+#   no-retry-task-cap       two retries already spent on this task ⇒ no third.
+#   no-retry-salvage-pushed a branch was pushed this round ⇒ a retry would lose work.
+#   no-retry-salvage-resuming  the ride resumed a branch (WORK_BRANCH) ⇒ same.
+#   no-retry-salvage-unknown   salvage could not establish the branch state ⇒ NOT a "no" (#33).
+#   no-retry-nonserving     `harness-death` is not serving-shaped ⇒ the coordinator decides.
+#   no-retry-no-strike      no strike at all ⇒ nothing to retry, and no decision line either.
+#   no-retry-router-unreachable  the serving set is unknown (no probe payload, no probe answer) ⇒
+#                           fail-closed to today's behaviour.
+#   no-retry-empty-provider the cell's PROVIDER component is empty — neither the strike marker nor
+#                           the finalizer's stats line carries one (the unverified cross-repo
+#                           contract breaking) ⇒ fail-closed: no retry, because which provider to
+#                           exclude is unknowable. Every other row leaves the provider populated.
+#
+# The doorbell block is composed AFTER the retry clause on purpose: the clause's `exit 0` on fire is
+# what makes "no scan re-queue" observable — a fired retry never reaches the ring, and `post.sh`'s
+# RETRY_FIRE echo (also after it) is the same absence from the other side. The round number and the
+# issue's labels are untouched by design: the re-run re-enters the launcher with its own argv
+# verbatim (ADR-127: an infra failure consumes no logic round), which is why the CALL asserts the
+# counters rather than a new round.
+name: strike-retry
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:strike-retry
+  - block:doorbell-ring
+  - file:post.sh
+rows: rows.psv

@@ -1,0 +1,5 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"repo":"test-project","unit":"-"} http://doorbell.test/coordinate/coordinate
+OUT → no retry: strike on deepseek/deepseek-v4-flash||timeout — the cell's provider component is EMPTY (no strike-marker provider, no stats.provider): which provider to exclude is unknowable, so no retry (fail-closed; the coordinator decides, as today)
+OUT → coordinator doorbell rung (/coordinate {"repo":"test-project","unit":"-"})
+OUT → post: RETRY_FIRE=[] RETRY_CELL=[]
+RC 0

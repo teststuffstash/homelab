@@ -1,0 +1,9 @@
+CALL curl -fsS --max-time 5 http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status
+CALL gh api repos/teststuffstash/homelab/issues/401/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/402/comments?per_page=100
+OUT PROVIDER-LATCHES <empty>
+OUT MODEL-NOMINATIONS <empty>
+OUT US-CASE <empty>
+OUT ORPHAN [homelab] ⛔ FLEET READER: error_class=timeout serving-shaped but no strike record carries a resolved provider — pair/model state unknown; no latch, no nomination, no agent/error this tick (rule #6 — never fail INTO a write)
+OUT REACHED: end
+RC 0

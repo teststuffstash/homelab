@@ -1,0 +1,22 @@
+# fu146-resumable-quoted — FU-199 (folded in, 2026-09-20): the resumable-branch expansion is
+# quoted, so a value carrying whitespace or a glob character can neither word-split nor expand.
+#
+# CONDITION UNDER REPLAY. The dispatch loop resolves `uworkbranch` from the repo-qualified
+# `resumable_branches` set. The set is NEWLINE-separated and read with `IFS= read -r`; the old
+# `for rb_entry in $resumable_branches` word-split AND glob-expanded, which is how the #1780
+# dispatch arrived carrying `work-branch=**` (the extraction's markdown tail split on its first
+# space). The extraction fix is pinned by `c4c5-ambig-decidable/strike-resumable-markdown`; THIS
+# fixture pins the expansion half.
+#
+# THE CONTRACT, one leg each:
+#   whitespace  a branch value carrying a space resolves to the WHOLE value, not its first word.
+#   glob        a branch value carrying `*` resolves LITERALLY, even though a matching file exists
+#               in the cwd — an unquoted expansion would have replaced it with that file's name.
+name: fu146-resumable-quoted
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fu146-resumable-match
+  - file:post.sh
+rows: rows.psv

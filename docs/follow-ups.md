@@ -7,7 +7,14 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-281** (2026-09-22: FU-280 minted for the registry's S3-vs-filesystem backend question, opened by the second commit-refusal outage; FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
+  Next free id: **FU-286** (2026-09-23: FU-285 minted for the replica co-location a disk pull
+  caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
+  fleet-wide disk-health metering — nothing watched any drive's SMART and the fleet buys used
+  drives with disclosed defects; FU-283 minted for the hung-CI-run watchdog, from oracle's
+  fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
+  record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
+  nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
+  2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
   endpoint while plan reads clean; FU-258 minted for Cilium dropping the `kubernetes` Service
@@ -371,6 +378,15 @@ six OVERSIZE items pointer-ized into
       checked (cloudflare.md completion table, homelab#1334).
       Program: `ROADMAP.md` → "Platform self-service via Crossplane".
       Relates ADR-076, ADR-085, ADR-092, ADR-101.
+- [ ] **FU-282** — The PublicRoute **origin mark** reads the homelab's WAN address from
+      `wg.teststuff.net` — the WireGuard endpoint's ddclient record (ADR-090). Correct value,
+      misleading name: a reader of the Composition has no reason to expect the VPN endpoint to be
+      load-bearing for an edge header, and renaming/retiring that record would silently break the
+      mark. **Next:** give ddclient a second target (`egress.teststuff.net`,
+      `ansible/group_vars/opnsense.yml` + a router apply) and repoint `$egressRecord` in
+      `argocd/resources/publicroute/composition.yaml` — one line each, but it needs a live
+      OPNsense apply, which is why it is not in the build. Cosmetic until then: the mark works.
+      Detail: [`docs/cloudflare.md`](cloudflare.md) §PublicRoute — origin mark.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
@@ -493,6 +509,18 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
+- [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.**
+      Fleet read 2026-09-23 (comments on the six Goals with a store): 19 checkpoint rulings, 11 of
+      them on #1640, where 4 fired on trigger (c) for ONE new member (two were sprouts filed
+      minutes after the previous checkpoint; one re-fired on rulings already written) and the
+      (a) rides found two thirds of their findings already filed / folded / fixed. Every ride
+      cost a sonnet session. The WRITE side is fixed (PR #1933: rulings are store rows, the
+      timeline stays flat); this is the READ side. Operator-owned: the pendulum went from
+      "not enough" (goal #278 stalled) to "too much". Candidate levers, undecided: debounce (c)
+      by member age or fold it into the next (a)/(e) wake; let the scan pre-rule the
+      deterministic findings (origin closed by a merged PR, surface+origin matching an open
+      issue) so the session sees only the residue. **Next:** operator picks the lever; measure
+      rulings-per-Goal before/after on `goal_timeline_comments` + the `last-checkpoint:` line.
 - [ ] **FU-178** — **Two readers, one mirror: the doorbells read `agents/stacks.json` while the
       scan reads the live cluster claim** — a claim change (chain redirect, knob flip) reaches
       the scan in minutes and the doorbell side only when someone remembers to sync the file
@@ -572,9 +600,45 @@ the block needs pruning, not more headings.
       (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
       strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
       pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
-      attempt-count auto-escalation (banked, feed-4). (c) is BUILT but dead in production twice
-      (#1268; 2026-09-13 `no-output` ∉ STRIKE_CLASSES, enforce flag unset) → homelab#1640
-      acceptances 1+3. Relates FU-174, FU-186, ADR-094/096/115.
+      attempt-count auto-escalation (banked, feed-4). (c) is BUILT but dead in production THREE times
+      (#1268; 2026-09-13 `no-output` ∉ STRIKE_CLASSES, enforce flag unset; 2026-09-23
+      `repetition-loop` ∉ `strike_classes` — oracle's #712/#713 fleet strike was never recorded,
+      no cooldown formed, the router re-picked the same cell `[free+half-open]` 13:05:01Z) →
+      homelab#1640 acceptances 1+3. The 09-23 round also exposed the identity questions UNDER the
+      strike: [`docs/spikes/model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md).
+      Relates FU-174, FU-186, ADR-094/096/115.
+
+- [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
+      `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
+      with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
+      with BOTH copies on one disk (498 G → 730 G scheduled, 147 %) — the ledger's soft-anti-affinity
+      trap, live — **despite the interval being raised 600 → 28800 s for exactly this.** So a replica
+      on a MISSING DISK takes a different path from one on a DOWN NODE; `replica-auto-balance:
+      least-effort` is a second untested candidate. Self-repaired on refit, no data lost (re-warmable
+      caches). **Next:** find which controller does it and name the knob that actually governs it in
+      [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
+      wrong lever. Relates FU-093, ADR-089.
+
+- [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
+      Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod
+      (FU-222) — while the fleet buys used drives with *disclosed* defects, so the belts alert on
+      GROWTH, never absolute counts. Built: a `smartctl_exporter` DaemonSet on every Talos node +
+      the same metric names from a textfile collector on pve/nx-02, nine promtool-fixtured belts.
+      Mechanism, evidence and the design call: [`storage-ledger.md`](storage-ledger.md) §Build.
+      **Next:** `smartctl_device_interface_speed` is SATA-only, so **NVMe lane width is uncovered**
+      — the trap that left x1-wired adapters in both NX boxes. Fit-time check is in
+      [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health; decide whether it
+      also wants a standing metric. Relates FU-222, FU-093.
+
+- [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
+      fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run
+      35839762985 sat `in_progress` from 08:54Z — the `ci` job hung 53 min on attempt 1 and 41+
+      min on attempt 2 against a normal 16–31 min wall — and the coordinator's ci-red directive
+      gates on a run-level `failure`, so a run that never FINISHES is invisible to it: #709 parked
+      at 10:35Z and stayed there until a human cancelled at ~13:20Z. **Next:** pick the cheap belt
+      (alert or cancel at 2× that workflow's p95 wall), then find what hung — ARC runner pod stuck
+      on the large-runner set vs. a test that never returned; the runner-side logs are the
+      platform's, the stack sees only the run view. Relates FU-200.
 
 - [ ] **FU-202** — **A key-class failure strikes the MODEL, losing the primary rail for the
       whole task** (#1151, 2026-09-01): r1's xs session key died mid-ride
@@ -1245,17 +1309,6 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-261** — **The BIOS PXE chainload was silently broken, and the role that serves it has
-      been failing for months.** `/srv/tftp/undionly.kpxe` was MISSING on the Matchbox LXC (only the
-      two UEFI binaries there), so a legacy PXE client got a filename it could not fetch and fell back
-      to disk — three reboots of `wk-metal-02` read as "PXE just doesn't take" (2026-09-20). Why nobody
-      saw it: `ansible/matchbox-ipxe-tftp.yml` ends with *Enable tftpd-hpa*, which `matchbox-proxydhcp`
-      MASKS (dnsmasq owns :69), so every run fails at the last task and the copy before it went
-      unverified. Re-running restored the file (74 KB, TFTP-served). **Next:** guard/drop the
-      tftpd-hpa tasks (the role header already says dnsmasq owns TFTP) + probe that all three boot
-      files are served — onboarding depends on it, nothing tests it. Relates FU-244.
-
-
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
       is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
       wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
@@ -1273,14 +1326,13 @@ the block needs pruning, not more headings.
       the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
-      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done 2026-09-16:** nx-01 +
-      wk-metal-02 `talosctl upgrade`d; PR#1740 (version by role, CP v1.13.2 / workers v1.13.10) merged;
-      **all four VM workers on v1.13.10 by 18:50Z** — wk-03 by design, wk-01/02/04 by the FU-248
-      incident (recovered as the upgrade, no data lost). Verified on every node: `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
-      unset, kata intact where declared. **2026-09-21:** cp-01/cp-02 + wk-metal-04 (FU-265) on v1.13.10;
-      m70s + hp-01 wait on #1839 (drain before install). **Next:** the 7 metal config updates (in place) + the remaining
-      metal workers via `talosctl upgrade` at convenience; Matchbox PXE assets to v1.13.10 before the next
-      metal reinstall; then a week's soak of `NodeRebootingRepeatedly` → archive. Subsumes FU-155 Option A; FU-033 gates 1.14.
+      (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past
+      it — the fleet is on v1.14.1 since 2026-09-22 (FU-033's rollout), `CONFIG_PAGE_TABLE_CHECK_ENFORCED`
+      unset wherever it was read, kata intact where declared. **PXE/USB assets done 2026-09-23:** the three
+      satellite pins now follow `var.talos_version_worker` and `machines-lint` fails on drift (they were at
+      v1.13.10 / v1.13.2 against a v1.14.1 fleet) — [`provisioning.md`](provisioning.md) §Upgrading a node's Talos.
+      **Next:** a week's soak of `NodeRebootingRepeatedly` clean from 2026-09-22 → archive. Subsumes FU-155 Option A.
+
 - [ ] **FU-254** — **Nothing detects that our substrate is behind, or out of support.** Talos 1.13
       left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a
       conversation, not a mechanism. Renovate cannot fill this: class 6 is deliberately "must not"

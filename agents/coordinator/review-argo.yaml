@@ -286,7 +286,7 @@ spec:
                           # review-<stack> cron's pattern); reviewer-session.sh --loop-ns fetches
                           # its own role=reviewer token for the pod's verdict writes.
                           SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
-                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                          GH_TOKEN="$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer ${SA_TOKEN}" \
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not reviewing blind"; exit 1; }
                           export GH_TOKEN

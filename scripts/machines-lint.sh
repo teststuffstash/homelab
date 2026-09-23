@@ -1,5 +1,6 @@
 #!/bin/bash
-# machines-lint — the mechanical currency gate for machines/generate.py outputs (homelab#303).
+# machines-lint — the mechanical currency gate for machines/generate.py outputs (homelab#303)
+# and for the Talos version pins that must follow `var.talos_version_worker` (FU-246).
 #
 # machines/machines.yaml is the one machine inventory; machines/generate.py regenerates
 # machines/README.md, machines/machines.html, and the marker-delimited hosts/versions blocks in
@@ -44,4 +45,72 @@ if [ -n "$drift" ]; then
 fi
 
 echo "machines-lint: machines/generate.py outputs are current (machines/README.md, machines/machines.html, README.md, CLAUDE.md)"
+
+# --- check 2: the PXE/USB Talos pins follow var.talos_version_worker (FU-246) -----------------
+#
+# Three files declare the Talos version a machine BOOTS from outside the cluster's own tofu root
+# — the Matchbox PXE assets (ansible), the Matchbox profile that points at them (the provisioning
+# root), and the USB fallback. Each carries a "keep in lockstep with var.talos_version_worker"
+# comment, and a comment is all that held them: the PXE profile served v1.13.2 while the fleet ran
+# v1.13.10, and the next metal node to PXE-boot got the page_table_check kernel and never came up
+# (2026-09-21, 19138c44). That bump then drifted again within a day when the fleet moved to
+# v1.14.1, and scripts/talos-usb.sh had been missed by it entirely. The comment is now a check.
+#
+# Why the WORKER version: every PXE/USB install is a worker (the CP nodes are nocloud VMs and one
+# PXE'd laptop that installs from the same worker image). Why here: this lint already owns
+# "generated/derived things that must follow tofu/variables.tf", and generate.py reads the same
+# defaults for the version line it renders into README.md/CLAUDE.md.
+tofu_default() {   # tofu_default <variables.tf path> <variable name> -> that variable's string default
+  awk -v want="$2" '
+    index($0, "variable \"" want "\"") == 1 { inblock = 1; next }
+    inblock && /^[[:space:]]*default[[:space:]]*=/ {
+      if (match($0, /"[^"]*"[[:space:]]*$/)) {
+        print substr($0, RSTART + 1, RLENGTH - 2)
+      }
+      exit
+    }
+    inblock && /^}/ { exit }
+  ' "$1"
+}
+
+want=$(tofu_default tofu/variables.tf talos_version_worker)
+if [ -z "$want" ]; then
+  echo "machines-lint: FAIL — no string default for var.talos_version_worker in tofu/variables.tf (renamed?)" >&2
+  exit 1
+fi
+
+# file : the pin as it must read when current : how to grep what it reads now
+pin_drift=""
+check_pin() {   # check_pin <file> <regex capturing the version> <expected line, for the fix hint>
+  got=$(sed -n -E "s@$2@\\1@p" "$1" | head -1)
+  if [ -z "$got" ]; then
+    echo "machines-lint: FAIL — no Talos version pin found in $1 (moved? adjust this lint with it)" >&2
+    exit 1
+  fi
+  if [ "$got" != "$want" ]; then
+    pin_drift="$pin_drift\n  $1: $got  →  $want   ($3)"
+  fi
+}
+
+check_pin ansible/group_vars/matchbox.yml \
+  '^talos_version: (v[0-9]+\.[0-9]+\.[0-9]+)$' \
+  're-run: ANSIBLE_CONFIG=ansible/ansible.cfg devbox run -- ansible-playbook ansible/matchbox-talos-assets.yml'
+prov=$(tofu_default tofu/provisioning/variables.tf talos_version)
+if [ -z "$prov" ]; then
+  echo "machines-lint: FAIL — no string default for var.talos_version in tofu/provisioning/variables.tf (renamed?)" >&2
+  exit 1
+fi
+[ "$prov" = "$want" ] || pin_drift="$pin_drift\n  tofu/provisioning/variables.tf: $prov  →  $want   (then apply: devbox run -- tofu -chdir=tofu/provisioning apply)"
+check_pin scripts/talos-usb.sh \
+  '^TALOS_VERSION="\$\{TALOS_VERSION:-(v[0-9]+\.[0-9]+\.[0-9]+)\}"$' \
+  'no apply — the default of the USB fallback'
+
+if [ -n "$pin_drift" ]; then
+  # shellcheck disable=SC2059
+  printf "machines-lint: FAIL — Talos pins behind var.talos_version_worker ($want):$pin_drift\n" >&2
+  echo "  a node that PXE- or USB-boots gets the stale kernel; bump each file, then run the apply named beside it" >&2
+  exit 1
+fi
+
+echo "machines-lint: PXE/USB Talos pins match var.talos_version_worker ($want)"
 exit 0

@@ -100,13 +100,11 @@ ZEN_PREFIX = "opencode/"
 
 
 def _rail_disabled(leg: str) -> bool:
-    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213)."""
-    v = os.environ.get("OPENCODE_RAIL_DISABLED", "").strip().lower()
-    if v in ("", "0", "false", "no", "off"):
-        return False
-    if v in ("1", "true", "yes", "on", "all", "both"):
-        return True
-    return leg in v.replace(",", " ").split()
+    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213). The parse is
+    the router's ONE home (Goal #1769 acceptance 2) — the same predicate the /route walk uses to
+    skip a parked rail `rail:parked`, so this forward-path belt and the walk cannot disagree about
+    which rail an env value parks."""
+    return router.rail_parked_leg(leg)
 # homelab#791: the OpenRouter translation leg — `openrouter/` prefixed model ids on the
 # /anthropic/* path get their Anthropic-format /v1/messages request translated to an
 # OpenAI-format /chat/completions call and forwarded to OpenRouter. The prefix is STRIPPED
@@ -220,7 +218,10 @@ def _dispatch_verdict(now: float, tier: str | None = None) -> tuple[bool, str | 
 # absent count (None), not zero — a broken counter must never stop dispatch.
 SUBSCRIPTION_MAX_RUNNING = int(os.environ.get("SUBSCRIPTION_MAX_RUNNING", "3"))
 SUBSCRIPTION_SESSION_SELECTOR = "homelab.teststuff.net/subscription-session=claude"
-OPENCODE_MAX_RUNNING = int(os.environ.get("OPENCODE_MAX_RUNNING", "3"))
+# Goal #1769 acceptance 2: the Go rail's concurrency bound is DECLARED in model-classes.json
+# (`rails.opencode-go.concurrency`); OPENCODE_MAX_RUNNING is the ENV OVERRIDE (0 = disabled), not
+# the only home. Read at CALL time (below) so the block — loaded by router.init() in main() — is
+# the home and the env is the override.
 GO_SESSION_SELECTOR = "homelab.teststuff.net/rail=opencode-go"
 SEMAPHORE_TTL_S = int(os.environ.get("SEMAPHORE_TTL_S", "10"))
 # One cache slot PER SELECTOR — the anthropic and Go rails share the listing code path but never
@@ -279,13 +280,81 @@ def _semaphore_state() -> dict:
                             and running >= SUBSCRIPTION_MAX_RUNNING)}
 
 
+def _go_max_running() -> int:
+    """The Go rail's concurrency bound (Goal #1769 acceptance 2): the DECLARED
+    `rails.opencode-go.concurrency` from model-classes.json, with OPENCODE_MAX_RUNNING as the ENV
+    OVERRIDE (0 = disabled). Read at CALL time so the block is the home and the env is the
+    override — the module global this replaced was the only home, which is the subtraction."""
+    env = os.environ.get("OPENCODE_MAX_RUNNING")
+    if env not in (None, ""):
+        try:
+            return int(env)
+        except ValueError:
+            pass
+    return int(router.rail_concurrency("opencode-go", 3) or 0)
+
+
 def _go_semaphore_state() -> dict:
-    """FU-170: the Go-rail concurrency bound — max from OPENCODE_MAX_RUNNING (0 = disabled),
-    fail-open on an unreadable count just like _semaphore_state."""
+    """FU-170: the Go-rail concurrency bound — max from the declared rail block, overridden by
+    OPENCODE_MAX_RUNNING (0 = disabled), fail-open on an unreadable count just like
+    _semaphore_state."""
     running = _go_running()
-    return {"running": running, "max": OPENCODE_MAX_RUNNING,
-            "limited": bool(OPENCODE_MAX_RUNNING > 0 and running is not None
-                            and running >= OPENCODE_MAX_RUNNING)}
+    max_running = _go_max_running()
+    return {"running": running, "max": max_running,
+            "limited": bool(max_running > 0 and running is not None
+                            and running >= max_running)}
+
+
+def _go_window_status(now: float) -> dict:
+    """gometer.go_window_status wired to the router's Go ledger — the ONE composition behind both
+    readers of the Go windows: GET /opencode-limit (the launcher probe), GET /metrics, and
+    `_opencode_ok` (the /route walk's go_gate, Goal #1769 acceptance 1). Before the gate existed
+    each HTTP surface carried its own pair of local closures for this; a second copy is exactly
+    how the probe and the walk would come to disagree about what `limited` means."""
+    def _snapshot(name, win_start, _resets_at):
+        return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
+
+    # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the previous
+    # window expired; the ledger walk recovers the open epoch).
+    def _chain(span_s, lookback_s):
+        return router.go_usage_chain_open(span_s, lookback_s)
+
+    return gometer.go_window_status(now, _snapshot, chain_fn=_chain)
+
+
+def _opencode_ok() -> tuple[bool, str | None, int]:
+    """Goal #1769 acceptance 1: the GO rail's own capacity verdict for /route's walk, beside
+    `_subscription_ok`/`_openrouter_ok`. The composite is the SAME one /opencode-limit serves
+    (`limited`), read in the same precedence `_go_limit_reason` names it, so the gate and the
+    launcher probe can never disagree about whether the Go rail is open:
+
+      rail-disabled (FU-213 park) → observed 429/402 capacity latch → window draw past threshold
+      → the OPENCODE_MAX_RUNNING semaphore.
+
+    Returns (ok, reason, retry_after_s); `reason` is the /opencode-limit reason and the router
+    types it `go:<reason>` in `skipped`. FAIL-OPEN on an unreadable count (the semaphore's own
+    contract: an absent count is not zero), so a broken pod counter never wedges the Go rail."""
+    now = time.time()
+    if _rail_disabled("go"):
+        return False, "rail-disabled", 900
+    go_capacity = _go_capacity_snapshot(now)
+    if go_capacity["limited"]:
+        return False, (go_capacity["reason"] or "observed"), \
+            max(60, int(go_capacity["remaining_s"] or 900))
+    status = _go_window_status(now)
+    if status["limited"]:
+        # Name the crossing window and carry ITS reset, the same shape the anthropic gate types
+        # (`utilization-<w>` + the window's reset) so a launcher defers for the right duration.
+        reason = next((f"utilization-{w}" for w, d in status["windows"].items()
+                       if d["utilization"] >= status["thresholds"][w]), "utilization")
+        w = status["windows"].get(reason[len("utilization-"):]) or {}
+        reset = w.get("resets_at")
+        retry = 900 if reset is None else max(60, min(int(reset - now), 6 * 3600))
+        return False, reason, retry
+    go_semaphore = _go_semaphore_state()
+    if go_semaphore["limited"]:
+        return False, "semaphore", 300
+    return True, None, 0
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -483,6 +552,38 @@ def _is_negative_cache_hit(ref: str) -> bool:
         return hit is not None and hit[1] is None and hit[0] > time.time()
 
 
+# Why a token is unresolvable, kept beside the negative cache entry (same lock, same lifetime):
+# "absent"    — the k8s API said 404/403 for the Secret, or it exists but its labels refuse the
+#               namespace: a definitive verdict, the handler answers 404 and no retry helps.
+# "transient" — a read timeout, a connection error, a 5xx, anything else: the handler answers
+#               503 + Retry-After so the fetcher's `curl --retry` tries again after the blip.
+# 2026-09-23: `coordinate-platform-1790139600` died on a 404 the proxy served for a 10 s k8s read
+# timeout at the :00 cron burst; the same ns was served one second later. A miss reason that the
+# cache cannot carry is a blip reported as a verdict.
+_miss_reasons: dict[str, str] = {}
+
+
+def _loop_git_ref(secret_name: str) -> str:
+    return f"agent-coordinator/{secret_name}#loop"
+
+
+def _git_token_ref(ns: str) -> str:
+    return f"agent-coordinator/agent-git-{ns}#git"
+
+
+def _miss_reason(ref: str) -> str:
+    """The reason the last resolve of `ref` missed — "absent" or "transient" (the default when
+    nothing was recorded: a negative entry with no verdict is a blip until proven otherwise)."""
+    with _refs_lock:
+        return _miss_reasons.get(ref, "transient")
+
+
+def _classify_miss(e: BaseException) -> str:
+    if isinstance(e, urllib.error.HTTPError) and e.code in (403, 404):
+        return "absent"
+    return "transient"
+
+
 GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
 # FU-080 loop tokens: per-STACK coordinator/reviewer git tokens (issues:write over one stack's
 # repos — strictly more privilege than a worker token), minted centrally in agent-coordinator by
@@ -526,13 +627,14 @@ def _token_review(token: str) -> str | None:
 def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
     """Read `agent-coordinator/<secret_name>`; honor it only when it carries LOOP_GIT_LABEL and
     its LOOP_NS_LABEL equals the namespace it is being served to (belt against a mis-mint)."""
-    ref = f"agent-coordinator/{secret_name}#loop"
+    ref = _loop_git_ref(secret_name)
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
         if hit and hit[0] > now:
             return hit[1]
     token_value = None
+    miss = "absent"
     try:
         sa_token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -546,14 +648,19 @@ def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
             b64 = (secret.get("data") or {}).get("GH_TOKEN", "")
             token_value = base64.b64decode(b64).decode() if b64 else None
         else:
-            log(f"loop-git: {secret_name} exists but labels refuse it for ns {for_ns}")
+            log(f"loop-git: {secret_name} exists but labels refuse it for ns {for_ns} (absent)")
     except Exception as e:  # noqa: BLE001
-        log(f"loop-git: resolve failed for {secret_name}: {e}")
+        miss = _classify_miss(e)
+        log(f"loop-git: resolve failed for {secret_name}: {e} ({miss})")
     with _refs_lock:
         # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
         # API blip doesn't poison the cache for the full window — the next request retries naturally.
         ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
         _refs[ref] = (now + ttl, token_value)
+        if token_value is None:
+            _miss_reasons[ref] = miss
+        else:
+            _miss_reasons.pop(ref, None)
     return token_value
 
 
@@ -563,13 +670,14 @@ def _resolve_git_token(ns: str) -> str | None:
     in a stack-reachable namespace any more). Honors only Secrets carrying GIT_TOKEN_LABEL AND
     whose WORKER_NS_LABEL equals the namespace being served (belt against a mis-mint). Cached
     briefly like refs."""
-    ref = f"agent-coordinator/agent-git-{ns}#git"
+    ref = _git_token_ref(ns)
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
         if hit and hit[0] > now:
             return hit[1]
     token_value = None
+    miss = "absent"
     try:
         sa_token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
@@ -584,14 +692,19 @@ def _resolve_git_token(ns: str) -> str | None:
             b64 = (secret.get("data") or {}).get("token", "")
             token_value = base64.b64decode(b64).decode() if b64 else None
         else:
-            log(f"git-token: agent-git-{ns} exists but labels refuse it for ns {ns}")
+            log(f"git-token: agent-git-{ns} exists but labels refuse it for ns {ns} (absent)")
     except Exception as e:  # noqa: BLE001
-        log(f"git-token: resolve failed for {ns}: {e}")
+        miss = _classify_miss(e)
+        log(f"git-token: resolve failed for {ns}: {e} ({miss})")
     with _refs_lock:
         # homelab#1004: negative entries (token_value is None) get a short TTL so a transient k8s
         # API blip doesn't poison the cache for the full window — the next request retries naturally.
         ttl = REF_CACHE_TTL_S if token_value is not None else NEGATIVE_CACHE_TTL_S
         _refs[ref] = (now + ttl, token_value)
+        if token_value is None:
+            _miss_reasons[ref] = miss
+        else:
+            _miss_reasons.pop(ref, None)
     return token_value
 
 
@@ -2761,13 +2874,7 @@ class Proxy(BaseHTTPRequestHandler):
             # hold expires until a 2xx clears it, while `capacity.limited` (and the top-level
             # `limited`) are keyed on the hold's EXPIRY — consumers act on `limited`, never on
             # `reason != null`.
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: wire the CHAIN-anchor seam — the 5h window's open epoch comes from
-            # the ledger walk (first-use/expiry-chained), not a fixed grid.
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            status = _go_window_status(time.time())
             go_semaphore = _go_semaphore_state()
             go_capacity = _go_capacity_snapshot(time.time())
             limited = (status["limited"] or go_semaphore["limited"]
@@ -2835,14 +2942,9 @@ class Proxy(BaseHTTPRequestHandler):
             # Utilization is the WINDOW-DRAW number (list price on raw tokens, badge-halved — the
             # 2026-08-17 reconciliation); the billed-style estimate is a SEPARATE gauge so the two
             # cannot be conflated. TYPE/HELP emitted once per metric family (Prometheus strict
-            # parsing requirement).
-            def _go_snapshot(name, win_start, _resets_at):
-                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
-            # homelab#540: CHAIN-anchor seam (5h window opens at the first request after the
-            # previous window expired; the ledger walk recovers the open epoch).
-            def _go_chain(span_s, lookback_s):
-                return router.go_usage_chain_open(span_s, lookback_s)
-            go_status = gometer.go_window_status(time.time(), _go_snapshot, chain_fn=_go_chain)
+            # parsing requirement). The window composition itself lives in _go_window_status —
+            # one home for /opencode-limit, /metrics and /route's go_gate (Goal #1769).
+            go_status = _go_window_status(time.time())
             lines += [
                 "# TYPE opencode_subscription_usage_usd gauge",
                 "# HELP opencode_subscription_usage_usd Go-rail subscription window DRAW usage in USD per window (list price, badge-halved).",
@@ -2894,7 +2996,7 @@ class Proxy(BaseHTTPRequestHandler):
             if go_semaphore["running"] is not None:
                 lines.append(f"opencode_subscription_semaphore_running {go_semaphore['running']}")
             lines += ["# TYPE opencode_subscription_semaphore_max gauge",
-                      f"opencode_subscription_semaphore_max {OPENCODE_MAX_RUNNING}"]
+                      f"opencode_subscription_semaphore_max {_go_max_running()}"]
             # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
             semaphore = _semaphore_state()
             lines += ["# TYPE anthropic_subscription_semaphore_running gauge",
@@ -3054,6 +3156,7 @@ class Proxy(BaseHTTPRequestHandler):
             caller = _token_review(auth[len("Bearer "):]) if auth.startswith("Bearer ") else None
             expected = f"system:serviceaccount:{ns}:agentstack-loop"
             token_value = None
+            miss = "absent"   # an unknown role / non-stack ns is a definitive miss, not a blip
             # role → secret-name prefix. "intake" (homelab#1095/ADR-119) is the issues-only
             # homelab token for cross-boundary dedup-and-extend; same TokenReview + label belt.
             _loop_roles = {"coordinator": "loop-git",
@@ -3063,6 +3166,8 @@ class Proxy(BaseHTTPRequestHandler):
                 stack = ns[: -len("-agents")]
                 name = f"{_loop_roles[role]}-{stack}"
                 token_value = _resolve_loop_git(name, ns)
+                if token_value is None:
+                    miss = _miss_reason(_loop_git_ref(name))
             elif caller != expected:
                 log(f"GET /loop-git-token ns={ns} → 403 (caller={caller or 'unauthenticated'})")
                 payload = b"forbidden"
@@ -3075,10 +3180,17 @@ class Proxy(BaseHTTPRequestHandler):
                 payload = token_value.encode()
                 self.send_response(200)
                 log(f"GET /loop-git-token ns={ns} role={role} → served (TokenReview ok)")
+            elif miss == "transient":
+                # A blip, not a verdict: 503 + Retry-After so `curl --retry` at the fetch site
+                # tries again once the k8s read recovers (never a 404 the caller fails closed on).
+                payload = b"unresolvable (transient)"
+                self.send_response(503)
+                self.send_header("Retry-After", "2")
+                log(f"GET /loop-git-token ns={ns} role={role} → 503 (transient)")
             else:
                 payload = b"unresolvable"
                 self.send_response(404)
-                log(f"GET /loop-git-token ns={ns} role={role} → 404")
+                log(f"GET /loop-git-token ns={ns} role={role} → 404 (absent)")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -3117,14 +3229,20 @@ class Proxy(BaseHTTPRequestHandler):
                 log(f"GET /git-token ns={ns} → UNAUTHENTICATED caller (allowed until "
                     f"GIT_TOKEN_REQUIRE_AUTH=1 — FU-089 migration)")
             token_value = _resolve_git_token(ns) if ns else None
+            miss = _miss_reason(_git_token_ref(ns)) if ns and token_value is None else "absent"
             if token_value:
                 payload = token_value.encode()
                 self.send_response(200)
                 log(f"GET /git-token ns={ns} → served")
+            elif miss == "transient":
+                payload = b"unresolvable (transient)"
+                self.send_response(503)
+                self.send_header("Retry-After", "2")
+                log(f"GET /git-token ns={ns} → 503 (transient)")
             else:
                 payload = b"unresolvable"
                 self.send_response(404)
-                log(f"GET /git-token ns={ns} → 404")
+                log(f"GET /git-token ns={ns} → 404 (absent)")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -3345,6 +3463,10 @@ class Proxy(BaseHTTPRequestHandler):
             decision = router.route(req_body, {
                 "price": _price, "subscription_ok": _subscription_ok,
                 "openrouter_ok": _openrouter_ok,
+                # Goal #1769 acceptance 1: the Go rail's OWN gate. Before this the walk flattened
+                # an `opencode-go/*` candidate onto the OpenRouter rail, so a Go model's fate was
+                # decided by the OpenRouter key's state (headroom, a mint that never happened).
+                "opencode_ok": _opencode_ok,
             })
             if decision.get("decision") == "dispatch" \
                     and decision.get("rail") == "openrouter" \
@@ -3923,7 +4045,7 @@ def _self_test() -> int:
         return s
 
     # Override globals for test
-    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response, OPENCODE_MAX_RUNNING
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response
     _go_response = {"type": "sse", "body": b'data: {"ok":true}\n\ndata: [DONE]\n\n'}  # default
     ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
     GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
@@ -4607,17 +4729,22 @@ def _self_test() -> int:
           f"semaphore-fail-open: semaphore dict running=None limited=False (got {resp['semaphore']})")
 
     # Test 10c: OPENCODE_MAX_RUNNING=0 disables the bound — a full count must NOT limit.
-    # Contract: limited requires max > 0 (the `0 = disabled` arm of the dispatch). Restore the
-    # module global afterwards so the remaining tests see the default max=3.
-    _old_go_max = OPENCODE_MAX_RUNNING
-    OPENCODE_MAX_RUNNING = 0
+    # Contract: limited requires max > 0 (the `0 = disabled` arm of the dispatch). Goal #1769
+    # acceptance 2: the bound is read at CALL time from the declared rail block, with the env as
+    # the override — so the toggle is the ENV, not a module global. Restore it afterwards so the
+    # remaining tests see the declared default (3).
+    _old_go_max = os.environ.get("OPENCODE_MAX_RUNNING")
+    os.environ["OPENCODE_MAX_RUNNING"] = "0"
     _semaphore_caches[GO_SESSION_SELECTOR] = (time.time(), 3)
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/opencode-limit")
     r = c.getresponse()
     resp = json.loads(r.read())
     c.close()
-    OPENCODE_MAX_RUNNING = _old_go_max
+    if _old_go_max is None:
+        os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    else:
+        os.environ["OPENCODE_MAX_RUNNING"] = _old_go_max
     check(resp["limited"] is False,
           f"semaphore-disabled: limited={resp['limited']} (OPENCODE_MAX_RUNNING=0, running 3 → disabled)")
     check(resp["reason"] is None,
@@ -6045,17 +6172,20 @@ data: [DONE]
     # Seed the cache with a negative entry, verify it's used, then verify re-resolution
     # after TTL expiry via the /git-token HTTP handler.
     git_ref = "agent-coordinator/agent-git-test-neg-cache#git"
+    check(git_ref == _git_token_ref("test-neg-cache"), "negative-cache _resolve_git_token: ref helper agrees")
     now = time.time()
     _refs[git_ref] = (now + NEGATIVE_CACHE_TTL_S, None)
+    with _refs_lock:
+        _miss_reasons[git_ref] = "absent"   # a cached DEFINITIVE miss (k8s said 404)
 
-    # First request: negative cache hit → 404 (unresolvable)
+    # First request: negative cache hit, absent → 404 (unresolvable)
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/git-token?ns=test-neg-cache")
     r = c.getresponse()
     r.read()
     c.close()
     check(r.status == 404,
-          "negative-cache _resolve_git_token: first request 404 (negative cache hit)")
+          "negative-cache _resolve_git_token: first request 404 (negative cache hit, absent)")
 
     # Record the cache entry's expiry
     with _refs_lock:
@@ -6066,14 +6196,49 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Second request: cache expired, re-resolution attempted → 404 again (no K8s API)
-    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    c.request("GET", "/git-token?ns=test-neg-cache")
-    r = c.getresponse()
-    r.read()
-    c.close()
-    check(r.status == 404,
-          "negative-cache _resolve_git_token: second request 404 (re-resolution attempted)")
+    # Second request: cache expired, re-resolution attempted with the K8s API AWAY (forced: the
+    # self-test runs both outside the cluster, where no SA token exists, and INSIDE it on the ARC
+    # runner, where the API is reachable and answers 403 — a definitive miss. Only a refused
+    # connection is the transient shape this block pins) → 503 + Retry-After (2026-09-23:
+    # never a 404 for a blip)
+    _real_urlopen = urllib.request.urlopen
+    def _api_away(*_a, **_k):  # the control plane is away
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+    urllib.request.urlopen = _api_away
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r = c.getresponse()
+        r.read()
+        retry_after = r.getheader("Retry-After")
+        c.close()
+        # A cached transient miss inside the TTL is still 503 (the blip is not a verdict)
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.request("GET", "/git-token?ns=test-neg-cache")
+        r2 = c.getresponse()
+        r2.read()
+        c.close()
+    finally:
+        urllib.request.urlopen = _real_urlopen
+    check(r.status == 503,
+          "negative-cache _resolve_git_token: second request 503 (re-resolution attempted, transient)")
+    check(retry_after == "2",
+          "negative-cache _resolve_git_token: transient miss carries Retry-After: 2")
+    check(_miss_reason(git_ref) == "transient",
+          "negative-cache _resolve_git_token: miss reason re-recorded as transient")
+
+    check(r2.status == 503,
+          "negative-cache _resolve_git_token: cached transient miss answers 503")
+
+    # _classify_miss: the k8s API's 404/403 are definitive, everything else is a blip
+    _h404 = urllib.error.HTTPError("u", 404, "nf", {}, None)
+    _h503 = urllib.error.HTTPError("u", 503, "busy", {}, None)
+    check(_classify_miss(_h404) == "absent", "_classify_miss: HTTP 404 → absent")
+    check(_classify_miss(urllib.error.HTTPError("u", 403, "fb", {}, None)) == "absent",
+          "_classify_miss: HTTP 403 → absent")
+    check(_classify_miss(_h503) == "transient", "_classify_miss: HTTP 503 → transient")
+    check(_classify_miss(TimeoutError("read timed out")) == "transient",
+          "_classify_miss: timeout → transient")
 
     # Verify cache entry was refreshed
     with _refs_lock:
@@ -6084,6 +6249,8 @@ data: [DONE]
           f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
     # Clean up
     _refs.pop(git_ref, None)
+    with _refs_lock:
+        _miss_reasons.pop(git_ref, None)
 
     print("\n=== Negative-cache TTL test for _resolve_loop_git (homelab#1004 / #1021) ===")
     # Same negative-cache TTL pattern in the sibling path _resolve_loop_git.
@@ -6104,10 +6271,18 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Call _resolve_loop_git directly — it will try K8s API (fails), cache new negative entry
-    result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    # Call _resolve_loop_git directly with the K8s API AWAY (forced, see the git-token block: in
+    # the cluster the API answers 403, which is a definitive miss, not this transient one)
+    _real_urlopen = urllib.request.urlopen
+    urllib.request.urlopen = _api_away
+    try:
+        result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    finally:
+        urllib.request.urlopen = _real_urlopen
     check(result is None,
           "negative-cache _resolve_loop_git: re-resolution returns None (no K8s API)")
+    check(_miss_reason(loop_ref) == "transient",
+          "negative-cache _resolve_loop_git: an unreachable K8s API is a transient miss")
 
     # Verify cache entry was refreshed
     with _refs_lock:
@@ -6118,6 +6293,8 @@ data: [DONE]
           f"(first expiry {first_expiry:.1f} → second {second_expiry:.1f})")
     # Clean up
     _refs.pop(loop_ref, None)
+    with _refs_lock:
+        _miss_reasons.pop(loop_ref, None)
 
     # ── #1020: cred-unresolved → circuit breaker accounting ─────────────────────────────────
     # PR #1019 landed the cred-unresolved → 502 fix but the 502 path returns before ever
@@ -6504,6 +6681,23 @@ data: [DONE]
     print("\n=== Pair cooldown feeds the pin (Goal #1640 acceptance 5) ===")
     router.init(None, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "model-classes.json"))
+    # ── Goal #1769 acceptance 2/3: the Go concurrency bound is READ from the `rails:` block ──
+    # The declared value is the home; OPENCODE_MAX_RUNNING is the env override. With the env
+    # unset, the effective bound is the declared one (3) — the module global this replaced was
+    # the only home, which is the subtraction.
+    check(router.rail_concurrency("opencode-go", None) == 3,
+          f"rails.opencode-go.concurrency must be declared 3 (got "
+          f"{router.rail_concurrency('opencode-go', None)})")
+    _saved_env_max = os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    check(_go_max_running() == 3,
+          f"the Go bound must read the declared value with the env unset (got {_go_max_running()})")
+    os.environ["OPENCODE_MAX_RUNNING"] = "7"
+    check(_go_max_running() == 7,
+          f"OPENCODE_MAX_RUNNING must OVERRIDE the declared value (got {_go_max_running()})")
+    if _saved_env_max is None:
+        os.environ.pop("OPENCODE_MAX_RUNNING", None)
+    else:
+        os.environ["OPENCODE_MAX_RUNNING"] = _saved_env_max
     _endpoints[_EP_MODEL] = [_endpoint_row("ProviderA", "providera", 0.10, 0.01),
                              _endpoint_row("ProviderB", "providerb", 0.30, 0.03)]
     for _t in ("issue-1668-a", "issue-1668-b"):

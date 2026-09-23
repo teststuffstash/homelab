@@ -42,3 +42,9 @@ spec:
     # Default-when-silent is `public: []` — both /metrics and /healthz blocked (ADR-123).
     # Spelled out here only to show the shape; an honest api consumer leaves it out.
     public: []
+  # Edge-asserted origin mark (optional, either profile): the edge sets this header on requests
+  # coming from the homelab's own WAN egress and STRIPS it from everyone else's, so the origin can
+  # tell our traffic from a caller's without any client stamping it. One claim per zone.
+  originMark:
+    header: X-Oracle-Origin
+    value: homelab

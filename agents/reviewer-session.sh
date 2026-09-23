@@ -182,10 +182,15 @@ fi
 NS="${LOOP_NS_ARG:-agent-coordinator}"
 POD_SA="default"
 LOOP_FETCH=""
+# >>>REPLAY:loop-fetch-guard>>>
 if [ -n "${LOOP_NS_ARG:-}" ]; then
   POD_SA="agentstack-loop"
-  LOOP_FETCH="export GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=reviewer\")\" || { echo 'FATAL: loop-reviewer token fetch refused/failed — not reviewing blind'; exit 1; }; "
+  # Assignment THEN export (homelab#617): `export X="$(…)" || …` reports export's status, so a
+  # failed fetch never fired this guard and the review ran blind — the reviewer twin of the
+  # coordinator bug, caught by replay loop-fetch-guard/reviewer-fetch-retry (2026-09-23).
+  LOOP_FETCH="GH_TOKEN=\"\$(curl -fsS --retry 3 --retry-delay 2 --retry-connrefused -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=reviewer\")\" || { echo 'FATAL: loop-reviewer token fetch refused/failed — not reviewing blind'; exit 1; }; export GH_TOKEN; "
 fi
+# <<<REPLAY:loop-fetch-guard<<<
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"

@@ -1,0 +1,158 @@
+# Behaviour fixture for disk-health.promtool-rules — `devbox run prometheus-rules-lint` runs it.
+#
+# Every series below is shaped from a REAL drive in this fleet, because the point of these rules is
+# a distinction that a synthetic fixture hides: a DEFECT COUNT IS NOT A DEFECT SIGNAL HERE. The
+# fleet buys used drives with disclosed defects, so the quiet cases carry non-zero standing counts
+# and must stay silent; only growth fires.
+#
+#   quiet   hp-01 sdb        Reallocated_Sector_Ct flat at 8   — the S4510-lot shape (bought with
+#                            retired blocks already on it)
+#   FIRES   wk-metal-04 sda  8 → 12 inside the 7 d window
+#   quiet   wk-metal-01 sda  UDMA_CRC_Error_Count flat at 0
+#   FIRES   wk-metal-04 sdc  1867 → 1868 inside 1 h — the SA400's real standing count
+#                            (docs/storage-ledger.md §2026-09-05), with the cable still degrading
+#   quiet   wk-metal-01 sda  SATA link 6.0 of 6.0 Gb/s
+#   FIRES   wk-metal-04 sdc  SATA link 3.0 of 6.0 Gb/s — the exact 2026-09-05 negotiation
+#   quiet   hp-01 nvme0      NVMe spare 100 / threshold 12, wear 3 % — its real live values
+#   FIRES   wk-metal-04 nvme0 spare 10 / threshold 12
+rule_files:
+  - disk-health.promtool-rules
+evaluation_interval: 5m
+
+tests:
+  # ── the 7 d window / 1 h-`for` rules. Everything runs at the REAL 5 m scrape cadence: promtool
+  #    evaluates rules at the file-level evaluation_interval, so an input series stepped any coarser
+  #    than that goes stale between samples and every rule over it silently sees nothing.
+  - interval: 5m
+    input_series:
+      # a defect counter that MOVES: 8 for the first 101 h, then 12
+      - series: 'smartctl_device_attribute{job="smartctl-exporter",node="wk-metal-04",device="sda",attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw"}'
+        values: '8x287 12x120'
+      # a defect counter that is merely NON-ZERO — the case an absolute threshold would get wrong
+      - series: 'smartctl_device_attribute{job="smartctl-exporter",node="hp-01",device="sdb",attribute_name="Reallocated_Sector_Ct",attribute_value_type="raw"}'
+        values: '8x400'
+      - series: 'smartctl_device_percentage_used{job="smartctl-exporter",node="wk-metal-01",device="sda"}'
+        values: '85x400'
+      - series: 'smartctl_device_percentage_used{job="smartctl-exporter",node="hp-01",device="nvme0"}'
+        values: '3x400'
+      # the HYPERVISOR half, same metric names from the ansible textfile collector on a different
+      # job — proof that the `job=~"smartctl-exporter|pve-node"` selector reaches both sides.
+      # nx-02's Micron 2200S reads 8 % live; 82 % is the same drive later in its life.
+      - series: 'smartctl_device_percentage_used{job="pve-node",node="nx-02",device="nvme0"}'
+        values: '82x400'
+    alert_rule_test:
+      # t=23h: both counters flat across the whole window → nothing, including the non-zero one.
+      - eval_time: 23h
+        alertname: DiskDefectsGrowing
+        exp_alerts: []
+      # t=25h: wk-metal-04 stepped at t=24h and has held for 1 h → fires. hp-01 stays quiet.
+      - eval_time: 25h
+        alertname: DiskDefectsGrowing
+        exp_alerts:
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sda", attribute_name: "Reallocated_Sector_Ct", attribute_value_type: "raw" }
+            exp_annotations:
+              summary: "wk-metal-04 sda: Reallocated_Sector_Ct grew by 4 in 7 d"
+              description: "A defect counter that was stable is moving. A non-zero standing count is normal here (drives are bought used, with disclosed defects) — GROWTH is not. Read the drive (docs/runbook.md §Reading a fleet disk's identity and health) and record the numbers in the private hardware register's inventory row before deciding."
+      # wear: 85 % (metal) and 82 % (a hypervisor, via the OTHER job) both fire; hp-01's real 3 %
+      # does not. Alerts sort by label set, so nx-02 comes first.
+      - eval_time: 2h
+        alertname: DiskWearHigh
+        exp_alerts:
+          - exp_labels: { severity: "warning", job: "pve-node", node: "nx-02", device: "nvme0" }
+            exp_annotations:
+              summary: "nx-02 nvme0: 82% of rated endurance used"
+              description: "Standardized wear indicator past 80%. Not urgent on its own — plan the replacement into the hardware register rather than reacting. ⚠ Trust THIS field, not a vendor SSD_Life_Left attribute: they disagree on the same drive (Kingston SA400 read 6 vs 5%, and the ADATA SU630's raw field is unusable — docs/runbook.md)."
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-01", device: "sda" }
+            exp_annotations:
+              summary: "wk-metal-01 sda: 85% of rated endurance used"
+              description: "Standardized wear indicator past 80%. Not urgent on its own — plan the replacement into the hardware register rather than reacting. ⚠ Trust THIS field, not a vendor SSD_Life_Left attribute: they disagree on the same drive (Kingston SA400 read 6 vs 5%, and the ADATA SU630's raw field is unusable — docs/runbook.md)."
+
+  # ── the short-window rules, at the real 5 m scrape cadence ────────────────────────────────────
+  - interval: 5m
+    input_series:
+      # the SA400's standing 1867 CRC errors, with one more arriving at t=105m
+      - series: 'smartctl_device_attribute{job="smartctl-exporter",node="wk-metal-04",device="sdc",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw"}'
+        values: '1867x20 1868x20'
+      - series: 'smartctl_device_attribute{job="smartctl-exporter",node="wk-metal-01",device="sda",attribute_name="UDMA_CRC_Error_Count",attribute_value_type="raw"}'
+        values: '0x40'
+      - series: 'smartctl_device_interface_speed{job="smartctl-exporter",node="wk-metal-04",device="sdc",speed_type="current"}'
+        values: '3000000000x40'
+      - series: 'smartctl_device_interface_speed{job="smartctl-exporter",node="wk-metal-04",device="sdc",speed_type="max"}'
+        values: '6000000000x40'
+      - series: 'smartctl_device_interface_speed{job="smartctl-exporter",node="wk-metal-01",device="sda",speed_type="current"}'
+        values: '6000000000x40'
+      - series: 'smartctl_device_interface_speed{job="smartctl-exporter",node="wk-metal-01",device="sda",speed_type="max"}'
+        values: '6000000000x40'
+      - series: 'smartctl_device_available_spare{job="smartctl-exporter",node="wk-metal-04",device="nvme0"}'
+        values: '10x40'
+      - series: 'smartctl_device_available_spare_threshold{job="smartctl-exporter",node="wk-metal-04",device="nvme0"}'
+        values: '12x40'
+      - series: 'smartctl_device_available_spare{job="smartctl-exporter",node="hp-01",device="nvme0"}'
+        values: '100x40'
+      - series: 'smartctl_device_available_spare_threshold{job="smartctl-exporter",node="hp-01",device="nvme0"}'
+        values: '12x40'
+    alert_rule_test:
+      # t=100m: 1867 flat across the whole 1 h window — a large standing count is not a signal.
+      - eval_time: 100m
+        alertname: DiskCrcErrorsGrowing
+        exp_alerts: []
+      # t=110m: one new error inside the window → fires at once (`for: 0m` — a cable is urgent).
+      - eval_time: 110m
+        alertname: DiskCrcErrorsGrowing
+        exp_alerts:
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc", attribute_name: "UDMA_CRC_Error_Count", attribute_value_type: "raw" }
+            exp_annotations:
+              summary: "wk-metal-04 sdc: 1 new SATA interface CRC error(s) in 1 h"
+              description: "Interface CRC errors are the CABLE, not the drive (docs/storage-ledger.md §2026-09-05 — wk-metal-04's SA400 sat on 1,867 of these at a negotiated 3.0 of 6.0 Gb/s, and NCQ retries after them stalled the queue on large writes). Reseat or replace the data cable for this device; do not condemn the drive on this alert alone."
+      # t=20m: the degraded link is real but still inside its 30 m debounce.
+      - eval_time: 20m
+        alertname: DiskInterfaceSpeedDegraded
+        exp_alerts: []
+      # t=30m: 3.0 of 6.0 Gb/s, held → fires. wk-metal-01 at 6.0/6.0 never does.
+      - eval_time: 30m
+        alertname: DiskInterfaceSpeedDegraded
+        exp_alerts:
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc" }
+            exp_annotations:
+              summary: "wk-metal-04 sdc: SATA link negotiated below its rating"
+              description: "The link came up slower than the drive and port can do — the wk-metal-04 signature, found by hand in 2026-09 only after a 9-hour Garage write job had already paid for it. Pair with DiskCrcErrorsGrowing: CRC errors alongside this means the cable. ⚠ This covers SATA only. NVMe PCIe LANE WIDTH is not exported and is not covered — see FU-284's residual and docs/runbook.md's fit-time check."
+      # t=10m: below the drive's own threshold, still debouncing.
+      - eval_time: 10m
+        alertname: NvmeSpareBelowThreshold
+        exp_alerts: []
+      # t=15m: fires on wk-metal-04 only — hp-01's 100 % against the same threshold stays quiet.
+      - eval_time: 15m
+        alertname: NvmeSpareBelowThreshold
+        exp_alerts:
+          - exp_labels: { severity: "critical", job: "smartctl-exporter", node: "wk-metal-04", device: "nvme0" }
+            exp_annotations:
+              summary: "wk-metal-04 nvme0: NVMe available spare 10% is below the drive's own threshold"
+              description: "The controller has burned through its spare block pool past the point IT calls critical. Plan the replacement now — a drive here is close to going read-only."
+
+  # ── the meter's own liveness: the belt must be able to say it has gone blind ──────────────────
+  - interval: 5m
+    input_series:
+      # the in-cluster half stops reporting after t=30m (DaemonSet down, ServiceMonitor target
+      # lost, image won't start)
+      - series: 'smartctl_devices{job="smartctl-exporter",node="hp-01"}'
+        values: '11x6'
+      # ...while the HYPERVISOR half keeps reporting throughout. The belt is per-half on purpose:
+      # losing the DaemonSet must not be masked by the hypervisors still being watched, and the
+      # firing alert must say WHICH side went blind.
+      - series: 'smartctl_devices{job="pve-node",node="nx-02"}'
+        values: '2x20'
+    alert_rule_test:
+      # t=25m: still reporting.
+      - eval_time: 25m
+        alertname: DiskHealthMetricsAbsent
+        exp_alerts: []
+      # t=55m: the in-cluster half is stale since t=35m and has held 15 m → fires, and ONLY for
+      # that half. Labels come from the selector's equality matcher, which is what carries `job`
+      # into the summary.
+      - eval_time: 55m
+        alertname: DiskHealthMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: "warning", job: "smartctl-exporter" }
+            exp_annotations:
+              summary: "No disk-health metrics from smartctl-exporter for 15m — those drives are unwatched"
+              description: "smartctl_devices is absent for a whole half of the fleet. If `job=smartctl-exporter` is missing, the DaemonSet is down, the ServiceMonitor lost its target, or the image cannot start — `kubectl -n node-maintenance get ds,pod`. If `job=pve-node` is missing, the hypervisors' smart-textfile-metrics timer has stopped or node_exporter is down — `systemctl status smart-textfile-metrics.timer` on pve and nx-02. While this fires, the drives on that side are not being watched at all."

@@ -1,0 +1,8 @@
+OUT >>> Case 1: the reviewer fetch carries the retry flags
+OUT RETRY_FLAGS_OK reviewer
+OUT TOKEN_EXPORTED
+OUT EXIT: 0
+OUT >>> Case 2: a fetch that fails after retrying still fails closed
+OUT FATAL: loop-reviewer token fetch refused/failed — not reviewing blind
+OUT EXIT: 1
+RC 0

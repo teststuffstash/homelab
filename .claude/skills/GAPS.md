@@ -195,9 +195,33 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       command-in-a-variable never ran). Also improvised: there is no `down` verb for a CONTROL
       PLANE (node-maintenance refuses, cp-upgrade only upgrades) — cp-01 went down by hand (etcd
       status + leader/VIP read, snapshot, drain, `talosctl shutdown`, cilium-check). Sighted
-      2026-09-21 (seat, pve GPU swap). Next: ship the watch as a verb (`maint watch`, emits one
-      line per new alert name, exits never) so it is run, not re-typed; and a `cp-down`/`cp-up`
-      pair beside cp-upgrade with the same gates.
+      2026-09-21 (seat, pve GPU swap). RESIGHT 2026-09-22 (seat, registry GC window): the re-typed
+      watch carried a SECOND defect, one the first sighting's bug would have masked — no dedupe, so
+      a persistent new alert re-notified every poll (`GarageDisruptionBlocked`, already pending 90
+      min before the window opened, fired on its 2 h `for:`, then repeated each 45 s tick). Two
+      independent defects in two consecutive hand-written copies is the argument for shipping the
+      verb, not for a bigger snippet in the skill. Next: ship the watch as a verb (`maint watch`,
+      emits one line per new alert name ONCE — baseline-diff plus a seen-set — exits never) so it is
+      run, not re-typed; and a `cp-down`/`cp-up` pair beside cp-upgrade with the same gates.
+      **RESIGHT 2026-09-23 (seat, wk-metal-04 drive swap) — THIRD hand-written copy, THREE more
+      defects, and the first was a new class: the PROBE, not the loop.** The watch exec'd
+      `wget` inside the prometheus container; that container has no `wget`, so the command produced
+      nothing, every poll compared an EMPTY alert set, and the Monitor sat silent for its full 30 min
+      while reporting "expired with no events". Silence from a working watch and silence from a dead
+      one are the same notification — which is the whole failure this skill exists to prevent, now
+      committed by the skill's own recipe (§Arm the watch prints `curl $PROM/api/v1/alerts` and never
+      says what `$PROM` is or how to prove it answered). The zsh `for a in $cur` bug from the first
+      sighting was ALSO re-committed in the replacement loop minutes later. Two fixes, both cheap:
+      the verb must (a) resolve a probe that is reachable from the jail — Alertmanager's LB VIP
+      `192.168.40.14:9093/api/v2/alerts` works with plain `curl`, no exec, no in-container tooling —
+      and (b) FAIL LOUD on an unreadable probe (`WATCH BLIND` after N consecutive empty reads),
+      mirroring `maint check`'s own "UNREADABLE blocks like a regression" rule, which the watch half
+      never inherited. Three sightings, three distinct defects, zero successful hand-written copies:
+      And a third, purely operational: the replacement Monitor was armed WITHOUT stopping the
+      broken one, so two watches ran and the dead one kept delivering its blob as if it were a
+      finding — a hand-managed watch has no notion of "replaces". Four defects across three copies,
+      zero successful ones: **stop re-typing it, ship `maint watch`** (one verb, one process, a
+      dedupe set, a loud-on-unreadable probe, and an id so re-arming replaces rather than duplicates).
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's

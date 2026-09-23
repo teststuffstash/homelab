@@ -1,0 +1,18 @@
+# Headless on purpose: a DaemonSet wants ONE scrape target per pod, not a load-balanced VIP.
+# The Service NAME becomes the Prometheus `job` label ("smartctl-exporter") — every expr in
+# prometheusrule.yaml depends on it (same convention as github-exporter/service.yaml).
+# No `bgp: advertise`, no LB VIP: this is scraped in-cluster only and has no LAN consumer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartctl-exporter
+  namespace: node-maintenance
+  labels: { app.kubernetes.io/name: smartctl-exporter }
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: smartctl-exporter
+  ports:
+    - name: metrics
+      port: 9633
+      targetPort: metrics

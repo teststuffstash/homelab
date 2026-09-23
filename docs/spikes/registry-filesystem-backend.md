@@ -37,8 +37,9 @@ exist?
   `corpus-image.oci.tar` is its Garage transport form, Argo artifact passing rides it). The
   registry's *backing store* is a service's working store, a different thing (operator,
   2026-09-22). The nearest precedent points the other way: the pull-through mirrors are rebuildable
-  and sit on **PVCs** by decision, with "bigger PVC, never a lower threshold" as the recorded
-  posture (ADR-080, homelab#116).
+  and sit on **PVCs** by decision ([ADR-091](../adr.md) — "cache PVCs on longhorn-bulk"), with
+  "bigger PVC, never a lower threshold" as the recorded posture
+  ([`storage-ledger.md`](../storage-ledger.md), homelab#116).
 - **Writes per release, if the backend changed** — a PVC at 2 replicas writes ~21.2 GB, against
   Garage rf=3's ~31.8 GB (or ~63.6 GB if a server-side copy does not share blocks — unverified,
   see below). So the candidate is cheaper in writes *and* removes the failure mode.

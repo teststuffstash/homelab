@@ -1,0 +1,5 @@
+CALL curl -m 5 -s -X POST -H Content-Type: application/json -d {"repo":"test-project","unit":"-"} http://doorbell.test/coordinate/coordinate
+OUT → no retry: strike on deepseek/deepseek-v4-flash|openrouter|timeout — salvage=unknown serving=1 cell_seen=no task_attempts=0/2 can_retry=1 (the coordinator decides, as today)
+OUT → coordinator doorbell rung (/coordinate {"repo":"test-project","unit":"-"})
+OUT → post: RETRY_FIRE=[] RETRY_CELL=[]
+RC 0

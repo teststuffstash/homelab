@@ -1,0 +1,27 @@
+# Prometheus picks up ServiceMonitors cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false
+# in tofu/monitoring.tf).
+#
+# 5m interval, NOT the 30s default: every scrape makes the exporter issue real ATA/NVMe passthrough
+# commands to every drive. Media health is a days-to-weeks signal — the alert windows below are
+# 1 h to 7 d — so a fast scrape buys nothing and costs IO on the exact disks this is meant to
+# protect. It also keeps nx-02's boot spinner from being woken on a 30 s cadence.
+#
+# `node` is the label every alert reports by: the pod's own instance is an ephemeral IP, and a
+# drive fault is a statement about a BOX. Taken from the pod's nodeName at relabel time.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: smartctl-exporter
+  namespace: node-maintenance
+  labels: { app.kubernetes.io/name: smartctl-exporter }
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smartctl-exporter
+  endpoints:
+    - port: metrics
+      interval: 5m
+      scrapeTimeout: 1m
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
