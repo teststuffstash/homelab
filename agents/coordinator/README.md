@@ -892,7 +892,10 @@ allowed) and `Goal → theme → child → sprout` reads 2 (suppressed).
 **THEN, assemble a complete theme (trigger (e) — ONLY when your unit carries
 `theme-complete=<theme-n>`).** The scan emits this for an open `theme:` container whose
 descendants are all closed and whose branch `goal/<goal-n>-<slug>` (its `Base`) has NO PR yet;
-the trigger retires once a PR for the branch exists. Re-read live state first: **if a PR for the
+the trigger retires once a PR for the branch exists. The walk reads RULINGS, not states: a
+`deferred` subtree is pruned (ADR-122 (4) — "not this Goal's" stays open by design and never
+holds an assembly; theme #1768 sat a day behind a deferred `agent-runtime#142` three levels
+down, 2026-09-22), and an unreadable store HOLDS the walk with one ⚠ (rule #6). Re-read live state first: **if a PR for the
 branch already exists, exit clean** — the trigger is stale (a sibling session or the seat got
 there first). Otherwise verify every member is CLOSED (re-list the theme's descendants) and that
 `ci` is green at the branch head (`gh run list --repo <slug> --branch goal/<goal-n>-<slug>`); a

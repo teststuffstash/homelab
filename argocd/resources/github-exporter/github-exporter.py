@@ -2116,7 +2116,7 @@ _FIXTURE = {
         {"number": 174, "title": "goal-174 — absorbable tier", "state": "OPEN",
          "stateReason": None, "closedAt": None,
          "body": "Some prose about a €99 idea.\n\nBudget: $12.50\nVerdict-authority: kpi\n",
-         "labels": {"nodes": [{"name": "task/goal"}]}},
+         "labels": {"nodes": [{"name": "task/goal"}]}, "comments": {"totalCount": 7}},
         {"number": 17, "title": "circles P0 MVP", "state": "CLOSED",
          "stateReason": "COMPLETED", "closedAt": _RECENT_CLOSE,
          "body": "Budget: 16\n", "labels": {"nodes": [{"name": "task/goal"},
@@ -2415,6 +2415,9 @@ def self_test():
 
     has('goal_budget_usd{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 12.5')
     has('goal_descendants_open{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
+    has('goal_timeline_comments{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 7')
+    # a node without the comments field (the pre-#comments query shape, or a partial read) emits NO series — absent, never 0
+    assert 'goal_timeline_comments{goal="17"' not in body, "goal 17 has no comments field and must not emit a count"
     has('goal_descendants_closed{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 2')
     has('goal_sprouts_filed_total{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
     has('goal_tree_truncated{owner="teststuffstash",project="oracle-fleet",stack="oracle"} 1')

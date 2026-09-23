@@ -229,3 +229,33 @@ tests:
       - expr: goal_budget_ratio_pre348
         eval_time: 9m
         exp_samples: []
+
+  # ── GoalTimelineNoisy — the write-back-is-the-store belt (2026-09-23) ────────────────────────
+  # A Goal's comment count is flat by construction once rulings land in the store; 34 is the
+  # homelab#1640 shape (twelve prose rulings + the two stores + operator notes). The quiet goal
+  # at 12 never fires; the noisy one fires only after the full hour.
+  - interval: 1m
+    name: GoalTimelineNoisy fires after 1h past 30 comments, never for a quiet goal
+    input_series:
+      - series: 'goal_timeline_comments{goal="1640",owner="teststuffstash",project="homelab",stack="platform",container="exporter",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "34+0x90"
+      - series: 'goal_timeline_comments{goal="29",owner="teststuffstash",project="circles",stack="circles",container="exporter",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "12+0x90"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: GoalTimelineNoisy
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: GoalTimelineNoisy
+        exp_alerts:
+          - exp_labels:
+              goal: "1640"
+              owner: teststuffstash
+              project: homelab
+              stack: platform
+              severity: warning
+              platform_machinery: "true"
+              triage: "none"
+            exp_annotations:
+              summary: "Goal homelab#1640 carries 34 comments"
+              description: "Goal homelab#1640 has 34 timeline comments. The checkpoint's write-back is the store (rule suffix + last-checkpoint: line, edited in place), so a count past 30 means a session is posting per-ride prose again — read the newest comments' authors. Past ~128 KiB of comments the scan's store read fails (E2BIG) and trigger (c) stops firing (2026-09-22, homelab#1640). https://github.com/teststuffstash/homelab/issues/1640"

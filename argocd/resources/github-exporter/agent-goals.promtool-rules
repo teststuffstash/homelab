@@ -40,6 +40,16 @@ groups:
         expr: goal_spent_usd / max by (owner, project, stack, goal) (goal_budget_usd)
       - record: goal_budget_remaining_usd
         expr: max by (owner, project, stack, goal) (goal_budget_usd) - goal_spent_usd
+      - alert: GoalTimelineNoisy
+        expr: max by (owner, project, stack, goal) (goal_timeline_comments) > 30
+        for: 1h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: "none"
+        annotations:
+          summary: "Goal {{ $labels.project }}#{{ $labels.goal }} carries {{ $value }} comments"
+          description: "Goal {{ $labels.project }}#{{ $labels.goal }} has {{ $value }} timeline comments. The checkpoint's write-back is the store (rule suffix + last-checkpoint: line, edited in place), so a count past 30 means a session is posting per-ride prose again — read the newest comments' authors. Past ~128 KiB of comments the scan's store read fails (E2BIG) and trigger (c) stops firing (2026-09-22, homelab#1640). https://github.com/{{ $labels.owner }}/{{ $labels.project }}/issues/{{ $labels.goal }}"
 
   # ── regression witness: the exprs exactly as they shipped from #209 to #348 ────────────────────
   # NOT a proposal and not deployed — the pre-fix forms, kept runnable so the fixture can EXECUTE
