@@ -108,6 +108,24 @@ spec:
     # will often be absent — that is the honest reading. Counts (agent_run_count_by_rail) are
     # the honest unit for subscription + Go; window-draw truth is the proxy's own gometer/anthropic
     # series and is NOT restated here.
+        # The checkpoint's write-back is the STORE (two machine comments edited in place —
+        # agents/goal-findings.sh, agents/epic_dispositions.py), so a Goal's comment count is
+        # flat by construction: it moves only when a human writes, or when a session posts prose
+        # rulings again. Twelve of those on homelab#1640 (6 KB each, 2026-09-14..22) pushed the
+        # timeline to 175 KB — past the 128 KiB single-argument cap the scan's store read ran
+        # into, which held trigger (c) for good. SYMPTOM alert: the count says "something writes
+        # per ride again", not which clause; the timeline itself names the author.
+        - alert: GoalTimelineNoisy
+          expr: max by (owner, project, stack, goal) (goal_timeline_comments) > 30
+          for: 1h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # the remedy is a play/recipe fix by the seat, never a worker ride on the Goal
+            triage: "none"
+          annotations:
+            summary: "Goal {{ $labels.project }}#{{ $labels.goal }} carries {{ $value }} comments"
+            description: "Goal {{ $labels.project }}#{{ $labels.goal }} has {{ $value }} timeline comments (SYMPTOM: the count, not who wrote them). Check the newest comments' authors and shapes: machine rulings belong in the two store comments edited in place (goal-findings, epic-dispositions), so per-ride prose from a session is one cause to rule out; operator escalations and human notes raise the count legitimately. Why it matters: past ~128 KiB of comments the scan's store read fails (E2BIG) and trigger (c) stops firing (2026-09-22, homelab#1640). https://github.com/{{ $labels.owner }}/{{ $labels.project }}/issues/{{ $labels.goal }}"
     - name: agent-rail-accounting
       rules:
         # Per-rail cost: add rail label via a two-pass label_replace — first default to openrouter,

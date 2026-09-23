@@ -1,0 +1,1 @@
+{"body": "---\nTouches: agents/coordinator/**\nBase: goal/29-coordinator-belts\n---\nLevel-2 theme (ADR-126): the coordinator belts, batched as one deploy-and-soak roll.\n"}

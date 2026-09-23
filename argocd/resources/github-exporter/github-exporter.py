@@ -987,7 +987,8 @@ _GOAL_FIELDS = """
         goalIssues: issues(labels:["task/goal"], states:[OPEN,CLOSED], first:$goals,
                            orderBy:{field:UPDATED_AT, direction:DESC}) {
           nodes { number title state stateReason closedAt body
-                  labels(first:20){ nodes { name } } }
+                  labels(first:20){ nodes { name } }
+                  comments { totalCount } }
         }
         issueTree: issues(states:[OPEN,CLOSED], first:$issues,
                           orderBy:{field:UPDATED_AT, direction:DESC}) {
@@ -1474,6 +1475,8 @@ def collect_goals(lines):
         "# HELP goal_descendant_info 1 per (goal, descendant) edge incl. the goal itself at depth 0 — the membership series `goal_spent_usd` joins against agent_run_cost_usd on (project, issue).",
         "# TYPE goal_verdict gauge",
         "# HELP goal_verdict 1 per goal, state enum on the `verdict` label: open | validated | reverted | abandoned (ADR-102 terminals, read from goal/* labels once the taxonomy carries them) | completed | not_planned (the GitHub-native close reason, all that is knowable until then).",
+        "# TYPE goal_timeline_comments gauge",
+        "# HELP goal_timeline_comments Comments on the goal issue itself. The checkpoint's write-back is the STORE (two machine comments, edited in place), so a count that climbs ride by ride is a session posting prose rulings again — the noise that pushed homelab#1640 past the 128 KiB store-read cap on 2026-09-22 (GoalTimelineNoisy).",
         "# TYPE goal_tree_truncated gauge",
         "# HELP goal_tree_truncated 1 = this repo has more issues than GOAL_ISSUE_WINDOW, so a descendant that has not been updated recently can be missing from the counts above. Not a silent cap.",
     ]
@@ -1504,6 +1507,9 @@ def collect_goals(lines):
             budget = parse_budget_usd(goal.get("body"))
             if budget is not None:
                 lines.append(metric("goal_budget_usd", ident, budget))
+            comments = ((goal.get("comments") or {}).get("totalCount"))
+            if isinstance(comments, int):
+                lines.append(metric("goal_timeline_comments", ident, comments))
             depths = descendants_by_depth(tree["parent"], number)
             states = {n: tree["issue"].get(n, {}).get("state", "") for n in depths}
             lines.append(metric("goal_descendants_open", ident,
@@ -2110,7 +2116,7 @@ _FIXTURE = {
         {"number": 174, "title": "goal-174 — absorbable tier", "state": "OPEN",
          "stateReason": None, "closedAt": None,
          "body": "Some prose about a €99 idea.\n\nBudget: $12.50\nVerdict-authority: kpi\n",
-         "labels": {"nodes": [{"name": "task/goal"}]}},
+         "labels": {"nodes": [{"name": "task/goal"}]}, "comments": {"totalCount": 7}},
         {"number": 17, "title": "circles P0 MVP", "state": "CLOSED",
          "stateReason": "COMPLETED", "closedAt": _RECENT_CLOSE,
          "body": "Budget: 16\n", "labels": {"nodes": [{"name": "task/goal"},
@@ -2409,6 +2415,9 @@ def self_test():
 
     has('goal_budget_usd{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 12.5')
     has('goal_descendants_open{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
+    has('goal_timeline_comments{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 7')
+    # a node without the comments field (the pre-#comments query shape, or a partial read) emits NO series — absent, never 0
+    assert 'goal_timeline_comments{goal="17"' not in body, "goal 17 has no comments field and must not emit a count"
     has('goal_descendants_closed{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 2')
     has('goal_sprouts_filed_total{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
     has('goal_tree_truncated{owner="teststuffstash",project="oracle-fleet",stack="oracle"} 1')
