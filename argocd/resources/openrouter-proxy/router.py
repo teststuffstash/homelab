@@ -38,6 +38,77 @@ import time
 # AST; never a third copy.
 import model_id
 
+# ── THE RAIL VOCABULARY — THE ONE HOME (Goal #1769 acceptance 1) ───────────────────────────────
+# A candidate's rail is whatever `model_id.parse()` says it is. The parser has owned the rule
+# since FU-127; the walk re-derived it anyway as a two-way split
+# (`"subscription" if m.startswith("claude/") else "openrouter"`, three sites), so an
+# `opencode-go/*` candidate classified as OpenRouter and was gated by the OpenRouter KEY's state
+# (`or_gate`) instead of the Go rail's own capacity (`/opencode-limit`). The rule is read from
+# the parser now, at the one place that decides — `route()`'s walk — and the walk's own
+# vocabulary IS the parser's, so `classes.<cls>.rails` and a decision row cannot spell a rail the
+# parser would never produce.
+#
+# `classes.<cls>.rails` is written in this CANONICAL vocabulary. `opencode-zen` is the one member
+# no parse rule produces yet: the `opencode/` prefix is the Zen leg (homelab#445), parked by
+# OPENCODE_RAIL_DISABLED and unmetered — Goal #1769 acceptance 2's `rails:` block declares it
+# `enabled: false`. A class may name it; no candidate can parse onto it, so the walk finds an
+# empty pool and moves on (a rail with no candidates is not a rail with a wrong answer).
+RAIL_OPENCODE_ZEN = "opencode-zen"
+RAILS = (model_id.RAIL_SUBSCRIPTION, model_id.RAIL_OPENCODE_GO, model_id.RAIL_OPENROUTER,
+         RAIL_OPENCODE_ZEN)
+# ONE-RELEASE alias for the pre-Goal-#1769 spelling. Applied once at load and logged once
+# (below), so a class file still carrying `subscription` means the canonical rail instead of
+# meaning NOTHING (which is what an unaliased unknown name would be — an empty pool, silently).
+# Deleted next release, with the alias row.
+RAIL_ALIASES = {"subscription": model_id.RAIL_SUBSCRIPTION}
+
+# ── CALLER CAPABILITY — THE RAIL WALK'S OTHER INPUT (Goal #1769 acceptance 4, router half) ─────
+# The 2026-08-26 incident (docs/incidents/2026-08-26-reviewer-404-loop.md) named the gap:
+# "the gate asks 'can the ACCOUNT buy', never 'can the CALLER ride'". The reviewer sends no
+# OpenRouter `key_ref` BY DESIGN, and `review`'s second rail entry — one YAML token — turned
+# "defer + fallback" into a served, dead OpenRouter pick with zero review verdicts for ~6h.
+# FU-188 pinned the reviewer to shadow; this predicate is what makes WIDENING the rail lists safe
+# again, so the pin's shell line (theme 2's deletion) stops being load-bearing.
+#
+# What each rail REQUIRES of the caller, declared per rail. Goal #1769 acceptance 2 EXTERNALIZED
+# this into model-classes.json's `rails:` block (`surfaces`), which `rail_surfaces()` reads; the
+# table below is the code BELT for a jail run without the file (same contract as every other
+# table here). The requirement is the rail's `surfaces` list, plus openrouter's `key_ref` (its own
+# credential — the one requirement that is not a surface, so it stays a code predicate).
+#
+#   openrouter                a `key_ref` — the caller's OWN credential. Its absence now means
+#                             "I cannot ride this rail", never "unknown, try anyway". Its
+#                             `surfaces` cover every caller surface (any CLI can ride it WITH a key).
+#   anthropic-subscription,
+#   opencode-go, opencode-zen the matching CLI surface. Derived from the rail's HARNESS, which
+#                             `model_id.parse()` already owns: a Go ride is executed by the claude
+#                             binary (agent-session.sh rides `opencode-go/*` through the jail
+#                             shim / claude CLI — parser harness "claude"), and the parked Zen leg
+#                             is the one the opencode CLI rides. So the Go rail is rideable by a
+#                             `claude-cli` caller — which is why the reviewer's surface can serve
+#                             a Go model when the Anthropic window is latched.
+RAIL_DEFAULTS = {
+    model_id.RAIL_SUBSCRIPTION: {
+        "gate": "sub", "surfaces": ["claude-cli"], "cost": "flat-window",
+        "windows": ["5h", "7d"], "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+        "concurrency": None, "enabled": True},
+    model_id.RAIL_OPENCODE_GO: {
+        "gate": "go", "surfaces": ["claude-cli"], "cost": "flat-pool",
+        "windows": ["5h", "7d", "30d"], "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+        "concurrency": 3, "enabled": True},
+    model_id.RAIL_OPENROUTER: {
+        "gate": "or", "surfaces": ["claude-cli", "opencode-cli", "openai-api"],
+        "cost": "per-token", "windows": [], "tier_thresholds": {}, "concurrency": None,
+        "enabled": True},
+    RAIL_OPENCODE_ZEN: {
+        "gate": "none", "surfaces": ["opencode-cli"], "cost": "per-token", "windows": [],
+        "tier_thresholds": {}, "concurrency": None, "enabled": False},
+}
+# The env kill switch's leg names (FU-213): OPENCODE_RAIL_DISABLED parks the opencode legs by
+# their LEG name, the rail vocabulary names them by rail. ONE map, so the walk and the proxy's
+# forward-path belt (`_rail_disabled`) cannot disagree about which rail an env value parks.
+RAIL_ENV_LEG = {model_id.RAIL_OPENCODE_GO: "go", RAIL_OPENCODE_ZEN: "zen"}
+
 # ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
 # These error classes are INFRA failures (model-routing-history.md §M1): they blacklist the (task, model)
 # pair without consuming a round. This set IS the vocabulary — `/report` stores a strike under a
@@ -64,8 +135,8 @@ STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-
 SERVING_CLASSES = {"provider-5xx", "timeout", "auth-storm", "tool-loop"}
 
 # ── #1259: tier ordering for label_map tier_floor enforcement ──
-# Ordered from cheapest to most expensive. Used to compare a model's model_tiers grade against
-# the tier_floor from a resolved label_map entry. A model whose tier is below the floor is
+# Ordered from cheapest to most expensive. Used to compare a model's `models.<key>.tier` grade
+# against the tier_floor from a resolved label_map entry. A model whose tier is below the floor is
 # excluded from the candidate walk.
 _TIER_ORDER = {"free": 0, "cheap": 1, "large": 2, "premium": 3}
 
@@ -107,7 +178,7 @@ CREATE TABLE IF NOT EXISTS generations(
   cost_usd REAL, latency_ms INTEGER, finish TEXT, generation_ms INTEGER);
 CREATE TABLE IF NOT EXISTS decisions(
   ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
-  model TEXT, reason TEXT, detail TEXT);
+  model TEXT, reason TEXT, detail TEXT, surface TEXT, key_ref TEXT);
 CREATE TABLE IF NOT EXISTS latch_state(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS circuit_events(
   ts REAL, session TEXT, model TEXT, class TEXT, n_4xx INTEGER);
@@ -232,6 +303,18 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                     conn.execute("ALTER TABLE strikes ADD COLUMN error_subclass TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
+                # Goal #1769 acceptance 4 (router half, 2026-09-22): decisions grew the CALLER
+                # facts the walk filtered on — `surface` (what the caller can execute) and
+                # `key_ref` (its OpenRouter credential ref). A `caller:*` skip reason is only
+                # actionable if the row says which surface/credential the decision was made on,
+                # so the facts ride the decision row itself, queryable on /router-status. Same
+                # LAST-column discipline: the CREATE TABLE above carries them and the positional
+                # INSERT in route() stays valid on both layouts.
+                for _dcol in ("surface TEXT", "key_ref TEXT"):
+                    try:
+                        conn.execute(f"ALTER TABLE decisions ADD COLUMN {_dcol}")
+                    except sqlite3.OperationalError:
+                        pass  # duplicate column — schema already current
                 
                 # homelab#1042: model_cooldowns grew role-scoped PRIMARY KEY(model, role). SQLite
                 # cannot change a PK by ALTER, so this rebuilds — which means it MUST NOT re-run
@@ -269,6 +352,21 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
         except (OSError, ValueError) as e:
             _log(f"model-classes load failed ({classes_path}): {e} — defaults only")
             _classes = {}
+        # The ONE-RELEASE rail alias (Goal #1769 acceptance 1): a file still spelling the old
+        # rail name loads, logged once per class that needed it. Runs HERE, at the load, so
+        # nothing downstream ever reads the old vocabulary.
+        _alias_rails()
+        # Goal #1769 acceptance 3: the Anthropic-only top-level `tier_thresholds` is retired into
+        # the subscription rail's declared table. A stale file's copy is folded in ONCE here, so
+        # nothing downstream reads the old location.
+        _migrate_tier_thresholds()
+        # Goal #1769 acceptance 3: the id→grade `model_tiers` table is retired into the canonical
+        # `models` table. A stale file's copy is folded in ONCE here (one-release alias), so
+        # nothing downstream reads the old location.
+        _migrate_model_tiers()
+        # Goal #1769 acceptance 2/5: no class may name a rail the `rails:` block does not declare
+        # — a load-time assert, so a typo is a startup failure, never a silently empty pool.
+        _assert_declared_rails()
     _log(f"store={'persistent' if _persistent else 'ephemeral'} "
          f"classes={'loaded' if _classes else 'defaults'}")
     return _persistent
@@ -278,11 +376,183 @@ def classes() -> dict:
     return _classes
 
 
-def tier_threshold(tier: str | None, default: float) -> float:
-    """FU-109: the per-consumer utilization threshold. Unknown/absent tier = the global default
-    (bare /anthropic-limit keeps today's behavior exactly)."""
+def _alias_rails() -> int:
+    """Rewrite every `classes.<cls>.rails` entry onto the canonical vocabulary, in place.
+    Returns how many classes needed it (0 = the file is already canonical), so a stale file is
+    VISIBLE in the router's own log rather than silently meaning nothing. This is the whole
+    one-release alias — deleted next release, with RAIL_ALIASES."""
+    n = 0
+    for cls, cinfo in (_classes.get("classes") or {}).items():
+        if not isinstance(cinfo, dict) or not isinstance(cinfo.get("rails"), list):
+            continue
+        given = [str(r) for r in cinfo["rails"]]
+        fixed = [RAIL_ALIASES.get(r, r) for r in given]
+        if fixed != given:
+            cinfo["rails"] = fixed
+            _log(f"model-classes: class {cls} rails {given} → {fixed} "
+                 "(one-release rail alias; update the file to the canonical names)")
+            n += 1
+    return n
+
+
+def _migrate_tier_thresholds() -> int:
+    """Goal #1769 acceptance 3: fold a stale file's Anthropic-only top-level `tier_thresholds`
+    into `rails.anthropic-subscription.tier_thresholds` ONCE at load, then drop the old key so
+    nothing downstream reads it. Returns how many rails it filled (0 = the file is already
+    migrated). The declared per-rail table is the home; this is the one-release alias."""
+    old = _classes.get("tier_thresholds")
+    if not isinstance(old, dict):
+        return 0
+    folded = {k: v for k, v in old.items() if not str(k).startswith("_")}
+    rails = _classes.get("rails")
+    seeded = False
+    if not isinstance(rails, dict):
+        # A file with the old top-level table and no `rails:` block at all (a partial revert of
+        # just model-classes.json). Popping the old key here would silently revert to
+        # RAIL_DEFAULTS. Seed the WHOLE canonical block — which is what rail_facts() already
+        # gives a rails-less file — because seeding one entry would make _assert_declared_rails()
+        # fail every class naming another rail.
+        rails = {r: dict(f) for r, f in RAIL_DEFAULTS.items()}
+        _classes["rails"] = rails
+        seeded = True
+    sub = rails.get(model_id.RAIL_SUBSCRIPTION)
+    n = 0
+    if isinstance(sub, dict) and (seeded or not sub.get("tier_thresholds")):
+        sub["tier_thresholds"] = folded
+        n = 1
+        _log("model-classes: top-level tier_thresholds → rails.anthropic-subscription."
+             "tier_thresholds (one-release migration"
+             + ("; no `rails:` block — seeded from RAIL_DEFAULTS" if seeded else "")
+             + "; update the file)")
+    elif folded:
+        _log(f"model-classes: top-level tier_thresholds {sorted(folded)} dropped — "
+             f"rails.{model_id.RAIL_SUBSCRIPTION} already declares its own")
+    _classes.pop("tier_thresholds", None)
+    return n
+
+
+def _migrate_model_tiers() -> int:
+    """Goal #1769 acceptance 3: fold a stale file's id→grade `model_tiers` table into the
+    canonical `models` table ONCE at load, then drop the old key so nothing downstream reads it.
+    Returns how many ids it seeded (0 = the file is already migrated). The one-release alias: the
+    seeded entries carry `ids` (the id under its parsed rail), `tier` (the old grade) and null for
+    the three facts the old table never held — so a stale file still routes, and the two
+    router-self-test asserts still hold over it (the ids are keyed by model_family() and railed by
+    model_id.parse() by construction). Deleted next release, with the alias row."""
+    old = _classes.get("model_tiers")
+    if not isinstance(old, dict):
+        return 0
+    models = _classes.get("models")
+    if not isinstance(models, dict):
+        models = {}
+        _classes["models"] = models
+    n = 0
+    for mid, tier in old.items():
+        if str(mid).startswith("_"):
+            continue
+        key = model_family(str(mid))
+        rail = model_id.parse(str(mid))["rail"]
+        entry = models.setdefault(key, {"ids": {}, "tier": tier, "context_tokens": None,
+                                        "tool_verified": None, "pool_usd": None})
+        entry.setdefault("ids", {}).setdefault(rail, str(mid))
+        if entry.get("tier") != tier:
+            _log(f"model-classes: model_tiers {mid!r} grades {tier!r} but models.{key} is "
+                 f"{entry.get('tier')!r} — the canonical key collapses the variant; the grade is "
+                 f"resolved per-id by _model_tier() (`:free` floors to 'free')")
+        n += 1
+    _classes.pop("model_tiers", None)
+    _log(f"model-classes: model_tiers → models (one-release migration; {n} ids; update the file)")
+    return n
+
+
+def _assert_declared_rails() -> None:
+    """Goal #1769 acceptance 2/5: every `classes.<cls>.rails` entry must be a rail the `rails:`
+    block DECLARES. A class naming an undeclared rail is an empty pool that silently serves
+    nothing — the exact failure the canonical vocabulary exists to prevent — so it FAILS THE LOAD
+    rather than deferring at request time. Runs after `_alias_rails()`, so the old spelling is
+    canonical by now. A file with no `rails:` block (a jail run without the file) is not checked:
+    the block is the authority, and absent means no constraint."""
+    declared = {r for r in (_classes.get("rails") or {}) if not str(r).startswith("_")}
+    if not declared:
+        return
+    for cls, cinfo in (_classes.get("classes") or {}).items():
+        if not isinstance(cinfo, dict):
+            continue
+        for rail in (cinfo.get("rails") or []):
+            if rail not in declared:
+                raise ValueError(
+                    f"model-classes: class {cls} names rail {rail!r}, which the `rails:` block "
+                    f"does not declare (declared: {sorted(declared)})")
+
+
+def rail_facts(rail: str) -> dict:
+    """The DECLARED facts for `rail` from model-classes.json's `rails:` block (Goal #1769
+    acceptance 2), falling back to RAIL_DEFAULTS for a jail run without the file. Never None for
+    a canonical rail."""
+    declared = (_classes.get("rails") or {}).get(rail)
+    if isinstance(declared, dict):
+        return declared
+    return RAIL_DEFAULTS.get(rail, {})
+
+
+def rail_enabled(rail: str) -> bool:
+    """The git authority: `rails.<rail>.enabled`. A rail declared `enabled: false` (Zen today) is
+    skipped `rail:disabled` and CANNOT be un-parked from env."""
+    return bool(rail_facts(rail).get("enabled", True))
+
+
+def rail_parked_leg(leg: str) -> bool:
+    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213). THE ONE HOME
+    for the env parse — openrouter-proxy.py:_rail_disabled delegates here, so the forward-path
+    belt and the /route walk cannot disagree about which rail an env value parks."""
+    v = os.environ.get("OPENCODE_RAIL_DISABLED", "").strip().lower()
+    if v in ("", "0", "false", "no", "off"):
+        return False
+    if v in ("1", "true", "yes", "on", "all", "both"):
+        return True
+    return leg in v.replace(",", " ").split()
+
+
+def rail_parked(rail: str) -> bool:
+    """The env authority: a rail parked by OPENCODE_RAIL_DISABLED is skipped `rail:parked`. Only
+    the opencode legs have a leg name; every other rail is never parked."""
+    leg = RAIL_ENV_LEG.get(rail)
+    return bool(leg) and rail_parked_leg(leg)
+
+
+def rail_skip_reason(rail: str) -> str | None:
+    """The rail-level skip reason for `rail`, or None when the rail is rideable. TWO authorities,
+    TWO reasons (Goal #1769 acceptance 2): git `enabled: false` → `rail:disabled`; the
+    OPENCODE_RAIL_DISABLED env park → `rail:parked`. Git wins — an `enabled: false` rail cannot be
+    overridden from env (the precedence documented in model-classes.json's rails._comment)."""
+    if not rail_enabled(rail):
+        return "rail:disabled"
+    if rail_parked(rail):
+        return "rail:parked"
+    return None
+
+
+def rail_surfaces(rail: str) -> list[str]:
+    """The caller surfaces `rail` serves (Goal #1769 acceptance 2 externalized acceptance 4's
+    in-router RAIL_SURFACE into the `rails:` block). The caller-capability predicate reads THIS."""
+    return [str(s) for s in (rail_facts(rail).get("surfaces") or [])]
+
+
+def rail_concurrency(rail: str, default: int | None = None) -> int | None:
+    """The rail's declared concurrency bound (Goal #1769 acceptance 2). The Go rail's bound was a
+    bare `OPENCODE_MAX_RUNNING` env fact; it is DECLARED here now, with the env as the override
+    (openrouter-proxy.py:_go_max_running)."""
+    v = rail_facts(rail).get("concurrency")
+    return default if v is None else int(v)
+
+
+def tier_threshold(tier: str | None, default: float,
+                   rail: str = model_id.RAIL_SUBSCRIPTION) -> float:
+    """FU-109 + Goal #1769 acceptance 3: the per-consumer utilization threshold, read from the
+    RAIL's declared `tier_thresholds` (the Anthropic-only top-level table is retired). Unknown/
+    absent tier = the global default (bare /anthropic-limit keeps today's behavior exactly)."""
     try:
-        return float((_classes.get("tier_thresholds") or {})[tier])
+        return float((rail_facts(rail).get("tier_thresholds") or {})[tier])
     except (KeyError, TypeError, ValueError):
         return default
 
@@ -419,8 +689,13 @@ def _ladder_cfg() -> dict:
 def ladder_tier(model: str, rail: str, price: float | None) -> int:
     """Which RUNG a candidate sits on. Rail decides the subscription rung (it is the rail that is
     already paid for, whatever the model id); on the OpenRouter rail a $0 price is the free rung
-    and everything else is the paid one."""
-    if rail == "subscription":
+    and everything else is the paid one.
+
+    BOTH subscription rails land on rung 1: `anthropic-subscription` and `opencode-go` are each a
+    flat-fee plan whose marginal cost per ride is ~0 (the Go rail's window DRAW is a budget
+    meter, not a per-request price — gometer). The rung is named `subscription` in LADDER; the
+    RAIL names are the canonical ones (Goal #1769 acceptance 1)."""
+    if rail in (model_id.RAIL_SUBSCRIPTION, model_id.RAIL_OPENCODE_GO):
         return 1
     if str(model).endswith(":free") or price == 0.0:
         return 0
@@ -491,7 +766,7 @@ def fold_outcome_into_cell(d: dict, striked: bool) -> dict | None:
         return None
     cls, urgency = cell
     model = str(d.get("model") or "")
-    rail = "subscription" if model.startswith("claude/") else "openrouter"
+    rail = model_id.parse(model)["rail"]
     used = ladder_tier(model, rail, 0.0 if model.endswith(":free") else None)
     st = cell_state(cls, urgency)
     start, clean, degraded = st["start_tier"], st["clean"], st["degraded"]
@@ -621,6 +896,80 @@ def vendor_family(model: str) -> str:
     if raw in ("haiku", "sonnet", "opus") or raw.startswith("claude-"):
         return "anthropic"                         # bare alias / bare claude-* id
     return raw.split("/")[0] if "/" in raw else raw.split("-")[0]
+
+
+# ── Goal #1769 acceptance 3: the canonical `models` table, keyed by model_family() ─────────────
+# `model_tiers` (an id → grade map) retired into `models` (a family → {ids, tier, context_tokens,
+# tool_verified, pool_usd} map). The key is model_family()'s OWN output — no new naming scheme —
+# so a `modelDeny` of the canonical key binds across every rail serving the model, and the M11
+# cross-rail ladder can say "cheapest rail serving X". These three readers are the ONE place the
+# table is consulted; every former `model_tiers` reader goes through them.
+def _models_table() -> dict:
+    return _classes.get("models") or {}
+
+
+def _model_entry(model: str) -> dict | None:
+    """The canonical `models` entry for a model id, keyed by model_family(). None when the id's
+    family is not in the table (an unapproved model — the rotation universe's exclusion)."""
+    return _models_table().get(model_family(model))
+
+
+def _model_tier(model: str) -> str | None:
+    """The model's tier, read from `models.<key>.tier` (the retired `model_tiers` grade).
+
+    A `:free` id floors to `"free"`. The table is keyed by model_family(), which collapses the
+    `:free` suffix onto the paid key, and `ids` is rail → ONE id — so a per-variant grade (master's
+    `model_tiers` graded `poolside/laguna-s-2.1:free` `"free"` and `poolside/laguna-s-2.1`
+    `"cheap"`) is not expressible in the table and must be resolved by the reader. `:free` is
+    already an id-level fact one check up: `never_free` matches the literal suffix (:1925). This is
+    the same rule, for `tier_floor`.
+    """
+    entry = _model_entry(model)
+    if not entry:
+        return None
+    return "free" if str(model).endswith(":free") else entry.get("tier")
+
+
+def _model_context_tokens(model: str) -> int | None:
+    """The model's declared harness context window, read from `models.<key>.context_tokens` —
+    the source the shell's CLAUDE_CODE_MAX_CONTEXT_TOKENS constant is deleted against (Goal #1769
+    acceptance 3). None when the model declares none (not yet declared, never a guess)."""
+    entry = _model_entry(model)
+    return entry.get("context_tokens") if entry else None
+
+
+def _denied(model: str, deny: set) -> bool:
+    """True when `model` is denied by the caller's `deny` set. A deny entry matches EITHER the
+    exact id (a bare rail id — no regression) OR the model's canonical family (a `models` key, so
+    `deny: [claude-sonnet]` excludes `claude/sonnet` AND `anthropic/claude-sonnet-4.6` in the same
+    route — Goal #1769 acceptance 3)."""
+    return model in deny or model_family(model) in deny
+
+
+def _assert_models_table(models: dict) -> None:
+    """Goal #1769 acceptance 3: the two CI asserts that pin the canonical `models` table to the
+    parser. For every entry and every `(rail, id)` under it:
+
+        model_family(id) == key   AND   model_id.parse(id).rail == rail
+
+    The expected values are COMPUTED from the parser, never read back from the table, so a
+    mis-keyed row (a wrong family or a wrong rail) trips this instead of silently mis-routing.
+    Raises AssertionError naming the offending entry; the self-test drives it over the live table
+    AND over a deliberately mis-keyed copy (the negative row — the test must be able to fail)."""
+    for key, entry in (models or {}).items():
+        if str(key).startswith("_"):
+            continue
+        ids = entry.get("ids") or {}
+        assert ids, f"models.{key} must declare `ids` per rail"
+        for rail, mid in ids.items():
+            fam = model_family(mid)
+            assert fam == key, \
+                f"models.{key}.ids.{rail} = {mid!r} parses to family {fam!r}, not {key!r}"
+            got_rail = model_id.parse(mid)["rail"]
+            assert got_rail == rail, \
+                f"models.{key}.ids.{rail} = {mid!r} parses to rail {got_rail!r}, not {rail!r}"
+        for fact in ("tier", "context_tokens", "tool_verified", "pool_usd"):
+            assert fact in entry, f"models.{key} must declare `{fact}`"
 
 
 def _repo_from_session(session: str) -> str | None:
@@ -1199,9 +1548,12 @@ def pair_cooldowns(now: float | None = None) -> dict[tuple[str, str], dict]:
 
 def _rotation_candidates(cinfo: dict) -> list[str]:
     """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
-    model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
-    first, then daily-rankings rank order, then the git rotation_fallback belt. Models whose
-    canary verdict says broken are excluded — on ALL THREE legs, chain_head included (homelab#1786).
+    the canonical `models` table (the human-approved set; graduation stays human), ordered: class
+    chain_head first, then daily-rankings rank order, then the git rotation_fallback belt. Models
+    whose canary verdict says broken are excluded — on ALL THREE legs, chain_head included
+    (homelab#1786). A rotation row is approved when its FAMILY is a `models` key (Goal #1769
+    acceptance 3) — the table is keyed canonically, so a `:free`/`:exacto` variant of an approved
+    model is approved too.
 
     The chain_head leg is NOT exempt. A head is a model like any other, and a broken canary is
     exactly the evidence the head ordering should yield to: a head is human-curated POLICY, but
@@ -1209,11 +1561,12 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     of everything else is the router's thesis inverted (Goal #1640 acceptance 3). The exclusion
     removes a head from MEMBERSHIP only — the head ORDER is untouched: surviving heads still
     precede the ranked rotation. One rule for every chain_head class, never a per-class knob."""
-    tiers = _classes.get("model_tiers") or {}
+    models = _models_table()
     rows = _read("SELECT model, source, canary_verdict, rank FROM rotation")
     broken = {m for m, _s, v, _r in rows if v == "broken"}
     ranked = sorted(((r or 0, m) for m, s, _v, r in rows
-                     if s == "openrouter-daily-rankings" and m in tiers and m not in broken))
+                     if s == "openrouter-daily-rankings" and model_family(m) in models
+                     and m not in broken))
     kind = "reasoning" if cinfo.get("reasoning") else "coding"
     fallback = (_classes.get("rotation_fallback") or {}).get(kind) or []
     out: list[str] = []
@@ -1271,8 +1624,8 @@ def draw_slot(cls: str, cinfo: dict, slot) -> dict:
 
 
 def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck_models: set,
-                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick,
-                   excl: dict | None = None) -> dict:
+                   cool: dict, ctx: dict, sub_gate, or_gate, go_gate, jitter: float, pick,
+                   excl: dict | None = None, caller_block=None) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
     The would-be pick if the ladder were authoritative: rungs ordered by true marginal cost
@@ -1306,12 +1659,20 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     def _rung(model: str, rail: str) -> dict:
         blocked = None
         price = basis = None
-        if rail == "subscription":
+        if rail == model_id.RAIL_SUBSCRIPTION:
             ok, reason, _retry = sub_gate()
             if ok:
                 price, basis = 0.0, "subscription"
             else:
                 blocked = reason or "subscription-limited"
+        elif rail == model_id.RAIL_OPENCODE_GO:
+            # Goal #1769 acceptance 1: the Go rung is gated by ITS OWN rail's capacity, never by
+            # the OpenRouter key's state — the same rule the served walk applies (go_gate).
+            ok, reason, _retry = go_gate()
+            if ok:
+                price, basis = 0.0, "opencode-go"
+            else:
+                blocked = f"go:{reason or 'limited'}"
         else:
             ok, reason = or_gate()
             if ok:
@@ -1326,11 +1687,18 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
 
     cands = [_rung(m, rail) for m, rail in eligible]
     sub_model = cfg["subscription_model"]
-    if (not any(c["rail"] == "subscription" for c in cands) and "subscription" in rails
-            and sub_model not in deny and sub_model not in struck_models and sub_model not in cool
+    if (not any(c["rail"] == model_id.RAIL_SUBSCRIPTION for c in cands)
+            and model_id.RAIL_SUBSCRIPTION in rails
+            and (caller_block is None or caller_block(model_id.RAIL_SUBSCRIPTION) is None)
+            and not _denied(sub_model, deny) and sub_model not in struck_models and sub_model not in cool
             and capability_floor_block(cls, sub_model) is None):
         # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
-        cands.append({**_rung(sub_model, "subscription"), "synthetic": True})
+        # `subscription` here means the ANTHROPIC safety-net rail (the FU-088 gates' subject, and
+        # what the shadow's own `subscription` block reports); a Go candidate is a real chain
+        # entry, never a stand-in. Goal #1769 acceptance 4: the stand-in is a CANDIDATE on a rail
+        # the CALLER must be able to ride, so a caller that cannot (surface mismatch) does not get
+        # a shadow pick it could never serve either.
+        cands.append({**_rung(sub_model, model_id.RAIL_SUBSCRIPTION), "synthetic": True})
     for c in cands:
         c["tier"] = LADDER[c["_t"]]
     choice, walk = None, "none"
@@ -1349,7 +1717,7 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
         choice = pick(band)
         walk = "at-or-above-start" if t >= start else "below-start"
         break
-    sub = next((c for c in cands if c["rail"] == "subscription"), None)
+    sub = next((c for c in cands if c["rail"] == model_id.RAIL_SUBSCRIPTION), None)
     return {
         "urgency": urgency, "urgency_source": usrc,
         "learned_start_tier": LADDER[learned], "start_tier": LADDER[start], "reprobe": reprobe,
@@ -1388,11 +1756,16 @@ def route(payload: dict, ctx: dict) -> dict:
     """The ADR-096 /route decision core — pure given ctx, so the self-test can drive it.
 
     payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?,
-              urgency?, slot?, jitter?}
+              surface?, urgency?, slot?, jitter?}
     ctx:     {price: fn(model, exclude_providers=frozenset())
                     ->(usd_per_mtok|None, basis|None, provider|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
               openrouter_ok:  fn(key_ref)->(ok, reason|None),
+              opencode_ok:    fn()->(ok, reason|None, retry_after_s)  — the GO rail's OWN
+                    capacity (the proxy composes it from /opencode-limit: the observed 429/402
+                    latch, the gometer window draw, OPENCODE_MAX_RUNNING and the FU-213 park).
+                    Goal #1769 acceptance 1: a Go candidate is gated by THIS, never by the
+                    OpenRouter key's state.
               pick: fn(list)->item  (optional; defaults to uniform random — the jitter band.
                     Unused under `jitter: false`, where the tie-break is caller/pool order)}
               `price`'s `exclude_providers` is the task's struck provider slugs (Goal #1640
@@ -1404,6 +1777,23 @@ def route(payload: dict, ctx: dict) -> dict:
     → per class-rail-order pick the effective-cheapest with a jitter-band uniform pick → capacity-
     gate the rail → dispatch, or a TYPED defer (capacity reasons and cooldowns carry retry_after;
     only chain-exhausted escalates — M1 doctrine).
+
+    CALLER CAPABILITY (Goal #1769 acceptance 4): `surface` (what the caller can EXECUTE) and
+    `key_ref` (its OpenRouter credential ref) are caller facts, and each rail's requirement
+    (the rail's declared `surfaces`, plus openrouter's `key_ref`) is applied in the ELIGIBILITY
+    loop — BEFORE any
+    capacity gate — so a candidate whose rail the caller cannot ride is skipped with a typed
+    `caller:no-key_ref` / `caller:surface` reason and never consumes a gate probe, and the shadow
+    ladder (which reads the same `eligible` set) cannot pick it either. PERMISSIVE BY CONSTRUCTION:
+    a body that sends NEITHER fact is filtered by nothing — byte-identical to the walk before this
+    change. The filter engages only once a caller has ADOPTED the contract by sending at least one
+    of the two; an un-adopted field must never strand a lane, but a caller that HAS declared its
+    facts is taken at its word.
+
+    Every RAIL value here is `model_id.parse()`'s (Goal #1769 acceptance 1): a candidate's rail is
+    parsed, `classes.<cls>.rails` is written in the same canonical vocabulary, and the decision
+    row echoes it. `opencode-go` therefore walks as its own rail — gated by `opencode_ok`, skipped
+    with a `go:…` reason — instead of being flattened onto OpenRouter.
 
     ADR-104 (FU-162) adds the DRAW form on top of that walk rather than beside it: `slot` picks
     one model out of the class's pool (`draw_slot`) and hands it to the same filters as a
@@ -1418,6 +1808,12 @@ def route(payload: dict, ctx: dict) -> dict:
     now = time.time()
     role = str(payload.get("role") or "worker")
     labels = [str(x) for x in (payload.get("labels") or [])]
+    # Goal #1769 acceptance 4: the CALLER's capability facts. `key_ref` rides the body already
+    # (the launcher's OpenRouter credential ref, empty on a subscription-rail ride); `surface` is
+    # the new one. Read once, here, so the eligibility filter, the OpenRouter gate and the
+    # decision row all speak about the same two values.
+    caller_surface = str(payload.get("surface") or "").strip()
+    caller_key_ref = str(payload.get("key_ref") or "").strip()
     sel = _classes.get("selection") or {}
     # ADR-104: the jitter band is exploration budget for high-volume dispatch and corruption
     # inside a ~13-call experiment. `jitter: false` zeroes the band AND replaces the uniform pick
@@ -1452,7 +1848,7 @@ def route(payload: dict, ctx: dict) -> dict:
         cls = str((_classes.get("role_defaults") or {}).get(role) or "coding")
     cinfo = (_classes.get("classes") or {}).get(cls) or {}
     tier = str(payload.get("tier") or cinfo.get("tier") or "heavy")
-    rails = list(cinfo.get("rails") or ["openrouter", "subscription"])
+    rails = list(cinfo.get("rails") or [model_id.RAIL_OPENROUTER, model_id.RAIL_SUBSCRIPTION])
     chain = [str(m) for m in (payload.get("chain") or [])]
     source = "chain"
     pre_skipped: list[dict] = []
@@ -1517,11 +1913,35 @@ def route(payload: dict, ctx: dict) -> dict:
     cooled = pair_cooldowns(now)
     skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
+
+    # Goal #1769 acceptance 4 (router half): what the CALLER can ride, per rail. Decided HERE, in
+    # the eligibility filter, so it precedes every capacity gate by construction — a rail the
+    # caller cannot ride never reaches `sub_gate`/`or_gate`/`go_gate` and never costs a probe.
+    # Returns the TYPED reason naming the missing fact, or None when the caller can ride the rail.
+    def caller_block(rail: str) -> str | None:
+        # Neither fact sent ⇒ the caller has not adopted the contract: filter nothing (the
+        # permissive default this change deliberately preserves).
+        if not (caller_surface or caller_key_ref):
+            return None
+        # Goal #1769 acceptance 2: the rail's `surfaces` come from the `rails:` block now, not an
+        # in-router table. A rail that declares no surfaces (or a caller that sent none) filters
+        # nothing on this axis.
+        want = rail_surfaces(rail)
+        if want and caller_surface and caller_surface not in want:
+            return "caller:surface"
+        # The OpenRouter rail is bought with the caller's OWN key: a declared fact set with no
+        # `key_ref` means the caller cannot ride it (the reviewer, by design). This is the fact
+        # the 2026-08-26 gate never asked about.
+        if rail == model_id.RAIL_OPENROUTER and not caller_key_ref:
+            return "caller:no-key_ref"
+        return None
     # model → the providers struck for it (serving-shaped classes). The model stays eligible and
     # is priced by the provider it lands on AFTER these are excluded (the next cheapest CELL).
     _excl: dict[str, frozenset] = {}
     for m in chain:
-        rail = "subscription" if m.startswith("claude/") else "openrouter"
+        # Goal #1769 acceptance 1: the rail is PARSED, never re-derived here. One reader
+        # (model_id), one rule, and a third rail value that the walk can act on.
+        rail = model_id.parse(m)["rail"]
         # ── #1259: label_map tier_floor/never_free enforcement ──
         # Checked before the main eligibility chain so failing models are skipped early
         # without breaking the elif structure below.
@@ -1529,11 +1949,11 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": "never-free:label_map"})
             continue
         if tier_floor:
-            m_tier = (_classes.get("model_tiers") or {}).get(m)
+            m_tier = _model_tier(m)
             if m_tier and _TIER_ORDER.get(m_tier, -1) < _TIER_ORDER.get(tier_floor, -1):
                 skipped.append({"model": m, "reason": f"tier-floor:{tier_floor}>{m_tier}"})
                 continue
-        if m in deny:
+        if _denied(m, deny):
             skipped.append({"model": m, "reason": "claim-deny"})
         elif m in struck_models:
             skipped.append({"model": m, "reason": "strike"})
@@ -1544,6 +1964,18 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        elif (rail_reason := rail_skip_reason(rail)) is not None:
+            # Goal #1769 acceptance 2: TWO authorities, TWO reasons. `rail:disabled` is the git
+            # declaration (`rails.<rail>.enabled: false` — Zen today); `rail:parked` is the
+            # OPENCODE_RAIL_DISABLED env kill switch (FU-213). Git wins: an `enabled: false` rail
+            # cannot be un-parked from env. Checked before caller capability (a rail fact precedes
+            # a caller fact) and before capacity, which is never consulted.
+            skipped.append({"model": m, "reason": rail_reason})
+        elif (caller_reason := caller_block(rail)) is not None:
+            # Typed, and a CALLER reason: the rail may be perfectly healthy — this request cannot
+            # ride it. Checked after the class's rail list (a class that does not name the rail at
+            # all is a class fact, not a caller fact) and before capacity, which is never consulted.
+            skipped.append({"model": m, "reason": caller_reason})
         elif decorrelate_family and vendor_family(m) == decorrelate_family:
             skipped.append({"model": m, "reason": f"decorrelate:{decorrelate_family}"})
         else:
@@ -1579,14 +2011,26 @@ def route(payload: dict, ctx: dict) -> dict:
 
     def or_gate():
         if "or" not in _gate_cache:
-            _gate_cache["or"] = ctx["openrouter_ok"](payload.get("key_ref"))
+            _gate_cache["or"] = ctx["openrouter_ok"](caller_key_ref or None)
         return _gate_cache["or"]
+
+    def go_gate():
+        """Goal #1769 acceptance 1: the GO rail's own capacity, beside sub_gate/or_gate. Before
+        this, an `opencode-go/*` candidate was flattened onto the OpenRouter rail by the walk's
+        two-way split and gated by `or_gate` — so a Go model was skipped for the OpenRouter KEY's
+        state (budget, a mint that never happened) and a Go outage could never be named as one.
+        The verdict is the proxy's `/opencode-limit` composite: the observed 429/402 latch, the
+        gometer window draw, OPENCODE_MAX_RUNNING and the FU-213 park. Memoized like the other
+        two — one read per route()."""
+        if "go" not in _gate_cache:
+            _gate_cache["go"] = ctx["opencode_ok"]()
+        return _gate_cache["go"]
 
     for rail in rails:
         pool = [m for m, r in eligible if r == rail]
         if not pool:
             continue
-        if rail == "subscription":
+        if rail == model_id.RAIL_SUBSCRIPTION:
             ok, reason, retry = sub_gate()
             if not ok:
                 reason = reason or "subscription-limited"
@@ -1595,6 +2039,18 @@ def route(payload: dict, ctx: dict) -> dict:
                 continue
             result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
                       "basis": "subscription", "provider": None, "jitter_pool": pool[:1]}
+        elif rail == model_id.RAIL_OPENCODE_GO:
+            ok, reason, retry = go_gate()
+            if not ok:
+                # TYPED so a decision row says WHICH rail refused and why: `go:<the /opencode-limit
+                # reason>`. A Go candidate is never skipped with an `openrouter:…` reason — that
+                # flattening is the defect this acceptance ends.
+                reason = f"go:{reason or 'limited'}"
+                capacity_block = capacity_block or {"reason": reason, "retry_after_s": retry}
+                skipped += [{"model": m, "reason": reason} for m in pool]
+                continue
+            result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
+                      "basis": "opencode-go", "provider": None, "jitter_pool": pool[:1]}
         else:
             ok, reason = or_gate()
             if not ok:
@@ -1664,6 +2120,10 @@ def route(payload: dict, ctx: dict) -> dict:
                     "half_open": half_open, "skipped": skipped, "jitter": jitter_on,
                     "strike_excluded": _picked_struck,
                     "cooldown_excluded": _picked_cooled,
+                    # Goal #1769 acceptance 3: the served model's declared context window, echoed
+                    # so the shell's CLAUDE_CODE_MAX_CONTEXT_TOKENS constant has a source to be
+                    # deleted against. None when the model declares none.
+                    "context_tokens": _model_context_tokens(result["model"]),
                     "provider_policy": cinfo.get("provider_policy"), **result}
     else:
         if decorrelate_family and not eligible and skipped and \
@@ -1684,19 +2144,24 @@ def route(payload: dict, ctx: dict) -> dict:
         decision = {"decision": "defer", "reason": reason, "retry_after_s": retry,
                     "class": cls, "tier": tier, "source": source, "skipped": skipped,
                     "jitter": jitter_on}
+    # Goal #1769 acceptance 4: the CALLER facts this row was decided ON, carried by BOTH verdicts
+    # — a `caller:*` skip in `skipped` is only actionable if the row also says which surface and
+    # credential the walk filtered against.
+    decision["caller"] = {"surface": caller_surface, "key_ref": caller_key_ref}
     if drawn:
         # The draw's provenance rides BOTH verdicts: a deferred slot has to be recordable in the
         # arm table too ("slot 4 deferred, cooldown" is evidence; a blank is not).
         decision.update({k: v for k, v in drawn.items() if k in ("pool", "pool_version", "slot")})
     # FU-127: the structured carrier — consumers read `.decision.resolved` instead of re-parsing
-    # the model string. Present on dispatch, absent on defer (no model to resolve). The rail in
-    # resolved uses the canonical vocabulary (anthropic-subscription, openrouter, opencode-go)
-    # while decision.rail uses the route's internal vocabulary (subscription, openrouter).
+    # the model string. Present on dispatch, absent on defer (no model to resolve). Goal #1769
+    # acceptance 1: `resolved.rail` and `decision.rail` are now the SAME canonical vocabulary
+    # (anthropic-subscription, opencode-go, openrouter) — the walk's rail IS the parser's, so
+    # there is no second spelling left to translate between.
     if result:
         decision["resolved"] = model_id.parse(result["model"])
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck_models, cool, ctx,
-                            sub_gate, or_gate, jitter, pick_fn, _excl)
+                            sub_gate, or_gate, go_gate, jitter, pick_fn, _excl, caller_block)
     # FU-127: the shadow pick carries its own resolved object so the M11 shadow log line
     # describes the SHADOW pick, not the served pick (which may differ — that's the entire
     # point of the shadow line). Present on dispatch, absent on defer.
@@ -1704,12 +2169,13 @@ def route(payload: dict, ctx: dict) -> dict:
         shadow["resolved"] = model_id.parse(shadow["model"])
     record_shadow_decision(payload, cls, decision, shadow)
     decision["shadow"] = shadow
-    _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
+    _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
            (now, str(payload.get("session") or ""), str(payload.get("stack") or ""), role, cls,
             decision["decision"], decision.get("rail") or "",
             decision.get("model") or "", decision.get("reason") or "",
             json.dumps({"skipped": skipped, "source": source,
-                        "jitter_pool": decision.get("jitter_pool"), "shadow": shadow})))
+                        "jitter_pool": decision.get("jitter_pool"), "shadow": shadow}),
+            caller_surface, caller_key_ref))
     return decision
 
 
@@ -1779,8 +2245,10 @@ def status_summary() -> dict:
         "SELECT session, model, class, n_4xx, ts FROM circuit_events WHERE ts > ? "
         "ORDER BY ts DESC LIMIT 20", (now - 7 * 86400,))
     decisions_24h = _read(
-        "SELECT decision, rail, model, reason, COUNT(*) FROM decisions WHERE ts > ? "
-        "GROUP BY decision, rail, model, reason ORDER BY 5 DESC LIMIT 20", (now - 86400,))
+        "SELECT decision, rail, model, reason, surface, key_ref, COUNT(*) FROM decisions "
+        "WHERE ts > ? "
+        "GROUP BY decision, rail, model, reason, surface, key_ref ORDER BY 7 DESC LIMIT 20",
+        (now - 86400,))
     return {
         "cooldowns_active": {
             "worker": active_cooldowns(now, role="worker"),
@@ -1795,8 +2263,14 @@ def status_summary() -> dict:
             for v in sorted(pair_cooldowns(now).values(),
                             key=lambda x: (x["model"], x["provider"]))],
         "decisions_24h": [
-            {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
-            for d, rl, m, rs, n in decisions_24h],
+            # Goal #1769 acceptance 4: each row carries the CALLER facts the decision was made on
+            # (`surface`/`key_ref`), beside the reason — so a `caller:*` skip is readable from
+            # /router-status without the sqlite file. Goal #1769 acceptance 3: the row also echoes
+            # the served model's declared `context_tokens` (the shell constant's source).
+            {"decision": d, "rail": rl, "model": m, "reason": rs,
+             "surface": sf or "", "key_ref": kr or "",
+             "context_tokens": _model_context_tokens(m) if m else None, "n": n}
+            for d, rl, m, rs, sf, kr, n in decisions_24h],
         "db_persistent": _persistent,
         "rows": counts,
         "strikes_7d": [{"model": m, "error_class": e, "n": n,
@@ -1818,7 +2292,27 @@ def status_summary() -> dict:
         # fleet-strike reader cite this list instead of keeping a copy that drifts.
         "strike_classes": sorted(STRIKE_CLASSES),
         "serving_classes": sorted(SERVING_CLASSES),
-        "tier_thresholds": _classes.get("tier_thresholds") or {},
+        # Goal #1769 acceptance 2/4: the declared rail set, each rail's state and gate. `enabled`
+        # is the git authority, `parked` the env authority (OPENCODE_RAIL_DISABLED) — the two
+        # reasons the walk skips a rail with, readable here without the sqlite file.
+        "rails": {
+            r: {"enabled": rail_enabled(r), "parked": rail_parked(r),
+                "gate": rail_facts(r).get("gate"),
+                "surfaces": rail_surfaces(r),
+                "cost": rail_facts(r).get("cost"),
+                "concurrency": rail_facts(r).get("concurrency")}
+            for r in RAILS},
+        # Goal #1769 acceptance 3: the per-rail FU-109 table (the Anthropic-only top-level table
+        # is retired). Kept under the old key for the readers that cite it, now sourced per rail.
+        "tier_thresholds": rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {},
+        # Goal #1769 acceptance 3: the canonical `models` table, echoed whole so the per-model
+        # facts (tier, context_tokens, tool_verified, pool_usd) and the per-rail `ids` are
+        # expressible from /router-status without the sqlite file or the ConfigMap.
+        "models": {
+            k: {"tier": v.get("tier"), "context_tokens": v.get("context_tokens"),
+                "tool_verified": v.get("tool_verified"), "pool_usd": v.get("pool_usd"),
+                "ids": v.get("ids") or {}}
+            for k, v in _models_table().items() if not str(k).startswith("_")},
         # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
         # and where the would-be pick disagreed with what actually got served.
         "ladder_cells": [
@@ -2102,6 +2596,33 @@ def self_test() -> int:
         ("pr", None), ("harness-death", "subscription-fallback")], \
         "ALTER'd layout must match the CREATE TABLE one — else the positional write is off by a column"
     _mig.close()
+    # Goal #1769 acceptance 4 (router half): the same discipline for decisions.surface/key_ref. The
+    # live PVC store takes the two columns by ALTER while the CREATE TABLE path already carries
+    # them, and route()'s INSERT is POSITIONAL — so a drift between the layouts would write the
+    # caller facts into the wrong slot and still "succeed". Replay the real sequence (pre-#1913
+    # schema → ALTER → today's writer) and read the columns back BY NAME.
+    _dmig = sqlite3.connect(":memory:")
+    _dmig.execute("""CREATE TABLE decisions(
+      ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
+      model TEXT, reason TEXT, detail TEXT)""")  # the pre-#1913 layout, verbatim
+    _dmig.execute("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  (1.0, "old-d", "issue-1", "worker", "coding", "defer", "", "",
+                   "chain-exhausted", "{}"))
+    for _dcol in ("surface TEXT", "key_ref TEXT"):
+        try:
+            _dmig.execute(f"ALTER TABLE decisions ADD COLUMN {_dcol}")
+        except sqlite3.OperationalError:
+            pass  # duplicate column — schema already current
+    _dmig.execute("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (2.0, "new-d", "issue-2", "reviewer", "review", "dispatch",
+                   "anthropic-subscription", "claude/sonnet", "", "{}", "claude-cli",
+                   "sleep-agents/sleep-openrouter"))
+    assert _dmig.execute(
+        "SELECT session, surface, key_ref FROM decisions ORDER BY ts").fetchall() == [
+        ("old-d", None, None),
+        ("new-d", "claude-cli", "sleep-agents/sleep-openrouter")], \
+        "the ALTER'd decisions layout must match the CREATE TABLE one — else the caller facts land in the wrong column"
+    _dmig.close()
     # ── homelab#1042: model_cooldowns PVC migration test ──
     # The self-test normally starts from a FRESH schema (:memory: via init(None)), so it never
     # exercises the "table already exists with the old 5-column shape" path that the live PVC
@@ -2622,6 +3143,9 @@ def self_test() -> int:
                  else (*_BASE_PRICES.get(m, (None, None)), None),
         "subscription_ok": lambda tier: (True, None, 0),
         "openrouter_ok": lambda ref: (True, None),
+        # Goal #1769 acceptance 1: the Go rail's own gate, beside the other two. Open by default
+        # here; the rows below close it and assert the Go reason.
+        "opencode_ok": lambda: (True, None, 0),
         "pick": lambda band: band[0],  # deterministic for the test
     }
     CHAIN = ["inclusionai/ling-3.0-flash:free", "deepseek/deepseek-v4-flash", "tencent/hy3",
@@ -2641,14 +3165,91 @@ def self_test() -> int:
         f"resolved shape (openrouter bare): {d.get('resolved')}"
     # subscription rail: claude/ prefix → anthropic-subscription, harness claude
     _sub = route(dict(base, chain=["claude/haiku"]), CTX)
-    assert _sub["decision"] == "dispatch" and _sub["rail"] == "subscription", _sub
+    assert _sub["decision"] == "dispatch" and _sub["rail"] == "anthropic-subscription", _sub
     assert _sub.get("resolved") == {"rail": "anthropic-subscription", "harness": "claude", "model": "haiku"}, \
         f"resolved shape (subscription): {_sub.get('resolved')}"
-    # opencode-go rail: prefix kept, harness claude
+    # opencode-go rail: the walk parses a THIRD rail value now (Goal #1769 acceptance 1). A class
+    # whose `rails` does not name it skips the candidate BY RAIL — typed and visible, never
+    # silently flattened onto OpenRouter (which is what the two-way split did, and why a Go
+    # candidate used to be gated by the OpenRouter KEY's state).
+    _go_noclass = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
+    assert _go_noclass["decision"] == "defer" and _go_noclass["reason"] == "chain-exhausted", \
+        _go_noclass
+    assert {"model": "opencode-go/deepseek-v4-flash",
+            "reason": "rail-opencode-go-not-in-class-coding"} in _go_noclass["skipped"], \
+        _go_noclass["skipped"]
+    # ── Goal #1769 acceptance 1: THREE-WAY RAIL, from model_id.parse(), at the walk ──
+    # The walk derived the rail with a two-way split before this
+    # (`"subscription" if m.startswith("claude/") else "openrouter"`), so `opencode-go/*`
+    # classified as OpenRouter and was gated by the OpenRouter key's state instead of the Go
+    # rail's own capacity. Every rail value below is one model_id.parse() produced, and a decision
+    # row echoes the CANONICAL name — the same vocabulary `resolved.rail` uses.
+    _saved_rails = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
     _go = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
-    assert _go["decision"] == "dispatch" and _go["rail"] == "openrouter", _go
-    assert _go.get("resolved") == {"rail": "opencode-go", "harness": "claude", "model": "opencode-go/deepseek-v4-flash"}, \
+    assert _go["decision"] == "dispatch" and _go["rail"] == "opencode-go", _go
+    assert _go["model"] == "opencode-go/deepseek-v4-flash" and _go["basis"] == "opencode-go", _go
+    assert _go["price_per_mtok"] is None, "a subscription-rail pick carries no per-token price"
+    assert _go.get("resolved") == {"rail": "opencode-go", "harness": "claude",
+                                   "model": "opencode-go/deepseek-v4-flash"}, \
         f"resolved shape (opencode-go): {_go.get('resolved')}"
+    assert _go["rail"] == _go["resolved"]["rail"], \
+        "decision.rail and resolved.rail are ONE vocabulary now (acceptance 1)"
+    # Go gate CLOSED ⇒ the Go candidate is skipped with a GO reason, and an OpenRouter sibling
+    # still serves: a Go outage is never an OpenRouter-key verdict, and it never takes the
+    # OpenRouter rail down with it.
+    _go_closed = {**CTX, "opencode_ok": lambda: (False, "observed-429", 900)}
+    _go_lim = route(dict(base, chain=["opencode-go/deepseek-v4-flash", "tencent/hy3"]),
+                    _go_closed)
+    assert _go_lim["decision"] == "dispatch" and _go_lim["rail"] == "openrouter", _go_lim
+    assert _go_lim["model"] == "tencent/hy3", _go_lim
+    assert {"model": "opencode-go/deepseek-v4-flash", "reason": "go:observed-429"} \
+        in _go_lim["skipped"], _go_lim["skipped"]
+    assert not any(str(s.get("reason", "")).startswith("openrouter") for s in _go_lim["skipped"]), \
+        f"a Go candidate must never be skipped for an OpenRouter reason: {_go_lim['skipped']}"
+    # …and with ONLY the Go candidate the defer is typed with the Go reason AND its retry_after
+    # (the capacity-class defer shape: retryable, not the escalating chain-exhausted).
+    _go_def = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), _go_closed)
+    assert _go_def["decision"] == "defer" and _go_def["reason"] == "go:observed-429", _go_def
+    assert _go_def["retry_after_s"] == 900, _go_def
+    assert _go_def.get("resolved") is None, "defer carries no resolved model"
+    # …and the SHADOW ladder reads the same gate: the Go rung is blocked with the Go reason,
+    # never priced as if the rail were open (the two halves of the walk cannot disagree about
+    # whether the Go rail is up).
+    _go_shadow = next(c for c in _go_def["shadow"]["candidates"] if c["rail"] == "opencode-go")
+    assert _go_shadow["blocked"] == "go:observed-429", _go_shadow
+    # …and the OpenRouter KEY's state is NOT consulted for a Go candidate: an exhausted
+    # OpenRouter budget leaves the Go rail serving (the inverse of the pre-fix behaviour, where
+    # exactly this input decided the Go candidate's fate).
+    _or_closed = {**CTX, "openrouter_ok": lambda ref: (False, "openrouter-budget-exhausted")}
+    _go_or = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), _or_closed)
+    assert _go_or["decision"] == "dispatch" and _go_or["rail"] == "opencode-go", _go_or
+    # the walk's OWN vocabulary is the parser's: every rail a class may name is one the parser
+    # produces (or the one declared member no parse rule produces yet — the parked Zen leg)
+    assert _classes["classes"]["coding"]["rails"] == ["opencode-go", "openrouter"]
+    _classes["classes"]["coding"]["rails"] = _saved_rails
+    # the THREE-WAY parse itself, per candidate class — the rule this block reads, not re-states
+    for _mid, _want in (("claude/haiku", "anthropic-subscription"),
+                        ("opencode-go/deepseek-v4-flash", "opencode-go"),
+                        ("deepseek/deepseek-v4-flash", "openrouter"),
+                        ("openrouter/owl-alpha", "openrouter")):
+        assert model_id.parse(_mid)["rail"] == _want, (_mid, model_id.parse(_mid))
+    # ── the ONE-RELEASE alias (acceptance 1): the OLD rail name still loads ──
+    # `subscription` meant the Anthropic rail before the canonical vocabulary; a class file still
+    # spelling it must resolve to the canonical name (and the decision row must echo the CANONICAL
+    # one), not to an empty pool that silently never serves.
+    assert _alias_rails() == 0, \
+        "the shipped model-classes.json is already canonical — the alias must be a no-op there"
+    _classes["classes"]["coding"]["rails"] = ["subscription"]
+    assert _alias_rails() == 1, "the old `subscription` rail name must alias, once"
+    assert _classes["classes"]["coding"]["rails"] == ["anthropic-subscription"], \
+        _classes["classes"]["coding"]["rails"]
+    _alias_route = route(dict(base, chain=["claude/haiku"]), CTX)
+    assert _alias_route["decision"] == "dispatch" \
+        and _alias_route["rail"] == "anthropic-subscription", _alias_route
+    # idempotent: a second load of the same file changes nothing and logs nothing
+    assert _alias_rails() == 0, "the alias is idempotent — a canonical list is left alone"
+    _classes["classes"]["coding"]["rails"] = _saved_rails
     # cloaked openrouter/<codename>: prefix KEPT, model is the full id
     _cloak = route(dict(base, chain=["openrouter/owl-alpha"]), CTX)
     assert _cloak["decision"] == "dispatch" and _cloak["rail"] == "openrouter", _cloak
@@ -2924,6 +3525,260 @@ def self_test() -> int:
     record_rotation("provider-events",
                     [{"model": "deepseek/deepseek-v4-flash", "canary_verdict": ""},
                      {"model": "claude/sonnet", "canary_verdict": ""}])
+    # ── Goal #1769 acceptance 4 (router half): CALLER CAPABILITY in the rail walk ──
+    # The 2026-08-26 world, REPLAYED (docs/incidents/2026-08-26-reviewer-404-loop.md). The
+    # reviewer sends NO chain — candidates come from the class's chain_head + the rotation, which
+    # is OpenRouter-ids-only (`tencent/hy3` here, exactly the shape that served dead) — and NO
+    # OpenRouter `key_ref`, by design. `review`'s second rail entry then served a dead OpenRouter
+    # pick with the account perfectly healthy: the gate asked "can the ACCOUNT buy", never "can
+    # the CALLER ride". With the caller's `surface` now declared, the openrouter candidates are
+    # skipped for the missing credential and the subscription candidate serves.
+    _review_caller = {"stack": "oracle", "task": "issue-188", "role": "reviewer",
+                      "session": "t-caller-review", "class": "review", "chain": [],
+                      "surface": "claude-cli"}
+    _cr = route(dict(_review_caller), CTX)      # OpenRouter account HEALTHY: CTX's or_gate is open
+    assert _cr["decision"] == "dispatch", _cr
+    assert _cr["rail"] == "anthropic-subscription" and _cr["model"] == "claude/sonnet", _cr
+    assert {"model": "tencent/hy3", "reason": "caller:no-key_ref"} in _cr["skipped"], \
+        f"the openrouter candidate must be skipped for the missing credential: {_cr['skipped']}"
+    assert not any(s.get("model") == "claude/sonnet" and str(s.get("reason", "")).startswith("caller:")
+                   for s in _cr["skipped"]), \
+        f"the subscription candidate rides a claude-cli caller: {_cr['skipped']}"
+    # …and the CALLER facts ride the decision row itself (acceptance 4's status half).
+    assert _cr["caller"] == {"surface": "claude-cli", "key_ref": ""}, _cr.get("caller")
+    assert _read("SELECT surface, key_ref FROM decisions WHERE session='t-caller-review'") \
+        == [("claude-cli", "")], "the caller facts must land on the stored decision row"
+    # THE SHADOW LADDER READS THE SAME ELIGIBLE SET: the unrideable rail is absent from it, so a
+    # defer can never be handed an openrouter model as its shadow pick (the FU-188 shape).
+    assert _cr["shadow"]["decision"] == "dispatch", _cr["shadow"]
+    assert all(model_id.parse(c["model"])["rail"] != "openrouter"
+               for c in _cr["shadow"]["candidates"]), \
+        f"an unrideable rail must be absent from the shadow ladder too: {_cr['shadow']['candidates']}"
+    # …and the openrouter rail is not even PROBED: the capability skip precedes the capacity gate,
+    # so a healthy account's gate is never consulted for a caller that cannot ride the rail.
+    _rev_probes: list = []
+    _rev_ctx = {**CTX, "openrouter_ok": lambda ref: (_rev_probes.append(ref), (True, None))[1]}
+    _cr_p = route(dict(_review_caller, session="t-caller-review-probe"), _rev_ctx)
+    assert _cr_p["rail"] == "anthropic-subscription" and not _rev_probes, \
+        f"a caller-unrideable rail must not consume a probe (calls={_rev_probes})"
+    # The SAME body WITH a credential ⇒ the openrouter rail is rideable again (no caller skip).
+    _cr2 = route(dict(_review_caller, session="t-caller-review-key",
+                      key_ref="sleep-agents/sleep-openrouter"), CTX)
+    assert not any(str(s.get("reason", "")).startswith("caller:") for s in _cr2["skipped"]), \
+        f"a caller that sends the credential must not be capability-skipped: {_cr2['skipped']}"
+    # NO REGRESSION for a caller that has not adopted the field: `key_ref` alone (no `surface`)
+    # walks the openrouter rail exactly as the fact-less body does — byte-identical pick and rail.
+    _with_key = route(dict(base, key_ref="sleep-agents/sleep-openrouter"), CTX)
+    assert _with_key["model"] == d["model"] and _with_key["rail"] == d["rail"], \
+        f"a key_ref-only body must walk as before this change: {_with_key} vs {d}"
+    assert not any(str(s.get("reason", "")).startswith("caller:")
+                   for s in _with_key["skipped"]), _with_key["skipped"]
+    # The SURFACE mismatch: a caller that can only execute the OpenAI-compatible API can ride
+    # NEITHER CLI rail — every claude/* and Go candidate is skipped `caller:surface` (and, with no
+    # credential, the openrouter rail for its own missing fact).
+    _saved_rails2 = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "anthropic-subscription", "openrouter"]
+    _api = route(dict(base, session="t-caller-surface",
+                      chain=["claude/haiku", "opencode-go/deepseek-v4-flash"],
+                      surface="openai-api"), CTX)
+    for _mid in ("claude/haiku", "opencode-go/deepseek-v4-flash"):
+        assert {"model": _mid, "reason": "caller:surface"} in _api["skipped"], \
+            f"{_mid} must be skipped on the surface mismatch: {_api['skipped']}"
+    assert _api["decision"] == "defer", _api
+    _classes["classes"]["coding"]["rails"] = _saved_rails2
+    # …and with ONLY an openrouter candidate, the capability skip still precedes the gate: the
+    # walk defers WITHOUT the OpenRouter gate having been consulted.
+    _or_calls: list = []
+    _nc = route(dict(base, session="t-caller-nogate", chain=["deepseek/deepseek-v4-flash"],
+                     surface="openai-api"),
+                {**CTX, "openrouter_ok": lambda ref: (_or_calls.append(ref), (True, None))[1]})
+    assert {"model": "deepseek/deepseek-v4-flash", "reason": "caller:no-key_ref"} \
+        in _nc["skipped"], _nc["skipped"]
+    assert _nc["decision"] == "defer" and not _or_calls, \
+        f"capability is decided BEFORE capacity (OpenRouter gate calls={_or_calls})"
+    # The requirement table is per-rail and complete: every canonical rail declares its surfaces
+    # in the `rails:` block (acceptance 2 externalized RAIL_SURFACE), and openrouter's requirement
+    # is the CREDENTIAL (its own key_ref test), never a surface — so its declared surfaces cover
+    # every caller surface.
+    for _r in RAILS:
+        assert rail_surfaces(_r), f"rail {_r} must declare surfaces in the `rails:` block"
+    assert set(rail_surfaces(model_id.RAIL_OPENROUTER)) >= {"claude-cli", "opencode-cli",
+                                                             "openai-api"}, \
+        rail_surfaces(model_id.RAIL_OPENROUTER)
+    # …and /router-status carries the caller facts on its decision rows.
+    assert any(r.get("surface") == "claude-cli" and r["rail"] == "anthropic-subscription"
+               for r in status_summary()["decisions_24h"]), \
+        "decision rows must carry the caller facts the route was decided on"
+    # ── Goal #1769 acceptance 2: the `rails:` block is READ ──
+    # (a) a rail declared `enabled: false` (Zen) is skipped `rail:disabled` — the GIT authority.
+    # No parse rule produces the Zen rail yet (the `opencode/` prefix is the leg, homelab#445), so
+    # the test injects a candidate at the PARSER seam; the walk itself is unmodified.
+    _saved_rails_zen = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-zen", "openrouter"]
+    _orig_parse = model_id.parse
+    model_id.parse = lambda m: ({"rail": RAIL_OPENCODE_ZEN, "harness": "opencode", "model": m}
+                                if m == "opencode/zen-probe" else _orig_parse(m))
+    try:
+        _zen = route(dict(base, session="t-zen-disabled", chain=["opencode/zen-probe"]), CTX)
+    finally:
+        model_id.parse = _orig_parse
+    assert _zen["decision"] == "defer", _zen
+    assert {"model": "opencode/zen-probe", "reason": "rail:disabled"} in _zen["skipped"], \
+        _zen["skipped"]
+    _classes["classes"]["coding"]["rails"] = _saved_rails_zen
+    # (b) a rail parked by OPENCODE_RAIL_DISABLED is skipped `rail:parked` — the ENV authority —
+    # and SERVED with it unset. The env is read at call time, so the toggle is the test's.
+    _saved_rails_go2 = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
+    _old_park = os.environ.get("OPENCODE_RAIL_DISABLED")
+    try:
+        os.environ["OPENCODE_RAIL_DISABLED"] = "go"
+        _parked = route(dict(base, session="t-go-parked",
+                             chain=["opencode-go/deepseek-v4-flash"]), CTX)
+        assert _parked["decision"] == "defer", _parked
+        assert {"model": "opencode-go/deepseek-v4-flash", "reason": "rail:parked"} \
+            in _parked["skipped"], _parked["skipped"]
+        os.environ.pop("OPENCODE_RAIL_DISABLED", None)
+        _unparked = route(dict(base, session="t-go-unparked",
+                               chain=["opencode-go/deepseek-v4-flash"]), CTX)
+        assert _unparked["decision"] == "dispatch" and _unparked["rail"] == "opencode-go", _unparked
+    finally:
+        if _old_park is None:
+            os.environ.pop("OPENCODE_RAIL_DISABLED", None)
+        else:
+            os.environ["OPENCODE_RAIL_DISABLED"] = _old_park
+    _classes["classes"]["coding"]["rails"] = _saved_rails_go2
+    # (c) a class naming a rail the block does not declare FAILS THE LOAD (acceptance 5).
+    _saved_rails_bad = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["bogus-rail"]
+    try:
+        _assert_declared_rails()
+        raise AssertionError("a class naming an undeclared rail must fail the load")
+    except ValueError:
+        pass
+    finally:
+        _classes["classes"]["coding"]["rails"] = _saved_rails_bad
+    # (d) tier_thresholds is read PER RAIL (acceptance 3): the Anthropic-only top-level table is
+    # retired; the subscription rail's declared table is the home.
+    assert tier_threshold("dispatch", 0.0) == 0.9 and tier_threshold("heavy", 0.0) == 0.8, \
+        (tier_threshold("dispatch", 0.0), tier_threshold("heavy", 0.0))
+    assert tier_threshold("nope", 0.42) == 0.42, "an unknown tier falls to the default"
+    # (e) /router-status echoes the rail set with each rail's enabled/parked state and gate.
+    _rs = status_summary()
+    assert set(_rs["rails"]) == set(RAILS), _rs["rails"]
+    assert _rs["rails"][RAIL_OPENCODE_ZEN]["enabled"] is False, _rs["rails"][RAIL_OPENCODE_ZEN]
+    assert _rs["rails"][model_id.RAIL_OPENCODE_GO]["gate"] == "go", _rs["rails"]
+    assert _rs["rails"][model_id.RAIL_OPENCODE_GO]["parked"] is False, _rs["rails"]
+    # (f) the one-release migration (acceptance 3): a stale file's Anthropic-only top-level
+    # `tier_thresholds` is folded into the subscription rail ONCE and the old key dropped.
+    _sub_tt_saved = dict(rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {})
+    _classes["rails"][model_id.RAIL_SUBSCRIPTION]["tier_thresholds"] = {}
+    _classes["tier_thresholds"] = {"dispatch": 0.7, "heavy": 0.6, "_comment": "stale"}
+    assert _migrate_tier_thresholds() == 1, "a stale top-level table must migrate once"
+    assert "tier_thresholds" not in _classes, "the old key must be dropped after migration"
+    assert rail_facts(model_id.RAIL_SUBSCRIPTION)["tier_thresholds"] == {"dispatch": 0.7,
+                                                                        "heavy": 0.6}, \
+        rail_facts(model_id.RAIL_SUBSCRIPTION)["tier_thresholds"]
+    _classes["rails"][model_id.RAIL_SUBSCRIPTION]["tier_thresholds"] = _sub_tt_saved
+    # (g) the rails-LESS stale file (a partial revert of just model-classes.json): a top-level
+    # `tier_thresholds` with NO `rails:` block at all must still SURVIVE — the fold seeds the
+    # WHOLE canonical block from RAIL_DEFAULTS (so `_assert_declared_rails()` stays satisfied)
+    # and the file's declared value WINS over the hardcoded default, rather than being silently
+    # popped and reverting to RAIL_DEFAULTS. This is the reviewer's own repro, pinned.
+    _saved_classes_all = dict(_classes)
+    _classes.clear()
+    _classes.update({"tier_thresholds": {"dispatch": 0.7}, "classes": {}})
+    assert _migrate_tier_thresholds() == 1, "a rails-less stale table must still migrate once"
+    assert "tier_thresholds" not in _classes, "the old key must be dropped after migration"
+    assert set(_classes["rails"]) == set(RAILS), \
+        f"the seed must be the WHOLE canonical block: {sorted(_classes['rails'])}"
+    _assert_declared_rails()  # the seeded block keeps every class's rail declared
+    assert tier_threshold("dispatch", 0.42) == 0.7, \
+        f"a rails-less stale table must survive, not revert to RAIL_DEFAULTS: " \
+        f"{tier_threshold('dispatch', 0.42)}"
+    _classes.clear()
+    _classes.update(_saved_classes_all)
+    # ── Goal #1769 acceptance 3: the canonical `models` table ──
+    # (h) the two table asserts over the LIVE table: every entry's every (rail, id) must parse to
+    # the entry's key (model_family) and its rail (model_id.parse). The expected values are
+    # COMPUTED from the parser, never read back from the table — so a mis-keyed row trips this.
+    _assert_models_table(_models_table())
+    # (i) the negative row: a deliberately mis-keyed entry MUST trip the assert (the test can
+    # fail). Two drifts, one per half of the assert: a wrong family and a wrong rail.
+    _bad_family = {"claude-sonnet": {"ids": {"openrouter": "anthropic/claude-opus-4.6"},
+                                     "tier": "large", "context_tokens": None,
+                                     "tool_verified": None, "pool_usd": None}}
+    _bad_rail = {"claude-sonnet": {"ids": {"opencode-go": "claude/sonnet"},
+                                   "tier": "large", "context_tokens": None,
+                                   "tool_verified": None, "pool_usd": None}}
+    for _bad, _want in ((_bad_family, "family"), (_bad_rail, "rail")):
+        try:
+            _assert_models_table(_bad)
+        except AssertionError as _e:
+            assert _want in str(_e), f"the {_want} drift must be named: {_e}"
+        else:
+            raise AssertionError(f"a mis-keyed models entry must trip the assert ({_want})")
+    # (j) the one-release `model_tiers` alias: a stale id→grade table folds into `models` ONCE,
+    # keyed by model_family() and railed by model_id.parse(), and the old key is dropped.
+    _models_saved = copy.deepcopy(_classes.get("models"))
+    _classes["model_tiers"] = {"claude/haiku": "cheap", "opencode-go/deepseek-v4-flash": "cheap"}
+    assert _migrate_model_tiers() == 2, "a stale model_tiers table must migrate once"
+    assert "model_tiers" not in _classes, "the old key must be dropped after migration"
+    assert _classes["models"]["claude-haiku"]["tier"] == "cheap", _classes["models"]["claude-haiku"]
+    assert _classes["models"]["deepseek-v4-flash"]["ids"] == \
+        {"opencode-go": "opencode-go/deepseek-v4-flash"}, _classes["models"]["deepseek-v4-flash"]
+    _assert_models_table(_classes["models"])  # the seeded table still satisfies the two asserts
+    _classes["models"] = _models_saved
+    # (j2) the `:free` suffix-floor: the table is keyed by model_family(), which collapses the
+    # `:free` suffix onto the paid key, and `ids` is rail → ONE id — so master's two grades for
+    # `poolside/laguna-s-2.1` (`cheap`) and `poolside/laguna-s-2.1:free` (`free`) are not
+    # expressible in the table and are resolved per-id by the reader. Both grades must survive.
+    assert _model_tier("poolside/laguna-s-2.1") == "cheap", \
+        _model_tier("poolside/laguna-s-2.1")
+    assert _model_tier("poolside/laguna-s-2.1:free") == "free", \
+        _model_tier("poolside/laguna-s-2.1:free")
+    # (j3) the alias path: a stale `model_tiers` holding BOTH laguna ids folds into the canonical
+    # table, and the reader still resolves the two grades per-id — in EITHER key order (the
+    # migration's setdefault keeps only the first-seen grade, so the reader, not the table, is
+    # what restores the variant's floor).
+    for _order in ({"poolside/laguna-s-2.1": "cheap", "poolside/laguna-s-2.1:free": "free"},
+                   {"poolside/laguna-s-2.1:free": "free", "poolside/laguna-s-2.1": "cheap"}):
+        _classes["model_tiers"] = dict(_order)
+        assert _migrate_model_tiers() == 2, "both laguna ids must migrate"
+        assert _model_tier("poolside/laguna-s-2.1") == "cheap", \
+            f"paid laguna must stay cheap (order {list(_order)}): " \
+            f"{_model_tier('poolside/laguna-s-2.1')}"
+        assert _model_tier("poolside/laguna-s-2.1:free") == "free", \
+            f":free laguna must floor to free (order {list(_order)}): " \
+            f"{_model_tier('poolside/laguna-s-2.1:free')}"
+        _classes["models"] = copy.deepcopy(_models_saved)
+    # (k) /router-status echoes the canonical table (the per-model facts + per-rail ids).
+    _rs_models = status_summary()["models"]
+    assert _rs_models["deepseek-v4-flash"]["context_tokens"] == 1000000, \
+        _rs_models.get("deepseek-v4-flash")
+    assert _rs_models["claude-sonnet"]["ids"]["openrouter"] == "anthropic/claude-sonnet-4.6", \
+        _rs_models.get("claude-sonnet")
+    # (l) the cross-rail deny (acceptance 3): a deny of the CANONICAL key excludes every rail's id
+    # for that model in the same route; a deny of a bare rail id excludes just that id.
+    _deny_chain = ["claude/sonnet", "anthropic/claude-sonnet-4.6", "tencent/hy3"]
+    _dd = route(dict(base, chain=_deny_chain, deny=["claude-sonnet"]), CTX)
+    assert _dd["decision"] == "dispatch" and _dd["model"] == "tencent/hy3", _dd
+    assert {"model": "claude/sonnet", "reason": "claim-deny"} in _dd["skipped"], _dd["skipped"]
+    assert {"model": "anthropic/claude-sonnet-4.6", "reason": "claim-deny"} in _dd["skipped"], \
+        _dd["skipped"]
+    _dd2 = route(dict(base, chain=["claude/sonnet", "anthropic/claude-sonnet-4.6"],
+                      deny=["claude/sonnet"]), CTX)
+    assert _dd2["decision"] == "dispatch" and _dd2["model"] == "anthropic/claude-sonnet-4.6", _dd2
+    assert {"model": "claude/sonnet", "reason": "claim-deny"} in _dd2["skipped"], _dd2["skipped"]
+    assert not any(s.get("model") == "anthropic/claude-sonnet-4.6" for s in _dd2["skipped"]), \
+        _dd2["skipped"]
+    # (m) /route echoes the served model's declared context_tokens (acceptance 3): the Go flash's
+    # 1M window is the shell constant being retired, so it must be expressible from the decision.
+    _saved_rails_ctx = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
+    _ctx_go = route(dict(base, chain=["opencode-go/deepseek-v4-flash"]), CTX)
+    assert _ctx_go["decision"] == "dispatch" and _ctx_go["context_tokens"] == 1000000, _ctx_go
+    _classes["classes"]["coding"]["rails"] = _saved_rails_ctx
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
@@ -3100,7 +3955,9 @@ def self_test() -> int:
     sh = dsh["shadow"]
     assert (sh["urgency"], sh["urgency_source"]) == ("tight", "default"), sh
     assert sh["start_tier"] == "subscription" and sh["learned_start_tier"] == "free", sh
-    assert (sh["model"], sh["rail"], sh["ladder_tier"]) == ("claude/haiku", "subscription",
+    # Goal #1769 acceptance 1: the shadow's RAIL is canonical too (the rung it sits on keeps the
+    # ladder's own name — rungs and rails are two vocabularies, and only the rail moved).
+    assert (sh["model"], sh["rail"], sh["ladder_tier"]) == ("claude/haiku", "anthropic-subscription",
                                                             "subscription"), sh
     assert sh["subscription"]["eligible"] and sh["price_per_mtok"] == 0.0, sh
     # elastic takes the learned rung as-is — rung 0, the free model, "tier 1 first"
@@ -3197,7 +4054,7 @@ def self_test() -> int:
         # the ultra band rides the subscription rail, and the class rails let it
         du = route(dict(base, session="t-draw-u", chain=[], slot=1, jitter=False,
                         **{"class": "ultra"}), CTX)
-        assert du["decision"] == "dispatch" and du["rail"] == "subscription", du
+        assert du["decision"] == "dispatch" and du["rail"] == "anthropic-subscription", du
         assert du["model"] == _bands["ultra"][0], du
     # JITTER SUPPRESSED, on the ordinary chain path too: three equally-priced candidates put the
     # tie-break in the open. With the band live, the ctx picker roams it; with `jitter: false` the
@@ -3418,7 +4275,7 @@ def self_test() -> int:
         "first full record wins; measured cache hit = 80/100"
     assert 'router_shadow_start_tier{class="coding",urgency="tight"} 0' in body, \
         "the learned cell must surface as a gauge for the M11 soak"
-    assert 'router_shadow_decisions_total{rail="subscription"' in body, body
+    assert 'router_shadow_decisions_total{rail="anthropic-subscription"' in body, body
     assert 'router_shadow_subscription_blocked_total{reason="subscription-limited:semaphore"} 1' \
         in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
@@ -3436,11 +4293,34 @@ def self_test() -> int:
     # t-pc-clean-ds) — seven run_reports, four strikes: 28→35 and 14→18.
     assert summary["rows"]["run_reports"] == 37 and summary["rows"]["strikes"] == 20  # + t-pairscope + t-noprov (Goal #1640 acceptance 1 reader half) + + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
     if _classes:
-        assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
-        for tier, thr in _classes["tier_thresholds"].items():
+        # Goal #1769 acceptance 3: tier_thresholds is read PER RAIL now — the Anthropic-only
+        # top-level table is retired into `rails.anthropic-subscription.tier_thresholds`.
+        _sub_tt = rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {}
+        assert _sub_tt, "the subscription rail must declare tier_thresholds (FU-109)"
+        for tier, thr in _sub_tt.items():
             if tier.startswith("_"):  # _comment keys are docs, not tiers
                 continue
             assert 0.0 < float(thr) <= 1.0, f"tier {tier} threshold out of range"
+        # …and the `rails:` block declares every canonical rail with the required fields.
+        _declared = {r for r in (_classes.get("rails") or {}) if not str(r).startswith("_")}
+        assert _declared == set(RAILS), \
+            f"the `rails:` block must declare every canonical rail: {_declared} vs {set(RAILS)}"
+        for _r in RAILS:
+            _f = rail_facts(_r)
+            for _k in ("gate", "surfaces", "cost", "windows", "tier_thresholds",
+                       "concurrency", "enabled"):
+                assert _k in _f, f"rail {_r} must declare `{_k}` in the `rails:` block"
+        assert rail_facts(RAIL_OPENCODE_ZEN).get("enabled") is False, \
+            "Zen must be declared enabled: false (a rail we chose not to use is DECLARED, not omitted)"
+        # Goal #1769 acceptance 1: `classes.<cls>.rails` is written in the CANONICAL rail
+        # vocabulary — every entry is a rail this walk can actually produce (or the declared,
+        # parse-less Zen leg). A typo or a pre-Goal-#1769 spelling that reached the walk would be
+        # an empty pool: a class that silently serves nothing. The alias above covers the old
+        # names at load; this is what makes a NEW wrong name a CI failure instead of a silence.
+        for _c, _ci in (_classes.get("classes") or {}).items():
+            for _r in (_ci.get("rails") or []):
+                assert _r in RAILS, \
+                    f"class {_c} lists rail {_r!r}, which is not in the canonical vocabulary {RAILS}"
         # M11 policy sanity (homelab#159): the two git-owned halves of the ladder.
         umap = _classes.get("urgency_map") or {}
         assert umap, "model-classes.json must carry urgency_map — it is the table BOTH sides read"
@@ -3449,8 +4329,8 @@ def self_test() -> int:
             for k, v in (umap.get(scope) or {}).items():
                 assert str(v) in URGENCIES, f"urgency_map.{scope}[{k}] = {v!r} is not tight/elastic"
         lad = _ladder_cfg()
-        assert lad["subscription_model"] in (_classes.get("model_tiers") or {}), \
-            "the ladder's subscription candidate must be a graded model (model_tiers)"
+        assert model_family(lad["subscription_model"]) in _models_table(), \
+            "the ladder's subscription candidate must be a graded model (models.<key>.tier)"
         assert 0 <= lad["tight_floor_tier"] < len(LADDER)
         # ADR-104 POOL CURATION invariants (FU-162). The router deliberately does not enforce
         # these at request time — research is an operator-driven lane where visibility is the
@@ -3461,7 +4341,7 @@ def self_test() -> int:
             assert str(pools.get("version") or ""), \
                 "pools.version is missing — /route echoes it, and an arm table without it cannot be re-drawn"
             all_classes = _classes.get("classes") or {}
-            tiers = _classes.get("model_tiers") or {}
+            models = _models_table()
             band_of: dict[str, str] = {}
             for bname, entries in (pools.get("bands") or {}).items():
                 assert entries, f"pool {bname} is empty — a band with no depth is not a band"
@@ -3470,8 +4350,8 @@ def self_test() -> int:
                 assert selectors, f"pool {bname} has no class selecting it (/route's `class` is the selector)"
                 fams: set[str] = set()
                 for m in entries:
-                    assert m in tiers, \
-                        f"pool {bname}: {m} is not in model_tiers — pools draw from the human-approved universe only"
+                    assert model_family(m) in models, \
+                        f"pool {bname}: {m} is not in the models table — pools draw from the human-approved universe only"
                     assert m not in band_of, \
                         f"bands must be DISJOINT: {m} is in both {band_of[m]} and {bname} (the run-1 self-grading arm)"
                     band_of[m] = bname
@@ -3479,30 +4359,32 @@ def self_test() -> int:
                     assert fam not in fams, f"pool {bname}: family {fam} twice — pools are family-deduped"
                     fams.add(fam)
                     # Same rail rule the walk above applies, so a pool cannot hold a model its
-                    # own class would skip as rail-not-in-class on every single draw.
-                    rail = "subscription" if m.startswith("claude/") else "openrouter"
+                    # own class would skip as rail-not-in-class on every single draw. The rule is
+                    # the PARSER's (Goal #1769 acceptance 1) — never a second copy of it.
+                    rail = model_id.parse(m)["rail"]
                     for c in selectors:
                         assert rail in (all_classes[c].get("rails") or []), \
                             f"pool {bname}: {m} rides {rail}, absent from class {c} rails"
         cb = _classes.get("circuit_breaker") or {}
         assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
             "auth breaker must trip before the generic one (auth never self-heals)"
-        # Chain ⊆ model_tiers parity (the invariant this file's _comment has CLAIMED since P3 but
+        # Chain ⊆ models parity (the invariant this file's _comment has CLAIMED since P3 but
         # nothing enforced — found 2026-08-03 when mimo graduated into sleep's chain and its tier
-        # entry became a human to-do item instead of a CI failure). model_tiers is the rotation
-        # path's human-approved universe (P5): a chain model missing from it silently loses
-        # rotation visibility. Jail/CI-only: in-pod runs have no stacks.json and skip.
+        # entry became a human to-do item instead of a CI failure). The `models` table is the
+        # rotation path's human-approved universe (P5): a chain model whose FAMILY is missing from
+        # it silently loses rotation visibility. Jail/CI-only: in-pod runs have no stacks.json and
+        # skip.
         stacks_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "agents", "stacks.json")
         if os.path.exists(stacks_path):
             with open(stacks_path) as fh:
                 stacks = json.load(fh).get("stacks") or []
-            tiers = _classes.get("model_tiers") or {}
+            models = _models_table()
             chain_models = set()
             for st in stacks:
                 if st.get("workerModel"):
                     chain_models.add(st["workerModel"])
                 chain_models.update(st.get("workerModelFallbacks") or [])
-            missing = sorted(m for m in chain_models if m not in tiers)
+            missing = sorted(m for m in chain_models if model_family(m) not in models)
             if missing:
                 reg_path = os.path.join(os.path.dirname(stacks_path), ".openrouter-registry.json")
                 prices = {}
@@ -3515,10 +4397,12 @@ def self_test() -> int:
                             "cheap" if p is not None and p < 0.5 else
                             "large" if p is not None and p < 3 else
                             "premium" if p is not None else "cheap?")
-                    print(f'  model_tiers MISSING chain entry — add: "{m}": "{tier}"'
+                    print(f'  models MISSING chain entry — add: "{model_family(m)}": '
+                          f'{{"ids": {{"{model_id.parse(m)["rail"]}": "{m}"}}, "tier": "{tier}", '
+                          f'"context_tokens": null, "tool_verified": null, "pool_usd": null}}'
                           f'{f"  (${p}/M prompt)" if p is not None else "  (not in registry — verify price)"}')
                 raise AssertionError(
-                    f"model_tiers must cover every stacks.json chain entry; missing: {missing}")
+                    f"the models table must cover every stacks.json chain entry; missing: {missing}")
     # ── homelab#1117: active_cooldowns() role filter on status/metrics call sites ──
     # A model with BOTH a worker-scoped and a probe-scoped cooldown must not collapse into one
     # entry. The status payload must show both roles; the metrics gauge must carry a role label.
@@ -3564,7 +4448,7 @@ def self_test() -> int:
     assert _lg["decision"] == "dispatch", f"lg must dispatch with a large candidate: {_lg}"
     assert _lg["model"] == "moonshotai/kimi-k3", \
         f"lg must pick the large-tier model, got {_lg['model']}"
-    _lg_tier = (_classes.get("model_tiers") or {}).get(_lg["model"])
+    _lg_tier = _model_tier(_lg["model"])
     assert _lg_tier and _TIER_ORDER.get(_lg_tier, -1) >= _TIER_ORDER.get("large", -1), \
         f"lg must pick at/above large tier, got {_lg['model']} (tier={_lg_tier})"
     assert not _lg["model"].endswith(":free"), \
@@ -3578,11 +4462,22 @@ def self_test() -> int:
     assert _md["decision"] == "dispatch", f"md must dispatch: {_md}"
     assert _md["model"] == "deepseek/deepseek-v4-flash", \
         f"md must pick the first cheap+ model, got {_md['model']}"
-    _md_tier = (_classes.get("model_tiers") or {}).get(_md["model"])
+    _md_tier = _model_tier(_md["model"])
     assert _md_tier and _TIER_ORDER.get(_md_tier, -1) >= _TIER_ORDER.get("cheap", -1), \
         f"md must pick at/above cheap tier, got {_md['model']} (tier={_md_tier})"
     assert any(s["reason"].startswith("tier-floor:") for s in _md["skipped"]), \
         f"md must skip free models: {_md['skipped']}"
+    # The `:free` suffix-floor under a tier_floor:cheap route (the migration's own job — master
+    # graded `poolside/laguna-s-2.1:free` "free" and the paid id "cheap"). Offered both, the
+    # :free variant is skipped with the typed reason and the paid id is served.
+    _laguna_chain = ["poolside/laguna-s-2.1:free", "poolside/laguna-s-2.1"]
+    _laguna = route(dict(base, chain=_laguna_chain, labels=["agent-budget/md"]), CTX)
+    assert _laguna["decision"] == "dispatch", f"laguna md must dispatch: {_laguna}"
+    assert _laguna["model"] == "poolside/laguna-s-2.1", \
+        f"md must serve the paid laguna, got {_laguna['model']}"
+    assert any(s["model"] == "poolside/laguna-s-2.1:free"
+               and s["reason"] == "tier-floor:cheap>free" for s in _laguna["skipped"]), \
+        f"the :free laguna must skip with tier-floor:cheap>free: {_laguna['skipped']}"
     # No size label: byte-identical to today's pick (no drift for the untouched majority)
     _no_label = route(dict(base), CTX)
     assert _no_label["decision"] == "dispatch" and _no_label["model"] == "inclusionai/ling-3.0-flash:free", \
@@ -3598,7 +4493,7 @@ def self_test() -> int:
         f"multi-label (track/iac + lg) must dispatch: {_multi}"
     assert _multi["model"] == "moonshotai/kimi-k3", \
         f"multi-label must pick the large-tier model, got {_multi['model']}"
-    _multi_tier = (_classes.get("model_tiers") or {}).get(_multi["model"])
+    _multi_tier = _model_tier(_multi["model"])
     assert _multi_tier and _TIER_ORDER.get(_multi_tier, -1) >= _TIER_ORDER.get("large", -1), \
         f"multi-label must pick at/above large tier, got {_multi['model']} (tier={_multi_tier})"
     assert not _multi["model"].endswith(":free"), \

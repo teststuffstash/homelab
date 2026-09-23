@@ -61,21 +61,33 @@ its anchor and its evidence:
 
 ### Rail rules
 
-- **A class names its rails.** `classes.<cls>.rails` (default `["openrouter","subscription"]`);
-  a candidate's rail is derived from its id (`claude/*` → `subscription`, else `openrouter`), and a
-  candidate whose rail the class does not list is skipped.
-  - anchor: `router.py:route`; `model-classes.json` → `classes`.
-  - evidence: decision row `skipped[{reason: "rail-<rail>-not-in-class-<cls>"}]`; `devbox run
-    router-self-test` (the eligibility rows).
+- **A class names its rails.** `classes.<cls>.rails` is written in the CANONICAL rail vocabulary —
+  `anthropic-subscription` · `opencode-go` · `openrouter` · `opencode-zen` (default
+  `["openrouter","anthropic-subscription"]`; the pre-Goal-#1769 spelling `subscription` still loads
+  through the one-release alias `router.py:RAIL_ALIASES`, deleted next release). A candidate's rail
+  is whatever `model_id.parse()` says it is — the parser owns the rule, and the walk reads it at the
+  one place that decides (`router.py:route`) — and a candidate whose rail the class does not list is
+  skipped. `opencode-zen` is the one member no parse rule produces yet (the `opencode/` leg, parked
+  by `OPENCODE_RAIL_DISABLED`): a class may name it, no candidate parses onto it, so the walk finds
+  an empty pool and moves on.
+  - anchor: `router.py:route` (`model_id.parse(m)["rail"]`); `model-classes.json` → `classes`.
+  - evidence: decision row `rail` (the parser's name — the same vocabulary `resolved.rail` uses);
+    `skipped[{reason: "rail-<rail>-not-in-class-<cls>"}]`; `devbox run router-self-test` (the
+    eligibility rows).
 - **Rails are walked in class order; the first rail with an eligible, priced candidate wins.**
   - anchor: `router.py:route` (the `for rail in rails` walk).
   - evidence: decision row `rail` + `jitter_pool`; `/router-status` → `decisions_24h`.
 - **Each rail has a capacity gate; a gate that closes refuses the whole rail with a typed defer —
-  it never falls through to a cheaper-but-unwired model.** The subscription gate is the FU-088
-  latch/utilization/semaphore triple; the OpenRouter gate is the key/credit state.
-  - anchor: `router.py:route` (`sub_gate`/`or_gate`, memoized to at most one read each) and the
-    capacity state in `openrouter-proxy.py`.
-  - evidence: `router_decisions_total{decision="defer",reason=…}`; replay
+  it never falls through to a cheaper-but-unwired model.** Three gates sit beside each other in the
+  walk, memoized to at most one read each: `sub_gate` (the `anthropic-subscription` rail — the
+  FU-088 latch/utilization/semaphore triple), `go_gate` (the `opencode-go` rail's OWN capacity, the
+  proxy's `/opencode-limit` composite: the observed 429/402 latch, the gometer window draw,
+  `OPENCODE_MAX_RUNNING` and the FU-213 park), and `or_gate` (the `openrouter` rail — the
+  key/credit state). A Go candidate is gated by `go_gate`, never by the OpenRouter key's state, and
+  a Go refusal is skipped with a typed `go:<reason>` — never an `openrouter:…` reason.
+  - anchor: `router.py:route` (`sub_gate`/`go_gate`/`or_gate`) and the capacity state in
+    `openrouter-proxy.py` (`/anthropic-limit`, `/opencode-limit`, the key/credit state).
+  - evidence: `router_decisions_total{decision="defer",reason=…}` (a Go defer reads `go:…`); replay
     `agents/replay/fixtures/fu088-ladder`.
 - **A chainless stack draws from the rotation universe** — `model_tiers` keys ordered by the
   class's `chain_head` first, then the ranked rotation — and the launcher refuses a chainless
