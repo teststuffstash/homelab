@@ -70,12 +70,15 @@ RAIL_ALIASES = {"subscription": model_id.RAIL_SUBSCRIPTION}
 # FU-188 pinned the reviewer to shadow; this predicate is what makes WIDENING the rail lists safe
 # again, so the pin's shell line (theme 2's deletion) stops being load-bearing.
 #
-# What each rail REQUIRES of the caller, declared per rail. Minimal and in-router here; Goal #1769
-# acceptance 2 externalizes it into model-classes.json's `rails:` block (gate/cost/windows/
-# enabled), which this table then reads.
+# What each rail REQUIRES of the caller, declared per rail. Goal #1769 acceptance 2 EXTERNALIZED
+# this into model-classes.json's `rails:` block (`surfaces`), which `rail_surfaces()` reads; the
+# table below is the code BELT for a jail run without the file (same contract as every other
+# table here). The requirement is the rail's `surfaces` list, plus openrouter's `key_ref` (its own
+# credential — the one requirement that is not a surface, so it stays a code predicate).
 #
 #   openrouter                a `key_ref` — the caller's OWN credential. Its absence now means
-#                             "I cannot ride this rail", never "unknown, try anyway".
+#                             "I cannot ride this rail", never "unknown, try anyway". Its
+#                             `surfaces` cover every caller surface (any CLI can ride it WITH a key).
 #   anthropic-subscription,
 #   opencode-go, opencode-zen the matching CLI surface. Derived from the rail's HARNESS, which
 #                             `model_id.parse()` already owns: a Go ride is executed by the claude
@@ -84,11 +87,27 @@ RAIL_ALIASES = {"subscription": model_id.RAIL_SUBSCRIPTION}
 #                             is the one the opencode CLI rides. So the Go rail is rideable by a
 #                             `claude-cli` caller — which is why the reviewer's surface can serve
 #                             a Go model when the Anthropic window is latched.
-RAIL_SURFACE = {
-    model_id.RAIL_SUBSCRIPTION: "claude-cli",
-    model_id.RAIL_OPENCODE_GO: "claude-cli",
-    RAIL_OPENCODE_ZEN: "opencode-cli",
+RAIL_DEFAULTS = {
+    model_id.RAIL_SUBSCRIPTION: {
+        "gate": "sub", "surfaces": ["claude-cli"], "cost": "flat-window",
+        "windows": ["5h", "7d"], "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+        "concurrency": None, "enabled": True},
+    model_id.RAIL_OPENCODE_GO: {
+        "gate": "go", "surfaces": ["claude-cli"], "cost": "flat-pool",
+        "windows": ["5h", "7d", "30d"], "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+        "concurrency": 3, "enabled": True},
+    model_id.RAIL_OPENROUTER: {
+        "gate": "or", "surfaces": ["claude-cli", "opencode-cli", "openai-api"],
+        "cost": "per-token", "windows": [], "tier_thresholds": {}, "concurrency": None,
+        "enabled": True},
+    RAIL_OPENCODE_ZEN: {
+        "gate": "none", "surfaces": ["opencode-cli"], "cost": "per-token", "windows": [],
+        "tier_thresholds": {}, "concurrency": None, "enabled": False},
 }
+# The env kill switch's leg names (FU-213): OPENCODE_RAIL_DISABLED parks the opencode legs by
+# their LEG name, the rail vocabulary names them by rail. ONE map, so the walk and the proxy's
+# forward-path belt (`_rail_disabled`) cannot disagree about which rail an env value parks.
+RAIL_ENV_LEG = {model_id.RAIL_OPENCODE_GO: "go", RAIL_OPENCODE_ZEN: "zen"}
 
 # ── STRIKE VOCABULARY — THE ONE HOME (Goal #1640 acceptance 1) ────────────────────────────────
 # These error classes are INFRA failures (model-routing.md §M1): they blacklist the (task, model)
@@ -337,6 +356,13 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
         # rail name loads, logged once per class that needed it. Runs HERE, at the load, so
         # nothing downstream ever reads the old vocabulary.
         _alias_rails()
+        # Goal #1769 acceptance 3: the Anthropic-only top-level `tier_thresholds` is retired into
+        # the subscription rail's declared table. A stale file's copy is folded in ONCE here, so
+        # nothing downstream reads the old location.
+        _migrate_tier_thresholds()
+        # Goal #1769 acceptance 2/5: no class may name a rail the `rails:` block does not declare
+        # — a load-time assert, so a typo is a startup failure, never a silently empty pool.
+        _assert_declared_rails()
     _log(f"store={'persistent' if _persistent else 'ephemeral'} "
          f"classes={'loaded' if _classes else 'defaults'}")
     return _persistent
@@ -365,11 +391,130 @@ def _alias_rails() -> int:
     return n
 
 
-def tier_threshold(tier: str | None, default: float) -> float:
-    """FU-109: the per-consumer utilization threshold. Unknown/absent tier = the global default
-    (bare /anthropic-limit keeps today's behavior exactly)."""
+def _migrate_tier_thresholds() -> int:
+    """Goal #1769 acceptance 3: fold a stale file's Anthropic-only top-level `tier_thresholds`
+    into `rails.anthropic-subscription.tier_thresholds` ONCE at load, then drop the old key so
+    nothing downstream reads it. Returns how many rails it filled (0 = the file is already
+    migrated). The declared per-rail table is the home; this is the one-release alias."""
+    old = _classes.get("tier_thresholds")
+    if not isinstance(old, dict):
+        return 0
+    folded = {k: v for k, v in old.items() if not str(k).startswith("_")}
+    rails = _classes.get("rails")
+    seeded = False
+    if not isinstance(rails, dict):
+        # A file with the old top-level table and no `rails:` block at all (a partial revert of
+        # just model-classes.json). Popping the old key here would silently revert to
+        # RAIL_DEFAULTS. Seed the WHOLE canonical block — which is what rail_facts() already
+        # gives a rails-less file — because seeding one entry would make _assert_declared_rails()
+        # fail every class naming another rail.
+        rails = {r: dict(f) for r, f in RAIL_DEFAULTS.items()}
+        _classes["rails"] = rails
+        seeded = True
+    sub = rails.get(model_id.RAIL_SUBSCRIPTION)
+    n = 0
+    if isinstance(sub, dict) and (seeded or not sub.get("tier_thresholds")):
+        sub["tier_thresholds"] = folded
+        n = 1
+        _log("model-classes: top-level tier_thresholds → rails.anthropic-subscription."
+             "tier_thresholds (one-release migration"
+             + ("; no `rails:` block — seeded from RAIL_DEFAULTS" if seeded else "")
+             + "; update the file)")
+    elif folded:
+        _log(f"model-classes: top-level tier_thresholds {sorted(folded)} dropped — "
+             f"rails.{model_id.RAIL_SUBSCRIPTION} already declares its own")
+    _classes.pop("tier_thresholds", None)
+    return n
+
+
+def _assert_declared_rails() -> None:
+    """Goal #1769 acceptance 2/5: every `classes.<cls>.rails` entry must be a rail the `rails:`
+    block DECLARES. A class naming an undeclared rail is an empty pool that silently serves
+    nothing — the exact failure the canonical vocabulary exists to prevent — so it FAILS THE LOAD
+    rather than deferring at request time. Runs after `_alias_rails()`, so the old spelling is
+    canonical by now. A file with no `rails:` block (a jail run without the file) is not checked:
+    the block is the authority, and absent means no constraint."""
+    declared = {r for r in (_classes.get("rails") or {}) if not str(r).startswith("_")}
+    if not declared:
+        return
+    for cls, cinfo in (_classes.get("classes") or {}).items():
+        if not isinstance(cinfo, dict):
+            continue
+        for rail in (cinfo.get("rails") or []):
+            if rail not in declared:
+                raise ValueError(
+                    f"model-classes: class {cls} names rail {rail!r}, which the `rails:` block "
+                    f"does not declare (declared: {sorted(declared)})")
+
+
+def rail_facts(rail: str) -> dict:
+    """The DECLARED facts for `rail` from model-classes.json's `rails:` block (Goal #1769
+    acceptance 2), falling back to RAIL_DEFAULTS for a jail run without the file. Never None for
+    a canonical rail."""
+    declared = (_classes.get("rails") or {}).get(rail)
+    if isinstance(declared, dict):
+        return declared
+    return RAIL_DEFAULTS.get(rail, {})
+
+
+def rail_enabled(rail: str) -> bool:
+    """The git authority: `rails.<rail>.enabled`. A rail declared `enabled: false` (Zen today) is
+    skipped `rail:disabled` and CANNOT be un-parked from env."""
+    return bool(rail_facts(rail).get("enabled", True))
+
+
+def rail_parked_leg(leg: str) -> bool:
+    """True while `leg` ("go"/"zen") is parked by OPENCODE_RAIL_DISABLED (FU-213). THE ONE HOME
+    for the env parse — openrouter-proxy.py:_rail_disabled delegates here, so the forward-path
+    belt and the /route walk cannot disagree about which rail an env value parks."""
+    v = os.environ.get("OPENCODE_RAIL_DISABLED", "").strip().lower()
+    if v in ("", "0", "false", "no", "off"):
+        return False
+    if v in ("1", "true", "yes", "on", "all", "both"):
+        return True
+    return leg in v.replace(",", " ").split()
+
+
+def rail_parked(rail: str) -> bool:
+    """The env authority: a rail parked by OPENCODE_RAIL_DISABLED is skipped `rail:parked`. Only
+    the opencode legs have a leg name; every other rail is never parked."""
+    leg = RAIL_ENV_LEG.get(rail)
+    return bool(leg) and rail_parked_leg(leg)
+
+
+def rail_skip_reason(rail: str) -> str | None:
+    """The rail-level skip reason for `rail`, or None when the rail is rideable. TWO authorities,
+    TWO reasons (Goal #1769 acceptance 2): git `enabled: false` → `rail:disabled`; the
+    OPENCODE_RAIL_DISABLED env park → `rail:parked`. Git wins — an `enabled: false` rail cannot be
+    overridden from env (the precedence documented in model-classes.json's rails._comment)."""
+    if not rail_enabled(rail):
+        return "rail:disabled"
+    if rail_parked(rail):
+        return "rail:parked"
+    return None
+
+
+def rail_surfaces(rail: str) -> list[str]:
+    """The caller surfaces `rail` serves (Goal #1769 acceptance 2 externalized acceptance 4's
+    in-router RAIL_SURFACE into the `rails:` block). The caller-capability predicate reads THIS."""
+    return [str(s) for s in (rail_facts(rail).get("surfaces") or [])]
+
+
+def rail_concurrency(rail: str, default: int | None = None) -> int | None:
+    """The rail's declared concurrency bound (Goal #1769 acceptance 2). The Go rail's bound was a
+    bare `OPENCODE_MAX_RUNNING` env fact; it is DECLARED here now, with the env as the override
+    (openrouter-proxy.py:_go_max_running)."""
+    v = rail_facts(rail).get("concurrency")
+    return default if v is None else int(v)
+
+
+def tier_threshold(tier: str | None, default: float,
+                   rail: str = model_id.RAIL_SUBSCRIPTION) -> float:
+    """FU-109 + Goal #1769 acceptance 3: the per-consumer utilization threshold, read from the
+    RAIL's declared `tier_thresholds` (the Anthropic-only top-level table is retired). Unknown/
+    absent tier = the global default (bare /anthropic-limit keeps today's behavior exactly)."""
     try:
-        return float((_classes.get("tier_thresholds") or {})[tier])
+        return float((rail_facts(rail).get("tier_thresholds") or {})[tier])
     except (KeyError, TypeError, ValueError):
         return default
 
@@ -1511,7 +1656,8 @@ def route(payload: dict, ctx: dict) -> dict:
 
     CALLER CAPABILITY (Goal #1769 acceptance 4): `surface` (what the caller can EXECUTE) and
     `key_ref` (its OpenRouter credential ref) are caller facts, and each rail's requirement
-    (`RAIL_SURFACE`, plus openrouter's `key_ref`) is applied in the ELIGIBILITY loop — BEFORE any
+    (the rail's declared `surfaces`, plus openrouter's `key_ref`) is applied in the ELIGIBILITY
+    loop — BEFORE any
     capacity gate — so a candidate whose rail the caller cannot ride is skipped with a typed
     `caller:no-key_ref` / `caller:surface` reason and never consumes a gate probe, and the shadow
     ladder (which reads the same `eligible` set) cannot pick it either. PERMISSIVE BY CONSTRUCTION:
@@ -1653,8 +1799,11 @@ def route(payload: dict, ctx: dict) -> dict:
         # permissive default this change deliberately preserves).
         if not (caller_surface or caller_key_ref):
             return None
-        want = RAIL_SURFACE.get(rail)
-        if want and caller_surface and caller_surface != want:
+        # Goal #1769 acceptance 2: the rail's `surfaces` come from the `rails:` block now, not an
+        # in-router table. A rail that declares no surfaces (or a caller that sent none) filters
+        # nothing on this axis.
+        want = rail_surfaces(rail)
+        if want and caller_surface and caller_surface not in want:
             return "caller:surface"
         # The OpenRouter rail is bought with the caller's OWN key: a declared fact set with no
         # `key_ref` means the caller cannot ride it (the reviewer, by design). This is the fact
@@ -1691,6 +1840,13 @@ def route(payload: dict, ctx: dict) -> dict:
             skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        elif (rail_reason := rail_skip_reason(rail)) is not None:
+            # Goal #1769 acceptance 2: TWO authorities, TWO reasons. `rail:disabled` is the git
+            # declaration (`rails.<rail>.enabled: false` — Zen today); `rail:parked` is the
+            # OPENCODE_RAIL_DISABLED env kill switch (FU-213). Git wins: an `enabled: false` rail
+            # cannot be un-parked from env. Checked before caller capability (a rail fact precedes
+            # a caller fact) and before capacity, which is never consulted.
+            skipped.append({"model": m, "reason": rail_reason})
         elif (caller_reason := caller_block(rail)) is not None:
             # Typed, and a CALLER reason: the rail may be perfectly healthy — this request cannot
             # ride it. Checked after the class's rail list (a class that does not name the rail at
@@ -2006,7 +2162,19 @@ def status_summary() -> dict:
         # fleet-strike reader cite this list instead of keeping a copy that drifts.
         "strike_classes": sorted(STRIKE_CLASSES),
         "serving_classes": sorted(SERVING_CLASSES),
-        "tier_thresholds": _classes.get("tier_thresholds") or {},
+        # Goal #1769 acceptance 2/4: the declared rail set, each rail's state and gate. `enabled`
+        # is the git authority, `parked` the env authority (OPENCODE_RAIL_DISABLED) — the two
+        # reasons the walk skips a rail with, readable here without the sqlite file.
+        "rails": {
+            r: {"enabled": rail_enabled(r), "parked": rail_parked(r),
+                "gate": rail_facts(r).get("gate"),
+                "surfaces": rail_surfaces(r),
+                "cost": rail_facts(r).get("cost"),
+                "concurrency": rail_facts(r).get("concurrency")}
+            for r in RAILS},
+        # Goal #1769 acceptance 3: the per-rail FU-109 table (the Anthropic-only top-level table
+        # is retired). Kept under the old key for the readers that cite it, now sourced per rail.
+        "tier_thresholds": rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {},
         # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
         # and where the would-be pick disagreed with what actually got served.
         "ladder_cells": [
@@ -3259,14 +3427,108 @@ def self_test() -> int:
         in _nc["skipped"], _nc["skipped"]
     assert _nc["decision"] == "defer" and not _or_calls, \
         f"capability is decided BEFORE capacity (OpenRouter gate calls={_or_calls})"
-    # The requirement table is per-rail and complete: every CLI-bound rail declares its surface,
-    # and openrouter's requirement is the CREDENTIAL (its own key_ref test), never a surface.
-    assert set(RAIL_SURFACE) <= set(RAILS) and model_id.RAIL_OPENROUTER not in RAIL_SURFACE, \
-        RAIL_SURFACE
+    # The requirement table is per-rail and complete: every canonical rail declares its surfaces
+    # in the `rails:` block (acceptance 2 externalized RAIL_SURFACE), and openrouter's requirement
+    # is the CREDENTIAL (its own key_ref test), never a surface — so its declared surfaces cover
+    # every caller surface.
+    for _r in RAILS:
+        assert rail_surfaces(_r), f"rail {_r} must declare surfaces in the `rails:` block"
+    assert set(rail_surfaces(model_id.RAIL_OPENROUTER)) >= {"claude-cli", "opencode-cli",
+                                                             "openai-api"}, \
+        rail_surfaces(model_id.RAIL_OPENROUTER)
     # …and /router-status carries the caller facts on its decision rows.
     assert any(r.get("surface") == "claude-cli" and r["rail"] == "anthropic-subscription"
                for r in status_summary()["decisions_24h"]), \
         "decision rows must carry the caller facts the route was decided on"
+    # ── Goal #1769 acceptance 2: the `rails:` block is READ ──
+    # (a) a rail declared `enabled: false` (Zen) is skipped `rail:disabled` — the GIT authority.
+    # No parse rule produces the Zen rail yet (the `opencode/` prefix is the leg, homelab#445), so
+    # the test injects a candidate at the PARSER seam; the walk itself is unmodified.
+    _saved_rails_zen = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-zen", "openrouter"]
+    _orig_parse = model_id.parse
+    model_id.parse = lambda m: ({"rail": RAIL_OPENCODE_ZEN, "harness": "opencode", "model": m}
+                                if m == "opencode/zen-probe" else _orig_parse(m))
+    try:
+        _zen = route(dict(base, session="t-zen-disabled", chain=["opencode/zen-probe"]), CTX)
+    finally:
+        model_id.parse = _orig_parse
+    assert _zen["decision"] == "defer", _zen
+    assert {"model": "opencode/zen-probe", "reason": "rail:disabled"} in _zen["skipped"], \
+        _zen["skipped"]
+    _classes["classes"]["coding"]["rails"] = _saved_rails_zen
+    # (b) a rail parked by OPENCODE_RAIL_DISABLED is skipped `rail:parked` — the ENV authority —
+    # and SERVED with it unset. The env is read at call time, so the toggle is the test's.
+    _saved_rails_go2 = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["opencode-go", "openrouter"]
+    _old_park = os.environ.get("OPENCODE_RAIL_DISABLED")
+    try:
+        os.environ["OPENCODE_RAIL_DISABLED"] = "go"
+        _parked = route(dict(base, session="t-go-parked",
+                             chain=["opencode-go/deepseek-v4-flash"]), CTX)
+        assert _parked["decision"] == "defer", _parked
+        assert {"model": "opencode-go/deepseek-v4-flash", "reason": "rail:parked"} \
+            in _parked["skipped"], _parked["skipped"]
+        os.environ.pop("OPENCODE_RAIL_DISABLED", None)
+        _unparked = route(dict(base, session="t-go-unparked",
+                               chain=["opencode-go/deepseek-v4-flash"]), CTX)
+        assert _unparked["decision"] == "dispatch" and _unparked["rail"] == "opencode-go", _unparked
+    finally:
+        if _old_park is None:
+            os.environ.pop("OPENCODE_RAIL_DISABLED", None)
+        else:
+            os.environ["OPENCODE_RAIL_DISABLED"] = _old_park
+    _classes["classes"]["coding"]["rails"] = _saved_rails_go2
+    # (c) a class naming a rail the block does not declare FAILS THE LOAD (acceptance 5).
+    _saved_rails_bad = list(_classes["classes"]["coding"]["rails"])
+    _classes["classes"]["coding"]["rails"] = ["bogus-rail"]
+    try:
+        _assert_declared_rails()
+        raise AssertionError("a class naming an undeclared rail must fail the load")
+    except ValueError:
+        pass
+    finally:
+        _classes["classes"]["coding"]["rails"] = _saved_rails_bad
+    # (d) tier_thresholds is read PER RAIL (acceptance 3): the Anthropic-only top-level table is
+    # retired; the subscription rail's declared table is the home.
+    assert tier_threshold("dispatch", 0.0) == 0.9 and tier_threshold("heavy", 0.0) == 0.8, \
+        (tier_threshold("dispatch", 0.0), tier_threshold("heavy", 0.0))
+    assert tier_threshold("nope", 0.42) == 0.42, "an unknown tier falls to the default"
+    # (e) /router-status echoes the rail set with each rail's enabled/parked state and gate.
+    _rs = status_summary()
+    assert set(_rs["rails"]) == set(RAILS), _rs["rails"]
+    assert _rs["rails"][RAIL_OPENCODE_ZEN]["enabled"] is False, _rs["rails"][RAIL_OPENCODE_ZEN]
+    assert _rs["rails"][model_id.RAIL_OPENCODE_GO]["gate"] == "go", _rs["rails"]
+    assert _rs["rails"][model_id.RAIL_OPENCODE_GO]["parked"] is False, _rs["rails"]
+    # (f) the one-release migration (acceptance 3): a stale file's Anthropic-only top-level
+    # `tier_thresholds` is folded into the subscription rail ONCE and the old key dropped.
+    _sub_tt_saved = dict(rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {})
+    _classes["rails"][model_id.RAIL_SUBSCRIPTION]["tier_thresholds"] = {}
+    _classes["tier_thresholds"] = {"dispatch": 0.7, "heavy": 0.6, "_comment": "stale"}
+    assert _migrate_tier_thresholds() == 1, "a stale top-level table must migrate once"
+    assert "tier_thresholds" not in _classes, "the old key must be dropped after migration"
+    assert rail_facts(model_id.RAIL_SUBSCRIPTION)["tier_thresholds"] == {"dispatch": 0.7,
+                                                                        "heavy": 0.6}, \
+        rail_facts(model_id.RAIL_SUBSCRIPTION)["tier_thresholds"]
+    _classes["rails"][model_id.RAIL_SUBSCRIPTION]["tier_thresholds"] = _sub_tt_saved
+    # (g) the rails-LESS stale file (a partial revert of just model-classes.json): a top-level
+    # `tier_thresholds` with NO `rails:` block at all must still SURVIVE — the fold seeds the
+    # WHOLE canonical block from RAIL_DEFAULTS (so `_assert_declared_rails()` stays satisfied)
+    # and the file's declared value WINS over the hardcoded default, rather than being silently
+    # popped and reverting to RAIL_DEFAULTS. This is the reviewer's own repro, pinned.
+    _saved_classes_all = dict(_classes)
+    _classes.clear()
+    _classes.update({"tier_thresholds": {"dispatch": 0.7}, "classes": {}})
+    assert _migrate_tier_thresholds() == 1, "a rails-less stale table must still migrate once"
+    assert "tier_thresholds" not in _classes, "the old key must be dropped after migration"
+    assert set(_classes["rails"]) == set(RAILS), \
+        f"the seed must be the WHOLE canonical block: {sorted(_classes['rails'])}"
+    _assert_declared_rails()  # the seeded block keeps every class's rail declared
+    assert tier_threshold("dispatch", 0.42) == 0.7, \
+        f"a rails-less stale table must survive, not revert to RAIL_DEFAULTS: " \
+        f"{tier_threshold('dispatch', 0.42)}"
+    _classes.clear()
+    _classes.update(_saved_classes_all)
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
@@ -3781,11 +4043,25 @@ def self_test() -> int:
     # t-pc-clean-ds) — seven run_reports, four strikes: 28→35 and 14→18.
     assert summary["rows"]["run_reports"] == 37 and summary["rows"]["strikes"] == 20  # + t-pairscope + t-noprov (Goal #1640 acceptance 1 reader half) + + drift-1 + unver-1 + go-drift-1 + go-unver-1 + platform-575 + sleep-iac-577 + agent-runtime-577 + failed-unver-1 + null-rail-1 + t-provider-1 + t-turn-cap + t-tool-loop + t-strike-pair-1 + t-strike-pair-2 + t-strike-pair-3a + t-strike-pair-3b + t-strike-model-1 + t-strike-cool-1 + t-strike-floor-1 + t-strike-decor-1 + t-pc-clean-early + t-pc-issue-93 + t-pc-issue-94 + t-pc-issue-93b + t-pc-issue-95 + t-pc-clean + t-pc-clean-ds
     if _classes:
-        assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
-        for tier, thr in _classes["tier_thresholds"].items():
+        # Goal #1769 acceptance 3: tier_thresholds is read PER RAIL now — the Anthropic-only
+        # top-level table is retired into `rails.anthropic-subscription.tier_thresholds`.
+        _sub_tt = rail_facts(model_id.RAIL_SUBSCRIPTION).get("tier_thresholds") or {}
+        assert _sub_tt, "the subscription rail must declare tier_thresholds (FU-109)"
+        for tier, thr in _sub_tt.items():
             if tier.startswith("_"):  # _comment keys are docs, not tiers
                 continue
             assert 0.0 < float(thr) <= 1.0, f"tier {tier} threshold out of range"
+        # …and the `rails:` block declares every canonical rail with the required fields.
+        _declared = {r for r in (_classes.get("rails") or {}) if not str(r).startswith("_")}
+        assert _declared == set(RAILS), \
+            f"the `rails:` block must declare every canonical rail: {_declared} vs {set(RAILS)}"
+        for _r in RAILS:
+            _f = rail_facts(_r)
+            for _k in ("gate", "surfaces", "cost", "windows", "tier_thresholds",
+                       "concurrency", "enabled"):
+                assert _k in _f, f"rail {_r} must declare `{_k}` in the `rails:` block"
+        assert rail_facts(RAIL_OPENCODE_ZEN).get("enabled") is False, \
+            "Zen must be declared enabled: false (a rail we chose not to use is DECLARED, not omitted)"
         # Goal #1769 acceptance 1: `classes.<cls>.rails` is written in the CANONICAL rail
         # vocabulary — every entry is a rail this walk can actually produce (or the declared,
         # parse-less Zen leg). A typo or a pre-Goal-#1769 spelling that reached the walk would be
