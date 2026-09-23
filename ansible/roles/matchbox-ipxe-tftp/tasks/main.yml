@@ -1,15 +1,23 @@
 ---
-# Stage-1 of the PXE chainload on the Matchbox LXC: a TFTP server handing vanilla
-# iPXE binaries to PXE ROMs, plus the entry script iPXE then runs.
-# (NOTE: the matchbox-proxydhcp role later makes dnsmasq own TFTP and masks
-# tftpd-hpa — this role is kept for the standalone-tftpd setup / reference.)
-# Config in group_vars/matchbox.yml.
+# Stage-1 of the PXE chainload on the Matchbox LXC: the vanilla iPXE binaries a PXE ROM
+# chainloads, plus the entry script iPXE then runs. Config in group_vars/matchbox.yml.
+#
+# ⚠ THIS ROLE RUNS NO TFTP SERVER. dnsmasq (role matchbox-proxydhcp) owns :69 and serves
+# {{ tftp_root }}; it MASKS tftpd-hpa. Until 2026-09-23 this role also installed, configured and
+# started tftpd-hpa, so every run died at its last task against that masked unit — and the file
+# copy before it therefore went unverified: `undionly.kpxe` was missing from /srv/tftp for months,
+# so every BIOS PXE client got a filename it could not fetch and fell back to disk (FU-261).
+# Staging the files is this role's job; serving them is dnsmasq's.
+#
+# ORDER: matchbox-proxydhcp must have run at least once — the verification at the bottom fetches
+# all three boot files over TFTP from the running dnsmasq, which is the only check that has ever
+# looked at the thing onboarding actually depends on.
 
-- name: Install tftpd-hpa + iPXE binaries (Debian-packaged, pinned/reproducible)
+- name: Install the iPXE binaries + the TFTP probe's client (Debian-packaged, pinned/reproducible)
   ansible.builtin.apt:
     name:
-      - tftpd-hpa
       - ipxe       # provides /usr/lib/ipxe/{undionly.kpxe,snponly.efi} + /boot/ipxe.efi
+      - curl       # the verification below speaks tftp:// with it
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -18,8 +26,10 @@
   ansible.builtin.file:
     path: "{{ tftp_root }}"
     state: directory
-    owner: tftp
-    group: tftp
+    # root-owned: the `tftp` user came with tftpd-hpa, which is no longer installed here.
+    # dnsmasq reads this tree as root.
+    owner: root
+    group: root
     mode: "0755"
 
 - name: Install iPXE binaries into TFTP root
@@ -27,26 +37,13 @@
     src: "{{ item.src }}"
     dest: "{{ tftp_root }}/{{ item.dst }}"
     remote_src: true
-    owner: tftp
-    group: tftp
+    owner: root
+    group: root
     mode: "0644"
   loop:
     - { src: /usr/lib/ipxe/undionly.kpxe, dst: undionly.kpxe } # BIOS / legacy PXE
     - { src: /boot/ipxe.efi, dst: ipxe.efi }                   # UEFI (ipxe.efi is a symlink here)
     - { src: /usr/lib/ipxe/snponly.efi, dst: snponly.efi }     # UEFI via SNP (fallback)
-
-- name: Configure tftpd-hpa
-  ansible.builtin.copy:
-    dest: /etc/default/tftpd-hpa
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      TFTP_USERNAME="tftp"
-      TFTP_DIRECTORY="{{ tftp_root }}"
-      TFTP_ADDRESS=":69"
-      TFTP_OPTIONS="--secure"
-  notify: Restart tftpd
 
 - name: Entry script — chain Matchbox, else boot local disk
   ansible.builtin.copy:
@@ -58,8 +55,36 @@
       #!ipxe
       chain {{ matchbox_http }}/ipxe?mac=${mac:hexhyp} || exit
 
-- name: Enable and start tftpd-hpa
-  ansible.builtin.systemd:
-    name: tftpd-hpa
-    enabled: true
-    state: started
+# --- verification: the boot files are SERVED, not merely present on disk (FU-261) ---
+# The failure this catches is exactly the one that hid for months: a file staged (or not) on
+# disk tells you nothing about what a PXE ROM receives. Fetch each one back over TFTP from
+# dnsmasq and compare the served byte count with the staged file.
+- name: Verify each boot file is served over TFTP
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      out=$(mktemp)
+      trap 'rm -f "$out"' EXIT
+      curl -sf --connect-timeout 5 --max-time 30 -o "$out" "tftp://127.0.0.1/{{ item }}"
+      served=$(stat -c %s "$out")
+      staged=$(stat -c %s "{{ tftp_root }}/{{ item }}")
+      if [ "$served" -eq 0 ] || [ "$served" != "$staged" ]; then
+        echo "{{ item }}: served=$served staged=$staged" >&2
+        exit 1
+      fi
+      echo "{{ item }} served ${served}B"
+  args:
+    executable: /bin/sh
+  loop:
+    - undionly.kpxe
+    - ipxe.efi
+    - snponly.efi
+  changed_when: false
+  register: tftp_probe
+  tags: [verify]
+
+- name: Show what TFTP served
+  ansible.builtin.debug:
+    msg: "{{ tftp_probe.results | map(attribute='stdout') | list }}"
+  when: not ansible_check_mode          # the probe itself is a shell task — skipped in --check
+  tags: [verify]

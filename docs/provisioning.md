@@ -10,7 +10,11 @@ node is a repeatable recipe. See `docs/runbook.md` for general ops.
   (LXC) + `ansible/matchbox*.yml` (install + TLS). Serves HTTP `:8080` (read API + `/assets`) and
   gRPC `:8081` (for the `poseidon/matchbox` tofu provider).
 - **Boot lives on the LXC, not OPNsense** — a dnsmasq **proxy-DHCP + TFTP** on the LXC
-  (`ansible/matchbox-proxydhcp.yml`); OPNsense's dnsmasq plugin won't emit the bootfile.
+  (`ansible/matchbox-proxydhcp.yml`); OPNsense's dnsmasq plugin won't emit the bootfile. The three
+  boot files dnsmasq hands out are *staged* by `ansible/matchbox-ipxe-tftp.yml`, which runs no TFTP
+  server of its own and ends by fetching each one back over TFTP — `--tags verify` is that probe
+  standalone. Nothing tested this before 2026-09-23 and `undionly.kpxe` was missing for months, so
+  every BIOS PXE client silently fell back to disk (FU-261).
 - **Disk-by-default, install-on-match.** Chain: PXE ROM → iPXE binary (`undionly.kpxe` BIOS /
   `ipxe.efi` UEFI) → `http://192.168.2.30:8080/assets/boot-or-disk.ipxe` → Matchbox `/ipxe`. A MAC
   with a **`matchbox_group`** matches the `talos-worker` profile → boots Talos **maintenance mode**
