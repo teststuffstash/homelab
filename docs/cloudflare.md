@@ -44,6 +44,27 @@ the shape), app `argocd/platform/publicroute.yaml`, provider secret
 
 Per-path opt-in is `.spec.operationalPaths.public` on the claim (a subset of the platform list). ⚠ **The block body is Cloudflare's own 403 page, not the structured JSON ADR-123 asked for** — `block` + a custom response in this phase is refused on the Free plan (gotcha 8). Live-verified on `mcp.minutark.ee` 2026-09-17: public `/metrics`, `/healthz` and their subpaths → 403, `/metricsx` → origin 404 (no over-match), `/` → 405 (route unaffected), in-cluster `/metrics` → 200 (the LAN scrape path is untouched).
 
+**Profile-agnostic, optional — the origin mark (`.spec.originMark`, 2026-09-23, oracle-fleet#667):**
+an origin that is reachable from the public internet cannot tell OUR traffic (probers, rides, the
+nested `claude -p`, the jail seat) from a stranger's — our requests take the same honest path
+through Cloudflare, and a client-supplied header would be worthless. Set `.spec.originMark`
+(`{header, value}`) and the composition renders ONE `http_request_late_transform` zone ruleset
+with two rules: **set** the header when `ip.src` equals the homelab's WAN egress, **remove** it
+for every other source so a client copy never reaches the origin (Cloudflare's own
+header-injection defence — gotcha 9). Rejected alternatives, recorded on oracle-fleet#667:
+client-declared header, User-Agent, a LAN hostname.
+
+The egress address is a **platform fact and never appears in the claim**. It is read at every
+reconcile from the `wg.teststuff.net` A record — the same record [ddclient](runbook.md) keeps on
+the dynamic Telia lease for the WireGuard endpoint (ADR-090) — through the provider, i.e. the
+authoritative record, not a resolver answer. So there is **no updater to own**: a lease change
+self-heals within one `provider-terraform` poll (`--poll=10m`, jitter 1m). If the record cannot
+be read, a `postcondition` fails the plan and the last-applied rule stays — stale but working,
+loud, never a rule carrying a garbage address. ⚠ Two consequences: the mark is **coarse** (every
+source behind that WAN address marks as ours — the jail, the operator's laptop, WireGuard
+clients), and **one claim per zone** may set it (one entry-point ruleset per phase, FU-039).
+The name coupling to `wg.` is cosmetic debt: FU-282.
+
 The quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials, speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split — zone-wide toggles are the wrong altitude; the class default is per-route, in the claim. The OpenAPI schema validation 2.0 path (originally part of the predicted shape) was **not built** — app-side validation stays the real gate, and the free-plan 1 KB body limit makes schema validation a non-starter for the api profile's first consumer (oracle-gateway, streamable-HTTP/SSE).
 
 **Completion state (2026-09-02):**
@@ -61,6 +82,7 @@ The quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, 
 | `ha.teststuff.net` retrofit = consumer #2 (retires `tofu/cloudflare/` + the write-key) | ☐ operator-witnessed, after the test claim |
 | Product zones (a claim owning a whole zone, e.g. the IdP/oracle-sales domains) | ☐ future — §Zone classes |
 | Operational paths non-public by default (ADR-123; `/metrics`, `/healthz`; per-path opt-in) | ✅ **BUILT 2026-09-17 (FU-206)** — connector leg on every claim, edge leg on the claim owning the zone's custom phase. §PublicRoute above. |
+| Origin mark (`.spec.originMark`) — edge-asserted "this request came from the homelab" header, both profiles | ✅ **BUILT 2026-09-23** (oracle-fleet#667) — entitlement live-probed (gotcha 9); egress address read from the ddclient record at every reconcile, no updater. §PublicRoute above. |
 | The request map (ADR-124): platform stage map + renderer + self-test | ✅ phase 1 (2026-09-03) — [`patterns/public-request-flow.md`](patterns/public-request-flow.md). ☐ phase 2: publish the claim's platform rows on the PublicRoute XR **status** so an app renders against what is live. |
 | Never-challenge Skip is over-broad (seam S5) — listing `http_request_firewall_managed` drops the Free managed WAF for the api host, not only challenges | ☐ decide: keep the products (bic/securityLevel/uaBlock) + `http_request_sbfm`, drop the managed phase from the Skip? Dry-run through the proxy first. |
 | DDoS L7 (`ddos_l7`) is outside the Skip (seam S4) — its mitigations can be challenge-shaped on an api route | ☐ verify whether the Free plan lets the HTTP DDoS ruleset action be overridden to block; if not, record it as a plan ceiling on the never-challenge promise. |
@@ -473,6 +495,26 @@ works on WiFi and dies on mobile.
    in #1304 — `block` with a structured 403 in this phase — **would have failed at apply for the
    first claim that set `.spec.origins`**; it never had, so the defect was latent. Both corrected
    in the FU-206 change.
+
+9. **Request-header transform on Free: ENTITLED (2026-09-23, same proxy, same zero-residue
+   recipe — for the origin mark, oracle-fleet#667).** The doctrine cuts both ways: a ✓ is worth
+   probing for too, because the alternative design was an origin-side compare costing a stack
+   rewrite.
+
+   | payload | verdict |
+   |---|---|
+   | `rewrite` + `headers.<name>.operation = "set"` **and** `"remove"`, both rules in ONE `http_request_late_transform` zone ruleset, `ip.src` in the expression | ✓ created (2 rules), `DELETE` 204, zero residue |
+
+   Confirmed in the same call: `http_request_late_transform` was the only unoccupied request
+   phase on `minutark.ee` (the pre-state list holds cache-settings, dynamic-redirect, ratelimit,
+   firewall-custom), so the origin mark does **not** hit the one-ruleset-per-phase limit — it
+   spends the last free request phase on that zone. Docs corroborate the plan surface:
+   [Transform Rules availability](https://developers.cloudflare.com/rules/transform/) is
+   Free-plan with **10 active rules per zone and NO regex** (these expressions use `eq`/`and`/
+   `not` only), and the set+strip pair is Cloudflare's own header-injection defence — the
+   `Client-Cert` forwarding example carries the same warning verbatim ("ensure that … can only
+   originate from this transform rule"). No cf-api-proxy change was needed: the `rulesets`
+   allowlist entry is phase-agnostic by design.
 
 ## Cloudflare MCP
 

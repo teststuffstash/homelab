@@ -365,6 +365,88 @@ spec:
                     paths       = ["*"]
                   }
                   {{- end }}
+                  {{- if $xr.spec.originMark }}
+                  {{- $markHeader := $xr.spec.originMark.header }}
+                  {{- $markValue := $xr.spec.originMark.value }}
+                  {{- /* The egress fact: the ddclient-maintained A record on the PLATFORM zone.
+                       Read through the provider (cf-api-proxy's dns_records allowlist entry)
+                       rather than a resolver — the authoritative record, no TTL lag. */}}
+                  {{- $egressRecord := "wg.teststuff.net" }}
+                  {{- $egressZoneId := (get $zones "teststuff.net").id }}
+                  # --- edge-asserted origin mark (both profiles) — oracle-fleet#667 ---
+                  # Marks requests that originate from THIS homelab so the origin can tell its own
+                  # traffic (probers, rides, the nested claude -p, the jail seat) from a real
+                  # caller's — without any client stamping a header on the way out. Two rules, ONE
+                  # ruleset (a sibling ruleset in the same phase collides with itself at apply):
+                  #   strip — every other source: the header is REMOVED, so a client-supplied copy
+                  #           never reaches the origin. This pair is Cloudflare's own documented
+                  #           header-injection defence (the Client-Cert forwarding example:
+                  #           "ensure that <header> ... can only originate from this transform
+                  #           rule").
+                  #   set   — ip.src == the homelab WAN egress: header = the claim's value.
+                  # Free-plan entitlement AND ip.src availability in this phase are live-probed
+                  # through cf-api-proxy (docs/cloudflare.md gotcha 9, 2026-09-23): created with
+                  # exactly these two rules, then deleted, zero residue. Transform Rules are
+                  # Free-plan (10 active per zone, NO regex — these expressions use eq/and/not).
+                  # WARNING: ONE claim per zone may set an origin mark — this phase takes one
+                  # entry-point ruleset per zone like every other (FU-039).
+                  # FRESHNESS: the WAN address is a dynamic Telia lease. It is NOT a literal here
+                  # — the data source re-reads it on every reconcile, so a lease change self-heals
+                  # within one provider-terraform poll (--poll=10m, jitter 1m). If the record
+                  # cannot be read the plan FAILS and the last-applied rule stays: stale but
+                  # working, loud, never a rule carrying a garbage address.
+                  data "cloudflare_dns_records" "egress" {
+                    zone_id   = "{{ $egressZoneId }}"
+                    type      = "A"
+                    name      = { exact = "{{ $egressRecord }}" }
+                    max_items = 1
+                    lifecycle {
+                      postcondition {
+                        condition     = length(self.result) == 1
+                        error_message = "origin mark: {{ $egressRecord }} must resolve to exactly one A record on the platform zone (ddclient-maintained — ansible/opnsense-ddclient.yml)"
+                      }
+                    }
+                  }
+                  locals {
+                    egress_ip = data.cloudflare_dns_records.egress.result[0].content
+                  }
+                  resource "cloudflare_ruleset" "origin_mark" {
+                    zone_id = local.zone_id
+                    name    = "PublicRoute {{ $host }} origin mark"
+                    kind    = "zone"
+                    phase   = "http_request_late_transform"
+                    # `ref` keeps rule IDs stable across updates — without it, every refresh of the
+                    # egress address would recreate the rules (Cloudflare's Terraform note on the
+                    # request-header-transform page). This ruleset re-renders by design, so it
+                    # matters more here than anywhere else in this Composition.
+                    rules = [
+                      {
+                        ref         = "origin_mark_strip"
+                        action      = "rewrite"
+                        description = "strip a client-supplied {{ $markHeader }} (header-injection defence)"
+                        expression  = "(http.host eq \"{{ $host }}\") and not (ip.src eq ${local.egress_ip})"
+                        action_parameters = {
+                          headers = {
+                            "{{ $markHeader }}" = { operation = "remove" }
+                          }
+                        }
+                        enabled = true
+                      },
+                      {
+                        ref         = "origin_mark_set"
+                        action      = "rewrite"
+                        description = "assert {{ $markHeader }}={{ $markValue }} on homelab-originated traffic"
+                        expression  = "(http.host eq \"{{ $host }}\") and ip.src eq ${local.egress_ip}"
+                        action_parameters = {
+                          headers = {
+                            "{{ $markHeader }}" = { operation = "set", value = "{{ $markValue }}" }
+                          }
+                        }
+                        enabled = true
+                      },
+                    ]
+                  }
+                  {{- end }}
                   output "tunnel_token" {
                     value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.this.token
                     sensitive = true
