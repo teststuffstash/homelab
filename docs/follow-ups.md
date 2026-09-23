@@ -7,7 +7,8 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-283** (2026-09-23: FU-282 minted for the origin mark's `wg.`-named egress
+  Next free id: **FU-284** (2026-09-23: FU-283 minted for the hung-CI-run watchdog, from oracle's
+  fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
   record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
   2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
@@ -586,9 +587,23 @@ the block needs pruning, not more headings.
       (c) provider outranks model class — strikes gain the served-provider column, serving-shaped
       strikes exclude the (model, provider) pair on re-pick (#783 legs; quality = FU-186/ADR-115
       pin-v2 + M14 pair-cooldowns). Rejected: task/build as routing basis, `model/strong`,
-      attempt-count auto-escalation (banked, feed-4). (c) is BUILT but dead in production twice
-      (#1268; 2026-09-13 `no-output` ∉ STRIKE_CLASSES, enforce flag unset) → homelab#1640
-      acceptances 1+3. Relates FU-174, FU-186, ADR-094/096/115.
+      attempt-count auto-escalation (banked, feed-4). (c) is BUILT but dead in production THREE times
+      (#1268; 2026-09-13 `no-output` ∉ STRIKE_CLASSES, enforce flag unset; 2026-09-23
+      `repetition-loop` ∉ `strike_classes` — oracle's #712/#713 fleet strike was never recorded,
+      no cooldown formed, the router re-picked the same cell `[free+half-open]` 13:05:01Z) →
+      homelab#1640 acceptances 1+3. The 09-23 round also exposed the identity questions UNDER the
+      strike: [`docs/spikes/model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md).
+      Relates FU-174, FU-186, ADR-094/096/115.
+
+- [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
+      fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run
+      35839762985 sat `in_progress` from 08:54Z — the `ci` job hung 53 min on attempt 1 and 41+
+      min on attempt 2 against a normal 16–31 min wall — and the coordinator's ci-red directive
+      gates on a run-level `failure`, so a run that never FINISHES is invisible to it: #709 parked
+      at 10:35Z and stayed there until a human cancelled at ~13:20Z. **Next:** pick the cheap belt
+      (alert or cancel at 2× that workflow's p95 wall), then find what hung — ARC runner pod stuck
+      on the large-runner set vs. a test that never returned; the runner-side logs are the
+      platform's, the stack sees only the run view. Relates FU-200.
 
 - [ ] **FU-202** — **A key-class failure strikes the MODEL, losing the primary rail for the
       whole task** (#1151, 2026-09-01): r1's xs session key died mid-ride
