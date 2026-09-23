@@ -8,8 +8,9 @@ tracker.
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
   Next free id: **FU-286** (2026-09-23: FU-285 minted for the replica co-location a disk pull
-  caused, which `replica-replenishment-wait-interval` did NOT prevent; **FU-284 is taken by the
-  disk-health metering build, PR #1945 in flight**; FU-283 minted for the hung-CI-run watchdog, from oracle's
+  caused, which `replica-replenishment-wait-interval` did NOT prevent; FU-284 minted for
+  fleet-wide disk-health metering — nothing watched any drive's SMART and the fleet buys used
+  drives with disclosed defects; FU-283 minted for the hung-CI-run watchdog, from oracle's
   fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
   record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
@@ -607,6 +608,17 @@ the block needs pruning, not more headings.
       caches). **Next:** find which controller does it and name the knob that actually governs it in
       [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
       wrong lever. Relates FU-093, ADR-089.
+
+- [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
+      Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod
+      (FU-222) — while the fleet buys used drives with *disclosed* defects, so the belts alert on
+      GROWTH, never absolute counts. Built: a `smartctl_exporter` DaemonSet on every Talos node +
+      the same metric names from a textfile collector on pve/nx-02, nine promtool-fixtured belts.
+      Mechanism, evidence and the design call: [`storage-ledger.md`](storage-ledger.md) §Build.
+      **Next:** `smartctl_device_interface_speed` is SATA-only, so **NVMe lane width is uncovered**
+      — the trap that left x1-wired adapters in both NX boxes. Fit-time check is in
+      [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health; decide whether it
+      also wants a standing metric. Relates FU-222, FU-093.
 
 - [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
       fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run

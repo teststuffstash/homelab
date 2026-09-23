@@ -1,0 +1,16 @@
+# Managed by ansible/roles/pve-node-exporter — edit there.
+#
+# 15 minutes, not the pool meter's 60 seconds. Every run issues real ATA/NVMe passthrough commands
+# to every drive, and media health is a days-to-weeks signal — the belts over it use 1 h and 7 d
+# windows. A fast cadence would only add IO to the disks it exists to protect, and would keep
+# nx-02's boot spinner from ever idling.
+[Unit]
+Description=Run smart-textfile-metrics every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
