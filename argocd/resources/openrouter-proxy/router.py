@@ -455,6 +455,10 @@ def _migrate_model_tiers() -> int:
         entry = models.setdefault(key, {"ids": {}, "tier": tier, "context_tokens": None,
                                         "tool_verified": None, "pool_usd": None})
         entry.setdefault("ids", {}).setdefault(rail, str(mid))
+        if entry.get("tier") != tier:
+            _log(f"model-classes: model_tiers {mid!r} grades {tier!r} but models.{key} is "
+                 f"{entry.get('tier')!r} — the canonical key collapses the variant; the grade is "
+                 f"resolved per-id by _model_tier() (`:free` floors to 'free')")
         n += 1
     _classes.pop("model_tiers", None)
     _log(f"model-classes: model_tiers → models (one-release migration; {n} ids; update the file)")
@@ -911,9 +915,19 @@ def _model_entry(model: str) -> dict | None:
 
 
 def _model_tier(model: str) -> str | None:
-    """The model's tier, read from `models.<key>.tier` (the retired `model_tiers` grade)."""
+    """The model's tier, read from `models.<key>.tier` (the retired `model_tiers` grade).
+
+    A `:free` id floors to `"free"`. The table is keyed by model_family(), which collapses the
+    `:free` suffix onto the paid key, and `ids` is rail → ONE id — so a per-variant grade (master's
+    `model_tiers` graded `poolside/laguna-s-2.1:free` `"free"` and `poolside/laguna-s-2.1`
+    `"cheap"`) is not expressible in the table and must be resolved by the reader. `:free` is
+    already an id-level fact one check up: `never_free` matches the literal suffix (:1925). This is
+    the same rule, for `tier_floor`.
+    """
     entry = _model_entry(model)
-    return entry.get("tier") if entry else None
+    if not entry:
+        return None
+    return "free" if str(model).endswith(":free") else entry.get("tier")
 
 
 def _model_context_tokens(model: str) -> int | None:
@@ -3675,6 +3689,29 @@ def self_test() -> int:
         {"opencode-go": "opencode-go/deepseek-v4-flash"}, _classes["models"]["deepseek-v4-flash"]
     _assert_models_table(_classes["models"])  # the seeded table still satisfies the two asserts
     _classes["models"] = _models_saved
+    # (j2) the `:free` suffix-floor: the table is keyed by model_family(), which collapses the
+    # `:free` suffix onto the paid key, and `ids` is rail → ONE id — so master's two grades for
+    # `poolside/laguna-s-2.1` (`cheap`) and `poolside/laguna-s-2.1:free` (`free`) are not
+    # expressible in the table and are resolved per-id by the reader. Both grades must survive.
+    assert _model_tier("poolside/laguna-s-2.1") == "cheap", \
+        _model_tier("poolside/laguna-s-2.1")
+    assert _model_tier("poolside/laguna-s-2.1:free") == "free", \
+        _model_tier("poolside/laguna-s-2.1:free")
+    # (j3) the alias path: a stale `model_tiers` holding BOTH laguna ids folds into the canonical
+    # table, and the reader still resolves the two grades per-id — in EITHER key order (the
+    # migration's setdefault keeps only the first-seen grade, so the reader, not the table, is
+    # what restores the variant's floor).
+    for _order in ({"poolside/laguna-s-2.1": "cheap", "poolside/laguna-s-2.1:free": "free"},
+                   {"poolside/laguna-s-2.1:free": "free", "poolside/laguna-s-2.1": "cheap"}):
+        _classes["model_tiers"] = dict(_order)
+        assert _migrate_model_tiers() == 2, "both laguna ids must migrate"
+        assert _model_tier("poolside/laguna-s-2.1") == "cheap", \
+            f"paid laguna must stay cheap (order {list(_order)}): " \
+            f"{_model_tier('poolside/laguna-s-2.1')}"
+        assert _model_tier("poolside/laguna-s-2.1:free") == "free", \
+            f":free laguna must floor to free (order {list(_order)}): " \
+            f"{_model_tier('poolside/laguna-s-2.1:free')}"
+        _classes["models"] = copy.deepcopy(_models_saved)
     # (k) /router-status echoes the canonical table (the per-model facts + per-rail ids).
     _rs_models = status_summary()["models"]
     assert _rs_models["deepseek-v4-flash"]["context_tokens"] == 1000000, \
@@ -4390,6 +4427,17 @@ def self_test() -> int:
         f"md must pick at/above cheap tier, got {_md['model']} (tier={_md_tier})"
     assert any(s["reason"].startswith("tier-floor:") for s in _md["skipped"]), \
         f"md must skip free models: {_md['skipped']}"
+    # The `:free` suffix-floor under a tier_floor:cheap route (the migration's own job — master
+    # graded `poolside/laguna-s-2.1:free` "free" and the paid id "cheap"). Offered both, the
+    # :free variant is skipped with the typed reason and the paid id is served.
+    _laguna_chain = ["poolside/laguna-s-2.1:free", "poolside/laguna-s-2.1"]
+    _laguna = route(dict(base, chain=_laguna_chain, labels=["agent-budget/md"]), CTX)
+    assert _laguna["decision"] == "dispatch", f"laguna md must dispatch: {_laguna}"
+    assert _laguna["model"] == "poolside/laguna-s-2.1", \
+        f"md must serve the paid laguna, got {_laguna['model']}"
+    assert any(s["model"] == "poolside/laguna-s-2.1:free"
+               and s["reason"] == "tier-floor:cheap>free" for s in _laguna["skipped"]), \
+        f"the :free laguna must skip with tier-floor:cheap>free: {_laguna['skipped']}"
     # No size label: byte-identical to today's pick (no drift for the untouched majority)
     _no_label = route(dict(base), CTX)
     assert _no_label["decision"] == "dispatch" and _no_label["model"] == "inclusionai/ling-3.0-flash:free", \
