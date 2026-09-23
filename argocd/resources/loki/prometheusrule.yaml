@@ -106,6 +106,13 @@ spec:
           # `or <current> * 0` fallback supplies the missing 6 h-ago value as zero, so a series that
           # was BORN inside the window fires; 6 h after the last line both disjuncts fall to 0 and
           # the alert self-clears without any reliance on metric pruning.
+          # ⚠ That last clause is only true because the stage sets `max_idle_duration = "24h"`.
+          # Shipped WITHOUT it, the counter's 5-minute default idle prune deleted the series and
+          # this alert resolved itself ~10 minutes after firing — measured live on 2026-09-23, a
+          # 300-second series lifetime with Alloy never restarting. The counter is still
+          # in-memory: an ALLOY restart (a config-hash bump, a node reboot) clears it outright, so
+          # an oops whose alert has not been read before such a restart is lost to this belt — the
+          # LINES remain in Loki, which is what the annotation sends the reader to.
           expr: |
             (sum by (node) (loki_process_custom_kernel_oops_lines_total)
                - (sum by (node) (loki_process_custom_kernel_oops_lines_total offset 6h)
