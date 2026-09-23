@@ -100,4 +100,4 @@ groups:
       annotations:
         summary: "No disk-health metrics from {{ $labels.job }} for 15m — those drives are unwatched"
         description: >-
-          smartctl_devices is absent for a whole half of the fleet. If `job=smartctl-exporter` is missing, the DaemonSet is down, the ServiceMonitor lost its target, or the image cannot start — `kubectl -n disk-health get ds,pod`. If `job=pve-node` is missing, the hypervisors' smart-textfile-metrics timer has stopped or node_exporter is down — `systemctl status smart-textfile-metrics.timer` on pve and nx-02. While this fires, the drives on that side are not being watched at all.
+          smartctl_devices is absent for a whole half of the fleet. If `job=smartctl-exporter` is missing, the DaemonSet is down, the ServiceMonitor lost its target, or the image cannot start — `kubectl -n node-maintenance get ds,pod`. If `job=pve-node` is missing, the hypervisors' smart-textfile-metrics timer has stopped or node_exporter is down — `systemctl status smart-textfile-metrics.timer` on pve and nx-02. While this fires, the drives on that side are not being watched at all.
