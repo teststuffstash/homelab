@@ -1,5 +1,45 @@
 {
- "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human. provider_policy (FU-186): per-class key; absent = today's pin behaviour (provider.order injected). \"exacto\" skips pin injection — the completion path appends :exacto to the served model id, which the proxy forwards UNTOUCHED with the M4 pin skipped, letting upstream's tool-call-quality ordering own provider selection. Priced classes carry no policy by construction.",
+ "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds (per rail, in the `rails:` block) = FU-109 (dispatch units defer later than heavy sessions). the `models` table must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human. provider_policy (FU-186): per-class key; absent = today's pin behaviour (provider.order injected). \"exacto\" skips pin injection — the completion path appends :exacto to the served model id, which the proxy forwards UNTOUCHED with the M4 pin skipped, letting upstream's tool-call-quality ordering own provider selection. Priced classes carry no policy by construction. `rails` is written in the CANONICAL rail vocabulary (Goal #1769 acceptance 1) — `anthropic-subscription` | `opencode-go` | `openrouter` | `opencode-zen` — the same names `model_id.parse()` produces and every decision row echoes; the router derives a candidate's rail from that parser and gates it on ITS OWN rail's capacity (a Go candidate on /opencode-limit, never on the OpenRouter key's state). The pre-Goal-#1769 spelling (`subscription`) still loads through a one-release alias in router.py:RAIL_ALIASES and is deleted next release. CALLER CAPABILITY (Goal #1769 acceptance 4, router half, 2026-09-22): a candidate is filtered by what the CALLER can ride, not only by what the account can buy — `/route` takes the caller's `surface` (claude-cli | opencode-cli | openai-api) and its `key_ref`, and a candidate whose rail needs a fact the caller did not send is skipped `caller:no-key_ref` (openrouter) or `caller:surface` (anthropic-subscription / opencode-go / opencode-zen) BEFORE any capacity gate is consulted. Sending NEITHER fact filters nothing, so an un-adopted caller walks exactly as before. The requirement table is the `rails:` block below (Goal #1769 acceptance 2 externalized router.py's RAIL_SURFACE into it).",
+ "rails": {
+  "_comment": "Goal #1769 acceptance 2 — the ONE declared table of rail facts. Before this, a rail's gate/cost/windows/thresholds/concurrency lived as scattered env constants (OPENCODE_MAX_RUNNING, ANTHROPIC_UTIL_THRESHOLD_*) and an Anthropic-only top-level tier_thresholds; a rail we chose not to use was simply OMITTED. Now every rail is DECLARED, and one we do not use is declared `enabled: false` with its reason (Zen). PRECEDENCE — two authorities, two skip reasons: `enabled: false` in git is `rail:disabled` and CANNOT be overridden from env; OPENCODE_RAIL_DISABLED (the FU-213 env kill switch, openrouter-proxy.py) is `rail:parked` and beats `enabled: true` — a kill switch beats a git round-trip. `gate` names the capacity probe the /route walk consults (sub | go | or | none); `surfaces` is the caller surfaces the rail serves (acceptance 4's predicate reads THIS, not an in-router table); `cost` is flat-window | flat-pool | per-token; `windows` are the utilization windows the gate reads; `tier_thresholds` is the per-rail FU-109 table (the Anthropic-only top-level table is retired — a stale file's copy is folded in once at load by router.py:_migrate_tier_thresholds); `concurrency` is the rail's bound (the Go rail's OPENCODE_MAX_RUNNING is now the ENV OVERRIDE of this declared value, not its only home).",
+  "anthropic-subscription": {
+   "gate": "sub",
+   "surfaces": ["claude-cli"],
+   "cost": "flat-window",
+   "windows": ["5h", "7d"],
+   "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+   "concurrency": null,
+   "enabled": true
+  },
+  "opencode-go": {
+   "gate": "go",
+   "surfaces": ["claude-cli"],
+   "cost": "flat-pool",
+   "windows": ["5h", "7d", "30d"],
+   "tier_thresholds": {"dispatch": 0.9, "heavy": 0.8},
+   "concurrency": 3,
+   "enabled": true
+  },
+  "openrouter": {
+   "gate": "or",
+   "surfaces": ["claude-cli", "opencode-cli", "openai-api"],
+   "cost": "per-token",
+   "windows": [],
+   "tier_thresholds": {},
+   "concurrency": null,
+   "enabled": true
+  },
+  "opencode-zen": {
+   "gate": "none",
+   "surfaces": ["opencode-cli"],
+   "cost": "per-token",
+   "windows": [],
+   "tier_thresholds": {},
+   "concurrency": null,
+   "enabled": false,
+   "_reason": "reachable and unmetered: pay-per-token USD with no pricing table, no spend meter, no ledger bucket — ledger.py:_model_rail folds it into \"openrouter\"; un-parking rides FU-170 (b)+(c), not this Goal."
+  }
+ },
  "classes": {
   "coding": {
    "_comment": "chain_head added 2026-09-19 (operator ruling — the FOURTH stand-in of the goal-decompose 08-23 / dispatch 08-25 / review 09-03 class, codified at the third). It REPLACES the fleet's last per-stack chain — the platform claim's workerModel deepseek/deepseek-v4.1-flash:exacto + workerModelFallbacks [claude/haiku] — which Goal #1640 acceptance 6 (#1782) drops when the claim goes chainless at routerMode: authoritative. It EXISTS because chain_source: \"stack\" then resolves nothing and the served walk draws straight from the ranked rotation, leaving the operator's ordering (v4-flash first, v4.1-flash next) stated nowhere — the identical failure each of the three prior heads was added to fix. Entries are BARE ids on purpose: provider_policy: \"exacto\" below appends the suffix at serve time, so a pre-suffixed entry would double it. Retires with the P4 flip, like the other three heads.",
@@ -12,18 +52,18 @@
    "dual_model": false,
    "rails": [
     "openrouter",
-    "subscription"
+    "anthropic-subscription"
    ],
    "tier": "heavy",
    "provider_policy": "exacto"
   },
   "review": {
-   "_comment": "chain_head added 2026-09-03 (the THIRD instance of the goal-decompose 08-23 / dispatch 08-25 class, codified per the >=2 rule): on chainless stacks chain_source resolves nothing, so the served walk drew the cheapest ROTATION model for reviews — xiaomi/mimo-v2.5 [market], 44+9 of 55 review decisions in the 24h shadow read — while the doctrine (review = the safety net, sonnet-class, model-routing.md M10) was carried only by the FU-188 incident pin's fallback in reviewer-session.sh. The head makes the served decision say what the lane actually runs; rails stay subscription-first with the rotation as capacity failover. Retires with the P4 flip like the other two heads.", "chain_head": ["claude/sonnet"], "chain_source": "stack",
+   "_comment": "chain_head added 2026-09-03 (the THIRD instance of the goal-decompose 08-23 / dispatch 08-25 class, codified per the >=2 rule): on chainless stacks chain_source resolves nothing, so the served walk drew the cheapest ROTATION model for reviews — xiaomi/mimo-v2.5 [market], 44+9 of 55 review decisions in the 24h shadow read — while the doctrine (review = the safety net, sonnet-class, model-routing.md M10) was carried only by the FU-188 incident pin's fallback in reviewer-session.sh. The head makes the served decision say what the lane actually runs; rails stay subscription-first with the rotation as capacity failover. SUBTRACTION (Goal #1769 acceptance 4, router half, 2026-09-22): the \"second rail entry is a foot-gun\" caveat this field used to carry is RETIRED — the walk now filters candidates on CALLER CAPABILITY (a rail whose credential the caller did not send, or whose CLI surface it cannot execute, is skipped `caller:*` BEFORE any capacity gate), so listing openrouter as a failover is safe by construction and no longer depends on the FU-188 shadow pin. Retires with the P4 flip like the other two heads.", "chain_head": ["claude/sonnet"], "chain_source": "stack",
    "decorrelate": "family",
    "reasoning": true,
    "min_tier_rule": "gte-author",
    "rails": [
-    "subscription",
+    "anthropic-subscription",
     "openrouter"
    ],
    "tier": "heavy"
@@ -59,7 +99,7 @@
     "claude/sonnet"
    ],
    "rails": [
-    "subscription"
+    "anthropic-subscription"
    ],
    "tier": "dispatch"
   },
@@ -71,7 +111,7 @@
    ],
    "reasoning": true,
    "rails": [
-    "subscription"
+    "anthropic-subscription"
    ],
    "tier": "heavy"
   },
@@ -89,7 +129,7 @@
    "reasoning": true,
    "rails": [
     "openrouter",
-    "subscription"
+    "anthropic-subscription"
    ],
    "tier": "heavy"
   },
@@ -97,7 +137,7 @@
    "pool": "ultra",
    "reasoning": true,
    "rails": [
-    "subscription",
+    "anthropic-subscription",
     "openrouter"
    ],
    "tier": "heavy"
@@ -112,7 +152,7 @@
   }
  },
  "pools": {
-  "_comment": "ADR-104 / model-routing-history.md §M13 — the CURATED half of the research draw verb: ranked, family-deduped, disjoint bands, consumed by slot index and never computed at request time. HAND-SEEDED (FU-162, 2026-08-11): entries are model_tiers members only (the human-approved universe — graduation stays human) and the ranking is that grade, large → cheap → free, because this pod has no capability/market read. The scout's weekly refresh (capability × task_market × effective price × rail-compat, §M7 leg 5) replaces the ranking and deepens the bands — it rides FU-161, so until then this table moves by PR and `version` bumps with every edit to the bands. `version` is echoed by /route as pool_version: an arm table that records (class, slot, pool_version) can be re-drawn exactly. Disjointness + family-dedup are CURATION policy, not router invariants (ADR-104 (3)) — devbox run router-self-test is where they are enforced, at edit time. Known shortfall: `regular` is 6 deep against the doc's 7-arm over-provision, and `instrument` shares the deepseek FAMILY with regular's #2 (the run-1 slip was the same MODEL grading its own arm, which disjointness forbids); both are curation depth, i.e. the scout refresh's job.",
+  "_comment": "ADR-104 / model-routing-history.md §M13 — the CURATED half of the research draw verb: ranked, family-deduped, disjoint bands, consumed by slot index and never computed at request time. HAND-SEEDED (FU-162, 2026-08-11): entries are `models` members only (the human-approved universe — graduation stays human) and the ranking is that grade, large → cheap → free, because this pod has no capability/market read. The scout's weekly refresh (capability × task_market × effective price × rail-compat, §M7 leg 5) replaces the ranking and deepens the bands — it rides FU-161, so until then this table moves by PR and `version` bumps with every edit to the bands. `version` is echoed by /route as pool_version: an arm table that records (class, slot, pool_version) can be re-drawn exactly. Disjointness + family-dedup are CURATION policy, not router invariants (ADR-104 (3)) — devbox run router-self-test is where they are enforced, at edit time. Known shortfall: `regular` is 6 deep against the doc's 7-arm over-provision, and `instrument` shares the deepseek FAMILY with regular's #2 (the run-1 slip was the same MODEL grading its own arm, which disjointness forbids); both are curation depth, i.e. the scout refresh's job.",
   "version": "2026-08-11.1",
   "bands": {
    "regular": [
@@ -183,11 +223,6 @@
   "promote_after": 3,
   "tight_floor_tier": 1
  },
- "tier_thresholds": {
-  "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold — the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
-  "dispatch": 0.9,
-  "heavy": 0.8
- },
  "cooldown": {
   "_comment": "ADR-096 addendum 4: model-level temporary blacklist. Trip when >= min_events in window_s and the non-2xx share >= bad_share (reason = dominant class); hold base_s doubling per consecutive trip up to max_s; ANY 2xx clears + resets the streak (half-open recovery: an expired hold makes the model eligible again and cheapest-effective ordering re-picks it — natural traffic is the probe). Keyed on OUR passive events, never upstream uptime (laguna measured 100% upstream while 81% 429 for our account, 2026-08-02).",
   "window_s": 600,
@@ -212,24 +247,113 @@
   "rule": "cheapest-effective-jitter",
   "jitter_band_pct": 15
  },
- "model_tiers": {
-  "claude/haiku": "cheap",
-  "claude/sonnet": "large",
-  "claude/opus": "premium",
-  "claude/fable": "premium",
-  "deepseek/deepseek-v4-flash": "cheap",
-    "deepseek/deepseek-v4.1-flash": "cheap",
-    "deepseek/deepseek-v4.1-flash:exacto": "cheap",
-  "deepseek/deepseek-v4-pro": "large",
-  "tencent/hy3": "cheap",
-  "poolside/laguna-s-2.1": "cheap",
-  "poolside/laguna-s-2.1:free": "free",
-  "inclusionai/ling-3.0-flash:free": "free",
-  "moonshotai/kimi-k3": "large",
-  "openrouter/fusion": "premium",
-  "openrouter/free": "free",
-  "xiaomi/mimo-v2.5": "cheap",
-  "opencode-go/deepseek-v4-flash": "cheap"
+ "models": {
+  "_comment": "Goal #1769 acceptance 3 — the ONE per-model table, keyed CANONICALLY by model_family()'s own output (no new naming scheme): `claude-sonnet` is one entry whose `ids` map rail → the id that rail is asked for, so a `modelDeny` of the canonical key binds across every rail serving it (the Goal's acid test) and the M11 cross-rail ladder can say 'cheapest rail serving X'. `tier` is the retired `model_tiers` grade (the human-approved universe — graduation stays human); `context_tokens` is the per-model harness window (today the CLAUDE_CODE_MAX_CONTEXT_TOKENS constant in agents/agent-session.sh, deleted there by theme 3 — DECLARED here so /route and /router-status can echo it); `tool_verified` is the date the model was verified to complete a tool-call loop through our stack (null = not yet declared); `pool_usd` is the Go rail's per-model monthly pool (gometer's '$NN pool'), null on every other rail. A `:free`/`:exacto` VARIANT collapses into its family (model_family() drops the suffix), so the variant's own price is the price callback's job and its exclusion is `never_free`'s — never a second table row. Two CI asserts in router-self-test pin the table to the parser: for every entry and every (rail, id) under it, model_family(id) == key AND model_id.parse(id).rail == rail — so the table cannot drift from model_id.py. A null fact is 'not yet declared', never a guess.",
+  "claude-haiku": {
+   "ids": {"anthropic-subscription": "claude/haiku"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "claude-sonnet": {
+   "ids": {"anthropic-subscription": "claude/sonnet", "opencode-go": "opencode-go/claude-sonnet-4-6", "openrouter": "anthropic/claude-sonnet-4.6"},
+   "tier": "large",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "claude-opus": {
+   "ids": {"anthropic-subscription": "claude/opus"},
+   "tier": "premium",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "fable": {
+   "ids": {"anthropic-subscription": "claude/fable"},
+   "tier": "premium",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "deepseek/deepseek-v4-flash": {
+   "ids": {"openrouter": "deepseek/deepseek-v4-flash"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "deepseek-v4-flash": {
+   "ids": {"opencode-go": "opencode-go/deepseek-v4-flash"},
+   "tier": "cheap",
+   "context_tokens": 1000000,
+   "tool_verified": null,
+   "pool_usd": 30
+  },
+  "deepseek/deepseek-v4.1-flash": {
+   "ids": {"openrouter": "deepseek/deepseek-v4.1-flash"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "deepseek/deepseek-v4-pro": {
+   "ids": {"openrouter": "deepseek/deepseek-v4-pro"},
+   "tier": "large",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "tencent/hy3": {
+   "ids": {"openrouter": "tencent/hy3"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "poolside/laguna-s-2.1": {
+   "ids": {"openrouter": "poolside/laguna-s-2.1"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "inclusionai/ling-3.0-flash": {
+   "ids": {"openrouter": "inclusionai/ling-3.0-flash:free"},
+   "tier": "free",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "moonshotai/kimi-k3": {
+   "ids": {"openrouter": "moonshotai/kimi-k3"},
+   "tier": "large",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "fusion": {
+   "ids": {"openrouter": "openrouter/fusion"},
+   "tier": "premium",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "free": {
+   "ids": {"openrouter": "openrouter/free"},
+   "tier": "free",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  },
+  "xiaomi/mimo-v2.5": {
+   "ids": {"openrouter": "xiaomi/mimo-v2.5"},
+   "tier": "cheap",
+   "context_tokens": null,
+   "tool_verified": null,
+   "pool_usd": null
+  }
  },
  "rotation_fallback": {
   "coding": [],
