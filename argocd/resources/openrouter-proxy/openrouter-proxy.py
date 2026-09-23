@@ -6129,8 +6129,15 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Second request: cache expired, re-resolution attempted → the K8s API is unreachable here,
-    # which is a TRANSIENT miss → 503 + Retry-After (2026-09-23: never a 404 for a blip)
+    # Second request: cache expired, re-resolution attempted with the K8s API AWAY (forced: the
+    # self-test runs both outside the cluster, where no SA token exists, and INSIDE it on the ARC
+    # runner, where the API is reachable and answers 403 — a definitive miss. Only a refused
+    # connection is the transient shape this block pins) → 503 + Retry-After (2026-09-23:
+    # never a 404 for a blip)
+    _real_urlopen = urllib.request.urlopen
+    def _api_away(*_a, **_k):  # the control plane is away
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+    urllib.request.urlopen = _api_away
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/git-token?ns=test-neg-cache")
     r = c.getresponse()
@@ -6152,6 +6159,7 @@ data: [DONE]
     c.close()
     check(r.status == 503,
           "negative-cache _resolve_git_token: cached transient miss answers 503")
+    urllib.request.urlopen = _real_urlopen
 
     # _classify_miss: the k8s API's 404/403 are definitive, everything else is a blip
     _h404 = urllib.error.HTTPError("u", 404, "nf", {}, None)
@@ -6194,8 +6202,14 @@ data: [DONE]
     # Wait for negative TTL to expire
     time.sleep(NEGATIVE_CACHE_TTL_S + 0.2)
 
-    # Call _resolve_loop_git directly — it will try K8s API (fails), cache new negative entry
-    result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    # Call _resolve_loop_git directly with the K8s API AWAY (forced, see the git-token block: in
+    # the cluster the API answers 403, which is a definitive miss, not this transient one)
+    _real_urlopen = urllib.request.urlopen
+    urllib.request.urlopen = _api_away
+    try:
+        result = _resolve_loop_git("test-loop-neg-cache", "test-ns")
+    finally:
+        urllib.request.urlopen = _real_urlopen
     check(result is None,
           "negative-cache _resolve_loop_git: re-resolution returns None (no K8s API)")
     check(_miss_reason(loop_ref) == "transient",
