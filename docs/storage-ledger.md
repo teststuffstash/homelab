@@ -446,9 +446,17 @@ I happen to have."* What that changes:
     §"the std tier has no third zone" names. **Consolidation makes that strictly less likely, not
     more**: `bulk` today is 3 disks on **2** nodes (wk-metal-01, wk-metal-04) — the very shape the
     ledger flags as dangerous for `std` — and becomes 5 disks on **4** (+ hp-01, + nx-01). The
-    standing discipline is the one the 2026-09-24 hp-01 window already used: raise
-    `replica-replenishment-wait-interval` (600 s today) above the window length before wiping a
-    node that holds replicas, and check for co-location afterwards (runbook recipe).
+    discipline is **drain first**: evict the node's Longhorn replicas and let them rebuild
+    elsewhere *before* the wipe ([`runbook.md`](runbook.md) §"Retire a node" step 1 "Storage out
+    first"; [`provisioning.md`](provisioning.md) already carries it on the wk-metal-01 row — *"a
+    wipe destroys bulk replicas; drain first"*). ⚠ **Do NOT reach for
+    `replica-replenishment-wait-interval` here** — **FU-285** measured it NOT to prevent
+    co-location when a *disk* goes away (2026-09-23, wk-metal-04, with the interval raised
+    600 → 28800 s), because a replica on a MISSING DISK takes a different path from one on a DOWN
+    NODE. The timer governs the down-node case (which is why it was the right knob for the
+    2026-09-24 hp-01 *insertion* window); the wipe case is the missing-disk one, and FU-285 is open
+    precisely because the knob that governs it has not been named yet. Check placement per volume
+    afterwards either way.
 - **Consolidating fixes the over-commitment outright.** Adding both SN530s takes `bulk` from
   **1009 G allocatable / 923 G committed (91.5 %, `intel0` at 105 % of its own size)** to
   **1521 G / 923 G = 61 %**. No tier needed to get that.
