@@ -112,10 +112,13 @@ resource "cloudflare_zone_setting" "minutark_always_https" {
 # contract, never a Cloudflare-prepended variant.
 # ⚠ The dashboard's "AI bot policies" rows (Search / Agent / Training = API `ai_search` /
 # `ai_user` / `ai_training`; API `disabled` = Allowed, the default) are NOT in the provider schema
-# (checked through v5.25.0), so they cannot be pinned here. Live 2026-09-24: Search + Agent
-# Allowed, Training = `disallow` — the row the dashboard names as the block. Same posture as CT
-# monitoring above: the Training row is set to Allowed in the third-party console, and read back
-# (`/zones/<id>/bot_management`, jail-read-all token) until the provider models it.
+# (checked through v5.25.0), so they cannot be pinned here. Both states were Cloudflare's
+# creation default (audit log: no bot change by anyone since 2026-08-09; teststuff.net and
+# eid-demo.com carry the same untouched block/disallow). The Training row and ai_bots_protection
+# are ONE switch: flipping Training → Allowed in the console (2026-09-24 19:54Z) also set
+# ai_bots_protection=disabled and deleted the managed "Block AI bots" ruleset. So pinning the
+# field below pins the row too. Read `/zones/<id>/bot_management` back after apply
+# (jail-read-all token) to confirm the API direction behaves the same.
 resource "cloudflare_bot_management" "minutark" {
   zone_id               = var.minutark_zone_id
   ai_bots_protection    = "disabled"
