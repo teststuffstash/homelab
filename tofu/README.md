@@ -99,7 +99,8 @@ pveum role add TerraformProv -privs "Datastore.Allocate Datastore.AllocateSpace 
   Datastore.AllocateTemplate Datastore.Audit Pool.Allocate Sys.Audit Sys.Console \
   Sys.Modify VM.Allocate VM.Audit VM.Clone VM.Config.CDROM VM.Config.Cloudinit \
   VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network \
-  VM.Config.Options VM.Migrate VM.Monitor VM.PowerMgmt SDN.Use"
+  VM.Config.Options VM.Migrate VM.Monitor VM.PowerMgmt SDN.Use \
+  VM.GuestAgent.Audit Mapping.Audit Mapping.Use"
 pveum user add tofu@pve
 pveum aclmod / -user tofu@pve -role TerraformProv
 pveum user token add tofu@pve provisioner --privsep 0   # prints the secret ONCE
@@ -110,6 +111,34 @@ Then export it (don't put it in a committed file):
 ```bash
 export TF_VAR_proxmox_api_token='tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 ```
+
+### PCI passthrough — the mapping is a bootstrap step, on purpose
+
+A VM that gets a host PCI device (`hostpci_mapping` in `variables.tf`) needs a **cluster mapping**
+declared first. This is not a stylistic choice: Proxmox lets only `root@pam` name a raw PCI address,
+and an apply that tried returned `HTTP 500 — only root can set 'hostpci0' config for non-mapped
+devices` (2026-09-24). A non-root identity may attach a device only through a mapping.
+
+**The token gets the USE half and not the MODIFY half** (operator ruling, 2026-09-24):
+`Mapping.Audit` + `Mapping.Use` are in the role above; **`Mapping.Modify` is deliberately absent.**
+With it, the automation identity could map *any* host device into *any* guest — a host-compromise
+primitive, and a step change from its otherwise VM-scoped power. Without it, it can attach only what
+a human declared here. The cost is this one-time root step per passed-through device, which is the
+same deal the role, the user and the SSH seed already take.
+
+On the host that owns the device (nx-02 for the SN530 — read the BDF and the vendor:device id with
+`lspci -nnD | grep -i non-volatile`, and the IOMMU group with
+`ls /sys/kernel/iommu_groups/*/devices/<bdf>`):
+
+```bash
+pvesh create /cluster/mapping/pci --id wk04-sn530 \
+  --map "node=nx-02,path=0000:82:00.0,id=15b7:5009,iommugroup=15" \
+  --description "WD PC SN530 256G (serial 20364B804395) - wk-04 Longhorn bulk disk, FU-280."
+```
+
+⚠ The device must be **alone in its IOMMU group**, or passing it through drags its neighbours with
+it. ⚠ `hostpci` is not hot-pluggable: the VM needs a full stop/start, so it rides a
+`node-maintenance` window.
 
 > The main root uses a **scoped `tofu@pve!provisioner` token** (`TerraformProv` role, in the
 > gitignored `terraform.tfvars`) — rotated off the broad bootstrap `root@pam!tofu` token, which is

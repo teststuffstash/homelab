@@ -229,7 +229,7 @@ data "talos_machine_configuration" "node" {
     # for the same reasons (mount under /var/lib/longhorn because longhorn-manager host-mounts only
     # that path; the entry's `name` is ALSO its node.longhorn.io disk key, so never rename one that
     # holds replicas). Empty for every VM but wk-04, whose disk is a PASSED-THROUGH physical NVMe
-    # (variables.tf `hostpci_id`) rather than pool storage — which is the only reason a VM is
+    # (variables.tf `hostpci_mapping`) rather than pool storage — which is the only reason a VM is
     # allowed to carry one at all. ⚠ Talos refuses a device that already has a partition table;
     # `talosctl wipe disk <dev>` first.
     length(each.value.longhorn_disks) > 0 ? [yamlencode({
