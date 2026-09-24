@@ -274,7 +274,7 @@ variable "nodes" {
     # can never place both replicas of a volume inside the twin. Re-ask this if a SECOND bulk disk
     # ever lands on an nx node — that is the moment the zone names must collapse.
     wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02",
-      hostpci_id = "0000:82:00.0",
+      hostpci_id     = "0000:82:00.0",
       longhorn_disks = [{ device = "/dev/disk/by-id/nvme-eui.e8238fa6bf530001001b448b49e4a8d0", name = "sn530", tags = ["bulk"] }]
     }
     # ADR-133's THIRD control plane, on the second hypervisor — one CP per chassis (pve, the X250,
