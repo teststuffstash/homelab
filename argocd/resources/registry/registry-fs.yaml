@@ -1,0 +1,147 @@
+# The first-party registry on a FILESYSTEM backend — FU-280's rollout (operator, 2026-09-24:
+# "just roll it out"), after phase 1 copied the real corpus in cleanly
+# (docs/spikes/registry-filesystem-backend.md §Phase 1 RESULT).
+#
+# WHY IT LEAVES GARAGE: not capacity — a Garage COPY shares blocks, so the 2x commit peak costs no
+# disk. The case is CONTENTION: while the registry pushes, Garage's other tenants see their p99
+# median 9.5x worse and the Garage PDB is closed 90.6% of the time, so no zone node can be drained
+# during a release (the spike's phase 0). On a volume a commit is a rename, the delete is an
+# unlink, and Garage never sees the bytes.
+#
+# THE CUTOVER SHAPE — why this is a second Deployment and not an edit of `registry`:
+#   1. this lands beside the live S3 registry, empty, reachable only via its ClusterIP Service;
+#   2. the corpus is copied in (skopeo, in-namespace, with the push token);
+#   3. the LB Service `registry` (192.168.40.33 ← registry.teststuff.net) flips its selector
+#      from `app: registry` to `app: registry-fs`. The hostname, VIP, cert and nginx auth
+#      front are unchanged; clients cannot tell. Rollback = flip the selector back.
+#   4. after a soak, the S3 Deployment + the Garage bucket go.
+#
+# The nginx front is the SAME ConfigMap as the S3 registry's (registry.yaml carries its
+# rationale: per-method auth, the challenging /v2/ ping). Env lessons carried from registry.yaml
+# are kept one-to-one; the S3-only ones (chunk sizes, redirect disable, credentials) have no
+# filesystem equivalent and are dropped.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+  namespace: registry
+spec:
+  accessModes: [ReadWriteOnce]
+  # replica-2 on `bulk` (the 2026-09-24 ruling). 150 Gi is ~3x the Garage bucket's 51.5 GB
+  # quota, whose 14-day peak was 42 GB, and it is ALSO the selector: 93–173 Gi fits only the
+  # two SN530s (hp-01, wk-04) — the arithmetic is the storage-ledger claim. Verify placement
+  # after binding: `kubectl -n longhorn-system get replicas.longhorn.io -l longhornvolume=<pv>`.
+  storageClassName: longhorn-bulk
+  resources:
+    requests:
+      storage: 150Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry-fs
+  namespace: registry
+  labels: { app: registry-fs }
+spec:
+  replicas: 1
+  # ⚠ Recreate, NOT RollingUpdate: the claim is RWO, so a rolling update deadlocks with the old
+  # pod holding the volume and the new one waiting for it.
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: registry-fs }
+  template:
+    metadata:
+      labels: { app: registry-fs }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000          # the registry writes the volume as uid 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: registry
+          image: registry:3.0.0
+          env:
+            - { name: REGISTRY_STORAGE, value: "filesystem" }
+            - { name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, value: "/var/lib/registry" }
+            # Deletes for GC, and the blob-descriptor cache OFF (#240) — see registry.yaml.
+            - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
+            - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
+            # One env var holding the whole map — per-key vars panic the registry.
+            - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
+              value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
+            - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # Relative Locations behind nginx+HAProxy (the first-seed 413) — see registry.yaml.
+            - { name: REGISTRY_HTTP_RELATIVEURLS, value: "true" }
+            # The default debug server binds :5001, nginx's port in the same netns.
+            - { name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:5002" }
+          ports:
+            - { name: http, containerPort: 5000 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/registry }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "2",    memory: "1Gi" }
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - { name: front, containerPort: 5001 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 5001 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - { name: nginx-conf, mountPath: /etc/nginx/conf.d, readOnly: true }
+            - { name: htpasswd, mountPath: /etc/nginx/htpasswd, readOnly: true }
+            - { name: nginx-tmp, mountPath: /tmp }
+            - { name: nginx-cache, mountPath: /var/cache/nginx }
+            - { name: nginx-run, mountPath: /var/run }
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "1",   memory: "256Mi" }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: registry-data }
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-conf
+          configMap: { name: registry-nginx }
+        - name: htpasswd
+          secret: { secretName: registry-htpasswd }
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+---
+# In-cluster name for the cutover copy and for verifying before the flip. Fronted by nginx like the
+# LB Service, so a push here needs the push token exactly as the real one does.
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-fs
+  namespace: registry
+  labels: { app: registry-fs }
+spec:
+  type: ClusterIP
+  selector: { app: registry-fs }
+  ports:
+    - { name: http, port: 80, targetPort: 5001 }

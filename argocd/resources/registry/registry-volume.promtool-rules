@@ -1,0 +1,13 @@
+# Hand copy of the registry-volume group from prometheusrule.yaml — re-copy after every expr edit.
+groups:
+  - name: registry-volume
+    rules:
+      - alert: RegistryVolumeAlmostFull
+        expr: |
+          kubelet_volume_stats_available_bytes{namespace="registry",persistentvolumeclaim="registry-data"}
+            / kubelet_volume_stats_capacity_bytes{namespace="registry",persistentvolumeclaim="registry-data"} < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "registry volume has {{ $value | humanizePercentage }} free — a 10 GB layer push may not fit"
