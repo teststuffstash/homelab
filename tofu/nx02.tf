@@ -78,7 +78,7 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     content {}
   }
 
-  # PCIe passthrough of a host device (variables.tf `hostpci_id` carries the why). Only wk-04 uses
+  # PCIe passthrough of a host device (variables.tf `hostpci_mapping` carries the why). Only wk-04 uses
   # it today: the WD SN530 at 0000:82:00.0, so the guest sees a REAL NVMe and its Longhorn disk is
   # not a slice of the nvme-thin pool.
   # ⚠ `pcie = false`, and that is DELIBERATE, not an oversight. `pcie = true` requires the **q35**
@@ -94,12 +94,28 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
   # ⚠ hostpci is NOT hot-pluggable: applying or changing it needs a full VM stop/start, so it rides
   # a `node-maintenance` window. A guest-initiated reboot keeps the qemu process and never picks up
   # pending hardware — the same trap the `serial` flag's note above records.
+  # ⚠ A MAPPING NAME, NOT A RAW BDF — this is a Proxmox permission boundary, found by applying
+  # (2026-09-24): `id = "0000:82:00.0"` fails with HTTP 500 *"only root can set 'hostpci0' config
+  # for non-mapped devices"*. Proxmox lets only `root@pam` name raw PCI addresses; a non-root
+  # identity may attach a device only through a cluster mapping someone else declared.
+  # We took the RESTRAINED half of that deal deliberately (operator, 2026-09-24): the `TerraformProv`
+  # role gained `Mapping.Audit` + `Mapping.Use` and **NOT `Mapping.Modify`**, so this token can
+  # attach the mappings a human declared but cannot invent new ones. `Mapping.Modify` would let the
+  # automation identity expose ANY host device to ANY guest — a host-compromise primitive, and a
+  # step change from its otherwise VM-scoped power. The mapping itself is therefore a Phase-0
+  # bootstrap step beside the role, the user and the SSH seed (tofu/README.md).
   dynamic "hostpci" {
-    for_each = each.value.hostpci_id == null ? [] : [each.value.hostpci_id]
+    for_each = each.value.hostpci_mapping == null ? [] : [each.value.hostpci_mapping]
     content {
-      device = "hostpci0"
-      id     = hostpci.value
-      pcie   = false
+      device  = "hostpci0"
+      mapping = hostpci.value
+      # pcie=false: these VMs declare no `machine`, so they run Proxmox's default i440fx, and
+      # pcie=true on i440fx makes the guest refuse to start (read live: `qm config 8114` has no
+      # `machine:` line). The device passes through fine on the legacy PCI bus. Moving the VM to
+      # q35 is NOT the cheap fix — it changes the guest's PCI topology and can rename the NIC, and
+      # these VMs take their static IP from the nocloud datasource, so a renamed interface is a
+      # node that comes back unaddressed.
+      pcie = false
     }
   }
 
