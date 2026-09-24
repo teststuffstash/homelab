@@ -1255,16 +1255,14 @@ the block needs pruning, not more headings.
       transiently doubles. **Next:** decide between persisting Alloy's positions (a hostPath dir on
       the node, which is a DaemonSet change) and making the rule restart-insensitive; the lines
       themselves are never lost — they are in Loki. Relates FU-247, FU-190.
-- [ ] **FU-286** — **The management box's `talosctl` is a MINOR behind the fleet, and the pin
-      cannot move yet.** The belt's `talos` check (client vs server, minor skew only — the skew that
-      breaks the API) has returned FAIL on every tick since the fleet moved to v1.14.1 on 2026-09-22:
-      client `v1.13.8`, server `v1.14.1`. The pin is `devbox.json`'s `talosctl: latest`, and devbox's
-      own index tops out at **1.13.8** (`devbox search talosctl`) while nixpkgs-unstable already
-      carries **1.14.1** — so `devbox update talosctl` reports "already up-to-date" and no version
-      string in devbox.json can reach it. **Next:** re-run `devbox update talosctl` once the index
-      catches up (the Monday `devbox-update` job is the natural carrier), or resolve talosctl from a
-      nixpkgs ref if it stays behind. Until then `MgmtBeltCheckFailing` stands on `check="talos"` —
-      that firing is this item, not a new fault. Relates FU-240, FU-246.
+- [ ] **FU-286** — **The management box's `talosctl` pin is a nixpkgs rev, not `latest` — revert when
+      devbox's index catches up.** The belt's `talos` check (client vs server minor skew) FAILED every tick
+      from 2026-09-22: client v1.13.8 vs fleet v1.14.1, because devbox's index tops out at 1.13.8.
+      **PR#1963 (merged 2026-09-24)** resolves talosctl from `github:NixOS/nixpkgs/4975466d…#talosctl`
+      (1.14.1), the first flake-ref package in `devbox.json`. `devbox update` cannot move it, so it
+      goes stale silently. **Next:** confirm `MgmtBeltCheckFailing{check="talos"}` clears after the box
+      pulls master; then switch back to `"talosctl": {"version": "latest"}` once `devbox search talosctl`
+      lists ≥ 1.14.1 (the Monday `devbox-update` run is when to look). Relates FU-240, FU-246.
 - [ ] **FU-032** — Watch: **wk-metal-02's flaky wired link** (the thinkcentre half of this item
       is moot since 2026-09-12 — that box left the cluster). **2026-08-07 (homelab#117):
       wk-metal-02 had a 4.5h NIC flap storm** (`carrier_changes` 2→3778, no reboot, flat plug
