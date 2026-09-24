@@ -100,6 +100,33 @@ resource "cloudflare_zone_setting" "minutark_always_https" {
   value      = "on"
 }
 
+# ── bot contract ────────────────────────────────────────────────────────────────────────────────
+# robots.txt IS the contract ("crawl it all"): training crawlers (GPTBot, ClaudeBot, …) pass like
+# search and live-fetch agents. The zone came up with Cloudflare's default `ai_bots_protection =
+# only_on_ad_pages` — a managed rule ("Block AI bots on ad pages", source firewallManaged) that
+# 403'd GPTBot/ClaudeBot on minutark.ee while robots.txt said Allow (oracle handoff 2026-09-24,
+# oracle-fleet#732). Pinned here so a re-bootstrap cannot resurrect it. Zone-wide by nature
+# (no per-host form), so this is the zone bootstrap's to own, not the PublicRoute claim's —
+# and it pins every knob OFF, matching the 2026-08-12 decline of zone-wide bot products
+# (docs/cloudflare.md §PublicRoute). Managed robots.txt stays off: the origin's file is the
+# contract, never a Cloudflare-prepended variant.
+# ⚠ The dashboard's "AI bot policies" rows (Search / Agent / Training = API `ai_search` /
+# `ai_user` / `ai_training`; API `disabled` = Allowed, the default) are NOT in the provider schema
+# (checked through v5.25.0), so they cannot be pinned here. Both states were Cloudflare's
+# creation default (audit log: no bot change by anyone since 2026-08-09; teststuff.net and
+# eid-demo.com carry the same untouched block/disallow). The Training row and ai_bots_protection
+# are ONE switch: flipping Training → Allowed in the console (2026-09-24 19:54Z) also set
+# ai_bots_protection=disabled and deleted the managed "Block AI bots" ruleset. So pinning the
+# field below pins the row too. Read `/zones/<id>/bot_management` back after apply
+# (jail-read-all token) to confirm the API direction behaves the same.
+resource "cloudflare_bot_management" "minutark" {
+  zone_id               = var.minutark_zone_id
+  ai_bots_protection    = "disabled"
+  crawler_protection    = "disabled"
+  fight_mode            = false
+  is_robots_txt_managed = false
+}
+
 # ── DNSSEC ──────────────────────────────────────────────────────────────────────────────────────
 # Cloudflare signs; the DS goes back to zone.ee BY HAND (registrar web flow — the doc rules out
 # automating against zone.ee). The output below is the exact string to paste. Verify afterwards

@@ -3,6 +3,13 @@
 # are resolved by name so we don't hard-code opaque UUIDs. Names are URL-encoded per the
 # data-source contract; scope disambiguates same-named account vs zone groups.
 
+# minutark.ee bot contract (cloudflare_bot_management, tofu/cloudflare/minutark.tf) — added
+# 2026-09-24 after the zone default "Block AI bots" 403'd GPTBot/ClaudeBot (oracle-fleet#732).
+data "cloudflare_api_token_permission_groups_list" "bot_management_write" {
+  name  = "Bot%20Management%20Write"
+  scope = "com.cloudflare.api.account.zone"
+}
+
 data "cloudflare_api_token_permission_groups_list" "dns_write" {
   name  = "DNS%20Write"
   scope = "com.cloudflare.api.account.zone"
@@ -87,6 +94,7 @@ resource "cloudflare_api_token" "tofu_apply" {
         data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id,
         data.cloudflare_api_token_permission_groups_list.zone_settings_write.result[0].id,
         data.cloudflare_api_token_permission_groups_list.dynamic_url_redirects_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.bot_management_write.result[0].id,
       ]) : { id = gid }]
       resources = jsonencode(local.apply_zone_resources)
     },
