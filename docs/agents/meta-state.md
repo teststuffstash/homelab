@@ -9,6 +9,22 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-24 — the basement drive session; arc in TICK-LOG).** All three drive windows
+  are CLOSED and verified: 13/13 Ready, etcd 3/3, 0 degraded, rebuild timer back at 600,
+  `mgmt-tf` baseline stamped at `a4cc12bb`. Nothing is half-applied. **Operator ruling on what is
+  next: the registry2 experiment (FU-280), not the scratch rearrangement** — registry2 is upstream
+  (it unblocks FU-274, which shrinks the 150Gi ghcr mirror = the biggest `bulk` tenant), and its
+  tier blocker is gone because the SN530 pair now sits in hp-01 + nx-02 for exactly that. Operator
+  is undecided whether those drives later become a bulk tier, so **do not coin a permanent tag or
+  hostname yet** (the spike's own naming trap; a glossary row is owed on coining, FU-163).
+  Order for that session: (1) the CHEAP side-question first — does a Garage server-side COPY share
+  blocks or duplicate them? If it shares, the 2x peak is a quota artifact costing no disk and
+  "raise the cap" beats changing backend; ~15 min, and building before it risks building the wrong
+  thing. (2) the **selector-less StorageClass audit** (`longhorn-local-xfs`, `longhorn-static` have
+  no `diskSelector`) — a hard blocker shared with the scratch work, so it is paid once here.
+  (3) phase 1 only, no DNS/cert/VIP. The scratch plan waits in
+  [`storage-ledger.md`](../storage-ledger.md) §the scratch class rides `bulk` (FU-234); nx-01's
+  freed 7600p is idle but safe — nothing degrades while it waits.
 - **⚑ PICKUP (2026-09-23 late — the mechanical FU sweep; arc in TICK-LOG).** Six PRs merged
   (#1946/#1947/#1948/#1949/#1950/#1951) plus the parked spike #1905. Three things a fresh session
   should expect rather than chase: (1) **`KernelOopsCaptured` is firing on wk-03 by design** — two

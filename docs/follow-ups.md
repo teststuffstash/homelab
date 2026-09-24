@@ -17,6 +17,7 @@ tracker.
   fleet-strike handoff; FU-282 minted for the origin mark's `wg.`-named egress
   record, deferred because it needs a live OPNsense apply; FU-281 minted for the goal-checkpoint trigger side waking on
   nothing — operator's fix; **FU-280 is taken by the registry-backend spike, PR #1905 in flight**.
+  2026-09-24: FU-288 minted for `node-maintenance` having no IPMI/BMC power path, found when nx-01 would not boot after a drive fit.
   2026-09-22: FU-279 minted for the uncollected Garage-side multipart debris, found running the registry GC by hand; FU-278 minted for the rollout's missing workload-health hold; FU-277 minted for the Talos 1.14 DHCP search-domain → loopback trap; FU-276 minted for the reconciler's failure paths found on nx-01 in the first box-run rollout; FU-275 minted for the canary override's seed-image churn; FU-274 minted for first-party images off the ghcr pull-through mirror; FU-273 minted for the substrate rollout's missing soak/halt + version-split attribution. 2026-09-21: FU-269..272 minted for ADR-139 (broker split, agent-gateway, gateway HA) + the vendor-status split; FU-268 minted for the CP-divergence/undeclared-component detector (#1845); FU-266 minted for the single CI runner VM (pve window), FU-267 for cilium-agent at its 512 Mi limit; FU-265 minted for wk-metal-04's unparseable firmware boot entry, found by the worker rollout; FU-264 minted for the Talos API CA rotation the public-master talosconfig leak makes necessary; FU-263 minted for the nocloud-VM substrate-upgrade fork found bumping the CPs; FU-262 minted for wk-metal-02's now-misleading name, deferred to its next reinstall.
   2026-09-20: FU-261 minted for the PXE chainload gap found reinstalling wk-metal-02; FU-260 minted for the Argo controller's apiserver-restart
   hot-loop flooding Loki; FU-259 minted for `talos_cluster_kubeconfig` rendering a stale
@@ -622,6 +623,19 @@ the block needs pruning, not more headings.
       [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
       wrong lever. Relates FU-093, ADR-089.
 
+- [ ] **FU-288** — **`node-maintenance` has no IPMI path, so the BMC boxes have no maintenance-boot.**
+      `scripts/node-maintenance.sh` contains zero IPMI/BMC references: `up` wakes a metal node by
+      **WoL from pve** (MAC out of `opnsense/dnsmasq-dhcp.py`) and a control plane has no `down`
+      verb at all (GAPS `maintenance-window-G2`). Both NX nodes have a BMC and are the fleet's
+      first boxes where remote power is deterministic — `machines.yaml` already records
+      `remote_power: "IPMI/BMC … chassis power on|off|cycle"` for nx-01 — yet the tooling cannot use
+      it. Cost, 2026-09-24: nx-01 failed to boot after a drive fit and every power action was
+      hand-typed `ipmitool` (and the first attempt died on the zsh `$VAR`-as-command trap). Also
+      wanted: `power soft` for a graceful hypervisor stop — used by hand for nx-02 the same day so
+      its LVM thin pool closed cleanly. **Next:** a `--bmc` path in `up`/`down` keyed off
+      `machines.yaml` `remote_power`, credentials out of the wallet rather than the documented
+      ADMIN/ADMIN default, plus the `cp-down`/`cp-up` pair GAPS already asks for. Relates FU-284,
+      GAPS `maintenance-window-G2`.
 - [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
       Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod
       (FU-222) — while the fleet buys used drives with *disclosed* defects, so the belts alert on
@@ -631,7 +645,17 @@ the block needs pruning, not more headings.
       **Next:** `smartctl_device_interface_speed` is SATA-only, so **NVMe lane width is uncovered**
       — the trap that left x1-wired adapters in both NX boxes. Fit-time check is in
       [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health; decide whether it
-      also wants a standing metric. Relates FU-222, FU-093.
+      also wants a standing metric. **2026-09-24 made both halves concrete.** (a) The lane-width
+      gap is REAL and cost eight days: nx-01's 7600p and nx-02's Micron 2200S both ran x1 of x4 on
+      mis-wired adapters, found only by a hand `LnkSta` read and fixed the same day — nothing in
+      the belt could have said so. (b) **`DiskMediaErrorsGrowing` is silently BLIND on one drive:**
+      nx-01's SK hynix BC711 reports a misparsed 128-bit `media_errors` of **1.388e26** (live in
+      Prometheus; `critical_warning 0`, `available_spare 100%`, `percentage_used 0%` prove it is a
+      parse artifact, not a defect). It does not false-fire — the value is constant, so max-min is
+      0 — but at that magnitude float64's ULP is ~1.5e10, so a genuine **+1 media error on that
+      drive rounds away and can never trip the alert**. A false negative on the drive the belt
+      exists to watch. Fix: clamp or exclude implausible values in the expr, with a promtool
+      fixture pinning the blind case. Relates FU-222, FU-093.
 
 - [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
       fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run

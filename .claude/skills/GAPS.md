@@ -222,6 +222,20 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       finding — a hand-managed watch has no notion of "replaces". Four defects across three copies,
       zero successful ones: **stop re-typing it, ship `maint watch`** (one verb, one process, a
       dedupe set, a loud-on-unreadable probe, and an id so re-arming replaces rather than duplicates).
+      **RESIGHT 2026-09-24 — the class is broader than the alert watch.** The same seat committed
+      the identical defect in a *benchmark*: an fio pod whose four jobs each redirected stderr to
+      /dev/null and whose jq parser was wrapped in `|| echo "(no data)"`. The jq was wrong
+      (`.jobs[0].sync.lat_ns` is null for non-fsync jobs, and indexing null throws before `//` can
+      default), so all four results printed "(no data)" and the output could not distinguish "fio
+      failed" from "the parser failed" — eight minutes and a 200 GiB run to learn nothing. The
+      re-run carried per-job exit codes and an `ls -la` of the JSON, and it was the parser.
+      **So the fix is not only "ship `maint watch`": any probe this seat writes must fail loud and
+      must be able to say WHICH HALF broke.** That belongs in the skill as a rule, not just in one
+      verb. Counter-example from the same session, and the pattern to ship: the alert watch DID
+      work, because it was written to a FILE (no zsh word-split), kept its dedupe + blind counter in
+      fixed paths so they survived re-invocation, and was self-tested against a known-firing alert
+      before being armed — and when it later reported nothing across a control-plane shutdown, that
+      silence was VERIFIED against Prometheus rather than trusted.
 - [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
       acceptance for any detector-first item (the standing build order: detector, let it fire on
       the real condition, then the fix) is to make the new alert fire on purpose — but `check`
@@ -234,6 +248,20 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       designed on wk-03, silenced 7h in Alertmanager, self-clears ~6h). Next: an expected-alert
       declaration that `check` honours (`open --expect <alert>`, reported as "expected, firing"
       rather than NEW), and the skill's detector-acceptance path should name it.
+      **RESIGHT 2026-09-24 (seat, the hp-01/nx-01/nx-02 drive session) — a SECOND shape, and it is
+      the common one.** Two windows in one session could not close, neither because of a detector:
+      (a) `InfoInhibitor` — stock kube-prometheus-stack plumbing, `severity: none`, driven by a
+      *pending* `CPUThrottlingHigh` the window did not cause (its expr matches
+      `ALERTS{severity="info"}` without requiring `alertstate="firing"`); (b) `CiliumUnreachableNodes`
+      + `NodeRebooted` + `PodSigkilled` after a planned reboot — all lagging alerts on conditions
+      verified resolved (`maint cilium-check` clean, 13/13 agents, have=13 missing=0), and
+      `PodSigkilled` is documented by node-maintenance itself as firing up to 30 min after the kill.
+      So the missing mechanism is not only "expected detector output" — it is **alerts a window
+      causes, or does not cause, that outlast it**. `--force` was used both times with the items
+      named: sanctioned, but the word means less each time. Note the node-scoped windows
+      `node-maintenance` opens already declare exactly the right list (`KubeNodeNotReady`,
+      `PodSigkilled`, `CiliumUnreachableNodes`, `NodeRebooted`, …) — `check` should honour that
+      declared list rather than diffing raw firing sets past it.
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's

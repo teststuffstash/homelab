@@ -10833,3 +10833,68 @@ metric name and proved `stage.match` drops nothing (3 entries in, 1 counted, `se
 BEFORE #1948 merged — the class of check the subagent had correctly reported as impossible here.
 Two windows closed with `--force`: in both, the known-open item was the alert the probe existed to
 produce. That is GAPS `maintenance-window-G4` — `check` has no notion of an expected alert.
+
+
+## 2026-09-24 — the basement session: three drive windows, and a dead coin cell explaining a boot that never worked
+
+Operator at the boxes, seat driving. Goal was the placement plan of record (hardware `STATE.md`
+§Next): SN530s to hp-01 + nx-02 for a registry tier, BC711 to nx-01 for ride scratch.
+
+**hp-01 (clean, ~15 min).** SN530 `20367A805809` into the free x16 — **x4 @ 5.0 GT/s**, correct for
+that PCIe 2.0 board, so the generic adapter is properly wired unlike both NX cards. Arrival read:
+2 % used, 4,577 h, 0 media errors, `hmpre 51200`/`hmmaxd 8` = the predicted 32 MiB HMB grant.
+65,157 power cycles on 4,577 h looks alarming and is not — an OEM laptop pull counting APST
+transitions. The rebuild timer was raised 600 -> 14400 s first: hp-01 held 26 replicas and m70s is
+the only other schedulable `std` node, so a >10 min window at 600 s silently CO-LOCATES both copies.
+Restored to 600 after. Nothing in `machines.yaml` was path-fragile, so the SN530 taking `nvme0n1`
+and pushing the 7600p to `nvme1n1` was cosmetic.
+
+**nx-01 (the long one).** Box POSTed, fans normal, CPUs warm, and reached NO network address at all
+— a full-subnet scan for the Talos API found every other node and no nx-01. Root cause, measured:
+**VBAT 1.442 V against nx-02's 3.11 V, `Lower Non-Recoverable`.** A dead CR2032 means the blade
+loses CMOS on any full de-energize, which reverts `Advanced -> PCIe/PCI/PnP -> LSI HBA OPROM` to its
+`Disabled` default — and the front bays hang off the SAS3008, so the ADATA SU630 stops being a boot
+device. POST fine, no OS, no network. Operator's own model ("reinserting the blade loses the front
+half") was the same failure seen from outside; a `chassis power cycle` did not clear it because it
+never fully drops the rail. Battery replaced, OPROM re-enabled, booted first try.
+
+Three seat errors in that diagnosis, all corrected by measurement or the operator, all the same
+shape — **a cause inferred from one reading with no control**: (1) `Expander Temp`/`NVMe_SSD Temp`
+reading `no reading` was called the electrical signature of an unseated backplane; nx-02, a healthy
+seated blade, reads identically — those sensors never populate. (2) SOL silence was called console
+redirection being off; it is `Enabled`, and the real reasons were a static already-painted BIOS
+screen plus `console=ttyS1` never being in the metal image (FU-247 owns that). (3) The seating model
+itself. The two A/Bs (expander across blades, VBAT across blades) are what actually settled anything.
+
+**The selector pin, and it paid off within the hour.** `ephemeral_disk_selector: disk.transport ==
+"nvme"` matched BOTH drives once the BC711 joined. Pinned by serial to the BC711 (PR #1952), applied
+via the box, then `talosctl reset --system-labels-to-wipe EPHEMERAL --graceful=false --reboot`.
+**Across that reboot the device names SWAPPED** — the Intel took `nvme0n1`, the BC711 `nvme1n1` —
+and EPHEMERAL followed the serial onto the BC711 exactly as intended. A `/dev/nvmeXn1` or transport
+pin would have landed it on the wrong drive. The apply also hit the FU-235 (2) field-manager
+conflict on `kubernetes_node_taint` — caused by the seat's own cordon; uncordon, re-plan (No
+changes), clean full apply, baseline stamped at `a4cc12bb`.
+
+**The 7600p measured at last** (raw device, 200 GiB span, the 09-23 protocol): QD1+fsync **2,348
+IOPS / 0.43 ms**, QD32 **74,022**, QD128 **75,532 / 295 MiB/s / p99.9 31.3 ms**, seq 1M QD4 180 s
+**298.5 MiB/s mean with a 226 MiB/s FLOOR** — no SLC cliff, where the SN530s collapse to 8–68 MiB/s.
+It is the fleet's best all-rounder and the first numbers for the model backing `std` on hp-01 and
+both `bulk` disks on wk-metal-04. First run produced four "(no data)" lines — the seat's own jq
+threw on a null `sync.lat_ns` while `2>/dev/null` and `|| echo` hid which half failed. GAPS
+`maintenance-window-G2`, fourth sighting, outside the alert-watch context.
+
+**nx-02 (hypervisor, the careful one).** etcd snapshot banked, wk-04 down via node-maintenance,
+cp-02 by hand (no CP verb exists — GAPS `maintenance-window-G2`), host stopped with `chassis power
+soft` so the LVM thin pool closed cleanly. VIP `.50` and the etcd leader were both on cp-01, so
+cp-02 was the cheapest CP to take; etcd ran 2 of 3 with quorum and zero fault tolerance. Operator
+swapped the SLOT1 adapter and fitted SN530 `20364B804395`, and replaced that CMOS battery too.
+Everything auto-started. **Both nx-02 NVMe now read 8 GT/s x4 — the Micron 2200S was x1**, which is
+the fleet's highest-value link fix: it backs the thin pool under cp-02's etcd and wk-04.
+
+**Left behind:** FU-288 (node-maintenance has no IPMI path — every power action today was
+hand-typed `ipmitool`, and the first died on the zsh `$VAR`-as-command trap); FU-284 widened twice
+over (lane width uncovered, proven by two x1 adapters; and `DiskMediaErrorsGrowing` silently BLIND
+on the BC711 — its misparsed 1.388e26 `media_errors` is live in Prometheus and float64's ULP there
+is ~1.5e10, so a real +1 rounds away); the scratch plan (PR #1953) as a ledger section + FU-234.
+Both windows closed `--force` on lagging alerts they caused — GAPS `maintenance-window-G4`, second
+shape, and the more common one.
