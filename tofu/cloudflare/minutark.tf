@@ -111,10 +111,11 @@ resource "cloudflare_zone_setting" "minutark_always_https" {
 # (docs/cloudflare.md §PublicRoute). Managed robots.txt stays off: the origin's file is the
 # contract, never a Cloudflare-prepended variant.
 # ⚠ The dashboard's "AI bot policies" rows (Search / Agent / Training = API `ai_search` /
-# `ai_user` / `ai_training`, live 2026-09-24: disabled / disabled / disallow) are NOT in the
-# provider schema (checked through v5.25.0), so they cannot be pinned here. After the apply, read
-# `/zones/<id>/bot_management` back (jail-read-all token): if `ai_training` did not follow, it is
-# set by hand in the third-party console until the provider models it.
+# `ai_user` / `ai_training`; API `disabled` = Allowed, the default) are NOT in the provider schema
+# (checked through v5.25.0), so they cannot be pinned here. Live 2026-09-24: Search + Agent
+# Allowed, Training = `disallow` — the row the dashboard names as the block. Same posture as CT
+# monitoring above: the Training row is set to Allowed in the third-party console, and read back
+# (`/zones/<id>/bot_management`, jail-read-all token) until the provider models it.
 resource "cloudflare_bot_management" "minutark" {
   zone_id               = var.minutark_zone_id
   ai_bots_protection    = "disabled"
