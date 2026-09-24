@@ -93,7 +93,7 @@ three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_byte
 | bucket | quota | used | owner |
 |---|---|---|---|
 | ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
-| registry | 52 GB | 27 GB | homelab (FU-203) |
+| registry | 52 GB | 27 GB | homelab — retiring: the registry left Garage 2026-09-24; the S3 half is removed after the soak (FU-280) |
 | agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
 | jail-transcripts | 21 GB | 1 GB | homelab |
 | loki | 17 GB | 11 GB | homelab |

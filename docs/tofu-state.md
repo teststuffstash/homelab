@@ -2,9 +2,9 @@
 
 Every tofu root in this repo *kept* its state as a **local, gitignored file in the jail** — and
 the reason that had to change is not tidiness: nothing running anywhere else can `plan` at all. The
-FU-097 drift belt and any out-of-cluster applier were both blocked on it. As of 2026-08-04 three of
-the five roots are on encrypted remote state in Garage; `main` and `github` are not, for reasons
-that are rulings rather than backlog (see the cone table).
+FU-097 drift belt and any out-of-cluster applier were both blocked on it. As of 2026-09-13 four of
+the five roots are on encrypted remote state in Garage (`github` joined 2026-09-13); `main` is not — it
+lives on the management box, a ruling rather than backlog (see the cone table).
 
 It is also the single most dangerous change in the repo. A root that loses its state does not fail
 loudly — it plans to **create** everything it already owns. Everything below is shaped by that.

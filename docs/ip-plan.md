@@ -16,7 +16,7 @@ range.** Real machines get an inventory entry (`machines/machines.yaml` or a
 `opnsense/dnsmasq-dhcp.py` static) *before* they get an address; VIPs come only from the two VIP
 blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 
-### The control-plane endpoint VIP — `192.168.2.50`, reserved (ADR-133, FU-243)
+### The control-plane endpoint VIP — `192.168.2.50`, LIVE since 2026-09-22 (ADR-133, FU-243)
 
 **The ruling:** the Kubernetes API endpoint is **`192.168.2.50`**, a single address reserved in
 `2.0/24` and assignable to no real host, ever.
@@ -40,8 +40,8 @@ Two consequences follow, and both are load-bearing:
   (quorum 2 of 2); failover is real only at three. This is why ADR-133 orders the VIP onto `cp-01`
   first and then both joins back to back, and why it never rests at two members.
 
-Clear before assignment, per the procedure above: `git grep 192.168.2.50` finds nothing and
-`nmap -sn 192.168.2.45-70` shows `.50` down (2026-09-20).
+Cleared before assignment (the 2026-09-20 pre-assignment check), per the procedure above: `git grep 192.168.2.50` found nothing and
+`nmap -sn 192.168.2.45-70` showed `.50` down (2026-09-20).
 
 ## The partition
 

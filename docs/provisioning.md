@@ -52,7 +52,9 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
    SSD (not loop devices / USB stick / Optane). Add the node to `machines/machines.yaml` (or fill in
    the existing entry) with `talos_metal_node: true` + that `install_disk`, then
    `devbox run -- python3 machines/generate.py` and commit the regenerated tables.
-5. **Install:** `devbox run -- tofu -chdir=tofu apply -target='talos_machine_configuration_apply.metal["<name>"]'`.
+5. **Install:** the main root runs on the management box (`docs/runbook.md` §the main root): push the
+   branch, `MGMT_REF=origin/<branch> devbox run mgmt-tf -- plan -target='talos_machine_configuration_apply.metal["<name>"]'`,
+   read the plan (a `-target` drags in whole resources — FU-248's incident), then `devbox run mgmt-tf -- apply <plan-id>`.
    Talos wipes the disk, installs, reboots.
 6. ⚠️ **Remove the Matchbox flag** before/at the post-install reboot
    (`tofu -chdir=tofu/provisioning destroy -target=matchbox_group.<x>`) so the reboot boots from
@@ -60,7 +62,7 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
    per-node group** on purpose — flags are transient.
 6b. **Apply the zone label** — `zone:` in `machines.yaml` is NOT part of the machine config; it is a
    separate tofu resource in `tofu/longhorn.tf`, so the install leaves the node unlabelled:
-   `devbox run tf-apply '-target=kubernetes_labels.node_zone["<name>"]'` (or `longhorn_storage` /
+   the same plan-by-id path, `devbox run mgmt-tf -- plan -target='kubernetes_labels.node_zone["<name>"]'` (or `longhorn_storage` /
    `longhorn_bulk_zone` when the node carries Longhorn disks — the `node_zone` `for_each` excludes
    those two sets). Then read the label back off the node.
    ⚠ Nothing fails without it. The node goes `Ready` either way, and ADR-114's zone-spread simply

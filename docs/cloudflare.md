@@ -29,7 +29,8 @@ Cloudflare credential.
 
 Files: `argocd/resources/publicroute/{xrd,composition}.yaml` (+ `example-claim.yaml.example` for
 the shape), app `argocd/platform/publicroute.yaml`, provider secret
-`argocd/resources/crossplane/cloudflare-ingress-externalsecret.yaml`.
+`argocd/resources/cf-api-proxy/externalsecret.yaml` (the ingress-write token lives with the proxy since
+the 2026-08-09 custody move; the reconciler holds no Cloudflare credential).
 
 **Built mechanism — per-route profile classes (built #1303–#1307, merged into goal/1302-public-edge 2026-09-02):** every shipped public hostname is one of two kinds, and the claim says which via the REQUIRED `.spec.profile` field (`consumer` | `api` — no default on the object, the 2026-07-16 API-server-stamp lesson). The composition fans out class-appropriate edge defaults the way ADR-101's zone classes fan out zone defaults. Glossary rows for the profile names: [`docs/glossary.md`](glossary.md) (FU-163, coining commit).
 
