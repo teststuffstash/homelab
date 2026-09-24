@@ -486,6 +486,16 @@ off m70s's shared `std` disk), one tag across three disks is still a name, not a
 with six bound PVs — safe in principle (an SC is consulted only at provisioning) but a live apply
 that wants a window, on the main root, i.e. through the box.
 
+**Re-run for `wk-04`, 2026-09-24**, because the Requirements row demands this check *before* a
+first Longhorn disk lands on an nx node and wk-04 is untainted (so the nx-01 argument above — "no
+Garage pod tolerates the taint" — does not carry over). Result: **still not a gate.**
+`longhorn-local-xfs` is fenced by its consumer's **required** node affinity, read live — the Garage
+StatefulSet pins `topology.kubernetes.io/zone In [wk-metal-01, wk-metal-04, m70s]`, and wk-04's zone
+is `nx-02`, so a zone volume cannot be scheduled there at all. `longhorn-local-std` selects `std`;
+wk-04's disk is `bulk`. `longhorn-static` still has zero consumers fleet-wide. The fence for
+`longhorn-local-xfs` is therefore the one `tofu/longhorn.tf` claims it is — *"the consumer's node
+affinity"* — and here it holds, unlike the within-node case on m70s.
+
 **`longhorn-static` needs no fix and cannot have one.** It is created by longhorn-manager from the
 `default-longhorn-static-storage-class` setting, so deleting it is futile — it returns. It has no
 consumers, nothing in this repo names it, and the only way to reach it is to write it into a

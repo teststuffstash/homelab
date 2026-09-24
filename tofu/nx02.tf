@@ -80,8 +80,17 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
 
   # PCIe passthrough of a host device (variables.tf `hostpci_id` carries the why). Only wk-04 uses
   # it today: the WD SN530 at 0000:82:00.0, so the guest sees a REAL NVMe and its Longhorn disk is
-  # not a slice of the nvme-thin pool. `pcie = true` needs the q35 machine type, which these VMs
-  # already use.
+  # not a slice of the nvme-thin pool.
+  # ⚠ `pcie = false`, and that is DELIBERATE, not an oversight. `pcie = true` requires the **q35**
+  # machine type; these VMs declare no `machine` at all, so they run Proxmox's default **i440fx**
+  # (read live 2026-09-24: `qm config 8114` has no `machine:` line). Setting pcie=true on i440fx
+  # makes the guest refuse to start — and it would have done so on the very stop/start this
+  # passthrough needs. The device still passes through fine on the legacy PCI bus; Linux binds the
+  # nvme driver either way.
+  # Switching the VM to q35 is NOT the cheap fix: it changes the guest's PCI topology and can
+  # rename the NIC, and these VMs take their static IP from the nocloud datasource — a renamed
+  # interface is a node that comes back unaddressed. If a future device genuinely needs PCIe
+  # semantics, that is its own change with its own window.
   # ⚠ hostpci is NOT hot-pluggable: applying or changing it needs a full VM stop/start, so it rides
   # a `node-maintenance` window. A guest-initiated reboot keeps the qemu process and never picks up
   # pending hardware — the same trap the `serial` flag's note above records.
@@ -90,7 +99,7 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     content {
       device = "hostpci0"
       id     = hostpci.value
-      pcie   = true
+      pcie   = false
     }
   }
 

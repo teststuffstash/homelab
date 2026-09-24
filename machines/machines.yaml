@@ -250,10 +250,21 @@ machines:
     zone: nx-02        # the nx-02 BOX is the failure domain. ⚠ nx-01 and nx-02 are the two nodes
                        # of ONE 2U twin chassis (shared backplane, 1+1 shared PSUs), so as zone
                        # labels they are NOT the independent domains Longhorn/Garage anti-affinity
-                       # reads them as. Harmless while neither carries data — both are declared
-                       # storage-free — so the rule is: BEFORE any replica is placed on either
-                       # node, collapse the two to ONE zone name. Renaming a zone after replicas
-                       # land makes Longhorn see a new empty disk and declare the old one missing.
+                       # reads them as. ⚠ THIS NODE IS NO LONGER STORAGE-FREE (2026-09-24): it
+                       # carries the passed-through WD SN530 as a `bulk` disk (tofu/variables.tf —
+                       # VM disks are declared there, not here). The zone names were NOT collapsed,
+                       # and that is the per-service call the 2026-09-23 deferral asked for, taken
+                       # on evidence: `bulk`'s ONLY member in this chassis is that disk, because
+                       # nx-01 carries `fast` alone (PR#1956), so longhorn-bulk cannot put both
+                       # replicas of a volume inside the twin. The selector-less classes were
+                       # checked too, as the ledger's Requirements row demands before a first disk
+                       # lands: `longhorn-local-xfs` is fenced by its consumer's REQUIRED node
+                       # affinity (the Garage StatefulSet pins zone In [wk-metal-01, wk-metal-04,
+                       # m70s] — nx-02 is not in it), `longhorn-local-std` selects `std`, and
+                       # `longhorn-static` has zero consumers fleet-wide.
+                       # ⚠ RE-ASK the moment a SECOND `bulk` disk lands on an nx node — that is
+                       # when the zone names must collapse. Renaming a zone after replicas land
+                       # makes Longhorn see a new empty disk and declare the old one missing.
     label: "`wk-04` (VM on nx-02)"
     role: k8s worker, untainted batch compute (the second hypervisor's first VM)
     hardware: Talos VM on nx-02
