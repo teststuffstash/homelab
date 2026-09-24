@@ -399,7 +399,7 @@ No ADR amendment is needed.
 
 1. **BLOCKER, do first — the selector-less audit.** `longhorn-local-xfs` (Garage's class) and
    `longhorn-static` carry **no `diskSelector`** and can therefore place on any disk, tag or no tag.
-   A volume already landed on the wrong disk on m70s for exactly this reason (§2026-09-21). Settle
+   The hazard is real but has never fired: it was fenced BY HAND twice (§the audit below). Settle
    it **before** any Longhorn disk exists on `nx-01`, not after — the ledger's nx deferral names
    this as the one thing role-separation does not cover.
 2. ~~**Decide the tag, and prefer not to coin one.**~~ **SUPERSEDED by the operator ruling below —
@@ -424,6 +424,72 @@ No ADR amendment is needed.
    the image store while the 7600p pair carries Longhorn — images and replicas on separate spindles.
 6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
    the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
+
+### The selector-less audit, run 2026-09-24 — done, and it is NOT a gate
+
+**Tracked by:** FU-234 (which named it a blocker). All eight Longhorn StorageClasses read live.
+Six are fenced — `longhorn` / `longhorn-single` / `longhorn-local-std` → `std`, `longhorn-bulk` /
+`longhorn-scratch` → `bulk`, `longhorn-fast` → `fast`. **Two are not:**
+
+| class | replicas | locality | binding | consumers | reach |
+|---|---|---|---|---|---|
+| `longhorn-local-xfs` | 1 | `strict-local` | WaitForFirstConsumer | Garage's 6 PVCs (3 zones × data+meta) | any schedulable disk **on whichever node its consumer lands on** |
+| `longhorn-static` | 2 (the global `default-replica-count`) | — | **Immediate** | **none** — 0 PVCs, 0 PVs | **any schedulable disk in the fleet** |
+
+**1. It does not gate registering the new disks.** Step 1 above called it a blocker on "any
+Longhorn disk existing on `nx-01`". It is not, for either class. `longhorn-local-xfs` is
+`strict-local` and its only consumer is the Garage StatefulSet, whose pods are zone-pinned; `nx-01`
+is tainted `homelab.io/ephemeral=true:NoSchedule` and no Garage pod tolerates it, so a `bulk` disk
+on `nx-01` (or `hp-01`) is unreachable by this class — *no consumer of it can schedule there*.
+`longhorn-static` places nothing because nothing uses it. **Register the disks; the fix below is a
+belt, not a gate.**
+
+**2. The live exposure is one disk on one node.** The class's documented fence is *"one disk per
+zone node"* (`tofu/longhorn.tf`), and that premise is **false today**: wk-metal-04 has three
+Longhorn disks and m70s has two. Per zone node —
+
+| zone node | candidates | verdict |
+|---|---|---|
+| wk-metal-01 | `mx500` only | no choice |
+| wk-metal-04 | `intel0`, `intel1` (both `bulk`); `sata500` unschedulable | two candidates, both acceptable |
+| **m70s** | `nvme` (`std`, shared with Talos + the container image store, 100 G reserved) and `pm961` (the zone's **dedicated** spindle) | **two candidates, one wrong** |
+
+**3. The record overstated the evidence — and the truth is the better argument.** Step 1 and the
+`nx-01`/`nx-02` requirement row both assert *"a volume already landed on the wrong disk on m70s for
+exactly this reason (§2026-09-21)"*. **§2026-09-21 records no such event.** It records the
+hypothetical (*"a CNPG volume **could** land on the PM961"*) and the decision to coin a second
+class, `longhorn-local-std`, rather than reuse the selector-less one. What the record *does* show is
+**two deliberate hand-mitigations and zero misplacements**:
+
+- **2026-09-12** (§the zone-rotation table, third run): the rotation onto `pm961` was executed *"with
+  the node's OTHER Longhorn disk temporarily `allowScheduling=false`, so the re-cut claims could
+  only land on the new spindle."* The hazard was real enough to fence by hand, in the recipe.
+- **2026-09-21**: an entire second StorageClass coined to keep the `std` fence true.
+
+Two mitigations that a human has to remember is a stronger case for a mechanism than an incident
+would be. The false claim is corrected in both places by this edit.
+
+**4. The fix is known, and its cost is now known too.** ADR-089 already records the pattern: a
+`diskSelector` on a StorageClass *"turned out to apply only to PVCs created after it (14 legacy
+volumes had an empty `diskSelector`) — backfilled"*. So the volume CR carries its own selector and
+live volumes are patchable; no data moves. The shape would be: tag the three zone disks (`mx500` →
+`[bulk, garage]`, `intel1` → `[bulk, garage]`, `pm961` → `[garage]` — a disk may carry several tags,
+so no tier changes hands), backfill the six volume CRs, then put `diskSelector: garage` on the
+class. It would retire the by-hand `allowScheduling=false` step from
+[`garage.md`](garage.md) §step 8.
+
+⚠ **Two reasons it is not done here, both for the operator.** It **coins a name** (`garage`), which
+needs a [glossary](glossary.md) row in its coining commit (FU-163) — and while the 2026-09-24 ruling
+admits exactly this case (*a tag is for a disk you want to EXCLUDE from something*: keep the zones
+off m70s's shared `std` disk), one tag across three disks is still a name, not a no-op. And
+`kubernetes_storage_class.parameters` is **immutable**, so the tofu change is a *replace* of a class
+with six bound PVs — safe in principle (an SC is consulted only at provisioning) but a live apply
+that wants a window, on the main root, i.e. through the box.
+
+**`longhorn-static` needs no fix and cannot have one.** It is created by longhorn-manager from the
+`default-longhorn-static-storage-class` setting, so deleting it is futile — it returns. It has no
+consumers, nothing in this repo names it, and the only way to reach it is to write it into a
+manifest by hand. Left as-is, recorded here so the next audit does not re-derive it.
 
 ### ⚠ Operator ruling, 2026-09-24 (later the same day) — ONE tier, not a tier per drive
 
@@ -457,12 +523,23 @@ I happen to have."* What that changes:
     2026-09-24 hp-01 *insertion* window); the wipe case is the missing-disk one, and FU-285 is open
     precisely because the knob that governs it has not been named yet. Check placement per volume
     afterwards either way.
-- **Consolidating fixes the over-commitment outright.** Adding both SN530s takes `bulk` from
-  **1009 G allocatable / 923 G committed (91.5 %, `intel0` at 105 % of its own size)** to
-  **1521 G / 923 G = 61 %**. No tier needed to get that.
-- **`nx-01`'s freed 7600p joins `bulk` too**, and then `longhorn-scratch` keeps selecting `bulk`
-  unchanged — ride scratch becomes local on nx-01 for free via `dataLocality: best-effort`, with no
-  new tag at all. **A tag is only warranted for a disk you want to EXCLUDE from something.**
+- **Consolidating fixes the over-commitment outright.** `bulk` today is **1009 G allocatable /
+  923 G committed (91.5 %, `intel0` at 105 % of its own size)**. Corrected 2026-09-24 against live
+  hardware, because the first version of this line counted drives that are not cluster storage:
+
+  | | allocatable | committed | |
+  |---|---|---|---|
+  | today | 1009 G | 923 G | **91.5 %** |
+  | **+ hp-01's SN530 (256 G, fitted and visible — done in this change)** | **~1247 G** | 923 G | **74 %** |
+  | + nx-02's SN530 via a wk-04 VM disk (**planned, not wired**) | ~1485 G | 923 G | 62 % |
+
+  ⚠ **nx-02 is a hypervisor, not a cluster member**, so its SN530 is not Longhorn capacity until a
+  Proxmox VM disk carries it into `wk-04` — `smartctl-exporter` sees no such disk on wk-04 today.
+  The 91.5 % objection dissolves at **74 %** with hp-01's drive alone; the 61 % figure this section
+  first carried assumed both, and nx-01's drive besides.
+- ~~**`nx-01`'s freed 7600p joins `bulk` too**~~ — **SUPERSEDED the same day, see the block below.**
+  **A tag is only warranted for a disk you want to EXCLUDE from something** — which turns out to be
+  exactly the case on nx-01.
 - **Demote by measurement, not in advance.** The one real risk is shape, not profile: `longhorn-bulk`
   is replica-2 and **a write waits for the slowest replica** (§2026-09-05). The drives differ on the
   axis that matters — sustained sequential over a 200 GiB span: 7600p **298 MiB/s mean / 226 MiB/s
@@ -472,6 +549,50 @@ I happen to have."* What that changes:
   end-to-end LAN push measured **3.4 MB/s** — far below even its floor. If it does bind, the escape
   hatch already exists and is already named: **`slow-bulk`**, which is exactly how the Kingston SA400
   got there — demoted *after* measurement, never before.
+
+### ⚠ Amendment, 2026-09-24 (operator) — nx-01 takes `fast`, not `bulk`
+
+The ruling above sent nx-01's freed 7600p into `bulk` so `longhorn-scratch` would reach it
+unchanged. **That does not survive contact with nx-01's role fence**, and the operator ruled
+option 1 below the same day. `bulk` has **two readers with opposite intents**:
+
+| class | replicas | locality | selector | holds | wanted on nx-01? |
+|---|---|---|---|---|---|
+| `longhorn-scratch` | 1 | `best-effort` | `bulk` | throwaway ride scratch | **yes** |
+| `longhorn-bulk` | 2 | `disabled` | `bulk` | the registry mirrors (~537 G), FU-280's store | **no** |
+
+Longhorn's `diskSelector` is **inclusive-AND with no negation**, so one tag cannot express both:
+tagging nx-01's disk `bulk` buys ride scratch *and silently makes the RIDE/ARC box a service
+replica host* — against its own declared fence (*"ride-local scratch only, never `std` or a
+service"*, `machines.yaml` and §Requirements' nx row).
+
+**The resolution coins nothing: nx-01's 7600p is tagged `fast`.** `longhorn-fast` already
+exists (replica-1, `strict-local`), has been **homeless since the Optane pair left with thinkcentre
+on 2026-09-12** (FU-234), and FU-159's operator ruling already scopes it to precisely this —
+*"SCRATCH for disk-write-heavy pods (CI builds and the like) … NEVER load-bearing data/metadata"*.
+So the ruling's substance holds — **no new tier, no coined name** — and only its mechanism changed.
+What it buys:
+
+- nx-01 gets **local** ride scratch. It is the fleet's biggest ride box (40 threads, 64 GB) and has
+  been taking its scratch over the network, because `longhorn-scratch` selects `bulk` and
+  `best-effort` locality cannot help a node outside the tier.
+- **nx-01 stays service-free by construction**, not by promise — the tag *is* the fence.
+- The `fast` tier stops being homeless, so a `longhorn-fast` PVC stops hanging Pending (half of
+  FU-234).
+- The chassis-sharing question stays parked correctly: the only class reaching nx-01 is
+  **replica-1**, and zone anti-affinity is meaningless for a single replica, so the deferred
+  collapse of the nx zone names (operator, 2026-09-23) keeps its original trigger — a *replicated*
+  volume landing on either node.
+
+**What stays open** is the still-unresolved half of step 4: `longhorn-scratch` (best-effort,
+`bulk`) and `longhorn-fast` (strict-local, `fast`) are **one replica-1 scratch class too many**, and
+keeping both is how a consumer picks the wrong one. Retiring one is a separate change — it wants a
+consumer migration, not a tag.
+
+**`bulk` still gains hp-01's SN530** (always-on, untainted), which is the capacity half and is
+unaffected by any of this. FU-280's store sits on `longhorn-bulk` across `mx500`/`intel0`/`intel1`/
+`sn530` — **4 disks on 3 nodes**, better anti-affinity than today's 3 on 2, and it never needed
+nx-01.
 
 **Also true and not a tier decision:** `bulk`-tagged disks today carry garage-0 and garage-2's
 data+meta volumes, which are `longhorn-local-xfs` — **selector-less**, so they landed there only
@@ -610,7 +731,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
 | **a Garage zone node's envelope** (the register had no row; measured 2026-09-10, garage.md §Target architecture) | ≥ 4 threads at desktop-class clocks (the chain is serial: clock and IPC over core count — m70s's 2C/4T @ 4.0 GHz returns a PUT in 0.68 s, the 4-core 3.4 GHz Ivy Bridge 0.66 s, the 2C ULV X240 1.99 s); **≈ 2 cores free at peak** for Garage (0.8) + the Longhorn engine (up to 1.1) + kernel; **16 GB** so the compacted LMDB (5–6 GB, up to 24 GB before rotation) sits in page cache (X240 at 8 GB: 200–1,800 major faults/s; m70s at 16 GB: 50); DRAM NVMe; **no rides on the node** | both stall episodes (09-08 SA400 windows, 09-10 08:25Z release on wk-metal-01: node 9 % idle, every endpoint p99 28–100 s, quorum races lost) were a ride sharing the zone node; the X240 zone paces GC, resync and PutObject for the whole cluster (mean 1.99 s vs 0.66 s) | need | FU-137 (the garage-2 move), the fleet-role assignment, now durable in `ROADMAP.md` §Hardware strategy: SFFs = std + Garage zones, laptops = control planes |
 | **a RIDE/ARC box** — the "gaming PC" of the fleet-role assignment | desktop-class, tainted, own SSD carrying **no Longhorn replica**, **VT-x** (kata) and **AVX2** (Bun/opencode rides exclude `wk-metal-04` and `m70s` today). Sizing is **extrapolated, not measured**: an ARC runner requests ~2.5 Gi (FU-218) and a kata ride ~5 Gi ([`spikes/ride-latency-breakdown.md`](spikes/ride-latency-breakdown.md)), so ~32 GB would hold ~6 concurrent with headroom, and ≥ 6 fast cores follows the register's "per-core speed sets finish time" (pytest is serial; the IDP Maven/Spring suites are per-core-bound) — **the first IDP CI job's CPU-seconds and peak RSS are what would size this properly** | live labels 2026-09-12: ARC hosts **5**, kata-capable **2**; promoting `wk-metal-02`/`-03` to control planes takes those to **3** and **1**, and to **1** and **0** if this register's own zone-node row (no rides on a Garage zone node) is honoured — `wk-metal-01`/`-04` are two of the three zones, so that row is *already* violated today. ⚠ Cheaper lever first, from the same 2026-09-09 sitting: cilium-agent Burstable (~1.3 cores/node of request tax) before any purchase | **want** — becomes a **need** the day the promotion lands (this register's classes: need = a failure has already happened) | ROADMAP §Hardware strategy; FU-218, FU-235, FU-093 |
-| **`nx-01` and `nx-02` are ONE failure domain, not two** | they are the two nodes of a single NX-6035-G5 2U twin: shared backplane, shared 1+1 PSUs. Both carry `topology.kubernetes.io/zone` labels of their own (`nx-01`, `nx-02`) because they are separate machines for scheduling, and both are declared storage-free, so nothing is misplaced today. ~~**The rule: before any Longhorn replica or Garage zone is placed on either, collapse the two to ONE zone name**~~ — **DEFERRED by operator ruling 2026-09-23.** The two nodes ARE two physically separate machines (separate boards, CPUs, RAM) and the operator wants the scheduler to keep seeing them that way: **for some services two replicas inside the chassis may be an acceptable trade, and that is a per-service call to make when it comes up, not a blanket rule to pre-empt.** Until then the fence is **ROLE, not zone name**: `nx-01` is pure metal ephemeral ARC/kata and nothing important lands on it — ride-local scratch only, never `std` or a service. ⚠ What the deferral does NOT cover, and must be checked before the first Longhorn disk lands on either node: **a selector-less StorageClass can place a replica on any disk regardless of intent** (`longhorn-local-xfs` is selector-less by design, and a volume already landed on the wrong disk on m70s for exactly that reason — §2026-09-21). Role separation is an intent; a diskSelector is a mechanism. The rename cost still scales with what is on the disk: throwaway scratch costs nothing, a registry replica costs a rebuild from its peer | found in review of the wk-04 onboarding, 2026-09-15; deferred 2026-09-23; the chassis facts are the private hardware register's `docs/nx-6035-g5.md` | **deferred** — decide per service at placement time | `machines/machines.yaml` (both rows carry the note) |
+| **`nx-01` and `nx-02` are ONE failure domain, not two** | they are the two nodes of a single NX-6035-G5 2U twin: shared backplane, shared 1+1 PSUs. Both carry `topology.kubernetes.io/zone` labels of their own (`nx-01`, `nx-02`) because they are separate machines for scheduling, and both are declared storage-free, so nothing is misplaced today. ~~**The rule: before any Longhorn replica or Garage zone is placed on either, collapse the two to ONE zone name**~~ — **DEFERRED by operator ruling 2026-09-23.** The two nodes ARE two physically separate machines (separate boards, CPUs, RAM) and the operator wants the scheduler to keep seeing them that way: **for some services two replicas inside the chassis may be an acceptable trade, and that is a per-service call to make when it comes up, not a blanket rule to pre-empt.** Until then the fence is **ROLE, not zone name**: `nx-01` is pure metal ephemeral ARC/kata and nothing important lands on it — ride-local scratch only, never `std` or a service. ⚠ What the deferral does NOT cover, and must be checked before the first Longhorn disk lands on either node: **a selector-less StorageClass can place a replica on any disk regardless of intent** (`longhorn-local-xfs` is selector-less by design; nothing has ever been misplaced, but the hazard was fenced by hand twice — §the selector-less audit, 2026-09-24). Role separation is an intent; a diskSelector is a mechanism. The rename cost still scales with what is on the disk: throwaway scratch costs nothing, a registry replica costs a rebuild from its peer | found in review of the wk-04 onboarding, 2026-09-15; deferred 2026-09-23; the chassis facts are the private hardware register's `docs/nx-6035-g5.md` | **deferred** — decide per service at placement time | `machines/machines.yaml` (both rows carry the note) |
 | **storage spread equally — no box holds more than one zone's share** | a placement rule, not a purchase: Garage places by capacity and Longhorn by free space, so the fattest box becomes the centre of gravity unless the tier is spread | operator direction 2026-09-09 (the fleet-role sitting); the 2026-09-01 collision and the garage-1-on-the-shared-Micron rotation are both this shape | **need** | ROADMAP §Hardware strategy |
 | **`fast` big enough to be the scratch tier** (Optane, replica-1) | **the tier has NO disk since 2026-09-12** — the Optane pair left with thinkcentre and is queued for wk-metal-04 (FU-234), where 26.7 G still fits only ONE 20Gi ride; ≥ 60 G (two rides + headroom) would let the platform repos' scratch leave `bulk` | FU-159 ruling: `fast` = scratch for disk-write-heavy pods, never load-bearing data; it was unused at 1.4 G because nothing fits, which is what made retiring its host node safe | want | FU-234, FU-159 |
 

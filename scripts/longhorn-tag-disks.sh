@@ -11,12 +11,17 @@
 #          not take NEW replicas. The DEFAULT class is fenced to std via
 #          persistence.defaultDiskSelector, so the scheduler can't drop platform replicas onto the
 #          huge/wipe-prone bulk disks.
-#   bulk — wk-metal-01's 500G MX500 + wk-metal-04's 500G SATA, registered here explicitly
+#   bulk — wk-metal-01's 500G MX500 + wk-metal-04's two 7600p + **hp-01's SN530 (2026-09-24,
+#          the tier's first ALWAYS-ON member)**, registered here explicitly
 #          (bulk-ONLY, generously reserved for the container/kata image store they share the
 #          partition with). wk-02 left this tier on 2026-08-07 — see the note below.
-#   fast — the ThinkCentre Optane pair (longhorn-register-optane.sh, untouched here). ⚠ HOMELESS
-#          since 2026-09-12: the pair left with thinkcentre and has not landed on wk-metal-04 yet,
-#          so the tier has no backing disk and a longhorn-fast PVC stays Pending (FU-234).
+#   fast — **nx-01's Intel 7600p since 2026-09-24** (registered below), which ends the HOMELESS
+#          stretch that began 2026-09-12 when the Optane pair left with thinkcentre and every
+#          longhorn-fast PVC went Pending (FU-234). The Optane pair is still unhomed and still
+#          belongs to longhorn-register-optane.sh, untouched here.
+#          ⚠ `fast` is now also a FENCE, not just a tier: it is the only tag nx-01 carries, and
+#          that is what keeps the replica-2 classes (`longhorn-bulk`) off the RIDE/ARC box while
+#          replica-1 ride scratch still lands locally. Do not add `bulk` to an nx-01 disk.
 #
 # hp-01 carries a SECOND std disk since 2026-08-25 (`hg5d`, a 128G Toshiba HG5d) — this node was
 # the ledger's "the one place where the honest answer is buy a disk" (104% of allocatable, under
@@ -262,6 +267,48 @@ kubectl -n longhorn-system patch nodes.longhorn.io m70s --type=merge -p '{
   }
 }' >/dev/null
 echo "  m70s/nvme registered (untagged, 100Gi reserved)"
+fi
+
+# hp-01's FOURTH disk — the WD SN530 NVMe (2026-09-24), registered **bulk**, not std. It is the
+# capacity that takes `bulk` off 91.5% committed (docs/storage-ledger.md §the operator ruling of
+# 2026-09-24) and makes room for FU-280's first-party registry store. It also gives `bulk` its
+# FIRST always-on member — ADR-089 recorded the tier as having none, only tainted wipe-on-PXE
+# laptops. storageReserved 0 like hg5d/intel7600p: Longhorn data only, no Talos, no image store.
+# Talos mounts it at /var/lib/longhorn/sn530 from machines.yaml's `longhorn_disks`.
+# Skip when already registered: re-patching mid disk-sync trips the longhorn validator.
+if kubectl -n longhorn-system get nodes.longhorn.io hp-01 -o jsonpath='{.spec.disks.sn530.path}' 2>/dev/null | grep -q .; then
+  echo "  hp-01/sn530 already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io hp-01 --type=merge -p '{
+    "spec": {
+      "disks": {
+        "sn530": {"path":"/var/lib/longhorn/sn530","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":["bulk"],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  hp-01/sn530 registered (bulk)"
+fi
+
+# nx-01's freed Intel 7600p (2026-09-24), registered **fast** — the tier's first backing disk since
+# the Optane pair left with thinkcentre on 2026-09-12 (FU-234), so `longhorn-fast` stops being a
+# class whose PVCs hang Pending. `fast` and NOT `bulk` is the whole point: `bulk` is read by
+# `longhorn-bulk` (replica-2 — the registry mirrors, FU-280's store) as well as by
+# `longhorn-scratch`, and nx-01's role fence is "ride-local scratch only, never a service"
+# (machines.yaml, the ⚠ block on this node). A diskSelector is inclusive-AND with no negation, so
+# the tag IS the fence. FU-159 already scopes `fast` to exactly this use.
+# storageReserved 0: this disk carries Longhorn scratch only — EPHEMERAL (Talos /var + the
+# containerd image store + ride scratch) lives on the BC711, pinned by serial.
+if kubectl -n longhorn-system get nodes.longhorn.io nx-01 -o jsonpath='{.spec.disks.intel7600p.path}' 2>/dev/null | grep -q .; then
+  echo "  nx-01/intel7600p already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io nx-01 --type=merge -p '{
+    "spec": {
+      "disks": {
+        "intel7600p": {"path":"/var/lib/longhorn/intel7600p","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":["fast"],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  nx-01/intel7600p registered (fast)"
 fi
 
 echo "disk status:"

@@ -38,7 +38,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s control plane (ADR-133 — one CP per chassis, laptop battery = a UPS for etcd) |
 | `wk-metal-03` (ThinkPad X260, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
 | `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
-| `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn |
+| `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — Longhorn SCRATCH only (`fast`) |
 | `nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin) | 192.168.2.59 | Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04` |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | `ci-runner-02` (VM on nx-02) | 192.168.2.66 | GitHub Actions runner VM — the second, on the other hypervisor (FU-266) |
