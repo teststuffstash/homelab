@@ -623,13 +623,27 @@ machines:
     # laptops fit either one microVM or one runner, which is why tofu/talos.tf declines to label
     # them. This box IS the storage-ledger's "RIDE/ARC box" row, so it carries both (FU-218 (a)).
     arc: true            # join the ARC runner pool (homelab.io/ephemeral LABEL, not the taint)
-    # EPHEMERAL (containerd image store + ride scratch) goes on the NVMe, NOT the system disk.
+    # EPHEMERAL (containerd image store + ride scratch) goes on an NVMe, NOT the system disk.
     # Boot stays on the SATA bay drive above: these boards boot LEGACY and a passive M.2 adapter
     # has no option ROM, so an NVMe cannot be a boot device — but it can carry EPHEMERAL, which is
-    # where ride-host pressure actually lands. Matched by TRANSPORT, not serial, so it survives
-    # whichever of the two 256 GB NVMe units is fitted (same lesson as the answer-file's
-    # ID_SERIAL_SHORT match: never pin to a device name that can shift).
-    ephemeral_disk_selector: disk.transport == "nvme"
+    # where ride-host pressure actually lands.
+    # ⚠ PINNED BY SERIAL since 2026-09-24, and the transport match it replaces is now WRONG:
+    # `disk.transport == "nvme"` was unambiguous only while ONE NVMe was fitted at a time (that is
+    # what its "survives whichever unit is fitted" rationale assumed). The BC711 joined the 7600p
+    # in x8 SLOT2, so the box holds TWO, the expression matches BOTH, and Talos would pick either
+    # when re-provisioning — the /dev/sdX-with-two-identical-disks trap in a CEL costume.
+    # The BC711 is the deliberate target: EPHEMERAL is the image store + ride scratch, and it is
+    # the only fleet drive measured with a concurrency tail (p99.9 6.4 ms vs 133–692 ms for the
+    # other three — hardware register, 2026-09-23 A/B), which is the right character for a box
+    # running many rides at once. It also frees the 7600p as a raw device.
+    # TRADE-OFF, eyes open: a serial pin does NOT survive replacing the drive — swap the BC711 and
+    # EPHEMERAL will not provision until this line is edited. That is accepted because with two
+    # same-size NVMe in one box NO selector is both unambiguous and replacement-proof, and the
+    # register should know which drive sits where regardless.
+    # ⚠ INSTALL-TIME: binds only to an UNPROVISIONED EPHEMERAL, so changing this needs
+    # `talosctl reset --system-labels-to-wipe EPHEMERAL` (safe here — nx-01 is cattle: no Longhorn
+    # replica, no data by role, /var is images + scratch and rebuilds itself).
+    ephemeral_disk_selector: disk.serial == "CYA5N060310805K39"
     notes: Nutanix NX-6035-G5 node 1; the fleet's RIDE/ARC box (storage-ledger §a RIDE/ARC box); BMC 192.168.2.123; onboarded 2026-09-15, converted from compute-only 2026-09-15.
 
   - name: nx-02
