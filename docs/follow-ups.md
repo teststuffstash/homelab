@@ -224,23 +224,16 @@ six OVERSIZE items pointer-ized into
       The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
       **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
       Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
-- [ ] **FU-280** — **Should the first-party registry move off the Garage S3 backend? POINTER.**
-      An S3 blob commit holds the layer TWICE (upload, then a server-side COPY into blobs/) — the
-      proximate cause of both commit-refusal outages (09-09, 09-22). A filesystem/PVC backend
-      renames on commit, so the double-hold cannot exist; ADR-121's rejection of the PVC rests on a
-      capacity clause that no longer binds and a misapplied principle (operator, 2026-09-22).
-      **UNBLOCKED 2026-09-24:** the tier is `bulk` (operator) and it is no longer 90% committed —
-      both SN530s joined it. **The premise also changed:** the 2× peak costs ZERO disk (measured —
-      a Garage COPY shares blocks), so the case is CONTENTION, not capacity. Phase 0 measured it:
-      other tenants' p99 median 9.5× worse while the registry pushes, and the Garage PDB closed
-      90.6% vs 41.4% — no zone node drainable during a release. **Phase 1 is LIVE**: a 150 Gi
-      `longhorn-bulk` claim, verified on the two SN530s alone (ns `registry-fs-trial`).
-      Evidence, the experiment, the naming trap and a cheaper side-question first:
-      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
-      **Corpus copied in 2026-09-24** (21 GB, ~70 MiB/s, digests match; the SN530s at ≤12% util,
-      so the cap was the 1 GbE path and `slow-bulk` is not needed). **Next:** make the trial reachable
-      from the CI runner (it is ClusterIP-only; a temporary VIP vs phase 2, per the spike doc), then read
-      the headline during a REAL oracle release. Relates FU-203, FU-274, FU-279, FU-137.
+- [ ] **FU-280** — **The first-party registry left Garage S3 — soak, then remove the S3 half. POINTER.**
+      CUT OVER 2026-09-24 14:50Z (operator: "just roll it out"; ADR-121 amended): `registry.teststuff.net`
+      is served by `registry-fs` on the 150Gi `registry-data` volume (#1961, #1962), verified via VIP and
+      HTTPS. The S3 Deployment runs UNROUTED as the rollback (selector flip). **Next, in order:** (1) the
+      first real oracle release lands on the volume: re-run phase 0's queries across it (the headline:
+      other tenants' p99 at idle); (2) a daily GC that PROCEEDS for real; (3) then remove the S3
+      Deployment, the Garage bucket + `RegistryBucketCommitHeadroomLow` (+ FU-279's debris goes with it).
+      ⚠ OPERATOR: replicas are on the two SN530s by scheduler preference only (the size was never a
+      selector; the first bind went to mx500 + intel0). Pinning them needs a disk tag, against the
+      "tags only exclude" ruling. [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**

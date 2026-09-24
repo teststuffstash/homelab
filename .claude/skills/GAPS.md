@@ -258,6 +258,8 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       already open with a node down. Next: give `up` a hypervisor start path (the node's
       `hypervisor` + `vm_id` are both in `var.nodes`) so the verb pair is symmetric for VMs as it
       is for metal.
+      RESIGHT 2026-09-24 (seat, registry cutover): a FOURTH copy, this time written as a bash script
+      file with a failed-read counter (it held, and stayed silent across a clean window). Still no verb.
 - [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
       acceptance for any detector-first item (the standing build order: detector, let it fire on
       the real condition, then the fix) is to make the new alert fire on purpose — but `check`

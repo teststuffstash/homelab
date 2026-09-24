@@ -10979,3 +10979,21 @@ slowest replica. The Job was deleted after verification. Finding that re-orders 
 is ClusterIP-only and the release pushes from a CI runner VM, so a real-release reading needs a
 temporary VIP or phase 2 first. Written into the spike doc plus a bulk-tier re-read
 (SERVICES.md, ledger), #1960.
+
+## 2026-09-24 afternoon — registry2 (FU-280): cut over, operator "just roll it out"
+
+The operator skipped the VIP-vs-phase-2 choice and ordered the rollout. The name needs no change:
+the backend sits behind the `registry` Service's selector. #1961 stood up `registry-fs`
+(same nginx front, 150Gi `registry-data`, `RegistryVolumeAlmostFull` + fixture) and removed the
+trial. **The size-as-selector premise was false:** the first bind landed on mx500 + intel0 while
+the trial still held the SN530s. New-replica eligibility is 200 % over-provisioning, not
+`available − size`. Deleting the trial ns, then the empty claim, re-landed it on both SN530s:
+preference, not constraint. That is recorded in the ledger, and the tag question goes to the
+operator. The corpus copy through the authenticated front took 136 s + 141 s, with digests and
+full layer lengths verified. A busybox finding went into the new GC guard before merge: `find`
+exits 0 on a missing path. #1962 flipped the selector at 14:50:25Z inside window
+seat-1790260664-8577 (check clean on every probe; watch silent). Verified via the VIP and
+`https://registry.teststuff.net`: tags, digests, a ranged mid-layer read, anonymous POST → 401.
+No S3 push in the gap, so no delta copy. The manual GC run landed on wk-04 and DEFERRED on the
+fresh copy; the dry run on the volume marked 6 blobs with 0 eligible. The S3 Deployment stays up
+unrouted as the rollback.
