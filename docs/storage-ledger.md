@@ -402,7 +402,9 @@ No ADR amendment is needed.
    A volume already landed on the wrong disk on m70s for exactly this reason (§2026-09-21). Settle
    it **before** any Longhorn disk exists on `nx-01`, not after — the ledger's nx deferral names
    this as the one thing role-separation does not cover.
-2. **Decide the tag, and prefer not to coin one.** `longhorn-fast` already exists as replica-1
+2. ~~**Decide the tag, and prefer not to coin one.**~~ **SUPERSEDED by the operator ruling below —
+   no tag is coined at all.** Kept for the reasoning, which still holds if a tag is ever needed:
+   `longhorn-fast` already exists as replica-1
    **`strict-local`**, and FU-159's ruling already scopes it to "SCRATCH for disk-write-heavy pods
    (CI builds and the like) … NEVER load-bearing data/metadata" — the semantics we want, already
    declared. A new name would need a [glossary](glossary.md) row in its coining commit (FU-163);
@@ -411,13 +413,15 @@ No ADR amendment is needed.
    Longhorn disk — `machines.yaml` `longhorn_disks` + `scripts/longhorn-tag-disks.sh`. The drive is
    free because EPHEMERAL moved to the BC711 on 2026-09-24 (see the nx-01 row in `machines.yaml`),
    and it is the fleet's best measured all-rounder (§the 7600p row in the drive table).
-4. **Repoint ride scratch off `bulk`**, and decide **which of the two replica-1 scratch classes
-   survives** — `longhorn-scratch` (best-effort, selector `bulk`) and `longhorn-fast`
-   (strict-local, selector `fast`) are one class too many, and keeping both is how a consumer picks
-   the wrong one.
-5. **Give one `wk-metal-04` disk the same tag**, so its rides get local scratch too. It already has
-   the right shape otherwise: the SA400 carries Talos + the image store while the 7600p pair carries
-   Longhorn — images and replicas on separate spindles.
+4. ~~**Repoint ride scratch off `bulk`**~~ — **SUPERSEDED: `longhorn-scratch` keeps selecting
+   `bulk` unchanged** (operator ruling below). What survives of this step is the second half, and it
+   is still open: **decide which of the two replica-1 scratch classes survives** — `longhorn-scratch`
+   (best-effort, selector `bulk`) and `longhorn-fast` (strict-local, selector `fast`) are one class
+   too many, and keeping both is how a consumer picks the wrong one.
+5. ~~**Give one `wk-metal-04` disk the same tag**~~ — **SUPERSEDED: there is no "same tag"**
+   (operator ruling below); wk-metal-04's `intel0`/`intel1` are already `bulk`, so its rides already
+   get local scratch. The shape note stands as the fleet rule, not a step: the SA400 carries Talos +
+   the image store while the 7600p pair carries Longhorn — images and replicas on separate spindles.
 6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
    the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
 
@@ -430,9 +434,21 @@ I happen to have."* What that changes:
 - **`registry2` is a `bulk` workload, not a new tier.** The spike already says bulk's definition
   ("rebuildable, degradation on wipe acceptable") *matches this store's profile exactly*, and the
   store needs ≥2 replicas because replica-1 was ruled out on availability grounds (rebuilding it
-  needs ghcr, the thing ADR-121 exists to be independent of). `longhorn-bulk` is replica-2. The only
-  objection the spike raised was **capacity**, and the two WD SN530s fitted 2026-09-24 (hp-01 x16,
-  nx-02 x8) ARE that capacity.
+  needs ghcr, the thing ADR-121 exists to be independent of). `longhorn-bulk` is replica-2. The
+  spike raised **two** objections against `bulk`, and both are answered — the first by hardware, the
+  second below:
+  - **capacity** — the two WD SN530s fitted 2026-09-24 (hp-01 x16, nx-02 x8) ARE that capacity.
+  - **"wipe-on-PXE laptops"** — a PXE reinstall wipes a metal node's disks, and this plan puts bulk
+    disks on two *more* PXE nodes (hp-01, nx-01). It is answered by replica-2 plus node count, not
+    waved away: a single wipe costs one replica and Longhorn rebuilds from the other, which is what
+    the second replica is *for*. The failure that would actually lose the store is both replicas
+    gone — i.e. `replica-soft-anti-affinity=true` having silently CO-LOCATED them, the same trap
+    §"the std tier has no third zone" names. **Consolidation makes that strictly less likely, not
+    more**: `bulk` today is 3 disks on **2** nodes (wk-metal-01, wk-metal-04) — the very shape the
+    ledger flags as dangerous for `std` — and becomes 5 disks on **4** (+ hp-01, + nx-01). The
+    standing discipline is the one the 2026-09-24 hp-01 window already used: raise
+    `replica-replenishment-wait-interval` (600 s today) above the window length before wiping a
+    node that holds replicas, and check for co-location afterwards (runbook recipe).
 - **Consolidating fixes the over-commitment outright.** Adding both SN530s takes `bulk` from
   **1009 G allocatable / 923 G committed (91.5 %, `intel0` at 105 % of its own size)** to
   **1521 G / 923 G = 61 %**. No tier needed to get that.
