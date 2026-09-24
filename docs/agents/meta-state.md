@@ -43,6 +43,9 @@ never the session's arc — that is TICK-LOG's.)
   install-impact line do what the linked issue asked, given what the fleet and the box already run
   (a version skipping the canary type, a config that needs a reboot under `no_reboot`, a CP change
   while the CP toggle is off)? Intent and plan disagreeing is BLOCKING even when every check is green."*
+  (1b) Same file, a second operator-direct fix: `.agents/review.md` ~L92 still frames ADR-128's narrowed gate as
+  "the trial week (2026-09-11 → 09-18)"; FU-233 ruled it standing. A live reviewer brief with a lapsed range can
+  mislead the reviewer. Its path list also omits `/scripts/` + `/nixos/`, which are in CODEOWNERS.
   (2) claude-jail `6f90815` (`DEVBOX_USE_VERSION=0.18.3`, FU-240) is still unpushed in `/workspace`.
   It needs your push + a jail rebuild, and the host profile wants the same export.
   (3) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
