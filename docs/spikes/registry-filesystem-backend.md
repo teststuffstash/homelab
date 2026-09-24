@@ -154,8 +154,23 @@ load-bearing one.
 
 | series | pushing (median) | idle (median) | |
 |---|---|---|---|
-| `block_resync_queue_length` | **2 106** | 60 | **35×** — and `GarageResyncBacklog`'s own "not draining" threshold is **1 000**, so a routine push puts the store past it |
+| `block_resync_queue_length` | **2 106** | 60 | **35×**. The idle figure independently reproduces the **median 58** that [`prometheusrule.yaml`](../../argocd/resources/garage-alerts/prometheusrule.yaml) records for the 7 days to 2026-09-22; **2 106 sits in that same file's p95 band (2.6 k)**. A routine push moves the fleet's resync backlog from its median to its 95th percentile. |
 | `table_gc_todo_queue_length` | 115 107 | 80 151 | +44 % |
+
+**That backlog has a measured operational consequence.** `garage:disruption_allowed` — the recording
+rule that drives the `garage` PodDisruptionBudget, and therefore every `node-maintenance` drain of a
+zone node — requires `max(block_resync_queue_length) <= 1000` among its three clauses. Split the
+same way (smaller n: the rule only exists since the PDB shipped, 2026-09-22):
+
+| | n | gate OPEN | gate CLOSED |
+|---|---|---|---|
+| registry **pushing** | 53 | 9.4 % | **90.6 %** |
+| registry **idle** | 326 | 58.6 % | 41.4 % |
+
+**While the registry is pushing, no Garage zone node can be drained** — the maintenance verbs refuse
+and the reconciler retries. `GarageDisruptionBlocked` fires if that persists 2 h, and the same file
+records the longest closed stretch in its own 7-day baseline as 82 min. So the registry's bursts do
+not only cost the other tenants latency; they close the fleet's maintenance window on three nodes.
 
 **Threat to validity, stated:** this is observational, not an A/B — "pushing" is inferred from
 multipart traffic and the causal claim rests on the second table's control rather than on an
