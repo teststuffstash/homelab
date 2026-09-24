@@ -1408,25 +1408,18 @@ the block needs pruning, not more headings.
       `ALERTS{…,node="wk-03"} firing`; it also caught the 5-min idle prune (#1951) and FU-287. **Next (install-time, the console half):** nx-01's BMC SOL is
       `ttyS1` and the metal image ships `console=tty0` only — a panic capture needs
       `console=ttyS1,115200` in the image-factory `extraKernelArgs`. Relates FU-155 (kmsg tenancy).
-- [ ] **FU-234** — **The `fast` (Optane) tier has no backing disk since 2026-09-12.** Both Intel
-      Optane M10 16G cards left with `thinkcentre` when it retired from cluster duty, so a
-      `longhorn-fast` PVC stays Pending — safe only because the tier had ZERO consumers
-      (FU-159's scratch-only ruling). The StorageClass stays declared: deleting it would orphan
-      the AgentStack XRD's `fast` quota key. **Next (operator, physical):** fit both cards in
-      wk-metal-04's free chipset root ports (`00:1c.0`/`00:1c.1`), add the `longhorn_disks` rows
-      to its `machines/machines.yaml` entry + apply, then
-      `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
-      shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
-      **WIDENED 2026-09-24 — the tier question is bigger than the Optanes.** `longhorn-scratch`
-      selects `bulk` (ADR-089 addendum), so ride scratch competes with the registry mirrors on a
-      tier at 91.5 % committed, and a ride on a node with no `bulk` disk (nx-01, wk-metal-03) gets
-      its scratch over the network. nx-01's Intel 7600p came free the same day (EPHEMERAL moved to
-      the BC711) and is the candidate backing disk. **Next, in order:** the selector-less audit
-      (BLOCKER — `longhorn-local-xfs`/`longhorn-static` can reach any disk), then reuse `fast`
-      rather than coin a `scratch` tag, then register the 7600p, then repoint scratch and retire
-      one of the two replica-1 classes.
-      Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier
-      and §the scratch class rides `bulk`.
+- [ ] **FU-234** — **Ride scratch and the `fast` tier: HOMED 2026-09-24, two loose ends left.**
+      `fast` had no backing disk from 2026-09-12 (the Optane pair left with `thinkcentre`) until
+      nx-01's freed Intel 7600p took the tag — chosen over `bulk` because `bulk` is also read by
+      `longhorn-bulk` (replica-2) and that would have made the RIDE/ARC box a service replica host
+      (operator, 2026-09-24). The selector-less audit this was blocked on is DONE and was never a
+      gate. **Open:** (1) `longhorn-scratch` (best-effort/`bulk`) and `longhorn-fast`
+      (strict-local/`fast`) are **one replica-1 class too many** — retiring one needs a consumer
+      migration, not a tag. (2) the Optane pair is still unhomed — fit both in wk-metal-04's free
+      chipset root ports (`00:1c.0`/`00:1c.1`), add the `longhorn_disks` rows + apply, then
+      `bash scripts/longhorn-register-optane.sh wk-metal-04`; ⚠ the x1 AIC form factor is off the
+      market, do not discard. Detail: [`docs/storage-ledger.md`](storage-ledger.md) §the scratch
+      class rides `bulk` (the plan, the audit, the 2026-09-24 amendment).
 - [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
       true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
       (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted

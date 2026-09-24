@@ -345,6 +345,17 @@ machines:
       # ⚠ Negotiates PCIe 2.0 x4 (5.0 GT/s) — this board's slot is PCIe 2.0 (dmidecode type 9), NOT
       # a drive fault; ~2GB/s, far above what small synchronous std writes ask for.
       - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a4111d, name: intel7600p, tags: [std] }
+      # WD PC SN530 256G (SDBPNPZ-256G-1006, serial 20367A805809), on a generic adapter in the free
+      # x16, fitted 2026-09-24. **BULK, not std** — it is the capacity that dissolves the tier's
+      # 91.5% over-commitment (docs/storage-ledger.md §the operator ruling of 2026-09-24) and makes
+      # room for the first-party registry's store (FU-280). It also gives `bulk` its FIRST
+      # always-on member: ADR-089 recorded that bulk had none, only tainted wipe-on-PXE laptops.
+      # Arrival read: 2% used, 4577h, 0 media errors, hmpre 51200/hmmaxd 8 = a 32 MiB HMB grant
+      # (DRAM-less, so its sustained-sequential floor is 8-68 MiB/s past the SLC cache against the
+      # 7600p's 226 - the shape risk FU-280 phase 1 measures, with `slow-bulk` as the escape hatch).
+      # 65,157 power cycles on 4,577h is an OEM laptop pull counting APST transitions, not wear.
+      # ⚠ It took nvme0n1 and pushed the 7600p to nvme1n1 — cosmetic only, both are pinned by-id.
+      - { device: /dev/disk/by-id/nvme-eui.e8238fa6bf530001001b448b49e85324, name: sn530, tags: [bulk] }
     notes: On the hp plug (a NOUS A1; entity ids were crossed with thinkcentre's 2026-08-18→09-09, fixed in the HA registry) — power measurable as sensor.plug_hp_power (~24 W idle); switch.tuyalocal_hp can cycle it, but AC-restore is flaky (confirmed 2026-09-09 — did not boot after a plug cycle) and WoL cannot follow an AC cut, so a plug cycle ends at the power button. Prefer WoL from a clean shutdown.
 
   - name: m70s
@@ -573,11 +584,14 @@ machines:
     kind: metal
     zone: nx-01        # ⚠ SAME 2U twin chassis as nx-02 (shared backplane + 1+1 PSUs), so these
                        # two zone labels are NOT the independent domains Longhorn/Garage
-                       # anti-affinity reads them as. Both nodes are declared storage-free, which
-                       # is what keeps it harmless; before any replica lands on either, collapse
-                       # the two to ONE zone name (docs/storage-ledger.md §Requirements).
+                       # anti-affinity reads them as. What keeps that harmless is that the ONLY
+                       # Longhorn class reaching this node is `longhorn-fast` — replica-1 and
+                       # strict-local — and zone anti-affinity is meaningless for a single replica.
+                       # The collapse-to-one-zone question is DEFERRED (operator 2026-09-23) and
+                       # its trigger is unchanged: a REPLICATED volume landing on either node
+                       # (docs/storage-ledger.md §Requirements).
     label: "`nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE)"
-    role: k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — no Longhorn
+    role: k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — Longhorn SCRATCH only (`fast`)
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
     cpu_cores: 40        # 2 sockets × 10C/20T — the largest node in the fleet
     memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
@@ -600,9 +614,21 @@ machines:
     # — the acoustic criterion turned out to be modulation, not RPM, and the fans do not cycle).
     # nx-02 has carried a control plane since 2026-09-20, so "the box might leave" is no longer a
     # live constraint on either node.
-    # It still carries NO Longhorn disk, now by ROLE rather than by trial (operator, 2026-09-23):
-    # this is the big kata/ARC box and rides are what a storm kills — data does not belong on it.
-    # SCRATCH disks for rides are in scope; Longhorn replicas and Garage zones are not.
+    # It carries exactly ONE Longhorn disk, and only SCRATCH, by ROLE rather than by trial
+    # (operator, 2026-09-23): this is the big kata/ARC box and rides are what a storm kills — data
+    # does not belong on it. SCRATCH disks for rides are in scope; Longhorn replicas and Garage
+    # zones are not, and the `fast` tag below is what MAKES that structural instead of a promise.
+    # ⚠ Why `fast` and not `bulk` (operator ruling, 2026-09-24). The one-bulk-tier ruling of the
+    # same day said nx-01's freed 7600p should join `bulk` so `longhorn-scratch` would reach it
+    # unchanged. That does not survive contact with the role fence: `bulk` is read by TWO classes —
+    # `longhorn-scratch` (replica-1, best-effort: throwaway, wanted here) and `longhorn-bulk`
+    # (replica-2: the registry mirrors and FU-280's store, emphatically NOT wanted here). Longhorn's
+    # diskSelector is inclusive-AND with no negation, so one tag cannot express both: tagging this
+    # disk `bulk` would buy ride scratch AND silently make this box a service replica host.
+    # `longhorn-fast` is the answer that coins NOTHING — it already exists (replica-1,
+    # strict-local), it has been HOMELESS since the Optane pair left with thinkcentre on 2026-09-12
+    # (FU-234), and FU-159's operator ruling already scopes it to exactly this: "SCRATCH for
+    # disk-write-heavy pods (CI builds and the like) … NEVER load-bearing data/metadata".
     # ⚠ The two nodes share a chassis but ARE two physically separate machines, and the operator
     # DEFERRED collapsing their zone names (2026-09-23): whether two replicas inside one chassis is
     # acceptable is a per-service call, not a blanket rule. The fence meanwhile is ROLE, not zone —
@@ -644,6 +670,18 @@ machines:
     # `talosctl reset --system-labels-to-wipe EPHEMERAL` (safe here — nx-01 is cattle: no Longhorn
     # replica, no data by role, /var is images + scratch and rebuilds itself).
     ephemeral_disk_selector: disk.serial == "CYA5N060310805K39"
+    longhorn_disks:
+      # Intel SSD Pro 7600p 256G (SSDPEKKF256G8L, serial BTHH82940HA4256B), x8 SLOT2. Freed
+      # 2026-09-24 when EPHEMERAL moved onto the BC711 by serial pin (above). Tagged `fast`, NOT
+      # `bulk` — the ⚠ block above is the whole argument. It is the fleet's best MEASURED
+      # all-rounder (QD1+fsync 2,348 IOPS / 0.43 ms, QD128 75,532, seq 1M QD4 298.5 MiB/s mean with
+      # a 226 MiB/s FLOOR and no SLC cliff — 2026-09-24, the raw-device protocol), which is the
+      # right character for ride scratch: disk-write-heavy, bursty, throwaway.
+      # What this fixes: `longhorn-scratch` selects `bulk`, and nx-01 has no `bulk` disk, so the
+      # fleet's BIGGEST ride box (40 threads, 64 GB) has been getting its ride scratch OVER THE
+      # NETWORK. Consumers move to `longhorn-fast` here; retiring one of the two replica-1 scratch
+      # classes is the still-open half of the ledger plan's step 4.
+      - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a41125, name: intel7600p, tags: [fast] }
     notes: Nutanix NX-6035-G5 node 1; the fleet's RIDE/ARC box (storage-ledger §a RIDE/ARC box); BMC 192.168.2.123; onboarded 2026-09-15, converted from compute-only 2026-09-15.
 
   - name: nx-02
