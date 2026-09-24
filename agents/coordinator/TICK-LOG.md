@@ -10967,3 +10967,15 @@ old script and registered nothing.
 **Also left behind:** `node-maintenance up` cannot start a VM — its `up` is WoL-then-wait, so after
 `down` stopped wk-04 the verb hung with the node off (started by hand with `qm start`); filed under
 the same GAPS entry as the missing `cp-down`.
+
+## 2026-09-24 afternoon — registry2 (FU-280) phase 1 step 3: the corpus copy
+
+A one-shot `skopeo copy --preserve-digests` Job on wk-01 (no replica there) copied both `ert-corpus`
+tags from the live registry into `registry-fs-trial`. Timing: 13:29:09Z → 13:33:53Z, 144 s + 140 s
+for 2 × 10.51 GB, digests identical, and skopeo streamed without buffering (`/tmp` stayed at 1 MB,
+so the pve thin pool (49 %) was never at risk). Over the window the SN530 replicas wrote ~71 MiB/s at
+12 % (hp-01) and 7 % (wk-04) util, and every hop received ~78 MiB/s, so the cap was 1 GbE, not the
+slowest replica. The Job was deleted after verification. Finding that re-orders the plan: the trial
+is ClusterIP-only and the release pushes from a CI runner VM, so a real-release reading needs a
+temporary VIP or phase 2 first. Written into the spike doc plus a bulk-tier re-read
+(SERVICES.md, ledger), #1960.

@@ -237,9 +237,10 @@ six OVERSIZE items pointer-ized into
       `longhorn-bulk` claim, verified on the two SN530s alone (ns `registry-fs-trial`).
       Evidence, the experiment, the naming trap and a cheaper side-question first:
       [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
-      **Next:** `skopeo copy` the real corpus in (mechanics + does replica-2 bind on the SN530's
-      8–68 MiB/s floor — `slow-bulk` is the escape hatch), then read the headline number during a
-      REAL oracle release. Relates FU-203, FU-274, FU-279, FU-137.
+      **Corpus copied in 2026-09-24** (21 GB, ~70 MiB/s, digests match; the SN530s at ≤12% util,
+      so the cap was the 1 GbE path and `slow-bulk` is not needed). **Next:** make the trial reachable
+      from the CI runner (it is ClusterIP-only; a temporary VIP vs phase 2, per the spike doc), then read
+      the headline during a REAL oracle release. Relates FU-203, FU-274, FU-279, FU-137.
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
