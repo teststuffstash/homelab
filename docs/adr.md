@@ -1913,6 +1913,14 @@ weekly delta cadence un-suspends — **FU-203** (tag-aware prune; the policy a p
 could never express). Push cred: Infisical `REGISTRY_PUSH_{HTPASSWD,TOKEN}`; the Actions repo
 secret is an operator console step (secrets.md §Minting doctrine item 2). FU-196 tracks the
 consumer cutover.
+**Amended 2026-09-24 (operator, FU-280): the backend is a filesystem volume, not Garage S3.**
+The "Longhorn PVC" rejection above rested on `bulk` at 88% committed and on "corpus is data → S3".
+The first no longer binds (two SN530s joined `bulk`); the second misread what the principle
+protects. What decided it was measured contention: during a push, Garage's other tenants saw a
+9.5× p99 and the PDB was closed 90.6% of the time. The 2× commit peak turned out to cost no disk.
+Now: `registry-fs` + 150Gi `registry-data` behind the unchanged Service/VIP/hostname. The S3
+Deployment + bucket stay until the soak ends, as the rollback (a selector flip).
+[`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
 
 ### ADR-122 — Issue authoring is dumb, the container disposes: filing is inert, a tree member has a disposition, the walk retires (2026-09-03)
 

@@ -829,49 +829,45 @@ incident detail are TICK-LOG's.
 
 ## Registry (first-party, push-mode) — prune + garbage-collect
 
-The `registry.teststuff.net` registry (ns `registry`, `registry:3` on the Garage bucket `registry`,
-ADR-121) has a 32Gi bucket cap and **no automatic retention** (FU-203). Ownership is the ADR-085
-split: the stack's IaC decides the keep-set (oracle-iac#664 — the pinned digest + the newest date
-tag + the previous pin) and untags/deletes what it no longer wants with its push credential
-(`DELETE /v2/<repo>/manifests/<digest>` — `REGISTRY_STORAGE_DELETE_ENABLED=true`); homelab runs the
-collector, which is the only step that needs the `registry` namespace. The standing collector is the `registry-garbage-collect` CronJob (**daily 03:00 UTC** since 2026-09-22 — 30 min after the stack's 02:30Z untag; see `argocd/resources/registry/registry-gc-cronjob.yaml`); the recipe below is the ad-hoc path if needed between runs.
+The `registry.teststuff.net` registry (ns `registry`, ADR-121) is `registry:3` on a **filesystem
+volume** since FU-280's rollout (2026-09-24): Deployment `registry-fs`, claim `registry-data`
+(150Gi `longhorn-bulk`), behind the unchanged `registry` LB Service
+(`argocd/resources/registry/registry-fs.yaml`). The S3 Deployment `registry` stays up UNROUTED as
+the rollback until the soak ends. **Rollback = set the `registry` Service's selector back to
+`app: registry` in `registry.yaml`.** Pushes made since the flip exist only on the volume.
+Retention ownership is the ADR-085 split: the stack's IaC decides the keep-set (oracle-iac#664:
+the pinned digest + the newest date tag + the previous pin) and untags/deletes what it no longer
+wants with its push credential (`DELETE /v2/<repo>/manifests/<digest>`). homelab runs the
+collector, the `registry-garbage-collect` CronJob (**daily 03:00 UTC**, 30 min after the stack's
+02:30Z untag; it defers while anything under the tree was written in the last 30 min, see
+`registry-gc-cronjob.yaml`). The recipe below is the ad-hoc path between runs.
 
-**Symptom of a full bucket:** the pusher sees an opaque **500** on a blob PATCH/PUT (Garage's
-`403 Bucket size quota is reached` is swallowed by the registry), `api_s3_error_counter` does not
-move, and the failed upload's bytes stay counted until purged (`UPLOADPURGING age: 1h`).
+**Symptom of a full volume:** `RegistryVolumeAlmostFull` (<15% free). At 100% the pusher sees a
+**500** on a blob PATCH/PUT, and the failed upload's bytes stay in `_uploads/` until
+`UPLOADPURGING` (age 1h) drops them.
 
-**Recipe (first run 2026-09-08, oracle handoff):**
+**Recipe:**
 
 ```bash
 K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
-# 0. before: what the bucket holds
-$K -n garage exec garage-0 -c garage -- ./garage bucket info registry | grep -E '^Size|^Objects'
+# 0. before: what the volume holds
+$K -n registry exec deploy/registry-fs -c registry -- df -h /var/lib/registry
 # 1. dry run — lists the manifests/blobs it would remove; --delete-untagged removes manifests
 #    no tag points at (a re-pointed tag leaves its old manifest behind exactly like this)
-$K -n registry exec deploy/registry -c registry -- \
+$K -n registry exec deploy/registry-fs -c registry -- \
   registry garbage-collect --dry-run --delete-untagged /etc/distribution/config.yml
 # 2. read it: every "marking manifest" line must be a digest a tag still serves
 #    (HEAD /v2/<repo>/manifests/<tag> → Docker-Content-Digest); every "eligible" one must not be.
-# 3. for real — same command without --dry-run. Do it in a window with no push in flight
-#    (the oracle release is Tuesdays 07:17Z); it does not need the registry stopped.
+# 3. for real — same command without --dry-run, in a window with no push in flight
+#    (nothing under /var/lib/registry/docker/registry/v2 modified in the last 30 min).
 # 4. verify: served tags still HEAD 200 with the same digest, the served layer HEAD 200 with its
-#    full content-length, the deleted digest 404, and the bucket size dropped.
+#    full content-length, the deleted digest 404, and `df` dropped.
 ```
 
 ⚠ `--delete-untagged` is correct HERE and wrong on the pull-through mirrors — a mirror caches
 digest-pinned pulls as untagged manifests, and that flag deletes exactly the images the pinning
 convention produces (homelab#116; the mirrors' `store-maintenance.yaml` runs GC without it).
 
-**After a push that FAILED at commit, the collector is only half the reclaim.** The refused
-upload's bytes sit in `_uploads/` as a completed object (the first `CompleteMultipartUpload`
-landed; only the copy's commit was refused) and count against the quota until the registry's own
-`UPLOADPURGING` (age 1h, interval 15m) drops them — no action, just the wait. Measured 2026-09-22:
-GC reclaimed 10.6 GB (42.2 → 31.6 GB) and left headroom at 19.9 GB, **still below the alert's
-22 GB**; the failed upload's further 9.8 GiB purged itself ~1 h after it started, taking headroom
-to ~30 GB. A still-firing alert minutes after a GC is this, not a failed collection. (A third pool,
-Garage-side incomplete multipart uploads, is invisible to both and to the quota — FU-279.)
-
-Measured 2026-09-08: dry run + real run ~1 min each on a 3-manifest repo; bucket 30.3 → 15.3 GiB.
-The Garage "Size" counter before the run read ~8 GB above the sum of the listed objects — the
-object listing (`aws s3 ls --recursive` with the registry's own key) is the number to trust when
-they disagree.
+The S3-era notes (the quota's 2× commit peak, the refused-commit reclaim, the Garage size counter
+drifting from the object listing) are in git history before FU-280's cutover; FU-279's Garage-side
+multipart debris goes with the bucket.
