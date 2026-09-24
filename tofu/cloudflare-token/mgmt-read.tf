@@ -14,6 +14,13 @@
 # dependents; the verdict names all three as "not planned". Same zone set as the write token
 # (local.apply_zone_resources — both product zones), same expiry (rotated together, FU-156).
 
+# minutark.ee bot contract (cloudflare_bot_management, tofu/cloudflare/minutark.tf) — added
+# 2026-09-24 after the zone default "Block AI bots" 403'd GPTBot/ClaudeBot (oracle-fleet#732).
+data "cloudflare_api_token_permission_groups_list" "bot_management_read" {
+  name  = "Bot%20Management%20Read"
+  scope = "com.cloudflare.api.account.zone"
+}
+
 data "cloudflare_api_token_permission_groups_list" "dns_read" {
   name  = "DNS%20Read"
   scope = "com.cloudflare.api.account.zone"
@@ -45,7 +52,7 @@ resource "cloudflare_api_token" "mgmt_read" {
     },
     {
       # zone: DNS records + DNSSEC, the mTLS client cert + CA hostname association, the WAF
-      # custom-rules ruleset, the two zone settings, the www→apex redirect ruleset
+      # custom-rules ruleset, the two zone settings, the www→apex redirect ruleset, bot management
       effect = "allow"
       permission_groups = [for gid in sort([
         data.cloudflare_api_token_permission_groups_list.dns_read.result[0].id,
@@ -53,6 +60,7 @@ resource "cloudflare_api_token" "mgmt_read" {
         data.cloudflare_api_token_permission_groups_list.waf_read.result[0].id,
         data.cloudflare_api_token_permission_groups_list.zone_settings_read.result[0].id,
         data.cloudflare_api_token_permission_groups_list.dynamic_url_redirects_read.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.bot_management_read.result[0].id,
       ]) : { id = gid }]
       resources = jsonencode(local.apply_zone_resources)
     },
