@@ -365,6 +365,74 @@ and a day of re-warm later. Not done in the PR that wired the consumers (#1457 d
 PVC); operator call, since the 09-05 pin was operator-approved. Requirement-register shape:
 *want* — "caches on the re-warmable tier", pointer this section.
 
+## The scratch class rides `bulk`, and that is now the wrong shape (2026-09-24)
+
+**Tracked by:** FU-234 (same concern, other hardware). **Status:** planned, nothing changed yet.
+
+`longhorn-scratch` is replica-1 with **`diskSelector: bulk`** and `dataLocality: best-effort`
+([ADR-089](adr.md) addendum, FU-081). That was right when `bulk` was the only tier with room. Two
+things make it wrong now.
+
+**1. Ride scratch and the registry mirrors share one budget.** `bulk` is three disks on two nodes
+— wk-metal-01 `mx500`, wk-metal-04 `intel0`/`intel1`, 1009 G — at **91.5 % committed with `intel0`
+at 105 % of its own size** (read 2026-09-24). The mirrors are ~537 G of the 923 G scheduled. The
+2026-07-25 wedge is exactly this collision: nine retro rides' 20Gi scratch allocations pushed both
+bulk disks past `storageScheduled`, every new scratch PVC faulted, and every ride/worker Init hung.
+
+**2. `best-effort` locality cannot help a node with no `bulk` disk.** The selector still binds
+placement, so a ride on a node outside the tier gets its scratch **over the network**:
+
+| box | role | local `bulk` disk | scratch today |
+|---|---|---|---|
+| `nx-01` | RIDE/ARC, 40 vCPU / 64 GB — the biggest ride box | **none** | **remote** |
+| `wk-metal-03` | the last laptop worker, kata/ride tier | **none** | **remote** |
+| `wk-metal-04` | kata + `bulk` | yes | local |
+| `wk-metal-01` | garage-2 + `bulk`, runs no rides | yes | n/a — and it has **no PCIe expansion at all**, so its shared image-store/replica partition cannot be split |
+
+**What ADR-089's addendum actually decided, and what moves.** Its load-bearing claim is
+*replica-1, no redundancy* — "losing the replica kills a ride that dies with it anyway" — and that
+**stands**. Only its placement clause ("on the bulk disks") changes, and placement stopped being
+ADR material on 2026-09-07 (§"what the Longhorn engine actually costs"); it lives in this document.
+No ADR amendment is needed.
+
+### The plan, in order
+
+1. **BLOCKER, do first — the selector-less audit.** `longhorn-local-xfs` (Garage's class) and
+   `longhorn-static` carry **no `diskSelector`** and can therefore place on any disk, tag or no tag.
+   A volume already landed on the wrong disk on m70s for exactly this reason (§2026-09-21). Settle
+   it **before** any Longhorn disk exists on `nx-01`, not after — the ledger's nx deferral names
+   this as the one thing role-separation does not cover.
+2. **Decide the tag, and prefer not to coin one.** `longhorn-fast` already exists as replica-1
+   **`strict-local`**, and FU-159's ruling already scopes it to "SCRATCH for disk-write-heavy pods
+   (CI builds and the like) … NEVER load-bearing data/metadata" — the semantics we want, already
+   declared. A new name would need a [glossary](glossary.md) row in its coining commit (FU-163);
+   reuse needs none. Coin one only if `strict-local` turns out wrong for ride scratch.
+3. **Register `nx-01`'s freed Intel 7600p** (`nvme-eui.5cd2e42a81a41125`, 256 G) as a tagged
+   Longhorn disk — `machines.yaml` `longhorn_disks` + `scripts/longhorn-tag-disks.sh`. The drive is
+   free because EPHEMERAL moved to the BC711 on 2026-09-24 (see the nx-01 row in `machines.yaml`),
+   and it is the fleet's best measured all-rounder (§the 7600p row in the drive table).
+4. **Repoint ride scratch off `bulk`**, and decide **which of the two replica-1 scratch classes
+   survives** — `longhorn-scratch` (best-effort, selector `bulk`) and `longhorn-fast`
+   (strict-local, selector `fast`) are one class too many, and keeping both is how a consumer picks
+   the wrong one.
+5. **Give one `wk-metal-04` disk the same tag**, so its rides get local scratch too. It already has
+   the right shape otherwise: the SA400 carries Talos + the image store while the 7600p pair carries
+   Longhorn — images and replicas on separate spindles.
+6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
+   the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
+
+### The fleet rule this is really about
+
+Not "two drives per ride box" but **images and Longhorn never share a spindle on a box that runs
+rides**. `wk-metal-04` already satisfies it; `nx-01` does after 2026-09-24; `wk-metal-01` *cannot*
+(no expansion) and runs no rides, which is the correct resolution for it.
+
+**`wk-metal-03` is the open case** (operator, 2026-09-24): it is the last laptop worker and moves
+**off the ride tier as more machines arrive**. Until then it either splits its single disk — giving
+up image-store headroom to do it — or accepts remote scratch. Remote is the honest default: a
+laptop with one M.2 cannot satisfy the rule, which is an argument for rides not living on laptops
+rather than for buying more drives.
+
 ## Build
 
 - **The ledger itself — BUILT 2026-08-02 (FU-093a)**: `devbox run storage-ledger`

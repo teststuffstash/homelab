@@ -1393,7 +1393,16 @@ the block needs pruning, not more headings.
       to its `machines/machines.yaml` entry + apply, then
       `bash scripts/longhorn-register-optane.sh wk-metal-04`. Intent = ride/ARC scratch, off the
       shared image-store partition. ⚠ The x1 AIC form factor is off the market — do not discard.
-      Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier.
+      **WIDENED 2026-09-24 — the tier question is bigger than the Optanes.** `longhorn-scratch`
+      selects `bulk` (ADR-089 addendum), so ride scratch competes with the registry mirrors on a
+      tier at 91.5 % committed, and a ride on a node with no `bulk` disk (nx-01, wk-metal-03) gets
+      its scratch over the network. nx-01's Intel 7600p came free the same day (EPHEMERAL moved to
+      the BC711) and is the candidate backing disk. **Next, in order:** the selector-less audit
+      (BLOCKER — `longhorn-local-xfs`/`longhorn-static` can reach any disk), then reuse `fast`
+      rather than coin a `scratch` tag, then register the 7600p, then repoint scratch and retire
+      one of the two replica-1 classes.
+      Detail: [`docs/storage-ledger.md`](storage-ledger.md) §thinkcentre leaves the std tier
+      and §the scratch class rides `bulk`.
 - [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
       true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
       (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
