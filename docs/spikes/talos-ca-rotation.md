@@ -1,6 +1,6 @@
 # Spike — rotating the Talos API CA under a tofu-declared cluster
 
-**Tracked by:** FU-264. **Status:** lab-probed 2026-09-22 on a disposable control plane (§Lab
+**Origin:** FU-264 (resolved 2026-09-22 — this spike is the record). **Status:** lab-probed 2026-09-22 on a disposable control plane (§Lab
 results). The state-reconciliation question is answered (candidate A), and the production recipe is
 §The recipe. **Production rotation DONE 2026-09-22 14:55–15:14Z** (§Production run).
 **Why now:** a talosconfig carrying the `os:admin` certificate **and its private key** was

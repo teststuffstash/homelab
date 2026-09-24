@@ -727,6 +727,15 @@ rather than for buying more drives.
   width.** `smartctl_device_interface_speed` is SATA-only, which is why two x1-wired M.2 adapters
   sat unnoticed in the NX boxes; it is a fit-time property and the check is in
   [`runbook.md`](runbook.md) §Reading a fleet disk's identity and health — FU-284's residual.
+  **2026-09-24 made both halves of that residual concrete.** (a) The lane-width gap cost eight
+  days: nx-01's 7600p and nx-02's Micron 2200S both ran x1 of x4 on mis-wired adapters. A hand
+  `LnkSta` read found them and they were fixed the same day; nothing in the belt could have said so.
+  (b) **`DiskMediaErrorsGrowing` is silently BLIND on one drive.** nx-01's SK hynix BC711 reports a
+  misparsed 128-bit `media_errors` of 1.388e26. `critical_warning` 0, `available_spare` 100 % and
+  `percentage_used` 0 % prove it is a parse artifact, not a defect. It does not false-fire, because the
+  value is constant (max − min = 0). But float64's ULP at that magnitude is ~1.5e10, so a genuine +1 on
+  that drive rounds away and can never trip the alert. Fix shape: clamp or exclude implausible values
+  in the expr, with a promtool fixture that pins the blind case.
 - **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
   `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
   `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and

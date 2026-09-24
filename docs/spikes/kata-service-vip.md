@@ -113,5 +113,22 @@ that grant, coordinator-dispatched kata rides shipped raw service URLs and the c
 `ConnectionRefused` (oracle-fleet#52 r1 strike). Note that this is a *consequence* of the workaround,
 not of the bug: rewriting to endpoint IPs is only necessary because VIPs don't work.
 
+## Removal and soak (2026-09-04 →)
+
+PR#1372 deleted `resolve_ep`, the three rewrites and `dnsPolicy: None`, so every ride now uses
+service DNS. It was verified by a kata pod under the ENFORCED fixer CNP: the proxy, garage and
+pushgateway VIPs answer, and `openrouter.ai` is still denied. The soak has **two legs** (operator
+correction, 2026-09-04):
+
+1. **Service-VIP leg: PROVEN** by oracle-fleet 432-r1 (kata, wk-metal-04, 11:40Z, CNP enforced).
+   The LLM loop and `/report` ran through the proxy svc name, phase metrics went to the pushgateway
+   svc name, and transcripts uploaded to garage. PR#434 landed in ~10 min with zero drops.
+2. **dind/kind leg: UNEXERCISED.** Only a `task/build` ride runs `devbox run e2e` in-pod (`devbox run
+   ci` starts no kind). In-pod kind has its own open fault: the #399-r1 node-image segfault and the
+   mirror-bypass question ([`kata-ci-gate.md`](kata-ci-gate.md) §In-pod kind on a kata ride).
+
+The regression signature is `AgentWorkerEgressDropped` carrying a BARE POD IP as its Hubble
+destination. `git revert 773ad63e` if it returns.
+
 Related: FU-116 (archived 2026-08-02 — kata ride storage, separate root cause — see
 [the OOM cascade incident](../incidents/2026-07-27-kata-ride-oom-cascade.md)), `docs/spikes/kata-ci-gate.md`.
