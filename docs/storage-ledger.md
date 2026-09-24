@@ -17,7 +17,7 @@ jointly blow the tier — which is exactly what happened.
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
 | `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
-| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p) | 1009G | 902G | 816G (90%) *(was 816G on 706G, 115%)* | 399G (40%) |
+| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the TEMPORARY `registry-fs-trial` *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
 | `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
 | `fast` | **NONE — no backing disk since 2026-09-12** (the Optane pair left with thinkcentre; queued for wk-metal-04, FU-234) | 0 | 0 | 0 | 0 |
 | *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
