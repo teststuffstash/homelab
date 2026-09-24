@@ -615,6 +615,10 @@
         }
       }
     },
+    "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e#talosctl": {
+      "last_modified": "1970-01-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e#talosctl"
+    },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
       "last_modified": "2026-09-18T09:35:58Z",
       "resolved": "github:NixOS/nixpkgs/0a3468a402c449992505b6a9fc5b06580141b750?lastModified=1789724158&narHash=sha256-nlKgrm0dsVhOSopKheVBCcOpiIticufPPVLdVOI0euA%3D"
@@ -1658,44 +1662,6 @@
             }
           ],
           "store_path": "/nix/store/9vlk37b1fgklzwl5bl9xb2dk8sn947ih-sops-3.13.3"
-        }
-      }
-    },
-    "talosctl@latest": {
-      "last_modified": "2026-08-27T07:16:00Z",
-      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#talosctl",
-      "source": "devbox-search",
-      "version": "1.13.8",
-      "systems": {
-        "aarch64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/57n75x36mxam3vhblz4fq3ls8xmkwsy9-talosctl-1.13.8",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/57n75x36mxam3vhblz4fq3ls8xmkwsy9-talosctl-1.13.8"
-        },
-        "aarch64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/iabz7nv9wvrgdfwy1nx6k6as6f8m5whk-talosctl-1.13.8",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/iabz7nv9wvrgdfwy1nx6k6as6f8m5whk-talosctl-1.13.8"
-        },
-        "x86_64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/fwz4d5ljdrd02aqlkb61l9664j94byma-talosctl-1.13.8",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/fwz4d5ljdrd02aqlkb61l9664j94byma-talosctl-1.13.8"
         }
       }
     },

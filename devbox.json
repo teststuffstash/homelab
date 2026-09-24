@@ -7,9 +7,7 @@
     "kubectl": {
       "version": "latest"
     },
-    "talosctl": {
-      "version": "latest"
-    },
+    "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e#talosctl": {},
     "kubernetes-helm": {
       "version": "latest"
     },
