@@ -2,20 +2,29 @@
 
 **Tracked by:** FU-280. **Touches:** [ADR-121](../adr.md) (the registry decision),
 [ADR-089](../adr.md) (quota-as-contract), [`storage-ledger.md`](../storage-ledger.md) (who owns the
-sum). **Status:** open, nothing decided. Opened 2026-09-22 after the second commit-refusal outage in
+sum). **Status:** open, and **re-framed 2026-09-24**. The cheap side-question was answered that day —
+the 2× peak costs **zero disk**, so the quota argument is dead — but the operator's correction the
+same day is that the quota refusal *was always the visible tip*: the case is **contention during the
+release window and the machinery the S3 path drags in**, not capacity (§the real case). Next step is
+therefore **phase 0**, a baseline of what a release costs the store's other tenants — **run the
+same day, from 7 days of history: other tenants' p99 median is 9.5× worse while the registry
+pushes, and the registry (not the pipelines beside it) is the variable that moves it.** The case is
+measured; phase 1 is worth building. Opened 2026-09-22 after the second commit-refusal outage in
 two weeks.
 
 ## The question
 
 `registry.teststuff.net` runs `registry:3` on the **Garage S3 driver**. A blob commit on that driver
 is two S3 steps — `CompleteMultipartUpload` of the upload, then a server-side **COPY** into
-`blobs/sha256/…` — so between them the bucket holds the layer **twice**. Should it run on a
+`blobs/sha256/…` — so between them the bucket holds the layer **twice** *in the quota's
+accounting* (and, as of 2026-09-24, provably **not** on disk — §the side-question). Should it run on a
 **filesystem (PVC)** backend instead, where a commit is a `rename(2)` and the double-hold does not
 exist?
 
-## What is established (measured 2026-09-22, not argued)
+## What is established (measured, not argued — 2026-09-22, extended 2026-09-24)
 
-- **The 2× peak is the proximate cause of both outages.** 09-09 and 09-22 were the same shape:
+- **The 2× peak is the proximate cause of both outages** — the *proximate* one; §the real case is
+  the reason the spike exists. 09-09 and 09-22 were the same shape:
   quota refused the COPY's commit, the registry mapped Garage's 403 onto an opaque **500**, and the
   pusher saw a 10 GB upload die at its last byte (51 min on 09-08, 10 min on 09-22).
 - **The arithmetic, reproduced exactly.** Held 31.6 GB (3 tag-served blobs) → upload completes
@@ -41,10 +50,25 @@ exist?
   "bigger PVC, never a lower threshold" as the recorded posture
   ([`storage-ledger.md`](../storage-ledger.md), homelab#116).
 - **Writes per release, if the backend changed** — a PVC at 2 replicas writes ~21.2 GB, against
-  Garage rf=3's ~31.8 GB (or ~63.6 GB if a server-side copy does not share blocks — unverified,
-  see below). So the candidate is cheaper in writes *and* removes the failure mode.
+  Garage rf=3's **~31.8 GB**. The ~63.6 GB alternative is **ruled out by measurement** (2026-09-24,
+  below): the server-side COPY shares blocks, so it writes nothing. The candidate is therefore
+  cheaper in writes by **~1.5×**, not 3×.
+- **The 2× commit peak costs NO disk** (measured 2026-09-24, §the side-question). It is a
+  **quota-accounting** effect only — which removes the capacity argument in *both* directions: the
+  peak is not a reason to move, and disk savings are not a reason either.
 
-## The open question that actually blocks a decision: WHICH TIER
+## WHICH TIER — ANSWERED 2026-09-24: `bulk`
+
+> **Operator ruling, 2026-09-24 — "I dont want to have a storageclass and tier name per each nvme
+> drive I happen to have."** `registry2` is a **`bulk`** workload, not a new tier; the two WD SN530s
+> fitted that day join `bulk` and take it from 91.5 % committed to 61 %, which dissolves the
+> capacity objection below. The full ruling, including how the `bulk` row's *second* objection
+> (wipe-on-PXE) is answered, lives in [`storage-ledger.md`](../storage-ledger.md) §the operator
+> ruling of 2026-09-24 — it is placement, so it belongs there and not in an ADR (§2026-09-07).
+> The rest of this section is the reasoning that led there; the table's `against` column is what
+> the ruling had to answer.
+
+### The reasoning, as it stood on 2026-09-22
 
 **`std` is not the answer** (operator, 2026-09-22). It is fine to *start* a spike on, and it has the
 room today — hp-01 `intel7600p` 227 G avail, m70s `nvme` 295 G — but ADR-089 defines `std` as "the
@@ -69,23 +93,115 @@ than inside a registry PR.
 
 ## The experiment
 
-### Phase 1 — settles the 2× claim, needs no DNS, cert or VIP
+### Phase 0 — BASELINE the release window first (detection before fix) — **DONE 2026-09-24**
 
-1. PVC, 40 Gi (two layers + one in flight), on whatever tier the spike starts on — `std` is
-   acceptable *for the trial only*, and the claim goes in [`storage-ledger.md`](../storage-ledger.md)
-   per ADR-089's one hard rule even though it is temporary.
+The 2× claim is already settled and it was never the case. What phase 1 has to beat is
+**contention**, and there is no point building a candidate before the thing it must improve is a
+number. This is the repo's own doctrine — build the detector, let it read the real condition, then
+change something — and it needs no new machinery: every series below already exists.
+
+Over one **real** release window (oracle's corpus release; allure + Argo artifacts running
+alongside), record:
+
+| series | why |
+|---|---|
+| per-pod `PutObject` / `UploadPart` / `ListObjectsV2` p99, split by pod | the tenants the registry push is stealing IO from — the 4.86→6.94 s vs 0.07–0.59 s split is the shape to look for |
+| `block_resync_queue_length` peak + drain time, per peer | the replication half of the cost, and the alert already watches it |
+| table GC backlog + LMDB meta size, per peer, out to +24 h | the untag's tombstones do not land until `TABLE_GC_DELAY` has passed |
+| `garage_write_probe_*` legs | the client-perspective view, already scraped every minute |
+
+That baseline **is a deliverable on its own**: if the release window turns out to be invisible to
+the other tenants, the case in §the real case is weaker than it looks and phase 1 is not worth
+building. If it is visible, the same series are the acceptance test for phase 1.
+
+#### Phase 0 RESULT (2026-09-24) — it is visible, and it is attributable
+
+Prometheus keeps **31 d**, so this was answerable from history instead of waiting for a release.
+**7 days, 2026-09-17 → 09-24, 1 969 five-minute samples.** "Registry pushing" = any sample with
+`UploadPart`/`UploadPartCopy` traffic (the registry is the only multipart producer of this size);
+"other tenants" = `PutObject`/`ListObjectsV2`/`GetObject`/`DeleteObject`, i.e. allure, Argo
+artifacts, loki, transcripts, ert-snapshots. **The registry pushes in 123 of 1 969 samples —
+6.2 % of the week, ~10 hours.**
+
+**Other tenants' p99, split on whether the registry is pushing:**
+
+| | n | median | p90 | p99 | mean |
+|---|---|---|---|---|---|
+| registry **pushing** | 123 | **4.72 s** | 12.6 s | 74.4 s | 7.86 s |
+| registry **idle** | 1 846 | **0.50 s** | 1.35 s | 14.5 s | 1.35 s |
+
+Median **9.5× worse**. Samples over 5 s: **41.5 % while pushing vs 4.2 % idle**. Over 30 s: 4.9 %
+vs 0.6 %.
+
+**And it is the registry, not the pipelines it runs alongside** — the load that matters is
+isolated by splitting again on other-tenant request rate (median 1.29 req/s):
+
+| registry | other tenants | n | median p99 | p90 | mean |
+|---|---|---|---|---|---|
+| pushing | quiet | 36 | 1.59 s | 58.4 s ⚠ | 13.9 s |
+| pushing | busy | 87 | **4.94 s** | 9.30 s | 5.37 s |
+| idle | quiet | 933 | 0.49 s | 0.92 s | 1.31 s |
+| idle | busy | 913 | **0.52 s** | 2.76 s | 1.39 s |
+
+**Other-tenant load on its own barely moves p99** (0.49 → 0.52 s median, 0.92 → 2.76 s p90 across
+an order of magnitude more traffic). **The registry push is what moves it** — 0.49 → 4.94 s median.
+That is the operator's thesis, measured: it is not the release *pipeline*, it is the registry's
+bytes going through the shared store. ⚠ The 58.4 s p90 in the push/quiet cell is **noise-prone**
+(n=36, and a low-count histogram lets a handful of stragglers dominate); the median column is the
+load-bearing one.
+
+**The lifecycle half moves too**, over the same split:
+
+| series | pushing (median) | idle (median) | |
+|---|---|---|---|
+| `block_resync_queue_length` | **2 106** | 60 | **35×**. The idle figure independently reproduces the **median 58** that [`prometheusrule.yaml`](../../argocd/resources/garage-alerts/prometheusrule.yaml) records for the 7 days to 2026-09-22; **2 106 sits in that same file's p95 band (2.6 k)**. A routine push moves the fleet's resync backlog from its median to its 95th percentile. |
+| `table_gc_todo_queue_length` | 115 107 | 80 151 | +44 % |
+
+**That backlog has a measured operational consequence.** `garage:disruption_allowed` — the recording
+rule that drives the `garage` PodDisruptionBudget, and therefore every `node-maintenance` drain of a
+zone node — requires `max(block_resync_queue_length) <= 1000` among its three clauses. Split the
+same way (smaller n: the rule only exists since the PDB shipped, 2026-09-22):
+
+| | n | gate OPEN | gate CLOSED |
+|---|---|---|---|
+| registry **pushing** | 53 | 9.4 % | **90.6 %** |
+| registry **idle** | 326 | 58.6 % | 41.4 % |
+
+**While the registry is pushing, no Garage zone node can be drained** — the maintenance verbs refuse
+and the reconciler retries. `GarageDisruptionBlocked` fires if that persists 2 h, and the same file
+records the longest closed stretch in its own 7-day baseline as 82 min. So the registry's bursts do
+not only cost the other tenants latency; they close the fleet's maintenance window on three nodes.
+
+**Threat to validity, stated:** this is observational, not an A/B — "pushing" is inferred from
+multipart traffic and the causal claim rests on the second table's control rather than on an
+intervention. A single controlled release window (push held back, then released, same day) would
+close it, and is cheap. It is not needed to justify building phase 1; it would be needed to claim
+a precise factor.
+
+### Phase 1 — the candidate, needs no DNS, cert or VIP
+
+1. PVC, 40 Gi (two layers + one in flight), on **`longhorn-bulk`** (the 2026-09-24 ruling; it is
+   replica-2, which the availability requirement above needs). The claim goes in
+   [`storage-ledger.md`](../storage-ledger.md) per ADR-089's one hard rule even though it is
+   temporary. ⚠ The measurement that matters most here is no longer the peak — it is **whether
+   replica-2 across a 7600p and an SN530 binds on the slowest replica**; the ruling names
+   `slow-bulk` as the escape hatch if it does.
 2. `registry:3` Deployment, `REGISTRY_STORAGE=filesystem`, ClusterIP only, no auth front.
    ⚠ **`strategy: Recreate`** — RWO plus RollingUpdate deadlocks on the volume.
 3. From an in-cluster pod: `skopeo copy` the real 10.6 GB corpus out of the current registry into
    it. Same payload, same cluster, one variable changed.
 
-Measure, against tonight's Garage numbers as the control:
+Measure against **phase 0's baseline**, not against the peak:
 
-| measurement | Garage control (2026-09-22) | what would settle it |
+| measurement | Garage control | what would settle it |
 |---|---|---|
-| peak store usage during commit | **2 × layer** (42.2 → 52.7 GB attempted) | **1 × layer**, i.e. no double-hold |
-| wall-clock to commit | ~9 min (20:04 → 20:12:57) | within noise, or better |
-| bytes written per release | ~21–64 GB depending on block sharing | ~21.2 GB at 2 replicas |
+| **other tenants' p99 during the push** (allure, Argo artifacts) | phase 0 | **unchanged from idle** — the release becomes invisible to them. *This is the headline.* |
+| `block_resync_queue_length` + drain time attributable to the release | phase 0 | **zero** — the store never sees the bytes |
+| table GC backlog / LMDB growth from the untag, out to +24 h | phase 0 | **zero** — the delete is an `unlink(2)` |
+| bytes written + LAN bytes per release | ~31.8 GB, replicated over 1 GbE | ~21.2 GB, one inter-node copy |
+| wall-clock to commit | ~9 min (2026-09-22, 20:04 → 20:12:57) | within noise, or better |
+| **replica-2 across a 7600p and an SN530** | n/a | does the slowest-replica wait bind? `slow-bulk` is the named escape hatch (the 2026-09-24 ruling) |
+| peak store usage during commit | 2 × layer **in the quota only**, 1 × on disk (measured 2026-09-24) | 1 × in both — a tidiness win, not the reason |
 
 ### Phase 2 — only if phase 1 wins
 
@@ -101,16 +217,117 @@ the temporary name being deleted, or skip the hostname until the cutover. A perm
 need a [glossary](../glossary.md) row in its coining commit (FU-163); the glossary currently holds
 only **registry (first-party)** and **registry mirrors**.
 
-## Cheap side-question worth answering first
+## The cheap side-question — ANSWERED 2026-09-24: the COPY shares blocks, and costs zero disk
 
-**Does a Garage server-side copy share blocks, or duplicate them?** Garage blocks are
-content-addressed and refcounted (`docs/garage.md`, and the rc=0 mechanics in the
-[2026-08-24 postmortem](../incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)), which suggests
-the COPY produces a second object referencing the same blocks — making the 2× peak a **quota
-artifact costing no disk**. If that holds, "raise the cap" becomes far cheaper than the ledger's
-logical sums imply, and it weakens the case for changing backend at all. Test: copy a known object
-inside a bucket, compare `garage stats` block count against bucket bytes. Unverified — do not build
-on it either way.
+**It shares them.** The 2× peak is a **quota-accounting artifact costing no disk whatsoever.**
+
+**Method** (live cluster, ~10 min): throwaway bucket `copytest` + key, quota raised to 8 G, and
+**256 MiB of `/dev/urandom`** so the payload shares no content with anything already stored. PUT
+from an in-cluster pod on `wk-04` with `aws s3 cp` — the same multipart path the registry uses.
+The instrument is `garage stats`: *"number of RC entries (~= number of blocks)"* for the block
+store, per-node `DataAvail` for actual disk, and `bucket info` **Size** for what the quota counts.
+
+| step | bucket Size (what the quota sees) | RC entries (blocks) | `DataAvail` m70s / wk-metal-01 / wk-metal-04 |
+|---|---|---|---|
+| baseline | 0 | 485 487 | 73.1 / 72.4 / 72.5 GiB |
+| **idle control, 75 s** (sizes the noise) | 0 | **+13** | 73.1 / 72.4 / 72.5 — unchanged |
+| PUT 256 MiB | 256 MiB | **+257** | 72.8 / 72.4 / 72.3 — **falls** |
+| `CopyObject` a → b | **512 MiB** | **+1** | 72.8 / 72.2 / 72.3 |
+| 8 more copies (a → c…j) | **2.5 GiB, 10 objects** | **+2 total** | 72.8 / 72.2 / 72.3 — **unchanged** |
+
+Ten objects, 2.5 GiB of logical bytes the quota charges for, **one physical copy**. Duplicating
+them would have cost ≈2 GiB *per zone* and the print granularity is 0.1 GiB, so the negative is not
+a rounding artifact. `block_ref` grew with each copy (new version rows) while RC did not — the new
+versions point at the **same** blocks.
+
+⚠ **One confounder, named because RC entries alone do not settle it.** Garage's block store is
+content-addressed globally, so a COPY that genuinely *re-wrote* identical bytes would dedupe to the
+same hashes and also leave RC flat. **`DataAvail` is what settles it**, and it did not move across
+2 GiB of logical copies. Either way the operational conclusion is identical: *no disk is consumed*.
+
+### What it settles, and what it does not
+
+It settles one thing, cleanly and narrowly: **"the bucket holds the layer twice" is true of the
+quota and false of the disk.** Consequences, in both directions:
+
+1. **The 2× peak is not a capacity cost**, so it is not a reason to change backend — and "raise the
+   cap" is a legitimate, nearly free way to stop *that* alert firing. A quota is a ceiling, not a
+   reservation ([`garage-workspace.yaml`](../../argocd/resources/registry/garage-workspace.yaml):
+   the 16 buckets' quotas already sum to ~205 GiB against 130 GiB of declared capacity).
+2. **Equally, a PVC backend cannot be justified on disk savings.** The honest first-write comparison
+   is ~31.8 GB (rf=3) against ~21.2 GB (replica-2) — **1.5×**, not 3×.
+3. **FU-203 already caps the peak inside the existing 48Gi quota** (`2 kept + 2 × incoming =
+   42.4 GB`, at any burst size), so the *outage* is addressable without this spike at all.
+
+**What it does NOT touch is the case for the spike** — see §the real case below. The quota refusal
+was the visible tip; the argument was never the 2×. What this measurement removes is **a bad
+argument, not the argument**, and it was worth ten minutes to learn which: building on "it costs 2×
+disk" would have sized the PVC by a rule that is simply false.
+
+## The real case (operator, 2026-09-24): contention, and the machinery underneath
+
+> *"Garage has a bigger cost on sync + deletion afterwards than Longhorn 2 replicas. It was more
+> about the garage thrashing — oracle CI pipelines upload to S3 (allure) then argo pipelines read +
+> write S3 + do a ghcr/registry push + untag the previous release + gc. Taking registry off S3
+> reduces the S3 sync cost during that period."*
+> *"Quota refusal was the visible tip of the iceberg — the complexity underneath was the problem."*
+
+### 1. The release window runs two opposite workloads through one small store
+
+A release is not an isolated event. In the same window: oracle CI uploads allure reports, the Argo
+pipelines read and write S3 artifacts, the registry takes a ~10.6 GB push, the previous release is
+untagged, and the collector runs. All of it on **three pods, three disks, one 1 GbE**.
+
+The sixteen buckets, read live 2026-09-24:
+
+| bucket | bytes | objects |
+|---|---|---|
+| `ert-snapshots` | 106.7 GB | 29 210 |
+| **`registry`** | **21.0 GB** | **16** |
+| `allure-reports` | 9.0 GB | **598 600** |
+| `agent-transcripts` | 6.5 GB | 32 653 |
+| `loki` | 4.5 GB | 252 934 |
+| `oracle-specs` | 527 MB | 41 566 |
+
+The registry and allure are **the two opposite extremes of the same store**: the registry is 14 % of
+the bytes in **16 objects**; allure is **62 % of every object in the cluster** for 6 % of the bytes.
+The release window runs both at once — a multi-GB block burst (disk, LAN, resync) against six
+hundred thousand small-object metadata writes (the LMDB `object`/`version` tables). Each contends
+for exactly what the other needs.
+
+What contention costs here is already measured in this document, not argued: a Garage node busy
+serving a rebuild ran PutObject p99 **4.86 → 6.94 s while its two peers stayed at 0.07–0.59 s**
+(§the rotation table, 2026-09-12), and under an oracle delta run `UploadPart` p99 reached **27 s**
+and `ListObjectsV2` **35.7 s** on garage-0. The mechanism is not the quota; it is one small store
+doing everyone's IO at once.
+
+### 2. The write is the cheap half — sync and deletion are the rest
+
+| | Garage (rf=3, shared) | Longhorn `longhorn-bulk` (replica-2, dedicated) |
+|---|---|---|
+| first write | ~31.8 GB | ~21.2 GB |
+| replication | every block to 3 nodes over the same 1 GbE, via the resync queue | one extra replica, then nothing |
+| delete (untag) | tombstones that **table GC pushes to EVERY node and holds for `TABLE_GC_DELAY` = 24 h** ([`prometheusrule.yaml`](../../argocd/resources/garage-alerts/prometheusrule.yaml)), then block GC walks and decrements refcounts | `unlink(2)` inside the volume's own filesystem |
+| metadata | `object`/`version`/`block_ref` rows ×3 plus Merkle trees, in an LMDB that **ratchets** (~2.6 GB/day of leaked pages, with *zone rotation* — a 2 h+ operation — as the standing remedy) | none |
+| who else pays | every other tenant on the store | nobody |
+
+Loose ends the S3 lifecycle has produced on this bucket alone: **FU-279** (incomplete multipart
+uploads `garbage-collect` never walks — 4.3 GB stuck, and the reclaim command carries a ☠ from the
+[2026-08-24 postmortem](../incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)).
+
+### 3. The machinery that exists ONLY because the store is S3
+
+| machinery | exists because |
+|---|---|
+| the `quota − held ≥ 2 × largest layer` rule, re-derived at 20Gi → 32Gi → 48Gi | a commit is a two-step COPY on the S3 driver |
+| `RegistryBucketCommitHeadroomLow`, fed by the garage-meta-rotation controller pushing the admin-API counter every 15 min | Garage exports no per-bucket size metric, so nothing else can see a cap |
+| the untag → collect schedule alignment (02:30Z → 03:00Z), three alert firings to get right | prune and GC are two systems in two repos (the ADR-085 split) |
+| FU-279's uncollectable multipart debris | multipart uploads onto a content-addressed refcounted store |
+| the opaque **500** — ADR-089 promises "fails fast with a legible error"; here it fails slow, at commit, illegibly | the registry maps Garage's 403 onto 500, and `api_s3_error_counter` does not move |
+
+On a PVC the commit is a `rename(2)`, the cap is `df`, the prune is `registry garbage-collect` over
+local files, and an over-cap write fails with `ENOSPC`. **Most of that table stops existing.** That
+is the case, and it is an argument about *complexity and blast radius*, not about capacity.
 
 ## What this does NOT decide
 
