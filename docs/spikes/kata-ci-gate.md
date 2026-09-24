@@ -72,12 +72,13 @@ kind's retained-node + journal, or run k3d with `--no-rollback`.
 | 13 | dind entrypoint + live inspection | **found `/dev/kmsg` root cause; mknod → UP in 21s**; kind −kmsg fails identically / +kmsg Ready in 19s |
 | 14–15 | clean acceptance manifest (digest-pinned, mknod) | **PASSED ×2** |
 
-## Open mystery: the reinstall installed the WRONG image (→ FU-076)
+## Mystery, now a detector: the reinstall installed the WRONG image (FU-076, archived 2026-09-24)
 
 The UEFI reinstall (`tofu apply -replace` of the config apply, state verifiably carrying the
 metal_kata installer URL) produced a node running the PLAIN metal schematic — kata restored via
-`talosctl upgrade --image factory.../f1aa29f1...` (metal nodes upgrade fine). Unexplained;
-re-check on the next metal (re)install whether install.image is honored from maintenance mode.
+`talosctl upgrade --image factory.../f1aa29f1...` (metal nodes upgrade fine). Unexplained.
+No longer a manual re-check: the box belt's `schematic` axis (`mgmt_node_drift`) fires
+`MgmtNodeInstallDrift` on exactly this outcome. It read 0 on all 13 nodes after the 2026-09-20/22 reinstalls.
 (Likely also the origin of the /dev/kmsg regression: the upgrade pulled a newer kata extension
 whose agent no longer creates it.)
 

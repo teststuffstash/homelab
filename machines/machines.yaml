@@ -275,7 +275,7 @@ machines:
   - name: thinkcentre
     kind: metal
     label: "`thinkcentre` (metal, OUT of the cluster)"
-    role: R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); its first apply waits on FU-012's state copy
+    role: R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); holds main's tofu state + applies since 2026-09-13 (ran the 09-22 fleet Talos rollout)
     hardware: Lenovo ThinkCentre Edge
     cpu_cores: 2
     memory_gb: 4
@@ -294,7 +294,7 @@ machines:
     # drained, shut down. Storage: docs/storage-ledger.md; the R12 row + why it is NOT the
     # permanent box (27.9 W idle, no AES-NI, the absent x16 CPU root port) lives in the private
     # hardware requirements register. Installed 2026-09-13 (docs/management-box.md); its test
-    # surface is ruled (§The test surface), its first apply waits on `main`'s state copy (FU-012).
+    # surface is ruled (§The test surface); it has held `main`'s state and applied since 2026-09-13.
     # The Talos flags (talos_metal_node / install_disk / longhorn_disks / pin_hostname / zone) were
     # REMOVED, not commented out — tofu derives cluster membership from their presence.
     # Hardware facts that outlive the role: 120GB Kingston SV300S3 SATA SSD (/dev/sdb when

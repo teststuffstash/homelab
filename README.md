@@ -31,7 +31,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `wk-03` (VM) | 192.168.2.63 | k8s worker, ephemeral/CI-runner tier (tainted; removable — no Longhorn disks, no kata) |
 | `cp-02` (VM on nx-02) | 192.168.2.65 | k8s control plane (ADR-133 — the third CP, second hypervisor) |
 | `wk-04` (VM on nx-02) | 192.168.2.64 | k8s worker, untainted batch compute (the second hypervisor's first VM) |
-| `thinkcentre` (metal, OUT of the cluster) | 192.168.2.53 | R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); its first apply waits on FU-012's state copy |
+| `thinkcentre` (metal, OUT of the cluster) | 192.168.2.53 | R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); holds main's tofu state + applies since 2026-09-13 (ran the 09-22 fleet Talos rollout) |
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
 | `m70s` (Lenovo ThinkCentre M70s SFF, PXE) | 192.168.2.56 | k8s worker + Longhorn (third physical Garage zone — ADR-114) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, compute tier (tainted, 8GB) + Longhorn bulk tier + the garage-2 zone — NO rides |
@@ -66,7 +66,7 @@ LAN names stay on local HAProxy). See [`docs/cloudflare.md`](docs/cloudflare.md)
 
 ```bash
 devbox shell                                   # toolchain from devbox.json (Nix)
-devbox run -- tofu -chdir=tofu plan            # review before apply — this hits live machines
+devbox run mgmt-tf -- plan                     # main root plans on the management box (docs/management-box.md)
 devbox run nodes                               # kubectl get nodes -o wide
 bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml   # OPNsense as code
 ```

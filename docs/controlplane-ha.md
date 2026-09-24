@@ -95,7 +95,7 @@ exist. A one-node throwaway **control plane** answers it completely. On the seco
 ```bash
 ssh root@192.168.2.59 'qm create 8199 --name cp-upgrade-lab --memory 4096 --cores 2 --cpu host \
   --ostype l26 --scsihw virtio-scsi-pci --net0 virtio,bridge=vmbr0 --serial0 socket --tags "talos,lab"
-qm set 8199 --scsi0 nvme-thin:0,import-from=/var/lib/vz/template/iso/talos-v1.13.2-nocloud-amd64.img,discard=on,ssd=1
+qm set 8199 --scsi0 nvme-thin:0,import-from=/var/lib/vz/template/iso/talos-v1.14.1-nocloud-amd64.img,discard=on,ssd=1
 qm disk resize 8199 scsi0 20G
 qm set 8199 --ide2 nvme-thin:cloudinit --ipconfig0 ip=192.168.2.65/24,gw=192.168.2.1 --boot order=scsi0
 qm start 8199'
@@ -216,7 +216,7 @@ about to displace** — for this fleet, that means a metal node, and the cheap v
 goes silent.
 
 Two adjacent findings from the same night, both filed: the BIOS PXE chainload was broken
-(`undionly.kpxe` missing on the Matchbox LXC — [FU-261](follow-ups.md)), which is why three reboots
+(`undionly.kpxe` missing on the Matchbox LXC — [FU-261](follow-ups-archive.md), fixed 2026-09-23), which is why three reboots
 read as "PXE just doesn't take"; and nothing alerts on a **declared node that is simply absent**
 from the cluster — the extreme case of [FU-235](follow-ups.md)'s declared-vs-live diff.
 

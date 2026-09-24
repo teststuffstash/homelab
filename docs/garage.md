@@ -11,8 +11,9 @@ point for the sleep-tracking pipeline (ADR-045) and a future home for Longhorn/H
   tunnel, no public LoadBalancer. Admin (3903) + RPC (3901) never leave the cluster.
 - **Region:** `garage` (S3 clients must set this). **Addressing:** path-style.
 
-> Single-node trial: `replication_factor = 1`, one StatefulSet replica, meta+data on Longhorn.
-> Not HA — that waits for the 3-node build (ADR-114). The bytes are data; the layout/config is code.
+> **rf=3 across three physical zones** (wk-metal-04 / m70s / wk-metal-01, one pod each on replica-1
+> `longhorn-local-xfs`) since 2026-09-07 (ADR-114; §Target architecture below). The bytes are data;
+> the layout/config is code. (It began as a single-node rf=1 trial.)
 
 ## One-time layout bootstrap (after the first `tofu apply`)
 
@@ -102,8 +103,8 @@ needs `latest.json`, the `build/` + `publish/` step manifests and the whole `par
 which ride in the image. Treat this bucket as **irreplaceable while an un-run delta window is open**,
 and as production data outright once the oracle stack serves traffic.
 
-**What protects it:** Garage runs `replication_factor = 1` on a single node, so *all* redundancy
-is Longhorn's (2 replicas per volume). Replica PLACEMENT is owned by
+**What protects it (the single-node era, before 2026-09-07):** Garage ran `replication_factor = 1` on a single node, so *all* redundancy
+was Longhorn's (2 replicas per volume); since the rf=3 build-out it is Garage's own (§Target architecture). Replica PLACEMENT is owned by
 [`storage-ledger.md`](storage-ledger.md) §tier fence (the 2026-08-04 placement recorded here was
 invalidated by the 2026-08-07 `diskSelector` stamping — read the ledger, not a dated copy).
 
@@ -240,7 +241,7 @@ recovered the whole Aug-4→24 delta on incident day —
 Its first instruction is the one with a deadline: **freeze the evidence and do not run
 `garage repair blocks`** until the carve is done.
 
-## Target architecture — rf=3 across physical zones (ADR-114, build-out in progress)
+## Target architecture — rf=3 across physical zones (ADR-114, BUILT; third zone met 2026-09-07)
 
 > ⚠ **Amended 2026-09-07 — the STORAGE BACKING below is retired; everything else stands.**
 > `replication_factor = 3` across physical zones, and "storage is not the replication layer", are
@@ -271,7 +272,7 @@ substantial change here, read them all — they are what changed the outcome):
   versioned staged changes (plan/apply-shaped); apply once per version, one RPC host; the
   algorithm minimizes movement, capacity values steer distribution.
 
-The single-node posture above is being retired: **`replication_factor = 3`, one Garage instance
+The single-node posture above was retired (2026-09-07): **`replication_factor = 3`, one Garage instance
 per physical failure domain,** ~~node-local XFS storage — Longhorn drops out of the Garage data
 path entirely~~ **on Longhorn replica-1** (see the amendment banner at the top of this section —
 engines replicate; storage stores singles — the same ruling moves CNPG to

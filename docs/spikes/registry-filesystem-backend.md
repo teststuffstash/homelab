@@ -2,7 +2,9 @@
 
 **Tracked by:** FU-280. **Touches:** [ADR-121](../adr.md) (the registry decision),
 [ADR-089](../adr.md) (quota-as-contract), [`storage-ledger.md`](../storage-ledger.md) (who owns the
-sum). **Status:** open, and **re-framed 2026-09-24**. The cheap side-question was answered that day —
+sum). **Status:** **DECIDED + CUT OVER 2026-09-24 14:50Z** ([ADR-121](../adr.md) amended): `registry-fs`
+on the `registry-data` volume serves `registry.teststuff.net`, and the S3 Deployment runs unrouted as
+the rollback. What remains is FU-280's soak and the S3 removal. How it got there: **re-framed 2026-09-24**. The cheap side-question was answered that day —
 the 2× peak costs **zero disk**, so the quota argument is dead — but the operator's correction the
 same day is that the quota refusal *was always the visible tip*: the case is **contention during the
 release window and the machinery the S3 path drags in**, not capacity (§the real case). Next step is
@@ -17,7 +19,7 @@ two weeks.
 
 ## The question
 
-`registry.teststuff.net` runs `registry:3` on the **Garage S3 driver**. A blob commit on that driver
+`registry.teststuff.net` ran `registry:3` on the **Garage S3 driver** until the 2026-09-24 cut-over. A blob commit on that driver
 is two S3 steps — `CompleteMultipartUpload` of the upload, then a server-side **COPY** into
 `blobs/sha256/…` — so between them the bucket holds the layer **twice** *in the quota's
 accounting* (and, as of 2026-09-24, provably **not** on disk — §the side-question). Should it run on a
@@ -395,4 +397,5 @@ keep-set of 3 while pushing a 4th, because oracle-fleet untags *after* a release
 be the first step of `release-corpus.yaml` "before the weekly push" and ADR-OF-004 moved it to a
 nightly cron. Prune-before-push caps the peak at `2 kept + 2 × incoming = 42.4 GB` **at any burst
 size**, on the current backend, with no capacity spend. That ordering fix and a pre-flight headroom
-gate are cheaper and more urgent than this spike; see FU-203.
+gate were cheaper and more urgent than this spike, and shipped under FU-203 (the retention untag + the
+daily collector; archived 2026-09-24).

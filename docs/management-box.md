@@ -47,8 +47,8 @@ resources that ArgoCD does not need to run** — Home Assistant, UniFi + its Mon
 namespace's dashboards and secrets, the forgejo runner and its CNPG Cluster, the kata RuntimeClass,
 the `random_password` → Secret residue. ADR-005 allows all of it to move, and **it stays in tofu
 deliberately** (operator ruling, 2026-09-13): it is the one nondestructive thing this box can apply.
-With a single OPNsense and a single control plane, anything that touches the router, the CPs or
-the Proxmox host is instant whole-cluster downtime — so phases B and C run on this residue, where a
+With a single OPNsense (and, when this was ruled, a single control plane — three since 2026-09-22,
+ADR-133), anything that touched the router, the CPs or the Proxmox host was instant whole-cluster downtime — so phases B and C run on this residue, where a
 wrong apply costs a dashboard or a Home Assistant restart, and the quirks get ironed out there.
 
 The sequence, in this order:
@@ -469,8 +469,8 @@ asked, given what the fleet and the box already run?). That reviewer instruction
 | Talos config apply, workers (`no_reboot`, health-gated) | on | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean |
 | Talos config apply, control planes | `apply_controlplane_config` **on** (operator, 2026-09-22) | 2026-09-22 | the same apply, CP rows included |
 | Talos install rollout, workers + CPs (`mgmt-reconcile`) | switch + CP toggle on | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last |
-| Reconciler park/verify + window close (FU-276) | — | harness only | #1887 (123 cases); not yet exercised live |
-| Rollout workload-health hold (FU-278) | — | harness + replay | #1891 (replay holds on forgejo before cp-01); first live rollout pending |
+| Reconciler park/verify + window close (FU-276) | — | harness only | #1887 (123 cases); not yet exercised live (FU-276 archived 2026-09-22) |
+| Rollout workload-health hold (FU-278) | — | harness + replay | #1891 (replay holds on forgejo before cp-01); first live rollout pending (FU-278 archived 2026-09-22) |
 | Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
 | Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
 
@@ -606,8 +606,9 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 
 **Sequence (operator, 2026-09-16 — box first, CPs second, router last):** the diff belt (FU-235) → the spike
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
-the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built; the fleet rollout
-(CPs included) is built behind its switch, which is off — the acting set is still one node.
+the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built, and the fleet rollout
+(CPs included) has been switched ON since 2026-09-22, when it rolled 13/13 nodes to v1.14.1 (#1879). The three CPs are
+live (FU-243). The CARP pair is what is left.
 
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 

@@ -95,13 +95,13 @@ truth). **homelab has no such split.** It *is* the platform's own `-iac` — Arg
 too — and it is simultaneously where the loop's own machinery lives. So the lane taxonomy above
 cannot key on the repo. It keys on the **path**.
 
-> ⚖ **TRIAL WEEK 2026-09-11 → 2026-09-18 (ADR-128, operator):** the codeowner gate is narrowed
+> ⚖ **ADR-128's narrowed gate — trialled 2026-09-11 → 09-18, then RULED to stand (operator, FU-233):** the codeowner gate is narrowed
 > to `agents/**`, `policy/**`, `tofu/github/**` + the governance dotdirs (and the operator's own
 > runtime repo). `docs/**`, `argocd/platform/**`, `tofu/*.tf`, `tofu/cloudflare/**`, `ansible/**`,
-> `opnsense/**`, `machines/**` merge on CI + bot review for the week — the rubric's read is the gate
+> `opnsense/**`, `machines/**` merge on CI + bot review — the rubric's read is the gate
 > there, the alert belts are the net, and a post-merge quickfix is the repair. Baseline + re-read:
-> [`../spikes/codeowner-catches.md`](../spikes/codeowner-catches.md), FU-FU-233. The rows below
-> describe the pre-trial (and revert) shape.
+> [`../spikes/codeowner-catches.md`](../spikes/codeowner-catches.md), FU-233. The rows below
+> describe the pre-trial (and revert) shape; the *trial:* cells are the standing state.
 
 | paths | applied by | agent may author | gate |
 |---|---|---|---|

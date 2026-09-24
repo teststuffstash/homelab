@@ -2,8 +2,10 @@
 
 **Tracked by:** FU-155 (research half dispatched as homelab#157). **Status:** researched, **no
 decision** — the tune-vs-accept call is the operator's (⚖ below). **Nothing was applied**; this
-document is findings only.
-**Environment:** Talos **v1.13.2** (pinned, `tofu/variables.tf:57`) / Kubernetes v1.36.1; the
+document is findings only. **2026-09-24: Option A is overtaken.** The fleet has run v1.14.1 since 2026-09-22
+(FU-033's rollout), and FU-246 subsumes the pin. What stays open is the tune-vs-accept ruling on
+v1.14 (FU-155).
+**Environment (at research time):** Talos **v1.13.2** (now v1.14.1, `tofu/variables.tf`) / Kubernetes v1.36.1; the
 ephemeral/kata tier (`wk-metal-01/02/03` 8GB, `wk-metal-04` 16GB), hardened 2026-07-28 by the
 FU-112(b) kubelet reservations (`tofu/metal.tf` — the `systemReserved`/`kubeReserved` block, ~L68-85).
 **Symptom being explained:** one PSI fire SIGKILLs 4–5 unrelated pods within a second, repeating
@@ -302,5 +304,5 @@ Check 2 in particular converts this whole document from "mechanism that fits the
 ## Related
 
 FU-155 (tracker), FU-139 / FU-112 / FU-082 (archived — the reservation hardening this builds on),
-FU-033 (a *1.14* precondition; option A stays inside 1.13), ADR-044 (the ephemeral tier),
+FU-033 (a *1.14* precondition; archived 2026-09-22 — the fleet moved to 1.14.1, which moots the 1.13 pin), ADR-044 (the ephemeral tier),
 `docs/incidents/2026-07-27-kata-ride-oom-cascade.md`, homelab#63/#65/#100/#101, homelab#857.

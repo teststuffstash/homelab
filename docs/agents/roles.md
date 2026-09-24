@@ -214,7 +214,7 @@ never harder posture on quiet ones.
     (`specs-<pr>.oracle.teststuff.net`, torn down on PR close) is the existing precedent/donor
     shape. Open: per-goal endpoint vs header-based flag routing, teardown, and whether the
     probe that runs there is the smoke (once) or the canary (cron) flavor.
-- **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
+- **responder** (FU-103) — alert-triggered triage. ⏸ **PAUSED 2026-09-16** (never-matching `alert-dep` filter; un-pause = FU-249). **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
   `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136),

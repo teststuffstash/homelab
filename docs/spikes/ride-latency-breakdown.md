@@ -217,5 +217,5 @@ oracle-fleet 10, circles/circles-iac 8 each). The queue is diurnal — 07–09 U
 average ~9 queued runs vs ~4 overnight — i.e. it peaks exactly when the operator is at the
 keyboard, which is why the daily-mean "capacity fine" read (2026-09-05, above) measured the wrong
 thing: the cost is operator minutes, not runner utilisation. Sizing follows: a burst of ~10 runs ×
-2 ARC slots wants **~10 slots, not 3** → wk-03 to 32 GB on pve (FU-225, RAM lot being bought;
+2 ARC slots wants **~10 slots, not 3** → wk-03 to 32 GB on pve (FU-225 — archived 2026-09-08 with no buy, the second hypervisor was the answer;
 FU-218 for the label stopgap).
