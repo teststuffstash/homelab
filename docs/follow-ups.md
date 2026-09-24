@@ -1408,18 +1408,16 @@ the block needs pruning, not more headings.
       `ALERTS{…,node="wk-03"} firing`; it also caught the 5-min idle prune (#1951) and FU-287. **Next (install-time, the console half):** nx-01's BMC SOL is
       `ttyS1` and the metal image ships `console=tty0` only — a panic capture needs
       `console=ttyS1,115200` in the image-factory `extraKernelArgs`. Relates FU-155 (kmsg tenancy).
-- [ ] **FU-234** — **Ride scratch and the `fast` tier: HOMED 2026-09-24, two loose ends left.**
+- [ ] **FU-234** — **Ride scratch and the `fast` tier: HOMED 2026-09-24, one loose end left.**
       `fast` had no backing disk from 2026-09-12 (the Optane pair left with `thinkcentre`) until
       nx-01's freed Intel 7600p took the tag — chosen over `bulk` because `bulk` is also read by
       `longhorn-bulk` (replica-2) and that would have made the RIDE/ARC box a service replica host
-      (operator, 2026-09-24). The selector-less audit this was blocked on is DONE and was never a
-      gate. **Open:** (1) `longhorn-scratch` (best-effort/`bulk`) and `longhorn-fast`
-      (strict-local/`fast`) are **one replica-1 class too many** — retiring one needs a consumer
-      migration, not a tag. (2) the Optane pair is still unhomed — fit both in wk-metal-04's free
-      chipset root ports (`00:1c.0`/`00:1c.1`), add the `longhorn_disks` rows + apply, then
-      `bash scripts/longhorn-register-optane.sh wk-metal-04`; ⚠ the x1 AIC form factor is off the
-      market, do not discard. Detail: [`docs/storage-ledger.md`](storage-ledger.md) §the scratch
-      class rides `bulk` (the plan, the audit, the 2026-09-24 amendment).
+      (operator, 2026-09-24). **Open:** `longhorn-scratch` (best-effort/`bulk`) and `longhorn-fast`
+      (strict-local/`fast`) are **one replica-1 class too many**; retiring one needs a consumer
+      migration, not a tag. **Dropped 2026-09-24 (operator): the Optane pair is NOT fitted.** Each
+      M10 is 16 GB (~13 G after the 25 % floor), a ride's docker-lib claim is a fixed 20Gi that cannot
+      span disks, `longhorn-fast` has no claims, and `fast` has a 238 G home. They'd cost wk-metal-04's
+      two free root ports for nothing. Detail: [`docs/storage-ledger.md`](storage-ledger.md) §the scratch class rides `bulk`.
 - [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
       true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
       (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
