@@ -229,11 +229,17 @@ six OVERSIZE items pointer-ized into
       proximate cause of both commit-refusal outages (09-09, 09-22). A filesystem/PVC backend
       renames on commit, so the double-hold cannot exist; ADR-121's rejection of the PVC rests on a
       capacity clause that no longer binds and a misapplied principle (operator, 2026-09-22).
-      **Blocked on a TIER decision, not on the registry:** `std` is wrong for a store that must
-      reach hundreds of GB, `bulk` is 90% committed — ADR-shaped, belongs with fleet-roles/FU-137.
+      **UNBLOCKED 2026-09-24:** the tier is `bulk` (operator) and it is no longer 90% committed —
+      both SN530s joined it. **The premise also changed:** the 2× peak costs ZERO disk (measured —
+      a Garage COPY shares blocks), so the case is CONTENTION, not capacity. Phase 0 measured it:
+      other tenants' p99 median 9.5× worse while the registry pushes, and the Garage PDB closed
+      90.6% vs 41.4% — no zone node drainable during a release. **Phase 1 is LIVE**: a 150 Gi
+      `longhorn-bulk` claim, verified on the two SN530s alone (ns `registry-fs-trial`).
       Evidence, the experiment, the naming trap and a cheaper side-question first:
       [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md).
-      **Next:** answer the tier question, then run phase 1. Relates FU-203, FU-274, FU-279, FU-137.
+      **Next:** `skopeo copy` the real corpus in (mechanics + does replica-2 bind on the SN530's
+      8–68 MiB/s floor — `slow-bulk` is the escape hatch), then read the headline number during a
+      REAL oracle release. Relates FU-203, FU-274, FU-279, FU-137.
 - [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
       `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
       accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**

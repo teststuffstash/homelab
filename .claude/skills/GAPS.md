@@ -236,6 +236,28 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       fixed paths so they survived re-invocation, and was self-tested against a known-firing alert
       before being armed — and when it later reported nothing across a control-plane shutdown, that
       silence was VERIFIED against Prometheus rather than trusted.
+      **RESIGHT 2026-09-24 (seat, wk-04 SN530 passthrough) — FOURTH hand-written copy, FOURTH new
+      defect class, and this one is the SEED.** The loop itself was right this time (a file, a
+      dedupe set, a loud-on-unreadable counter). What was wrong was where its baseline came from:
+      the seat re-typed the alert names out of `maint open`'s printed output, which prints the
+      **responder SKIP list** — a fixed 14-name set — and NOT the 6 alerts actually firing. The
+      watch therefore reported all six pre-existing alerts as NEW on its first poll, seven
+      notifications in the first minute of the window, and `maint check` had to be run to find out
+      which one (`InfoInhibitor`) was real. Crying wolf is the same failure as silence: both make
+      the next notification unreadable. **The fix is one line and removes the re-typing entirely**
+      — the true baseline is already on disk at `$STATE_DIR/<id>/baseline.json` under `.alerts[]`,
+      which `open` wrote. Seed from that file, never from the terminal. Four copies, four distinct
+      classes (zsh word-split → no dedupe → dead probe → wrong seed), zero clean ones; every one
+      of them would have been prevented by the verb that has now been "next" for three sightings.
+      **Also improvised this window, and the sibling of the missing `cp-down`: `node-maintenance up`
+      cannot start a VM.** Its `up` path is WoL-then-wait — for a VM it logs *"no MAC … (a VM? start
+      it on pve)"* and then blocks on `node_ready` forever, so after `down` stopped wk-04 the verb
+      hung with the node off and nothing to wake it. The seat started it by hand
+      (`ssh root@nx-02 qm start 8114`) and `up` then completed its uncordon + storage wait normally.
+      So `down` works for a VM and `up` does not — the asymmetry is invisible until a window is
+      already open with a node down. Next: give `up` a hypervisor start path (the node's
+      `hypervisor` + `vm_id` are both in `var.nodes`) so the verb pair is symmetric for VMs as it
+      is for metal.
 - [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
       acceptance for any detector-first item (the standing build order: detector, let it fire on
       the real condition, then the fix) is to make the new alert fire on purpose — but `check`

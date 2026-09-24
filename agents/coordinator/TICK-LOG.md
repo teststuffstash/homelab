@@ -10898,3 +10898,72 @@ on the BC711 — its misparsed 1.388e26 `media_errors` is live in Prometheus and
 is ~1.5e10, so a real +1 rounds away); the scratch plan (PR #1953) as a ledger section + FU-234.
 Both windows closed `--force` on lagging alerts they caused — GAPS `maintenance-window-G4`, second
 shape, and the more common one.
+
+
+## 2026-09-24 — registry2 (FU-280): the cheap question inverted the spike, then the operator inverted it back
+
+Seat session, operator engaged throughout. Picked up on the 09-24 pickup's own ordering: the cheap
+side-question FIRST, because "building before it risks building the wrong thing".
+
+**The side-question, answered in ~10 min, and it killed the stated case.** Does a Garage server-side
+COPY share blocks or duplicate them? Throwaway bucket, 256 MiB of `/dev/urandom`, PUT from an
+in-cluster pod on the registry's own multipart path, instrumented with `garage stats`. Idle control
+first (75 s: RC +13) so the noise floor was known before the signal. PUT: RC **+257**. `CopyObject`:
+RC **+1**, `DataAvail` unchanged. Eight more copies: 2.5 GiB of logical bytes the quota charges for,
+**+2 RC total**, `DataAvail` unchanged on all three nodes. The 2× commit peak costs **zero disk** —
+quota accounting only. Confounder named rather than hidden (content-addressing means RC alone cannot
+separate "shares" from "re-writes and dedupes"; `DataAvail` settles it).
+
+**And the seat drew the wrong conclusion from it** — "case weakened, operator fork" — because it
+reasoned from the spike's stated *proximate* cause. The operator corrected: *"it was more about the
+garage thrashing… quota refusal was the visible tip of the iceberg, the complexity underneath was
+the problem."* The measurement killed a BAD argument, not the argument.
+
+**Phase 0, and it was answerable from HISTORY** — Prometheus keeps 31 d, so the baseline did not need
+the next release. 7 days, 1969 five-minute samples. Other tenants' p99 (`PutObject`/`ListObjectsV2`/
+`GetObject`/`DeleteObject`): median **4.72 s while the registry pushes vs 0.50 s idle — 9.5×**;
+over-5 s samples 41.5 % vs 4.2 %. Attribution by a second split on other-tenant request rate:
+idle/quiet 0.49 s → idle/busy 0.52 s (an order more traffic barely moves it) vs push/busy **4.94 s**.
+It is the registry's bytes, not the pipelines beside it. Lifecycle half: resync backlog median
+**2106 vs 60** (the idle figure independently reproduces the 58 that `prometheusrule.yaml` records
+for its own 7-day baseline), and `garage:disruption_allowed` **CLOSED 90.6 % vs 41.4 %** — while the
+registry pushes, no Garage zone node can be drained. Bucket shapes explain the mechanism: registry
+is 21.0 GB in **16 objects**, allure 9.0 GB in **598 600** — 62 % of every object in the cluster.
+
+**A review caught the seat inventing an alert name** (`GarageResyncBacklog` does not exist; the 1000
+threshold is a clause inside `garage:disruption_allowed`). Fixing it produced the PDB measurement
+above — the correction was worth more than the claim.
+
+**The tier ruling did not survive contact with the role fence.** #1954 sent nx-01's freed 7600p into
+`bulk`; but `bulk` has TWO readers with opposite intents (`longhorn-scratch` replica-1 throwaway,
+`longhorn-bulk` replica-2 services) and `diskSelector` is inclusive-AND with no negation, so one tag
+cannot express both — tagging nx-01 `bulk` would have made the RIDE/ARC box a service replica host.
+Operator took option 1: **reuse `fast`**, which coins nothing, already means scratch-only (FU-159)
+and had been homeless since the Optanes left. #1956.
+
+**Three Proxmox facts learned only by applying**, each caught by a failed apply or a reviewer:
+(1) `pcie = true` needs q35 and these VMs have no `machine:` line — i440fx, so the guest would have
+refused to start inside the very window that needed it (reviewer caught it before the apply).
+(2) Raw `hostpci` is **root@pam-only**: `HTTP 500 — only root can set 'hostpci0' config for
+non-mapped devices`. Fixed with a cluster MAPPING, and the operator took the restrained half:
+`TerraformProv` gained `Mapping.Audit` + `Mapping.Use`, deliberately **not** `Mapping.Modify`, so the
+automation identity can attach declared hardware but cannot invent a mapping exposing any host device
+to any guest. (3) A mapping without `subsystem-id` passes config and fails at VM **start**.
+
+**The trial is live and verified.** 150 Gi on `longhorn-bulk`, bound with EXACTLY two replicas, one
+per SN530 — sizing as the selector, no tag coined. Longhorn's 25 % minimal-available floor caps a
+fresh 238 Gi drive at 173 Gi, so the only-the-SN530s window is **93–173 Gi**; the 200 Gi first
+floated schedules nowhere.
+
+**Seat errors worth the record, all the same shape — asserted instead of read.** `pcie=true` "which
+these VMs already use" (they do not). A `tofu fmt -check | tail` whose `$?` was TAIL's — the exact
+"never pipe-filter a gate's exit" rule already in the seat card. An alert watch seeded from `maint
+open`'s responder SKIP list instead of the firing set, which cried wolf 7× in the window's first
+minute (GAPS `maintenance-window-G2`, FOURTH hand-written copy, FOURTH distinct defect class — the
+fix is to seed from `$STATE_DIR/<id>/baseline.json`, which `open` already wrote). And the shared
+checkout sat FIVE commits behind all session, so the first `longhorn-tag-disks.sh` run executed the
+old script and registered nothing.
+
+**Also left behind:** `node-maintenance up` cannot start a VM — its `up` is WoL-then-wait, so after
+`down` stopped wk-04 the verb hung with the node off (started by hand with `qm start`); filed under
+the same GAPS entry as the missing `cp-down`.

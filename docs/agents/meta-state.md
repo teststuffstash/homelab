@@ -9,6 +9,32 @@ never the session's arc — that is TICK-LOG's.)
 
 
 ## Live state (pruned 2026-09-05, the corpus-cost sitting — every item live-verified against the board that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+- **⚑ PICKUP (2026-09-24 — registry2 / FU-280: the trial is LIVE and the case is measured; arc in TICK-LOG).**
+  Merged: #1955 (the measurement + reframing), #1956 (nx-01→`fast`, hp-01's SN530→`bulk`),
+  #1957/#1958 (wk-04's SN530 by PCIe passthrough), #1959 (the trial). **Verified live:** the 150 Gi
+  `longhorn-bulk` claim bound with EXACTLY two replicas, one per SN530 (hp-01 + wk-04), nothing on
+  mx500/intel0/intel1 — sizing as the selector worked. Pod Running on wk-04.
+  **The spike's premise CHANGED and the doc now says so:** a Garage server-side COPY shares blocks,
+  so the 2× commit peak costs ZERO disk — it was never the case. The case is CONTENTION (phase 0,
+  7 days of history): other tenants' p99 median 9.5× worse while the registry pushes (4.72 s vs
+  0.50 s), resync backlog 2106 vs 60, and the Garage PDB **closed 90.6 % vs 41.4 %** — no zone node
+  can be drained during a release.
+  **NEXT, in order:** (1) `skopeo copy` the real 10.6 GB corpus into the trial (mechanics + the
+  slowest-replica question: the SN530's sustained floor is 8–68 MiB/s against the 7600p's 226;
+  `slow-bulk` is the named escape hatch). (2) The HEADLINE number needs a **real oracle release
+  window** — re-run phase 0's queries during it and compare. (3) Only if it wins: phase 2, and the
+  end state is the LIVE registry moving onto the backend and KEEPING its name (the spike's naming
+  trap — do not coin `registry2.teststuff.net`).
+  ⚠ **Three Proxmox facts learned by applying, all now in git:** raw `hostpci` is root@pam-only (use
+  a cluster MAPPING; `TerraformProv` got `Mapping.Audit`+`Mapping.Use` and deliberately NOT
+  `Mapping.Modify`, operator ruling); a mapping needs `subsystem-id` or the VM fails at START, not
+  at config time; and these VMs are **i440fx** (no `machine:` line) so `pcie=true` breaks the guest.
+  ⚠ **200 Gi schedules NOWHERE** — Longhorn's 25 % minimal-available floor caps a fresh 238 Gi drive
+  at 173 Gi; the only-the-SN530s window is 93–173 Gi.
+  ⚠ FU-280's tracker entry still cites `bulk` at 90 % committed as its blocker — stale now that
+  both SN530s are in (reviewer's non-blocking note on #1956). Open: retiring one of the two
+  replica-1 scratch classes (FU-234), and nx-02's SN530 is the only bulk member in the nx twin
+  chassis — re-ask the zone-collapse question if a SECOND lands there.
 - **⚑ PICKUP (2026-09-24 — the basement drive session; arc in TICK-LOG).** All three drive windows
   are CLOSED and verified: 13/13 Ready, etcd 3/3, 0 degraded, rebuild timer back at 600,
   `mgmt-tf` baseline stamped at `a4cc12bb`. Nothing is half-applied. **Operator ruling on what is
