@@ -311,6 +311,29 @@ else
   echo "  nx-01/intel7600p registered (fast)"
 fi
 
+# wk-04's WD SN530 (2026-09-24), registered **bulk** — the FIRST Longhorn disk on a VM node that is
+# not the VM's own root disk, and allowed only because it is a PCIe-PASSED-THROUGH physical NVMe
+# (tofu/variables.tf `hostpci_id`), not a slice of nx-02's nvme-thin pool. Pool-backed Longhorn
+# capacity is what ADR-089's wk-02 consequence and the 2026-08-24 meta-wipe incident rule out.
+# Pairs with hp-01's SN530 above: two identical drives, which is what FU-280's registry trial runs
+# on so the measurement has one variable.
+# ⚠ Zone: wk-04 is zone `nx-02`, one half of the twin chassis shared with nx-01. Safe because this
+# is `bulk`'s ONLY member in that chassis (nx-01 carries `fast` alone), so longhorn-bulk cannot put
+# both replicas of a volume inside the twin. Re-ask if a second bulk disk lands on an nx node.
+# Skip when already registered: re-patching mid disk-sync trips the longhorn validator.
+if kubectl -n longhorn-system get nodes.longhorn.io wk-04 -o jsonpath='{.spec.disks.sn530.path}' 2>/dev/null | grep -q .; then
+  echo "  wk-04/sn530 already registered — skip"
+else
+  kubectl -n longhorn-system patch nodes.longhorn.io wk-04 --type=merge -p '{
+    "spec": {
+      "disks": {
+        "sn530": {"path":"/var/lib/longhorn/sn530","allowScheduling":true,"evictionRequested":false,"storageReserved":0,"tags":["bulk"],"diskType":"filesystem"}
+      }
+    }
+  }' >/dev/null
+  echo "  wk-04/sn530 registered (bulk)"
+fi
+
 echo "disk status:"
 kubectl -n longhorn-system get nodes.longhorn.io -o json | python3 -c '
 import sys,json

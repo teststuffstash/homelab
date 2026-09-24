@@ -225,6 +225,21 @@ data "talos_machine_configuration" "node" {
       }
     })],
     [local.registry_mirrors_patch],
+    # Extra Longhorn disks on a VM node — the same patch metal.tf renders from machines.yaml, and
+    # for the same reasons (mount under /var/lib/longhorn because longhorn-manager host-mounts only
+    # that path; the entry's `name` is ALSO its node.longhorn.io disk key, so never rename one that
+    # holds replicas). Empty for every VM but wk-04, whose disk is a PASSED-THROUGH physical NVMe
+    # (variables.tf `hostpci_id`) rather than pool storage — which is the only reason a VM is
+    # allowed to carry one at all. ⚠ Talos refuses a device that already has a partition table;
+    # `talosctl wipe disk <dev>` first.
+    length(each.value.longhorn_disks) > 0 ? [yamlencode({
+      machine = {
+        disks = [for d in each.value.longhorn_disks : {
+          device     = d.device
+          partitions = [{ mountpoint = "/var/lib/longhorn/${d.name}" }]
+        }]
+      }
+    })] : [],
     # FU-139: the VM tier gets kubelet reservations too. FU-112(b) fixed only the kata metal nodes
     # ("desktops/VMs use different math and aren't urgent"); wk-02 then proved the VMs need them —
     # 2026-08-04 18:34:28 Talos's OOMController SIGKILLed the Longhorn instance-manager cgroup,

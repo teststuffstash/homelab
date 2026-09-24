@@ -78,6 +78,22 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
     content {}
   }
 
+  # PCIe passthrough of a host device (variables.tf `hostpci_id` carries the why). Only wk-04 uses
+  # it today: the WD SN530 at 0000:82:00.0, so the guest sees a REAL NVMe and its Longhorn disk is
+  # not a slice of the nvme-thin pool. `pcie = true` needs the q35 machine type, which these VMs
+  # already use.
+  # ⚠ hostpci is NOT hot-pluggable: applying or changing it needs a full VM stop/start, so it rides
+  # a `node-maintenance` window. A guest-initiated reboot keeps the qemu process and never picks up
+  # pending hardware — the same trap the `serial` flag's note above records.
+  dynamic "hostpci" {
+    for_each = each.value.hostpci_id == null ? [] : [each.value.hostpci_id]
+    content {
+      device = "hostpci0"
+      id     = hostpci.value
+      pcie   = true
+    }
+  }
+
   operating_system {
     type = "l26"
   }
