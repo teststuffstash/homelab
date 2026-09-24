@@ -58,6 +58,9 @@ never the session's arc — that is TICK-LOG's.)
   kind-timing evidence), #1370 (FU-171 resight), #1713 (pin-only-lint, operator lane), #1627 (unqueued),
   #1669 (blocked until theme 1 deploys).
   (7) Cloudflare `Cache Purge` onto tofu-apply vs relying on oracle-fleet#414's Cache-Control: undecided.
+  (8) **#1968** (minutark bot contract, oracle-fleet#732): GPTBot/ClaudeBot 403 until it lands. Needs a
+  host-side `tofu/cloudflare-token` apply (Bot Management Write/Read, new scope) THEN the jail's
+  `tofu/cloudflare` apply, then a GPTBot curl should return 200. Un-armed on purpose. It could share a token sitting with (7).
 - **⚑ UNOBSERVED FIRSTS (read when they happen; no action until then):** #1621 is open for its live
   acceptance: the next oracle corpus publish should ring `/corpus-published` → `release-corpus.yaml`.
   `fixer.imageVolumes` (#1808, ADR-135): the first ride with `/corpus` mounted. The first oracle
