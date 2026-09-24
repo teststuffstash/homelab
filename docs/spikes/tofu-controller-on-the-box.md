@@ -217,5 +217,5 @@ Two pieces of evidence are worth keeping for any later substrate question:
 - the drift condition and the failure states read well from `kubectl`;
 - a k3s on the box cannot bind its API to loopback.
 
-Retiring FU-242 on this reason, or amending ADR-132's "decided by the spike" line, is for the
+FU-242 is retired (archived 2026-09-21). Amending ADR-132's "decided by the spike" line, is for the
 operator.

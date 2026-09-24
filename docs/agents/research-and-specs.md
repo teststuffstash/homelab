@@ -5,7 +5,7 @@ multi-model fan-out, evaluated, woven, hardened by implementation, and handed to
 **First-pass record (2026-08-10) from ONE full run** — circles, 2026-08-03..08 — plus the design
 rulings from the operator session that harvested it. Per the ≥2-projects rule, the *unsettled
 register* at the bottom is deliberate: the second run (idp, FU-126) settles it. Model selection
-mechanics live in [`model-routing.md`](model-routing.md) §M13 (ADR-104); the researcher role's
+mechanics live in [`model-routing-history.md`](../spikes/model-routing-history.md) §M13 (ADR-104); the researcher role's
 machinery in [`roles.md`](roles.md); branch/lineage mechanics in
 [`issue-authoring.md`](issue-authoring.md) §`Base:`.
 

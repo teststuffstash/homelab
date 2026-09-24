@@ -207,7 +207,7 @@ surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in bu
    genuinely new base is still dropped. Within-tick siblings collapse too (two variants of one new
    base = one candidate, represented by the cheapest listing). The snapshot keeps storing FULL
    ids — bases are derived at diff time, so the live snapshot survived the change. Replayed
-   against #234's own world in `agents/replay/fixtures/scout-variant-batch-rollout`: 22 → 2.
+   against #234's own world in `agents/replay/fixtures/scout-variant/batch-rollout`: 22 → 2.
 2. **Benchmark cross-check, one MCP call per candidate.** ✅ **BUILT** (homelab#282, 2026-08-11),
    with one live unknown named below. `get-model` embeds the AA indices; attach them to the digest
    row (capability beside price, so the graduation call has both) and mark benchless newcomers

@@ -6,7 +6,7 @@ routes), oracle + sleep run chainless (oracle-iac#387, sleep-iac#77), and the pl
 chainless flip rode the same wave; what remains is flip acceptance 2–4, the FU-186/ADR-115
 provider legs, and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
 decisions, the claim-knob ledger, the OpenCode Go rail evidence, and the build plan — so the
-direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (§M8–M13) and the
+direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (rules; the §M8–M13 mechanism history is in [`model-routing-history.md`](../spikes/model-routing-history.md)) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
 decision record is **ADR-107** (decision 3 superseded by **ADR-112**, the harness matrix); the
 day's probe evidence is TICK-LOG 2026-08-13.
