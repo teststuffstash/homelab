@@ -25,6 +25,21 @@ never the session's arc — that is TICK-LOG's.)
   (3) phase 1 only, no DNS/cert/VIP. The scratch plan waits in
   [`storage-ledger.md`](../storage-ledger.md) §the scratch class rides `bulk` (FU-234); nx-01's
   freed 7600p is idle but safe — nothing degrades while it waits.
+  **⚠ Operator ruling the same evening, and it REVISES that plan (PR #1954 carries it into the
+  ledger; read the §Operator ruling block, not just the step list above it): ONE tier, not a tier
+  per drive** — *"I dont want to have a storageclass and tier name per each nvme drive I happen to
+  have."* So: **registry2 goes on `bulk`, not a new tier** (the spike already says bulk's definition
+  matches its profile exactly, and it needs ≥2 replicas since replica-1 was ruled out on
+  availability); the two SN530s **join `bulk`**, which takes the tier from 1009 G/923 G committed
+  (**91.5 %**, `intel0` at 105 %) to **1521 G/923 G = 61 %** and dissolves the capacity objection
+  that blocked FU-280; **nx-01's 7600p joins `bulk` too**, so `longhorn-scratch` keeps selecting
+  `bulk` unchanged and ride scratch goes node-local for free — no tag is coined at all. A tag is
+  only for a disk you want to EXCLUDE. The open risk is SHAPE, not profile: replica-2 writes wait
+  for the slowest replica and the SN530's sustained-sequential floor is 8–68 MiB/s against the
+  7600p's 226 — **phase 1 is the measurement**, and if it binds the escape hatch is the existing
+  `slow-bulk`, demoted after evidence exactly as the SA400 was. Also found: `bulk` disks already
+  carry garage-0/garage-2's data+meta only because `longhorn-local-xfs` is selector-less and those
+  volumes are node-pinned — nobody chose it, so the audit is a live cleanup, not hygiene.
 - **⚑ PICKUP (2026-09-23 late — the mechanical FU sweep; arc in TICK-LOG).** Six PRs merged
   (#1946/#1947/#1948/#1949/#1950/#1951) plus the parked spike #1905. Three things a fresh session
   should expect rather than chase: (1) **`KernelOopsCaptured` is firing on wk-03 by design** — two
