@@ -6,8 +6,11 @@ sum). **Status:** open, and **re-framed 2026-09-24**. The cheap side-question wa
 the 2× peak costs **zero disk**, so the quota argument is dead — but the operator's correction the
 same day is that the quota refusal *was always the visible tip*: the case is **contention during the
 release window and the machinery the S3 path drags in**, not capacity (§the real case). Next step is
-therefore **phase 0**, a baseline of what a release costs the store's other tenants. Opened
-2026-09-22 after the second commit-refusal outage in two weeks.
+therefore **phase 0**, a baseline of what a release costs the store's other tenants — **run the
+same day, from 7 days of history: other tenants' p99 median is 9.5× worse while the registry
+pushes, and the registry (not the pipelines beside it) is the variable that moves it.** The case is
+measured; phase 1 is worth building. Opened 2026-09-22 after the second commit-refusal outage in
+two weeks.
 
 ## The question
 
@@ -90,7 +93,7 @@ than inside a registry PR.
 
 ## The experiment
 
-### Phase 0 — BASELINE the release window first (detection before fix)
+### Phase 0 — BASELINE the release window first (detection before fix) — **DONE 2026-09-24**
 
 The 2× claim is already settled and it was never the case. What phase 1 has to beat is
 **contention**, and there is no point building a candidate before the thing it must improve is a
@@ -109,8 +112,56 @@ alongside), record:
 
 That baseline **is a deliverable on its own**: if the release window turns out to be invisible to
 the other tenants, the case in §the real case is weaker than it looks and phase 1 is not worth
-building. If it is as visible as the rotation measurements suggest, the same series are the
-acceptance test for phase 1 — and, either way, a durable read of what a release costs.
+building. If it is visible, the same series are the acceptance test for phase 1.
+
+#### Phase 0 RESULT (2026-09-24) — it is visible, and it is attributable
+
+Prometheus keeps **31 d**, so this was answerable from history instead of waiting for a release.
+**7 days, 2026-09-17 → 09-24, 1 969 five-minute samples.** "Registry pushing" = any sample with
+`UploadPart`/`UploadPartCopy` traffic (the registry is the only multipart producer of this size);
+"other tenants" = `PutObject`/`ListObjectsV2`/`GetObject`/`DeleteObject`, i.e. allure, Argo
+artifacts, loki, transcripts, ert-snapshots. **The registry pushes in 123 of 1 969 samples —
+6.2 % of the week, ~10 hours.**
+
+**Other tenants' p99, split on whether the registry is pushing:**
+
+| | n | median | p90 | p99 | mean |
+|---|---|---|---|---|---|
+| registry **pushing** | 123 | **4.72 s** | 12.6 s | 74.4 s | 7.86 s |
+| registry **idle** | 1 846 | **0.50 s** | 1.35 s | 14.5 s | 1.35 s |
+
+Median **9.5× worse**. Samples over 5 s: **41.5 % while pushing vs 4.2 % idle**. Over 30 s: 4.9 %
+vs 0.6 %.
+
+**And it is the registry, not the pipelines it runs alongside** — the load that matters is
+isolated by splitting again on other-tenant request rate (median 1.29 req/s):
+
+| registry | other tenants | n | median p99 | p90 | mean |
+|---|---|---|---|---|---|
+| pushing | quiet | 36 | 1.59 s | 58.4 s ⚠ | 13.9 s |
+| pushing | busy | 87 | **4.94 s** | 9.30 s | 5.37 s |
+| idle | quiet | 933 | 0.49 s | 0.92 s | 1.31 s |
+| idle | busy | 913 | **0.52 s** | 2.76 s | 1.39 s |
+
+**Other-tenant load on its own barely moves p99** (0.49 → 0.52 s median, 0.92 → 2.76 s p90 across
+an order of magnitude more traffic). **The registry push is what moves it** — 0.49 → 4.94 s median.
+That is the operator's thesis, measured: it is not the release *pipeline*, it is the registry's
+bytes going through the shared store. ⚠ The 58.4 s p90 in the push/quiet cell is **noise-prone**
+(n=36, and a low-count histogram lets a handful of stragglers dominate); the median column is the
+load-bearing one.
+
+**The lifecycle half moves too**, over the same split:
+
+| series | pushing (median) | idle (median) | |
+|---|---|---|---|
+| `block_resync_queue_length` | **2 106** | 60 | **35×** — and `GarageResyncBacklog`'s own "not draining" threshold is **1 000**, so a routine push puts the store past it |
+| `table_gc_todo_queue_length` | 115 107 | 80 151 | +44 % |
+
+**Threat to validity, stated:** this is observational, not an A/B — "pushing" is inferred from
+multipart traffic and the causal claim rests on the second table's control rather than on an
+intervention. A single controlled release window (push held back, then released, same day) would
+close it, and is cheap. It is not needed to justify building phase 1; it would be needed to claim
+a precise factor.
 
 ### Phase 1 — the candidate, needs no DNS, cert or VIP
 
