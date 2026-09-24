@@ -2,18 +2,21 @@
 
 **Tracked by:** FU-280. **Touches:** [ADR-121](../adr.md) (the registry decision),
 [ADR-089](../adr.md) (quota-as-contract), [`storage-ledger.md`](../storage-ledger.md) (who owns the
-sum). **Status:** open, nothing decided. Opened 2026-09-22 after the second commit-refusal outage in
+sum). **Status:** open — but its premise is now **measured and substantially weaker**: the cheap
+side-question below was answered 2026-09-24 and the 2× peak turns out to cost **zero disk**. What is
+left is an operator fork, not a build. Opened 2026-09-22 after the second commit-refusal outage in
 two weeks.
 
 ## The question
 
 `registry.teststuff.net` runs `registry:3` on the **Garage S3 driver**. A blob commit on that driver
 is two S3 steps — `CompleteMultipartUpload` of the upload, then a server-side **COPY** into
-`blobs/sha256/…` — so between them the bucket holds the layer **twice**. Should it run on a
+`blobs/sha256/…` — so between them the bucket holds the layer **twice** *in the quota's
+accounting* (and, as of 2026-09-24, provably **not** on disk — §the side-question). Should it run on a
 **filesystem (PVC)** backend instead, where a commit is a `rename(2)` and the double-hold does not
 exist?
 
-## What is established (measured 2026-09-22, not argued)
+## What is established (measured, not argued — 2026-09-22, extended 2026-09-24)
 
 - **The 2× peak is the proximate cause of both outages.** 09-09 and 09-22 were the same shape:
   quota refused the COPY's commit, the registry mapped Garage's 403 onto an opaque **500**, and the
@@ -41,10 +44,25 @@ exist?
   "bigger PVC, never a lower threshold" as the recorded posture
   ([`storage-ledger.md`](../storage-ledger.md), homelab#116).
 - **Writes per release, if the backend changed** — a PVC at 2 replicas writes ~21.2 GB, against
-  Garage rf=3's ~31.8 GB (or ~63.6 GB if a server-side copy does not share blocks — unverified,
-  see below). So the candidate is cheaper in writes *and* removes the failure mode.
+  Garage rf=3's **~31.8 GB**. The ~63.6 GB alternative is **ruled out by measurement** (2026-09-24,
+  below): the server-side COPY shares blocks, so it writes nothing. The candidate is therefore
+  cheaper in writes by **~1.5×**, not 3×.
+- **The 2× commit peak costs NO disk** (measured 2026-09-24, §the side-question). It is a
+  **quota-accounting** effect only. This removes the capacity half of the case for changing
+  backend — the half that made it urgent.
 
-## The open question that actually blocks a decision: WHICH TIER
+## WHICH TIER — ANSWERED 2026-09-24: `bulk`
+
+> **Operator ruling, 2026-09-24 — "I dont want to have a storageclass and tier name per each nvme
+> drive I happen to have."** `registry2` is a **`bulk`** workload, not a new tier; the two WD SN530s
+> fitted that day join `bulk` and take it from 91.5 % committed to 61 %, which dissolves the
+> capacity objection below. The full ruling, including how the `bulk` row's *second* objection
+> (wipe-on-PXE) is answered, lives in [`storage-ledger.md`](../storage-ledger.md) §the operator
+> ruling of 2026-09-24 — it is placement, so it belongs there and not in an ADR (§2026-09-07).
+> The rest of this section is the reasoning that led there; the table's `against` column is what
+> the ruling had to answer.
+
+### The reasoning, as it stood on 2026-09-22
 
 **`std` is not the answer** (operator, 2026-09-22). It is fine to *start* a spike on, and it has the
 room today — hp-01 `intel7600p` 227 G avail, m70s `nvme` 295 G — but ADR-089 defines `std` as "the
@@ -71,9 +89,12 @@ than inside a registry PR.
 
 ### Phase 1 — settles the 2× claim, needs no DNS, cert or VIP
 
-1. PVC, 40 Gi (two layers + one in flight), on whatever tier the spike starts on — `std` is
-   acceptable *for the trial only*, and the claim goes in [`storage-ledger.md`](../storage-ledger.md)
-   per ADR-089's one hard rule even though it is temporary.
+1. PVC, 40 Gi (two layers + one in flight), on **`longhorn-bulk`** (the 2026-09-24 ruling; it is
+   replica-2, which the availability requirement above needs). The claim goes in
+   [`storage-ledger.md`](../storage-ledger.md) per ADR-089's one hard rule even though it is
+   temporary. ⚠ The measurement that matters most here is no longer the peak — it is **whether
+   replica-2 across a 7600p and an SN530 binds on the slowest replica**; the ruling names
+   `slow-bulk` as the escape hatch if it does.
 2. `registry:3` Deployment, `REGISTRY_STORAGE=filesystem`, ClusterIP only, no auth front.
    ⚠ **`strategy: Recreate`** — RWO plus RollingUpdate deadlocks on the volume.
 3. From an in-cluster pod: `skopeo copy` the real 10.6 GB corpus out of the current registry into
@@ -85,7 +106,7 @@ Measure, against tonight's Garage numbers as the control:
 |---|---|---|
 | peak store usage during commit | **2 × layer** (42.2 → 52.7 GB attempted) | **1 × layer**, i.e. no double-hold |
 | wall-clock to commit | ~9 min (20:04 → 20:12:57) | within noise, or better |
-| bytes written per release | ~21–64 GB depending on block sharing | ~21.2 GB at 2 replicas |
+| bytes written per release | **~31.8 GB** (rf=3; block sharing confirmed 2026-09-24) | ~21.2 GB at 2 replicas |
 
 ### Phase 2 — only if phase 1 wins
 
@@ -101,16 +122,55 @@ the temporary name being deleted, or skip the hostname until the cutover. A perm
 need a [glossary](../glossary.md) row in its coining commit (FU-163); the glossary currently holds
 only **registry (first-party)** and **registry mirrors**.
 
-## Cheap side-question worth answering first
+## The cheap side-question — ANSWERED 2026-09-24: the COPY shares blocks, and costs zero disk
 
-**Does a Garage server-side copy share blocks, or duplicate them?** Garage blocks are
-content-addressed and refcounted (`docs/garage.md`, and the rc=0 mechanics in the
-[2026-08-24 postmortem](../incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md)), which suggests
-the COPY produces a second object referencing the same blocks — making the 2× peak a **quota
-artifact costing no disk**. If that holds, "raise the cap" becomes far cheaper than the ledger's
-logical sums imply, and it weakens the case for changing backend at all. Test: copy a known object
-inside a bucket, compare `garage stats` block count against bucket bytes. Unverified — do not build
-on it either way.
+**It shares them.** The 2× peak is a **quota-accounting artifact costing no disk whatsoever.**
+
+**Method** (live cluster, ~10 min): throwaway bucket `copytest` + key, quota raised to 8 G, and
+**256 MiB of `/dev/urandom`** so the payload shares no content with anything already stored. PUT
+from an in-cluster pod on `wk-04` with `aws s3 cp` — the same multipart path the registry uses.
+The instrument is `garage stats`: *"number of RC entries (~= number of blocks)"* for the block
+store, per-node `DataAvail` for actual disk, and `bucket info` **Size** for what the quota counts.
+
+| step | bucket Size (what the quota sees) | RC entries (blocks) | `DataAvail` m70s / wk-metal-01 / wk-metal-04 |
+|---|---|---|---|
+| baseline | 0 | 485 487 | 73.1 / 72.4 / 72.5 GiB |
+| **idle control, 75 s** (sizes the noise) | 0 | **+13** | 73.1 / 72.4 / 72.5 — unchanged |
+| PUT 256 MiB | 256 MiB | **+257** | 72.8 / 72.4 / 72.3 — **falls** |
+| `CopyObject` a → b | **512 MiB** | **+1** | 72.8 / 72.2 / 72.3 |
+| 8 more copies (a → c…j) | **2.5 GiB, 10 objects** | **+2 total** | 72.8 / 72.2 / 72.3 — **unchanged** |
+
+Ten objects, 2.5 GiB of logical bytes the quota charges for, **one physical copy**. Duplicating
+them would have cost ≈2 GiB *per zone* and the print granularity is 0.1 GiB, so the negative is not
+a rounding artifact. `block_ref` grew with each copy (new version rows) while RC did not — the new
+versions point at the **same** blocks.
+
+⚠ **One confounder, named because RC entries alone do not settle it.** Garage's block store is
+content-addressed globally, so a COPY that genuinely *re-wrote* identical bytes would dedupe to the
+same hashes and also leave RC flat. **`DataAvail` is what settles it**, and it did not move across
+2 GiB of logical copies. Either way the operational conclusion is identical: *no disk is consumed*.
+
+### What this changes
+
+1. **The capacity argument for the PVC backend is gone.** It was the urgent half — "the bucket holds
+   the layer twice" is true of the *quota* and false of the *disk*.
+2. **Write amplification is 1.5×, not 3×** — Garage rf=3 writes ~31.8 GB per release against a
+   replica-2 PVC's ~21.2 GB. A real cost, not a failure mode.
+3. **"Raise the cap" is now nearly free.** A quota is a ceiling, not a reservation
+   ([`garage-workspace.yaml`](../../argocd/resources/registry/garage-workspace.yaml) header: the 16
+   buckets' quotas already sum to ~205 GiB against 130 GiB of declared capacity), and the transient
+   half of the registry's cap now provably buys nothing physical.
+4. **FU-203 already caps the peak without spending anything.** Prune-before-push holds it at
+   `2 kept + 2 × incoming = 42.4 GB` — **inside the existing 48Gi cap**, at any burst size.
+5. **What survives of the case for changing backend:** the opaque **500** (a legibility bug, and
+   ADR-089's "fails fast with a legible error" promise is broken on this path regardless of
+   backend), FU-274's ambition to serve first-party images from here, and that 1.5×.
+
+**Therefore this is an operator fork, not a build.** Neither branch is blocked on capacity any
+more, and the tier question that used to block it was answered independently the same day
+(`bulk` — [`storage-ledger.md`](../storage-ledger.md) §the operator ruling of 2026-09-24).
+Phase 1 below is still the right experiment *if* the fork goes that way; it is no longer the
+obvious next step.
 
 ## What this does NOT decide
 
