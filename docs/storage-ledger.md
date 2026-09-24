@@ -421,6 +421,39 @@ No ADR amendment is needed.
 6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
    the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
 
+### ⚠ Operator ruling, 2026-09-24 (later the same day) — ONE tier, not a tier per drive
+
+The step list above leans toward reusing `fast` or coining a `scratch` tag. **The operator ruled
+against tier proliferation**: *"I dont want to have a storageclass and tier name per each nvme drive
+I happen to have."* What that changes:
+
+- **`registry2` is a `bulk` workload, not a new tier.** The spike already says bulk's definition
+  ("rebuildable, degradation on wipe acceptable") *matches this store's profile exactly*, and the
+  store needs ≥2 replicas because replica-1 was ruled out on availability grounds (rebuilding it
+  needs ghcr, the thing ADR-121 exists to be independent of). `longhorn-bulk` is replica-2. The only
+  objection the spike raised was **capacity**, and the two WD SN530s fitted 2026-09-24 (hp-01 x16,
+  nx-02 x8) ARE that capacity.
+- **Consolidating fixes the over-commitment outright.** Adding both SN530s takes `bulk` from
+  **1009 G allocatable / 923 G committed (91.5 %, `intel0` at 105 % of its own size)** to
+  **1521 G / 923 G = 61 %**. No tier needed to get that.
+- **`nx-01`'s freed 7600p joins `bulk` too**, and then `longhorn-scratch` keeps selecting `bulk`
+  unchanged — ride scratch becomes local on nx-01 for free via `dataLocality: best-effort`, with no
+  new tag at all. **A tag is only warranted for a disk you want to EXCLUDE from something.**
+- **Demote by measurement, not in advance.** The one real risk is shape, not profile: `longhorn-bulk`
+  is replica-2 and **a write waits for the slowest replica** (§2026-09-05). The drives differ on the
+  axis that matters — sustained sequential over a 200 GiB span: 7600p **298 MiB/s mean / 226 MiB/s
+  floor, no cliff**; SN530 **138–163 mean but an 8–68 MiB/s floor** past its SLC cache; MX500 is SATA.
+  Whether that binds is unknown and **phase 1 of FU-280 is the measurement**: a 10.6 GB push at the
+  SN530's mean is ~78 s, inside the 180 s that exhausted the cache in the bench, and the real
+  end-to-end LAN push measured **3.4 MB/s** — far below even its floor. If it does bind, the escape
+  hatch already exists and is already named: **`slow-bulk`**, which is exactly how the Kingston SA400
+  got there — demoted *after* measurement, never before.
+
+**Also true and not a tier decision:** `bulk`-tagged disks today carry garage-0 and garage-2's
+data+meta volumes, which are `longhorn-local-xfs` — **selector-less**, so they landed there only
+because they are node-pinned to those nodes. Nobody chose that. It is the same selector-less hole the
+plan lists as its blocker, which makes that audit a live cleanup rather than hygiene.
+
 ### The fleet rule this is really about
 
 Not "two drives per ride box" but **images and Longhorn never share a spindle on a box that runs
