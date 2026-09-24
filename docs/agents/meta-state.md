@@ -61,6 +61,7 @@ never the session's arc — that is TICK-LOG's.)
   (8) **#1968** (minutark bot contract, oracle-fleet#732): GPTBot/ClaudeBot 403 until it lands. Needs a
   host-side `tofu/cloudflare-token` apply (Bot Management Write/Read, new scope) THEN the jail's
   `tofu/cloudflare` apply, then a GPTBot curl should return 200. Un-armed on purpose. It could share a token sitting with (7).
+  Plus the console: AI bot policies → Training → Allowed (`ai_training` is not in the provider, checked through v5.25.0).
 - **⚑ UNOBSERVED FIRSTS (read when they happen; no action until then):** #1621 is open for its live
   acceptance: the next oracle corpus publish should ring `/corpus-published` → `release-corpus.yaml`.
   `fixer.imageVolumes` (#1808, ADR-135): the first ride with `/corpus` mounted. The first oracle
