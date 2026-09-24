@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-288** (2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-289** (2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -96,7 +96,14 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-25 (fu-sweep after the evening board-sweep, machine-lane reconciled by
+_Last updated: 2026-09-24 (fu-sweep over **Hardware & nodes + GitOps & platform**, the two fastest-growing
+sections since 08-25; the Agents block was out of scope. **Archived:** FU-215 (quiet 8 d after the do-ip6 fix),
+FU-203 (the 09-23 GC took the bucket 19.6→9.8 GiB), FU-076 (now a detector, `MgmtNodeInstallDrift`).
+**Soak FAILED, re-scoped:** FU-224 (bucket-sync still 58–70 % throttled at 2 CPU → it is CPU-bound).
+**Re-scoped on evidence:** FU-192 (b) answered — the largest tenant peaks at 1.23 MB/s against 8, so the
+limit stays; FU-235 (all 7 axes 0 on 13 nodes → only `install_disk` left); FU-208 (the pve hold is
+gone at 48 %); FU-274 (the store is the fs volume now). **DO-NOW:** FU-286's talosctl pin → PR#1963.
+FU-288 moved into its section, and the counter was corrected. Previous 2026-08-25 (fu-sweep after the evening board-sweep, machine-lane reconciled by
 substance: **FU-149 archived** — the 14d read says ordinary days 0–6, the cap bound only on real
 storm days; **FU-168's (a) soak read FAILED** — cron-woken dispatches persist (2 and 5 in 24h),
 the emitter hunt is live on #459; **FU-147 fired live 2026-08-24 and mis-fired** — the landing-PR
@@ -134,13 +141,10 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
-      `pve_lvm_thin_pool_data_percent` < 75 (no sample = hold); first bake (#1366) took the pool
-      71 → 79 % and the gate HELD wk-03, by design. **2026-09-05: the pool's post-trim floor is
-      ~80 % (79.6 after the 03:35 trim, 81.0 after a manual one), so the gate is a PERMANENT hold** —
-      wk-02's pod sits `Init:0/1`, the kube-prometheus defaults (`KubeDaemonSetRolloutStuck` /
-      `KubeContainerWaiting` / `KubePodNotReady`) fire on it, and a runner landing on wk-03 pulls the
-      same 4.9 GiB ungated. **Next:** a sentinel-scoped closure (or a second, small image for
-      `agents/coordinator/sentinel-argo.yaml`) — hundreds of MB. Relates FU-015, FU-093, FU-207, #80.
+      `pve_lvm_thin_pool_data_percent` < 75. The 09-05 "permanent hold" (post-trim floor ~80 %) is gone:
+      pve's pool reads 48 % on 2026-09-24 and `runner-image-prepull-pve` is 4/4 Ready. **Next:** a
+      sentinel-scoped closure (or a second, small image for `agents/coordinator/sentinel-argo.yaml`) —
+      hundreds of MB, not 4.9 GiB. Relates FU-015, FU-093, FU-207, #80.
 
 - [ ] **FU-205** — **WAN-upstream accounting: one view of what hits GitHub/PyPI/ghcr/… from
       where** (operator ask 2026-09-02 after two same-day WAN-limit incidents; no FU/ADR covers
@@ -182,23 +186,13 @@ six OVERSIZE items pointer-ized into
       experiment settles fsync honesty AND whether Garage moves to node-local storage (the
       `user_volumes` partition, install-time only). Not on the X240: it leaves the zone role first.
 
-- [ ] **FU-224** — **`longhorn-manager` throttles at its 150m CPU limit.** Grafana's throttling
-      panel (operator, 2026-09-07) shows 4–14 % of CFS periods throttled per manager pod over an
-      hour (`longhorn-manager-fxr4s` 13.9 %), cilium agents 4–13 %. Not a data-path contamination of
-      the ledger's engine measurement — `instance-manager` carries the I/O and has NO CPU limit — but
-      the manager IS the attach/rebuild/scheduling plane, and the 150m req==limit came from the
-      FU-112(b) Guaranteed-QoS ruling, sized for memory not CPU. **Next:** raise the manager CPU
-      limit (300m, keep req==limit) in `tofu/longhorn.tf` on a quiet day — it rolls the DaemonSet,
-      so not mid-migration; re-read the panel a week later. **Re-sighted 2026-09-08 (operator, the
-      panel): `cilium-rzv4p` at 30 %** — that one was wk-03's post-resize restart (53 % at 13:11Z,
-      2 % five minutes later: agent start-up at its 250m limit, transient). The steady-state
-      picture is the FU's: cilium agents 11–17 % on the slow-CPU boxes (wk-metal-03, hp-01, m70s),
-      longhorn-manager 9–21 %, and `transcripts-viewer` 55 % at a 1-CPU limit on hp-01 (all of it
-      the bucket-sync container, 62 %). **Applied 2026-09-08 (operator: "run all of it"), PR#1519:
-      manager 150m→300m, cilium agent 250m→500m, bucket-sync 1→2** — both DaemonSets rolled with
-      the oracle delta job running, volumes healthy throughout. **Next:** re-read the throttling
-      panel ≈2026-09-15; if manager/cilium sit under ~5 % and the sync burst under ~20 %, archive.
-      No FU/ADR matched `throttl` (grepped 2026-09-07). Link: ADR-089, FU-112.
+- [ ] **FU-224** — **`transcripts-viewer`'s bucket-sync is CPU-bound at any limit.** Filed 2026-09-07
+      for CFS throttling on longhorn-manager/cilium-agent/bucket-sync. PR#1519 (2026-09-08) raised all
+      three. **Soak read 2026-09-24** (24 h, throttled/total CFS periods per pod): manager 0.7–3.4 % ✓;
+      cilium-agent now has no CPU limit, so nothing to throttle ✓; bucket-sync still at 58–70 % on all
+      three pods ✗. Doubling its limit (1→2 CPU) did not move the ratio (62 % before), so the sync eats
+      whatever it gets. **Next:** measure the sync's cycle time/lag instead of its throttling, and
+      raise the limit only if the lag is felt. Link: ADR-089, FU-112.
 
 - [ ] **FU-229** — **Garage SLO breached on its own 30-day window and nothing alerts; CI-hour
       write churn unattributed.** 30-day reads 2026-09-10: availability garage-1 99.90 %, garage-0
@@ -214,16 +208,6 @@ six OVERSIZE items pointer-ized into
       Resights: 09-16 (oracle handoff) CI PUT bursts 8–13/s → ~500 meta-volume writes/PUT on
       garage-2's Longhorn meta, GetObject p99 17 s; 09-22 16:28Z a runner sync stalled the ert parse.
       Link: FU-093, FU-137, oracle-fleet#499/#518/#547.
-- [ ] **FU-203** — **The first-party registry has no retention: POINTER** (born with ADR-121).
-      The cap fired 2026-09-07 (20Gi) and 2026-09-09 (32Gi): a blob COMMIT holds the layer twice, so
-      `quota − held ≥ 2×layer` — rule, both failures, storage read, retention ownership AND current
-      status: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml);
-      cap **48Gi** (#1578). **LIVE:** the quota belts (#1577), the collector (`registry-garbage-collect`,
-      **daily 03:00Z** since 2026-09-22, #1902), and since 2026-09-14 **the POLICY half** —
-      oracle-fleet's nightly `retention` CronWorkflow untags outside its keep-set (02:30Z).
-      The SCHEDULE MISMATCH that cost three firings (09-07, 09-15→16, 09-22) is closed by #1902.
-      **Next:** watch one unattended daily cycle reclaim (first due 2026-09-23 03:00Z), then archive.
-      Relates FU-279 (MPU debris, a pool this misses). ADR-121/-089/-085.
 - [ ] **FU-280** — **The first-party registry left Garage S3 — soak, then remove the S3 half. POINTER.**
       CUT OVER 2026-09-24 14:50Z (operator: "just roll it out"; ADR-121 amended): `registry.teststuff.net`
       is served by `registry-fs` on the 150Gi `registry-data` volume (#1961, #1962), verified via VIP and
@@ -249,8 +233,9 @@ six OVERSIZE items pointer-ized into
       2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
       that TTL nearly filled it (720h left over from FU-196 v0; #1870 set 168h + 150Gi). Serve
       first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
-      third-party images only. **Next:** per-repo keep-sets + quota there first (FU-203: 48Gi cap,
-      only oracle-fleet has a policy), then dual-publish → pin flip per image. Relates FU-196, FU-203.
+      third-party images only. **Next:** per-repo keep-sets there first (only oracle-fleet has a
+      retention policy; the store is the 150Gi filesystem volume since FU-280's 2026-09-24 cutover, not
+      the 48Gi bucket), then dual-publish → pin flip per image. Relates FU-196, FU-203, FU-280.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -274,11 +259,11 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-192** — **Three residues of the ADR-118 tenancy flip, all deferred deliberately**
       (2026-08-27, step 2). (a) Grafana's tenant list is a SNAPSHOT — Loki has no wildcard tenant,
       so an all-namespace view must enumerate, and a namespace added later is invisible there
-      until someone edits the datasource. (b) `ingestion_rate_mb` is PER TENANT, so the flip
-      raised the aggregate ceiling ~32x; left at 8 until the flip's own per-namespace baselines
-      exist — **due ~2026-09-03**, and until then ADR-118's "per-tenant ingest limits" win is not
-      banked. (c) the OTel rail writes under a static `monitoring` tenant. **Next:** (b) — the
-      only one with a date and real evidence. Detail + options:
+      until someone edits the datasource. (b) ANSWERED 2026-09-24: the per-namespace baseline peaks
+      at 1.23 MB/s (`argo`, 25 d), next 0.35 (`longhorn-system`), so the per-tenant 8 MB/s binds only
+      a runaway and stays — the win is banked (doc updated). (c) the OTel rail writes under a static
+      `monitoring` tenant. **Next:** (a) — generate the datasource's tenant list from the live
+      namespaces instead of a committed snapshot. Detail + options:
       [`loki-tenancy.md`](loki-tenancy.md) §What tenancy costs the operator.
 
 - [ ] **FU-191** — **The admission-controller seat: engine UNDECIDED (Kyverno vs OPA Gatekeeper),
@@ -320,11 +305,6 @@ six OVERSIZE items pointer-ized into
       backup CronJob (ADR-114's logical-deletion class). Operator intent: metadata maintenance is
       unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
 
-- [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
-      maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
-      metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
-      upgrade`; likely also the origin of the kata `/dev/kmsg` regression, see
-      `docs/spikes/kata-ci-gate.md`). Verify install.image is honored from maintenance mode.
 - [ ] **FU-072** — **The kata service-VIP workaround is REMOVED; soaking.** The original symptom
       (kata guests black-hole `10.96.x` VIPs, runc pods on the same node fine) was re-probed GONE
       on all four kata nodes 2026-09-03 and never root-caused — but the workaround it justified
@@ -395,18 +375,6 @@ six OVERSIZE items pointer-ized into
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
       public repos), applied outside the jail. `oracle-iac` stays private permanently.
-- [ ] **FU-215** — **Unbound SERVFAILs `github.com` names in short windows — reason READ 2026-09-16:
-      `exceeded the maximum number of sends`; belt applied; root cause = do-ip6 on a v4-only WAN.**
-      Windows 09-05 ×4, 09-16 16:35–17:00Z (browser, jail `gh`/`git`, CI's Actions results-receiver).
-      Operator's resolver-log export: 39 SERVFAILs, every one "exceeded the maximum number of sends"
-      (retry exhaustion — the nsone authoritatives answered the LAN directly throughout). **Belt
-      LIVE** (PR pending, `unbound_advanced`): `prefetch` + `serveexpired` (stale ≤ 1 d, reply TTL 30,
-      client-timeout 1800 ms — RFC 8767). **Root cause (evidence):** infra cache holds 389 IPv6
-      name-server entries at the never-measured 376 ms placeholder while the WAN has NO IPv6 — OPNsense
-      sets `do-ip6` from Interfaces → Settings → *Allow IPv6* (`unbound.inc`), a legacy page with no
-      API. **Done 17:55Z:** *Turn off IPv6* ticked (LAN had no v6 at all), Unbound restarted — infra cache
-      0 IPv6 entries, github/LAN/public names NOERROR. **Next:** soak — `UnboundGithubServfail` quiet for
-      a week → archive; the GUI-only knob is recorded in `docs/runbook.md` §OPNsense as code.
 
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
@@ -623,19 +591,6 @@ the block needs pruning, not more headings.
       [`runbook.md`](runbook.md) §Single worker maintenance — a future session reaches for the same
       wrong lever. Relates FU-093, ADR-089.
 
-- [ ] **FU-288** — **`node-maintenance` has no IPMI path, so the BMC boxes have no maintenance-boot.**
-      `scripts/node-maintenance.sh` contains zero IPMI/BMC references: `up` wakes a metal node by
-      **WoL from pve** (MAC out of `opnsense/dnsmasq-dhcp.py`) and a control plane has no `down`
-      verb at all (GAPS `maintenance-window-G2`). Both NX nodes have a BMC and are the fleet's
-      first boxes where remote power is deterministic — `machines.yaml` already records
-      `remote_power: "IPMI/BMC … chassis power on|off|cycle"` for nx-01 — yet the tooling cannot use
-      it. Cost, 2026-09-24: nx-01 failed to boot after a drive fit and every power action was
-      hand-typed `ipmitool` (and the first attempt died on the zsh `$VAR`-as-command trap). Also
-      wanted: `power soft` for a graceful hypervisor stop — used by hand for nx-02 the same day so
-      its LVM thin pool closed cleanly. **Next:** a `--bmc` path in `up`/`down` keyed off
-      `machines.yaml` `remote_power`, credentials out of the wallet rather than the documented
-      ADMIN/ADMIN default, plus the `cp-down`/`cp-up` pair GAPS already asks for. Relates FU-284,
-      GAPS `maintenance-window-G2`.
 - [ ] **FU-284** — **Disk health is metered fleet-wide; NVMe PCIe lane width still is not: POINTER.**
       Until 2026-09-23 nothing watched any drive's media — every wear/fault read was a hand-run pod
       (FU-222) — while the fleet buys used drives with *disclosed* defects, so the belts alert on
@@ -1336,6 +1291,14 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-288** — **`node-maintenance` has no IPMI path, so the BMC boxes have no maintenance-boot.**
+      `scripts/node-maintenance.sh` wakes a metal node only by WoL from pve, and a control plane has
+      no `down` verb (GAPS `maintenance-window-G2`). Both NX nodes have a BMC — `machines.yaml`
+      already records nx-01's `remote_power: "IPMI/BMC …"` — yet the tooling cannot use it. Cost,
+      2026-09-24: nx-01 would not boot after a drive fit, and every power action (plus nx-02's
+      graceful `power soft`) was hand-typed `ipmitool`. **Next:** a `--bmc` path in `up`/`down` keyed
+      off `remote_power`, credentials from the wallet (not the ADMIN/ADMIN default), plus the
+      `cp-down`/`cp-up` pair GAPS asks for. Relates FU-284, GAPS `maintenance-window-G2`.
 - [ ] **FU-287** — **Every Alloy restart re-counts the kernel-oops lines still in the kmsg-reader's
       container log, so `KernelOopsCaptured` re-fires on old faults.** Measured 2026-09-23 at
       FU-247's acceptance: with NO new line injected, deleting the `alloy` pod on wk-03 brought the
@@ -1418,21 +1381,13 @@ the block needs pruning, not more headings.
       M10 is 16 GB (~13 G after the 25 % floor), a ride's docker-lib claim is a fixed 20Gi that cannot
       span disks, `longhorn-fast` has no claims, and `fast` has a 238 G home. They'd cost wk-metal-04's
       two free root ports for nothing. Detail: [`docs/storage-ledger.md`](storage-ledger.md) §the scratch class rides `bulk`.
-- [ ] **FU-235** — **Declared node state vs live: the metal nodes drift, and tofu cannot see it.** (1) `kata:
-      true` on four laptops, live only -01/-02 carry `homelab.io/kata` (2026-09-12) — kata pool 2, not 4.
-      (2) `kubernetes_node_taint.ephemeral` cannot own `.spec.taints` on a node cilium-operator untainted
-      (nx-01; `force` tried + reverted — atomic list; own `field_manager` since d4b350f3). (3) **install-time
-      drift** (2026-09-16, nx-01): config applied in place, tofu plans clean, yet the node runs the plain
-      schematic and EPHEMERAL on the SATA disk — the install half never can. (4) **ABSENT is the extreme
-      case**: wk-metal-02 declared, no Node object for ~12 h, nothing fired (2026-09-21, FU-243).
-      **Diff LANDED 2026-09-21** (#1828/#1831): box `check_nodes` + `TalosFleetVersionSplit`.
-      **Axes + transport LANDED 2026-09-21** (#1859/#1861): `mgmt_node_drift{node,axis}` over
-      reachable/version/schematic/registered/labels/taints/ephemeral_disk via the box's textfile;
-      `MgmtNodeMissing`/`LiveStateDrift`/`InstallDrift`/`MgmtBelt*` — all 91 series 0 at landing.
-      Pre-merge impact line LANDED (#1858). (2) stands (home = `machine.nodeTaints`), detected not
-      fixed. **Reconciler layers 3–5 LANDED** (#1864): `reconcile:` in machines.yaml, box loop
-      `mgmt-reconcile`, wk-03 the only `auto` (idle, in sync). **Next:** its first live sync = the
-      attended 1.14 canary (FU-033); then the `install_disk` axis.
+- [ ] **FU-235** — **Declared node state vs live: detected on every axis but one.** The box belt's
+      `mgmt_node_drift{node,axis}` (#1828/#1831/#1859/#1861) covers reachable/version/schematic/
+      registered/labels/taints/ephemeral_disk, alerting via `MgmtNodeMissing`/`LiveStateDrift`/
+      `InstallDrift`; the reconciler (#1864) did its first live sync as the 1.14 rollout (#1879, 13/13,
+      2026-09-22). Read 2026-09-24: all seven axes 0 on all 13 nodes, including the kata-label and nx-01
+      taint drift this item was filed for. `kubernetes_node_taint` still cannot own `.spec.taints`
+      (home = `machine.nodeTaints`): it is detected, not fixed. **Next:** the `install_disk` axis.
       [`management-box.md`](management-box.md) §MB2/§MB4. Relates FU-218, FU-072, FU-252.
 
 - [ ] **FU-277** — **Talos ≥ v1.14 puts the DHCP search domain in every metal-node pod's resolv.conf.**

@@ -10,6 +10,22 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-215** *(archived 2026-09-24)* — **Unbound's `github.com` SERVFAILs: root cause fixed, soak PROVEN.**
+  Every SERVFAIL was "exceeded the maximum number of sends" — `do-ip6` on a v4-only WAN burned the send
+  budget on unreachable v6 authoritatives. Fix 2026-09-16 17:55Z: OPNsense *Turn off IPv6* (GUI-only,
+  `docs/runbook.md` §OPNsense as code) + the `prefetch`/`serveexpired` belt (`ansible/group_vars/opnsense.yml`).
+  Acceptance: `UnboundGithubServfail` last fired 09-16 17:00Z (pre-fix), none in the 8 days since.
+- **FU-203** *(archived 2026-09-24)* — **the first-party registry's retention: both halves live, the
+  daily collector PROVEN.** Policy = oracle-fleet's nightly `retention` untag (02:30Z); collector =
+  `registry-garbage-collect` daily 03:00Z (#1902). Acceptance: the 2026-09-23 03:00Z run took the
+  `registry` bucket 19.6 → 9.8 GiB, and `RegistryBucketCommitHeadroomLow` has not fired since 09-22 20:41Z.
+  The registry left Garage for the filesystem store 2026-09-24 — its GC and the S3 half's removal are
+  **FU-280**; the rule lives in the header of `argocd/resources/registry/garage-workspace.yaml`.
+- **FU-076** *(archived 2026-09-24)* — **"is `install.image` honoured from maintenance mode?" is now a
+  detector, not a manual re-check.** The box belt's `schematic`/`ephemeral_disk` axes
+  (`mgmt_node_drift`, FU-235) compare declared against live on every tick, and `MgmtNodeInstallDrift`
+  fires on the plain-schematic outcome this item watched for. Read 2026-09-24, after wk-metal-02's
+  09-20 maintenance-mode reinstall and the 09-22 rollout: all seven axes 0 on all 13 nodes.
 - **FU-254** *(archived 2026-09-23)* — **the belt now asks whether the DECLARATION itself is stale.**
   `check_substrate` (`scripts/mgmt-probe.sh`) compares `tofu/variables.tf`'s declared Talos / Kubernetes /
   Cilium versions against each project's GitHub releases (cached 6 h — the belt ticks every 15 min) and

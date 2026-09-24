@@ -214,9 +214,12 @@ One more thing that changes quietly, and is the reason step 2 does not silently 
 change: **`limits_config` is per tenant.** With one tenant, `ingestion_rate_mb: 8` was an effective
 whole-cluster ceiling; from the flip every namespace gets its own 8 MB/s and the aggregate ceiling
 rises ~32x. The number is left at 8 on purpose — that is no per-tenant regression, and sizing a real
-per-tenant limit needs the per-namespace baselines the flip itself produces. Until FU-192 does that,
-ADR-118's "per-tenant ingest limits" win is **not yet banked**: the #811 containment is still the
-alert belt plus the Garage bucket cap.
+per-tenant limit needs the per-namespace baselines the flip itself produces. **Read 2026-09-24
+(FU-192)** from `sum by (tenant) (rate(loki_distributor_bytes_received_total[5m]))` over 25 days:
+the busiest tenant (`argo`) peaks at 1.23 MB/s and the next (`longhorn-system`) at 0.35. The
+per-tenant 8 MB/s is therefore about 6× the largest real peak and binds only a runaway. It stays at 8,
+and ADR-118's per-tenant ingest limit is now a measured containment. The alert belt and the Garage
+bucket cap remain behind it.
 
 ## Rollout
 
