@@ -686,7 +686,7 @@ the block needs pruning, not more headings.
       **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
       **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`;
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
-      axis — [`model-routing.md`](agents/model-routing.md) §M10 ⚖, 2026-08-11; design before wiring).
+      axis — [`model-routing-history.md`](spikes/model-routing-history.md) §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
       2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
@@ -914,7 +914,7 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-161** — **Scout v3: POINTER.** Design + mechanism (variant filter, benchmark
       cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing
-      partition): [`model-routing.md`](agents/model-routing.md) §M7. Legs 1–2 shipped 2026-08-11
+      partition): [`model-routing-history.md`](spikes/model-routing-history.md) §M7. Legs 1–2 shipped 2026-08-11
       (#282); legs 3–4 + the filing gate (operator, 2026-08-17: an all-unbenched, uncanaried
       digest posts nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause
       rule. ⚠ Written-not-proven: no organic scout fire since the merge; every 08-10..08-17
@@ -923,7 +923,7 @@ the block needs pruning, not more headings.
       rows — owned by G-A child homelab#778. Related: #235's belt (machine lane owns it).
 
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
-      evidence + 4-step build order: [`docs/agents/model-routing.md`](agents/model-routing.md)
+      evidence + 4-step build order: [`docs/spikes/model-routing-history.md`](spikes/model-routing-history.md)
       §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
       classes; the scout rides its class's provider policy; `@` arms = the experiment
       instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
