@@ -17,7 +17,7 @@ jointly blow the tier — which is exactly what happened.
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
 | `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
-| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the TEMPORARY `registry-fs-trial` *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
+| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the registry's `registry-data` (FU-280) *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
 | `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
 | `fast` | **NONE — no backing disk since 2026-09-12** (the Optane pair left with thinkcentre; queued for wk-metal-04, FU-234) | 0 | 0 | 0 | 0 |
 | *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
@@ -425,16 +425,18 @@ No ADR amendment is needed.
 6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
    the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
 
-### Claim — `registry-fs-trial`, 150 Gi on `longhorn-bulk` (2026-09-24, TEMPORARY)
+### Claim — `registry-data`, 150 Gi on `longhorn-bulk` (2026-09-24, the first-party registry)
 
-ADR-089's one hard rule: every claim is stated here. FU-280 phase 1's PVC —
-**150 Gi, `longhorn-bulk` (replica-2), so 300 Gi of committed tier** — in ns `registry-fs-trial`,
-manifests in [`argocd/resources/registry-fs-trial/`](../argocd/resources/registry-fs-trial/).
-**It is an experiment and has an end state either way:** if the filesystem backend wins, the live
-registry moves onto it and keeps its own name; if it loses, the claim goes. No hostname, no cert,
-no auth — phase 2 is deliberately not built (the spike's naming trap).
+ADR-089's one hard rule: every claim is stated here. **150 Gi, `longhorn-bulk` (replica-2), so
+300 Gi of committed tier**, in ns `registry`, manifests in
+[`argocd/resources/registry/registry-fs.yaml`](../argocd/resources/registry/registry-fs.yaml).
+It is the filesystem store `registry.teststuff.net` moves onto (FU-280's rollout, operator
+2026-09-24). It **replaces** phase 1's `registry-fs-trial` claim of the same size, which was
+deleted to free the same two disks. Sized at ~3× the Garage bucket's 51.5 GB quota (14-day peak
+42 GB); `RegistryVolumeAlmostFull` fires under 15 % free. When the S3 registry is removed after the
+soak, the bucket's quota leaves the Garage tally.
 
-**The size is the placement mechanism, not a guess** (operator, 2026-09-24: run the trial on the
+**The size is the placement mechanism, not a guess** (operator, 2026-09-24: run it on the
 two SN530s alone — one variable, and nothing else's storage disturbed). Longhorn places a replica
 only where `available − size > max × storage-minimal-available-percentage` (25). Read live the same
 day, after both SN530s joined:

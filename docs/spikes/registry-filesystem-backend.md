@@ -11,8 +11,8 @@ same day, from 7 days of history: other tenants' p99 median is 9.5× worse while
 pushes, and the registry (not the pipelines beside it) is the variable that moves it.** The case is
 measured; phase 1 is worth building. **Phase 1 was built and loaded the same day** (§Phase 1
 RESULT): the 21 GB corpus copied cleanly at the 1 GbE rate, and the SN530 replicas were not the
-limit. The headline still needs a real release, and the trial must first become reachable from the
-CI runner. Opened 2026-09-22 after the second commit-refusal outage in
+limit. The operator then ordered the **rollout** (§Rollout): the live registry moves onto a
+volume and keeps its name, and the headline is read at the first release after the flip. Opened 2026-09-22 after the second commit-refusal outage in
 two weeks.
 
 ## The question
@@ -239,9 +239,30 @@ ClusterIP-only. So "re-run phase 0 during a release" needs one of two things fir
 - a temporary LB VIP on the trial (plain HTTP, like the live registry's in-cluster path), or
 - phase 2's exposure.
 
-That choice is the next step.
+**Neither was built. The operator's answer (2026-09-24) was to roll it out** (next section).
 
-### Phase 2 — only if phase 1 wins
+### Rollout — ordered 2026-09-24, in place of phase 2
+
+"Just roll it out: copy the existing contents in, then repoint `registry.teststuff.net`." No new
+name is needed. The hostname resolves to HAProxy `3.33` → LB `40.33` → the `registry` Service, and
+the backend sits behind that Service's selector, so the naming trap below never arises.
+
+1. **Stand up** `registry-fs` beside the S3 registry in ns `registry`
+   ([`registry-fs.yaml`](../../argocd/resources/registry/registry-fs.yaml)). It gets the same
+   nginx auth front, a 150 Gi `registry-data` claim (the trial's size, same selector arithmetic)
+   and `RegistryVolumeAlmostFull` from creation. The trial is deleted to free the two SN530s.
+2. **Copy** the corpus in with an in-namespace skopeo Job, authenticated with the existing
+   `registry-push-token`, then **flip** the `registry` Service's selector to `app: registry-fs`.
+   The GC CronJob moves to the volume in the same change. A delta copy after the flip catches
+   any push that landed on S3 in between. **Rollback** = flip the selector back; the S3 registry
+   keeps running.
+3. **After the soak:** remove the S3 Deployment and the Garage bucket, and amend ADR-121.
+
+**The headline is now read from the other side:** the first real release after the flip goes
+to the volume. Re-run phase 0's queries across that window. The other tenants' p99 should
+sit at its idle baseline.
+
+### Phase 2 — SUPERSEDED by the rollout above (kept for the naming trap)
 
 Exposure as a real name, because the consumer mounts the image as a **native OCI image volume**
 (`chart/templates/mcp-server.yaml`) which containerd pulls, and ADR-121's "zero node config, no

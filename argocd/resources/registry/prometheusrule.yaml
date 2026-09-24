@@ -40,3 +40,26 @@ spec:
               registry-garbage-collect CronJob (daily 03:00Z; ad-hoc recipe in docs/runbook.md
               §Registry) reclaims it, or the cap in garage-workspace.yaml grows — check
               `garage stats` DataAvail per zone first, every zone holds a full copy at rf=3.
+    # The filesystem backend's belt (FU-280, registry-fs.yaml) — the same failure as the bucket
+    # alert above, on the new store: a push that cannot fit dies at the last byte. On a volume a
+    # commit is a rename, so the need is 1 x layer in flight, not 2 x. 15% of 150 Gi is ~24 GB,
+    # which is still two corpus layers of warning. Detector first: it exists from the claim's
+    # creation, before any push depends on the volume.
+    - name: registry-volume
+      rules:
+        - alert: RegistryVolumeAlmostFull
+          expr: |
+            kubelet_volume_stats_available_bytes{namespace="registry",persistentvolumeclaim="registry-data"}
+              / kubelet_volume_stats_capacity_bytes{namespace="registry",persistentvolumeclaim="registry-data"} < 0.15
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "registry volume has {{ $value | humanizePercentage }} free — a 10 GB layer push may not fit"
+            description: >-
+              registry-data (the first-party registry's filesystem store) has under 15% free. At
+              100% an in-flight blob write fails and the pusher gets a 500 at the last byte. Check
+              what holds it: served tags vs untagged manifests (the stack's untag + the daily
+              registry-garbage-collect reclaim those; ad-hoc recipe in docs/runbook.md §Registry)
+              vs `_uploads/` debris (UPLOADPURGING clears it within ~1h). If the served set has
+              grown, grow the claim in registry-fs.yaml, after reading the bulk tier's room in
+              docs/storage-ledger.md.

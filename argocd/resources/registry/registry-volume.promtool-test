@@ -1,0 +1,41 @@
+# Behaviour fixture for RegistryVolumeAlmostFull.
+#
+#   devbox run -- promtool test rules argocd/resources/registry/registry-volume.promtool-test
+rule_files:
+  - registry-volume.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # 150 Gi volume: 40 Gi free (26%) is quiet; 20 Gi free (13%) fires after `for: 15m`; a GC
+  # back to 60 Gi free clears it. A different PVC in the namespace never fires.
+  - interval: 1m
+    name: "fires under 15% free after 15m, clears after reclaim, ignores other claims"
+    input_series:
+      - series: 'kubelet_volume_stats_capacity_bytes{namespace="registry",persistentvolumeclaim="registry-data"}'
+        values: "161061273600+0x60"
+      - series: 'kubelet_volume_stats_available_bytes{namespace="registry",persistentvolumeclaim="registry-data"}'
+        values: "42949672960+0x10 21474836480+0x30 64424509440+0x20"
+      - series: 'kubelet_volume_stats_capacity_bytes{namespace="registry",persistentvolumeclaim="other"}'
+        values: "1073741824+0x60"
+      - series: 'kubelet_volume_stats_available_bytes{namespace="registry",persistentvolumeclaim="other"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RegistryVolumeAlmostFull
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: RegistryVolumeAlmostFull
+        exp_alerts: []
+      - eval_time: 27m
+        alertname: RegistryVolumeAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: registry
+              persistentvolumeclaim: registry-data
+            exp_annotations:
+              summary: "registry volume has 13.33% free — a 10 GB layer push may not fit"
+      - eval_time: 50m
+        alertname: RegistryVolumeAlmostFull
+        exp_alerts: []
