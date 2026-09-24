@@ -75,12 +75,12 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
 
 - ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources; releases publish images + OCI
   charts to ghcr.
-- ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes control plane (v1.13.2 / v1.36.1).
+- ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes (v1.14.1 / v1.36.1), three control planes behind a Talos VIP (ADR-133).
 - ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover = FU-007).
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
-- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21); the apt leg of ADR-070 stays open.
+- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21, mcr @ .40.31, pypi @ .40.34) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
 
 ## 3 · Resource Plane
 
@@ -130,7 +130,7 @@ _Fig. 4: Observability Plane — small agents collect, one central brain visuali
   since FU-136; `tofu/monitoring.tf` keeps the namespace + secrets), exposed at
   `grafana`/`prometheus`/`alertmanager.teststuff.net`; Alertmanager notifies via the Home
   Assistant webhook (ADR-042).
-- ✅ Log aggregation: Loki + Alloy, 7-day retention, queried in Grafana (ADR-083).
+- ✅ Log aggregation: Loki + Alloy, 30-day retention / 7-day query lookback, queried in Grafana (ADR-083).
 - ✅ OTel collector (OTLP sink) → Prometheus + Loki — the claude-code agent roles' telemetry
   rail, incl. the LAN jail door (`docs/agents/observability-and-retro.md` §A0).
 - 🔜 Civo cost/FinOps (no Civo footprint yet).

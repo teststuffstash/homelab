@@ -189,8 +189,8 @@ soft-anti-affinity). All stateful services use Longhorn PVCs (not node-pinned). 
 for good on 2026-09-14 and thinkcentre left cluster duty), so every r=2 std volume must hold
 one copy on each — soft anti-affinity means a capacity squeeze surfaces as SILENT co-location,
 not a Pending volume. The `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy
-pods — eligibility ruling in `docs/storage-ledger.md`) has **no backing disk** until the Optane
-pair lands on wk-metal-04 (FU-234); registration is `scripts/longhorn-register-optane.sh <node>`,
+pods — eligibility ruling in `docs/storage-ledger.md`) is backed by nx-01's Intel 7600p since
+2026-09-24 (the Optane pair is shelved, FU-234); registration is `scripts/longhorn-register-optane.sh <node>`,
 the mounts come from that node's `longhorn_disks` in `machines/machines.yaml` (`tofu/metal.tf`
 only consumes it).
 
@@ -337,8 +337,8 @@ NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-d
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
 healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
 elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
-re-sync when the node returns. cp-01 is out of scope (only control plane → §Proxmox host
-maintenance window).
+re-sync when the node returns. Control planes are out of scope: this script refuses them, and they go through
+`scripts/controlplane-upgrade.sh`.
 
 **The window also declares itself to the alert path, in two halves that cover different label
 shapes** (FU-230; `SILENCE=0` opts out of both). `settle`/`down` open Alertmanager silences keyed on
@@ -558,11 +558,12 @@ When a pool VM goes NotReady with its Talos API "no route to host", read the hyp
 `lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
 
 1. **Pre-flight:** Longhorn 0 degraded volumes; no agent rides mid-flight you care about.
-2. **Full-stop, not drain** — cp-01 is the only control plane, so the API goes down either
-   way; metal workloads keep running headless, and a clean stop is just the planned version of
+2. **Full-stop, not drain.** Since 2026-09-22 (ADR-133) pve hosts only ONE of three control planes
+   (cp-01). cp-02 (nx-02) and wk-metal-02 keep etcd quorum and serve the API on the VIP `.50`, so
+   the API stays UP through the window. Metal workloads keep running headless, and a clean stop is just the planned version of
    the whole-lab power loss the platform already survives (§Power-loss below).
-3. `qm shutdown` workers + ci-runner + `pct shutdown 210` (parallel is fine), **cp-01 LAST**,
-   then `poweroff` on pve. wk-01/wk-02 take longest (Longhorn detach).
+3. `qm shutdown` workers + ci-runner + `pct shutdown 210` (parallel is fine), **cp-01 LAST**
+   (one etcd member; quorum rides on the other two), then `poweroff` on pve. wk-01/wk-02 take longest (Longhorn detach).
 4. All guests + the LXC carry `onboot=1` and the X99 powers on after AC restore — on boot
    everything self-starts and the cluster reforms with no hands (verified: 10/10 Ready,
    ~10 min plug-out to all-Ready).

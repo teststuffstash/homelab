@@ -5,10 +5,10 @@ Provisions the Talos Linux Kubernetes cluster (VMs on the Proxmox hosts `pve` `1
 carries the platform substrate that ArgoCD can't manage for itself (ADR-005): storage, monitoring,
 Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1–2.
 
-> **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
+> **Status: APPLIED & LIVE.** Talos `v1.14.1` / Kubernetes `v1.36.1`, Cilium `1.19.1`
 > (kube-proxy-free). Nodes: VMs on **pve** cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63`,
-> a VM on **nx-02** (the second hypervisor) wk-04 `.64`, **+ bare-metal**
-> hp-01 `.54`, nx-01 `.58` (NX-6035-G5 node 1), wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
+> VMs on **nx-02** (the second hypervisor) cp-02 `.65` / wk-04 `.64`, **+ bare-metal**
+> hp-01 `.54`, nx-01 `.58` (NX-6035-G5 node 1), wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250, a control plane),
 > wk-metal-03 `.184`, wk-metal-04 `.186` (kata), m70s `.56` (ThinkCentre M70s SFF, third
 > physical Garage zone).
 > **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
@@ -27,7 +27,7 @@ Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1�
 
 | Thing | Version |
 |---|---|
-| Talos Linux | `v1.13.2` (Kubernetes `v1.36.1`) |
+| Talos Linux | `v1.14.1` (Kubernetes `v1.36.1`) |
 | Cilium (CNI) | `1.19.1` |
 | `bpg/proxmox` | `~> 0.107` |
 | `siderolabs/talos` | `~> 0.11` |
@@ -60,7 +60,7 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `unifi.tf` — UniFi Network Application + MongoDB on Longhorn (replaces the previous Docker controller);
   `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP). **Applied & live**; image pinned by digest.
 - `longhorn.tf` — Longhorn storage (default StorageClass, replicated) + a `longhorn-fast`
-  node-local tier on the ThinkCentre's Optane.
+  node-local scratch tier on nx-01's 7600p.
 - `metal.tf` — bare-metal Talos workers (PXE/USB-installed, not Proxmox VMs), incl. the
   `HostnameConfig` hostname pinning; see `../docs/provisioning.md`.
 - `monitoring.tf` — the namespace, the HA scrape token and the `grafana-admin` Secret the chart
@@ -196,7 +196,7 @@ goes in git.
 
 ## Not included yet (next steps)
 
-- FU-012 — remote/encrypted state backend (THIS root's state is still local; cloudflare/
-  provisioning/infisical migrated to encrypted Garage state 2026-08-04 — `docs/tofu-state.md`).
+- FU-012 — box-scoped credentials. THIS root's state has lived on the management box since 2026-09-13
+  (`devbox run mgmt-tf`); the other roots are on encrypted Garage state — `docs/tofu-state.md`.
 - FU-013 — Home Assistant `/config` → object-storage (S3) backup (Longhorn covers in-cluster
   replication, not off-cluster DR).

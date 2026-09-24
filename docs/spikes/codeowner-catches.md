@@ -294,7 +294,8 @@ Two ADR-100-shaped options for `docs/**`, in preference order:
    leaving per-service docs and spikes free — the A5 pile's "docs/ split" candidate, now with
    evidence behind it.
 
-Either way the rubric's single-writer clause wants its verb widened from *appending* to *any write*.
+Either way the rubric's single-writer clause wanted its verb widened from *appending* to *any write*,
+and it was: `.agents/review.md` now blocks "appending, editing, or ARCHIVING" (the FU-233 ruling).
 
 Also on the record: `/nixos/` was ADDED as an owned path mid-trial (`bd74bdd4`, ADR-129 amended —
 the box applies from master), which is the opposite direction and deliberate.

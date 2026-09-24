@@ -105,7 +105,7 @@ after). Revisit once Renovate is live and the fleet is current.
 2. If it reproduces: file upstream with that pair of outputs — the divergence question above is
    the first thing a maintainer will ask.
 3. If it does not: record the version that fixed it and close, keeping the mitigation as a belt.
-4. Either way, re-run at **three** control planes to settle whether the single-CP endpoint-set
+4. Either way, re-run at **three** control planes (in place since 2026-09-22, ADR-133 — the precondition is met) to settle whether the single-CP endpoint-set
    emptying is load-bearing.
 
 ## Mitigation — the control-plane verb guards itself (2026-09-20)
