@@ -337,7 +337,9 @@ machines:
     # 2026-08-18; AC-restore flaky → WoL).
     # No AVX2 — verified via /proc/cpuinfo.
     talos_metal_node: true
-    install_disk: /dev/sda
+    # by-id, NOT /dev/sda: two identical 128GB SATA SSDs sit in this box (the SanDisk system disk +
+    # the Toshiba Longhorn disk below). Read live 2026-09-24: SystemDisk = sda = this wwn.
+    install_disk: /dev/disk/by-id/wwn-0x5001b44e2face231
     longhorn_disks:
       # 2nd 128GB SATA SSD added 2026-08-25 to relieve the std tier — hp-01 is the node
       # docs/storage-ledger.md calls the one place where the honest answer is buy a disk.
