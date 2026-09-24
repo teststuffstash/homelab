@@ -425,6 +425,33 @@ No ADR amendment is needed.
 6. **Re-read `bulk`'s committed %** afterwards. The point of the exercise is that ride scratch and
    the re-warmable caches stop drawing on one budget; if the number does not move, it did not work.
 
+### Claim — `registry-fs-trial`, 150 Gi on `longhorn-bulk` (2026-09-24, TEMPORARY)
+
+ADR-089's one hard rule: every claim is stated here. FU-280 phase 1's PVC —
+**150 Gi, `longhorn-bulk` (replica-2), so 300 Gi of committed tier** — in ns `registry-fs-trial`,
+manifests in [`argocd/resources/registry-fs-trial/`](../argocd/resources/registry-fs-trial/).
+**It is an experiment and has an end state either way:** if the filesystem backend wins, the live
+registry moves onto it and keeps its own name; if it loses, the claim goes. No hostname, no cert,
+no auth — phase 2 is deliberately not built (the spike's naming trap).
+
+**The size is the placement mechanism, not a guess** (operator, 2026-09-24: run the trial on the
+two SN530s alone — one variable, and nothing else's storage disturbed). Longhorn places a replica
+only where `available − size > max × storage-minimal-available-percentage` (25). Read live the same
+day, after both SN530s joined:
+
+| disk | avail / max | largest volume it can take |
+|---|---|---|
+| `mx500` | 208 / 463 Gi | 92 Gi |
+| `intel0` | 131 / 238 Gi | 71 Gi |
+| `intel1` | 108 / 238 Gi | 48 Gi |
+| **`sn530`** (hp-01 **and** wk-04) | 233 / 238 Gi | **173 Gi** |
+
+So **93–173 Gi can only land on the two fresh SN530s**, and 150 Gi sits in the middle of that
+window with headroom on both sides. No tag was coined to achieve it — the same
+"a tag is only for a disk you want to EXCLUDE" ruling that sent nx-01 to `fast`.
+⚠ **Verify placement after binding rather than assuming it**: exactly two replicas, one per SN530.
+The trick stops working the moment another `bulk` disk frees up past 150 Gi.
+
 ### The selector-less audit, run 2026-09-24 — done, and it is NOT a gate
 
 **Tracked by:** FU-234 (which named it a blocker). All eight Longhorn StorageClasses read live.
