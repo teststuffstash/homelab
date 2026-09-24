@@ -261,7 +261,8 @@ grep this doc, so the strings must match the emitter exactly):
 |---|---|---|---|
 | `cloudflare_edge_requests_total` | counter | `zone`, `host`, `status` | `sum by (host) (rate(…[$__rate_interval]))` |
 | `cloudflare_edge_cached_requests_total` | counter | `zone`, `host` | the cache-served SUBSET of the above; ratio is the consumer's division — `sum by (host) (rate(cached…)) / sum by (host) (rate(requests…))` |
-| `cloudflare_edge_rate_limit_events_total` | counter | `zone`, `host`, `action` | `sum by (host, action) (rate(…[$__rate_interval]))` |
+| `cloudflare_edge_rate_limit_events_total` | counter | `zone`, `host`, `action` | `sum by (host, action) (rate(…[$__rate_interval]))` — ⚠ the name is historical: it counts firewall events of **every** action (`block`, `skip`, `rate_limit`, …), not only rate limiting |
+| `cloudflare_edge_firewall_events_host_action_source_total` | counter | `zone`, `host`, `action`, `source` | the same events split by the acting product (`firewallCustom`, `firewallManaged`, `rateLimiter`, …) — `sum by (host, action, source) (rate(…[$__rate_interval]))`; added 2026-09-24 for oracle-fleet#732 (the "Block AI bots" managed rule was only nameable by a GraphQL read) |
 | `cloudflare_edge_probe_ok` | gauge | `zone` | `min by (zone) (min_over_time(…[10m]))` |
 
 **There is no `route` label — the per-hostname dimension is `host`.** `by (route)` parses, returns
@@ -283,7 +284,7 @@ consumer must know:
   absolute value.
 - A **new** series here should name its dimensions in the metric name (the lablabs
   `cloudflare_zone_requests_status_country_host` convention) so the contract travels with the
-  series and not only with this table. The four above keep their names to avoid a flag day.
+  series and not only with this table. The four original series keep their names to avoid a flag day; `…_firewall_events_host_action_source_total` is the first one named to this convention.
 
 The poller queries one zone at a time (never batched — a free zone riding into a batched query
 would make Cloudflare reject the whole batch, homelab#132 round 3). Self-test replays recorded
