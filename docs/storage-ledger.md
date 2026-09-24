@@ -61,8 +61,8 @@ Two things that made it more than a bolt-on. The disk arrived with a **bootable 
 — Talos refuses to partition a device that already carries a partition table. And it is now the
 *second* 128G SATA SSD in that box, which makes `/dev/sdX` an unsafe way to name either of them:
 the entry is pinned to `/dev/disk/by-id/wwn-0x500080db1007e129` precisely because `longhorn_disks`
-*partitions* what it points at. `install_disk: /dev/sda` on the same node is the remaining
-name-based selector and should follow (FU-076's neighbourhood).
+*partitions* what it points at. The node's `install_disk` followed on 2026-09-24: it is
+`/dev/disk/by-id/wwn-0x5001b44e2face231` (the SanDisk system disk, read live as `SystemDisk = sda`).
 
 **The hypervisor is still not where a spare SATA SSD goes**, but the reason is cost, not
 impossibility (operator, 2026-08-25): pve's board exposes the ports and they are disabled in
