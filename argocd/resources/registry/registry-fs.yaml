@@ -28,9 +28,10 @@ metadata:
 spec:
   accessModes: [ReadWriteOnce]
   # replica-2 on `bulk` (the 2026-09-24 ruling). 150 Gi is ~3x the Garage bucket's 51.5 GB
-  # quota, whose 14-day peak was 42 GB, and it is ALSO the selector: 93–173 Gi fits only the
-  # two SN530s (hp-01, wk-04) — the arithmetic is the storage-ledger claim. Verify placement
-  # after binding: `kubectl -n longhorn-system get replicas.longhorn.io -l longhornvolume=<pv>`.
+  # quota, whose 14-day peak was 42 GB. ⚠ The size is NOT a selector: the first bind landed on
+  # the Garage-zone disks (mx500 + intel0), and the replicas sit on the two SN530s (hp-01, wk-04)
+  # only by scheduler preference. That is the storage-ledger claim's finding. Re-verify after any
+  # eviction: `kubectl -n longhorn-system get replicas.longhorn.io -l longhornvolume=<pv>`.
   storageClassName: longhorn-bulk
   resources:
     requests:

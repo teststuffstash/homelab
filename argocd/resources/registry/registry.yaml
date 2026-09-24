@@ -202,6 +202,9 @@ metadata:
     lbipam.cilium.io/ips: "192.168.40.33"
 spec:
   type: LoadBalancer
-  selector: { app: registry }
+  # FU-280 CUTOVER (2026-09-24): registry.teststuff.net is served by the FILESYSTEM registry
+  # (registry-fs.yaml), not the S3 Deployment above. The S3 Deployment keeps running, unrouted,
+  # as the rollback: set this back to `app: registry`. It goes, with its bucket, after the soak.
+  selector: { app: registry-fs }
   ports:
     - { name: http, port: 80, targetPort: 5001 }

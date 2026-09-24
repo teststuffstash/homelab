@@ -436,23 +436,20 @@ deleted to free the same two disks. Sized at ~3× the Garage bucket's 51.5 GB qu
 42 GB); `RegistryVolumeAlmostFull` fires under 15 % free. When the S3 registry is removed after the
 soak, the bucket's quota leaves the Garage tally.
 
-**The size is the placement mechanism, not a guess** (operator, 2026-09-24: run it on the
-two SN530s alone — one variable, and nothing else's storage disturbed). Longhorn places a replica
-only where `available − size > max × storage-minimal-available-percentage` (25). Read live the same
-day, after both SN530s joined:
-
-| disk | avail / max | largest volume it can take |
-|---|---|---|
-| `mx500` | 208 / 463 Gi | 92 Gi |
-| `intel0` | 131 / 238 Gi | 71 Gi |
-| `intel1` | 108 / 238 Gi | 48 Gi |
-| **`sn530`** (hp-01 **and** wk-04) | 233 / 238 Gi | **173 Gi** |
-
-So **93–173 Gi can only land on the two fresh SN530s**, and 150 Gi sits in the middle of that
-window with headroom on both sides. No tag was coined to achieve it — the same
-"a tag is only for a disk you want to EXCLUDE" ruling that sent nx-01 to `fast`.
-⚠ **Verify placement after binding rather than assuming it**: exactly two replicas, one per SN530.
-The trick stops working the moment another `bulk` disk frees up past 150 Gi.
+**Placement is a scheduler PREFERENCE, not a constraint — the size-as-selector premise was FALSE**
+(found 2026-09-24, the first bind). The trial was sized to 150 Gi on the arithmetic that Longhorn
+only places a replica where `available − size > max × 25 %`, which would have left only the two
+SN530s eligible. **The first `registry-data` bind landed on wk-metal-01 `mx500` + wk-metal-04 `intel0`**
+while the trial still held the SN530s. For a NEW (empty) replica the binding gate is over-provisioning,
+`scheduled + size ≤ (max − reserved) × 200 %`, and `mx500` (430 + 150 ≤ 726) and `intel0`
+(250 + 150 ≤ 476) both pass. Among eligible disks the scheduler prefers the most usable
+space. That is why the empty SN530s won for the trial, and won again once the trial was deleted
+and the empty claim recreated (replicas: hp-01 + wk-04 `sn530`, verified). **Nothing holds it
+there.** A replica rebuild after a node loss or eviction may put a copy back on a Garage-zone
+disk, and 200 % over-provisioning lets that happen past the disk's physical room. The durable fix
+is a disk tag, which contradicts the "a tag only EXCLUDES" ruling that sent nx-01 to `fast`, so it
+is the operator's call (FU-280). ⚠ After any `bulk` eviction, re-read
+`kubectl -n longhorn-system get replicas.longhorn.io -l longhornvolume=<registry-data's pv>`.
 
 ### The selector-less audit, run 2026-09-24 — done, and it is NOT a gate
 
