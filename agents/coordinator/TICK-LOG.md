@@ -10997,3 +10997,18 @@ seat-1790260664-8577 (check clean on every probe; watch silent). Verified via th
 No S3 push in the gap, so no delta copy. The manual GC run landed on wk-04 and DEFERRED on the
 fresh copy; the dry run on the volume marked 6 blobs with 0 eligible. The S3 Deployment stays up
 unrouted as the rollback.
+
+## 2026-09-24 evening — oracle handoff: minutark.ee 403'd GPTBot/ClaudeBot (oracle-fleet#732)
+
+A GraphQL `firewallEventsAdaptive` read named the rule: "Block AI bots on ad pages" (`firewallManaged`),
+which is the zone's `ai_bots_protection=only_on_ad_pages` / dashboard Training=`disallow`. It was
+Cloudflare's creation default: the audit log shows no bot change by anyone since 2026-08-09, and
+teststuff.net and eid-demo.com still carry the same untouched default. The observability token
+cannot read `/bot_management`; jail-read-all can. The provider (through v5.25.0) has no
+`ai_training`, but the console Training flip (19:54Z, operator) also set `ai_bots_protection`, so
+the two are one switch. #1967 merged: edge-probe emits
+`cloudflare_edge_firewall_events_host_action_source_total` (verified live on a skip event).
+#1968 merged and applied: token roots gained Bot Management Write/Read (operator, host-side),
+then the jail's `tofu/cloudflare` apply was one create, the re-plan was clean, and GPTBot and
+ClaudeBot now get 200. Claude-User's 2 "unsuccessful" requests were origin 400s from the oracle
+gateway; that went back in the handoff Result.
