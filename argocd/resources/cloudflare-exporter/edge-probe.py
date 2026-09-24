@@ -62,8 +62,10 @@ HEADERS = [
     "# TYPE cloudflare_edge_requests_total counter",
     "# HELP cloudflare_edge_cached_requests_total Cumulative count of the subset served from cache (hit/stale/revalidated), by zone and host. Ratio is the CONSUMER's division: rate(cached)/rate(requests).",
     "# TYPE cloudflare_edge_cached_requests_total counter",
-    "# HELP cloudflare_edge_rate_limit_events_total Cumulative rate-limit/mitigation events by zone, host and action.",
+    "# HELP cloudflare_edge_rate_limit_events_total Cumulative firewall events of EVERY action (block, skip, rate_limit, managed_challenge, ...) by zone, host and action. The name is historical: it is not rate-limit-only.",
     "# TYPE cloudflare_edge_rate_limit_events_total counter",
+    "# HELP cloudflare_edge_firewall_events_host_action_source_total Cumulative firewall events by zone, host, action and source (the product/phase that acted: firewallCustom, firewallManaged, rateLimiter, securityLevel, bic, ...).",
+    "# TYPE cloudflare_edge_firewall_events_host_action_source_total counter",
     "# HELP cloudflare_edge_probe_ok 1 when the edge poll succeeded for the zone this poll. 0 or absent means the counters above are STALE, not safe.",
     "# TYPE cloudflare_edge_probe_ok gauge",
 ]
@@ -84,7 +86,8 @@ HEADERS = [
 # only on restart — which rate()/increase() handle natively.
 _totals_req = {}     # (zone, host, status) -> cumulative requests
 _totals_cached = {}  # (zone, host)         -> cumulative cache-served requests
-_totals_fw = {}      # (zone, host, action) -> cumulative firewall/mitigation events
+_totals_fw = {}      # (zone, host, action) -> cumulative firewall events (every action)
+_totals_fw_src = {}  # (zone, host, action, source) -> the same, split by the acting product
 _buckets = {}        # dedupe: bucket key -> (count already counted, first-seen epoch)
 
 # Buckets are datetime-anchored, so a bucket older than the lookback can never be re-reported.
@@ -114,6 +117,7 @@ def _reset_totals():
     _totals_req.clear()
     _totals_cached.clear()
     _totals_fw.clear()
+    _totals_fw_src.clear()
     _buckets.clear()
 
 
@@ -281,6 +285,20 @@ def collect(lines, fetch=None, zone_ids=None):
                 label_key = (zone_name, host, action)
                 _totals_fw[label_key] = _totals_fw.get(label_key, 0) + delta
 
+            # The same events split by `source` — which product/rule phase acted. Deduped on its
+            # own bucket key so the aggregate series above stays byte-identical.
+            src_buckets = {}
+            for row in firewall_rows:
+                key = (row.get("datetime", ""),
+                       row.get("clientRequestHTTPHost", "unknown"),
+                       row.get("action", "unknown"),
+                       row.get("source") or "unknown")
+                src_buckets[key] = src_buckets.get(key, 0) + 1
+            for (stamp, host, action, source), count in sorted(src_buckets.items()):
+                delta = _accumulate(("fwsrc", zone_name, stamp, host, action, source), count, now)
+                label_key = (zone_name, host, action, source)
+                _totals_fw_src[label_key] = _totals_fw_src.get(label_key, 0) + delta
+
         except Exception as exc:
             failed += 1
             _errors += 1
@@ -302,6 +320,10 @@ def collect(lines, fetch=None, zone_ids=None):
     for (zone, host, action), value in sorted(_totals_fw.items()):
         lines.append(metric("cloudflare_edge_rate_limit_events_total",
                             {"zone": zone, "host": host, "action": action}, value))
+    for (zone, host, action, source), value in sorted(_totals_fw_src.items()):
+        lines.append(metric("cloudflare_edge_firewall_events_host_action_source_total",
+                            {"zone": zone, "host": host, "action": action, "source": source},
+                            value))
     for zone_label, value in probe_ok:
         lines.append(metric("cloudflare_edge_probe_ok", {"zone": zone_label}, value))
 
@@ -426,6 +448,20 @@ _FLIPPED_FIREWALL = [
         "clientRequestHTTPHost": "mcp.minutark.ee",
         "action": "rate_limit",
         "source": "rateLimiter",
+    },
+    # Recorded 2026-09-24 (oracle handoff): the zone's "Block AI bots" managed rule 403-ing
+    # GPTBot/ClaudeBot on the consumer host — the case the `source` split exists to name.
+    {
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "minutark.ee",
+        "action": "block",
+        "source": "firewallManaged",
+    },
+    {
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "minutark.ee",
+        "action": "block",
+        "source": "firewallManaged",
     },
 ]
 
@@ -630,6 +666,9 @@ def self_test():
         "quiet state must emit no rate-limit data series"
     assert not any(l.startswith("cloudflare_edge_cached_requests_total{") for l in body.splitlines()), \
         "quiet state must emit no cached-request data series"
+    assert not any(l.startswith("cloudflare_edge_firewall_events_host_action_source_total{")
+                   for l in body.splitlines()), \
+        "quiet state must emit no firewall-source data series"
 
     # 2. Flipped fixture → traffic with cache misses and rate-limit events.
     flipped = _exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL)
@@ -641,6 +680,9 @@ def self_test():
         'cloudflare_edge_cached_requests_total{host="minutark.ee",zone="minutark.ee"} 100',
         'cloudflare_edge_cached_requests_total{host="mcp.minutark.ee",zone="minutark.ee"} 0',
         'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
+        'cloudflare_edge_rate_limit_events_total{action="block",host="minutark.ee",zone="minutark.ee"} 2',
+        'cloudflare_edge_firewall_events_host_action_source_total{action="rate_limit",host="mcp.minutark.ee",source="rateLimiter",zone="minutark.ee"} 3',
+        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 2',
         'cloudflare_edge_probe_ok{zone="minutark.ee"} 1',
     ):
         assert sample in body, f"missing sample: {sample}\n--- exposition ---\n{body}"
@@ -654,6 +696,7 @@ def self_test():
         'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 42',
         'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100',
         'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
+        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 2',
     ):
         assert sample in twice, (
             "re-polling an already-counted bucket changed its total — dedupe is broken.\n"
