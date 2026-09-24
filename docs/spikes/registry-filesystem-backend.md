@@ -9,7 +9,10 @@ release window and the machinery the S3 path drags in**, not capacity (§the rea
 therefore **phase 0**, a baseline of what a release costs the store's other tenants — **run the
 same day, from 7 days of history: other tenants' p99 median is 9.5× worse while the registry
 pushes, and the registry (not the pipelines beside it) is the variable that moves it.** The case is
-measured; phase 1 is worth building. Opened 2026-09-22 after the second commit-refusal outage in
+measured; phase 1 is worth building. **Phase 1 was built and loaded the same day** (§Phase 1
+RESULT): the 21 GB corpus copied cleanly at the 1 GbE rate, and the SN530 replicas were not the
+limit. The headline still needs a real release, and the trial must first become reachable from the
+CI runner. Opened 2026-09-22 after the second commit-refusal outage in
 two weeks.
 
 ## The question
@@ -180,8 +183,9 @@ a precise factor.
 
 ### Phase 1 — the candidate, needs no DNS, cert or VIP
 
-1. PVC, 40 Gi (two layers + one in flight), on **`longhorn-bulk`** (the 2026-09-24 ruling; it is
-   replica-2, which the availability requirement above needs). The claim goes in
+1. PVC on **`longhorn-bulk`** (the 2026-09-24 ruling; it is replica-2, which the availability
+   requirement above needs). Planned at 40 Gi; **built at 150 Gi**, because size is what
+   restricts it to the two SN530s (the arithmetic is in the ledger claim). The claim goes in
    [`storage-ledger.md`](../storage-ledger.md) per ADR-089's one hard rule even though it is
    temporary. ⚠ The measurement that matters most here is no longer the peak — it is **whether
    replica-2 across a 7600p and an SN530 binds on the slowest replica**; the ruling names
@@ -202,6 +206,40 @@ Measure against **phase 0's baseline**, not against the peak:
 | wall-clock to commit | ~9 min (2026-09-22, 20:04 → 20:12:57) | within noise, or better |
 | **replica-2 across a 7600p and an SN530** | n/a | does the slowest-replica wait bind? `slow-bulk` is the named escape hatch (the 2026-09-24 ruling) |
 | peak store usage during commit | 2 × layer **in the quota only**, 1 × on disk (measured 2026-09-24) | 1 × in both — a tidiness win, not the reason |
+
+#### Phase 1 RESULT (2026-09-24) — the copy is clean and the SN530s are not the limit
+
+A one-shot `skopeo copy --preserve-digests` Job on wk-01 (a wired node that holds neither replica)
+pulled both tags out of the live registry and pushed them into the trial:
+
+| | |
+|---|---|
+| payload | 2 tags × 1 layer × 10.51 GB = 21.0 GB (`ert-corpus:2026-09-22`, `:2026-09-23`) |
+| wall-clock | **144 s + 140 s** (13:29:09Z → 13:33:53Z), ≈ **70 MiB/s** sustained per tag |
+| integrity | manifest digests identical to the live registry's, both tags |
+| client buffering | none: skopeo streamed registry-to-registry, and `/tmp` stayed at 1 MB |
+| volume | `healthy` throughout; both replicas `running`, one per SN530 (hp-01, wk-04) |
+
+**The slowest-replica question is answered: it does not bind at this rate.** Over the 4-minute
+window, each SN530 wrote ≈ 71 MiB/s at **12 % (hp-01) and 7 % (wk-04) utilisation**. The 70 %-busy
+`sdb` on wk-04 is the volume's iSCSI frontend, not a disk. The limit was the network: every hop read
+≈ 78 MiB/s receive, the whole chain from the Garage source through wk-01 and wk-04 to hp-01, across
+both hypervisors on 1 GbE. The SN530's 8–68 MiB/s sustained floor is a figure for writes that
+outrun its SLC cache. It did not show up in 10.5 GB bursts at these utilisations, so `slow-bulk` is
+not needed. (The pairing also differs from the one planned: sizing put the replicas on **two
+SN530s**, not a 7600p and an SN530.)
+
+**What this does NOT measure: the headline.** The copy *read* 21 GB out of Garage, which is the
+opposite load from a release. On the trial side, a push that never touches Garage cannot contend
+with Garage's tenants, so the "other tenants' p99" row holds by construction. What a real release
+window still has to show is the trial handling the real pusher. ⚠ **As built, the real pusher cannot
+reach it**: the oracle release pushes from a CI runner VM outside the cluster, and the trial is
+ClusterIP-only. So "re-run phase 0 during a release" needs one of two things first:
+
+- a temporary LB VIP on the trial (plain HTTP, like the live registry's in-cluster path), or
+- phase 2's exposure.
+
+That choice is the next step.
 
 ### Phase 2 — only if phase 1 wins
 
