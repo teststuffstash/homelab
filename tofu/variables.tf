@@ -173,6 +173,32 @@ variable "nodes" {
     # FU-033 (b)'s workloadIsolation default lives. Nor does it move the seed disk images (image.tf,
     # FU-275): those follow the role version only.
     talos_version = optional(string)
+    # PCIe passthrough of one host device to this VM (bpg `hostpci0`). Used for an NVMe that must
+    # be REAL inside the guest rather than a slice of the hypervisor's thin pool — the pool is the
+    # third sum the storage ledger tracks, and the 2026-08-24 incident (pve pool at 100%, wk-01
+    # frozen, Garage's meta LMDB back with empty tables) is why Longhorn capacity does not live on
+    # it. Passthrough also keeps the guest's `/dev/disk/by-id/nvme-eui.*` name identical to the
+    # host's, so machines.yaml-style by-id pinning works, and leaves SMART readable to the
+    # in-cluster smartctl-exporter (FU-284) — neither is true of a thin-pool LV or a raw-block
+    # `-scsiN` passthrough.
+    # ⚠ Requires VT-d/IOMMU on the host and the device ALONE in its IOMMU group (nx-02: group 15
+    # holds only 0000:82:00.0, verified 2026-09-24). Applying it needs a full VM stop/start —
+    # hostpci is not hot-pluggable — so it rides a node-maintenance window. It also pins the VM to
+    # that host, which is free here: nothing live-migrates in this fleet.
+    hostpci_id = optional(string)
+    # Extra Longhorn disks for a VM node, same shape and same rules as machines.yaml's
+    # `longhorn_disks` for metal (locals.tf `metal_nodes`): [{device, name, tags}], mounted at
+    # /var/lib/longhorn/<name> because longhorn-manager host-mounts only that path, and <name> is
+    # ALSO the node.longhorn.io disk key — renaming one orphans its replicas. Rendered into
+    # machine.disks by talos.tf; registered + tagged by scripts/longhorn-tag-disks.sh.
+    # ⚠ This directive PARTITIONS the device, so name it by /dev/disk/by-id/*, never /dev/nvmeXn1.
+    # Until 2026-09-24 only metal nodes could carry one; wk-04 is the first VM to, and only because
+    # its disk is a PASSED-THROUGH physical NVMe (hostpci_id above), not pool storage.
+    longhorn_disks = optional(list(object({
+      device = string
+      name   = string
+      tags   = list(string)
+    })), [])
   }))
   default = {
     # memory 8→12 GiB (2026-09-14, #1687): kube-apiserver alone holds ~4.1 GiB (10 nodes, the
@@ -236,7 +262,21 @@ variable "nodes" {
     # It SERVES none — nx-02 is not in longhorn.tf's zone maps and gets no disk registration,
     # and the box is on a noise/idle trial (private hardware register R11) that may end with the
     # whole chassis leaving. serial stays false: the pve-serial-log Ansible role only tails pve.
-    wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02" }
+    # wk-04 carries the WD SN530 that was fitted to nx-02 on 2026-09-24, by PCIe passthrough
+    # (0000:82:00.0, alone in IOMMU group 15) rather than as a thin-pool LV — see `hostpci_id`.
+    # It joins `bulk` and is the tier's capacity for FU-280's registry trial. The drive was raw
+    # and unallocated when this landed (no PV, no holders); the `nvme-thin` pool is the OTHER
+    # NVMe, the Micron 2200S at 0000:83:00.0, and is untouched by this.
+    # ⚠ ZONE, the per-service call the 2026-09-23 deferral asked for: wk-04's zone is `nx-02` and
+    # nx-01/nx-02 are one 2U twin (shared backplane + 1+1 PSUs), so two replicas inside the chassis
+    # would not be two failure domains. It is safe here BY CONSTRUCTION, not by luck: `bulk`'s only
+    # member in that chassis is this disk (nx-01 carries `fast` alone, PR#1956), so `longhorn-bulk`
+    # can never place both replicas of a volume inside the twin. Re-ask this if a SECOND bulk disk
+    # ever lands on an nx node — that is the moment the zone names must collapse.
+    wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02",
+      hostpci_id     = "0000:82:00.0",
+      longhorn_disks = [{ device = "/dev/disk/by-id/nvme-eui.e8238fa6bf530001001b448b49e4a8d0", name = "sn530", tags = ["bulk"] }]
+    }
     # ADR-133's THIRD control plane, on the second hypervisor — one CP per chassis (pve, the X250,
     # the Nutanix twin), so no single box can take two of the three. Sized like cp-01 rather than
     # smaller: a CP's footprint is its own apiserver + etcd, and cp-01's 8→12 GiB bump (#1687) was

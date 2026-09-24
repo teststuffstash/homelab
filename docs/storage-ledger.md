@@ -486,6 +486,16 @@ off m70s's shared `std` disk), one tag across three disks is still a name, not a
 with six bound PVs — safe in principle (an SC is consulted only at provisioning) but a live apply
 that wants a window, on the main root, i.e. through the box.
 
+**Re-run for `wk-04`, 2026-09-24**, because the Requirements row demands this check *before* a
+first Longhorn disk lands on an nx node and wk-04 is untainted (so the nx-01 argument above — "no
+Garage pod tolerates the taint" — does not carry over). Result: **still not a gate.**
+`longhorn-local-xfs` is fenced by its consumer's **required** node affinity, read live — the Garage
+StatefulSet pins `topology.kubernetes.io/zone In [wk-metal-01, wk-metal-04, m70s]`, and wk-04's zone
+is `nx-02`, so a zone volume cannot be scheduled there at all. `longhorn-local-std` selects `std`;
+wk-04's disk is `bulk`. `longhorn-static` still has zero consumers fleet-wide. The fence for
+`longhorn-local-xfs` is therefore the one `tofu/longhorn.tf` claims it is — *"the consumer's node
+affinity"* — and here it holds, unlike the within-node case on m70s.
+
 **`longhorn-static` needs no fix and cannot have one.** It is created by longhorn-manager from the
 `default-longhorn-static-storage-class` setting, so deleting it is futile — it returns. It has no
 consumers, nothing in this repo names it, and the only way to reach it is to write it into a
@@ -531,10 +541,16 @@ I happen to have."* What that changes:
   |---|---|---|---|
   | today | 1009 G | 923 G | **91.5 %** |
   | **+ hp-01's SN530 (256 G, fitted and visible — done in this change)** | **~1247 G** | 923 G | **74 %** |
-  | + nx-02's SN530 via a wk-04 VM disk (**planned, not wired**) | ~1485 G | 923 G | 62 % |
+  | + nx-02's SN530, **PCIe-passed-through to wk-04** (wired 2026-09-24) | ~1485 G | 923 G | 62 % |
 
-  ⚠ **nx-02 is a hypervisor, not a cluster member**, so its SN530 is not Longhorn capacity until a
-  Proxmox VM disk carries it into `wk-04` — `smartctl-exporter` sees no such disk on wk-04 today.
+  ⚠ **nx-02 is a hypervisor, not a cluster member**, so its SN530 reaches the cluster only through
+  `wk-04`. **Not as a thin-pool LV** — that is the third sum this document tracks, and the
+  2026-08-24 meta-wipe is what it costs — but by **PCIe passthrough** (`0000:82:00.0`, alone in
+  IOMMU group 15; VT-d was already enabled, so no BIOS session was needed). Passthrough also keeps
+  the guest's `nvme-eui.*` by-id identical to the host's and leaves SMART readable to the
+  in-cluster exporter (FU-284); a thin-pool LV or a raw-block `-scsiN` passthrough does neither.
+  Read live before wiring: the SN530 was raw — no PV, no holders — and `nvme-thin` is the OTHER
+  NVMe, the Micron 2200S, untouched.
   The 91.5 % objection dissolves at **74 %** with hp-01's drive alone; the 61 % figure this section
   first carried assumed both, and nx-01's drive besides.
 - ~~**`nx-01`'s freed 7600p joins `bulk` too**~~ — **SUPERSEDED the same day, see the block below.**
