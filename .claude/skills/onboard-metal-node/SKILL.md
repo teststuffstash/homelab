@@ -56,9 +56,11 @@ drain, delete, BGP, doc rows); do not re-derive it here.
    devbox run -- python3 machines/generate.py    # after ANY machines.yaml edit; commit the diff
    ```
 
-5. **Install** (needs the two TF_VAR secrets — see tofu-apply skill):
+5. **Install** — the main root runs on [the management box](../../../docs/management-box.md) (tofu-apply skill; push the branch first):
    ```bash
-   devbox run -- tofu -chdir=tofu apply -target='talos_machine_configuration_apply.metal["<name>"]'
+   MGMT_REF=origin/<branch> devbox run mgmt-tf -- plan -target='talos_machine_configuration_apply.metal["<name>"]'
+   # read the plan — a -target drags in whole resources (FU-248's incident) — then:
+   devbox run mgmt-tf -- apply <plan-id>
    ```
 
 6. ⚠️ **Unflag** so the post-install reboot boots from disk (not a reinstall loop):
@@ -80,13 +82,13 @@ as prose, and add to it every time a round finds a new one.
    taints cause a `kube-controller-manager` field conflict otherwise):
    ```bash
    devbox run -- kubectl --kubeconfig tofu/kubeconfig wait --for=condition=Ready node/<name>
-   devbox run -- tofu -chdir=tofu apply -target='kubernetes_node_taint.ephemeral["<name>"]'
+   devbox run mgmt-tf -- plan -target='kubernetes_node_taint.ephemeral["<name>"]'   # then apply <plan-id>
    ```
 
 7b. **Apply the zone label.** `zone:` in `machines.yaml` is NOT carried by the machine config —
    it is a separate tofu resource, so step 5 leaves the node **unlabelled**:
    ```bash
-   devbox run tf-apply '-target=kubernetes_labels.node_zone["<name>"]'   # plain node, no Longhorn disk
+   devbox run mgmt-tf -- plan -target='kubernetes_labels.node_zone["<name>"]'   # plain node, no Longhorn disk; then apply <plan-id>
    devbox run -- kubectl --kubeconfig tofu/kubeconfig get node <name> \
      -o jsonpath='{.metadata.labels.topology\.kubernetes\.io/zone}{"\n"}'   # must print <zone>
    ```
@@ -136,5 +138,5 @@ as prose, and add to it every time a round finds a new one.
 
 ## Verify
 
-`devbox run nodes` — the new node should be `Ready` on Talos v1.13.2, its zone label set (7b), and
+`devbox run nodes` — the new node should be `Ready` on the declared worker Talos version (`var.talos_version_worker`), its zone label set (7b), and
 its `cilium bgp peers` session `established` (step 8).
