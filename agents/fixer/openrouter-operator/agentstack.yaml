@@ -8,7 +8,10 @@ metadata:
   name: platform
 spec:
   mainRepo: homelab
-  coordinatorModel: opus # platform coordination = highest-stakes arbitration (stacks.json carry-over)
+  coordinatorModel: opencode-go/deepseek-v4-flash # 2026-09-25 (operator): the Anthropic 7d window sits at
+  # 0.94 against the 0.95 latch, and the dispatch class rails are subscription-only, so a latched
+  # coordinator DEFERS rather than fails over. The claim model is an explicit override (resolve-model:
+  # --model wins), so this rides the Go rail until the window resets; revert to `opus` then.
   # FU-080 graduation (2026-07-26, third stack): platform runs its own per-stack loop in
   # platform-agents. Thin by design — only openrouter-operator has a fixer block, and little
   # agentic activity happens here yet (operator note). coordinator.enabled + loop.perStack render
