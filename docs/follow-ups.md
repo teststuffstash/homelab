@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-289** (2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-290** (2026-09-25: FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -1222,6 +1222,15 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement suspect.**
+      Read-only diagnosis 2026-09-25: wk-04 pins ~32 GiB after PCI passthrough, ~25.7 GiB on node 1;
+      runner-02 has ~3.7 GiB swapped to HDD. `numa=true` supplies guest topology, no host binding.
+      Swap starts 09-24 22:43Z during e2e with ~11 GiB globally available; FU-225's low-memory
+      alert misses this. [Evidence and uncertainty](../agents/coordinator/TICK-LOG.md#2026-09-25--ci-runner-02-swapping-diagnosis-fu-289).
+      **Next:** detector first (host swap activity + I/O pressure, fixture + event replay; add
+      per-node/per-VM placement visibility), then a maintenance-window placement comparison
+      budgeting ALL three VMs per physical node and rerunning e2e. No live change made; exact
+      reclaim trigger needs per-node capture/A-B verification. Relates FU-266, FU-225, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
