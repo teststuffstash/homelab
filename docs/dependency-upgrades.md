@@ -375,8 +375,8 @@ and then nothing is watching.
 ## Next steps, in dependency order
 
 1. **Make Renovate actually run again** — the cause is the missing `statuses` permission (§Ground
-   truth, diagnosed 2026-09-25); grant it, then drop the invalid `vulnerabilityAlerts.prPriority`
-   and either fix or remove the `NIX_VERSION` custom manager. Then land the
+   truth, diagnosed 2026-09-25); granted 2026-09-25 (PRs flow); the invalid `vulnerabilityAlerts.prPriority` is dropped
+   (validator-clean). Remaining: either fix or remove the `NIX_VERSION` custom manager. Then land the
    `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single highest-value
    security item on this page.
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a

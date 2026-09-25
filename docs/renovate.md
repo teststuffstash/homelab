@@ -79,6 +79,10 @@ auto-merge hard-blocked. Safe: no duplication, no churn, nothing auto-acts on it
 
 ## Gotchas encountered
 
+- **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
+  (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
+  caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party
+  `teststuffstash/**` refs are excluded in the global config; `@master` is the contract.
 - **`@latest` devbox/nix pins are un-trackable** → Renovate mis-resolves them (it once proposed
   downgrading gitleaks to a dead 5-yr-old release). The `nix`/`devbox` manager is **disabled**; devbox
   updates are owned instead by the weekly **`devbox-update`** job (`scripts/devbox-update.sh` /
