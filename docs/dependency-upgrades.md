@@ -72,6 +72,14 @@ the base SHA and aborts if it moved mid-run; six repos hitting it in one pass su
 schedule is colliding with the loop's own push traffic rather than genuine coincidence. Neither is
 diagnosed here; both are stated as observed with the evidence attached.
 
+> **Diagnosed 2026-09-25 (debug run 36107468534): both halves are ONE missing permission —
+> `statuses`.** Renovate reads each branch's commit statuses and writes `renovate/stability-days`
+> (the `minimumReleaseAge` cooldown's status). The App was never granted `statuses`, so every
+> repo 403s after extraction: `x-accepted-github-permissions: statuses=read` surfaces as
+> `integration-unauthorized`, `statuses=write` as `repository-changed` — neither is a race or an
+> installation change. The fix is the declaration in [`github-apps.yaml`](github-apps.yaml) plus
+> the grant in the App settings (the `GithubAppPermissionDrift` belt rings until it lands).
+
 > **Acceptance for "Renovate works in homelab":** at least one `renovate/*` PR has been opened,
 > gated and merged. Until then, treat every claim about automated dependency hygiene in this repo
 > as aspirational. (The dashboard-issue-exists half of this acceptance was RETIRED 2026-08-18:
