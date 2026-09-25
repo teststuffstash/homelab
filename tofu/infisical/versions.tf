@@ -4,7 +4,7 @@ terraform {
   required_providers {
     infisical = {
       source  = "Infisical/infisical"
-      version = "~> 0.16"
+      version = "~> 0.19"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
