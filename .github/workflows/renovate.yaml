@@ -52,11 +52,8 @@ jobs:
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
 
-      # FU-085: Renovate may have opened/updated PRs the coordinator owns (deps-review, major).
-      # Ring the doorbell (in-cluster ARC runner → ClusterIP svc); a false wake costs a scan.
-      - name: Ring the coordinator doorbell
-        if: always()
-        run: |
-          curl -m 5 -s -X POST -d '{"repo":"all"}' \
-            http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate \
-            >/dev/null || true
+      # No coordinator doorbell here (REMOVED 2026-09-25, operator — FU-290). The FU-085 ring
+      # ({"repo":"all"} after every run) fanned out to every stack's scan; under the first live
+      # Renovate wave those doorbell scans drained the shared homelab-agents GraphQL pool hourly
+      # and every stack's review reflex died on it. The per-stack coordinate crons still pick up
+      # the deps-review/major PRs on their own schedule; re-adding a ring waits on FU-290's lever.

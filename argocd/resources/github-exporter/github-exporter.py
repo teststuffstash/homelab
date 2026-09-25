@@ -1025,17 +1025,28 @@ __GOAL_FIELDS__
 }
 """
 
-# The goal fields are NEW schema surface on a LOAD-BEARING query: collect_open_prs also drives the
-# review + ci-red edge triggers and the stall detector, and a GraphQL *validation* error fails the
-# WHOLE query (data=None → graphql() raises), not just the new fields. So the extended query is
-# tried once and, if it errors, the walk falls back to the pre-#209 query FOREVER (this process)
-# and says so in `goal_query_supported`. Losing the goal panel is a degradation; losing review
-# dispatch would be an outage.
-_PR_QUERY_GOALS = _PR_QUERY.replace("__GOAL_FIELDS__", _GOAL_FIELDS)
-# The variable DECLARATIONS go too: "all variables used" is a GraphQL validation rule, so a base
-# query still declaring $goals/$issues would be rejected — the fallback has to be clean.
-# (Passing unused variable VALUES in the map is fine; only the document is validated.)
+# The goal fields ride their OWN request, never the LOAD-BEARING PR walk (2026-09-25). Combined,
+# the per-repo issueTree (first:$issues OPEN+CLOSED, `parent` per node) pushed the one query past
+# GitHub's per-query resource ceiling once the first Renovate wave added ~20 open PRs: 705 field
+# errors per poll, `pullRequests.nodes.*.number` among them — the whole github_pull_request_*
+# family went absent (GithubExporterPartialData) and the review edge went dark. Split, each walk
+# returned 0 errors on the same org. A goal-walk failure now costs only the goal panel: a
+# validation rejection (schema surface) latches `goal_query_supported=0` for this process, a
+# transient one skips this poll's goal trees (absent ≠ zero).
 _PR_QUERY_BASE = _PR_QUERY.replace("__GOAL_FIELDS__", "").replace(", $goals:Int!, $issues:Int!", "")
+_GOAL_QUERY = """
+query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
+  organization(login:$org) {
+    repositories(first:50, after:$cursor, orderBy:{field:PUSHED_AT, direction:DESC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        name
+""" + _GOAL_FIELDS + """
+      }
+    }
+  }
+}
+"""
 _goal_fields_ok = True
 _TRANSIENT_GRAPHQL = ("rate limit", "rate_limit", "ratelimit", "timeout", "timed out",
                       "temporarily", "try again", "internal error", "service unavailable",
@@ -1055,7 +1066,9 @@ def collect_open_prs(lines):
     """Emit per-open-PR review + CI state — the input the running-agents dashboard's stall detector
     needs (a green, unapproved PR with no reviewer acting on it = the 2.5h silent stall measured
     2026-07-09, docs/agents/observability-and-retro.md §A′). One GraphQL query/poll pulls
-    reviewDecision + statusCheckRollup across every repo, so cost stays ~1 request.
+    reviewDecision + statusCheckRollup across every repo, then walk_goal_trees() issues a SECOND,
+    separate request for the goal fields — ~2 requests/poll (split 2026-09-25: combined, they
+    exceeded GitHub's per-query resource ceiling; see _GOAL_QUERY).
 
     Token scope: this needs the PAT to also carry `Pull requests:read` (the PR list + reviewDecision).
     CI state comes from statusCheckRollup where readable (public repos — any token) and otherwise
@@ -1085,7 +1098,6 @@ def collect_open_prs(lines):
         "# TYPE github_pull_request_park_blocking_count gauge",
         "# HELP github_pull_request_park_blocking_count Blocking-dependency count for the closing issue of a codeowner-parked PR (absent-when-unreadable — the FU-108 read-honesty rule; hotfix=\"true\" when the closing issue title starts with 🚨).",
     ]
-    global _goal_fields_ok
     cursor = None
     _AGENT_ISSUE_NUMBERS.clear()
     _GOAL_TREES.clear()
@@ -1095,30 +1107,11 @@ def collect_open_prs(lines):
     # one — but it becomes live at 50+ repos, which is why the counting below is set-based and the
     # exposition is deduped rather than trusting this to stay single-page.
     for _ in range(10):  # hard page cap
-        variables = {"org": ORG, "cursor": cursor, "goals": GOAL_MAX, "issues": GOAL_ISSUE_WINDOW}
-        if _goal_fields_ok:
-            try:
-                data = graphql(_PR_QUERY_GOALS, variables)
-            except RuntimeError as exc:
-                # RuntimeError is graphql()'s "GraphQL said no with no usable data" — a schema or
-                # permission rejection of the new fields. Transport failures (URLError, timeouts)
-                # deliberately propagate instead: they say nothing about the query, and latching
-                # the fallback on a network blip would kill the panel until the pod restarts.
-                # A drained pool says the same thing, so it is excluded by name.
-                if is_transient_graphql_error(exc):
-                    raise
-                _goal_fields_ok = False
-                print(f"goal fields rejected by GraphQL ({exc}) — falling back to the pre-#209 "
-                      f"query for this process; goal_query_supported=0, PR/review metrics "
-                      f"unaffected", flush=True)
-                data = graphql(_PR_QUERY_BASE, variables)
-        else:
-            data = graphql(_PR_QUERY_BASE, variables)
+        data = graphql(_PR_QUERY_BASE, {"org": ORG, "cursor": cursor})
         repos = data["organization"]["repositories"]
         for repo in repos["nodes"] or []:
             if not repo:
                 continue
-            ingest_goal_tree(repo["name"], repo)  # #209; a no-op on the fallback query
             # FU-108: per-repo agent-label counts ride THIS walk (the REST Search API silently
             # omits private repos under the fine-grained PAT — github_agent_issue_labels had
             # never emitted for oracle-fleet/sleep-tracking; same silent-success class as FU-063).
@@ -1328,8 +1321,43 @@ def collect_open_prs(lines):
             # maybe_dispatch_queued owns the prev-set diff + retry internally.
             maybe_dispatch_queued(repo["name"], queued_now)
         if not repos["pageInfo"]["hasNextPage"]:
-            return
+            break
         cursor = repos["pageInfo"]["endCursor"]
+    walk_goal_trees()
+
+
+def walk_goal_trees():
+    """The goal walk (#209) — its own request, after the PR walk (see _GOAL_QUERY). Never raises:
+    the PR series are already emitted, and a goal-side failure must not take them down."""
+    global _goal_fields_ok
+    if not _goal_fields_ok:
+        return
+    cursor = None
+    try:
+        for _ in range(10):  # hard page cap
+            data = graphql(_GOAL_QUERY, {"org": ORG, "cursor": cursor,
+                                         "goals": GOAL_MAX, "issues": GOAL_ISSUE_WINDOW})
+            repos = data["organization"]["repositories"]
+            for repo in repos["nodes"] or []:
+                if repo:
+                    ingest_goal_tree(repo["name"], repo)
+            if not repos["pageInfo"]["hasNextPage"]:
+                return
+            cursor = repos["pageInfo"]["endCursor"]
+    except RuntimeError as exc:
+        # RuntimeError is graphql()'s "GraphQL said no with no usable data". A schema/permission
+        # rejection latches the fallback for this process; a transient one (drained pool, 502)
+        # says nothing about the fields — skip this poll's trees instead.
+        _GOAL_TREES.clear()
+        if is_transient_graphql_error(exc):
+            print(f"goal walk skipped this poll ({exc})", flush=True)
+            return
+        _goal_fields_ok = False
+        print(f"goal fields rejected by GraphQL ({exc}) — goal_query_supported=0 for this "
+              f"process; PR/review metrics unaffected", flush=True)
+    except Exception as exc:  # transport (URLError/HTTP 5xx): absent this poll, never latched
+        _GOAL_TREES.clear()
+        print(f"goal walk skipped this poll ({exc})", flush=True)
 
 
 
@@ -1421,7 +1449,7 @@ def ingest_goal_tree(repo_name, repo_node):
     """Capture one repo's goal issues + flat parent map from the collect_open_prs walk (#209).
 
     Pure over the GraphQL node, so the `--self-test` drives it against a recorded tree. Absent
-    fields (the pre-#209 fallback query) simply record nothing: absent ≠ zero, the same rule
+    fields (a goal walk that was rejected or skipped) simply record nothing: absent ≠ zero, the same rule
     collect_agent_issues follows when its walk failed."""
     goals = (repo_node.get("goalIssues") or {}).get("nodes")
     tree = repo_node.get("issueTree") or {}
@@ -1461,7 +1489,7 @@ def collect_goals(lines):
     is stale-empty and nothing emits (absent ≠ zero, same rule as collect_agent_issues)."""
     lines += [
         "# TYPE goal_query_supported gauge",
-        "# HELP goal_query_supported 1 = the goal GraphQL fields are being read; 0 = this process fell back to the pre-#209 query (goal series are ABSENT, PR/review metrics unaffected).",
+        "# HELP goal_query_supported 1 = the goal GraphQL fields are being read; 0 = GraphQL rejected the separate goal walk and this process latched it off (goal series are ABSENT; the PR walk is a separate request, so PR/review metrics are unaffected).",
         f"goal_query_supported {1 if _goal_fields_ok else 0}",
         "# TYPE goal_budget_usd gauge",
         "# HELP goal_budget_usd The goal's machine-parsed `Budget:` line in USD (ADR-102). ABSENT when no line parses — an unreadable budget is unfunded-unknown, never 0.",
@@ -2441,8 +2469,8 @@ def self_test():
     # The fallback query must be a VALID document: "all variables used" means the goal variable
     # declarations have to disappear with the fields they served.
     assert "$goals" not in _PR_QUERY_BASE and "$issues" not in _PR_QUERY_BASE
-    assert "goalIssues" not in _PR_QUERY_BASE and "goalIssues" in _PR_QUERY_GOALS
-    assert "__GOAL_FIELDS__" not in _PR_QUERY_GOALS
+    assert "goalIssues" not in _PR_QUERY_BASE and "goalIssues" in _GOAL_QUERY
+    assert "__GOAL_FIELDS__" not in _GOAL_QUERY and "pullRequests" not in _GOAL_QUERY
     # …and only a permanent rejection may latch it. "API rate limit exceeded" must NOT.
     assert is_transient_graphql_error(RuntimeError("API rate limit exceeded for installation"))
     assert is_transient_graphql_error(RuntimeError("Something went wrong, please try again"))
@@ -2497,7 +2525,7 @@ def self_test():
         assert len(_behind_posts) == 3, "empty URL disables the edge entirely"
         # The walk carries the field the predicate reads — on BOTH query variants (the goal-field
         # fallback must not strip it; it is not a goal field).
-        assert "mergeStateStatus" in _PR_QUERY_GOALS and "mergeStateStatus" in _PR_QUERY_BASE
+        assert "mergeStateStatus" in _PR_QUERY_BASE
     finally:
         UPDATE_PR_WEBHOOK_URL = saved_update_url
         urllib.request.urlopen = saved_urlopen_behind
