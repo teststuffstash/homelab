@@ -90,6 +90,12 @@ WINDOW_HOURS = int(os.environ.get("RUN_WINDOW_HOURS", "24"))
 # under-counting a tree whose older members fell out of the window.
 GOAL_ISSUE_WINDOW = int(os.environ.get("GOAL_ISSUE_WINDOW", "100"))
 GOAL_MAX = int(os.environ.get("GOAL_MAX_PER_REPO", "20"))
+# Repos per page of the open-PR walk. The walk's cost is per OPEN PR (reviewDecision +
+# mergeStateStatus are computed per PR on GitHub's side), and GitHub gateway-times-out a query at
+# ~10 s: at 63 open PRs (2026-09-25, the Renovate wave) first:50 took 11.4 s → 502/504 on EVERY
+# poll, first:10 10.6 s, first:5 4.3 s. Small pages keep each request well under the ceiling as
+# the PR count grows; the price is a few more requests per poll.
+PR_WALK_REPOS_PER_PAGE = int(os.environ.get("PR_WALK_REPOS_PER_PAGE", "5"))
 # Closed goals age out of the panel (ADR-102: the registry stays queryable via Prometheus
 # retention, not via an ever-growing default view).
 GOAL_CLOSED_MAX_AGE_DAYS = int(os.environ.get("GOAL_CLOSED_MAX_AGE_DAYS", "30"))
@@ -1000,7 +1006,7 @@ _GOAL_FIELDS = """
 _PR_QUERY = """
 query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
   organization(login:$org) {
-    repositories(first:50, after:$cursor, orderBy:{field:PUSHED_AT, direction:DESC}) {
+    repositories(first:__PAGE__, after:$cursor, orderBy:{field:NAME, direction:ASC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
@@ -1033,7 +1039,8 @@ __GOAL_FIELDS__
 # returned 0 errors on the same org. A goal-walk failure now costs only the goal panel: a
 # validation rejection (schema surface) latches `goal_query_supported=0` for this process, a
 # transient one skips this poll's goal trees (absent ≠ zero).
-_PR_QUERY_BASE = _PR_QUERY.replace("__GOAL_FIELDS__", "").replace(", $goals:Int!, $issues:Int!", "")
+_PR_QUERY_BASE = (_PR_QUERY.replace("__GOAL_FIELDS__", "").replace(", $goals:Int!, $issues:Int!", "")
+                  .replace("__PAGE__", str(PR_WALK_REPOS_PER_PAGE)))
 _GOAL_QUERY = """
 query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
   organization(login:$org) {
@@ -1101,12 +1108,12 @@ def collect_open_prs(lines):
     cursor = None
     _AGENT_ISSUE_NUMBERS.clear()
     _GOAL_TREES.clear()
-    # NB the repo walk pages a CURSOR over a mutable sort key (PUSHED_AT DESC), the GraphQL cousin
-    # of the offset hazard gh_paged documents: a push during the walk can re-present a repo on a
-    # later page. Not reachable today — the org has 11 repos and `first:50` ends the walk on page
-    # one — but it becomes live at 50+ repos, which is why the counting below is set-based and the
-    # exposition is deduped rather than trusting this to stay single-page.
-    for _ in range(10):  # hard page cap
+    # The walk is MULTI-PAGE (PR_WALK_REPOS_PER_PAGE), so it sorts by NAME — an immutable key. The
+    # old PUSHED_AT DESC order was the GraphQL cousin of gh_paged's offset hazard: a push mid-walk
+    # re-sorts, so a repo could be re-presented on a later page or SKIPPED for a poll. A repo created
+    # mid-walk can still shift the name order by one; the counting below stays set-based and the
+    # exposition deduped for exactly that.
+    for _ in range(40):  # hard page cap (40 × PR_WALK_REPOS_PER_PAGE repos)
         data = graphql(_PR_QUERY_BASE, {"org": ORG, "cursor": cursor})
         repos = data["organization"]["repositories"]
         for repo in repos["nodes"] or []:
