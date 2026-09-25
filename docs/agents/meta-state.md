@@ -14,7 +14,12 @@ never the session's arc — that is TICK-LOG's.)
   on #1990 (DONE: PR#1993 merged, lint third shape + 18-case self-test + ADR-100 addendum; hunks 2+3 landed
   direct — ci.yaml self-test step + `pin-only.reusable.yml`) and #1987 (homelab#1994 MERGED 20:04Z — `agents/major-handoff.sh` is the
   only setter of `major/awaiting-human`, C9 never re-arms `major`; agent-runtime#156 — finalize never arms a
-  `major` PR — was ARMED awaiting the bot's re-review at wind-down: verify it merged, else read its verdict). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
+  `major` PR — MERGED 20:14Z). Residues from #1987: (i) the four migration headings (`Upstream`, `Known
+  issues`, `Platform compatibility`, `Evidence`) are enforced by the script but named by NO rubric yet — #1989
+  (the migration lens) is their home and must spell them exactly; (ii) oracle-fleet#738 + oracle-iac#1001 still
+  wear `major/awaiting-human` with `reviews: []` — the script now refuses that state but relabels nothing back;
+  oracle-stack call (seat triage scope), say so at the next handoff; (iii) the code "S3" is defined twice — the replay
+  README's seam pattern S3 and python-stack.md's S3-publishing section — docs-graph-lint check #4 trips on the glyph form; docs-cleanup item (rename one). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
   (`deploy-revert-argo.yaml`: `GithubWorkflowRunFailed`-on-master trigger, the `uses:` pin predicate, close
   the re-opened Renovate PR) — a subagent chunk; (b) the DRILL on agent-coordinator (caller `pin-only.yml`
   per the reusable's header, `pin-only` made REQUIRED in tofu/github, merge a deliberately bad pin, let the

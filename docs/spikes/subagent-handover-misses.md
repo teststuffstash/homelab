@@ -177,3 +177,12 @@ everything derivable once the transcript link exists. The rules that keep it che
   `agent/error` and ADR-119 filing paths do not — a filing-surface gap to weigh at the next
   design-agents sitting (subtraction first: does the reviewer's escape belt need a declaration at
   all on a loop-filed issue whose PR is seat-authored and codeowner-gated?).
+
+- **2026-09-25 (S9 #1987, #1990):** (a) the dispatch stated the clone's HEAD as origin/master while the
+  shared checkout carried the seat's UNPUSHED bookkeeping commits — a `git clone --local` copies those; the
+  subagent had to reset onto `origin/master`. Rule: name the base as `origin/master` and tell the subagent to
+  branch from it, never from the clone's HEAD. (b) `git clone --local` of `/workspace/agent-runtime` failed on a
+  cross-device link and its `origin` pointed at the shared path, so the first push wrote a stray ref into the
+  operator's tree. Rule: for sibling repos use `--no-hardlinks` and `git remote set-url origin <github url>`
+  before any push. (c) the dispatch said the PR would park on the codeowner; the jail identity is the sole owner,
+  so the waiver let both PRs auto-merge — say "parks unless the waiver applies".
