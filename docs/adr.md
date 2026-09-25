@@ -1352,6 +1352,19 @@ IAC-G04 enforces on homelab; queue-time denial anywhere (e.g. the fix-debounce l
 the ❌ table. Doctrine + tier table: `docs/agents/iac-lane.md` §"The platform lane"; enforcement:
 `CODEOWNERS`, `scripts/pin-only-lint.sh`, `tofu/github/repo_rulesets.tf`.
 
+**Addendum (2026-09-25, design sitting — the `.github/workflows` pin carve-out, homelab#1990).
+Decision:** `.github/workflows/*.y(a)ml` is un-owned by owner→rule replacement: a PR may change
+only `uses: <owner>/<repo>@<sha> # <tag>` lines, removed/added lines pair by `<owner>/<repo>`,
+`teststuffstash/*` refs never change (they float at `@master`), and every added SHA must equal the
+commit the tag names upstream (`git/ref/tags` → annotated deref; unresolvable = FAIL) — the third
+shape in `pin-only-lint`, self-tested by `pin-only-lint-test`. **Considered:** keeping the owner
+(rejected — a human cannot read a SHA; the read was theatre and every Renovate pin parked);
+dropping the owner without a rule (rejected — this ADR's doctrine). **Why:** the rule verifies the
+one thing the review could not. **Consequences:** rollout agent-coordinator → openrouter-operator
+→ agent-runtime → homelab via the `pin-only.reusable.yml` caller at `@master`; rollback is a revert
+of a pin, itself a pin change that passes the same lint — no bypass credential exists anywhere in
+the chain; real workflow edits stay operator-direct to master.
+
 ### ADR-101 — Public ingress as a platform XRD: zone classes, per-claim tunnels, credential-armed
 
 **Status:** Accepted (operator direction 2026-08-08). **Decision:** public HTTP exposure is a
