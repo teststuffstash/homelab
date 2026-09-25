@@ -12,8 +12,9 @@ never the session's arc — that is TICK-LOG's.)
 
 - **⚑ PICKUP (2026-09-25 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
   on #1990 (DONE: PR#1993 merged, lint third shape + 18-case self-test + ADR-100 addendum; hunks 2+3 landed
-  direct — ci.yaml self-test step + `pin-only.reusable.yml`) and #1987 (agent-runtime#156 + homelab#1994,
-  read their terminals first). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
+  direct — ci.yaml self-test step + `pin-only.reusable.yml`) and #1987 (homelab#1994 MERGED 20:04Z — `agents/major-handoff.sh` is the
+  only setter of `major/awaiting-human`, C9 never re-arms `major`; agent-runtime#156 — finalize never arms a
+  `major` PR — was ARMED awaiting the bot's re-review at wind-down: verify it merged, else read its verdict). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
   (`deploy-revert-argo.yaml`: `GithubWorkflowRunFailed`-on-master trigger, the `uses:` pin predicate, close
   the re-opened Renovate PR) — a subagent chunk; (b) the DRILL on agent-coordinator (caller `pin-only.yml`
   per the reusable's header, `pin-only` made REQUIRED in tofu/github, merge a deliberately bad pin, let the
