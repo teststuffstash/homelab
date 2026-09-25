@@ -30,9 +30,8 @@ REGRESSION, not a never-worked.** FU-014's rollout evidence (archived 2026-07-12
 because that archive entry expires ~2026-08-16) records real bumps flowing on 2026-07-05/06: a
 sleep-tracking docker-digest PR that produced a sleep-iac deploy PR 8 minutes later, plus
 devbox-update bumps. sleep-tracking is now one of the four `integration-unauthorized` repos. So
-the write path **worked** and then broke somewhere in the 2026-07-06 → 08-01 window — the FU-125
-diagnosis should start from *what changed* (App key rotation, permission edit, installation
-scope), not from scratch.
+the write path **worked** and then broke somewhere in the 2026-07-06 → 08-01 window. The cause
+turned out to be a permission the App never had, not a change to the App — diagnosed below.
 
 | Observation | Evidence |
 |---|---|
@@ -65,20 +64,15 @@ one that fails**, because it buys false confidence in a supply-chain control tha
 compromise. The cooldown, the SHA-pinning and the OSV alerts are all real policy — and none of them
 have been *applied* to homelab.
 
-**The `integration-unauthorized` half is the regression** — Renovate reads fine, then fails on
-write, on repos where writes demonstrably worked on 2026-07-05/06; diff the App's permissions and
-installations against that date. **The `repository-changed` half is a race** — Renovate re-checks
-the base SHA and aborts if it moved mid-run; six repos hitting it in one pass suggests the ~6h
-schedule is colliding with the loop's own push traffic rather than genuine coincidence. Neither is
-diagnosed here; both are stated as observed with the evidence attached.
-
-> **Diagnosed 2026-09-25 (debug run 36107468534): both halves are ONE missing permission —
-> `statuses`.** Renovate reads each branch's commit statuses and writes `renovate/stability-days`
-> (the `minimumReleaseAge` cooldown's status). The App was never granted `statuses`, so every
-> repo 403s after extraction: `x-accepted-github-permissions: statuses=read` surfaces as
-> `integration-unauthorized`, `statuses=write` as `repository-changed` — neither is a race or an
-> installation change. The fix is the declaration in [`github-apps.yaml`](github-apps.yaml) plus
-> the grant in the App settings (the `GithubAppPermissionDrift` belt rings until it lands).
+**Diagnosed 2026-09-25 (debug run 36107468534): both halves are ONE missing permission —
+`statuses`.** Renovate reads each branch's commit statuses and writes `renovate/stability-days`
+(the `minimumReleaseAge` cooldown's status). The App was never granted `statuses`, so every repo
+403s after extraction: `x-accepted-github-permissions: statuses=read` surfaces as
+`integration-unauthorized`, `statuses=write` as `repository-changed`. The two earlier hypotheses —
+an App permission/installation regression since 2026-07-06, and the ~6h schedule racing the loop's
+push traffic — are both ruled out (the live declared-vs-live page matched on every other permission
+and all ten installs). The fix is the declaration in [`github-apps.yaml`](github-apps.yaml) plus the
+grant in the App settings (the `GithubAppPermissionDrift` belt rings until it lands).
 
 > **Acceptance for "Renovate works in homelab":** at least one `renovate/*` PR has been opened,
 > gated and merged. Until then, treat every claim about automated dependency hygiene in this repo
@@ -380,12 +374,11 @@ and then nothing is watching.
 
 ## Next steps, in dependency order
 
-1. **Make Renovate actually run again** — diff the `homelab-renovate` App's permissions and
-   installations against 2026-07-06, when writes last demonstrably worked (the regression framing
-   above); decide whether the ~6h schedule is racing the loop's push traffic; drop the invalid
-   `vulnerabilityAlerts.prPriority`; and either fix or remove the `NIX_VERSION` custom manager. Then
-   land the orphaned `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single
-   highest-value security item on this page.
+1. **Make Renovate actually run again** — the cause is the missing `statuses` permission (§Ground
+   truth, diagnosed 2026-09-25); grant it, then drop the invalid `vulnerabilityAlerts.prPriority`
+   and either fix or remove the `NIX_VERSION` custom manager. Then land the
+   `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single highest-value
+   security item on this page.
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a
    `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix. (The
    dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
