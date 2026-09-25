@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-289** (2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-291** (2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -354,6 +354,9 @@ six OVERSIZE items pointer-ized into
       success** (measured 2026-08-01: all 10 autodiscovered repos abort; same silent-success
       class as FU-108/FU-113). Evidence + inventory:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
+      **ROOT CAUSE 2026-09-25:** the App lacks `statuses` (403 on read → integration-unauthorized,
+      on write → repository-changed); declared in PR#1969, granted 2026-09-25 → run 36110998294 `done`
+      on all 10 repos, 20 PRs (first merges: snore-recorder#33, allure-behavior-snippets#7).
       **Next:** absorbed into the Renovate Goal — homelab#502, closed back into the ROADMAP
       work map (row G-D; its body is the launch draft). Acceptance items there: App permission
       diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
@@ -440,6 +443,16 @@ taxonomy: an item belongs where its NEXT ACTION lands. Keep them; adding a sixth
 the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
+
+- [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
+      GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
+      failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran
+      53 doorbell `coordinate-perstack` scans (vs ~1–2/15m baseline) plus 64 switchboard pods, following
+      the first live Renovate wave (FU-125). The pool drained again after the reset (~150 pts/min at
+      09:53). The detector was blind: REST `/rate_limit` misreports graphql, fixed in PR#1979, so
+      GithubRateLimitLow pages from now on. **Next:** after #1979 lands, measure the points each
+      consumer spends (scan vs session vs reflex), then decide the lever (doorbell debounce per stack,
+      scan query batching, or a separate App/installation per stack). Relates FU-125, ADR-094.
 
 - [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.**
       Fleet read 2026-09-23 (comments on the six Goals with a store): 19 checkpoint rulings, 11 of
@@ -1219,6 +1232,16 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement suspect.**
+      Read-only diagnosis 2026-09-25: wk-04 pins ~32 GiB after PCI passthrough, ~25.7 GiB on node 1;
+      runner-02 has ~3.7 GiB swapped to HDD. `numa=true` supplies guest topology, no host binding.
+      Swap starts 09-24 22:43Z during e2e with ~11 GiB globally available; FU-225's low-memory
+      alert misses this. [Evidence and uncertainty](../agents/coordinator/TICK-LOG.md#2026-09-25--ci-runner-02-swapping-diagnosis-fu-289).
+      **Next:** detector first (host swap activity + I/O pressure, fixture + event replay; add
+      per-node/per-VM placement visibility), then a maintenance-window placement comparison
+      budgeting ALL three VMs per physical node and rerunning e2e. No live change made; exact
+      reclaim trigger needs per-node capture/A-B verification. **ci-runner-02 PARKED 2026-09-25**
+      (operator; drained + stopped, `var.ci_runner_02_running=false`, PR#1978) — flip back after. Relates FU-266, FU-225, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
