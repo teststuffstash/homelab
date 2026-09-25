@@ -717,7 +717,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "GitHub rate-limit pools (remaining %, per token identity)",
-      "description": "FU-084: pools are PER INSTALLATION and graphql is separate from core \u2014 the 2026-07-17 incident drained coordinator-git's graphql pool to 9 with nothing watching. Alert fires < 10% (GithubRateLimitLow).",
+      "description": "FU-084: pools are PER INSTALLATION and graphql is separate from core \u2014 the 2026-07-17 incident drained coordinator-git's graphql pool to 9 with nothing watching. coordinator-git = the homelab-agents installation (142724430): every stack's loop/worker/reflex token spends it. graphql is read from the GraphQL endpoint's own rateLimit since 2026-09-25 (REST /rate_limit under-reported it; that day's 09:19-09:31Z exhaustion never showed here). Alert fires < 10% (GithubRateLimitLow).",
       "gridPos": {
         "h": 8,
         "w": 12,

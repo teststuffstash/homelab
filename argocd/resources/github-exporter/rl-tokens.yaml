@@ -32,6 +32,9 @@ metadata:
   name: rl-coordinator-git-gen
   namespace: monitoring
 spec:
+  # homelab-agents: token="coordinator-git" IS the homelab-agents installation pool — every
+  # per-stack loop-git/loop-intake broker token, worker agent-git-<repo> token and the review/
+  # coordinate reflexes of all stacks spend it (2026-09-25: exhausted 09:19–09:31Z).
   appID: "4150968" # homelab-agents (same installation as coordinator-git — the pool that bit)
   installID: "142724430"
   auth:
@@ -343,3 +346,62 @@ spec:
   data:
     - secretKey: pem
       remoteRef: { key: LABELS_GH_APP_PRIVATE_KEY }
+---
+# 2026-09-25 audit: homelab-sentinel was the one Infisical-keyed App left unprobed. Its token only
+# WRITES verdict statuses (reads ride coordinator-git), but every Renovate/PR wave multiplies them.
+# (homelab-arc / homelab-runner-registrar stay unprobed: keys live outside Infisical — in-cluster
+# arc-github-app Secret / VM cloud-init — and both spend only per-boot/per-scale REST calls.)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-sentinel-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-sentinel-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: SENTINEL_GH_APP_PRIVATE_KEY }
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-sentinel-git-gen
+  namespace: monitoring
+spec:
+  appID: "4929271" # homelab-sentinel
+  installID: "161337293"
+  auth:
+    privateKey:
+      secretRef: { name: rl-sentinel-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [homelab]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-sentinel-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-sentinel-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-sentinel-git-gen
