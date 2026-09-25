@@ -234,7 +234,11 @@ bump should not wait for a human. Ownership is **replaced, not dropped**: `pin-o
 required `ci`) allows only arc-runner image-pin lines into them via a PR — stricter than the review
 it stands in for, since a regex cannot approve a smuggled fourth line. Real edits take the operator
 path (direct to master), which is not a PR and not gated. That is the general shape for anything
-else that needs un-gating: **replace the owner with a rule, never just remove the owner.**
+else that needs un-gating: **replace the owner with a rule, never just remove the owner.** The
+third shape (ADR-100 addendum 2026-09-25) un-owns `.github/workflows/` the same way: a PR may
+carry only `uses: <owner>/<repo>@<sha> # <tag>` lines, paired by action, first-party refs frozen at
+`@master`, and each SHA verified upstream against the tag it claims — the one check a human
+reviewer could never perform on a digest bump.
 
 The deny row is the load-bearing one. `agents/**` holds the launcher that builds its own dispatch
 command (ADR-094), the scan that decides what gets dispatched, and the reflex that approves its own
