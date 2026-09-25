@@ -1,0 +1,5 @@
+# c9-rearm — the decision table (family contract in fixture.yaml).
+# id                       | world | patch (relpath @ patches/*.jq)                  | env | expect             | params
+worker-unarmed             | base  |                                                 |     | armed-both         |
+major-not-armed            | base  | gh/pr-list.json @ patches/label-major.jq        |     | armed-witness-only |
+awaiting-human-not-armed   | base  | gh/pr-list.json @ patches/label-awaiting-human.jq |   | armed-witness-only |

@@ -1,0 +1,3 @@
+CALL gh pr merge 91 --repo teststuffstash/sleep-iac --auto --squash
+OUT [sleep-iac] C9: armed worker PR #91 (arrived un-armed — invisible to the merge path)
+RC 0

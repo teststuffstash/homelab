@@ -1,0 +1,18 @@
+# provenance — family world `recorded-738` (agents/replay/fixtures/major-handoff)
+#
+# WHAT THIS WORLD IS. The EVIDENCE of homelab S9 #1987, recorded live: oracle-fleet#738, a Renovate
+# `major` bump the coordinator had relabelled `major/awaiting-human` on 2026-09-25 with NO reviewer
+# verdict at all (`reviews: []`) — its own comment did the "review". The `no-approval` row replays
+# the handoff gate over exactly this payload and REFUSES it, which is the whole point of the script.
+#
+# PROVENANCE CLASS: recorded (the literal `gh pr view` payload, unedited; the command below asked
+# for a superset of the fields the gate reads — state, labels, reviews, commits — the extras are
+# inert). The `major/awaiting-human` label is ON the PR in this recording: that is the defect the
+# fixture pins, not a fixture mistake.
+world: recorded-738
+class: recorded
+recorded:
+  cmd: gh pr view 738 --repo teststuffstash/oracle-fleet --json number,state,labels,reviews,commits,headRefOid,author
+  at: 2026-09-25
+  source: teststuffstash/oracle-fleet#738 (head ed86910, author app/homelab-renovate-1234)
+used_by: major-handoff/no-approval   # regenerate the truth: run.sh --index

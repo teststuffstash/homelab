@@ -197,6 +197,7 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `c9-rearm` | table | - | `agents/review-reflex.sh` | - |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
@@ -304,6 +305,7 @@ is stale, so it cannot drift the way the prose register did.
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
+| `major-handoff` | table | - | `agents/major-handoff.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/null-author` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |

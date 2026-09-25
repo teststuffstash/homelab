@@ -1,0 +1,35 @@
+# major-handoff — THE FAMILY, one decision table over the launcher-owned handoff gate
+# (agents/major-handoff.sh; homelab S9 #1987, stint #1985).
+#
+# THE CONTRACT. `major/awaiting-human` is SET BY THE SCRIPT and requires a bot verdict AT HEAD:
+# (1) the PR is OPEN and carries `major`; (2) the newest APPROVED review by `homelab-reviewer`
+# (`[bot]` suffix normalized) post-dates the newest NON-merge commit — the reflex's
+# `bot_approved_head` definition, replicated in the script and pinned HERE (the reflex's own copy is
+# pinned by `review-pick`); (3) that approval's body carries the four migration headings —
+# Upstream / Known issues / Platform compatibility / Evidence — each line-anchored as `## …` or
+# `**…**`, case-insensitive; (4) only then two label CALLs in IL-T16 order (ADD awaiting-human,
+# REMOVE in-progress) followed by a re-read of the REST labels endpoint that must show the end
+# state. Every refusal is ONE `major-handoff: REFUSED — …` line and exit 3 with NO write; an
+# unreadable probe is exit 4 with NO write (rule #6); a re-read that does not prove the writes is
+# exit 5 (not a refusal — the writes were issued).
+#
+# ROWS. `handoff` is the clean approved world (the constructed sibling of the recorded evidence);
+# `merge-commit-not-content` and `bot-suffix-normalized` pin the two replicated reflex rules;
+# `approved-without-headings` / `approval-stale` / `not-major-lane` each earn a refusal by one
+# patch; `no-approval` replays the LIVE oracle-fleet#738 recording — the PR the coordinator
+# relabelled by hand with `reviews: []` — and refuses it; `reviews-unreadable` injects a failed
+# probe (per-call STUB_GH_… override) and pins exit 4 with no CALL after the probe;
+# `end-state-not-proven` patches the AFTER-state read and pins exit 5.
+#
+# WORLDS. worlds/approved (constructed — see its provenance.yaml) · worlds/recorded-738 (recorded).
+name: major-handoff
+mode: table
+source: agents/major-handoff.sh
+parts:
+  - block:major-handoff-seams
+  - file:bridge.sh
+  - block:major-handoff
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_PR=738
+rows: rows.psv

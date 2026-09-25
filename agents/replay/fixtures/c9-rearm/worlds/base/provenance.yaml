@@ -1,0 +1,18 @@
+# provenance — family world `base` (agents/replay/fixtures/c9-rearm)
+#
+# WHAT THIS WORLD IS. One `gh pr list` page for a stack repo as the reflex holds it when the C9
+# re-arm belt runs: #90 a WORKER-App-authored, un-armed, non-draft PR on master (the row under
+# test — clean in the base, a row's patch adds the lane label); #91 the same shape with no labels
+# at all — the family WITNESS, armed in every row, so an empty world can never fake an inert pass;
+# #92 a Renovate-App-authored `major` PR, out of C9 scope by AUTHOR today (the accident the
+# `major` row makes structural for worker-authored PRs).
+#
+# PROVENANCE CLASS: constructed (README §S6): the shape is the reflex's own `--json` field list
+# (number, isDraft, autoMergeRequest, author, labels, headRefName, baseRefName), the numbers are
+# sleep-iac#90-style evidence (the `major` PR a finalize armed on 2026-09-25, homelab S9 #1987),
+# the payload is authored for the family.
+world: base
+class: constructed
+constructed: 2026-09-25
+source: agents/review-reflex.sh C9 (the --json field subset the jq reads); numbers after sleep-iac#90
+used_by: c9-rearm/*   # regenerate the truth: run.sh --index

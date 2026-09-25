@@ -1,0 +1,18 @@
+# provenance — family world `approved` (agents/replay/fixtures/major-handoff)
+#
+# WHAT THIS WORLD IS. oracle-fleet#738 (the recorded-738 sibling: same head ed86910, same commit
+# date) as it would look once the brief's steps 2–4 have run: the coordinator's `agent/in-progress`
+# claim on the PR, a round-1 CHANGES_REQUESTED by the reviewer bot, a HUMAN review that quotes a
+# heading (must never count as the bot's verdict), and the bot's APPROVED at 12:00Z carrying the
+# four migration headings in the two admitted forms (`## …` and `**…:**`). The labels endpoint
+# file is the AFTER state the handoff's re-read must see.
+#
+# PROVENANCE CLASS: constructed (README §S6 — a fabricated world is legitimate for pinning OUR
+# side of a contract; it is not presented as a recording of GitHub's). Only the commit is real;
+# every review is authored here because no `major` PR on the platform has ever received the
+# reviewer's migration evidence in this shape (that absence IS homelab#1987).
+world: approved
+class: constructed
+constructed: 2026-09-25
+source: teststuffstash/oracle-fleet#738 (commit only); reviews + labels authored for the family
+used_by: major-handoff/* (every row but no-approval)   # regenerate the truth: run.sh --index

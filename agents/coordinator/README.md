@@ -45,7 +45,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/done` | merged | coordinator; the deterministic scan RECONCILES it when a CLOSED issue still carries a stale `agent/blocked` or `agent/review` label — a merged PR mentions the issue, the state persisted past `C4C5_PERSIST_S`, and the merged-closeout clause (C6) was skipped (homelab#1106) |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
-| `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
+| `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | `agents/major-handoff.sh` ONLY (requires the bot's APPROVED at head + the four migration headings; §Dependency major bumps step 5) — never by hand |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
 
@@ -1506,11 +1506,19 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    the estimator says `⚠ ESCALATE` → `agent/blocked` + comment, stop.
 4. **Loop to green.** Worker pushes → CI re-runs → re-dispatch the reviewer. Repeat within the round
    bound (max 5, ADR-127). Green + `APPROVED` is the target.
-5. **Hand off to the human — do NOT merge.** The PR is un-armed by design; your approval does not merge
-   it. Relabel **`major/awaiting-human`** and comment "migration documented, CI green, reviewer-approved —
-   ready for a human to merge" (link the reviewer's summary). A human reads the documented trail and
-   clicks merge. Optionally the reviewer's non-blocking follow-up comments (new major features worth
-   adopting) become fresh `agent-fix` issues.
+5. **Hand off to the human — do NOT merge, do NOT relabel by hand.** The PR is un-armed by design; your
+   approval does not merge it. The handoff is launcher-owned (ADR-094 — you judge, shell acts; homelab S9 #1987):
+   ```sh
+   bash agents/major-handoff.sh <owner/repo> <PR>
+   ```
+   It sets **`major/awaiting-human`** (and releases `agent/in-progress`) ONLY when the reviewer bot's
+   APPROVED review sits at the PR head and carries the four migration headings (`Upstream`, `Known
+   issues`, `Platform compatibility`, `Evidence`). A `major-handoff: REFUSED — …` exit (3) means the
+   migration evidence is missing — dispatch the reviewer again (step 2); never apply the label yourself
+   (your own comment is not a review: oracle-fleet#738 / oracle-iac#1001 were relabelled with
+   `reviews: []` on 2026-09-25). Exit 4 = a probe was unreadable, nothing written — retry next tick.
+   A human reads the documented trail and clicks merge. Optionally the reviewer's non-blocking
+   follow-up comments (new major features worth adopting) become fresh `agent-fix` issues.
 
 Why this is yours and not the reflex's: a major bump is a **judgment** call (is the fix within budget?
 is the breakage worth adopting now? is a human happy to merge?), and reviews for it must run **while red**

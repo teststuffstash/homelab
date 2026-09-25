@@ -1,0 +1,6 @@
+CALL gh pr view 738 --repo teststuffstash/oracle-fleet --json state,labels,reviews,commits
+CALL gh pr edit 738 --repo teststuffstash/oracle-fleet --add-label major/awaiting-human
+CALL gh pr edit 738 --repo teststuffstash/oracle-fleet --remove-label agent/in-progress
+CALL gh api repos/teststuffstash/oracle-fleet/issues/738/labels --jq .[].name
+OUT major-handoff: teststuffstash/oracle-fleet#738 → major/awaiting-human (agent/in-progress removed; homelab-reviewer approval at head, submitted 2026-09-25T12:00:00Z)
+RC 0

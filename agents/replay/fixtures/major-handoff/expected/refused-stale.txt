@@ -1,0 +1,3 @@
+CALL gh pr view 738 --repo teststuffstash/oracle-fleet --json state,labels,reviews,commits
+OUT major-handoff: REFUSED — the newest homelab-reviewer approval (2026-09-25T12:00:00Z) predates the newest content commit (2026-09-25T13:00:00Z) on teststuffstash/oracle-fleet#738 — the verdict is not at head; re-dispatch the reviewer (brief step 2)
+RC 3

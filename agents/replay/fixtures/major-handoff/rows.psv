@@ -1,0 +1,11 @@
+# major-handoff — the decision table (family contract in fixture.yaml).
+# id                        | world        | patch (relpath @ patches/*.jq)                                                              | env                      | expect               | params
+handoff                     | approved     |                                                                                             |                          | handoff              |
+merge-commit-not-content    | approved     | gh/pr-view-738.json @ patches/merge-commit-after-review.jq                                  |                          | handoff              |
+bot-suffix-normalized       | approved     | gh/pr-view-738.json @ patches/bot-suffix.jq                                                 |                          | handoff              |
+approved-without-headings   | approved     | gh/pr-view-738.json @ patches/strip-headings.jq                                             |                          | refused-headings     |
+approval-stale              | approved     | gh/pr-view-738.json @ patches/commit-after-review.jq                                        |                          | refused-stale        |
+not-major-lane              | approved     | gh/pr-view-738.json @ patches/label-not-major.jq                                            |                          | refused-not-major    |
+no-approval                 | recorded-738 |                                                                                             |                          | refused-no-approval  |
+reviews-unreadable          | approved     |                                                                                             | STUB_GH_pr_view_738=fail | unreadable           |
+end-state-not-proven        | approved     | gh/api-repos-teststuffstash-oracle-fleet-issues-738-labels.json @ patches/verify-still-in-progress.jq |                | not-proven           |
