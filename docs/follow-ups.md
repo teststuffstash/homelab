@@ -355,7 +355,8 @@ six OVERSIZE items pointer-ized into
       class as FU-108/FU-113). Evidence + inventory:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
       **ROOT CAUSE 2026-09-25:** the App lacks `statuses` (403 on read → integration-unauthorized,
-      on write → repository-changed); declared in PR#1969, the App-settings grant is operator-side.
+      on write → repository-changed); declared in PR#1969, granted 2026-09-25 → run 36110998294 `done`
+      on all 10 repos, 20 PRs (first merges: snore-recorder#33, allure-behavior-snippets#7).
       **Next:** absorbed into the Renovate Goal — homelab#502, closed back into the ROADMAP
       work map (row G-D; its body is the launch draft). Acceptance items there: App permission
       diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
