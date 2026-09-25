@@ -452,7 +452,8 @@ the block needs pruning, not more headings.
       09:53). The detector was blind: REST `/rate_limit` misreports graphql, fixed in PR#1979, so
       GithubRateLimitLow pages from now on. **Next:** after #1979 lands, measure the points each
       consumer spends (scan vs session vs reflex), then decide the lever (doorbell debounce per stack,
-      scan query batching, or a separate App/installation per stack). Relates FU-125, ADR-094.
+      scan query batching, or a separate App/installation per stack). **2026-09-25 (operator):**
+      renovate.yaml's org-wide `{"repo":"all"}` ring removed meanwhile. Relates FU-125, ADR-094.
 
 - [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.**
       Fleet read 2026-09-23 (comments on the six Goals with a store): 19 checkpoint rulings, 11 of
