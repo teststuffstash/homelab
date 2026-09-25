@@ -22,8 +22,7 @@
     "minimumReleaseAge": null,
     "labels": ["security", "automerge"],
     "addLabels": ["automerge"],
-    "automerge": true,
-    "prPriority": 10
+    "automerge": true
   },
 
   "packageRules": [
@@ -73,6 +72,12 @@
     {
       "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (docs/renovate.md).",
       "matchManagers": ["nix", "devbox"],
+      "enabled": false
+    },
+    {
+      "description": "First-party reusable workflows (`uses: teststuffstash/<repo>/.github/workflows/…@master`) are NOT Renovate's — the floating @master IS the contract: a fix in homelab reaches every caller at once. pinGitHubActionDigests froze every caller at one homelab commit and would then open a digest PR per homelab master move (2026-09-25, oracle-fleet#737). Same rule as first-party images (docs/dependency-upgrades.md class 3): our own artifacts never ride Renovate.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["teststuffstash/**"],
       "enabled": false
     },
     {
