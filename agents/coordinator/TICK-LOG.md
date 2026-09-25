@@ -11012,3 +11012,57 @@ the two are one switch. #1967 merged: edge-probe emits
 then the jail's `tofu/cloudflare` apply was one create, the re-plan was clean, and GPTBot and
 ClaudeBot now get 200. Claude-User's 2 "unsuccessful" requests were origin 400s from the oracle
 gateway; that went back in the handoff Result.
+
+## 2026-09-25 — ci-runner-02 swapping diagnosis (FU-289)
+
+Operator asked why oracle e2e's "Preparing nodes" took 397/67 s on runner-02 versus 1.95 s
+on runner-01, and whether NUMA or missing provisioning explains it. Read-only SSH to both
+guests and hypervisors, GitHub run logs, Prometheus event replay, and PR/source review:
+
+- Both guests: Debian 12, kernel `6.1.0-53-cloud-amd64`, 12 GiB, six vCPUs, two active runner
+  services, no guest swap. Docker/BuildKit/Nix mirrors, inotify settings and janitor match.
+  Docker/containerd are 29.8.0/2.3.4 on runner-01, 29.8.1/2.3.5 on runner-02.
+- Both hosts: 8 GiB swap, swappiness=60, zone_reclaim_mode=0, page-cluster=3,
+  overcommit_memory=0. pve is single-socket, PVE 8.4.20/kernel 6.8.12-42, swap on NVMe;
+  nx-02 is dual-socket, PVE 9.2.2/kernel 7.0.2-6, swap on the WD HDD.
+- nx-02 swap was effectively zero until 2026-09-24 22:43Z (first nonzero sampled value
+  0.362 GiB), during runner-02's 22:39:14–22:54:09 successful e2e. It reached 5.43 GiB overnight.
+  Sampled host MemAvailable never fell below 9.36 GiB in the preceding 24h. During the two
+  failures (07:24–07:31 and 07:44–07:47), swap-in was active, HDD utilization peaked at 98%,
+  host I/O PSI at 34%; pve had essentially no swap activity. Node-image readiness preceded
+  the delay. Failed runs: oracle-fleet/actions/runs/36107119144 and /36109123574.
+- Around 08:21Z, `/proc/<qemu-pid>/numa_maps` totals in GiB (resident pages, shared pages can
+  occur in multiple processes): wk-04 N0=6.30/N1=25.74; runner-02 N0=5.91/N1=2.53;
+  cp-02 N0=5.78/N1=0.34. Runner-02 VmSwap was ~3.7 GiB. Node 0 had ~12 GiB free, node 1
+  ~1 GiB; kswapd0 accumulated <1 s CPU, kswapd1 ~23 s. Cgroup memory.high/max unlimited,
+  no high/max/OOM events. Automatic NUMA balancing=1; THP enabled/defrag=madvise.
+- wk-04's full 32 GiB is resident after the SN530 passthrough (#1957/#1958); VmLck accounting
+  ~32 GiB and node pin acquire-minus-release counters ~32 GiB support VFIO pinning. Its two
+  16-GiB guest RAM mappings are physically ~6.3/9.7 GiB and 0/16 GiB across host nodes.
+  The device is attached to host node 1. Its guest RAM is essentially no longer KSM-shared.
+- #1718's body/review introduced sockets=2 + numa=true as the dual-socket fix; #1841 copied
+  it to runner-02. Neither contains host-placement verification. The running command lines
+  have ram-node0/1 but NO host-nodes/policy, and all vCPU affinity masks allow all host CPUs.
+  Installed `PVE/QemuServer/Memory.pm` confirms default topology splits guest RAM without
+  host binding; `numaN.hostnodes` + policy is a separate path. The tf comment overstates what
+  matching guest socket count guarantees. Sixteen vCPUs also do not inherently require both
+  sockets: each socket has twenty hardware threads (ten physical cores).
+
+Strongest inference: skewed, VFIO-pinned wk-04 memory leaves node 1 short of reclaimable
+headroom; later runner demand causes local reclaim onto slow swap. The exact allocation that
+woke reclaim is NOT proven: historical per-node memory/VM placement was not scraped, and no
+controlled placement change was performed. THP compaction may amplify it (3567/3570 compact
+attempts failed at the read), but no trace identifies it as the trigger. No evidence yet for a
+kernel regression; runner-02's kvm-nx-lpage-re thread used only ~1 s CPU over ~23h, unlike the
+reported busy-loop signature. A kernel swap is therefore not the first diagnostic experiment.
+
+Upstream grounding: [QEMU memory backends](https://www.qemu.org/docs/master/system/invocation.html)
+separate guest topology from host-nodes/policy; [Intel's KVM tuning guide, §3.2.1](https://cdrdv2-public.intel.com/686407/kvm-tuning-guide-icx.pdf)
+explains why VFIO-pinned RAM limits automatic NUMA relocation; [Linux physical memory](https://docs.kernel.org/mm/physical_memory.html)
+describes per-node reclaim, and [THP controls](https://docs.kernel.org/admin-guide/mm/transhuge.html)
+describe allocation-time reclaim/compaction. Proxmox's [NUMA-aware vCPU pinning RFC](https://lore.proxmox.com/pve-devel/20260217114813.2063770-1-d.csapak@proxmox.com/)
+is distinct from the topology flag; no such pinning option exists in the inspected installation.
+
+FU-289 owns the remaining detector, per-node evidence and controlled placement/e2e comparison;
+FU-225's existing MemAvailable<3GiB belt cannot detect this event. No VM restart, swapoff,
+sysctl, affinity, NUMA or infrastructure configuration change was made.
