@@ -392,6 +392,9 @@ jobs:
       - name: Findings-store self-test (devbox run goal-findings-self-test)
         run: devbox run goal-findings-self-test
 
+      - name: pin-only-lint self-test (devbox run pin-only-lint-test)
+        run: devbox run pin-only-lint-test
+
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
         # homelab#1441: diff against the PR's base SHA AT EVENT TIME — the merge commit's first
