@@ -378,7 +378,10 @@ and then nothing is watching.
    truth, diagnosed 2026-09-25); granted 2026-09-25 (PRs flow); the invalid `vulnerabilityAlerts.prPriority` is dropped
    (validator-clean). Remaining: either fix or remove the `NIX_VERSION` custom manager. Then land the
    `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single highest-value
-   security item on this page.
+   security item on this page — but only once a Renovate run has REBUILT it under the
+   first-party exclusion (its first cut also froze `teststuffstash/homelab/…reusable.yml@master`
+   at one SHA; §Gotchas in [`renovate.md`](renovate.md)): no `uses: teststuffstash/` line may
+   change in the diff.
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a
    `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix. (The
    dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
