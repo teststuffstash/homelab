@@ -104,6 +104,7 @@ apps:
       pull_requests: { level: write, why: "renovate + devbox-update PRs; runner-image self-bump PR" }
       issues: { level: write, why: "the Dependency Dashboard issue" }
       workflows: { level: write, why: "renovate bumps pinned action refs under .github/workflows/" }
+      statuses: { level: write, why: "renovate reads branch commit statuses + writes renovate/stability-days (the minimumReleaseAge cooldown); missing, every repo aborts — 403 read → integration-unauthorized, 403 write → repository-changed (FU-125, 2026-09-25)" }
     absent:
       vulnerability_alerts: "DECIDED — vulnerability data comes from Renovate's OSV alerts, not GitHub Dependabot (docs/renovate.md §OSV: 'we use OSV instead and ignore that warning'; self-host ethos, no repo Dependency-graph settings needed)"
     installs: selected

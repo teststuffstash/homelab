@@ -195,6 +195,10 @@
         "workflows": {
           "level": "write",
           "why": "renovate bumps pinned action refs under .github/workflows/"
+        },
+        "statuses": {
+          "level": "write",
+          "why": "renovate reads branch commit statuses + writes renovate/stability-days (the minimumReleaseAge cooldown); missing, every repo aborts — 403 read → integration-unauthorized, 403 write → repository-changed (FU-125, 2026-09-25)"
         }
       },
       "absent": {
