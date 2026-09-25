@@ -337,10 +337,11 @@ existing per-issue `$` drill-down.
 
 **Two honesty signals, on the panel by design.** `goal_tree_truncated=1` means that repo has more
 issues than the exporter's `GOAL_ISSUE_WINDOW`, so a long-untouched descendant can be missing from
-the counts; `goal_query_supported=0` means the exporter fell back to its pre-#209 GraphQL query and
-the goal series are **absent rather than wrong** (that fallback exists because the goal fields ride
-a load-bearing query — losing the panel is a degradation, losing review dispatch would be an
-outage). A page that hid either would report a partial tree as a whole one, which is the
+the counts; `goal_query_supported=0` means GraphQL rejected the goal walk and the exporter latched it
+off for the process, so the goal series are **absent rather than wrong**. The goal walk is its own
+request, separate from the load-bearing PR walk (split 2026-09-25 after the combined query hit
+GitHub's per-query resource ceiling and took the PR series down), so a goal-side failure costs the
+panel, never review dispatch. A page that hid either would report a partial tree as a whole one, which is the
 FU-125/FU-108 failure class this platform keeps paying for.
 
 **The gate:** `python3 argocd/resources/github-exporter/github-exporter.py --self-test` — the
