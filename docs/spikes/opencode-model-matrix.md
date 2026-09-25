@@ -116,7 +116,7 @@ use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-a
 | kimi-k2.7-code | 0.95/4.00/0.19/– | $60 | — | ⚠ **UNKNOWN — HTTP 500 "Internal server error" at probe time** (raw 2026-09-17); an upstream fault, NOT a compat ✗ — re-probe | untested | priced cheap-slot candidate |
 | kimi-k2.6 | 0.95/4.00/0.16/– | $60 | — | untested | untested | |
 | kimi-k2.5 | unpriced (absent from the published table) | ? | — | untested | untested | `_GO_MAX_PRICE` fallback applies |
-| glm-5.3-flash | 0.15/0.50/0.03/– | $60 | — | ⚠ **UNKNOWN — HTTP 500 at probe time** (raw 2026-09-17); re-probe | untested | NEW in the 09-17 table |
+| glm-5.3-flash | 0.15/0.50/0.03/– | $60 | **2× usage** (operator read of the picker, 2026-09-25) | ⚠ **UNKNOWN — HTTP 500 at probe time** (raw 2026-09-17); re-probe | untested | NEW in the 09-17 table; ⚠ the 2× badge makes it a poor failover cell whatever the tool probe says — never a slot pick |
 | glm-5.3 | 1.40/4.40/0.26/– | $15 | — | ⚠ **UNKNOWN — HTTP 500 at probe time** (raw 2026-09-17); re-probe | untested | NEW in the 09-17 table (note the $15 pool — its 5.2/5.1 siblings are $60) |
 | glm-5.2 | 1.40/4.40/0.26/– | $60 | — | ✗ **422 on EVERY function tool** (raw+claude 08-13) | ✅ but ⚠ drops STRING-shorthand content (free-associates; blocks form fine — shim normalizes) | serves the CLI's auxiliary calls fine; tools work OpenAI-shaped on `/chat/completions` (raw 08-13, `tool_calls`) |
 | glm-5.1 / glm-5 | 5.1: 1.40/4.40/0.26/– · glm-5 unpriced | $60/? | — | untested (glm-5.2 class suspected) | untested | |
