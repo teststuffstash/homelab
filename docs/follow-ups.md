@@ -1234,15 +1234,15 @@ the block needs pruning, not more headings.
 ## Hardware & nodes
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement suspect.**
-      Read-only diagnosis 2026-09-25: wk-04 pins ~32 GiB after PCI passthrough, ~25.7 GiB on node 1;
-      runner-02 has ~3.7 GiB swapped to HDD. `numa=true` supplies guest topology, no host binding.
-      Swap starts 09-24 22:43Z during e2e with ~11 GiB globally available; FU-225's low-memory
-      alert misses this. [Evidence and uncertainty](../agents/coordinator/TICK-LOG.md#2026-09-25--ci-runner-02-swapping-diagnosis-fu-289).
-      **Next:** detector first (host swap activity + I/O pressure, fixture + event replay; add
-      per-node/per-VM placement visibility), then a maintenance-window placement comparison
-      budgeting ALL three VMs per physical node and rerunning e2e. No live change made; exact
-      reclaim trigger needs per-node capture/A-B verification. **ci-runner-02 PARKED 2026-09-25**
-      (operator; drained + stopped, `var.ci_runner_02_running=false`, PR#1978) — flip back after. Relates FU-266, FU-225, FU-280.
+      **POINTER:** [diagnosis, placement options and settling experiment](spikes/nx-02-numa-placement.md).
+      Operator prefers automatic best-effort placement without Kubernetes resource enforcement;
+      wk-04's running Talos kernel lacks automatic NUMA balancing. No placement change applied.
+      **Next:** detector first (swap activity + I/O pressure, fixture + event replay), add per-node/
+      per-VM visibility, then compare placement in a maintenance window, budgeting all three VMs
+      and rerunning e2e. Exact reclaim trigger and locality benefits remain unverified.
+      **ci-runner-02 PARKED 2026-09-25** (operator; drained + stopped,
+      `var.ci_runner_02_running=false`, PR#1978) — flip back after validation.
+      Relates FU-266, FU-225, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
