@@ -1,0 +1,23 @@
+# c9-rearm — the review reflex's C9 re-arm belt (agents/review-reflex.sh), as one decision table
+# (homelab S9 #1987: majors never self-arm).
+#
+# THE CONTRACT. C9 arms a WORKER-App-authored, non-draft, un-armed PR on master (or a goal/**
+# base) so it becomes visible to the merge path — decision-free, every gate still applies. It
+# must NEVER arm the human-merge lane: `major` (the lane marker devbox-update.sh sets, now excluded
+# by label rather than by the accident that Renovate, not the worker App, authors those PRs) and
+# `major/awaiting-human` (the handoff label agents/major-handoff.sh sets). The `agent/error`,
+# `research/*` and non-default-base exclusions are unchanged and not pinned here.
+#
+# ROWS. `worker-unarmed` is the clean base — both worker PRs armed; `major-not-armed` and
+# `awaiting-human-not-armed` each add one label to #90 and expect ONLY the witness #91 armed. #92
+# (Renovate-authored `major`) is in every world and never armed — the author predicate, pinned by
+# its absence from every stream.
+#
+# WORLDS. worlds/base (constructed — see its provenance.yaml).
+name: c9-rearm
+mode: table
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:c9-rearm
+rows: rows.psv

@@ -189,6 +189,7 @@ for repo in $REPOS; do
   done
   rm -f "$errfile"
 
+  # >>>REPLAY:c9-rearm>>>
   # C9 repair (TICK-LOG meta-7 retro (a) — the FU-079 class): a WORKER-authored PR that arrived
   # un-armed is invisible to the ENTIRE merge path (updater, this reflex, auto-merge). Arm it —
   # decision-free: arming only *requests* auto-merge, every gate (CI, review, CODEOWNERS) still
@@ -221,6 +222,12 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
                  # gone, so the intent has to be stated. Same label the changes-requested
                  # clause in coordinator-scan.sh already honours.
                  and all(.labels[].name; . != "major/awaiting-human")
+                 # major = the human-merge LANE MARKER itself (devbox-update.sh, FU-022): a major
+                 # bump is never self-armed, before OR after its handoff (homelab S9 #1987 - the
+                 # same lane read agent-finalize now makes before arming). Today the author
+                 # predicate above already keeps Renovate-authored majors out of C9; this line
+                 # makes the rule structural instead of an accident of who opened the PR.
+                 and all(.labels[].name; . != "major")
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
                  and ((.headRefName // "") | startswith("research/") | not)
@@ -233,6 +240,7 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
                       or ((.baseRefName // "") | startswith("goal/"))))
         | .number')
 EOF_C9
+  # <<<REPLAY:c9-rearm<<<
 
   # REQUIRED CONTEXTS (2026-09-13, homelab#1629 stand-aside): `green` used to mean "every check
   # that REPORTED is green", which dispatched a reviewer the moment CI finished while a required

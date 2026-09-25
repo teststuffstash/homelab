@@ -1,0 +1,20 @@
+[
+  {
+    "number": 90, "isDraft": false, "autoMergeRequest": null,
+    "author": { "login": "app/homelab-agents-1234" },
+    "labels": [ { "name": "dependencies" } ],
+    "headRefName": "renovate/kubernetes-helm-4.x", "baseRefName": "master"
+  },
+  {
+    "number": 91, "isDraft": false, "autoMergeRequest": null,
+    "author": { "login": "app/homelab-agents-1234" },
+    "labels": [],
+    "headRefName": "fix/issue-88-witness", "baseRefName": "master"
+  },
+  {
+    "number": 92, "isDraft": false, "autoMergeRequest": null,
+    "author": { "login": "app/homelab-renovate-1234" },
+    "labels": [ { "name": "major" }, { "name": "dependencies" } ],
+    "headRefName": "renovate/actions-checkout-7.x", "baseRefName": "master"
+  }
+]

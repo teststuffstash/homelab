@@ -1,0 +1,35 @@
+{
+  "state": "OPEN",
+  "labels": [
+    { "name": "major" },
+    { "name": "dependencies" },
+    { "name": "agent/in-progress" }
+  ],
+  "commits": [
+    {
+      "oid": "ed869104c1e2c0b4a5f6d7e8f9a0b1c2d3e4f5a6",
+      "messageHeadline": "chore(deps): update actions/checkout action to v7",
+      "committedDate": "2026-09-25T11:06:24Z"
+    }
+  ],
+  "reviews": [
+    {
+      "author": { "login": "homelab-reviewer" },
+      "state": "CHANGES_REQUESTED",
+      "submittedAt": "2026-09-25T11:30:00Z",
+      "body": "Round 1: the v7 action drops the default `persist-credentials`; the deploy step needs `persist-credentials: true`."
+    },
+    {
+      "author": { "login": "rasmus" },
+      "state": "COMMENTED",
+      "submittedAt": "2026-09-25T11:45:00Z",
+      "body": "## Upstream\n\nA human comment quoting the headings must NOT count as the bot's verdict."
+    },
+    {
+      "author": { "login": "homelab-reviewer" },
+      "state": "APPROVED",
+      "submittedAt": "2026-09-25T12:00:00Z",
+      "body": "Migration review — actions/checkout v6 → v7.\n\n## Upstream\n\nv7 requires node24 runners and drops `persist-credentials` defaulting to true (release notes v7.0.0).\n\n## Known issues\n\nNone open upstream for the v7.0.x line that touch this repo's usage.\n\n**Platform compatibility:**\n\nThe ARC runner image is node24-capable since homelab PR#1881; the deploy step sets `persist-credentials: true` explicitly.\n\n## Evidence\n\nCI green on ed86910 (`ci` run 4412); the deploy job pushed the chart tag in the dry-run.\n"
+    }
+  ]
+}
