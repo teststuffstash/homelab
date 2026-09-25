@@ -11066,3 +11066,38 @@ is distinct from the topology flag; no such pinning option exists in the inspect
 FU-289 owns the remaining detector, per-node evidence and controlled placement/e2e comparison;
 FU-225's existing MemAvailable<3GiB belt cannot detect this event. No VM restart, swapoff,
 sysctl, affinity, NUMA or infrastructure configuration change was made.
+
+## 2026-09-25 — the Renovate design sitting (design-agents corpus) → stint S9 (homelab#1985)
+
+**Condition:** the first live Renovate wave (58 PRs / 10 repos, 7 merged, 0 on the platform stack:
+every armed bump parked on the code-owner review; 21 majors relabelled `major/awaiting-human` on a
+diff read, oracle-fleet#738 + oracle-iac#1001 with no reviewer verdict at all; sleep-iac#90 a
+`major` ARMED by a fix-round worker's finalize and merged with zero review; five homelab PRs with
+no lane — terraform + npm have no rule). Operator rulings, in order: (1) majors are a DIFFERENT
+review animal — upstream research + known-issues read + platform compatibility BEFORE a human is
+asked (memory `major-bump-review-lens`); (2) majors vs MAJORS — classify by BLAST CLASS
+(exercised-by-CI / runtime-in-prod / substrate), semver only decides whether the lens runs;
+Actions majors sit in the CI-exercised class; (3) the `.github/workflows` pin carve-out is wanted,
+with a stricter-than-review filter (SHA must resolve upstream to the tag's commit, pairs, no
+first-party ref moves) and a proven rollback; (4) rollback needs NO bypass credential — a
+`pull_request` workflow runs the merge commit's file, so a revert of a pin is green by
+construction (#151's CI ran v7 checkout while master had v4); the revert chain
+(`deploy-revert-argo.yaml`, homelab-agents App) gains a `GithubWorkflowRunFailed`-on-master
+trigger + the `uses:` pin predicate + closes the re-opened Renovate PR; (5) the goal is removing
+CODEOWNER from as many places as possible: an owner leaves a dependency class when its row is
+complete — proposer, merge gate, deploy edge, detector, revert, canary, last proven E2E — and
+controlled breakage + rollbacks beats no updates (not updating accrues invisible EOL/CVE risk;
+CONTEXT #10). Kubernetes minors reach machinery only after a recreate-from-git drill. Design =
+a migration LENS (blocking by construction) on the existing reviewer machinery, never a new role
+(roles.md 10:1); the reviewer pod clones ONLY the project repo today → it gains the coordinator's
+shallow homelab clone and points at generated facts (`machines/README.md`, the arc-runner FROM).
+**Command:** the Renovate Goal (G-D, #502) re-headed as **stint S9 = homelab#1985**, originals
+#1987–#1992 (#1986 closed: the reviewer's Go path is the legacy ladder under the FU-188 pin —
+`authoritative` is downgraded to shadow for reviews, so past the 0.95 latch it self-serves
+`opencode-go/qwen3.7-plus`; 59 reviews served on Go to date). Capacity: 7d at 0.94 vs the 0.95
+latch, Go 7d $1.45/$30 → platform `coordinatorModel` → `opencode-go/deepseek-v4-flash`
+(c513ad1d, live on the claim), jail stays on Anthropic (operator), glm-5.3-flash recorded as
+2× usage — it consumes twice the allowance (operator; never a pick). Subagents dispatched on #1990 (lint third shape + ADR-100 addendum +
+operator-direct hunks reported) and #1987 (agent-runtime finalize never arms `major`;
+`agents/major-handoff.sh` requires a bot APPROVED at head with the four migration headings).
+FU-289's spike + tracker pointer (operator's uncommitted work) folded in (67ab123a).

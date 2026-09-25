@@ -10,6 +10,17 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-24 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-25 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
+  on #1990 (workflow-pin lint third shape, PR parks on the codeowner) and #1987 (agent-runtime finalize +
+  `agents/major-handoff.sh`, two PRs); read their terminals first (`gh pr list --search "Implements #1990"`
+  etc.), seat-read + merge. **Seat-owed operator-direct hunks** (never a worker's): #1990's CODEOWNERS
+  unown of `/.github/workflows/` + `pin-only.reusable.yml` + the ci.yaml step (land AFTER the lint merges,
+  agent-coordinator → openrouter-operator → agent-runtime → homelab, drill first: merge a deliberately bad
+  pin on agent-coordinator and let the chain revert it); #1988's `renovate-global.json` blast-class rules;
+  #1989's `.agents/review.md` edit (the migration lens paragraph + the FU-097 intent-review draft below,
+  ONE operator-direct change). Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
+  Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
+  stacks.json mirror). The reviewer needs nothing (legacy ladder self-serves Go past 0.95; #1986 closed).
 - **⚑ PICKUP (2026-09-24 — registry2 / FU-280 CUT OVER).** `registry.teststuff.net` → `registry-fs` on
   the `registry-data` volume since 14:50Z (#1961/#1962); the S3 Deployment runs unrouted as the rollback.
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
