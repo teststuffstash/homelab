@@ -124,6 +124,10 @@ spec:
                   name: rl-token-labels-git
                   optional: true
                   items: [{ key: token, path: labels-git }]
+              - secret:
+                  name: rl-token-sentinel-git
+                  optional: true
+                  items: [{ key: token, path: sentinel-git }]
         - name: app-keys
           projected:
             sources:

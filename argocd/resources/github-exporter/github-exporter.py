@@ -1779,12 +1779,79 @@ def collect_graphql_partial_stats(lines):
                             {"owner": ORG, "class": error_class}, count))
 
 
+# 2026-09-25: the GraphQL pool as the GraphQL endpoint itself enforces it. `rateLimit` is free
+# (a rateLimit-only query spends no points — measured on an idle pool: `used` held at 0 across
+# five calls, dryRun and not), and
+# the answer rides the x-ratelimit-* headers too, which GitHub also sends on the 403/200-with-
+# RATE_LIMITED reply of an EXHAUSTED pool — the one moment the body carries no `data`.
+_RL_GRAPHQL_QUERY = "{ rateLimit(dryRun: true) { limit remaining resetAt } }"
+
+
+def _graphql_rate_limit(token):
+    """→ {"limit", "remaining", "reset"} for the token's GraphQL pool, from the response headers
+    (x-ratelimit-resource: graphql), falling back to the body. None when neither answers."""
+    req = urllib.request.Request(
+        API + "/graphql",
+        data=json.dumps({"query": _RL_GRAPHQL_QUERY}).encode(),
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                 "User-Agent": "homelab-github-exporter"},
+        method="POST",
+    )
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        headers, body = resp.headers, resp.read()
+    except urllib.error.HTTPError as exc:  # an exhausted pool answers 403 — the headers still count
+        headers, body = exc.headers, exc.read()
+    return _parse_graphql_rate_limit(headers, body)
+
+
+def _parse_graphql_rate_limit(headers, body):
+    """Pure half of _graphql_rate_limit (self-tested). Headers win: they are present on the
+    exhausted-pool reply where `data.rateLimit` is null."""
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    if h.get("x-ratelimit-resource") == "graphql" and "x-ratelimit-remaining" in h:
+        return {"limit": int(h.get("x-ratelimit-limit", 0)),
+                "remaining": int(h["x-ratelimit-remaining"]),
+                "reset": int(h.get("x-ratelimit-reset", 0))}
+    try:
+        rl = (json.loads(body or b"{}").get("data") or {}).get("rateLimit")
+    except ValueError:
+        rl = None
+    if not rl:
+        return None
+    reset = rl.get("resetAt")
+    ts = (datetime.strptime(reset, "%Y-%m-%dT%H:%M:%SZ")
+          .replace(tzinfo=timezone.utc).timestamp()) if reset else 0
+    return {"limit": rl.get("limit", 0), "remaining": rl.get("remaining", 0), "reset": int(ts)}
+
+
+def rate_limit_lines(name, rest_resources, graphql_pool):
+    """Exposition lines for ONE token. `resources.graphql` from REST `/rate_limit` is DROPPED:
+    for installation tokens AND the exporter's PAT it disagrees with the pool the GraphQL endpoint
+    enforces (2026-09-25, all eight identities probed side by side: REST said 60 used where
+    GraphQL said 1284 on homelab-agents; the PAT read 2 vs 3412) — the gauge sat at ~4884 while
+    every loop in four namespaces took "API rate limit already exceeded for installation ID
+    142724430" for 12 minutes. The graphql series comes from `graphql_pool` or not at all: a hole
+    (bridged by GithubRateLimitLow's min_over_time) is honest, the REST number is not."""
+    out = []
+    pools = {k: v for k, v in (rest_resources or {}).items() if k != "graphql"}
+    if graphql_pool is not None:
+        pools["graphql"] = graphql_pool
+    for resource, r in pools.items():
+        labels = {"token": name, "resource": resource}
+        out.append(metric("github_rate_limit_remaining", labels, r.get("remaining", 0)))
+        out.append(metric("github_rate_limit_limit", labels, r.get("limit", 0)))
+        out.append(metric("github_rate_limit_reset_timestamp", labels, r.get("reset", 0)))
+    return out
+
+
 def collect_rate_limits(lines):
     """FU-084: remaining/limit/reset per token per resource. Rate-limit pools are PER
-    INSTALLATION (the 2026-07-17 incident drained coordinator-git's GraphQL pool to 9,
-    invisible on any REST view) — probe tokens for each watched installation are ESO-minted
-    into RL_TOKEN_DIR (rl-tokens.yaml, one file per token name); the exporter's own PAT is
-    always included. `/rate_limit` itself never counts against a pool."""
+    INSTALLATION (the 2026-07-17 incident drained coordinator-git's GraphQL pool to 9) — probe
+    tokens for each watched installation are ESO-minted into RL_TOKEN_DIR (rl-tokens.yaml, one
+    file per token name); the exporter's own PAT is always included. Two free calls per token:
+    REST `/rate_limit` for core/search/…, a `rateLimit` GraphQL query for graphql (why: see
+    rate_limit_lines)."""
     tokens = {"exporter-pat": TOKEN}
     for name in sorted(os.listdir(RL_TOKEN_DIR)) if os.path.isdir(RL_TOKEN_DIR) else []:
         p = os.path.join(RL_TOKEN_DIR, name)
@@ -1794,21 +1861,22 @@ def collect_rate_limits(lines):
                 tokens[name] = tok
     lines += [
         "# TYPE github_rate_limit_remaining gauge",
-        "# HELP github_rate_limit_remaining Requests left in the pool (per token identity, per resource — graphql is the pool that drained 2026-07-17).",
+        "# HELP github_rate_limit_remaining Requests left in the pool (per token identity, per resource; graphql read from the GraphQL endpoint's own rateLimit, not REST /rate_limit).",
         "# TYPE github_rate_limit_limit gauge",
         "# TYPE github_rate_limit_reset_timestamp gauge",
     ]
     for name, tok in tokens.items():
         try:
-            res = gh("/rate_limit", token=tok).get("resources", {})
+            rest = gh("/rate_limit", token=tok).get("resources", {})
         except Exception as exc:  # one bad/expired token must not hide the others
             print(f"rate_limit probe {name} failed: {exc}", flush=True)
-            continue
-        for resource, r in res.items():
-            labels = {"token": name, "resource": resource}
-            lines.append(metric("github_rate_limit_remaining", labels, r.get("remaining", 0)))
-            lines.append(metric("github_rate_limit_limit", labels, r.get("limit", 0)))
-            lines.append(metric("github_rate_limit_reset_timestamp", labels, r.get("reset", 0)))
+            rest = {}
+        try:
+            gql = _graphql_rate_limit(tok)
+        except Exception as exc:
+            print(f"graphql rateLimit probe {name} failed: {exc}", flush=True)
+            gql = None
+        lines += rate_limit_lines(name, rest, gql)
 
 
 GITHUBSTATUS_URL = "https://www.githubstatus.com/api/v2/components.json"
@@ -3732,7 +3800,33 @@ def self_test():
 
     _graphql_partial_total.clear()
 
-    print("github-exporter self-test: OK (closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
+    # ── 2026-09-25: graphql pool from the GraphQL endpoint, never REST /rate_limit ──────────────
+    # Inputs are the shapes recorded that day (REST resources.graphql 60 used / GraphQL headers
+    # 1284 used on the same homelab-agents token); expected values are read off the inputs.
+    _rest = {"core": {"limit": 5000, "remaining": 5000, "reset": 1790333005},
+             "graphql": {"limit": 5000, "remaining": 4940, "reset": 1790332277}}
+    _hdr = {"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "3716",
+            "X-RateLimit-Reset": "1790332250", "X-RateLimit-Resource": "graphql"}
+    _pool = _parse_graphql_rate_limit(_hdr, b'{"data":{"rateLimit":{"limit":5000,"remaining":1,"resetAt":"2026-09-25T10:30:50Z"}}}')
+    assert _pool == {"limit": 5000, "remaining": 3716, "reset": 1790332250}, f"headers win: {_pool}"
+    # exhausted pool: body has no data, only the headers answer
+    _pool0 = _parse_graphql_rate_limit(dict(_hdr, **{"X-RateLimit-Remaining": "0"}),
+                                       b'{"errors":[{"type":"RATE_LIMITED","message":"API rate limit already exceeded for installation ID 142724430."}]}')
+    assert _pool0 and _pool0["remaining"] == 0, f"exhausted pool must read 0, not vanish: {_pool0}"
+    # body fallback: 2026-09-25T10:30:50Z == 1790332250 (the header reset above, same reply)
+    assert _parse_graphql_rate_limit({}, b'{"data":{"rateLimit":{"limit":5000,"remaining":3716,"resetAt":"2026-09-25T10:30:50Z"}}}') \
+        == {"limit": 5000, "remaining": 3716, "reset": 1790332250}
+    assert _parse_graphql_rate_limit({}, b"not json") is None
+    _rl = "\n".join(rate_limit_lines("coordinator-git", _rest, _pool))
+    assert 'github_rate_limit_remaining{resource="graphql",token="coordinator-git"} 3716' in _rl, _rl
+    assert 'github_rate_limit_remaining{resource="graphql",token="coordinator-git"} 4940' not in _rl, \
+        "the REST graphql number must never be emitted"
+    assert 'github_rate_limit_remaining{resource="core",token="coordinator-git"} 5000' in _rl
+    _rl_hole = "\n".join(rate_limit_lines("coordinator-git", _rest, None))
+    assert 'resource="graphql"' not in _rl_hole, "no GraphQL answer ⇒ a hole, never the REST fallback"
+    assert 'resource="core"' in _rl_hole
+
+    print("github-exporter self-test: OK (graphql rate-limit pool source (2026-09-25), closing-keyword regex coverage, goal walk, budget parse, verdict, membership, "
           "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
           "shape, conflict edge-trigger, queued label-transition edge-trigger, vendor status "
           "scale, job-level queue/duration metrics + caching + retry on API failure, "

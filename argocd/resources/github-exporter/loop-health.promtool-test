@@ -1218,6 +1218,60 @@ tests:
         alertname: GithubRateLimitLow
         exp_alerts: []
 
+  # ── GithubRateLimitLow 4/4 — 2026-09-25, the incident shape, and the SOURCE it needs ──────
+  # The homelab-agents installation (token="coordinator-git") ran its GraphQL pool dry at 09:19Z
+  # and every stack's review/coordinate reflex took "API rate limit already exceeded for
+  # installation ID 142724430" until the 09:31:15Z reset. Nothing paged, because the gauge was
+  # fed from REST `/rate_limit`'s `graphql` resource, which does not report the pool GraphQL
+  # enforces: the recorded series never went under 4884 (the witness series below replays it,
+  # 2-minute exporter samples held per minute). Since the fix the exporter reads the pool from a
+  # GraphQL `rateLimit` query (github-exporter.py rate_limit_lines). t=0 ≙ 08:31:15Z window open.
+  # Real pool: drains 100/min from 4800 → 0 at t=48 (09:19), held at 0 through t=60, refilled
+  # at t=61. Expected: under 10% (<500) from t=44 → `for: 5m` → firing at t=49, one minute after
+  # the first consumer failure; holds ≤10m past the refill (test 3/3's price) → clear by t=71.
+  # The witness must stay silent throughout — if it ever fired, exp_alerts below would list it.
+  - interval: 1m
+    name: "2026-09-25 shape: an exhausted homelab-agents graphql pool pages; the REST-fed reading never could"
+    input_series:
+      - series: 'github_rate_limit_remaining{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.11.219:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6f75bfcf44-ppqn6",service="github-exporter"}'
+        values: "4800-100x48 0+0x12 5000+0x30"
+      - series: 'github_rate_limit_limit{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.11.219:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6f75bfcf44-ppqn6",service="github-exporter"}'
+        values: "5000+0x90"
+      # what Prometheus actually recorded 08:31–10:01Z (REST source): 4914 → 4884, reset → 4998
+      - series: 'github_rate_limit_remaining{token="rest-witness",resource="graphql",endpoint="http-metrics",instance="10.244.11.219:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6f75bfcf44-ppqn6",service="github-exporter"}'
+        values: "4914 4997 4997 4954x3 4948 4948 4944 4944 4939 4939 4934x3 4933 4933 4930 4930 4924 4924 4922 4922 4916x3 4915 4915 4911x3 4906 4906 4904x3 4903 4903 4901x3 4897 4897 4892 4892 4887x3 4884x9 4998x30"
+      - series: 'github_rate_limit_limit{token="rest-witness",resource="graphql",endpoint="http-metrics",instance="10.244.11.219:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6f75bfcf44-ppqn6",service="github-exporter"}'
+        values: "5000+0x90"
+    alert_rule_test:
+      - eval_time: 48m
+        alertname: GithubRateLimitLow
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      - eval_time: 69m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      - eval_time: 71m
+        alertname: GithubRateLimitLow
+        exp_alerts: []
+
   # ── GithubPaidUsage — the roll, and the DOUBLE COUNT a bare `sum(max_over_time(…))` produces ──
   # `sum()` is label-less, so this alert never had an identity to churn — but what it sums does:
   # every billing series carries `pod`/`instance`, so for the ≤10m the range holds both pod
