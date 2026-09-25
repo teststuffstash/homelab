@@ -51,6 +51,12 @@ variable "ci_runner_memory_mb" {
   # (variables.tf); the e2e p50 is sequencing-bound (PSI ~0), not memory-bound.
 }
 
+variable "ci_runner_02_running" {
+  description = "ci-runner-02's power state (started + on_boot). PARKED false 2026-09-25 (operator) while nx-02's NUMA/swap placement is investigated — FU-289; the VM and its disk stay, ci-runner-01 carries the proxmox-vm lane. Flip back to true to resume."
+  type        = bool
+  default     = false
+}
+
 variable "ci_runner_02_vm_id" {
   type    = number
   default = 9002
@@ -251,6 +257,8 @@ resource "proxmox_virtual_environment_vm" "ci_runner_02" {
   name      = "ci-runner-02"
   vm_id     = var.ci_runner_02_vm_id
   node_name = var.nx02_node
+  started   = var.ci_runner_02_running
+  on_boot   = var.ci_runner_02_running
   tags      = sort(["ci", "github-runner", "debian"])
 
   agent { enabled = true }
