@@ -1066,7 +1066,9 @@ def collect_open_prs(lines):
     """Emit per-open-PR review + CI state — the input the running-agents dashboard's stall detector
     needs (a green, unapproved PR with no reviewer acting on it = the 2.5h silent stall measured
     2026-07-09, docs/agents/observability-and-retro.md §A′). One GraphQL query/poll pulls
-    reviewDecision + statusCheckRollup across every repo, so cost stays ~1 request.
+    reviewDecision + statusCheckRollup across every repo, then walk_goal_trees() issues a SECOND,
+    separate request for the goal fields — ~2 requests/poll (split 2026-09-25: combined, they
+    exceeded GitHub's per-query resource ceiling; see _GOAL_QUERY).
 
     Token scope: this needs the PAT to also carry `Pull requests:read` (the PR list + reviewDecision).
     CI state comes from statusCheckRollup where readable (public repos — any token) and otherwise
@@ -1447,7 +1449,7 @@ def ingest_goal_tree(repo_name, repo_node):
     """Capture one repo's goal issues + flat parent map from the collect_open_prs walk (#209).
 
     Pure over the GraphQL node, so the `--self-test` drives it against a recorded tree. Absent
-    fields (the pre-#209 fallback query) simply record nothing: absent ≠ zero, the same rule
+    fields (a goal walk that was rejected or skipped) simply record nothing: absent ≠ zero, the same rule
     collect_agent_issues follows when its walk failed."""
     goals = (repo_node.get("goalIssues") or {}).get("nodes")
     tree = repo_node.get("issueTree") or {}
@@ -1487,7 +1489,7 @@ def collect_goals(lines):
     is stale-empty and nothing emits (absent ≠ zero, same rule as collect_agent_issues)."""
     lines += [
         "# TYPE goal_query_supported gauge",
-        "# HELP goal_query_supported 1 = the goal GraphQL fields are being read; 0 = this process fell back to the pre-#209 query (goal series are ABSENT, PR/review metrics unaffected).",
+        "# HELP goal_query_supported 1 = the goal GraphQL fields are being read; 0 = GraphQL rejected the separate goal walk and this process latched it off (goal series are ABSENT; the PR walk is a separate request, so PR/review metrics are unaffected).",
         f"goal_query_supported {1 if _goal_fields_ok else 0}",
         "# TYPE goal_budget_usd gauge",
         "# HELP goal_budget_usd The goal's machine-parsed `Budget:` line in USD (ADR-102). ABSENT when no line parses — an unreadable budget is unfunded-unknown, never 0.",
