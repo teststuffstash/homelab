@@ -11,12 +11,18 @@ never the session's arc — that is TICK-LOG's.)
 ## Live state (pruned 2026-09-24 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-09-25 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
-  on #1990 (workflow-pin lint third shape, PR parks on the codeowner) and #1987 (agent-runtime finalize +
-  `agents/major-handoff.sh`, two PRs); read their terminals first (`gh pr list --search "Implements #1990"`
-  etc.), seat-read + merge. **Seat-owed operator-direct hunks** (never a worker's): #1990's CODEOWNERS
-  unown of `/.github/workflows/` + `pin-only.reusable.yml` + the ci.yaml step (land AFTER the lint merges,
-  agent-coordinator → openrouter-operator → agent-runtime → homelab, drill first: merge a deliberately bad
-  pin on agent-coordinator and let the chain revert it); #1988's `renovate-global.json` blast-class rules;
+  on #1990 (DONE: PR#1993 merged, lint third shape + 18-case self-test + ADR-100 addendum; hunks 2+3 landed
+  direct — ci.yaml self-test step + `pin-only.reusable.yml`) and #1987 (agent-runtime#156 + homelab#1994,
+  read their terminals first). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
+  (`deploy-revert-argo.yaml`: `GithubWorkflowRunFailed`-on-master trigger, the `uses:` pin predicate, close
+  the re-opened Renovate PR) — a subagent chunk; (b) the DRILL on agent-coordinator (caller `pin-only.yml`
+  per the reusable's header, `pin-only` made REQUIRED in tofu/github, merge a deliberately bad pin, let the
+  chain revert it, record it merged through the normal gates); (c) only then hunk 1 — the CODEOWNERS
+  unown of `/.github/workflows/` (text in PR#1993's body), agent-coordinator → openrouter-operator →
+  agent-runtime → homelab. ⚠ Renovate's FIRST pin PR per repo (homelab#1970's shape) removes unpinned `@v4`
+  refs and fails the grammar by design → that one-time pin lands operator-direct per repo; bumps after it
+  are governed. ⚠ `update-pr-branch.reusable.yml` was retired (ADR-111) but agent-coordinator +
+  agent-runtime still carry callers — dead callers, delete on the next `.github` touch there; #1988's `renovate-global.json` blast-class rules;
   #1989's `.agents/review.md` edit (the migration lens paragraph + the FU-097 intent-review draft below,
   ONE operator-direct change). Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
