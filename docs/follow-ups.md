@@ -1230,7 +1230,8 @@ the block needs pruning, not more headings.
       **Next:** detector first (host swap activity + I/O pressure, fixture + event replay; add
       per-node/per-VM placement visibility), then a maintenance-window placement comparison
       budgeting ALL three VMs per physical node and rerunning e2e. No live change made; exact
-      reclaim trigger needs per-node capture/A-B verification. Relates FU-266, FU-225, FU-280.
+      reclaim trigger needs per-node capture/A-B verification. **ci-runner-02 PARKED 2026-09-25**
+      (operator; drained + stopped, `var.ci_runner_02_running=false`, PR#1978) — flip back after. Relates FU-266, FU-225, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
