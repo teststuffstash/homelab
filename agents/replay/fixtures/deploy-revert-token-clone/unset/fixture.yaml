@@ -1,6 +1,11 @@
 # homelab#1180 → 2026-09-03 header sweep: when GH_TOKEN is absent, the clone degrades to
 # anonymous — `_cu` is the plain https URL and `_ah` is the EMPTY `http.extraHeader=` (git
 # treats an empty value as "no extra header"), never a header with an empty credential.
+#
+# FU-1990 part 2 (2026-09-26): the new `workflow-pin-revert` WorkflowTemplate in the same file
+# reuses the same `>>>REPLAY:deploy-revert-token-clone>>>` block, so this fixture covers both
+# templates (deploy-revert and workflow-pin-revert). The block is identical; only the surrounding
+# workflow logic differs.
 name: deploy-revert-token-clone-unset
 mode: actions
 source: agents/coordinator/deploy-revert-argo.yaml
