@@ -97,7 +97,7 @@ variable "protected_repos" {
     # enforcement layer; this flip makes it true. openrouter-operator + agent-coordinator got
     # whole-repo CODEOWNERS the same day (their gate = human on everything, bot review as input;
     # relax per-path later via carve-outs, never by dropping the flag).
-    agent-coordinator   = { required_checks = ["ci"], require_code_owner_review = true }
+    agent-coordinator   = { required_checks = ["ci", "pin-only"], require_code_owner_review = true }
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
     # `e2e` required since 2026-09-16 (oracle-fleet#369, open since 09-02 as agent/blocked because
