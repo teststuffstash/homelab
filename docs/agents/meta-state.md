@@ -8,20 +8,21 @@ meant to avoid — and every design-agents corpus load pays it too: at 75 KB thi
 never the session's arc — that is TICK-LOG's.)
 
 
-## Live state (pruned 2026-09-24 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
+## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-25 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
+- **⚑ PICKUP (2026-09-26 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
   on #1990 (DONE: PR#1993 merged, lint third shape + 18-case self-test + ADR-100 addendum; hunks 2+3 landed
-  direct — ci.yaml self-test step + `pin-only.reusable.yml`) and #1987 (homelab#1994 MERGED 20:04Z — `agents/major-handoff.sh` is the
+  direct — ci.yaml self-test step + `pin-only.reusable.yml`; **PR#1999 OPEN + armed** — the revert-chain extension
+  for workflow-pin PRs: Alertmanager routes `GithubWorkflowRunFailed` to both `deploy-pin-revert` (deterministic
+  revert) and `agent-responder` (triage lane), the workflow finds the newest merged pin-only PR within the window,
+  reverts it, closes Renovate PRs that re-open the same version, auto-merges) and #1987 (homelab#1994 MERGED 20:04Z — `agents/major-handoff.sh` is the
   only setter of `major/awaiting-human`, C9 never re-arms `major`; agent-runtime#156 — finalize never arms a
   `major` PR — MERGED 20:14Z). Residues from #1987: (i) the four migration headings (`Upstream`, `Known
   issues`, `Platform compatibility`, `Evidence`) are enforced by the script but named by NO rubric yet — #1989
   (the migration lens) is their home and must spell them exactly; (ii) oracle-fleet#738 + oracle-iac#1001 still
   wear `major/awaiting-human` with `reviews: []` — the script now refuses that state but relabels nothing back;
   oracle-stack call (seat triage scope), say so at the next handoff; (iii) the code "S3" is defined twice — the replay
-  README's seam pattern S3 and python-stack.md's S3-publishing section — docs-graph-lint check #4 trips on the glyph form; docs-cleanup item (rename one). **Seat-owed, in order:** (a) #1990 part 2 = the revert-chain extension
-  (`deploy-revert-argo.yaml`: `GithubWorkflowRunFailed`-on-master trigger, the `uses:` pin predicate, close
-  the re-opened Renovate PR) — a subagent chunk; (b) the DRILL on agent-coordinator (caller `pin-only.yml`
+  README's seam pattern S3 and python-stack.md's S3-publishing section — docs-graph-lint check #4 trips on the glyph form; docs-cleanup item (rename one). **Seat-owed, in order:** (a) watch PR#1999 — if findings, fix inline, re-background; if green, merge + deploy; (b) the DRILL on agent-coordinator (caller `pin-only.yml`
   per the reusable's header, `pin-only` made REQUIRED in tofu/github, merge a deliberately bad pin, let the
   chain revert it, record it merged through the normal gates); (c) only then hunk 1 — the CODEOWNERS
   unown of `/.github/workflows/` (text in PR#1993's body), agent-coordinator → openrouter-operator →
