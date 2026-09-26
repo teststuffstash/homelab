@@ -445,6 +445,14 @@ The merged proxy code was run locally against the REAL `opencode.ai/zen/go` with
    either header, run between them, 200s. The allowlist-era proxy would be hard-failing on this
    rail today.
 
+6. **The JAIL shim is a second client of the same rule, proved 2026-09-26.** A raw request
+   through `scripts/claude-model-shim.py` (`:18091`, Go leg) with `User-Agent: claude-cli/…` and
+   NO session header → `400 MissingSessionID`; the same request carrying only Claude Code's
+   native `X-Claude-Code-Session-Id` → `200`. The shim forwards headers verbatim (it owns only
+   hop-by-hop headers, auth and `anthropic-beta` on the Go leg), and a `claude -p` capture
+   shows the CLI (v2.1.281) sending that header on every call — the vendor's "no custom-header
+   wrapper is needed" holds through the shim without a mirror line.
+
 One correction this forces on the 09-17 re-park's premise: the FU-213 value was never *rejected*
 — any stable id clears the 400 gate. It was **inefficient**: one bucket per session-key/project
 (and a single `direct:<hash>` bucket for every direct-key ride), so rides shared an affinity key
