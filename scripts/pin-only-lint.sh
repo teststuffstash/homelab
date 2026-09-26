@@ -61,9 +61,15 @@ PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/ar
 # a workflow path in GUARDED, and the ratchet exemption never sees a `uses:` line as a pin).
 WORKFLOW_GUARDED='^\.github/workflows/[^/]+\.ya?ml$'
 WORKFLOW_PIN_LINE='^[-+][[:space:]]*(- )?uses:[[:space:]]*[A-Za-z0-9-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+(\.[0-9]+){0,2}$'
+# The initial-pin case: a REMOVED line may be unpinned (`@v4` with no SHA). The grammar is the
+# same as WORKFLOW_PIN_LINE but without the SHA+tag requirement — just `@<tag>` where tag is
+# `v<digits>` with up to two `.<digits>` groups. Only the REMOVED sign (`-`) is allowed.
+WORKFLOW_UNPINNED_LINE='^-[[:space:]]*(- )?uses:[[:space:]]*[A-Za-z0-9-]+/[A-Za-z0-9_.-]+@v[0-9]+(\.[0-9]+){0,2}$'
 # The same grammar as capture groups: sign, owner/repo, sha, tag (kept next to the regex so the
 # two cannot drift apart unnoticed — a line that matches WORKFLOW_PIN_LINE always extracts).
 WORKFLOW_PIN_EXTRACT='s/^([-+])[[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+)@([0-9a-f]{40})[[:space:]]+#[[:space:]]+(v[0-9]+(\.[0-9]+){0,2})$/\1 \3 \4 \5/'
+# The unpinned extraction: sign, owner/repo, tag (no SHA). Only REMOVED lines fit this.
+WORKFLOW_UNPINNED_EXTRACT='s/^-[[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+)@v[0-9]+(\.[0-9]+){0,2}$/- \2 v\3/'
 
 # Refuse to pass when the diff cannot be computed. A check that green-lights because it could not
 # see is the failure class this repo keeps paying for (FU-125/FU-108/FU-131) — and one I shipped
@@ -125,22 +131,70 @@ for f in $wf_changed; do
     echo "pin-only-lint: FAIL — $f changed without a single content line; a workflow may only receive action pin bumps via a PR." >&2
     rc=1; continue
   fi
-  offending="$(printf '%s\n' "$lines" | grep -Ev "$WORKFLOW_PIN_LINE" || true)"
-  if [ -n "$offending" ]; then
-    echo "pin-only-lint: FAIL — $f may only receive action PIN lines via a PR (uses: <owner>/<repo>@<sha> # <tag>):" >&2
-    printf '  %s\n' "$offending" >&2
-    rc=1; continue
+  # Separate removed and added lines. Removed lines can be pinned (SHA) or unpinned (@v4);
+  # added lines MUST be pinned. This allows the initial-pin scenario (unpinned→pinned).
+  removed_lines="$(printf '%s\n' "$lines" | grep -E '^-' || true)"
+  added_lines="$(printf '%s\n' "$lines" | grep -E '^\+' || true)"
+
+  # Check ADDED lines: all must be pinned (SHA format).
+  if [ -n "$added_lines" ]; then
+    offending_added="$(printf '%s\n' "$added_lines" | grep -Ev "$WORKFLOW_PIN_LINE" || true)"
+    if [ -n "$offending_added" ]; then
+      echo "pin-only-lint: FAIL — $f: added lines must be pinned (uses: <owner>/<repo>@<sha> # <tag>):" >&2
+      printf '  %s\n' "$offending_added" >&2
+      rc=1; continue
+    fi
   fi
+
+  # Check REMOVED lines: each must be either pinned OR unpinned (the initial-pin case).
+  if [ -n "$removed_lines" ]; then
+    offending_removed="$(printf '%s\n' "$removed_lines" | grep -Ev "$WORKFLOW_PIN_LINE|$WORKFLOW_UNPINNED_LINE" || true)"
+    if [ -n "$offending_removed" ]; then
+      echo "pin-only-lint: FAIL — $f: removed lines must be either pinned or unpinned action refs:" >&2
+      printf '  %s\n' "$offending_removed" >&2
+      rc=1; continue
+    fi
+  fi
+
+  # Extract owner/repo from both formats for pairing. Added lines always have SHA+tag; removed
+  # lines may or may not. Only added lines go into added_specs for upstream verification.
   removed_or=""; added_or=""; added_specs=""
-  while read -r sign or sha tag; do
-    case "$or" in
-      teststuffstash/*)
-        echo "pin-only-lint: FAIL — $f: a first-party ref never changes via a PR (floats at @master by contract, .github/renovate-global.json): ${sign} uses: $or@$sha # $tag" >&2
-        rc=1; continue ;;
-    esac
-    if [ "$sign" = - ]; then removed_or="${removed_or}${or}"$'\n'
-    else added_or="${added_or}${or}"$'\n'; added_specs="${added_specs}${or} ${sha} ${tag}"$'\n'; fi
-  done <<< "$(printf '%s\n' "$lines" | sed -E "$WORKFLOW_PIN_EXTRACT")"
+  # Process removed lines (may be pinned or unpinned).
+  if [ -n "$removed_lines" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      # Try pinned format first.
+      if printf '%s' "$line" | grep -Eq "$WORKFLOW_PIN_LINE"; then
+        extracted="$(printf '%s' "$line" | sed -E "$WORKFLOW_PIN_EXTRACT")"
+        or="$(printf '%s' "$extracted" | awk '{print $2}')"
+      else
+        # Unpinned format.
+        extracted="$(printf '%s' "$line" | sed -E "$WORKFLOW_UNPINNED_EXTRACT")"
+        or="$(printf '%s' "$extracted" | awk '{print $2}')"
+      fi
+      case "$or" in
+        teststuffstash/*)
+          echo "pin-only-lint: FAIL — $f: a first-party ref never changes via a PR (floats at @master by contract, .github/renovate-global.json): $line" >&2
+          rc=1; continue ;;
+      esac
+      removed_or="${removed_or}${or}"$'\n'
+    done <<< "$removed_lines"
+  fi
+  # Process added lines (always pinned).
+  if [ -n "$added_lines" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      extracted="$(printf '%s' "$line" | sed -E "$WORKFLOW_PIN_EXTRACT")"
+      read -r sign or sha tag <<< "$extracted"
+      case "$or" in
+        teststuffstash/*)
+          echo "pin-only-lint: FAIL — $f: a first-party ref never changes via a PR (floats at @master by contract, .github/renovate-global.json): ${sign} uses: $or@$sha # $tag" >&2
+          rc=1; continue ;;
+      esac
+      added_or="${added_or}${or}"$'\n'
+      added_specs="${added_specs}${or} ${sha} ${tag}"$'\n'
+    done <<< "$added_lines"
+  fi
   if [ "$(printf '%s' "$removed_or" | sort)" != "$(printf '%s' "$added_or" | sort)" ]; then
     echo "pin-only-lint: FAIL — $f: removed and added uses: lines do not pair up by <owner>/<repo> (a bump never adds, drops or swaps an action):" >&2
     printf '  removed: %s\n' "$(printf '%s' "$removed_or" | sort | tr '\n' ' ')" >&2

