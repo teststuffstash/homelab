@@ -4,11 +4,6 @@
 # anonymous requests per clone before the 401 retry — the exact traffic GitHub's per-IP throttle
 # counts (incidents/2026-09-02-anonymous-git-throttle-loop-outage.md §Recurrence). This fixture
 # asserts both: the URL carries no token, the header carries the right one.
-#
-# FU-1990 part 2 (2026-09-26): the new `workflow-pin-revert` WorkflowTemplate in the same file
-# reuses the same `>>>REPLAY:deploy-revert-token-clone>>>` block, so this fixture covers both
-# templates (deploy-revert and workflow-pin-revert). The block is identical; only the surrounding
-# workflow logic differs (different alert payload, different branch name, different PR close logic).
 name: deploy-revert-token-clone-set
 mode: actions
 source: agents/coordinator/deploy-revert-argo.yaml
