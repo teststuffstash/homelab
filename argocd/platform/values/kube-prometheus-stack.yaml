@@ -274,6 +274,15 @@ alertmanager:
         webhook_configs:
           - send_resolved: true
             url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/alert
+      # FU-1990 part 2: the pin-revert chain — GithubWorkflowRunFailed on master where the newest
+      # merged change was a workflow-pin PR (scripts/pin-only-lint.sh third shape). The deterministic
+      # half: revert the merge, close the Renovate PR that re-opens the same version, auto-merge.
+      # Composes with agent-responder (the triage lane) — both see the alert, the revert stops the
+      # bleeding while the triage investigates the root cause.
+      - name: deploy-pin-revert
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/workflow-failed
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -292,6 +301,14 @@ alertmanager:
         - matchers:
             - alertname = "InfoInhibitor"
           receiver: "null"
+        # FU-1990 part 2: the pin-revert chain — GithubWorkflowRunFailed goes to BOTH deploy-pin-revert
+        # (the deterministic revert of pin-only PRs) AND agent-responder (the triage lane). continue: true
+        # lets it fall through to the responder route below. The revert only fires when the newest merged
+        # change was a pin-only PR; all other failures are report-only and the triage handles them.
+        - continue: true
+          matchers:
+            - alertname = "GithubWorkflowRunFailed"
+          receiver: deploy-pin-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts

@@ -39,6 +39,12 @@ spec:
     - name: degraded-dep
       eventSourceName: agent-loop
       eventName: deploy-degraded
+    # FU-1990 part 2: the pin-revert chain — Alertmanager POSTs GithubWorkflowRunFailed here when
+    # a master-branch CI run fails. The workflow checks whether the newest merged PR was pin-only
+    # (scripts/pin-only-lint.sh third shape: `uses: owner/repo@sha # tag`) and reverts it if so.
+    - name: workflow-failed-dep
+      eventSourceName: agent-loop
+      eventName: workflow-failed
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 4 }
       template:
@@ -61,6 +67,30 @@ spec:
                       value: "{}"
           parameters:
             - src: { dependencyName: degraded-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+    # FU-1990 part 2: the pin-revert trigger — fires on workflow-failed-dep, submits the
+    # workflow-pin-revert WorkflowTemplate. Rate-limited separately from the deploy-revert trigger.
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-workflow-pin-revert
+        conditions: "workflow-failed-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: workflow-pin-revert-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: workflow-pin-revert }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: workflow-failed-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -222,6 +252,219 @@ spec:
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — ${APP} Degraded post-deploy)" \
               --body "FU-044 deterministic rollback: ArgoCD app **${APP}** went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN}m of #${PRNUM} merging. Reverting the bump restores the previous pin (ArgoCD re-syncs on merge). Roll-FORWARD (a worker fixing the app repo) composes on top — this only stops the bleeding. CI-only lane; no approval gate by design (ADR-084).${BODY_EXTRA}" \
+              | grep -oE '[0-9]+$')"
+            gh pr merge --auto --squash "$PR" --repo "$SLUG"
+            echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "512Mi" }
+---
+# workflow-pin-revert — FU-1990 part 2: deterministic revert of a pin-only workflow PR whose CI
+# just failed on master. The trigger is GithubWorkflowRunFailed on master/main branch; the workflow
+# finds the newest merged PR within the revert window whose files touch `.github/workflows/`, checks
+# if every changed line is a `uses:` pin (the third shape from scripts/pin-only-lint.sh), and if so:
+#   (a) reverts the merge commit as a new auto-merging PR
+#   (b) closes any open Renovate PR that re-opens the same pin version (a closed PR is a rejected
+#       version in Renovate's own semantics — it will not re-propose the same pin)
+#   (c) the revert PR follows the same pattern as deploy-revert (branch name, commit message, body)
+#
+# COMPOSITION with the responder lane: Alertmanager routes GithubWorkflowRunFailed to BOTH
+# deploy-pin-revert (this workflow) AND agent-responder (the triage lane, when not paused). The
+# revert stops the bleeding deterministically; the triage investigates the root cause. The two
+# paths are independent and compose — a revert does not prevent a triage, and a triage does not
+# prevent a revert.
+#
+# IDEMPOTENCY: branch name revert-wf-<sha8> (deterministic; second attempt hits already-exists),
+# plus the responder-seen cm ledger keyed wf-<repo>-<sha>. Guards: non-master/main = report-only;
+# no recent workflow-pin merge = report-only; every probe failure is loud and fail-closed (no revert
+# on bad data). The pin-only predicate is fail-closed: empty/unreadable diff = FAIL, never "no
+# offending lines found".
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: workflow-pin-revert
+  namespace: agent-coordinator
+spec:
+  entrypoint: revert
+  serviceAccountName: agent-coordinator
+  # Same podSpecPatch as deploy-revert (homelab#103 soft hostname spread, homelab#867 soft Longhorn-
+  # disk de-preference). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: revert
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: workflow-pin-revert-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          # Only bumps merged within this window are revert candidates — a failure a day after a
+          # merge is an incident (responder lane), not a rollback.
+          - { name: REVERT_WINDOW_MIN, value: "120" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            printf '%s' "$PAYLOAD" > /tmp/alert.json
+
+            # Alertmanager POSTs an array of alerts; we only care about firing ones on master/main.
+            # The payload structure: {"alerts": [{"status": "firing"|"resolved", "labels": {...}, ...}]}
+            ALERT="$(jq -c '.alerts[] | select(.status == "firing") | select(.labels.branch == "master" or .labels.branch == "main") | .labels' /tmp/alert.json 2>/dev/null | head -1)"
+            [ -n "$ALERT" ] || { echo "→ no firing master/main alert in payload — nothing to do"; exit 0; }
+
+            OWNER="$(printf '%s' "$ALERT" | jq -r '.owner // empty')"
+            REPO="$(printf '%s' "$ALERT" | jq -r '.repo // empty')"
+            WF="$(printf '%s' "$ALERT" | jq -r '.workflow // empty')"
+            BRANCH="$(printf '%s' "$ALERT" | jq -r '.branch // empty')"
+            SLUG="${OWNER}/${REPO}"
+
+            [ -n "$OWNER" ] && [ -n "$REPO" ] || { echo "→ no owner/repo in alert — nothing to do"; exit 0; }
+            echo "→ $SLUG workflow '$WF' failed on $BRANCH"
+
+            # Ledger: one revert decision per (repo, merge-sha). Keyed on the merge commit, not the
+            # alert fingerprint — a flapping workflow that fails, succeeds, fails again should not
+            # mint multiple revert PRs for the same merge.
+            # We compute the key AFTER finding the candidate below.
+
+            # The revert candidate: newest merge within the window whose files touch .github/workflows/.
+            # revert-* branches excluded (never revert a revert — that ping-pongs).
+            # Fail-closed: no candidate = report-only.
+            CUTOFF="$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+            CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
+              --json number,title,headRefName,mergedAt,mergeCommit,files \
+              --jq --arg cutoff "$CUTOFF" '[.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= $cutoff) | select(.files[]?.path | startswith(".github/workflows/"))] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
+            [ -n "$CAND" ] || { echo "→ $SLUG: NO workflow-touching merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+
+            PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
+            SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
+            TITLE="$(printf '%s' "$CAND" | jq -r .title)"
+
+            # Ledger check (now that we have the SHA).
+            KEY="wf-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"
+            SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$KEY}" 2>/dev/null || true)"
+            [ -n "$SEEN" ] && { echo "→ $SLUG@$SHA: already handled ($SEEN) — skip"; exit 0; }
+            kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$KEY\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}" >/dev/null 2>&1 \
+              || echo "WARN: ledger patch failed — branch-name idempotency is the remaining belt"
+
+            # ── THE PIN-ONLY PREDICATE (scripts/pin-only-lint.sh third shape) ───────────────────
+            # Every changed line in the diff must be a `uses:` pin line:
+            #   `uses: <owner>/<repo>@<40-hex sha> # <tag>`
+            # where tag is `v<digits>` with up to two `.<digits>` groups. Leading YAML indentation
+            # and an optional `- ` list marker allowed. Nothing else.
+            # Fail-closed: empty/unreadable diff = FAIL, never "no offending lines found".
+            DIFF="$(gh pr diff "$PRNUM" --repo "$SLUG" 2>/dev/null || true)"
+            if [ -z "$DIFF" ]; then
+              echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0
+            fi
+
+            # Extract content lines only (strip +++ / --- headers, keep real additions/removals).
+            CONTENT_LINES="$(printf '%s\n' "$DIFF" | grep -E '^[-+][^-+]' || true)"
+            if [ -z "$CONTENT_LINES" ]; then
+              echo "→ $SLUG#$PRNUM has no content lines in the diff — not a pin bump (report-only)"; exit 0
+            fi
+
+            # The pin-line regex (same grammar as scripts/pin-only-lint.sh WORKFLOW_PIN_LINE).
+            PIN_LINE_RE='^[-+][[:space:]]*(- )?uses:[[:space:]]*[A-Za-z0-9-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+(\.[0-9]+){0,2}$'
+            OFFENDING="$(printf '%s\n' "$CONTENT_LINES" | grep -Ev "$PIN_LINE_RE" || true)"
+            if [ -n "$OFFENDING" ]; then
+              echo "→ $SLUG#$PRNUM is NOT pin-only — outside the revert class, report-only:"
+              printf '%s\n' "$OFFENDING" | head -20
+              exit 0
+            fi
+
+            echo "→ $SLUG#$PRNUM is pin-only — inside the revert class"
+
+            # ── CLOSE RENOVATE PRs THAT RE-OPEN THE SAME PIN ───────────────────────────────────
+            # Renovate's semantics: a closed PR is a rejected version. If there's an open Renovate
+            # PR that bumps the same action to the same (now-reverted) SHA, close it — Renovate will
+            # not re-propose a closed version.
+            # We extract the removed pins (the OLD versions we're reverting TO) and close any open
+            # PR whose title/body mentions those pins.
+            # The diff has - lines (removed, the NEW pins we're reverting FROM) and + lines (added,
+            # the OLD pins we're reverting TO). We want to close PRs that propose the - lines.
+            # Extract: owner/repo@sha from the - lines.
+            REMOVED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^-[^-]' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' || true)"
+            if [ -n "$REMOVED_PINS" ]; then
+              echo "→ looking for open Renovate PRs that re-open the reverted pins..."
+              while read -r pin; do
+                [ -n "$pin" ] || continue
+                # pin = "owner/repo@sha" — search for open PRs mentioning this pin
+                # Renovate PR titles are like "chore(deps): update actions/checkout digest to abc1234"
+                # or the body contains the pin. We search both.
+                SHORT_SHA="$(printf '%s' "$pin" | grep -oE '@[0-9a-f]{40}$' | tr -d '@' | cut -c1-7)"
+                MATCHING_PRS="$(gh pr list --repo "$SLUG" --state open --search "$SHORT_SHA" --json number,title,author --jq '.[] | select(.author.login == "renovate[bot]" or .author.login == "renovate") | .number' 2>/dev/null || true)"
+                for pr in $MATCHING_PRS; do
+                  # Verify this PR actually mentions the pin (the search is broad).
+                  PR_BODY="$(gh pr view "$pr" --repo "$SLUG" --json body --jq .body 2>/dev/null || true)"
+                  if printf '%s' "$PR_BODY" | grep -qF "$pin"; then
+                    echo "  → closing Renovate PR #$pr (re-opens reverted pin $pin)"
+                    gh pr close "$pr" --repo "$SLUG" --comment "Closing: this pin was reverted by the workflow-pin-revert chain (FU-1990). Renovate will not re-propose a closed version." 2>/dev/null || true
+                  fi
+                done
+              done <<< "$REMOVED_PINS"
+            fi
+
+            echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — workflow '$WF' failed on $BRANCH within ${REVERT_WINDOW_MIN}m of the merge"
+            BR="revert-wf-$(printf '%s' "$SHA" | cut -c1-8)"
+            rm -rf /work/repo
+            # >>>REPLAY:deploy-revert-token-clone>>>
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst.
+            _cu="https://github.com/${SLUG}.git"
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            # <<<REPLAY:deploy-revert-token-clone<<<
+            git clone -c "$_ah" --depth 30 "$_cu" /work/repo
+            cd /work/repo
+            git config user.name "workflow-pin-revert (FU-1990)"
+            git config user.email "noreply@teststuff.net"
+            if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+              echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
+            fi
+            git checkout -b "$BR"
+            git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
+            git push origin "$BR"
+            # Compute the PR body — printf, not a multi-line shell string: a literal newline at column 0
+            # would close this YAML block scalar, and indenting it instead would emit a markdown code block.
+            RUN_NUM="$(printf '%s' "$ALERT" | jq -r '.number')"
+            BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. Renovate PRs that re-open the reverted pins are closed (a closed PR is a rejected version in Renovate'"'"'s semantics). CI-only lane; no approval gate by design (ADR-084).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)' \
+              "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM")"
+            PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
+              --title "revert: ${TITLE} (auto-rollback — workflow '${WF}' failed post-merge)" \
+              --body "$BODY" \
               | grep -oE '[0-9]+$')"
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
