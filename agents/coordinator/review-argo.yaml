@@ -139,6 +139,17 @@ spec:
       port: "12000"
       endpoint: /corpus-published
       method: POST
+    # FU-1990 part 2: the pin-revert edge — Alertmanager POSTs GithubWorkflowRunFailed alerts here
+    # (argocd/platform/values/kube-prometheus-stack.yaml). Consumed by the `deploy-revert` Sensor
+    # (deploy-revert-argo.yaml) when the failing workflow's newest merged change was a pin-only PR
+    # (the `uses:` predicate from scripts/pin-only-lint.sh third shape). Deterministic: find the
+    # merge, revert it, close the Renovate PR that re-opens the same version, auto-merge the revert.
+    # The responder lane (when not paused) ALSO sees this alert on /alert for triage; the two paths
+    # compose — the revert stops the bleeding, the triage investigates the root cause.
+    workflow-failed:
+      port: "12000"
+      endpoint: /workflow-failed
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1
