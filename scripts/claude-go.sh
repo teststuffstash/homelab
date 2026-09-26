@@ -11,6 +11,7 @@
 #   claude-go                        # fable main + Go subagents (default slot map below)
 #   SLOT_HAIKU=opencode-go/deepseek-v4-flash claude-go   # override a slot (Go rail)
 #   SLOT_HAIKU=opencode/nemotron-3-ultra-free claude-go   # override a slot (Zen rail, #444)
+#   SLOT_OPUS=claude-opus-5-5 claude-go               # a slot back on the subscription (real Opus)
 #   CLAUDE_GO_ALL=1 claude-go        # map the MAIN model too — the pure Go trial session
 #
 # Prereq: the wallet string `opencode-go-api-key` (operator-minted at opencode.ai/auth — a
@@ -110,8 +111,15 @@ for s in "$SLOT_HAIKU" "$SLOT_SONNET" "$SLOT_OPUS"; do
         echo "claude-go: (zen catalog unreachable — slot '${s}' unverified this run)" >&2
       fi
       ;;
+    claude-*)
+      # An Anthropic id on a slot rides the subscription via the shim's passthrough (routing is
+      # by prefix; anything without an opencode prefix goes to api.anthropic.com untouched) —
+      # e.g. SLOT_OPUS=claude-opus-5-5 puts real Opus on the `opus` alias (probed 2026-09-26).
+      # No catalog to verify against; the CLI rejects an unknown id on first use.
+      echo "claude-go: slot '${s}' is an Anthropic id — rides the subscription (passthrough)" >&2
+      ;;
     *)
-      echo "claude-go: ⚠ slot model '${s}' has neither opencode-go/ nor opencode/ prefix — cannot verify against a catalog" >&2
+      echo "claude-go: ⚠ slot model '${s}' has neither opencode-go/, opencode/ nor claude- prefix — cannot verify against a catalog" >&2
       ;;
   esac
 done
