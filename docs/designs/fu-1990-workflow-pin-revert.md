@@ -10,7 +10,7 @@ When a Renovate PR bumps a GitHub Action pin (`.github/workflows/*.yml`) and the
 1. Identify the failing workflow's newest merged change
 2. Determine if it was a pin-only PR (every changed line is `uses: owner/repo@sha # tag`)
 3. Revert the merge commit
-4. Close any open Renovate PR that re-opens the same pin version (Renovate won't re-propose closed versions)
+4. Keep the same version from merging again when Renovate re-proposes it (a merged PR is not a rejected one)
 5. Create a revert PR with auto-merge
 
 This is deterministic, mechanical work — exactly the class the platform automates.
@@ -186,7 +186,7 @@ The workflow can be tested by:
 2. Observing the CI failure on master
 3. Checking the `workflow-pin-revert-*` Workflow runs in the `agent-coordinator` namespace
 4. Verifying the revert PR is created and auto-merges on CI green
-5. Verifying any open Renovate PR that re-opens the same pin is closed
+5. Verifying a Renovate PR that re-proposes the reverted pin fails `ci` on pin-only-lint check (e)
 
 ## Future Work
 
