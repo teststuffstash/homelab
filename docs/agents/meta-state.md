@@ -28,8 +28,17 @@ never the session's arc — that is TICK-LOG's.)
   CODEOWNERS unown of `/.github/workflows/` on openrouter-operator, agent-runtime, homelab (the block
   text is in the 2026-09-27 TICK-LOG entry's spirit: replacement, not removal — pin-only-lint already
   runs in their `ci`: c9f0416, 9775c12, homelab ci.yaml L398) and their parked majors follow the same
-  class path; (c) #1988's remaining rules (terraform/npm lanes — the five unlabelled homelab PRs) and
-  #1989's closeout; (d) `docs/designs/fu-1990-workflow-pin-revert.md` §Testing → the drill record.
+  class path; (c) #1988's remaining rules (terraform/npm lanes — the seven unlabelled homelab PRs) and
+  #1989's closeout; (d) DONE 2026-09-27 (PR#2011). **Late 2026-09-27:** (b) DONE — CODEOWNERS un-owned on all
+  three repos, openrouter-operator#77 + agent-runtime#157 merged on their own, homelab #2007/#2008 red on
+  `ci` until 47b23058 (GH_TOKEN on the lint step — all gh calls authenticated, operator; trailing comment
+  on a `uses:` line) — confirm they merged. **S9 original 7 = #2014** (version SETS: claude-code across
+  jail/worker/coordinator, kubectl/kubernetes/kind — design first, the devbox-update job is the model;
+  the interim register is dependency-upgrades.md §Version SETS + row 11, PR#2015). Weekly image
+  rebuilds with build-date tags live on agent-coordinator (3b05a11) + agent-runtime (aa4182b) — the first
+  Monday run (2026-09-28 06:00Z) is an unobserved first: expect a deploy-pin PR per image. agent-coordinator#1
+  (the Dependency Dashboard) was closed again 10:16Z — a reopen by Renovate = a config-resolution defect
+  (debug dry-run on that repo).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
   `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup). ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
