@@ -82,10 +82,16 @@
       "automerge": true
     },
     {
-      "description": "Terraform providers (lockfile + version constraints) — SUBSTRATE: the management sentinel's stage-1 allowlist DENIES `.terraform.lock.hcl` and `required_providers` by design (ADR-131; policy/mgmt/plan-input.yaml deny_paths/deny_patterns), so `management-sentinel` — a REQUIRED context — is red on every one of these PRs and the review reflex never dispatches (it needs every present check green). The lane is the human plan: `devbox run mgmt-human-plan -- <pr>` from the jail (docs/management-box.md §MB3 'When the box refuses'), read, then merge. Labelled `major/awaiting-human` on ANY update type so the board shows them as the human lane they are (#1988's substrate row), never as the unlabelled class (#1976/#1981/#1983/#1984/#1996/#1997, 2026-09-25). Un-armed: nothing may merge these on a bot approval.",
+      "description": "Terraform providers (lockfile + version constraints) — the MANAGEMENT BOX is the gate, mechanically (ADR-131 amended 2026-09-27, homelab#2026, S9 #1988): stage 1 of the sentinel admits the `provider-pin` diff shape (only version / constraints / hash lines, every provider source unchanged), stage 2 plans the head with the new provider (registry-signed, hash-verified by tofu) and a pin head must plan EMPTY — `management-sentinel` is green on +0 ~0 -0 and red (`provider bump changes the plan: <root>(…) — human read`) otherwise. With ci + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red ones are the only provider PRs a human sees. Six such PRs (2026-09-25..27) all planned +0 under human orders — the human added nothing (operator: 'I don't want to see these PRs for years to come'). Roots the box does NOT plan (policy foreign_roots) are excluded by the rule after this one rather than merged unplanned (#1984 merged that way, reconciled from the jail after the fact).",
       "matchManagers": ["terraform"],
-      "addLabels": ["major/awaiting-human"],
-      "automerge": false
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "Terraform roots the management box does not plan (policy/mgmt/plan-input.yaml foreign_roots: tofu/infisical port-forwards into the live cluster; tofu/cloudflare-token is the one-shot admin-token root) — no sentinel plan exists for them, so a provider bump there has no gate. Disabled: their providers move by hand with a jail plan (docs/management-box.md §MB3), and tofu/infisical is slated to leave tofu (docs/dependency-upgrades.md).",
+      "matchManagers": ["terraform"],
+      "matchFileNames": ["tofu/infisical/**", "tofu/cloudflare-token/**"],
+      "enabled": false
     },
     {
       "description": "Dockerfile base-image VERSION minor (e.g. python 3.11→3.12) — behavior change → `deps-review`.",
