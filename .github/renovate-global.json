@@ -75,6 +75,19 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
+      "description": "npm — homelab's only npm surface is scripts/mermaid-lint (jsdom + mermaid, the docs' mermaid parser), CI-only dev tooling exercised by required `ci` (`npm ci` + a parse on every PR) → mechanical automerge for patch/minor; majors → the catch-all. Until 2026-09-27 these bumps had NO lane (#1977/#2012 — the #1988 unlabelled class) and /scripts/ CODEOWNERS parked them; the manifest + lockfile are un-owned in CODEOWNERS since the same day.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "Terraform providers (lockfile + version constraints) — SUBSTRATE: the management sentinel's stage-1 allowlist DENIES `.terraform.lock.hcl` and `required_providers` by design (ADR-131; policy/mgmt/plan-input.yaml deny_paths/deny_patterns), so `management-sentinel` — a REQUIRED context — is red on every one of these PRs and the review reflex never dispatches (it needs every present check green). The lane is the human plan: `devbox run mgmt-human-plan -- <pr>` from the jail (docs/management-box.md §MB3 'When the box refuses'), read, then merge. Labelled `major/awaiting-human` on ANY update type so the board shows them as the human lane they are (#1988's substrate row), never as the unlabelled class (#1976/#1981/#1983/#1984/#1996/#1997, 2026-09-25). Un-armed: nothing may merge these on a bot approval.",
+      "matchManagers": ["terraform"],
+      "addLabels": ["major/awaiting-human"],
+      "automerge": false
+    },
+    {
       "description": "Dockerfile base-image VERSION minor (e.g. python 3.11→3.12) — behavior change → `deps-review`.",
       "matchManagers": ["dockerfile"],
       "matchUpdateTypes": ["minor"],
