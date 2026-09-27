@@ -243,7 +243,7 @@ def extract_first_party_images(refs):
             row["version"] = f"`{var}`={tag}" + (f"; {sum(versions.values())} manifest ref(s)" if versions else "")
             if stray:
                 detail = ", ".join(f"{n}× {v}" for v, n in sorted(stray.items()))
-                row["overrides"] = {"deploy_edge": {"status": "gap", "text": f"{len(stray)} ref(s) NOT at the images.env pin ({detail}) — the deploy-pin sweep misses them"}}
+                row["overrides"] = {"deploy_edge": {"status": "gap", "text": f"{sum(stray.values())} ref(s) NOT at the images.env pin ({detail}) — the deploy-pin sweep misses them"}}
         else:
             row["version"] = ", ".join(f"{v} (×{n})" for v, n in sorted(versions.items()))
             if len(versions) > 1 or any(v.startswith("(none") for v in versions):
@@ -586,12 +586,18 @@ def summarize(registry, rows, proofs):
     for cls in registry["classes"]:
         mine = [r for r in rows if r["class"] == cls["id"]]
         gap_cells = [c for c in COLUMNS if cls[c]["status"] == "gap"]
-        human_cells = [c for c in COLUMNS if cls[c]["status"] == "human"]
+        # Row overrides count for EVERY verdict, not only the gap one (PR#2028 review round 2): a
+        # row whose column is overridden to `human` keeps the owner exactly like a class-level 👤
+        # cell, and a row overridden to `gap` re-opens the class — read every cell through cell_of.
+        human_cells = sorted({c for c in COLUMNS if cls[c]["status"] == "human"}
+                             | {c for r in mine for c in COLUMNS if cell_of(cls, r, c)["status"] == "human"})
         gap_rows = [r for r in mine if any(cell_of(cls, r, c)["status"] == "gap" for c in COLUMNS)]
+        human_rows = [r for r in mine if any(c in r["overrides"] and r["overrides"][c]["status"] == "human" for c in COLUMNS)]
         proof = proofs["classes"].get(str(cls["id"]))
         complete = not gap_cells and not gap_rows and proof is not None
         out.append({"id": cls["id"], "name": cls["name"], "rows": len(mine), "gap_rows": len(gap_rows),
-                    "gap_cells": gap_cells, "human_cells": human_cells, "complete": complete,
+                    "gap_cells": gap_cells, "human_cells": human_cells, "human_rows": len(human_rows),
+                    "complete": complete,
                     "owner_may_leave": complete and not human_cells,
                     "last_proven": proof["merged_at"] if proof else None,
                     "last_proven_pr": proof.get("pr") if proof else None})
@@ -620,7 +626,8 @@ def render(registry, rows, proofs, summary):
         if s["owner_may_leave"]:
             verdict = "**yes** — complete"
         elif s["complete"]:
-            verdict = "no — complete, but a 👤 cell keeps the human by ruling"
+            verdict = ("no — complete, but a 👤 cell keeps the human by ruling"
+                       + (f" ({s['human_rows']} row-level)" if s["human_rows"] else ""))
         else:
             reasons = ([f"{len(s['gap_cells'])} ⚠ column(s)"] if s["gap_cells"] else [])
             if s["gap_rows"]:
@@ -696,7 +703,24 @@ def self_test():
     assert names_dependency('  "jq@latest": {', ['"jq@latest"'])
     # case-insensitive, like Renovate's lower-cased branch names vs `Infisical/infisical`
     assert names_dependency("renovate/infisical-0.x", ["Infisical/infisical", "infisical"])
-    print("dependency-coverage self-test: OK (token-boundary proof matcher)")
+    # summarize(): a ROW-level `human` override keeps the owner exactly like a class-level 👤 cell
+    # (the owner rule: "no column is 👤"); a class of all-ok cells with one such row must read
+    # complete=True, owner_may_leave=False — and complete=False if that override were a gap.
+    ok = {"status": "ok", "text": "t"}
+    cls = {"id": 99, "name": "t", **{c: ok for c in COLUMNS}}
+    reg = {"classes": [cls]}
+    proofs = {"classes": {"99": {"pr": 1, "merged_at": "2026-09-27T00:00:00Z", "title": "t"}}, "rows": {}}
+    rows = [{"key": "99:a", "class": 99, "name": "a", "overrides": {}},
+            {"key": "99:b", "class": 99, "name": "b", "overrides": {"revert": {"status": "human", "text": "by ruling"}}}]
+    (s,) = summarize(reg, rows, proofs)
+    assert s["complete"] and not s["owner_may_leave"] and s["human_cells"] == ["revert"] and s["human_rows"] == 1, s
+    rows[1]["overrides"]["revert"]["status"] = "gap"
+    (s,) = summarize(reg, rows, proofs)
+    assert not s["complete"] and s["gap_rows"] == 1 and s["human_cells"] == [], s
+    rows[1]["overrides"] = {}
+    (s,) = summarize(reg, rows, proofs)
+    assert s["complete"] and s["owner_may_leave"], s
+    print("dependency-coverage self-test: OK (token-boundary proof matcher, row-override verdicts)")
 
 
 def main():

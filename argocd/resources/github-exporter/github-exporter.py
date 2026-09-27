@@ -2098,6 +2098,11 @@ def collect_renovate_liveness(lines):
         if not repos["pageInfo"]["hasNextPage"]:
             break
         cursor = repos["pageInfo"]["endCursor"]
+    else:
+        # past the cap with pages left: those repos get no series, which reads exactly like "Renovate
+        # not installed there" — say so rather than stay silent (PR#2028 review follow-up)
+        print("renovate-liveness: repo walk hit the 20-page cap with hasNextPage=true — repos beyond it "
+              "publish no github_renovate_last_pr_timestamp", flush=True)
     for repo, ts in sorted(last.items()):
         lines.append(metric("github_renovate_last_pr_timestamp", {"owner": ORG, "repo": repo}, ts))
 
