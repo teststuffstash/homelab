@@ -11237,3 +11237,48 @@ regardless of `dependencyDashboard: false`) → the issue DELETED (GraphQL; its 
 the 08-18 ruling, lives here). homelab's clean grouped Actions PR #2021: `ci` green, but
 `renovate/stability-days` PENDING forever — pinned action releases without timestamps, the same
 class → pins/digests made timestamp-optional too.
+
+## 2026-09-27 — S9 continued: the node 24 review read, the coordinator image's runtime smoke, and the last two unlabelled lanes (homelab#1985 / #1988)
+
+**Condition:** agent-coordinator#23 (node 22→24, the first un-armed base-image `major` of run 7's
+wave) sat `major/awaiting-human` with a clean migration-lens review; the operator asked whether the
+review was good, whether a human adds anything, and whether to add checks before or rely on a revert
+after. **Read:** the review was correct on every mapping and honest about its one limit — `ci`
+proves the image BUILDS, nothing runs `claude`. Tracing the post-merge path showed the human gate is
+load-bearing for a reason that is not the diff: build-fails → FU-1990 report-only but nothing ships
+(fail-safe); build-passes-but-`claude`-dies → deploy-pin merges → every coordinator/reviewer/
+responder/REVERT pod starts on the broken image, FU-044 never fires (a CronWorkflow is not Degraded
+when its runs fail), `ArgoWorkflowsFailing` sees it in ~1h but the revert lane rides the same image —
+**the revert lane reverts itself out of existence** (no FU/ADR/iac-lane text on the shape; posted on
+#1988 as the runtime-in-prod row's missing half). **Command:** agent-coordinator `2b6a9fa` (direct,
+workflow files) — a RUNTIME SMOKE in `ci` (load the PR build, `claude --version`, `gh --version`,
+`kubectl version --client`, `s5cmd version`, `python3 --version`) and on the PUSHED tag in
+`build-image` before deploy-pin can open the bump; both green on master's node 22 image (run
+36318272163) and on #23's head after `update-branch` (claude 2.1.283 under node 24). #23 merged 12:18Z
+(the seat as the human), master build 36318547631 smoke-green → homelab#2024 (deploy-pin). The real
+acceptance is the first coordinator/reviewer run on `2026.9.27-gca94f4a2dd99` — read it when #2024
+lands. **Ruling to carry:** base-image majors on agent-coordinator arm like Actions did only when the
+post-merge half exists — a pin revert for `deploy/agent-coordinator` triggered by
+`ArgoWorkflowsFailing` (not Degraded) whose pod runs the PREVIOUS tag (#1988).
+**homelab#2023 "1 workflow awaiting approval" (operator sighting):** head 236688e4 was force-pushed
+by `runner-image.yaml`'s bump step as `github-actions[bot]` — checkout's persisted GITHUB_TOKEN
+extraheader wins over the App token in the push URL — so the `synchronize` ran no
+`pull_request_target` (renovate-approve never fired) and CI sat `action_required`. Only a REUSED pin
+PR shows it (a fresh PR's `opened` comes from `gh pr create` as the App); the earlier pin heads
+were all `opened`/update-branch events. Approved the run by API, relabelled `automerge` to fire the
+reflex, and `persist-credentials: false` on the checkout (26af71c0). **The #1988 (c) lanes:** npm
+(`scripts/mermaid-lint`, CI-exercised) → automerge patch/minor + CODEOWNERS un-owns the manifest +
+lockfile (`/scripts/` parked #1977/#2012); terraform providers → `major/awaiting-human` on ANY type,
+un-armed — the sentinel refuses lockfile heads by design (ADR-131), so the lane is the HUMAN PLAN
+(`devbox run mgmt-human-plan -- <pr> --yes`). Ran it on all six: #1997 cloudflare +0, #1996 main +0 /
+provisioning +0, #1983 github +0 (21 excluded by `plan_exclude_types`), #1981 cloudflare +0, #1976
+main +0 — merged; #1984 (infisical 0.16→0.19) touched no box-held root and merged on the in-cluster
+half's green WITHOUT a plan — corrected after the fact from the jail: `tofu/infisical/apply.sh plan`
+showed 2 in-place updates (provider-schema shape: `+ adopt_existing = false`, computed attrs re-read,
+no value change), applied, re-plan clean. Lesson: the sentinel's "touches no box-held surface"
+success is NOT a plan; a root the box does not plan needs the jail plan BEFORE the merge.
+**openrouter-operator:** `* @RasmusSoot` parked #71/#73 (pre-commit, automerge, reviewer APPROVED
+two days) and #80 (python 3.14, deps-review). First commit path-tiered the file (c706852) — WRONG,
+the header states a chokepoint rationale (router = egress/credential/budget) that stands; restored
+with only the pre-commit carve-out (fa2ec3e). #71/#73 merged on their own; **#80 stays a human
+merge by design (operator).**
