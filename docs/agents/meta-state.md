@@ -51,7 +51,20 @@ never the session's arc — that is TICK-LOG's.)
   nixpkgs#nodejs_24 -c npx --yes renovate@<ver> --autodiscover=false <owner/repo>` with RENOVATE_CONFIG_FILE,
   RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
-  `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup). ⚠ `update-pr-branch.reusable.yml`
+  `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup).
+  **2026-09-27 ~12:40Z (TICK-LOG has the arc):** (c) DONE — npm + terraform lanes (6ddcdc21), six
+  provider PRs human-planned + merged, infisical root reconciled from the jail. agent-coordinator#23
+  (node 24) MERGED with the new runtime smoke in `ci`+`build-image` (2b6a9fa); **read the first
+  coordinator/reviewer run on `2026.9.27-gca94f4a2dd99` once homelab#2024 lands** (the acceptance
+  the smoke cannot give). Base-image majors on agent-coordinator stay un-armed until the #1988
+  runtime-in-prod row's post-merge half exists (pin revert on `ArgoWorkflowsFailing`, pod on the
+  PREVIOUS tag). **Operator-owed:** openrouter-operator#80 (python 3.14 on the router Dockerfile —
+  human merge by that repo's chokepoint rationale). **Confirm merged:** homelab #2023 (relabelled to
+  fire the reflex after the `github-actions[bot]` actor hold — fix bf00a329, watch the Monday
+  rebuild's pin PR runs as the App), #2024, #1977 (DIRTY after #2012 — Renovate rebases it).
+  Terraform lane recipe: a provider PR is red on `management-sentinel` by design → `devbox run
+  mgmt-human-plan -- <pr> --yes`, read, merge; a root the box does NOT plan (infisical) needs the
+  jail plan BEFORE the merge. ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
   `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
