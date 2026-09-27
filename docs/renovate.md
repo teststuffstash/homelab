@@ -132,6 +132,10 @@ Safe: no duplication, no churn, nothing auto-acts on it.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
-- **GitHub Dependabot alerts** need an App permission + repo Dependency-graph/Dependabot settings; we
-  use **OSV instead** and ignore that warning. (Grant `vulnerability_alerts:read` to the App only if you
-  specifically want GitHub's alert source too.)
+- **GitHub Dependabot alerts**: OSV stays the vulnerability source, but the `Cannot access vulnerability
+  alerts` WARN cannot be ignored — it is a *Repository Problem*, and Renovate ensures a Dependency
+  Dashboard issue on every repo that has one, `dependencyDashboard: false` notwithstanding (10 open
+  dashboards org-wide on 2026-09-27; agent-coordinator#1 deleted → #24 re-created within the hour).
+  So the App declares `vulnerability_alerts: read` (`docs/github-apps.yaml`, the FU-098 flow: PR the
+  declaration, click in the App settings + approve the install, `GithubAppPermissionDrift` clears).
+  With the WARN gone and no pending branches, the dashboards stop being ensured — close them once.
