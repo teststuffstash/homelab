@@ -434,6 +434,14 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
+- [ ] **FU-293** — **Runtime-major adoptables have no harvest.** The migration lens now lists what a new
+      Python/Node/Go release lets the code adopt as ordinary `Follow-ups:` bullets (PR#2025 + this
+      change), but a Renovate PR has no container (ADR-127), so no merged-closeout harvest turns them
+      into an issue — the seat files one backlog issue per runtime bump by hand (openrouter-operator#80
+      → the py314 items landed in #82). **Why deferred:** the container rule is a design ruling; the fix
+      is a harvest target for dependency PRs (one issue per runtime bump on the repo), not a lens edit.
+      **Next:** decide the harvest's owner (coordinator scan at the bump's merge vs the stint closeout)
+      in a design sitting with #2014; until then the lens tells the reviewer to write the bullets anyway.
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran

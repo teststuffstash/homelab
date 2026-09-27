@@ -68,14 +68,15 @@ A runtime (Python, Node, Go, the JDK) is backwards compatible by policy: across 
 releases the "must change" list is usually EMPTY (openrouter-operator#80, python 3.11→3.14: nothing
 removed that the code used). Writing "no adaptation needed" and stopping is the failure — the value
 of reading three What's New pages is what the code CAN now do (operator, 2026-09-27: "usually there is
-no needed change, just something new and shiny, new best practices"). So for a runtime major, under
-`## Upstream`, add a **`### Adopt`** list: each new syntax / stdlib API / idiom the release enables
-that THIS code would use, with the call sites (PEP 695 generics for a `ParamSpec`/`TypeVar` decorator,
-`fromisoformat` parsing `Z`, `StrEnum`, `tomllib`, `TaskGroup`, the `type` statement, …), and the
-linter rules that start firing once `target-version` moves. Nothing in it blocks the bump; it is the
-WORK ITEM the bump creates — the coordinator files it as one issue on the repo (`agent/*` lane), never
-as review follow-ups (the rubric has none outside a container), and the set move (below) is its first
-child. An empty Adopt list is a finding too: say the pages were read and name why nothing applies.
+no needed change, just something new and shiny, new best practices"). So for a runtime major, list
+under `## Upstream` what the release lets THIS code adopt — each new syntax / stdlib API / idiom with
+its call sites (PEP 695 generics for a `ParamSpec`/`TypeVar` decorator, `fromisoformat` parsing `Z`,
+`StrEnum`, `tomllib`, `TaskGroup`, the `type` statement, …) and the linter rules that start firing once
+`target-version` moves — as ORDINARY review follow-ups: the standard `Follow-ups:` shape, one
+issue-ready bullet each (no term of its own). Nothing in it blocks the bump. ⚠ A dependency PR
+usually has NO container (ADR-127), so nothing harvests those bullets today — the seat files the one
+backlog issue from the review body until FU-293 closes that gap; write them anyway, they are the
+record. An empty list is a finding too: say the pages were read and name why nothing applies.
 
 ## Version SETS — a runtime bump moves its whole set, or names what it leaves behind
 
@@ -93,7 +94,7 @@ the others as part of the SAME change, not as "lint/dev targets that need not mo
   2026-09-27: python 3.11→3.14 in the image, 3.11 everywhere else, approved as "no adaptation").
 - The set moving together IS the legitimate `--request-changes` on a Renovate PR: name every
   member and its new value; the coordinator dispatches a worker onto the branch (or the operator
-  lands the operator-only members — `devbox.json` is one — and says so). Bumping `target-version`
+  lands the members CODEOWNERS owns in THAT repo — read it, never assume — and says so). Bumping `target-version`
   also turns on the new release's lints, so the review lists what they flag.
 
 ## Verdict
