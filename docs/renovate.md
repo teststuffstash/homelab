@@ -67,7 +67,7 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
   `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
   2026-09-27). Majors → the catch-all.
-- **Terraform providers ride the mechanical `automerge` lane; the management box is the gate.** Stage 1
+- **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate.** Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
   (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
