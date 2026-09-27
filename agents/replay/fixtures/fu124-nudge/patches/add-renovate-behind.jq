@@ -9,7 +9,7 @@
     "autoMergeRequest": { "enabledAt": "2026-09-27T06:01:00Z" },
     "reviewDecision": "APPROVED",
     "headRefOid": "ren150oid789",
-    "author": { "login": "homelab-renovate-1234[bot]" },
+    "author": { "login": "app/homelab-renovate-1234" },
     "headRefName": "renovate/github-actions"
   }
 ]
