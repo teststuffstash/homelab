@@ -10,6 +10,19 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-27 evening — FU-289 hardware half, planned as an UNATTENDED overnight session).**
+  Done today: placement belts live (#2040/#2042), wk-04 at 16/16 GiB (#2041 + 04b08852), nx-02's GRUB +
+  kernel on SOL ttyS1 (#2044, lands at next boot); SA400 is in nx-02 as `/dev/sdb` (Windows partitions,
+  wipe it). **Next, in order** (all in FU-289 + `docs/spikes/nx-02-numa-placement.md`): (1) online boot-disk
+  move — wipe/partition sdb like sda (BIOS-boot, 1G EFI, LVM), `lvremove pve/data` (0 % used, drop the
+  storage.cfg `local-lvm` entry or recreate it bigger on the SSD after), `vgextend pve` + `pvmove
+  /dev/sda3 /dev/sdb3`, `vgreduce`, `grub-install /dev/sdb` + `update-grub`; (2) host window per runbook
+  §Proxmox host maintenance window: cp-02 + wk-04 down via node-maintenance (FORCE=1 for wk-04's WARNs),
+  `chassis bootdev bios`, reboot, `sol activate` → `Hard Disk Drive BBS Priorities` → SA400 first
+  (`bios2.py` on pve, private register `hardware/docs/nx-6035-g5.md`; HDD pull = last resort), boot,
+  verify swap on the SSD, `up` both; (3) THEN flip `var.ci_runner_02_running` (PR#1978) and rerun the
+  oracle e2e comparison under `PveHostSwapUsed`/`PveNumaNodeMemoryLow`. Window-close gotcha: GAPS
+  maintenance-window-G5 — `close --force` when the only new alerts are the node's own NodeRebooted/PodSigkilled.
 - **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
   Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
   bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
