@@ -52,22 +52,22 @@ never the session's arc — that is TICK-LOG's.)
   RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
   `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup).
-  **2026-09-27 ~14:20Z (TICK-LOG has the arc; operator away since ~13:05Z, seat coordinating via subagents):**
-  LANDED: provider-pin lane end to end (PR#2026 + rule flip 779f40fa + drill #2030 PASSED — Renovate
-  terraform PRs now merge on the box's empty plan; a non-empty plan is the only human read); lens
-  §Runtime majors ADOPT + §Version SETS (PR#2025); closeouts #1987/#1989/#1990 CLOSED (PR#2027);
-  agent-coordinator#23 node 24 merged + runtime smoke, first coordinator run on it Succeeded;
-  openrouter-operator#81 merged (devbox python 3.14). **Confirm/next:** (1) **openrouter-operator#82**
-  — the rest of the python set, armed, parked on the `*` gate: YOUR merge (supersedes Renovate #80;
-  do not close #80). (2) **#1992** coverage table PR — a subagent owned its cycle; check it merged.
-  (3) **#1988 base-image post-merge half** (pin revert on `ArgoWorkflowsFailing`, pod on the PREVIOUS
-  tag) and **#2014 set mechanism** (version file stamped by devbox-update vs images from the devbox
-  base; python: regex manager vs worker) — design forks, yours (corpus sitting). (4) FU-097 intent-
-  review paragraph in `.agents/review.md` — operator-direct, still unlanded. (5) Monday 06:00Z: the
-  weekly image rebuilds → one deploy-pin PR per image; and `runner-image.yaml`'s next pin PR must run as
-  the App (bf00a329). (6) #1977 waits for Renovate's rebase. (7) `automerge` label is Renovate-only —
-  a jail-authored PR wearing it gets no reviewer (exporter skips it, renovate-approve wants a Bot
-  author); a rule for the subagent card if it bites again. ⚠ `update-pr-branch.reusable.yml`
+  **2026-09-27 ~17:15Z (TICK-LOG has the arc — S9 mostly LANDED):** provider-pin lane live + drilled;
+  lens: version SETS + adoptables-as-follow-ups (FU-292 = no harvest for no-container PRs); reviewer reads
+  CODEOWNERS for operator-only paths (PR#2031); #1992 register + gauges (PR#2028); #1987/#1989/#1990
+  CLOSED; openrouter-operator python set complete (#81/#82/#83), guard covers pyproject/uv.lock; Dependency
+  Dashboards root-caused twice and gone (force.dependencyDashboard, e67b00fe). **Next:** (1) S9 #1985
+  closeout — open originals: #1988 (base-image post-merge half: pin revert on `ArgoWorkflowsFailing`, pod
+  on the PREVIOUS tag — design fork, corpus sitting), #1991 (record written, close at the sweep), #2014 (set
+  mechanism: regex manager over devbox/pyproject pins keyed to the image datasource vs worker round — design
+  fork). (2) Operator-direct `.github`: a `devbox run dependency-coverage -- --check` ci step. (3) FU-152
+  extension: agent-coordinator refs outside the kustomize pin (composition.yaml 5× `2026.8.7`,
+  gc-mirrors.yaml `2026.7.25`) — the deploy-pin sweep misses them. (4) FU-097 intent-review paragraph in
+  `.agents/review.md` — still unlanded. (5) Monday 06:00Z: weekly image rebuilds → a deploy-pin PR per
+  image; `runner-image.yaml`'s pin PR must run as the App (bf00a329). (6) #1977 waits for Renovate's rebase.
+  (7) Hygiene: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac renovate.json (inert now);
+  agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy. (8) `automerge` label = Renovate-only (a
+  jail-authored PR wearing it gets no reviewer) — subagent-card material if it bites again. ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
   `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
