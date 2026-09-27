@@ -11101,3 +11101,95 @@ latch, Go 7d $1.45/$30 → platform `coordinatorModel` → `opencode-go/deepseek
 operator-direct hunks reported) and #1987 (agent-runtime finalize never arms `major`;
 `agents/major-handoff.sh` requires a bot APPROVED at head with the four migration headings).
 FU-289's spike + tracker pointer (operator's uncommitted work) folded in (67ab123a).
+
+## 2026-09-27 — S9 pre-drill read: GitHub Actions majors merge on their own, and the revert chain could not (homelab#1985 / #1988 / #1990, ADR-141)
+
+**Condition:** operator opened on the S9 state with four rulings — structural fixes only, never
+per-PR; operator time on dependency updates is THE cost function; "CI is the gate" must hold, and
+a missing gate is built/queued first; the GitHub majors merge on their own and roll back on their
+own. The read: 13 Actions majors sat `major/awaiting-human` across agent-coordinator (5),
+agent-runtime (5) and openrouter-operator (3) — every one green, nothing a human could add;
+#1989's gate (the four migration headings) has NO producer, so majors were deadlocked fleet-wide
+(five allure-behavior-snippets PRs latched `agent/error`, four extension comments on #1989). The
+FU-1990 revert chain (PR#1999, live on the cluster since 09-26 09:52Z, never fired) had two
+structural gaps: its revert PR carried no labels, so on a repo with one required approving review
+it would have sat BLOCKED on a human forever (the reflex approves only Bot + `automerge` +
+`dependencies`); and its "close the re-opened Renovate PR" step keyed on the original PR's `-`
+lines (the OLD pins) and ran at revert time, when Renovate has not re-created anything yet — a
+merged PR is not a rejected one, the re-proposal appears only after the revert lands. Without the
+close the lane loops (merge → fail → revert → re-propose → merge …, a fresh merge SHA each round).
+Operator, mid-read: "github majors were not supposed to be majors?" — the correction that shaped
+the design: semver still says major (the LENS runs), blast class picks the LANE.
+**Command:** (1) `.github/renovate-global.json` — `github-actions` majors ARMED at creation, keep
+`major`, no `automerge` label: the review reflex reviews armed non-`automerge` PRs, so the
+reviewer's migration lens is the merge gate (a distinct identity satisfies the one-review rule),
+CI on the bumped head is the runner-compat proof; the last-rule-wins order makes it a one-rule
+change (8c462f74, operator-direct). (2) `renovate-approve.reusable.yml` — the reverted-pin close:
+a Renovate PR that re-adds a pin named on a merged `revert-wf-*` PR's `reverted-pins:` line (30 d)
+is closed instead of approved (same commit; inputs via files — the real agent-coordinator
+closed-PR list is ~200 KB, past MAX_ARG_STRLEN; four logic tests in the jail). (3) PR#2002 —
+the chain labels + arms the revert PR, writes `reverted-pins:` (the `+` lines), the reviewer
+prompt is lane-aware; ADR-103 ratchet satisfied by the `workflow-pin-revert-merge-lane` fixture.
+(4) PR#2003 — ADR-141 + the invariant "no PR is both armed and `major`" → "the arm, never the
+label, decides the owner" in merge-path.md, the coordinator brief, renovate.md,
+dependency-upgrades.md. (5) pin-only-lint into `ci` on openrouter-operator (c9f0416) and
+agent-runtime (9775c12), direct (governance); CODEOWNERS unown waits for the drill (stint order).
+(6) `tofu/github/variables.tf` bookkeeping: agent-coordinator `required_checks = [ci]` — the
+09-26 session folded the lint INTO `ci` (6b1d207d), no `pin-only` check exists; matches live.
+**Second read (operator → agent-coordinator#14's comments):** the reviewer asked Renovate to bump
+a third `actions/checkout` call site — one added on master (6b1d207d) AFTER the PR opened — as a
+CHANGES_REQUESTED, which on a Renovate PR parks it forever (no fixer behind it); its two
+TOOL_GAPs (the runner image definition, the org Renovate config) were the reviewer pod having no
+homelab checkout; and the mechanism behind the unbumped site: Renovate re-extracts master only
+when IT rebases, never on a branch someone else pushed to (the operator's update-branch on #14 —
+"Edited/Blocked"), and the org default `rebaseWhen: conflicted` is what Renovate's own docs call
+wrong for automerge + strict checks. "Renovate works in batches" — five single-member reviews,
+five updater/CI rounds per wave. **Command:** (7) `.github/renovate-global.json` (b609c1e8):
+Actions bumps grouped per repo per wave (`github-actions` + `github-actions (major)`),
+`rebaseWhen: behind-base-branch` on both; (8) the reverted-pin refusal MOVED from the approve
+reflex into `scripts/pin-only-lint.sh` check (e) — the reflex's job guard needs the `automerge`
+label, which a lens-reviewed major never carries, so the close could never have fired there
+(the #2003 reviewer found the same mismatch independently); the lint runs in every platform
+repo's required `ci` = one gate for both lanes; self-test 22 cases; (9) on the #2002 branch: the
+reviewer prompt's Renovate-aware rules (no fixer, master-moved call site is never a finding, the
+PR is a batch member — list the siblings, state a runner fact once) + a shallow homelab master
+clone in the pod prep pointing the lens at `docker/arc-runner/Dockerfile` (FROM
+actions-runner:2.336.0), `argocd/platform/arc-runners.yaml`, `machines/README.md`,
+`.github/renovate-global.json`; (10) a forked subagent: `agents/update-pr-branch.sh` leaves
+untouched Renovate PRs to Renovate (PR lane, with its replay fixture).
+**Third read (operator):** a CHANGES_REQUESTED on a major is normal — the coordinator dispatches
+a fixer when the repo needs adapting; what was wrong on #14 was asking for a pin Renovate bumps
+itself. And the major reviewer "is supposed to do more research — what changed upstream, open
+issues with this version and compatibility with the rest of the stack", on an Actions major too.
+It ran only the upstream half. **Command:** (11) `agents/lenses/migration.md` — the lens as a
+file, BLOCKING by construction, selected on `major`/`deps-review`, posture pinned outside the
+claim map; the three halves under the four headings `agents/major-handoff.sh` matches (the
+missing producer of #1989's deadlock); Renovate-author rules corrected (CR = an adaptation this
+repo needs → fixer; never a pin Renovate rebases); batch context. Inline prompt → pointer.
+**The drill (agent-coordinator#20, 09:10Z, App-authored, `automerge`+`dependencies`, armed):** the
+forward half is proven — reflex APPROVED 09:10:23, auto-merged, master `build-image` failed on the
+bad pin at 09:11 (run 36308596716, deploy-pin: `app_id` required). The chain fired every link
+(alert 09:17:43 → Alertmanager `deploy-pin-revert` → EventSource `/workflow-failed` 09:18:13 →
+Sensor → `workflow-pin-revert-snrj9`, Succeeded in 52 s) — and reverted nothing: `gh pr list
+--jq --arg cutoff …` is gh's "unknown arguments" (`--jq` takes only the expression), swallowed by
+`2>/dev/null || true` into "no candidate". The FU-044 `deploy-revert` template carries the
+identical line: NEITHER rollback chain had ever found a candidate. Before that, the first push
+attempt found the `coordinator-git` mint lacked `workflows:write` (PR#2005; the App-level drift
+belt was green because the App holds the grant — the subset in `git-token.yaml` did not).
+**Command:** PR#2005 (mint), PR#2006 (cutoff embedded in both templates + two fixtures whose CALL
+line is the pin); the chain re-fires from the saved Alertmanager payload after sync. Operator
+ruling mid-drill: finish agent-coordinator's PRs before any other repo.
+**The drill, second half (chain fixed, re-fired from the saved Alertmanager payload 09:33:57Z):**
+`workflow-pin-revert-drill-bcftg` found the candidate (agent-coordinator#20), wrote the ledger key,
+opened revert **#21** as the App at 09:34:15 with `automerge`+`dependencies` and the
+`reverted-pins:` line (actions/create-github-app-token@f456852…), the reflex APPROVED at 09:35:41,
+auto-merge landed it at 09:37:17 — **no human touch from the bad merge to the revert.** Wall time of
+the rollback itself, bad merge → revert merged, once the chain worked: ~3.5 min from the alert.
+**Operator rulings, second half:** finish agent-coordinator's PRs before any other repo; grouping is
+a trade-off (coarse revert, no partial verdict, bisection on failure) → majors ungrouped, non-majors
+grouped — and an Actions major is not a "major major" until evidence says so (no lens review of an
+Actions major has yet found an upstream change that mattered: #14, allure#18–#21 all N/A) → Actions
+bumps of EVERY type ride the grouped mechanical lane; a dependency graduates to an ungrouped,
+lens-reviewed `major` on evidence (a revert naming it, a red major PR, an in-PR adaptation or a
+follow-up from a review) — one `matchPackageNames` line (8a75d351; ADR-141 amended, PR#2009).
+Renovate dispatched by the operator at 09:25Z to apply the rules sooner (run 36309312970).

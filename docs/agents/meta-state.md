@@ -10,31 +10,32 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-26 — STINT S9 homelab#1985 OPEN, Renovate through the lanes).** Subagents were dispatched
-  on #1990 (DONE: PR#1993 merged, lint third shape + 18-case self-test + ADR-100 addendum; hunks 2+3 landed
-  direct — ci.yaml self-test step + `pin-only.reusable.yml`; **PR#1999 MERGED** (2026-09-26 09:51Z —
-  the revert-chain extension for workflow-pin PRs: Alertmanager routes `GithubWorkflowRunFailed` to
-  both `deploy-pin-revert` (deterministic revert) and `agent-responder` (triage lane), the workflow
-  finds the newest merged pin-only PR within the window, reverts it, closes Renovate PRs that re-open
-  the same version, auto-merges) and #1987 (homelab#1994 MERGED 20:04Z — `agents/major-handoff.sh` is the
-  only setter of `major/awaiting-human`, C9 never re-arms `major`; agent-runtime#156 — finalize never arms a
-  `major` PR — MERGED 20:14Z). Residues from #1987: (i) the four migration headings (`Upstream`, `Known
-  issues`, `Platform compatibility`, `Evidence`) are enforced by the script but named by NO rubric yet — #1989
-  (the migration lens) is their home and must spell them exactly; (ii) oracle-fleet#738 + oracle-iac#1001 still
-  wear `major/awaiting-human` with `reviews: []` — the script now refuses that state but relabels nothing back;
-  oracle-stack call (seat triage scope), say so at the next handoff; (iii) the code "S3" is defined twice — the replay
-  README's seam pattern S3 and python-stack.md's S3-publishing section — docs-graph-lint check #4 trips on the glyph form; docs-cleanup item (rename one). **Seat-owed, in order:** (a) the DRILL on agent-coordinator (caller `pin-only.yml`
-  per the reusable's header, `pin-only` made REQUIRED in tofu/github, merge a deliberately bad pin, let the
-  chain revert it, record it merged through the normal gates); (b) only then hunk 1 — the CODEOWNERS
-  unown of `/.github/workflows/` (text in PR#1993's body), agent-coordinator → openrouter-operator →
-  agent-runtime → homelab. ⚠ Renovate's FIRST pin PR per repo (homelab#1970's shape) removes unpinned `@v4`
-  refs and fails the grammar by design → that one-time pin lands operator-direct per repo; bumps after it
-  are governed. ⚠ `update-pr-branch.reusable.yml` was retired (ADR-111) but agent-coordinator +
-  agent-runtime still carry callers — dead callers, delete on the next `.github` touch there; #1988's `renovate-global.json` blast-class rules;
-  #1989's `.agents/review.md` edit (the migration lens paragraph + the FU-097 intent-review draft below,
-  ONE operator-direct change). Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
+- **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
+  Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
+  bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
+  lens-reviewed `major` on evidence (`.github/renovate-global.json`, 8a75d351); the migration lens as a
+  file (`agents/lenses/migration.md`, PR#2002) with the four handoff headings — the producer #1989 lacked;
+  the reviewer pod clones homelab; the revert chain merges on its own (labels, PR#2002), its identity
+  can push workflow files (PR#2005), its candidate query works (PR#2006 — both rollback chains had NEVER
+  found a candidate: `gh --jq` takes no `--arg`); pin-only-lint check (e) refuses a reverted pin;
+  updater + FU-124 nudge leave untouched grouped-Actions Renovate PRs to Renovate (PR#2004). **DRILL
+  PASSED** (agent-coordinator#20 → revert #21, 09:10–09:37Z, zero human touch). FU-291 filed
+  (late-round reviewer findings, detector first). **Next, in order:** (a) read Renovate run 36309312970's
+  effect on agent-coordinator — the five parked majors #14–#18 (`major/awaiting-human`, #14 human-edited so
+  Renovate will not autoclose it) should be superseded by ONE grouped `github-actions` PR under the
+  amended rule; whatever the run leaves behind is a class call, never per-PR fixes; watch that grouped PR
+  merge on its own (reflex approve + CI) and master's build-image stay green; (b) only then the
+  CODEOWNERS unown of `/.github/workflows/` on openrouter-operator, agent-runtime, homelab (the block
+  text is in the 2026-09-27 TICK-LOG entry's spirit: replacement, not removal — pin-only-lint already
+  runs in their `ci`: c9f0416, 9775c12, homelab ci.yaml L398) and their parked majors follow the same
+  class path; (c) #1988's remaining rules (terraform/npm lanes — the five unlabelled homelab PRs) and
+  #1989's closeout; (d) `docs/designs/fu-1990-workflow-pin-revert.md` §Testing → the drill record.
+  Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
+  `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup). ⚠ `update-pr-branch.reusable.yml`
+  retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
+  `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
-  stacks.json mirror). The reviewer needs nothing (legacy ladder self-serves Go past 0.95; #1986 closed).
+  stacks.json mirror).
 - **⚑ PICKUP (2026-09-24 — registry2 / FU-280 CUT OVER).** `registry.teststuff.net` → `registry-fs` on
   the `registry-data` volume since 14:50Z (#1961/#1962); the S3 Deployment runs unrouted as the rollback.
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
