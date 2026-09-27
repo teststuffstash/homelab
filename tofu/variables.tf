@@ -200,13 +200,13 @@ variable "nodes" {
     # pages the faulting thread's socket had free, and for a VFIO-pinned guest (hostpci above) that
     # first placement is permanent — wk-04 landed 6/26 GiB across nx-02's two 32 GiB nodes, node 1
     # was left ~1 GiB, and kswapd swapped the OTHER guests there to the HDD (2026-09-24, the
-    # ci-runner-02 e2e stalls). With this flag the guest's RAM is 2 MiB hugetlb pages that Proxmox
-    # RESERVES per host node before QEMU starts (half per node; the start fails loudly if it cannot)
-    # and each guest node is BOUND to its host node — balanced capacity by construction, locality
-    # as a bonus. `bind` is right here precisely because the pin makes the placement permanent
-    # anyway; `preferred` would silently skew again on the next restart. Costs nothing the pin had
-    # not already taken (no KSM, no balloon). Takes effect at the next full VM stop/start, inside
-    # a node-maintenance window; only meaningful on a dual-socket hypervisor (nx-02).
+    # ci-runner-02 e2e stalls). With this flag each guest NUMA node's RAM is half the total,
+    # PREFERRED on the matching host node (nx02.tf has why not `bind`, and why not hugepages —
+    # the latter is root@pam-only in Proxmox, refused to the automation identity 2026-09-27). The
+    # pin still makes the placement permanent for the VM's life, so the balance is decided at
+    # start: restart it while both host nodes have 16 GiB free and it lands 16/16; the placement
+    # belts (PveNumaNodeMemoryLow, PveGuestSwapped) report a skewed start. Takes effect at the
+    # next full VM stop/start, inside a node-maintenance window; dual-socket hypervisors only.
     numa_pin = optional(bool, false)
     # Extra Longhorn disks for a VM node, same shape and same rules as machines.yaml's
     # `longhorn_disks` for metal (locals.tf `metal_nodes`): [{device, name, tags}], mounted at
