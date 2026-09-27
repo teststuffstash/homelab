@@ -11229,3 +11229,11 @@ cooldown NO base-image bump has ever been proposable (a silent gap on every repo
 dashboard's cause). Fix: a docker-datasource rule `minimumReleaseAgeBehaviour: timestamp-optional`
 (no cooldown on base images; CI + the deploy-pin revert are the gate) — the node 24 major will now
 arrive as an un-armed `major` PR (human lane, lens) and the dashboard has nothing to host.
+**Run 7 (docker cooldown timestamp-optional) confirmed the diagnosis:** 11 base-image PRs on 7 repos
+in one run (python 3.14, nginx 1.31, node 24 → agent-coordinator#23 un-armed `major`, uv, the
+actions-runner image) — updates that had been unproposable for months. The dashboard on
+agent-coordinator kept being re-ensured while any PR is open (an existing issue is maintained
+regardless of `dependencyDashboard: false`) → the issue DELETED (GraphQL; its only human content,
+the 08-18 ruling, lives here). homelab's clean grouped Actions PR #2021: `ci` green, but
+`renovate/stability-days` PENDING forever — pinned action releases without timestamps, the same
+class → pins/digests made timestamp-optional too.

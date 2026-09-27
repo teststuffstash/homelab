@@ -65,6 +65,11 @@
       "automerge": true
     },
     {
+      "description": "Pins and digests: the cooldown is TIMESTAMP-OPTIONAL. A pin (tag → SHA) or a digest move changes nothing semantically, and the releases it references often carry no timestamp (homelab#2021, 2026-09-27: `renovate/stability-days` PENDING forever on the grouped Actions pin PR — the same class as the Docker finding below). Without this the first pin PR of every repo can never merge.",
+      "matchUpdateTypes": ["pin", "pinDigest", "digest"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
       "description": "Docker datasource: the 7-day cooldown is TIMESTAMP-OPTIONAL. Docker tags carry no release timestamp, and under the default timestamp-required behaviour every base-image release is marked pending FOREVER (agent-coordinator debug dry-run 2026-09-27: 'Marking 29 release(s) as pending, as they do not have a releaseTimestamp' — node 22→24 could never be proposed), which also force-enables the Dependency Dashboard Renovate keeps reopening on that repo (a pending internalChecksFilter branch makes Renovate ensure the dashboard regardless of dependencyDashboard: false). Trade-off accepted: no cooldown on base images — CI (the image build) and the deploy-pin revert are the gate.",
       "matchDatasources": ["docker"],
       "minimumReleaseAgeBehaviour": "timestamp-optional"
