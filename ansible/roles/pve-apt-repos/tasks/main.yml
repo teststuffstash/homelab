@@ -1,0 +1,56 @@
+# pve-apt-repos — the Proxmox package repositories, as code. A fresh Proxmox install enables ONLY
+# the enterprise repos, which 401 without a subscription, so every `apt update` fails — and with
+# it any role whose first task refreshes the cache: pve-node-exporter could not even start on
+# nx-02 (PVE 9, 2026-09-27, the FU-289 rollout). pve (PVE 8) had the same fix by hand years ago
+# (`# deb …` in pve-enterprise.list, no-subscription lines in sources.list). This role makes it
+# re-creatable: enterprise entries stay on disk, DISABLED; the no-subscription repos are declared
+# in the deb822 form PVE ≥ 9 ships. Runs FIRST in every pve play; idempotent.
+#
+# Scope: deb822 (`*.sources`) hosts, i.e. PVE ≥ 9 / trixie+. A bookworm host's `.list`/
+# sources.list hand state is left alone (the only one, pve, is already right; rewriting it into
+# .sources beside the .list lines would make apt see every target twice).
+---
+- name: Release codename (facts are off in the pve plays)
+  ansible.builtin.shell: . /etc/os-release && echo "$VERSION_CODENAME"
+  register: pve_codename
+  changed_when: false
+
+- name: Enterprise repos disabled in place (every deb822 stanza pointing at enterprise.proxmox.com)
+  # `Enabled: false` goes right after `Types:` so it lands INSIDE the stanza (an append after a
+  # trailing blank line would open a new, invalid stanza). Files stay: re-enabling is one line.
+  ansible.builtin.shell: |
+    changed=0
+    for f in /etc/apt/sources.list.d/*.sources; do
+      [ -f "$f" ] || continue
+      grep -q '^URIs: https://enterprise.proxmox.com' "$f" || continue
+      grep -q '^Enabled: false' "$f" && continue
+      sed -i -e '/^Enabled:/d' -e '/^Types:/a Enabled: false' "$f"
+      changed=1
+    done
+    echo "changed=$changed"
+  register: pve_enterprise_off
+  changed_when: "'changed=1' in pve_enterprise_off.stdout"
+
+- name: No-subscription repos declared (pve + ceph, deb822)
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pve-no-subscription.sources
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/pve-apt-repos — edit there.
+      Types: deb
+      URIs: http://download.proxmox.com/debian/pve
+      Suites: {{ pve_codename.stdout }}
+      Components: pve-no-subscription
+      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+      Types: deb
+      URIs: http://download.proxmox.com/debian/ceph-{{ pve_ceph_by_codename[pve_codename.stdout] }}
+      Suites: {{ pve_codename.stdout }}
+      Components: no-subscription
+      Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+  when: pve_codename.stdout in pve_ceph_by_codename
+
+- name: Apt cache refreshes cleanly (the isolated end-state check — this is what the 401 broke)
+  ansible.builtin.apt:
+    update_cache: true
+  changed_when: false
