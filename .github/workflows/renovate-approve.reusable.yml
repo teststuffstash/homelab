@@ -108,6 +108,11 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # A pin the FU-1990 revert chain rolled back is refused by pin-only-lint (homelab
+      # scripts/pin-only-lint.sh check (e), inside every platform repo's required `ci`) — the
+      # re-proposed PR stays red until Renovate moves it to a newer version, so it never reaches
+      # this approve. One home for the rule, and CI is the gate for BOTH lanes (mechanical and
+      # lens-reviewed); a close here would only have covered the mechanical one.
       - name: Approve (distinct identity → satisfies required-approval)
         if: steps.gate.outputs.ok == 'true' && steps.dup.outputs.skip != 'true'
         env:
