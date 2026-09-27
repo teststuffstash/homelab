@@ -49,6 +49,25 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
 
   memory {
     dedicated = each.value.memory_mb
+    # numa_pin (variables.tf): hugetlb-backed RAM, reserved per host node at VM start. The pool
+    # is released at stop (keep_hugepages=false) — a parked guest must not hold 32 GiB of host RAM.
+    hugepages      = each.value.numa_pin ? "2" : null
+    keep_hugepages = each.value.numa_pin ? false : null
+  }
+
+  # numa_pin: guest node i ↔ host node i, cpus are GUEST vCPU ids (half per socket, matching the
+  # cpu block's `cores` = per-socket count), memory half each, host-node BOUND. Without these
+  # blocks Proxmox splits the guest topology but attaches NO host-nodes/policy to the memory
+  # backends (PVE/QemuServer/Memory.pm, read 2026-09-27) — which is how the 6/26 skew happened.
+  dynamic "numa" {
+    for_each = each.value.numa_pin ? [0, 1] : []
+    content {
+      device    = "numa${numa.value}"
+      cpus      = "${numa.value * each.value.cores / 2}-${(numa.value + 1) * each.value.cores / 2 - 1}"
+      memory    = each.value.memory_mb / 2
+      hostnodes = tostring(numa.value)
+      policy    = "bind"
+    }
   }
 
   disk {
