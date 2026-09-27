@@ -72,6 +72,13 @@
       "automerge": true
     },
     {
+      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float.",
+      "matchManagers": ["custom.regex"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
       "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (docs/renovate.md).",
       "matchManagers": ["nix", "devbox"],
       "enabled": false
@@ -119,6 +126,17 @@
       ],
       "depNameTemplate": "NixOS/nix",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "description": "s5cmd in the agent-coordinator image (coordinator/Dockerfile, the transcript-capture uploader): the release-asset URL carries the version twice (path + asset name) — one regex, both captures must agree. github-releases datasource; patch/minor ride the custom.regex lane, majors the human lane. Pinned BECAUSE Renovate updates it (operator 2026-09-27); claude-code and gh in the same image float to latest on the weekly rebuild by design.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^coordinator\\/Dockerfile$/"],
+      "matchStrings": [
+        "releases/download/v(?<currentValue>[0-9.]+)/s5cmd_[0-9.]+_Linux-64bit\\.tar\\.gz"
+      ],
+      "depNameTemplate": "peak/s5cmd",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ]
 }
