@@ -480,6 +480,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unit-fast-path-blocked-on` | actions | - | `agents/coordinator-scan.sh` | - |
 | `updater` | table | - | `-` | MP-T02 |
+| `workflow-pin-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 <!-- replay-index:end -->
 
 
