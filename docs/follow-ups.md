@@ -350,26 +350,16 @@ six OVERSIZE items pointer-ized into
       deploy_repos — it rode an earlier apply (~2026-08-04, the circles-secret fix) unrecorded.
       **Remaining:** (1) observe one real snore build → pin PR → Pi converge E2E (organic);
       (2) the first half (operator-chart + pod-image shapes). Relates FU-097, ADR-084.
-- [ ] **FU-125** — **Renovate silently REGRESSED to zero dependency PRs — while reporting
-      success** (measured 2026-08-01: all 10 autodiscovered repos abort; same silent-success
-      class as FU-108/FU-113). Evidence + inventory:
-      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
-      **ROOT CAUSE 2026-09-25:** the App lacks `statuses` (403 on read → integration-unauthorized,
-      on write → repository-changed); declared in PR#1969, granted 2026-09-25 → run 36110998294 `done`
-      on all 10 repos, 20 PRs (first merges: snore-recorder#33, allure-behavior-snippets#7).
-      **Next:** absorbed into the Renovate Goal — homelab#502, closed back into the ROADMAP
-      work map (row G-D; its body is the launch draft). Acceptance items there: App permission
-      diff, liveness gauge, prPriority + `NIX_VERSION` hygiene, the pin-dependencies branch.
-      `dependencyDashboard: false` by ruling 2026-08-18 (liveness = the exporter gauge ONLY).
-      This item closes when that Goal launches and validates. Relates FU-046, FU-097, FU-016.
-- [ ] **FU-097** — **The box's capability ledger.** Reshaped 2026-09-22 (operator). Per surface, it
-      records what the box has been TESTED doing on its own (date + evidence) and its auto-apply TOGGLE.
-      There is no codeowner column: on box-applied surfaces the codeowner read becomes an **intent
-      review** (does the plan + install-impact line do what the issue asked?). LANDED: the ledger
-      section (#1893, [`management-box.md`](management-box.md) §The capability ledger), and the first
-      toggle, Talos config auto-apply (`no_reboot` only, health-gated; the CP toggle has been ON since
-      09-22). **Next:** the intent-review instruction in `.agents/review.md` (operator-direct; the draft
-      is in [`meta-state.md`](agents/meta-state.md) §OPERATOR-OWED). Relates FU-012, FU-235.
+- [ ] **FU-097** — **The box's capability ledger.** Reshaped 2026-09-22 (operator): per surface, what the
+      box has been TESTED doing on its own (date + evidence) and its auto-apply TOGGLE; no codeowner column —
+      on box-applied surfaces the codeowner read becomes an **intent review** (does the plan + install-impact
+      line do what the issue asked?). LANDED: the ledger (#1893, [`management-box.md`](management-box.md)
+      §The capability ledger) + the first toggle (Talos config auto-apply, `no_reboot` only, health-gated).
+      **Generalized 2026-09-27 (S9 #1985):** the ledger rule — an owner leaves a row only when its proof
+      columns are filled and recent — now covers DEPENDENCY CLASSES too: the migration lens is the intent
+      review for a dependency major, rows in [`dependency-upgrades.md`](dependency-upgrades.md) §"Last proven
+      end to end" until #1992 generates the 7-column table. **Next:** the intent-review instruction in
+      `.agents/review.md` (operator-direct; draft in [`meta-state.md`](agents/meta-state.md) §OPERATOR-OWED). Relates FU-012, FU-235, #1992.
 - [ ] **FU-237** — **Build the management sentinel (ADR-131)** — plan-on-PR for the tofu roots,
       evaluated on the R12 box behind a pre-execution input allowlist, verdict-only back under
       `homelab-sentinel`. **Steps 1–3 BUILT 2026-09-13**; (a) the flip LIVE (PR#1617); (b) the
@@ -809,16 +799,16 @@ the block needs pruning, not more headings.
       **Next:** archive after `CiDispatchStalled` survives its first real firing or a quiet month
       (shipped 2026-08-11 — window opens ~2026-09-11).
 
-- [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
-      decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
-      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
-      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"); reflex skips `automerge`,
-      `rebaseWhen: conflicted` set. **Unproven, awaiting a real reviewable bump:** an armed `deps-review` PR through
-      the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
-      **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
-      manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
-      Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
-      an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
+- [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E: an armed `deps-review` PR → review
+      reflex → CHANGES_REQUESTED → a worker adapting on the `renovate/*` branch → merge.** Built:
+      the split by class ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
+      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"; ADR-141 — the arm decides the owner).
+      **Status 2026-09-27 (S9 #1985):** majors HAVE flown, not through this path — agent-coordinator#22
+      (Actions major, grouped mechanical lane, no review) and #23 (node 24: migration lens + a human
+      merge) prove the lens and the human lane; no `deps-review` PR has drawn a CHANGES_REQUESTED yet.
+      Still to verify: Renovate leaves the worker-edited branch alone, the worker pushes to `renovate/*`
+      (never `agent/*`). Keep open until one flies — the per-class ledger is
+      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to end". Relates FU-041, FU-044, #1988.
 - [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
       from devbox (`kubernetes-helmPlugins.helm-unittest`, `$HELM_PLUGINS`) instead of a 23 MB
       GitHub-release pull per run — circles#15 (the `new-stack --from` donor) + sleep-tracking#115,

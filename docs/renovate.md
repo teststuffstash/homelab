@@ -2,8 +2,10 @@
 
 Self-hosted Renovate keeps our dependencies current **and** is our first line of defence for the
 things we *ingest* — the consumer side of the supply chain ([`slsa.md`](slsa.md) names this **S2C2F**
-but hadn't built it — since built). The LIVE status is FU-125 — Renovate regressed to zero
-delivered PRs, see [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth.
+but hadn't built it — since built). LIVE since 2026-09-25 (the App's missing `statuses` grant,
+FU-125 — archived 2026-09-27) and routed through the S9 lanes since 2026-09-27 (homelab#1985,
+ADR-141); which class has actually merged through which lane is
+[`dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to end".
 
 ## Shape
 
@@ -24,8 +26,9 @@ reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automer
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
 Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
 
-⚠ As of 2026-08-01 this path delivers ZERO PRs org-wide while reporting success — FU-125; verify
-against [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth before trusting it.
+The 2026-08-01 → 09-25 silent zero-PR stretch (every repo aborting on a permission the App never
+had) is recorded in [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth; a lane is
+trusted only once that doc's §"Last proven end to end" carries a merge for it.
 
 ## Threat model — mitigate a Trivy-style compromise
 
@@ -101,9 +104,11 @@ not the coordinator, owns whether an update should exist:
   `matchPackageNames … "enabled": false` rule, or an `allowedVersions`/`matchCurrentVersion` pin. That is
   the coordinator's (or human's) "don't do this bump" verb for Renovate PRs.
 
-The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-argo.yaml`), but the
-changes-requested→worker transition isn't built yet, so a reviewer-rejected Renovate PR simply **parks** — open, changes-requested,
-auto-merge hard-blocked. Safe: no duplication, no churn, nothing auto-acts on it.
+The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-argo.yaml`); the
+changes-requested→worker transition exists for `major` PRs (the brief's major play, step 3) but has
+never fired on a `renovate/*` branch (FU-046, unproven as of 2026-09-27) — until it does, a
+reviewer-rejected Renovate PR simply **parks**: open, changes-requested, auto-merge hard-blocked.
+Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
