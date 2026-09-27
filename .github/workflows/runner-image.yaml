@@ -40,6 +40,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The pin push below authenticates with the App token IN THE URL. checkout's default
+          # persists GITHUB_TOKEN as an http.extraheader on github.com, which git sends first — so
+          # the push landed as `github-actions[bot]` (2026-09-27, #2023 head 236688e4): a
+          # `synchronize` by that actor runs NO pull_request_target workflow (the approve reflex
+          # never fired) and its `pull_request` CI run sat "awaiting approval" until a maintainer
+          # clicked. A fresh PR hides it (the `opened` event carries the App via `gh pr create`);
+          # a REUSED pin PR (second build of the day) shows it. No persisted credential = the URL
+          # token is the only one = the App is the actor.
+          persist-credentials: false
       # Every build fetches ALL repos' lockfiles live, so any same-day build already served the
       # Monday cron's purpose (other repos' lock drift). Skip the scheduled rebake when today's
       # pin proves a build already ran (2026-08-03: the drifted cron was the 4th build that day).
