@@ -54,6 +54,11 @@ spec:
     issues: write                  #   move the agent/* labels
     checks: read                   #   review-reflex reads statusCheckRollup to detect "green"
     statuses: read                 #     (rollup mixes Checks-API + commit-status signals)
+    workflows: write               #   the FU-1990 revert chain pushes `revert-wf-*` branches that change
+                                   #     .github/workflows/ (a pin rolled back) — GitHub refuses a workflow
+                                   #     file push from an App token without this, and the App has held the
+                                   #     grant since 2026-07-26; the drill found the SUBSET here was the gap
+                                   #     (agent-coordinator, 2026-09-27, homelab#1990).
     actions: write                 #     + `gh --json statusCheckRollup`'s fixed fragment also reaches
                                    #       checkSuite.workflowRun (an Actions resource); without read the
                                    #       whole GraphQL query 403s and gh returns empty.
