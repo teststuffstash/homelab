@@ -416,7 +416,7 @@ spec:
 
             echo "→ $SLUG#$PRNUM is pin-only — inside the revert class"
 
-            # ── THE REVERTED PINS (for the reflex-side close) ────────────────────────────────
+            # ── THE REVERTED PINS (for the CI refusal, pin-only-lint check (e)) ────────────────────────────────
             # In the ORIGINAL PR's diff the `+` lines are the versions this revert removes again.
             # They go into the revert PR body as one `reverted-pins:` line; pin-only-lint check (e)
             # refuses a Renovate PR that re-adds any of them (header note (b)). The refusal
