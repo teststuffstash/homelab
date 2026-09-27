@@ -14,7 +14,7 @@ LINT="$HERE/pin-only-lint.sh"
 command -v jq >/dev/null || { echo "FAIL: jq not on PATH — run via \`devbox run pin-only-lint-test\`"; exit 1; }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
-export PIN_ONLY_REPO="$T/repo" PIN_ONLY_GH="$T/gh-stub" STUB="$T/api"
+export PIN_ONLY_REPO="$T/repo" PIN_ONLY_GH="$T/gh-stub" STUB="$T/api" PIN_ONLY_SLUG="teststuffstash/synthetic"
 
 # ── the gh stub: `gh api <path> --jq <expr>` → jq -r <expr> over $STUB/<path>; a missing file is
 # the 404 shape (non-zero, message on stderr) — exactly what an unknown tag returns upstream.
@@ -30,6 +30,10 @@ chmod +x "$PIN_ONLY_GH"
 # <tagsha> <commitsha>: the annotated tag object git/tags/<tagsha> pointing at a commit.
 ref_()    { mkdir -p "$STUB/repos/$1/git/ref/tags"; printf '{"ref":"refs/tags/%s","object":{"type":"%s","sha":"%s"}}\n' "$2" "$3" "$4" >"$STUB/repos/$1/git/ref/tags/$2"; }
 tagobj_() { mkdir -p "$STUB/repos/$1/git/tags"; printf '{"tag":"x","sha":"%s","object":{"type":"commit","sha":"%s"}}\n' "$2" "$3" >"$STUB/repos/$1/git/tags/$2"; }
+# reverts_ <owner/repo@sha …>: the closed-PR list with ONE merged revert-wf-* PR naming those pins
+# (check (e)); reverts_ "" is the empty memory every case gets by default (see case_).
+CLOSED='pulls?state=closed&sort=updated&direction=desc&per_page=100'
+reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf '[]\n'; else printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; fi >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
 OLD=1111111111111111111111111111111111111111
@@ -75,7 +79,7 @@ pass=0; fail=0
 # The stub tree is rebuilt per case so a canned answer never leaks between cases.
 case_() {
   local name="$1" want="$2" stubs="$3" edit="$4" out rc
-  rm -rf "$STUB"; mkdir -p "$STUB"; eval "$stubs"
+  rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""; eval "$stubs"
   git -C "$R" checkout -q -b "c-$name" "$BASE"
   ( cd "$R" && eval "$edit" ) >/dev/null 2>&1
   git -C "$R" add -A && git -C "$R" commit -q -m "$name"
@@ -96,6 +100,15 @@ bump() { sed -i "s|uses: $2@$3 # $4\$|uses: $2@$5 # $6|" "$1"; }
 # (a)+(b)+(d) all hold: both checkout lines move OLD→NEW at v4.2.2, the ref names NEW → OK.
 case_ clean-pair-bump ok \
   "ref_ actions/checkout v4.2.2 commit $NEW" \
+  "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
+# (e) the reverted-pin memory: the same clean bump is REFUSED when a merged revert-wf-* PR of this
+# repo names NEW as a reverted pin (the FU-1990 chain rolled it back) …
+case_ reverted-pin-refused 'is a REVERTED pin' \
+  "ref_ actions/checkout v4.2.2 commit $NEW; reverts_ actions/checkout@$NEW" \
+  "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
+# … and the memory is fail-closed: an unreadable closed-PR list is a FAIL, never a pass (d)'s rule.
+case_ reverted-memory-unreadable 'cannot read the merged revert-wf-* PRs' \
+  "ref_ actions/checkout v4.2.2 commit $NEW; rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
 # A one-line bump on the v3 major tag (Renovate's digest-only shape): ref v3 → NEW → OK.
 case_ clean-major-tag-bump ok \
@@ -181,7 +194,7 @@ git -C "$R2" checkout -q -b "initial-pin" "$BASE2"
 sed -i "s|uses: actions/checkout@v4|uses: actions/checkout@$NEW # v4|" "$R2/.github/workflows/ci.yaml"
 sed -i "s|uses: docker/setup-buildx-action@v3|uses: docker/setup-buildx-action@$NEW # v3|" "$R2/.github/workflows/ci.yaml"
 git -C "$R2" add -A && git -C "$R2" commit -q -m "pin deps"
-rm -rf "$STUB"; mkdir -p "$STUB"
+rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
 ref_ actions/checkout v4 commit $NEW
 ref_ docker/setup-buildx-action v3 commit $NEW
 out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
@@ -196,7 +209,7 @@ git -C "$R2" checkout -q master
 git -C "$R2" checkout -q -b "initial-pin-mismatch" "$BASE2"
 sed -i "s|uses: actions/checkout@v4|uses: actions/cache@$NEW # v4|" "$R2/.github/workflows/ci.yaml"
 git -C "$R2" add -A && git -C "$R2" commit -q -m "pin mismatch"
-rm -rf "$STUB"; mkdir -p "$STUB"
+rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
 ref_ actions/cache v4 commit $NEW
 out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
 if [ $rc != 0 ] && printf '%s' "$out" | grep -q 'do not pair up'; then
