@@ -3477,13 +3477,15 @@ EOF_GTHEMES_OPEN
     # >>>REPLAY:fu124-nudge>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND") and (.reviewDecision=="APPROVED"))|.number'); do
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
-      if printf '%s' "$prsjson" | jq -e --argjson u "$u" '.[]|select(.number==$u)|(((.author.login//"")|startswith("homelab-renovate")) and ((.headRefName//"")|test("^renovate/github-actions(-major)?$")))' >/dev/null 2>&1; then
+      # Login shape (homelab#2007): `app/<slug>` from pr list, `<slug>[bot]` from the commits probe —
+      # strip both before the prefix test (the update-pr-branch.sh RENOVATE_LOGIN_JQ def, inlined).
+      if printf '%s' "$prsjson" | jq -e --argjson u "$u" 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); .[]|select(.number==$u)|((.author.login|renovate_login) and ((.headRefName//"")|test("^renovate/github-actions(-major)?$")))' >/dev/null 2>&1; then
         u_cj="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$u_cj" >/dev/null 2>&1 || u_cj=""
         if [ -z "$u_cj" ]; then
           echo "  [$repo] FU-124: #${u} commit probe unreadable — HOLDING, not nudging (rule #6; the updater cron retries)"
           continue
         fi
-        if jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | (.login // "") ] | all(startswith("homelab-renovate"))' <<<"$u_cj" >/dev/null 2>&1; then
+        if jq -e 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | .login ] | all(renovate_login)' <<<"$u_cj" >/dev/null 2>&1; then
           echo "  [$repo] FU-124: #${u} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
           continue
         fi

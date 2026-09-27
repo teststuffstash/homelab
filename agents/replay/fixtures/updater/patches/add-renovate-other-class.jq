@@ -5,6 +5,6 @@
 . + [
   { number: 152, createdAt: "2026-09-27T06:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-09-27T06:01:00Z" }, reviewDecision: "APPROVED", baseRefName: "master", labels: [],
-    headRefOid: "ren152oid789", author: { login: "homelab-renovate-1234[bot]" }, headRefName: "renovate/boto3-1.x",
+    headRefOid: "ren152oid789", author: { login: "app/homelab-renovate-1234" }, headRefName: "renovate/boto3-1.x",
     reviews: [ { author: { login: "homelab-reviewer[bot]" }, state: "APPROVED", submittedAt: "2026-09-27T06:30:00Z" } ] }
 ]
