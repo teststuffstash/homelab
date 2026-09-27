@@ -1,0 +1,36 @@
+# RenovateSilent + DependencyClassProofStale, lifted VERBATIM out of prometheusrule.yaml — the
+# rules file that dependency-coverage.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest would fail it.
+#
+# THE COPY CANNOT DRIFT SILENTLY: `devbox run exporter-self-test` reads both alerts out of both
+# files and asserts expr/for/labels/annotations are identical; prometheus-rules-lint pins expr+for.
+#
+# Regenerate after editing either alert in prometheusrule.yaml:
+#   yq '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "RenovateSilent" or .alert == "DependencyClassProofStale")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+groups:
+  - name: github
+    rules:
+      - alert: RenovateSilent
+        expr: time() - max(github_renovate_last_pr_timestamp) > 14 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: "Renovate has not opened a PR anywhere in the org for 14 days"
+          description: 'The newest `renovate/*` PR on any teststuffstash repo is over 14 days old (github_renovate_last_pr_timestamp, org-wide max). Renovate runs every 6h from .github/workflows/renovate.yaml and reports success even when it opens nothing (FU-125, docs/dependency-upgrades.md §Ground truth): read the latest run log for `integration-unauthorized` / `repository-changed` per repo, then `gh api /orgs/teststuffstash/installations` for the homelab-renovate App and its permissions (GithubAppPermissionDrift is the sibling belt). Never re-enable the dependency dashboard as the fix — liveness is this gauge by ruling.'
+      - alert: DependencyClassProofStale
+        expr: |-
+          (github_dependency_coverage_complete == 1)
+            and on (class, class_name)
+          (time() - github_dependency_coverage_last_proven_timestamp) > 90 * 86400
+        for: 1d
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: "Dependency class {{ $labels.class }} ({{ $labels.class_name }}) is complete but its proof is over 90 days old"
+          description: 'docs/dependency-upgrades.md §The dependency inventory marks class {{ $labels.class }} ({{ $labels.class_name }}) complete — no ⚠ column — but its newest end-to-end proof (a merged proposer PR, or the capability-ledger date) is older than 90 days: the owner may have left and nothing has exercised propose → gate → deploy since. Re-run `devbox run dependency-coverage` (it refreshes the proofs from GitHub); if the date does not move, the class has stalled — find why nothing proposed (docs/renovate.md) or re-add the owner in docs/dependency-classes.yaml.'
