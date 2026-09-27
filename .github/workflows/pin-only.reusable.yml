@@ -31,10 +31,10 @@ jobs:
   pin-only:
     runs-on: homelab-ephemeral
     steps:
-      - uses: actions/checkout@v4 # the caller's PR merge ref (refs/pull/N/merge)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 # the caller's PR merge ref (refs/pull/N/merge)
 
       - name: Fetch homelab's lint at master (script + devbox toolchain)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: teststuffstash/homelab
           ref: master
