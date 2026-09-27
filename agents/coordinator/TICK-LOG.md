@@ -11218,3 +11218,14 @@ same-day collision appends the run number after a manifest probe). claude-code a
 floating; s5cmd gets a Renovate regex manager (github-releases) and the regex-managed class gets
 its lane (`custom.regex` patch/minor → automerge — the arc-runner's devbox/nix pins had none);
 kubectl stays hand-set to the fleet version.
+**agent-coordinator#1 (the Dependency Dashboard) — root cause by a local Renovate debug dry-run
+(Node 24 via nix, renovate@44.115.10, `--autodiscover=false teststuffstash/agent-coordinator`):**
+the resolved config carries `dependencyDashboard: false`, yet "Ensuring Dependency Dashboard" —
+because `renovate/node-24.x` is a branch whose creation "is disabled because internalChecksFilter
+was not met", and this Renovate auto-enables the dashboard to host pending-check branches. The
+branch is pending FOREVER: "Marking 29 release(s) as pending, as they do not have a releaseTimestamp
+(minimumReleaseAgeBehaviour=timestamp-required)" — Docker tags have no timestamp, so under the 7-day
+cooldown NO base-image bump has ever been proposable (a silent gap on every repo, not just the
+dashboard's cause). Fix: a docker-datasource rule `minimumReleaseAgeBehaviour: timestamp-optional`
+(no cooldown on base images; CI + the deploy-pin revert are the gate) — the node 24 major will now
+arrive as an un-armed `major` PR (human lane, lens) and the dashboard has nothing to host.
