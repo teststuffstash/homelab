@@ -163,7 +163,7 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 
 | event | who acts | what happens |
 |---|---|---|
-| PR green + behind | reflex (updater workflow) | update-branch API call |
+| PR green + behind | reflex (updater workflow) | update-branch API call — EXCEPT an untouched Renovate PR on a grouped Actions branch (`renovate/github-actions`, `renovate/github-actions-major`): those ride `rebaseWhen: behind-base-branch` and Renovate rebases them itself; an updater push would mark the PR edited and stop Renovate maintaining it (ADR-141, PR#2004) |
 | PR green + current + unapproved | reflex (exporter POST → Argo Events → review WorkflowTemplate; `*/15` CronWorkflow backstop) | dispatch reviewer session |
 | approval lands | reflex (GitHub auto-merge) | merge, delete branch |
 | update-branch returns 422 (conflict) | reflex labels → **coordinator decides** | the brief's §The `merge-conflict` clause: resume on the branch (a merge-only fix round; the push dismisses approvals, so the codeowner re-reads the resolution only) when the conflict is confined to the PR's own files or append-only surfaces; close + re-queue when it reaches the diff's substance, the PR was never approved, or a resume already failed; escalate when the conflicting master change is the seat's |
