@@ -62,6 +62,25 @@ handoff gate matches them literally):
   durable "not this version" is a config change (`.github/renovate-global.json`) — name it when
   that is the remedy.
 
+## Version SETS — a runtime bump moves its whole set, or names what it leaves behind
+
+A language / tool runtime is usually pinned in SEVERAL places that must agree
+(`docs/dependency-upgrades.md` §Version SETS, owner homelab#2014): for a Python service the
+`Dockerfile` `FROM`, `devbox.json` `python@X.Y`, `pyproject.toml` `requires-python`, ruff
+`target-version`, mypy `python_version`. A Renovate bump moves ONE member (the image tag). Read
+the others as part of the SAME change, not as "lint/dev targets that need not move":
+
+- **CI runs under the devbox interpreter, not the image.** With `devbox.json` still at the old
+  major, a green `ci` proves the code on the OLD runtime and nothing about the new one — say so
+  under Platform compatibility, and count it as an adaptation this repo needs.
+- **devbox pins never move on their own.** The weekly `devbox-update` job re-resolves `@latest`
+  packages only; a `python@3.11` pin stays on 3.11 until a human edits it (openrouter-operator#80,
+  2026-09-27: python 3.11→3.14 in the image, 3.11 everywhere else, approved as "no adaptation").
+- The set moving together IS the legitimate `--request-changes` on a Renovate PR: name every
+  member and its new value; the coordinator dispatches a worker onto the branch (or the operator
+  lands the operator-only members — `devbox.json` is one — and says so). Bumping `target-version`
+  also turns on the new release's lints, so the review lists what they flag.
+
 ## Verdict
 
 `--approve` only once every breaking change is N/A or handled in the diff, the known-issues read
