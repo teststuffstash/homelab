@@ -23,7 +23,9 @@ stale-approval-no-update    | board | gh/pr-list.json @ patches/add-bot-approved
 probe-unreadable            | board | gh/pr-list.json @ patches/add-bot-approved-head.jq  |                             | noop-probe-hold | p1=141
 merge-ready-only-off-legacy-pick | board | gh/pr-list.json @ patches/add-two-behind.jq    | UPDATER_MERGE_READY_ONLY=0  | picks | n=101 oid=abc123def456
 parked-approved-head-no-update | board | gh/pr-list.json @ patches/add-parked-approved-head.jq | | noop |
-# ── ADR-141: Renovate owns the currency of its UNTOUCHED branches (rebaseWhen behind-base-branch) ─
+# ── ADR-141: Renovate owns the currency of its UNTOUCHED GROUPED-ACTIONS branches (the two rules with
+# rebaseWhen behind-base-branch); any other Renovate class still rides this updater (PR#2004 review) ─
 renovate-untouched-no-update   | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | renovate-skip-probe1 | p1=150
 renovate-worker-pushed-update  | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | picks-probe1  | p1=150 n=150 oid=ren150oid789
 renovate-untouched-cr-no-update | board | gh/pr-list.json @ patches/add-renovate-cr-behind.jq |     | unstrand-renovate-skip | n=151
+renovate-other-class-update    | board | gh/pr-list.json @ patches/add-renovate-other-class.jq |     | picks         | n=152 oid=ren152oid789

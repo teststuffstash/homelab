@@ -52,7 +52,7 @@ if [ "${UPDATER_MERGE_READY_ONLY:-1}" = "0" ]; then MERGE_READY_ONLY=false; else
 # 22:30 → 09-08, the first cron tick after homelab#1465 shipped the field; --limit 50 still lands
 # at 505,050). The commit half of "approved at head" is probed per candidate in leg 1 instead.
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
-  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author)"
+  --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName)"
 
 # RENOVATE OWNS ITS OWN CURRENCY (ADR-141, 2026-09-27). Renovate stops maintaining a branch the
 # moment a commit it did not author lands on it (its edited-PR rule — this updater's merge commit
@@ -63,10 +63,18 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # PR author is Renovate AND every non-merge commit is Renovate-authored — then this updater keeps
 # its hands off. A Renovate PR a worker has pushed to (the FU-046 deps-review shape) is NOT
 # skipped: Renovate has already stopped maintaining it, and this belt is its only currency.
-# `author` is a scalar list field (no node cost); commit authorship comes from the per-candidate
-# `gh pr view --json commits` probe leg 1 already pays for bot-approved candidates.
-renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate
-  jq -e '(.author.login // "") | startswith("homelab-renovate")' <<<"$1" >/dev/null 2>&1
+# ⚠ SCOPED TO THE GROUPED ACTIONS BRANCHES (PR#2004 review): `rebaseWhen: behind-base-branch` is
+# set ONLY on the two `matchManagers: ["github-actions"]` rules in .github/renovate-global.json —
+# every other class (python runtime/dev deps, dockerfile minors, pre-commit) inherits the global
+# `conflicted`, so Renovate never rebases those for plain staleness and this updater IS their
+# currency. Renovate names a grouped rule's branch `renovate/<groupSlug>`; the two groupNames
+# there are `github-actions` and `github-actions (major)` → `^renovate/github-actions(-major)?$`.
+# That file is the ONE HOME of the group names — a groupName change there changes this regex.
+# `author` and `headRefName` are scalar list fields (no node cost); commit authorship comes from
+# the per-candidate `gh pr view --json commits` probe leg 1 already pays for bot-approved candidates.
+renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate AND the branch is a grouped Actions one
+  jq -e '((.author.login // "") | startswith("homelab-renovate"))
+         and ((.headRefName // "") | test("^renovate/github-actions(-major)?$"))' <<<"$1" >/dev/null 2>&1
 }
 renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 when no foreign non-merge commit
   jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
@@ -246,7 +254,7 @@ jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                     and (([.labels[].name] | index("agent/arbitrate")) == null)) | .number' <<<"$PRS" \
 | while read -r n; do
     pj="$(gh pr view "$n" --repo "$REPO" --json commits,reviews 2>/dev/null)" || pj=""
-    # Same rule as leg 1: an untouched Renovate PR is Renovate's to rebase (ADR-141).
+    # Same rule as leg 1: an untouched Renovate PR on a grouped Actions branch is Renovate's to rebase (ADR-141).
     if [ -n "$pj" ] && renovate_author "$(jq -c --argjson n "$n" '.[] | select(.number == $n)' <<<"$PRS")" && renovate_untouched "$pj"; then
       echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
       continue

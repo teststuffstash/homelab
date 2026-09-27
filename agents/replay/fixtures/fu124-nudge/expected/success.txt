@@ -1,3 +1,3 @@
-CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/101/update-branch -f expected_head_sha=abc123def456
-OUT   [testrepo] FU-124: nudged updater — update-branch on armed BEHIND PR #101
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n}}/update-branch -f expected_head_sha={{oid}}
+OUT   [testrepo] FU-124: nudged updater — update-branch on armed BEHIND PR #{{n}}
 RC 0

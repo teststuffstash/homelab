@@ -3,5 +3,5 @@
 . + [
   { number: 151, createdAt: "2026-09-27T06:00:00Z", mergeStateStatus: "BEHIND",
     autoMergeRequest: { enabledAt: "2026-09-27T06:01:00Z" }, reviewDecision: "CHANGES_REQUESTED", baseRefName: "master", labels: [],
-    headRefOid: "ren151oid789", author: { login: "homelab-renovate-1234[bot]" } }
+    headRefOid: "ren151oid789", author: { login: "homelab-renovate-1234[bot]" }, headRefName: "renovate/github-actions" }
 ]
