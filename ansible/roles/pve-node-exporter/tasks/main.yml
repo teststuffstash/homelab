@@ -104,6 +104,9 @@
 - name: Flush handlers before verifying
   ansible.builtin.meta: flush_handlers
 
+# Host-level series only: the per-guest placement rows (pve_qemu_numa_resident_bytes, …) exist
+# only while a guest is RUNNING, and this role must stay re-runnable on a host with none up (a
+# maintenance window, a freshly rebuilt hypervisor) — they show in the Report below, best-effort.
 - name: Verify the pool series is served on the exporter port (isolated end-state check)
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ pve_node_exporter_port }}/metrics"
@@ -116,7 +119,6 @@
     and 'pve_lvm_thin_pool_data_percent' in pve_metrics.content
     and 'smartctl_device_smart_status' in pve_metrics.content
     and 'node_memory_numa_MemFree' in pve_metrics.content
-    and 'pve_qemu_numa_resident_bytes' in pve_metrics.content
 
 - name: Report
   ansible.builtin.debug:
