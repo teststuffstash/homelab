@@ -3,14 +3,23 @@ collections:
   # Manage OPNsense via its API as code (FRR/BGP, and more later).
   # https://github.com/O-X-L/ansible-opnsense
   #
-  # PINNED to 25.7.8 — matches the os-frr 1.52 plugin on OPNsense 26.1. This
+  # PINNED to 26.1.11 — matches the os-frr plugin on OPNsense 26.1.x. This
   # collection's frr_bgp_neighbor expects a `remote_as_mode` field (and bgp_general
-  # a `redistribute` field) that the os-frr 1.52 API emits.
+  # a `redistribute` field) that the os-frr API emits.
+  #
+  # ⚠ 26.x flipped the global `reload` module-argument default true -> false
+  # (plugins/module_utils/defaults/main.py: RELOAD_MOD_ARG, default=False). A
+  # reload-capable module call WITHOUT `reload: true` now writes SAVED config only —
+  # it still reports `changed` while the running service never learns the change.
+  # Every reload-capable call site under ansible/roles/opnsense-*/ therefore sets it
+  # explicitly, through a role-scoped block-level module_defaults (see the header of
+  # each role's tasks/main.yml). Keep that up when adding a task or a module.
   #
   # History: while on OPNsense 24.7 (os-frr 1.42) we had to pin the predecessor
   # ansibleguy.opnsense==1.2.13 because those fields did NOT exist yet and the
   # newer modules crashed ("Failed to translate API entry"). After upgrading to
   # 26.1 the schema gained those fields, so 1.2.13 broke the other way and we moved
-  # to oxlorg 25.7.8. Lesson: keep this pin aligned with the OPNsense/os-frr version.
+  # to oxlorg 25.7.8 (now 26.1.11). Lesson: keep this pin aligned with the
+  # OPNsense/os-frr version.
   - name: oxlorg.opnsense
     version: "26.1.11"
