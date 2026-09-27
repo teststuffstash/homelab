@@ -67,12 +67,16 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
   `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
   2026-09-27). Majors → the catch-all.
-- **Terraform providers are the HUMAN-PLAN lane, never the reflex's.** The management sentinel refuses
-  lockfile / `required_providers` heads by design (ADR-131), so the required `management-sentinel`
-  context is red on every provider PR and the reflex never dispatches. Renovate labels them
-  `major/awaiting-human` on any update type (un-armed); the seat runs `devbox run mgmt-human-plan --
-  <pr>` (docs/management-box.md §MB3), reads the plan, merges the clean ones (#1997: `cloudflare: +0
-  ~0 -0`, 2026-09-27).
+- **Terraform providers ride the mechanical `automerge` lane; the management box is the gate.** Stage 1
+  of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
+  source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
+  (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
+  `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
+  `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
+  ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
+  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
+  (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
+  orders — the evidence that a human read adds nothing here (S9 #1988).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy

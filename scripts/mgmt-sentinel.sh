@@ -211,6 +211,13 @@ while IFS=$'\t' read -r pr sha; do
   fi
   # stage 1
   hits="$(mgmt_stage1 "$POL" "$REPO" "$base" "$sha")" || { log "[#$pr] stage 1 could not run (policy unreadable) — skipped this run"; continue; }
+  # PROVIDER-PIN head (ADR-131 amended 2026-09-27): stage 1 admitted a denied file because its diff
+  # is the bump shape (mgmt_provider_pin_shape). Such a head must plan EMPTY — a provider bump that
+  # changes the plan is the evidence a human reads, so on a pin head a non-empty plan is a FAILURE.
+  # A human plan keeps its own semantics (the human reads whatever the plan says).
+  admitted="$(grep $'^admitted\t' <<<"$hits" || true)"; hits="$(grep -v $'^admitted\t' <<<"$hits" || true)"
+  PIN=0; [ -n "$admitted" ] && [ $HUMAN = 0 ] && PIN=1
+  [ $PIN = 1 ] && log "[#$pr] provider-pin head — stage 1 admitted: $(awk -F'\t' '{printf "%s ", $2}' <<<"$admitted")"
   overridden=""
   if [ -n "$hits" ] && [ $HUMAN = 1 ]; then
     overridden="$hits"
@@ -233,7 +240,7 @@ while IFS=$'\t' read -r pr sha; do
   # stage 2
   wt="$SDIR/wt-${sha:0:8}"; rm -rf "$wt"; git -C "$REPO" worktree prune
   git -C "$REPO" worktree add --quiet --detach "$wt" "$sha" || { log "[#$pr] worktree add failed"; continue; }
-  bodyf="$(mktemp)"; desc=""; state=success; failed_roots=""
+  bodyf="$(mktemp)"; desc=""; state=success; failed_roots=""; pin_changed=""
   if [ $HUMAN = 1 ]; then
     { echo "**management-sentinel: HUMAN PLAN** — \`tofu plan\` of ${sha:0:8} on the management box, ordered from the jail by a human who read the diff (ADR-131's escape hatch, §MB3 \"When the box refuses\"). Addresses and counts only; the plan text stays on the box."
       if [ -n "$overridden" ]; then
@@ -245,6 +252,9 @@ while IFS=$'\t' read -r pr sha; do
     desc="human plan: "
   else
     echo "**management-sentinel** — \`tofu plan\` of ${sha:0:8} on the management box (ADR-131). Addresses and counts only; the plan text stays on the box." >"$bodyf"
+    if [ $PIN = 1 ]; then
+      { echo; echo "**Provider-pin head** — stage 1 admitted the \`provider-pin\` shape (only version / constraint / hash lines change, every provider source unchanged; ADR-131 amended 2026-09-27) in: $(awk -F'\t' -v bt='`' '{printf "%s%s%s ", bt, $2, bt}' <<<"$admitted"). The plan ran with the head's providers, verified against its lockfile hashes and the registry's signatures. **A bump must plan empty** — any change below fails this context and is the evidence a human reads."; } >>"$bodyf"
+    fi
   fi
   for root in "${roots[@]}"; do
     out="$wt/.mgmt-plan-$root.bin"
@@ -282,6 +292,11 @@ while IFS=$'\t' read -r pr sha; do
     fi
     os=""; oh=""; [ "$o" -gt 0 ] && { os=" ⇢$o output$op"; oh=", $o output value$op to save"; }
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
+    if [ $PIN = 1 ] && [ -n "$changes" ]; then
+      state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
+      { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}) — human read"; } >>"$bodyf"
+      log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) — failing the context"
+    fi
     excl_n=0; excl_types=""
     notplanned="$(mgmt_plan_not_planned "$out")"
     if [ -n "$notplanned" ]; then
@@ -317,7 +332,11 @@ while IFS=$'\t' read -r pr sha; do
     if [ "$root" = main ]; then install_impact "$out" "$sha"; [ -n "$impact_desc" ] && desc="${desc% }${impact_desc} "; fi
     log "[#$pr] $root: +$a ~$c -$d ${rs}${os}${impact_desc}"
   done
-  if [ "$state" = failure ]; then desc="plan errored:$failed_roots — see the PR comment"; [ $HUMAN = 1 ] && desc="human plan: $desc"; fi
+  if [ "$state" = failure ]; then
+    if [ -n "${pin_changed:-}" ] && [ -z "$failed_roots" ]; then desc="provider bump changes the plan:${pin_changed} — human read (see the PR comment)"
+    else desc="plan errored:$failed_roots — see the PR comment"; [ $HUMAN = 1 ] && desc="human plan: $desc"; fi
+  fi
+  pin_changed=""
   if [ -n "$overridden" ] && [ "$state" = success ]; then
     desc="${desc% } — stage 1 overridden: $(awk -F'\t' 'NR==1{f=$2; sub(".*/","",f); printf "%s %s", $1, f}' <<<"$overridden")"
   fi

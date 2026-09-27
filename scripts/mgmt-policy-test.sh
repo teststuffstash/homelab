@@ -16,7 +16,8 @@ git -C "$T" init -q -b master
 mkdir -p "$T/tofu/dashboards" "$T/tofu/provisioning" "$T/tofu/github" "$T/tofu/cloudflare" "$T/tofu/cloudflare-token"
 echo '{"title":"x"}' >"$T/tofu/dashboards/x.json"
 printf 'resource "kubernetes_config_map" "x" {\n  data = { "x.json" = file("${path.module}/dashboards/x.json") }\n}\n' >"$T/tofu/monitoring.tf"
-printf 'terraform {\n  required_providers {}\n}\n' >"$T/tofu/versions.tf"
+printf 'terraform {\n  required_providers {\n    random = {\n      source  = "hashicorp/random"\n      version = "~> 3.6"\n    }\n  }\n}\n' >"$T/tofu/versions.tf"
+printf 'provider "registry.opentofu.org/hashicorp/random" {\n  version     = "3.9.0"\n  constraints = "~> 3.6"\n  hashes = [\n    "h1:8EQU5KSxezcjo/phRSe69rDOI0lk4pSaggj7FsskYp8=",\n    "zh:03f1114cc20b8913523735ab76e0f0a2b16ce13c92923a53304bf85f07fc0dbc",\n  ]\n}\n' >"$T/tofu/.terraform.lock.hcl"
 echo 'x' >"$T/tofu/provisioning/main.tf"; echo 'x' >"$T/tofu/github/main.tf"; echo 'x' >"$T/tofu/cloudflare/main.tf"; echo 'x' >"$T/tofu/cloudflare-token/main.tf"
 git -C "$T" add -A && git -C "$T" commit -q -m base
 BASE="$(git -C "$T" rev-parse HEAD)"
@@ -45,6 +46,17 @@ case_ clean-dashboard   none          'echo "{\"title\":\"y\"}" > tofu/dashboard
 case_ clean-resource    none          'printf "resource \"kubernetes_config_map\" \"y\" {}\n" >> tofu/monitoring.tf'
 case_ versions-tf       deny_paths    'echo "# bump" >> tofu/versions.tf'
 case_ lockfile          deny_paths    'echo "provider" > tofu/.terraform.lock.hcl'
+# the provider-pin shape (ADR-131 amended 2026-09-27): a Renovate bump is ADMITTED, anything wider is not —
+# a changed `provider "…"` header trips deny_patterns too (the existing provider-block rule), by design
+case_ lockfile-pin      admitted      'sed -i -e "s/3.9.0/3.9.1/" -e "s|h1:8EQU.*|h1:Lw9im2VBBJQ3RyAbHPQ0rcvcmmcZWm3x+kIOpN+Tv9s=\",|" -e "s|zh:03f1.*|zh:105b678ee72322a3067f105d7e05e940f6143238f377f6e87ff4ec909246ac2a\",|" tofu/.terraform.lock.hcl'
+case_ lockfile-constraint admitted    'sed -i "s/~> 3.6/~> 3.9/" tofu/.terraform.lock.hcl'
+case_ lockfile-source   'deny_paths deny_patterns'    'sed -i "s|hashicorp/random|evil/random|" tofu/.terraform.lock.hcl'
+case_ lockfile-new-provider 'deny_paths deny_patterns' 'printf "provider \"registry.opentofu.org/evil/x\" {\n  version = \"1.0.0\"\n}\n" >> tofu/.terraform.lock.hcl'
+case_ lockfile-new-file 'deny_paths deny_patterns'    'printf "provider \"registry.opentofu.org/hashicorp/random\" {\n  version = \"3.9.1\"\n}\n" > tofu/provisioning/.terraform.lock.hcl'
+case_ lockfile-extra-line deny_paths  'sed -i "s/3.9.0/3.9.1/" tofu/.terraform.lock.hcl; echo "# note" >> tofu/.terraform.lock.hcl'
+case_ versions-pin      admitted      'sed -i "s/~> 3.6/~> 3.9/" tofu/versions.tf'
+case_ versions-source   deny_paths    'sed -i "s|hashicorp/random|evil/random|" tofu/versions.tf'
+case_ pin-plus-tf-edit  admitted      'sed -i "s/3.9.0/3.9.1/" tofu/.terraform.lock.hcl; printf "resource \"kubernetes_config_map\" \"y\" {}\n" >> tofu/monitoring.tf'
 case_ tfvars            deny_paths    'echo "a=1" > tofu/x.auto.tfvars'
 case_ shell-script      deny_paths    'echo "#!/bin/sh" > tofu/apply.sh'
 case_ tfvars-json       deny_paths    'echo "{}" > tofu/x.auto.tfvars.json'

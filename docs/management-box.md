@@ -390,6 +390,24 @@ post). A later push is a new head the box refuses again; re-read, re-run. The re
 green context whose description says `human plan: … — stage 1 overridden: deny_paths providers.tf`,
 so the review knows what the box did not judge on its own.
 
+**The provider-pin shape (ADR-131 amended 2026-09-27, S9 #1988) — the one refusal that became a
+rule.** A Renovate provider bump touches exactly the two files stage 1 denies by name, and six of
+them (tls, proxmox, github, cloudflare, random, infisical; 2026-09-25..27) planned `+0 ~0 -0` under
+human orders — the human read added nothing. `admit_shapes: [provider-pin]` in the policy admits a
+`.terraform.lock.hcl` / `versions.tf` whose diff is ONLY `version =` / `constraints =` / `"h1:…"`
+`"zh:…"` lines (`version = "…"` lines in `versions.tf`), with every provider source — the
+`provider "registry…/x/y" {` headers, the `source =` lines — identical between base and head and the
+file present in base (`mgmt_provider_pin_shape` in `scripts/mgmt-lib.sh`; fixtures in
+`mgmt-policy-test`). Stage 2 then plans with the HEAD's providers: `init` downloads from the sources
+master already trusts and tofu verifies the zip against the head's h1 hash and the registry's
+signature, so a hostile hash fails `init` and never runs. What the shape cannot vouch for is the new
+version's behaviour — the plan does: **a pin head must plan empty**; a non-empty plan fails
+`management-sentinel` with `provider bump changes the plan: <root>(+a ~c -d) — human read`, and the
+comment names the root. That failure is the whole human lane for this class; a human who agrees
+with the change orders `mgmt-human-plan` as before. The infisical / cloudflare-token roots are
+`foreign_roots` (no box plan) and are excluded from Renovate's terraform manager rather than merged
+unplanned (#1984 merged that way on 2026-09-27 and was reconciled from the jail after the fact).
+
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
