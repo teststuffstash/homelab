@@ -1,0 +1,31 @@
+# pve-serial-console — the hypervisor's OWN console on its BMC's serial-over-LAN, as code. The NX
+# nodes' BIOS already redirects POST/setup to SOL (COM2 = ttyS1; the private hardware register has
+# the BIOS captures), but the Proxmox install left GRUB and the kernel on the VGA console only
+# (`GRUB_CMDLINE_LINUX_DEFAULT="quiet"`), so `ipmitool … sol activate` went dark the moment GRUB
+# loaded — an unattended boot-disk change (FU-289) cannot be watched that way. This puts the GRUB
+# menu and the kernel console on BOTH the VGA and the serial port. Takes effect at the next boot;
+# never reboots. A host without `pve_serial_console_unit` (pve — no BMC) is a clean no-op.
+---
+- name: GRUB serial console settings (menu + kernel on VGA and the SOL serial unit)
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: "^{{ item.key }}="
+    line: '{{ item.key }}="{{ item.value }}"'
+  loop:
+    - { key: GRUB_CMDLINE_LINUX_DEFAULT, value: "quiet console=tty0 console=ttyS{{ pve_serial_console_unit }},{{ pve_serial_console_baud }}n8" }
+    - { key: GRUB_TERMINAL, value: "console serial" }
+    - { key: GRUB_SERIAL_COMMAND, value: "serial --unit={{ pve_serial_console_unit }} --speed={{ pve_serial_console_baud }} --word=8 --parity=no --stop=1" }
+  loop_control:
+    label: "{{ item.key }}"
+  when: pve_serial_console_unit is defined
+  notify: update-grub
+
+- name: Flush handlers before verifying
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify the rendered grub.cfg carries the serial console (isolated end-state check)
+  ansible.builtin.command: grep -c "console=ttyS{{ pve_serial_console_unit }}" /boot/grub/grub.cfg
+  register: pve_grub_serial
+  changed_when: false
+  failed_when: pve_grub_serial.stdout | int < 1
+  when: pve_serial_console_unit is defined

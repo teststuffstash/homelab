@@ -557,6 +557,14 @@ When a pool VM goes NotReady with its Talos API "no route to host", read the hyp
 `qm status <vmid> --verbose | grep qmpstatus` (`io-error` = paused on a failed write) and
 `lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
 
+**Watching the HOST boot (nx-02, the BMC boxes):** `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P ADMIN
+sol activate` (leave with `~.`) shows POST and BIOS setup — and, since 2026-09-27, the GRUB menu and
+the kernel console too (`ansible/pve-serial-console.yml`: `console=ttyS1,115200n8` + GRUB on the
+serial unit, per-host via `host_vars/`). Boot-device class for one boot: `chassis bootdev bios|pxe|disk`;
+ranking two disks is BIOS setup (`Hard Disk Drive BBS Priorities`), driven over SOL with the
+`bios2.py` recipe in the private hardware register (`hardware/docs/nx-6035-g5.md`). pve (the X99
+desktop) has no BMC — its console is the monitor.
+
 1. **Pre-flight:** Longhorn 0 degraded volumes; no agent rides mid-flight you care about.
 2. **Full-stop, not drain.** Since 2026-09-22 (ADR-133) pve hosts only ONE of three control planes
    (cp-01). cp-02 (nx-02) and wk-metal-02 keep etcd quorum and serve the API on the VIP `.50`, so
