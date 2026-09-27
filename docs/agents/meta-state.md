@@ -52,19 +52,22 @@ never the session's arc — that is TICK-LOG's.)
   RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
   `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup).
-  **2026-09-27 ~12:40Z (TICK-LOG has the arc):** (c) DONE — npm + terraform lanes (6ddcdc21), six
-  provider PRs human-planned + merged, infisical root reconciled from the jail. agent-coordinator#23
-  (node 24) MERGED with the new runtime smoke in `ci`+`build-image` (2b6a9fa); **read the first
-  coordinator/reviewer run on `2026.9.27-gca94f4a2dd99` once homelab#2024 lands** (the acceptance
-  the smoke cannot give). Base-image majors on agent-coordinator stay un-armed until the #1988
-  runtime-in-prod row's post-merge half exists (pin revert on `ArgoWorkflowsFailing`, pod on the
-  PREVIOUS tag). **Operator-owed:** openrouter-operator#80 (python 3.14 on the router Dockerfile —
-  human merge by that repo's chokepoint rationale). **Confirm merged:** homelab #2023 (relabelled to
-  fire the reflex after the `github-actions[bot]` actor hold — fix bf00a329, watch the Monday
-  rebuild's pin PR runs as the App), #2024, #1977 (DIRTY after #2012 — Renovate rebases it).
-  Terraform lane recipe: a provider PR is red on `management-sentinel` by design → `devbox run
-  mgmt-human-plan -- <pr> --yes`, read, merge; a root the box does NOT plan (infisical) needs the
-  jail plan BEFORE the merge. ⚠ `update-pr-branch.reusable.yml`
+  **2026-09-27 ~14:20Z (TICK-LOG has the arc; operator away since ~13:05Z, seat coordinating via subagents):**
+  LANDED: provider-pin lane end to end (PR#2026 + rule flip 779f40fa + drill #2030 PASSED — Renovate
+  terraform PRs now merge on the box's empty plan; a non-empty plan is the only human read); lens
+  §Runtime majors ADOPT + §Version SETS (PR#2025); closeouts #1987/#1989/#1990 CLOSED (PR#2027);
+  agent-coordinator#23 node 24 merged + runtime smoke, first coordinator run on it Succeeded;
+  openrouter-operator#81 merged (devbox python 3.14). **Confirm/next:** (1) **openrouter-operator#82**
+  — the rest of the python set, armed, parked on the `*` gate: YOUR merge (supersedes Renovate #80;
+  do not close #80). (2) **#1992** coverage table PR — a subagent owned its cycle; check it merged.
+  (3) **#1988 base-image post-merge half** (pin revert on `ArgoWorkflowsFailing`, pod on the PREVIOUS
+  tag) and **#2014 set mechanism** (version file stamped by devbox-update vs images from the devbox
+  base; python: regex manager vs worker) — design forks, yours (corpus sitting). (4) FU-097 intent-
+  review paragraph in `.agents/review.md` — operator-direct, still unlanded. (5) Monday 06:00Z: the
+  weekly image rebuilds → one deploy-pin PR per image; and `runner-image.yaml`'s next pin PR must run as
+  the App (bf00a329). (6) #1977 waits for Renovate's rebase. (7) `automerge` label is Renovate-only —
+  a jail-authored PR wearing it gets no reviewer (exporter skips it, renovate-approve wants a Bot
+  author); a rule for the subagent card if it bites again. ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
   `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +

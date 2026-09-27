@@ -11282,3 +11282,48 @@ two days) and #80 (python 3.14, deps-review). First commit path-tiered the file 
 the header states a chokepoint rationale (router = egress/credential/budget) that stands; restored
 with only the pre-commit carve-out (fa2ec3e). #71/#73 merged on their own; **#80 stays a human
 merge by design (operator).**
+
+## 2026-09-27 (afternoon) — S9 turned into a mapping stint: the provider-pin lane, the version-set lens rule, the closeouts (operator left at ~13:05Z: "coordinate the rest without me, let subagents do the work")
+
+**Direction correction (operator, ~12:55Z):** labelling terraform providers `major/awaiting-human` and
+running six human plans was the WRONG way round — all six planned `+0 ~0 -0`, the human added nothing
+("what value does a human provide on #1976? I don't want to see these PR-s for years to come";
+"management box and renovate go hand-in-hand"). S9 is a MAPPING opportunity: remove the human where
+the machine already holds the evidence. **Command:** PR#2026 (merged 13:53Z) — ADR-131 amended: stage 1
+ADMITS the `provider-pin` diff shape (`admit_shapes` in `policy/mgmt/plan-input.yaml`,
+`mgmt_provider_pin_shape`: only version / constraints / hash lines, every provider source unchanged,
+file present in base — the DIFF is judged, never the author), stage 2 plans the head with the new
+provider (registry-signed, hash-verified by tofu), and a pin head whose plan is NOT empty FAILS the
+context (`provider bump changes the plan: <root>(…) — human read`) — the only provider PR a human ever
+sees. 10 new fixtures (mgmt-policy-test 81/81). Reviewer's one blocking finding was right: my docs
+said the Renovate half was live while it was still pending — tense fixed. Then the Renovate rule flip
+(779f40fa, direct): terraform → `automerge`, the two `foreign_roots` (infisical, cloudflare-token)
+disabled for the manager rather than merged unplanned. **DRILL PASSED (subagent, PR#2030):** box pulled
+#2026 at 14:04Z; a lockfile-shaped downgrade head (random 3.9.1→3.9.0, 31 changed lines) → stage 1
+admitted → `main: +0 ~0 -0` → `management-sentinel=success` with the provider-pin paragraph, 4 min 38 s
+push→verdict; PR closed, never merged. Drill side-finding: `local f="$4" base_f="${f##*/}"` read the
+CALLER's `f` (worked only because mgmt_stage1's loop variable is `f`) — fixed with a direct-call
+fixture (this entry's commit).
+**openrouter-operator#80 (python 3.11→3.14) read with the operator:** the lens review was right about
+the code (a subagent audit against the 3.12/3.13/3.14 What's New pages: nothing removed that the code
+uses; the adoptables are PEP 695 generics, `fromisoformat` parsing `Z`, the py314 ruff rules) and wrong
+about the toolchain: it called `devbox.json` `python@3.11` + ruff/mypy/`requires-python` "lint/dev
+targets that need not move" while noting CI runs under devbox — so the green check proved 3.11. The
+reviewer had no rule naming the VERSION SET and no fact that `devbox-update` re-resolves `@latest`
+only (a pinned `python@3.11` never moves). Operator: "Python is pretty backwards compatible, usually
+there is no needed change, just something new and shiny, new best practices" → the lens now says a
+runtime major produces an ADOPT list (a work item on the repo), not a "needed" list. **Command:**
+PR#2025 (merged): lens §Runtime majors → ADOPT + §Version SETS; register row `python (per service)`
+(#2014 commented). Subagent on openrouter-operator: **#81 merged** (devbox `python@3.14`, single-package
+`devbox update python`, CI ran Python 3.14.4, all green); **#82 OPEN** — the rest of the set (image,
+ruff `py314`, mypy 3.14, `requires-python >=3.14`, UP047/UP043/PEP 758 rewrites, `.replace("Z")`
+dropped), armed so the lens review runs, parked for the human owner by the repo's `*` gate — supersedes
+Renovate #80 when merged. **Mechanic found:** a JAIL-authored PR labelled `automerge` gets NO reviewer
+(the exporter skips the label as the mechanical lane; renovate-approve approves Bot-authored PRs only)
+— the label is Renovate-only; #81 sat 18 min until the label came off.
+**Closeouts (subagent, PR#2027 merged 13:37Z):** #1987, #1989, #1990 CLOSED with verified deliverables;
+#1991's "last proven end to end" record in dependency-upgrades.md (unproven: Python deps-review→worker
+loop FU-046, a base-image major merging without a human); FU-125 archived; FU-046/FU-097 updated;
+ROADMAP G-D re-pointed to #1988/#1992/#2014. Operator-owed, untouched: the FU-097 intent-review
+paragraph in `.agents/review.md`. **#1992** (coverage table + gauges): subagent PR in flight at this
+write. **Node 24 acceptance:** first coordinator run on `2026.9.27-gca94f4a2dd99` Succeeded (13:01Z).
