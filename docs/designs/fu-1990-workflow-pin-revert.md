@@ -179,14 +179,32 @@ The two paths are independent and compose:
 - A triage does not prevent a revert
 - The revert stops the bleeding deterministically; the triage investigates why it broke
 
-## Testing
+## Testing — the drill (2026-09-27, PASSED)
 
-The workflow can be tested by:
-1. Merging a pin-only PR that bumps a GitHub Action to a broken SHA
-2. Observing the CI failure on master
-3. Checking the `workflow-pin-revert-*` Workflow runs in the `agent-coordinator` namespace
-4. Verifying the revert PR is created and auto-merges on CI green
-5. Verifying a Renovate PR that re-proposes the reverted pin fails `ci` on pin-only-lint check (e)
+Run once on agent-coordinator as the chain's own identity (`homelab-agents[bot]`), no human touch
+from the bad merge to the merged revert. Record: homelab#1990 (comment of 2026-09-27) and
+`agents/coordinator/TICK-LOG.md` 2026-09-27.
+
+1. agent-coordinator#20: `actions/create-github-app-token` v1 → v1.0.0 (whose `app_id`/`private_key`
+   inputs break the `deploy-pin` job), `automerge`+`dependencies`, armed → reflex approved →
+   `ci` (pin-only-lint third shape) green → auto-merged 09:10Z.
+2. master `build-image` failed 09:11Z → `GithubWorkflowRunFailed` 09:17:43Z → Alertmanager
+   `deploy-pin-revert` → EventSource `/workflow-failed` → Sensor → `workflow-pin-revert-snrj9`.
+3. **Two defects the drill found that two code reviews had passed:** the `coordinator-git` mint
+   lacked `workflows: write` (the first push was refused — homelab PR#2005), and the candidate
+   query `gh pr list --jq --arg cutoff …` had never worked (`gh --jq` takes only the expression;
+   swallowed into "no candidate" — PR#2006, same line in the FU-044 `deploy-revert` template).
+4. Re-fired from the saved payload after #2006 synced (09:33:57Z): candidate #20 found, ledger
+   key written, revert **#21** opened labelled + armed with `reverted-pins:` → reflex approved
+   09:35:41Z → auto-merged 09:37:17Z → master `build-image` green → alert resolved.
+   **Alert → merged revert: ~3.5 minutes.**
+
+To repeat the drill: a pin-only PR whose new SHA resolves upstream (the lint requires it) but whose
+version breaks a PUSH-ONLY workflow on master; open it as the App so the whole lane is exercised;
+the replay fixtures `workflow-pin-revert-candidate` / `workflow-pin-revert-merge-lane` pin the two
+steps the drill found broken. Re-fire without a fresh failure: `kubectl -n agent-coordinator create`
+a Workflow with `workflowTemplateRef: workflow-pin-revert` and the Alertmanager payload as the
+`payload` parameter (the ledger is keyed on the merge SHA, so a handled merge is skipped).
 
 ## Future Work
 
