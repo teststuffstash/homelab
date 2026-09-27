@@ -136,6 +136,11 @@ Two consequences the original write-up did not draw:
   `numa` block); `cpu.affinity` needs `root@pam`, so it is not the lever. The "less
   flexibility under pressure" framing of `bind` above is wrong for wk-04: all 32 GiB are pinned
   at start and never move, so the policy matters for one moment only.
+  **Applied 2026-09-27, corrected by the apply:** `hugepages` is ALSO `root@pam`-only in
+  Proxmox (HTTP 500 *"only root can set 'hugepages' config"* to the automation identity), so
+  the shipped form is the `numa` blocks alone with `policy=preferred` — with the pin faulting
+  32 GiB in at start, a `bind` on a short host node would swap the other guests out to satisfy
+  it. The balance is therefore decided by free memory at start; the belts report a skewed one.
 - **Swap on the WD spinner is the amplifier.** pve swaps to NVMe and had no event. With
   dedicated no-balloon guests, nx-02's swap belongs on an SSD (the SA400 going in as the boot
   disk carries it — a DRAM-less SATA SSD still serves random 4k reads at ~100× the HDD's rate),
