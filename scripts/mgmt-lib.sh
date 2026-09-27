@@ -142,7 +142,11 @@ mgmt_policy_get() { _yq -r "$2" "$1"; }
 # (mgmt-sentinel.sh) — the one thing a human reads.
 # rc 1 = not the shape (the deny stands). Reads that fail read as "not the shape", never as a pass.
 mgmt_provider_pin_shape() {
-  local repo="$1" base="$2" head="$3" f="$4" base_f="${f##*/}" changed srcs_b srcs_h line_re src_re
+  local repo="$1" base="$2" head="$3" f="$4" changed srcs_b srcs_h line_re src_re base_f
+  # separate statement: `local f="$4" base_f="${f##*/}"` expands BOTH words before `local` assigns,
+  # so base_f took the CALLER's `f` — it worked on the box only because mgmt_stage1's loop variable
+  # is also named `f` (drill #2030's self-check found it, 2026-09-27); any other caller got "" → deny
+  base_f="${f##*/}"
   git -C "$repo" cat-file -e "$base:$f" 2>/dev/null || return 1
   case "$base_f" in
     .terraform.lock.hcl)

@@ -57,6 +57,14 @@ case_ lockfile-extra-line deny_paths  'sed -i "s/3.9.0/3.9.1/" tofu/.terraform.l
 case_ versions-pin      admitted      'sed -i "s/~> 3.6/~> 3.9/" tofu/versions.tf'
 case_ versions-source   deny_paths    'sed -i "s|hashicorp/random|evil/random|" tofu/versions.tf'
 case_ pin-plus-tf-edit  admitted      'sed -i "s/3.9.0/3.9.1/" tofu/.terraform.lock.hcl; printf "resource \"kubernetes_config_map\" \"y\" {}\n" >> tofu/monitoring.tf'
+# the shape function called DIRECTLY, with no variable named `f` in scope (drill #2030's finding: the
+# basename was taken from the caller's `f` and every other caller was silently refused)
+git -C "$T" checkout -q -b c-shape-direct "$BASE"; sed -i "s/3.9.0/3.9.1/" "$T/tofu/.terraform.lock.hcl"
+git -C "$T" add -A && git -C "$T" commit -q -m shape-direct && shape_head="$(git -C "$T" rev-parse HEAD)"
+unset f; lockfile_path="tofu/.terraform.lock.hcl"
+if mgmt_provider_pin_shape "$T" "$BASE" "$shape_head" "$lockfile_path"; then pass=$((pass+1)); echo "PASS shape-direct-call (no caller variable named f)"
+else fail=$((fail+1)); echo "FAIL shape-direct-call — mgmt_provider_pin_shape refused a pin-shaped lockfile when called outside mgmt_stage1"; fi
+git -C "$T" checkout -q "$BASE"
 case_ tfvars            deny_paths    'echo "a=1" > tofu/x.auto.tfvars'
 case_ shell-script      deny_paths    'echo "#!/bin/sh" > tofu/apply.sh'
 case_ tfvars-json       deny_paths    'echo "{}" > tofu/x.auto.tfvars.json'
