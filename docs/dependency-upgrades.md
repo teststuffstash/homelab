@@ -107,11 +107,28 @@ deployment?" has a different answer per class, because homelab runs **three reco
 | 8 | **GitHub Actions** (16 deps, 7 files) | `.github/workflows/*` | `github-actions` | ✅ **self-deploying** | The next run uses the merged file. SHA-pinning is the Trivy mitigation — **and it is exactly what's stuck on the orphaned branch** |
 | 9 | **Ansible collections/roles** | `ansible/requirements.yml`, `collections/` | `ansible-galaxy` (1) | ❌ **no** | Merge deploys nothing; someone must run `scripts/opnsense-playbook.sh`. The FU-097 gap, sharpest here — this is the router |
 | 10 | **arc-runner toolchain ARGs** (DEVBOX_VERSION, NIX_VERSION) | `docker/arc-runner/Dockerfile` | `regex` custom (2) | ✅ yes | `runner-image.yaml` builds and opens the pin PR. ⚠ the NIX_VERSION half resolves nothing (above) |
+| 11 | **Harness + tool versions baked into first-party images** (claude-code ×3: agent-base via devbox, agent-coordinator + claude-jail via npm; `gh` via apt; s5cmd; `KUBECTL_VERSION` ARG in the coordinator image) | three Dockerfiles in three repos | devbox-update (agent-base only); `regex` custom for s5cmd (2026-09-27); **none** for claude-code (npm), gh, KUBECTL_VERSION | ✅ built weekly (`schedule` on `build-image.yaml`, 2026-09-27) + on push | A rebuild is a new build-date tag → deploy-pin rolls it; the cluster pin is the revert. **GAP (register):** claude-code floats to npm latest in two images and rides nixpkgs in the third — no shared version, nothing checks they agree; the jail only moves on a hand rebuild; kubectl in the coordinator image is a hand ARG outside the weekly devbox sync. Owner of the fix: #2014 (version sets). |
 
-**The honest summary:** classes 1, 2, 3, 8 and 10 already have a working path→deploy edge. Class 4/5
+**The honest summary:** classes 1, 2, 3, 8, 10 and 11 already have a working path→deploy edge (11 since the 2026-09-27 weekly rebuild — but see its GAP cell). Class 4/5
 have a deliberate human gate that should stay but has **no drift detection** between applies. Class
 6 is a node rollout that must never be automated. Classes 7 and 9 are outside Renovate entirely, and
 **9 is the one that silently does nothing** — a merged OPNsense change sits until a human remembers.
+
+### Version SETS — what must move together (operator ruling 2026-09-27; owner #2014)
+
+Some versions are used in several places and a bump in one place alone is worse than no bump
+("doing things prematurely is also bad"). The sets, their sources today, and whether they are in
+sync — the register `#1992`'s generated table will carry; until then this list is it:
+
+| Set | Members and how each is set today | In sync? |
+|---|---|---|
+| **claude-code** | worker (agent-base): devbox `claude-code@latest` → weekly synchronized `devbox-update`; coordinator + reviewer (agent-coordinator image): npm latest at build, rebuilt weekly (Mon 06:00Z); the seat (claude-jail): npm latest at a hand rebuild | ❌ three mechanisms; the two cluster images rebuild on the same cron minute (roughly equal), the jail drifts; no detector |
+| **kubectl / kubernetes / kind** | fleet Kubernetes: `machines/machines.yaml` + `tofu/variables.tf`, box-run rollout; kubectl in repos: devbox `@latest` weekly; kubectl in the coordinator image: hand `ARG` (v1.36.1); kind: devbox `@latest` in the e2e repos | ⚠ the skew rule (kubectl within one minor of the server) is nobody's check; the ARG only moves when someone edits it |
+| **devbox / nix** | `DEVBOX_VERSION` / `NIX_VERSION` in the arc-runner image (regex-managed); devbox in the jail (`DEVBOX_USE_VERSION`, FU-240); the host `/nix` | ⚠ FU-240's pin is not the runner's |
+
+**The model to match:** `devbox-update.yaml` — one weekly job re-resolves every repo together, one PR
+per repo, majors to the human lane. Anything that floats on its own cron (row 11) is a tracked gap,
+not a solution.
 
 ### "Tofu" is not one class — the five roots differ in owner, credential and blast radius
 
