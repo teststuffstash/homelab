@@ -266,7 +266,9 @@ classes** — stages 4 and 5 are where the gaps are.
   [`renovate-global.json`](../.github/renovate-global.json): 7-day cooldown (security bypasses it),
   Actions SHA-pinned, OSV alerts on, majors always human-gated.
 - **The classification decides the lane, not the reviewer's mood:** digest/pin → `automerge`;
-  runtime version bumps and base-image minors → `deps-review`; **every** major → `major`, un-armed.
+  runtime version bumps and base-image minors → `deps-review`; **every** major → `major` (the lens
+  marker), un-armed — EXCEPT GitHub Actions majors, which are armed (the CI-exercised blast class,
+  ADR-141; [`renovate.md`](renovate.md) §"The automerge vs review split").
 - **First-party artifacts never ride Renovate** — a `2026.<m>.<d>-g<sha>` version doesn't order, so
   the deploy-pin PR opens them (ADR-084).
 - *Gap:* none of this currently fires in homelab (see Ground truth).
@@ -280,7 +282,8 @@ classes** — stages 4 and 5 are where the gaps are.
   adapts the code **on the `renovate/*` branch**. Never close the PR: closing is not a terminal
   action — [`renovate.md`](renovate.md) §Coordinator × Renovate explains why (churn, and
   vulnerability PRs are recreated regardless). To abandon an upgrade durably, change the **config**.
-- **`major` lane** — un-armed, coordinator-owned, human merges.
+- **`major` lane** — un-armed, coordinator-owned, human merges. An ARMED `major` (GitHub Actions,
+  ADR-141) is the reflex's: the reviewer's lens approves, CI + the FU-1990 revert chain are the gate.
 - **Platform-specific review question the app lanes don't ask:** *does this bump violate a platform
   invariant?* The ip-plan ranges (ADR-088), storage caps (ADR-089,
   [`storage-ledger.md`](storage-ledger.md)), the `bgp=advertise` label contract, secret
