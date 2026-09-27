@@ -1,7 +1,8 @@
 # pve-node-exporter — the pve thin-pool meter (FU-093): Debian's packaged node_exporter on the
 # hypervisor + a systemd timer feeding its textfile collector with the LVM thin-pool level, VG free
-# extents, per-thin-LV allocation and every guest's qmpstatus (files/pve-textfile-metrics.sh has
-# the why). Prometheus scrapes it as a static LAN target — argocd/resources/pve-metrics/.
+# extents, per-thin-LV allocation, every guest's qmpstatus and — since FU-289 — where each guest's
+# RAM physically sits (per host NUMA node), what is swapped and what is pinned (files/pve-textfile-
+# metrics.sh has the why). Prometheus scrapes it as a static LAN target — argocd/resources/pve-metrics/.
 #
 # Chosen over an in-cluster Proxmox-API exporter deliberately: no credential to mint, store and
 # rotate (the tofu token's role cannot create users, so that path is a root-side mint anyway), and
@@ -22,7 +23,12 @@
     mode: "0644"
     content: |
       # Managed by ansible/roles/pve-node-exporter — edit there.
-      ARGS="--collector.textfile.directory={{ pve_textfile_dir }} --web.listen-address=:{{ pve_node_exporter_port }}"
+      # meminfo_numa (per physical memory node) + the reclaim/compaction vmstat counters (FU-289):
+      # a dual-socket host can swap one node empty while MemAvailable stays at 9 GiB — kswapd
+      # works per node — and the default vmstat regex keeps only pswp*/pgfault*. Both are
+      # counters the 2026-09-24 nx-02 event could only be reconstructed from AFTER the fact,
+      # by ssh; the rules in argocd/resources/pve-metrics/ read them live now.
+      ARGS="--collector.textfile.directory={{ pve_textfile_dir }} --web.listen-address=:{{ pve_node_exporter_port }} --collector.meminfo_numa --collector.vmstat.fields=^(oom_kill|pgpg|pswp|pg.*fault|pgscan|pgsteal|allocstall|compact_(stall|fail|success)|thp_fault).*"
   notify: restart node_exporter
 
 - name: Textfile directory exists (Debian's default; explicit so the timer never writes into a void)
@@ -109,7 +115,9 @@
     pve_metrics.status == 200
     and 'pve_lvm_thin_pool_data_percent' in pve_metrics.content
     and 'smartctl_device_smart_status' in pve_metrics.content
+    and 'node_memory_numa_MemFree' in pve_metrics.content
+    and 'pve_qemu_numa_resident_bytes' in pve_metrics.content
 
 - name: Report
   ansible.builtin.debug:
-    msg: "{{ pve_metrics.content | regex_findall('pve_lvm_thin_pool_data_percent.*|pve_lvm_vg_free_bytes.*|pve_qemu_status.*|smartctl_devices.*|smartctl_device_smart_status.*') }}"
+    msg: "{{ pve_metrics.content | regex_findall('pve_lvm_thin_pool_data_percent.*|pve_qemu_numa_resident_bytes.*|pve_qemu_swap_bytes.*|pve_lvm_vg_free_bytes.*|pve_qemu_status.*|smartctl_devices.*|smartctl_device_smart_status.*') }}"

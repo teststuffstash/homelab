@@ -1,7 +1,8 @@
 #!/bin/sh
 # pve-textfile-metrics — the pve thin-pool meter (FU-093). Writes the LVM thin-pool level, VG free
-# extents, per-thin-LV allocation and every guest's qmpstatus into node_exporter's textfile
-# collector, once a minute from a systemd timer (pve-textfile-metrics.timer).
+# extents, per-thin-LV allocation, every guest's qmpstatus and every guest's memory placement
+# (per host NUMA node / swapped / pinned — FU-289) into node_exporter's textfile collector, once a
+# minute from a systemd timer (pve-textfile-metrics.timer).
 #
 # WHY. The pool filled to 100 % four times (2026-08-07, 08-18, 08-24, 09-03) and not one fill
 # alerted: nothing outside the hypervisor could see the pool, and at 100 % every VM on it pauses
@@ -62,12 +63,46 @@ trap 'rm -f "$TMP"' EXIT
   # Guests: qm's own status plus the QMP status, which is where "paused on a failed write" shows
   # (qmpstatus=io-error while status=running — the 2026-09-03 signature). Non-running guests carry
   # no qmpstatus; report their status verbatim.
+  guests="$(qm list 2>/dev/null | awk 'NR > 1 { print $1, $2, $3 }')"
   echo '# HELP pve_qemu_status 1 for each guest, labelled with qm status and qmpstatus (io-error = paused on a failed write).'
   echo '# TYPE pve_qemu_status gauge'
-  qm list 2>/dev/null | awk 'NR > 1 { print $1, $2, $3 }' | while read -r vmid name status; do
+  printf '%s\n' "$guests" | while read -r vmid name status; do
+    [ -n "$vmid" ] || continue
     qmp="$(qm status "$vmid" --verbose 2>/dev/null | awk '/^qmpstatus:/ { print $2 }')"
     [ -n "$qmp" ] || qmp="$status"
     printf 'pve_qemu_status{vmid="%s",name="%s",status="%s",qmpstatus="%s"} 1\n' "$vmid" "$name" "$status" "$qmp"
+  done
+
+  # Guest memory PLACEMENT (FU-289): where each running guest's RAM physically sits (per host
+  # NUMA node, summed from the qemu process's numa_maps — a hugetlb mapping counts in its own
+  # page size), how much of it the host has swapped out (VmSwap), and how much is pinned
+  # (VmLck: VFIO passthrough pins the whole guest, and pinned pages never move again). The
+  # 2026-09-24 nx-02 event was invisible without this — wk-04's 32 GiB pinned 6/26 across the
+  # two nodes left node 1 nothing evictable but the other guests, and kswapd swapped them to the
+  # HDD while MemAvailable said 9 GiB (docs/spikes/nx-02-numa-placement.md). ~16 ms for a 32 GiB
+  # guest; the numa_maps walk takes the mmap lock shared, harmless once a minute.
+  echo '# HELP pve_qemu_numa_resident_bytes Resident guest memory per host NUMA node (from the qemu process numa_maps).'
+  echo '# TYPE pve_qemu_numa_resident_bytes gauge'
+  echo '# HELP pve_qemu_swap_bytes Guest memory the host has swapped out (qemu process VmSwap).'
+  echo '# TYPE pve_qemu_swap_bytes gauge'
+  echo '# HELP pve_qemu_locked_bytes Guest memory pinned in host RAM (qemu process VmLck — VFIO passthrough pins it all).'
+  echo '# TYPE pve_qemu_locked_bytes gauge'
+  printf '%s\n' "$guests" | while read -r vmid name status; do
+    [ -n "$vmid" ] && [ -r "/var/run/qemu-server/$vmid.pid" ] || continue
+    pid="$(cat "/var/run/qemu-server/$vmid.pid")"
+    [ -r "/proc/$pid/numa_maps" ] || continue
+    awk -v vmid="$vmid" -v name="$name" '
+      {
+        ps = 4096
+        for (i = 1; i <= NF; i++) if ($i ~ /^kernelpagesize_kB=/) { split($i, k, "="); ps = k[2] * 1024 }
+        for (i = 1; i <= NF; i++) if ($i ~ /^N[0-9]+=/) { split($i, a, "="); n[substr(a[1], 2)] += a[2] * ps }
+      }
+      END { for (x in n) printf "pve_qemu_numa_resident_bytes{vmid=\"%s\",name=\"%s\",node=\"%s\"} %.0f\n", vmid, name, x, n[x] }
+    ' "/proc/$pid/numa_maps"
+    awk -v vmid="$vmid" -v name="$name" '
+      /^VmSwap:/ { printf "pve_qemu_swap_bytes{vmid=\"%s\",name=\"%s\"} %.0f\n", vmid, name, $2 * 1024 }
+      /^VmLck:/  { printf "pve_qemu_locked_bytes{vmid=\"%s\",name=\"%s\"} %.0f\n", vmid, name, $2 * 1024 }
+    ' "/proc/$pid/status"
   done
 } > "$TMP" || exit 1
 
