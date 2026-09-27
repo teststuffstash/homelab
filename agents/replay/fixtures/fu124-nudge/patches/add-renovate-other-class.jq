@@ -1,4 +1,4 @@
-# ADR-141 scope pin (PR#2004 review): add-renovate-behind's shape on a NON-Actions branch
+# ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences) scope pin (PR#2004 review): add-renovate-behind's shape on a NON-Actions branch
 # (`renovate/boto3-1.x` — global `rebaseWhen: conflicted`, Renovate never rebases it for
 # staleness) → the nudge is this PR's currency and must fire, no commits probe needed.
 . + [

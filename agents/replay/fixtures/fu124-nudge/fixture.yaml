@@ -31,7 +31,7 @@
 #   6. One armed+BEHIND APPROVED Renovate-authored PR on a grouped Actions branch
 #      (`renovate/github-actions(-major)` — the only rules with rebaseWhen behind-base-branch,
 #      .github/renovate-global.json): commits probed (rows/<id>/gh/pr-view-150);
-#      all Renovate's → NO call, a skip line (ADR-141 — Renovate rebases its own untouched
+#      all Renovate's → NO call, a skip line (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences) — Renovate rebases its own untouched
 #      branches, and one foreign merge commit makes it stop); a worker commit present → nudged
 #   7. The same PR on any OTHER Renovate branch (`renovate/boto3-1.x`: global `conflicted`) →
 #      nudged, no probe — this nudge is that class's currency (PR#2004 review)

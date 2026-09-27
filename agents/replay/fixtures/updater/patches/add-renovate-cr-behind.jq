@@ -1,4 +1,4 @@
-# ADR-141 unstrand row: the add-cr-behind shape (armed+BEHIND, CHANGES_REQUESTED) but Renovate-
+# ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences) unstrand row: the add-cr-behind shape (armed+BEHIND, CHANGES_REQUESTED) but Renovate-
 # authored and untouched — leg 2 must leave it to Renovate's own rebase, not merge master into it.
 . + [
   { number: 151, createdAt: "2026-09-27T06:00:00Z", mergeStateStatus: "BEHIND",
