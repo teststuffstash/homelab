@@ -1,0 +1,1 @@
+printf 'REVERTED_PINS=%s\n' "$REVERTED_PINS"

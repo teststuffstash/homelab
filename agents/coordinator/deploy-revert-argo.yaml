@@ -421,8 +421,10 @@ spec:
             # They go into the revert PR body as one `reverted-pins:` line; the renovate-approve
             # reflex closes a Renovate PR that re-adds any of them (header note (b)). The close
             # cannot happen here: Renovate re-creates the PR only AFTER this revert merges.
+            # >>>REPLAY:workflow-pin-revert-reverted-pins>>>
             REVERTED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^+' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
             echo "→ reverted pins: ${REVERTED_PINS:-<none>}"
+            # <<<REPLAY:workflow-pin-revert-reverted-pins<<<
 
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — workflow '$WF' failed on $BRANCH within ${REVERT_WINDOW_MIN}m of the merge"
             BR="revert-wf-$(printf '%s' "$SHA" | cut -c1-8)"
@@ -452,6 +454,7 @@ spec:
               --title "revert: ${TITLE} (auto-rollback — workflow '${WF}' failed post-merge)" \
               --body "$BODY" \
               | grep -oE '[0-9]+$')"
+            # >>>REPLAY:workflow-pin-revert-merge-lane>>>
             # The MECHANICAL lane, same as the deploy-pin job: the platform repos require one
             # approving review and the renovate-approve reflex posts it ONLY for this label pair
             # (Bot author + automerge + dependencies). Labels BEFORE arming — the `labeled` event is
@@ -460,6 +463,7 @@ spec:
               || { echo "FATAL: could not label $SLUG#$PR — the reflex will not approve it (a human must)"; exit 1; }
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green)"
+            # <<<REPLAY:workflow-pin-revert-merge-lane<<<
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }
