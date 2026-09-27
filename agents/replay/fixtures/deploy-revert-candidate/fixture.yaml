@@ -1,0 +1,16 @@
+# deploy-revert-candidate — the same defect, same fix, in the FU-044 deploy-revert template (the
+# -iac deploy-bump rollback): `gh pr list --jq --arg cutoff …` never returned a candidate, so that
+# chain had never reverted anything either. Pinned exactly like workflow-pin-revert-candidate: the
+# CALL line with the literal cutoff, and a non-empty CAND (the block ends before the -iac path
+# check, which reads a second gh call and is outside this pin).
+name: deploy-revert-candidate
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/sleep-iac
+  - APP=sleep-tracking
+  - REVERT_WINDOW_MIN=120
+  - CUTOFF=2026-09-27T07:20:00Z
+parts:
+  - block:deploy-revert-candidate
+  - file:post.sh

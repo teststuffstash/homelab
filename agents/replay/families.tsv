@@ -45,6 +45,7 @@ coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail
 coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
 depends-on-retired-format	depends-on-retired-format
+deploy-revert-candidate	deploy-revert-candidate
 deploy-revert-token-clone/set	deploy-revert-token-clone
 deploy-revert-token-clone/unset	deploy-revert-token-clone
 dispatch-phase-scan	dispatch-phase
@@ -158,4 +159,5 @@ touches-check-predicate	touches-check-predicate
 unblocked-unlabeled-blocker-open	unblocked-unlabeled
 unblocked-unlabeled-surfaces	unblocked-unlabeled
 unit-fast-path-author	unit-fast-path-author
+workflow-pin-revert-candidate	workflow-pin-revert-candidate
 workflow-pin-revert-merge-lane	workflow-pin-revert-merge-lane
