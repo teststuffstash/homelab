@@ -6,7 +6,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | Skill | What it is |
 |---|---|
 | [design](design/SKILL.md) | Full-context mode for design questions (owning doc + link closure) |
-| [design-agents](design-agents/SKILL.md) | `/design` for the agent platform — full-corpus read |
+| [design-agents](design-agents/SKILL.md) | `/design` for the agent platform — full-corpus read; **operator-typed only** (2026-09-27), the `.claude/hooks/` gate denies self-invocation |
 | [board-sweep](board-sweep/SKILL.md) | Sweep the live board: what the loop did, and what escalated unseen |
 | [docs-cleanup](docs-cleanup/SKILL.md) | Fine-comb grooming: sync every doc with tracker truth |
 | [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (pipeline: board-sweep → this → docs-cleanup) |
