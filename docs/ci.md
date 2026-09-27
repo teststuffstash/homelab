@@ -94,8 +94,9 @@ same-sha runs serialize, different PRs still use both slots.
   snore-recorder's **arm64** image — the Talos node kernel has no `binfmt_misc`, so QEMU emulation
   fails. arm64 images build **off-cluster** via `devbox run build-image` on a binfmt-capable host.
 
-Dependency automation status lives in `docs/dependency-upgrades.md` §Ground truth (FU-125 —
-Renovate currently delivering zero PRs).
+Dependency automation status lives in `docs/dependency-upgrades.md` — §Ground truth for the
+2026-08→09 silent stretch (FU-125, resolved 2026-09-25) and §"Last proven end to end" for which
+class has merged through which lane.
 
 ## Tier B — act_runner (Forgejo-only)
 
