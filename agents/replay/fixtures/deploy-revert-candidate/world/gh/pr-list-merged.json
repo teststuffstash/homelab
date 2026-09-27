@@ -1,0 +1,5 @@
+[
+  {"number":91,"title":"revert: deploy: sleep-ingester 2026.9.27-gaaaa (auto-rollback)","headRefName":"revert-sleep-ingester-aaaaaaaa","mergedAt":"2026-09-27T09:30:00Z","mergeCommit":{"oid":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}},
+  {"number":90,"title":"deploy: sleep-ingester 2026.9.27-g0123456789ab","headRefName":"deploy/sleep-ingester","mergedAt":"2026-09-27T09:10:31Z","mergeCommit":{"oid":"0123456789abcdef0123456789abcdef01234567"}},
+  {"number":80,"title":"deploy: sleep-ingester 2026.9.20-gcafecafecafe","headRefName":"deploy/sleep-ingester","mergedAt":"2026-09-20T10:00:00Z","mergeCommit":{"oid":"cafecafecafecafecafecafecafecafecafecafe"}}
+]

@@ -234,6 +234,7 @@ is stale, so it cannot drift the way the prose register did.
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
+| `deploy-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-token-clone/set` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-token-clone/unset` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -480,6 +481,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unit-fast-path-blocked-on` | actions | - | `agents/coordinator-scan.sh` | - |
 | `updater` | table | - | `-` | MP-T02 |
+| `workflow-pin-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 <!-- replay-index:end -->
 

@@ -184,11 +184,18 @@ spec:
             # fixer-issue merge (IAC-T03) that degrades the stack was invisible to this chain.
             # revert-* branches excluded (never revert a revert — that ping-pongs).
             # Fail-closed: no candidate = report-only.
-            CUTOFF="$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+            # >>>REPLAY:deploy-revert-candidate>>>
+            # ⚠ `gh … --jq` takes ONLY the expression — it is not jq's CLI, so `--jq --arg cutoff …`
+            # is "unknown arguments" and, behind `2>/dev/null || true`, read as "no candidate" on
+            # every run (the 2026-09-27 rollback drill on agent-coordinator found it, homelab#1990;
+            # this chain had never found a candidate either). The cutoff is embedded in the
+            # expression. CUTOFF is overridable so a replay can pin the date.
+            CUTOFF="${CUTOFF:-$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)}"
             CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
               --json number,title,headRefName,mergedAt,mergeCommit \
-              --jq --arg cutoff "$CUTOFF" '[.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= $cutoff)] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
+              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\")] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
             [ -n "$CAND" ] || { echo "→ $APP degraded with NO -iac merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+            # <<<REPLAY:deploy-revert-candidate<<<
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
             SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"
@@ -371,15 +378,23 @@ spec:
             # The revert candidate: newest merge within the window whose files touch .github/workflows/.
             # revert-* branches excluded (never revert a revert — that ping-pongs).
             # Fail-closed: no candidate = report-only.
-            CUTOFF="$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+            # >>>REPLAY:workflow-pin-revert-candidate>>>
+            # ⚠ `gh … --jq` takes ONLY the expression (not jq's CLI): `--jq --arg cutoff …` was
+            # "unknown arguments" and, behind `2>/dev/null || true`, read as "no candidate" on every
+            # run — the 2026-09-27 drill (agent-coordinator#20, homelab#1990) fired the whole chain
+            # and the workflow exited 0 here, report-only. The cutoff is embedded; CUTOFF is
+            # overridable so a replay can pin the date. Same fix in deploy-revert above.
+            CUTOFF="${CUTOFF:-$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)}"
             CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
               --json number,title,headRefName,mergedAt,mergeCommit,files \
-              --jq --arg cutoff "$CUTOFF" '[.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= $cutoff) | select(.files[]?.path | startswith(".github/workflows/"))] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
+              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(.files[]?.path | startswith(\".github/workflows/\"))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
             [ -n "$CAND" ] || { echo "→ $SLUG: NO workflow-touching merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
 
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
             SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"
+            echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE)"
+            # <<<REPLAY:workflow-pin-revert-candidate<<<
 
             # Ledger check (now that we have the SHA).
             KEY="wf-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"

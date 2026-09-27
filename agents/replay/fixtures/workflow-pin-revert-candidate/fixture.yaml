@@ -1,0 +1,17 @@
+# workflow-pin-revert-candidate — the revert candidate read of the FU-1990 chain (homelab S9 #1990).
+# The 2026-09-27 drill (agent-coordinator#20) fired every link — alert, Alertmanager, EventSource,
+# Sensor, Workflow — and the workflow exited 0 report-only: `gh pr list --jq --arg cutoff …` is
+# "unknown arguments" (gh's --jq takes only the expression), swallowed by `2>/dev/null || true`
+# into "no candidate". The contract pinned here: ONE `gh pr list` call whose --jq carries the
+# cutoff LITERALLY (the CALL line is the pin — the --arg form is a different call and reds),
+# and the candidate's number / merge SHA / title extracted from what gh printed.
+name: workflow-pin-revert-candidate
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/agent-coordinator
+  - REVERT_WINDOW_MIN=120
+  - CUTOFF=2026-09-27T07:20:00Z
+parts:
+  - block:workflow-pin-revert-candidate
+  - file:post.sh
