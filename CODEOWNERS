@@ -19,6 +19,11 @@
 # governing all of it. An agent able to edit these is not gated at all, whatever the ruleset says.
 /agents/            @RasmusSoot
 /scripts/           @RasmusSoot
+# mermaid-lint's npm manifest + lockfile: Renovate's npm lane (renovate-global.json) — required `ci`
+# runs `npm ci` + the parser on every PR, so the bump IS exercised; owned /scripts/ parked #1977/#2012
+# with nothing a human could add (S9 #1988 (c), 2026-09-27). The script itself stays owned above.
+/scripts/mermaid-lint/package.json
+/scripts/mermaid-lint/package-lock.json
 /policy/            @RasmusSoot
 # The recovery root's own config (ADR-129). Without this row a bot-approved PR could rewrite the
 # management box's kernel, bootloader or sshd and the box would apply it on its next pull — and
