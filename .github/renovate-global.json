@@ -65,6 +65,11 @@
       "automerge": true
     },
     {
+      "description": "Docker datasource: the 7-day cooldown is TIMESTAMP-OPTIONAL. Docker tags carry no release timestamp, and under the default timestamp-required behaviour every base-image release is marked pending FOREVER (agent-coordinator debug dry-run 2026-09-27: 'Marking 29 release(s) as pending, as they do not have a releaseTimestamp' — node 22→24 could never be proposed), which also force-enables the Dependency Dashboard Renovate keeps reopening on that repo (a pending internalChecksFilter branch makes Renovate ensure the dashboard regardless of dependencyDashboard: false). Trade-off accepted: no cooldown on base images — CI (the image build) and the deploy-pin revert are the gate.",
+      "matchDatasources": ["docker"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
       "description": "Dockerfile base-image VERSION minor (e.g. python 3.11→3.12) — behavior change → `deps-review`.",
       "matchManagers": ["dockerfile"],
       "matchUpdateTypes": ["minor"],

@@ -72,13 +72,21 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # That file is the ONE HOME of the group names — a groupName change there changes this regex.
 # `author` and `headRefName` are scalar list fields (no node cost); commit authorship comes from
 # the per-candidate `gh pr view --json commits` probe leg 1 already pays for bot-approved candidates.
+# ⚠ LOGIN SHAPE (homelab#2007, 2026-09-27): `gh pr list --json author` reports an App as
+# `app/homelab-renovate-1234` (the `app/` prefix), `pr view --json commits … authors[].login` as
+# the same or `homelab-renovate-1234[bot]`, and GraphQL `reviews[].author.login` without either.
+# A raw `startswith` on the list shape matched nothing, so the updater merged master into
+# homelab#2007 (branch renovate/github-actions, one Renovate commit) and Renovate dropped the
+# branch as edited — the exact defect this skip exists to prevent. Normalize BOTH affixes before
+# the prefix test, the same `sub("\\[bot\\]$"; "")` idiom the reviewer-identity reads below use.
+RENOVATE_LOGIN_JQ='def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate");'
 renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate AND the branch is a grouped Actions one
-  jq -e '((.author.login // "") | startswith("homelab-renovate"))
+  jq -e "$RENOVATE_LOGIN_JQ"' (.author.login | renovate_login)
          and ((.headRefName // "") | test("^renovate/github-actions(-major)?$"))' <<<"$1" >/dev/null 2>&1
 }
 renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 when no foreign non-merge commit
-  jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
-           | .authors[]? | (.login // "") ] | all(startswith("homelab-renovate"))' <<<"$1" >/dev/null 2>&1
+  jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
+           | .authors[]? | .login ] | all(renovate_login)' <<<"$1" >/dev/null 2>&1
 }
 
 # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
