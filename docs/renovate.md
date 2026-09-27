@@ -73,15 +73,15 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
   `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
   2026-09-27). Majors → the catch-all.
-- **Terraform providers: the [management box](management-box.md) is the gate; the mechanical `automerge` lane is the TARGET, wired by a separate operator-direct edit of `renovate-global.json` (the terraform rule still labels `major/awaiting-human`, un-armed, until that lands).** Stage 1
+- **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
   (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
   `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
   `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
   ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
-  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are to be excluded from the manager
-  (`matchFileNames`, the same `.github` edit) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
+  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
+  (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
