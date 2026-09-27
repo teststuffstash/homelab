@@ -105,7 +105,12 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    git -C "$R" fetch -q origin; git -C "$R" reset -q --hard "$REF"
    cd "$R"
    mkdir -p "$P"; chmod 700 "$P"
-   [ -d tofu/.terraform ] || devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >&2
+   # init EVERY run, lockfile read-only: a no-op while the cached providers match the lock, and the
+   # only thing that heals them when a provider bump lands on master (Renovate moved bpg/proxmox to
+   # 0.113.1 and the next human plan died with "Required plugins are not installed", 2026-09-27 —
+   # the old `[ -d .terraform ] ||` guard skipped init forever after the first clone).
+   devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 \
+     || devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >&2
    SHA=$(git rev-parse --short HEAD)
    # A plan id is unique per (when, ref-sha) and names its own artifacts. Nothing but this script
    # writes into $P, and a saved plan holds state values — root-only, 600.
