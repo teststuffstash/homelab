@@ -11423,6 +11423,10 @@ register; the structural fix is UEFI boot mode (no INT13 cap), parked for an att
 **Step 3:** `ci_runner_02_running` → true (#2048, merged 21:13Z, `mgmt-tf` plan = the one VM update,
 applied 21:16Z with MGMT_YES=1); nx-02 nodes 11.1/11.1 GiB free, swap 0 B. Three oracle-fleet CI runs
 dispatched 21:20Z for the "Preparing nodes" comparison (runner-01 baseline 2.5 s; the event was 397/67 s).
+**Result:** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (the event: 397 s and
+67 s; runner-01 baseline 2.5 s), e2e green in 7m11s, host swap 0 B, node free 9.1/6.3 GiB with all three
+guests up (runner-02 faulting in 3.0/5.4 GiB), no `PveHostSwap*`/`PveNuma*` fire; …24933 cancelled by the
+workflow's concurrency group, …30352 on ci-runner-01-2. One sample; the belts judge the week.
 Window closed `--force`: off-baseline = `PodSigkilled` (own shutdown) + `LonghornNodeOverProvisioned`
 wk-metal-01 (pending since 19:01Z, unrelated — mx500 463 G max / 580 G scheduled). GAPS G5 re-sighted
 (+ `NodeRebooted` on the HYPERVISOR's exporter, + the down node's nodeName-pinned `fstrim-guard`

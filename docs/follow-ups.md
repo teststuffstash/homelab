@@ -1247,13 +1247,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
       [diagnosis, counters, placement, detectors, the boot-disk move](spikes/nx-02-numa-placement.md).
       DONE 2026-09-27: detectors live (#2040/#2042); wk-04 `numa_pin` 16.0/16.0 GiB on both restarts;
-      nx-02 root+swap on the SA400, host booted from it 20:58Z (the LSI HBA's legacy `Maximum INT 13
-      Devices` 1 → 2 was the missing piece — recipe in the private register `hardware/docs/nx-6035-g5.md`);
-      ci-runner-02 UNPARKED (#2048, applied 21:16Z), nodes 11.1/11.1 GiB free, swap 0 B. **Next:** (1) read
-      the three oracle CI runs dispatched 21:20Z — `kind e2e` "Preparing nodes" on runner-02 vs runner-01's
-      2.5 s, under `PveHostSwapUsed`/`PveNumaNodeMemoryLow`; (2) at the next attended BIOS visit confirm
-      `ID01` = the Kingston (or pull the WD, now a spare); UEFI boot mode is the structural fix.
-      Relates FU-266, FU-280.
+      nx-02 root+swap on the SA400 and booted from it 20:58Z (the LSI HBA's legacy `Maximum INT 13 Devices`
+      1 → 2 was the missing piece — recipe in the private register `hardware/docs/nx-6035-g5.md`);
+      ci-runner-02 UNPARKED (#2048); its first oracle `kind e2e` (run 36351320341) prepared nodes in **3.9 s**
+      (was 397/67 s; runner-01 2.5 s), green, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire — ONE sample.
+      **Next:** (1) the belts judge a week of real PR load (a second slow sample reopens placement, not the
+      disk); (2) next attended BIOS visit: confirm `ID01` = the Kingston (or pull the WD, now a spare); UEFI
+      boot mode is the structural fix. Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`

@@ -13,10 +13,10 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
   from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
   LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.
-  **Next:** (1) the three oracle CI runs dispatched 21:20Z (36351320341/…24933/…30352) — read each e2e
-  job's `Runner name` + "Preparing nodes" time; runner-01's baseline is 2.5 s, the failure was 397/67 s
-  (a runner-02 sample ≥ 10 s = FU-289 is NOT closed by the disk move); also `PveHostSwapUsed` should stay
-  silent. (2) BIOS residual: `Hard Disk Drive BBS Priorities` #1 = `ID01`, assumed the Kingston — confirm
+  **Read (1):** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (failure 397/67 s,
+  runner-01 2.5 s), e2e green 7m11s, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire; …24933 was cancelled by
+  the concurrency group, …30352 ran on ci-runner-01-2 (~0 s, image cached). One sample — the belts judge the
+  week. (2) BIOS residual: `Hard Disk Drive BBS Priorities` #1 = `ID01`, assumed the Kingston — confirm
   at the next attended BIOS visit, or pull the WD (both GRUBs are installed). (3) Board reads, nothing
   done: `LonghornNodeOverProvisioned` on wk-metal-01 since 19:01Z (mx500 463 G max / 580 G scheduled — the
   FU-285 rebuild's residue, check its ratio before acting); homelab#2037 wears `agent/error` (Renovate
