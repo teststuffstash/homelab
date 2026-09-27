@@ -64,6 +64,15 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
   adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
   other major stays un-armed on the human lane until its class row is complete (#1988).
+- **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
+  `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
+  2026-09-27). Majors → the catch-all.
+- **Terraform providers are the HUMAN-PLAN lane, never the reflex's.** The management sentinel refuses
+  lockfile / `required_providers` heads by design (ADR-131), so the required `management-sentinel`
+  context is red on every provider PR and the reflex never dispatches. Renovate labels them
+  `major/awaiting-human` on any update type (un-armed); the seat runs `devbox run mgmt-human-plan --
+  <pr>` (docs/management-box.md §MB3), reads the plan, merges the clean ones (#1997: `cloudflare: +0
+  ~0 -0`, 2026-09-27).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
