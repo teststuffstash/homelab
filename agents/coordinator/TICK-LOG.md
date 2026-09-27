@@ -11327,3 +11327,39 @@ loop FU-046, a base-image major merging without a human); FU-125 archived; FU-04
 ROADMAP G-D re-pointed to #1988/#1992/#2014. Operator-owed, untouched: the FU-097 intent-review
 paragraph in `.agents/review.md`. **#1992** (coverage table + gauges): subagent PR in flight at this
 write. **Node 24 acceptance:** first coordinator run on `2026.9.27-gca94f4a2dd99` Succeeded (13:01Z).
+
+## 2026-09-27 (evening) — S9 coordinated by subagents: #1992 landed, the reviewer reads CODEOWNERS, the guard covers python pins, the dashboards' real cause
+
+**#1992 DONE (PR#2028, two review rounds, subagent):** `scripts/dependency-coverage.py` + `docs/dependency-classes.yaml`
+→ the generated register in dependency-upgrades.md (99 rows / 12 classes, 88 ⚠), gauges
+`github_dependency_coverage_*` + `github_renovate_last_pr_timestamp`, alerts `RenovateSilent` (14 d) +
+`DependencyClassProofStale` (90 d). Operator-owed: a `dependency-coverage -- --check` ci step (`.github`).
+Register finding: agent-coordinator refs outside the kustomize pin — 5× `2026.8.7` in
+`argocd/resources/agentstack/composition.yaml`, 1× `2026.7.25` in `registry-cache/gc-mirrors.yaml` (the 18
+bare `image:` refs under agents/coordinator are kustomize-supplied by design, FU-152); the stale two are
+real (the 14 × `2026.8.7` templates seen live at 12:58Z) — extend FU-152 or the sweep.
+**openrouter-operator#82 MERGED (operator)** — python set complete on that repo. Operator read: "how much of
+this is automated for 3.15?" → answered on the board: Renovate PR + lens review + deploy/revert are machine;
+the set move needs FU-046's unproven worker round, `devbox.json` was hard-coded operator-only in the
+reviewer rule, the set has no single source (#2014), adoptables have no harvest, the merge is the `*` gate.
+**Operator directions, landed:** (1) PR#2031 — the reviewer's no-container rule READS the repo's CODEOWNERS
+for operator-only paths (the hard-coded list was wrong for every repo but one); adoptables are ORDINARY
+`Follow-ups:` bullets, no term ("does it deserve its own term" — no); **FU-292** = a dependency PR has no
+container so nothing harvests them (three review rounds: my FU id skipped the counter, then the counter
+note landed mid-sentence — the reviewer caught both). (2) openrouter-operator#83 (subagent, operator
+merged): `deps-pin-guard` admits pin-only `pyproject.toml`/`uv.lock` diffs (strict: a new `[[package]]`
+parks), both un-owned; a guarded file + an owned path now passes to the code owner instead of red (#82 was
+the live case). Survey: no other repo needs it — openrouter-operator was the only `*`-owned repo with
+python dep files; stack repos gate governance paths only. (3) **Dependency Dashboards** (agent-coordinator
+#24 reopened 4 h after #1 was deleted; 10 open org-wide): cause 1 = the `Cannot access vulnerability alerts`
+WARN is a Repository Problem → PR#2034 declares `vulnerability_alerts: read` on homelab-renovate (FU-098
+flow; the 'DECIDED absent' reading was wrong about the cost), operator clicked, WARN gone — and #24
+REOPENED anyway on the next run. Cause 2 (debug dry-run, renovate 44.115.12): `config:recommended` →
+`:dependencyDashboard` is resolved at REPO level and merged on top of the global keys, so the global
+`false` lost on every repo (dependency-dashboard.js:205 gates on that value alone). Fix e67b00fe:
+`force.dependencyDashboard=false`; next run closed all 10 dashboards itself. Orphan branch
+`renovate/actions-checkout-7.x` deleted (the #2018 class). Hygiene left: `:dependencyDashboard` lines in
+sleep-tracking / sleep-iac / oracle-iac renovate.json (now inert).
+**Mechanics learned:** a jail-authored PR labelled `automerge` gets NO reviewer (exporter skips the label,
+renovate-approve wants a Bot author) — Renovate-only label; `git pull --rebase origin master` on a PR
+branch the updater has merged into diverges from its remote tip — rebase onto `origin/<branch>` instead.
