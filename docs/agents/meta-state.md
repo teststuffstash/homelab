@@ -38,7 +38,18 @@ never the session's arc — that is TICK-LOG's.)
   rebuilds with build-date tags live on agent-coordinator (3b05a11) + agent-runtime (aa4182b) — the first
   Monday run (2026-09-28 06:00Z) is an unobserved first: expect a deploy-pin PR per image. agent-coordinator#1
   (the Dependency Dashboard) was closed again 10:16Z — a reopen by Renovate = a config-resolution defect
-  (debug dry-run on that repo).
+  (debug dry-run on that repo) — DONE, see below.
+  **Latest (2026-09-27 ~10:50Z):** agent-coordinator#1 root-caused (docker tags have no releaseTimestamp → every
+  base-image bump pending forever under the 7-day cooldown → the pending branch force-enables the dashboard);
+  fixed by the docker-datasource `minimumReleaseAgeBehaviour: timestamp-optional` rule — EXPECT on the next
+  Renovate runs: a node 22→24 `major` PR on agent-coordinator (human lane, lens) and base-image bumps across the
+  repos that never appeared before (python, docker:dind, …) — read them as a WAVE, not incidents. The updater's
+  Renovate-author predicate missed the `app/` login shape (#2007 got a merge commit → edited → DIRTY); PR#2017
+  fixes it with both spellings pinned. Closing a Renovate PR does NOT delete its branch — delete the branch too
+  or Renovate re-attaches to the edited history (#2018). Weekly image rebuilds proved on both repos (deploy PRs
+  #2013 agent-base, #2016 agent-coordinator carry build-date tags). Dry-run recipe (jail): `nix shell
+  nixpkgs#nodejs_24 -c npx --yes renovate@<ver> --autodiscover=false <owner/repo>` with RENOVATE_CONFIG_FILE,
+  RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
   `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup). ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
