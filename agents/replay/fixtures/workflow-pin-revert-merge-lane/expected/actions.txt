@@ -1,0 +1,6 @@
+CALL gh pr edit 20 --repo teststuffstash/agent-coordinator --add-label automerge --add-label dependencies
+CALL gh pr merge --auto --squash 20 --repo teststuffstash/agent-coordinator
+OUT → reverted pins: actions/create-github-app-token@f45685208fd9b88321d74015b5996fc8c3e43d18
+OUT → revert PR teststuffstash/agent-coordinator#20 labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green)
+OUT REVERTED_PINS=actions/create-github-app-token@f45685208fd9b88321d74015b5996fc8c3e43d18
+RC 0

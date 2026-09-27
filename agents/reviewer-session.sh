@@ -532,6 +532,13 @@ fi
 PREP=$(cat <<PREP
 set -e
 ${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
+# The platform facts the migration lens needs live in homelab, not the project repo (S9
+# homelab#1989: the ARC runner image + Actions Runner version, the fleet versions, the org
+# Renovate policy). A shallow master clone beside the project — the coordinator's shape
+# (coordinator-session.sh PREP), authenticated so the cluster NAT never clones anonymously
+# (homelab#1136). Best-effort: a missing clone is a TOOL_GAP the review names, not a red pod.
+_ah="http.extraHeader="; [ -n "\${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic \$(printf 'x-access-token:%s' "\$GH_TOKEN" | base64 | tr -d '\n')"
+timeout 120 git clone -q -c "\$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || echo "→ WARN: homelab clone failed — platform facts unavailable to the lens (TOOL_GAP)"
 cd /work/repo
 gh pr checkout ${PR}
 # MCP config (#1041): injected from the launcher-side MCP_PREP (built above the replay region).
@@ -613,7 +620,12 @@ echo "→ epic container: \$EPIC_CONTAINER (none = the Follow-ups: channel is cl
 LENS_BASE="\${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 CHANGED="\$(gh pr view ${PR} --json files -q '.files[].path' 2>/dev/null || true)"
 LENSES=""
-printf '%s\n' "\$CHANGED" | grep -qE '^charts?/' && LENSES="helm"
+# The MIGRATION lens (S9 homelab#1989, ADR-141): a dependency major — label major / deps-review —
+# gets the three-half procedure (upstream, known issues, platform compatibility) with the four
+# headings agents/major-handoff.sh matches. BLOCKING by construction (the migration judgment IS
+# the verdict), so its posture is pinned below, not read from the claim map.
+gh pr view ${PR} --json labels -q '.labels[].name' 2>/dev/null | grep -qxE 'major|deps-review' && LENSES="migration"
+printf '%s\n' "\$CHANGED" | grep -qE '^charts?/' && LENSES="\$LENSES helm"
 if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manifests|deploy)/.*\.ya?ml\$' \
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
   LENSES="\$LENSES k8s-prod"
@@ -640,6 +652,9 @@ SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
 # Lens posture map from the single claim read (FU-101): absent lenses → advisory
 LENS_MAP='$LENS_MAP'
+# migration is blocking by construction (agents/lenses/migration.md) — pinned here, outside the
+# claim map, so no stack can downgrade it to advisory.
+LENS_MAP=\$(printf '%s' "\$LENS_MAP" | jq -c '. + {migration: "blocking"}' 2>/dev/null || printf '{"migration":"blocking"}')
 # >>>REPLAY:lens-posture-handling>>>
 for l in \$LENSES; do
   _posture=\$(printf '%s' "\$LENS_MAP" | jq -r --arg l "\$l" '.[\$l] // "advisory"' 2>/dev/null || echo "advisory")
@@ -682,12 +697,7 @@ STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops
 
 STEP 1 — classify the PR: run  gh pr view ${PR} --json labels,title,files  and decide which kind it is.
 
-If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-review, or it changes only devbox.lock / devbox.json / a lockfile AND crosses a MAJOR version — then a diff skim is NOT enough. Do a MIGRATION INVESTIGATION:
-  1. List each tool whose MAJOR version changed, old -> new (read it from the lockfile diff).
-  2. Fetch that tool major-version upstream release / migration notes with WebFetch and read the breaking-changes section. If egress blocks the fetch, reason from your own knowledge of that major and say so explicitly.
-  3. Map every breaking change onto THIS repo actual usage: grep how the tool is invoked under scripts/, .github/, chart/, Makefile, and the devbox scripts in devbox.json. For each spot that must change, post an INLINE PR comment naming the exact change and citing the migration note.
-  4. Note genuinely useful NEW capabilities of the major as ONE short, non-blocking follow-up comment.
-  Verdict: --request-changes if ANY adaptation is required (a worker will fix it on this branch and you re-review); --approve only once every breaking change is either N/A or already handled in the diff. A major bump is HUMAN-GATED (not auto-merged): your review DOCUMENTS the migration so a human can merge with confidence — do not expect auto-merge.
+If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-review, or it changes only devbox.lock / devbox.json / a lockfile AND crosses a MAJOR version — a diff skim is NOT enough: the MIGRATION lens attached to your system prompt (agents/lenses/migration.md, BLOCKING by construction) is the procedure — upstream notes for every major crossed, the upstream issue tracker read for the target version, platform compatibility against what the fleet runs in /work/homelab — and its four headings (Upstream, Known issues, Platform compatibility, Evidence) are the shape of your review body. The LANE depends on whether the PR is ARMED: an ARMED major (the CI-exercised blast class, S9 homelab#1985) merges on your --approve, so approve only what the evidence supports; an UN-ARMED major is human-gated — your review documents the migration for the handoff gate. Renovate is not a fixer: --request-changes only for an adaptation THIS repo needs (the coordinator then dispatches a worker), never for a call site Renovate bumps on its next rebase, and read the PR as a member of its Renovate batch (the lens says how).
 
 THE REQUIRED CHECKS ARE ALREADY GREEN — NEVER ASK A HUMAN TO RE-RUN THE GATE. You were dispatched by review-reflex.sh, whose pick predicate includes  select(green)  — every check on this head reported SUCCESS/NEUTRAL/SKIPPED and at least one check existed. A red PR CANNOT reach you (the coordinator routes those to the worker via its ci-red clause) — that held when you were DISPATCHED, and STEP 0 is where you re-check it at EXECUTION time: a head that is red or still running when YOU look is a STEP 0 precondition (stand aside, no label), never a finding and never a reason to ask for a re-run. Your sandbox deliberately has no devbox and no network — you READ the diff, you never execute project code (CI does). That is the design, not a limitation of your run, so do not report it as one, and never close a review with "someone with a working devbox should confirm the tests pass": that is the gate re-litigating itself through you.
   ⚠ PRECISION: what is guaranteed is that the checks PASSED — NOT what they COVER. Most stacks make CI run  devbox run ci  (the same gate you would run locally), but a repo whose .github/workflows/ defines CI as something narrower makes "green" a weaker statement. You have the repo CHECKED OUT: if a finding of yours turns on whether CI actually exercises something, READ  .github/workflows/  and say what you found — no API call, no permission needed. For check-level detail your token also carries checks/statuses/actions:read (operator grant 2026-07-10):  gh pr checks ${PR} . The project rubric (.agents/review*.md) is what says how much the local gate is worth in THIS repo; it wins over this paragraph.
