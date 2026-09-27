@@ -1245,17 +1245,14 @@ the block needs pruning, not more headings.
 ## Hardware & nodes
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
-      [diagnosis, counters, placement and the detectors](spikes/nx-02-numa-placement.md).
-      DONE 2026-09-27: detectors live on both hypervisors (#2040/#2042: `meminfo_numa` + reclaim
-      vmstat, per-guest placement/swap/pin series, `PveHostSwapUsed`/`PveHostSwapThrash`/
-      `PveNumaNodeMemoryLow`/`PveGuestSwapped`, replayed against the event); wk-04 restarted with
-      `numa_pin` (#2041 + `04b08852`: `numa0/1` hostnodes `preferred` — `hugepages` is root@pam-only)
-      and sits **16.0/16.0 GiB** (was 6.3/25.7). **Next:** (1) nx-02 boot disk → the SA400 (online
-      `pvmove`, swap leaves the spinner; host window for the reboot; pick the SSD in `Hard Disk Drive BBS
-      Priorities` over SOL — nx-02's COM2/SOL redirection is on, recipe + `bios2.py` in the private
-      hardware register `docs/nx-6035-g5.md`; pulling the HDD is the last resort; GRUB + kernel are on SOL
-      since 2026-09-27, `ansible/pve-serial-console.yml`, #2044), (2) THEN unpark ci-runner-02
-      (`var.ci_runner_02_running`, PR#1978) and rerun the oracle e2e comparison under the belts.
+      [diagnosis, counters, placement, detectors, the boot-disk move](spikes/nx-02-numa-placement.md).
+      DONE 2026-09-27: detectors live (#2040/#2042); wk-04 `numa_pin` 16.0/16.0 GiB on both restarts;
+      nx-02 root+swap on the SA400, host booted from it 20:58Z (the LSI HBA's legacy `Maximum INT 13
+      Devices` 1 → 2 was the missing piece — recipe in the private register `hardware/docs/nx-6035-g5.md`);
+      ci-runner-02 UNPARKED (#2048, applied 21:16Z), nodes 11.1/11.1 GiB free, swap 0 B. **Next:** (1) read
+      the three oracle CI runs dispatched 21:20Z — `kind e2e` "Preparing nodes" on runner-02 vs runner-01's
+      2.5 s, under `PveHostSwapUsed`/`PveNumaNodeMemoryLow`; (2) at the next attended BIOS visit confirm
+      `ID01` = the Kingston (or pull the WD, now a spare); UEFI boot mode is the structural fix.
       Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:

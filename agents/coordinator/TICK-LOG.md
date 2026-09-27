@@ -11395,3 +11395,43 @@ VGA, host_vars-gated (pve no-op), applied and verified in grub.cfg; lands at the
 also reports both NX CMOS batteries replaced and nx-01's console redirection enabled (private
 register amended, dated, unverified until a watched boot).
 
+
+## 2026-09-27 (night, unattended) — FU-289 hardware half: nx-02 boots from the SA400, the LSI HBA's one-disk INT13 cap, ci-runner-02 unparked
+
+**Condition:** operator at bedtime: "pick up from meta state, FU-289 hardware half and the rest."
+Window seat-1790538379-8332 (19:46–21:19Z), alert watch armed. Step 1 online: the SA400 wiped and
+partitioned like the WD (BIOS-boot / 1 G ESP / LVM), `vgextend pve`, the 0 %-used `local-lvm` pool
+dropped, `pvmove` of root+swap (104 G, 19 min at ~95 MB/s off the spinner), `vgreduce`, GRUB on BOTH
+disks, `local-lvm` recreated as a 700 G thin pool on the SSD (metadata grown to 1 G — lvcreate's 88 M
+auto-size was tight). Step 2: `down wk-04` (FORCE=1), `qm shutdown` cp-02 (etcd 3/3 healthy before,
+API on the VIP throughout), `chassis bootdev bios`, reboot.
+
+**The reboot did not come back.** `Hard Disk Drive BBS Priorities` listed ONE disk; booting it put the
+WD's GRUB in `grub rescue>` — `ls` saw `(hd0)` only. Cause: the SAS3008's legacy option ROM registers
+INT13 drives up to `Maximum INT 13 Devices for this Adapter`, shipped as **1** in this Nutanix IT
+NVDATA — so a legacy bootloader on a bay disk can never read a second bay disk, however BIOS ranks
+them. Reached the LSI utility over SOL by blind Ctrl-C through POST (its banner does not render on
+SOL; the keystroke is honoured), found both drives in SAS Topology (Kingston slot 0, WD slot 2), set
+the cap to 2 via the Enter-opened numeric dialog (Alt+keys and `+`/`-` do not cross SOL), saved, rebooted
+into setup, ranked `ID01` first in the BBS submenu (both disks now listed), F4 — host up from the SSD
+37 s later (20:58Z), `swap` on `sdb3`, VMs auto-started, wk-04 16.02/16.02 GiB again, `up wk-04` +
+uncordon cp-02, cilium 13/13, targets 186/186. Rollback plan if the utility had not rendered: BMC
+NFS virtual media with a serial-console rescue ISO (nix-built), pvmove back — not needed. Recipe and
+drivers (`lsi_catch2.py`, `lsi_keys.py`, `bbs.py`, `grub_probe.py` on `pve:/root`) are in the private
+register; the structural fix is UEFI boot mode (no INT13 cap), parked for an attended window.
+
+**Step 3:** `ci_runner_02_running` → true (#2048, merged 21:13Z, `mgmt-tf` plan = the one VM update,
+applied 21:16Z with MGMT_YES=1); nx-02 nodes 11.1/11.1 GiB free, swap 0 B. Three oracle-fleet CI runs
+dispatched 21:20Z for the "Preparing nodes" comparison (runner-01 baseline 2.5 s; the event was 397/67 s).
+Window closed `--force`: off-baseline = `PodSigkilled` (own shutdown) + `LonghornNodeOverProvisioned`
+wk-metal-01 (pending since 19:01Z, unrelated — mx500 463 G max / 580 G scheduled). GAPS G5 re-sighted
+(+ `NodeRebooted` on the HYPERVISOR's exporter, + the down node's nodeName-pinned `fstrim-guard`
+CronJob → `CronJobNotSucceeding` — expected-class members).
+
+**Side find while the pvmove ran:** `MgmtBeltCheckFailing{tofu:github,tofu:provisioning,nodes}` +
+`MgmtReconcileLoopStale` firing since 13:17Z — the box's checkout had "Required plugins are not
+installed" after Renovate's integrations/github 6.13.0 bump; the probe + reconciler still guarded init
+with `[ ! -d .terraform ]` (#2043 fixed only mgmt-tf.sh). Un-wedged by hand (three inits), belt 7/7 pass,
+reconciler "nothing to sync"; PR#2045 (init every run, `mgmt-reconcile-test` 154 pass) merged. S9 read:
+agent-coordinator's grouped github-actions PR #22 and the node 24 major #23 merged on their own; homelab
+#2008 merged, #2007 closed (superseded); master CI green.

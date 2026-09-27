@@ -10,19 +10,20 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-09-27 evening — FU-289 hardware half, planned as an UNATTENDED overnight session).**
-  Done today: placement belts live (#2040/#2042), wk-04 at 16/16 GiB (#2041 + 04b08852), nx-02's GRUB +
-  kernel on SOL ttyS1 (#2044, lands at next boot); SA400 is in nx-02 as `/dev/sdb` (Windows partitions,
-  wipe it). **Next, in order** (all in FU-289 + `docs/spikes/nx-02-numa-placement.md`): (1) online boot-disk
-  move — wipe/partition sdb like sda (BIOS-boot, 1G EFI, LVM), `lvremove pve/data` (0 % used, drop the
-  storage.cfg `local-lvm` entry or recreate it bigger on the SSD after), `vgextend pve` + `pvmove
-  /dev/sda3 /dev/sdb3`, `vgreduce`, `grub-install /dev/sdb` + `update-grub`; (2) host window per runbook
-  §Proxmox host maintenance window: cp-02 + wk-04 down via node-maintenance (FORCE=1 for wk-04's WARNs),
-  `chassis bootdev bios`, reboot, `sol activate` → `Hard Disk Drive BBS Priorities` → SA400 first
-  (`bios2.py` on pve, private register `hardware/docs/nx-6035-g5.md`; HDD pull = last resort), boot,
-  verify swap on the SSD, `up` both; (3) THEN flip `var.ci_runner_02_running` (PR#1978) and rerun the
-  oracle e2e comparison under `PveHostSwapUsed`/`PveNumaNodeMemoryLow`. Window-close gotcha: GAPS
-  maintenance-window-G5 — `close --force` when the only new alerts are the node's own NodeRebooted/PodSigkilled.
+- **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
+  from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
+  LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.
+  **Next:** (1) the three oracle CI runs dispatched 21:20Z (36351320341/…24933/…30352) — read each e2e
+  job's `Runner name` + "Preparing nodes" time; runner-01's baseline is 2.5 s, the failure was 397/67 s
+  (a runner-02 sample ≥ 10 s = FU-289 is NOT closed by the disk move); also `PveHostSwapUsed` should stay
+  silent. (2) BIOS residual: `Hard Disk Drive BBS Priorities` #1 = `ID01`, assumed the Kingston — confirm
+  at the next attended BIOS visit, or pull the WD (both GRUBs are installed). (3) Board reads, nothing
+  done: `LonghornNodeOverProvisioned` on wk-metal-01 since 19:01Z (mx500 463 G max / 580 G scheduled — the
+  FU-285 rebuild's residue, check its ratio before acting); homelab#2037 wears `agent/error` (Renovate
+  docker v29 `major`, the unarmed-major dispatch predates the anomaly latch — class question for a corpus
+  session, not per-PR); `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z on the
+  #2043 class (provider bump → "Required plugins are not installed") — un-wedged by hand, fixed by PR#2045
+  (init every run in probe + reconciler).
 - **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
   Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
   bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
@@ -141,10 +142,12 @@ never the session's arc — that is TICK-LOG's.)
   owed by oracle: a null `origin` column means the header does not survive the tunnel hop. Also check
   whether our platform-stack deny on `deepseek/deepseek-v4-flash-0731` was meant to cover the
   permaslug-spelled cell, against which it is INERT.
-- **⚑ UNBUILT, NO HOME YET (single sightings — detector-first on a second):** `fstrim-guard-*` should
-  skip a cordoned node. `KubeJobFailed` fired 45 series during the 09-16 window, and adding it to
-  `DECLARED_ALERTS` was rejected as too broad. Separately, the registry exposes no scraped metric, so
-  push throughput has no belt.
+- **⚑ UNBUILT, NO HOME YET (single sightings — detector-first on a second):** `fstrim-guard-<node>`
+  is nodeName-pinned ON PURPOSE (the manifest: "must still run when cordoned") — so while a node is
+  OFF in a window its guard sits Pending and `CronJobNotSucceeding` fires (2026-09-27, wk-04): a window
+  consequence for GAPS maintenance-window-G5's EXPECTED class, not a skip-on-cordon change. `KubeJobFailed`
+  fired 45 series during the 09-16 window, and adding it to `DECLARED_ALERTS` was rejected as too broad.
+  Separately, the registry exposes no scraped metric, so push throughput has no belt.
 - **⚑ HYGIENE:** stale agent branches (homelab 11 as of 09-05, plus agent-runtime 1, oracle-fleet 4,
   circles 4, sleep 1): delete or resume. The ZOMBIE hosted runs 32217689970 and 34748702282 cannot be
   cancelled by API: operator UI, or ignore. Phantom `agent/done` closes: confirm or relabel

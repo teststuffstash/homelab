@@ -311,6 +311,10 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       time. Is the alert the problem or the silence or the waiting?" The silence is irrelevant
       (`check` reads Prometheus firing state, not Alertmanager's muting); the alert is right
       elsewhere; the WAIT was the defect. Closed with `--force`, stated. Sighted 2026-09-27 (seat).
+      Re-sighted 2026-09-27 evening (seat, the unattended nx-02 hypervisor reboot): the same two
+      alerts plus `NodeRebooted` for the HYPERVISOR's node_exporter and `CronJobNotSucceeding` for
+      the down node's own `fstrim-guard-<node>` (nodeName-pinned, so it sits Pending while the
+      node is off) — a per-node CronJob is a fourth member of the "known consequence" class.
       Next: `check` should classify an alert whose labels pin it to the window's `--node` (node,
       the pods of that node's DaemonSets) AND whose class is the declared act's known consequence
       (NodeRebooted, PodSigkilled, KubeNodeNotReady …) as EXPECTED, printed but not blocking
