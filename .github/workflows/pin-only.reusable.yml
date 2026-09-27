@@ -31,7 +31,10 @@ jobs:
   pin-only:
     runs-on: homelab-ephemeral
     steps:
-      - uses: actions/checkout@v4 # the caller's PR merge ref (refs/pull/N/merge)
+      # the caller's PR merge ref (refs/pull/N/merge). No trailing comment on a `uses:` line: the
+      # pin grammar is `uses: owner/repo@sha # tag` with NOTHING after the tag, so Renovate's pin
+      # of a commented line is an "unpinned" added line to the lint (homelab#2007, 2026-09-27).
+      - uses: actions/checkout@v4
 
       - name: Fetch homelab's lint at master (script + devbox toolchain)
         uses: actions/checkout@v4

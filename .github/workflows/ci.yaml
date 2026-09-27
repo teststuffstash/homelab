@@ -407,6 +407,11 @@ jobs:
           devbox run pin-only-lint "$BASE_SHA"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # The third shape (PR#1993) resolves every added action SHA against the tag upstream, and
+          # check (e) reads this repo's merged revert-wf-* PRs — both through `gh`, which in Actions
+          # needs an explicit token. Without it every workflow-pin PR on homelab was red
+          # ("cannot verify … upstream"; the first grouped Actions PRs, #2007/#2008, 2026-09-27).
+          GH_TOKEN: ${{ github.token }}
 
       # ADR-106 (4): the .agents/fix.yaml NEVER-TOUCH tier as a machine check — a WORKER-authored
       # diff touching governance paths (.github/.agents/scripts/policy/devbox/CODEOWNERS) is red.
