@@ -32,6 +32,19 @@ READMEs upfront, retros excluded; grounding names only what lies outside that co
 the subsystem is coupled enough that any major change needs the whole context anyway
 (operator, 2026-08-10).
 
+**The design-agents read is OPERATOR-TYPED ONLY (operator, 2026-09-27) — the one exception
+to "behave as if invoked".** The corpus load costs ~300–350k tokens (FU-164's measurement),
+which is too much to start unprompted, mid-session, or for a question that leans on one
+slice of the corpus. When a task looks agent-platform-design-shaped and the operator did not
+type `/design-agents`: **stop and ask** (AskUserQuestion — full corpus / a named slice / no
+corpus read), and never read `docs/agents/` or the `agents/` READMEs wholesale as the
+workaround. If the answer is the full read, the operator issues `/design-agents <question>`
+themselves — the typed form is the only one that loads. Enforced at the harness by
+`.claude/settings.json` → `.claude/hooks/design-agents-gate.sh` (a model-initiated
+`Skill(design-agents)` call is denied with this rule as the reason; a typed slash command
+never passes through the Skill tool). Reads the corpus already loaded this session stay
+pre-authorized — the rule gates the LOAD, not the use.
+
 ## Follow-ups (FU-NNN)
 
 Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/design-agents-gate.sh",
+            "timeout": 5,
+            "statusMessage": "design-agents gate"
+          }
+        ]
+      }
+    ]
+  }
+}

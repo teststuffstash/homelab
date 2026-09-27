@@ -2,11 +2,14 @@
 name: design-agents
 description: >
   Full-corpus design mode for the AGENT PLATFORM — the /design variant for anything under
-  docs/agents/ or agents/. Reads the ENTIRE agents corpus upfront (no per-file selection, no
-  per-file grounding list), because the subsystem is tightly coupled enough that any major change
-  needs full context anyway (operator ruling 2026-08-10). Use on "/design-agents <question>",
-  "design agents ...", or any /design-shaped question whose topic is the agent platform
-  (coordinator, reviewer, fixer, scan, replay, goal lane, model routing, retro, responder, …).
+  docs/agents/ or agents/. Reads the ENTIRE agents corpus upfront (~300–350k tokens), because
+  the subsystem is tightly coupled enough that any major change needs full context anyway
+  (operator ruling 2026-08-10). OPERATOR-TYPED ONLY (operator rule 2026-09-27): runs when the
+  operator types "/design-agents <question>" — NEVER self-invoke it, and never pick it for a
+  question that merely touches the agent platform. If a task looks like it needs the corpus
+  and the operator did not type it: stop and ask (full corpus / a named slice / none); a
+  model-initiated Skill(design-agents) call is denied by the .claude/hooks/design-agents-gate.sh
+  PreToolUse hook.
 ---
 
 # design-agents — read the whole damn thing first
@@ -14,13 +17,22 @@ description: >
 > **Glance first**: [`../GAPS.md`](../GAPS.md) §design-agents — unpromoted sightings apply
 > until closed (contract: [`../README.md`](../README.md)).
 
+> **Operator-typed only (2026-09-27).** This skill loads when the operator types
+> `/design-agents <question>` — the seat never self-invokes it (the harness denies a
+> model-initiated `Skill(design-agents)` call via `.claude/hooks/design-agents-gate.sh`), and
+> the workaround — reading `docs/agents/` wholesale without the skill — is equally off-limits.
+> A question that turns out to need the corpus mid-session is a stop-and-ask, not a read: the
+> operator decides between the full load, a named slice, or no corpus read. Rule home:
+> `agents/jail-seat-card.md` §Design questions.
+
 The sibling of [`../design/SKILL.md`](../design/SKILL.md), specialized for the agent platform.
 Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly coupled that any
 major change requires the full context anyway — selective closure kept under-reading (the FSM
 `replay:` fields, `model-routing.md` §M1a: both misses were claims about files not read), and the
 per-file grounding list had grown into an audit burden the operator had to verify by memory.
-Fixed cost beats itemized honesty here: **~300–350k tokens measured** (session-ctx `--big` on the 2026-09-03/04 corpus loads; the "~110k" this line carried since the 2026-08-18 trim was never re-measured), pre-authorized, paid ONCE per session
-(prompt caching amortizes every follow-up question).
+Fixed cost beats itemized honesty here: **~300–350k tokens measured** (session-ctx `--big` on the 2026-09-03/04 corpus loads; the "~110k" this line carried since the 2026-08-18 trim was never re-measured), paid ONCE per session
+(prompt caching amortizes every follow-up question) — and since 2026-09-27 paid only when the
+operator types the command (the box above).
 
 ## The read plan
 
