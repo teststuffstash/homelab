@@ -52,17 +52,18 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   exist; they run in prod), major base-image changes. These carry `deps-review`, arm
   auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the
   harmless ones (→ auto-merge) and requests changes on the rest (→ a worker adapts the code). No human.
-- **GitHub Actions MAJORS merge on their own (ADR-141, S9 homelab#1985).** Blast class decides the lane,
-  semver decides the lens: an Actions major carries `major` (the reviewer runs the migration lens —
-  upstream notes, known issues, runner compatibility — as the merge gate) and is ARMED (the
-  CI-exercised class: a `pull_request` workflow runs the PR's own file, so green CI on the bumped head
-  is the proof). Push-only workflows (`build-image`, deploy jobs) are covered after the merge by the
-  FU-1990 revert chain: `GithubWorkflowRunFailed` on master → `workflow-pin-revert` reverts the pin PR
-  as an `automerge`+`dependencies` PR the reflex approves (PR#2002) → the re-proposed version is
-  refused by `pin-only-lint` check (e) in `ci` (the revert body's `reverted-pins:` line, 30 days), so it
-  stays red until Renovate proposes a newer release. Bumps are grouped per repo per wave (one PR, one
-  review, one revert) and rebase themselves. Every other major stays un-armed on the human lane until
-  its class row is complete (#1988).
+- **GitHub Actions bumps — every type, majors included — ride the grouped mechanical lane (ADR-141,
+  amended 2026-09-27).** One `github-actions` PR per repo per wave, `automerge` label, the reflex
+  approves, CI on the bumped head is the proof (a `pull_request` workflow runs the PR's own file);
+  push-only workflows (`build-image`, deploy jobs) are covered after the merge by the FU-1990 revert
+  chain: `GithubWorkflowRunFailed` on master → `workflow-pin-revert` reverts the pin PR as an
+  `automerge`+`dependencies` PR the reflex approves → the re-proposed version is refused by
+  `pin-only-lint` check (e) in `ci` (the revert body's `reverted-pins:` line, 30 days) until a newer
+  release. An Actions major is not a "major major" until evidence says so: a dependency GRADUATES to
+  the ungrouped, `major`-labelled, lens-reviewed lane (one PR per dependency — precise revert, precise
+  refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
+  adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
+  other major stays un-armed on the human lane until its class row is complete (#1988).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy

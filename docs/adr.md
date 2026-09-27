@@ -2469,3 +2469,16 @@ on the arm); the reviewer prompt is lane-aware; runtime-in-prod and substrate ma
 until their rows are complete (#1988); a bad Actions major costs one failed master run + one revert,
 never operator minutes. Stint S9 (homelab#1985), originals #1988/#1990; docs: `docs/renovate.md`
 §"The automerge vs review split", `docs/designs/fu-1990-workflow-pin-revert.md`.
+**Amended 2026-09-27 (operator, same day):** majors ungrouped, non-majors grouped — and a GitHub
+Actions major is NOT a "major major" until evidence says so: every lens review of an Actions major
+this week (agent-coordinator#14, allure-behavior-snippets#18–#21) found only N/A. So Actions bumps of
+EVERY type ride the grouped mechanical lane (`automerge` label, the reflex approves, CI + the
+FU-1990 revert chain are the gate and the evidence collector); a dependency GRADUATES to an
+ungrouped, `major`-labelled, lens-reviewed PR the first time it produces evidence a human should
+care — a merged `revert-wf-*` PR naming it, a red major PR, or a review asking for an in-PR
+adaptation or filing a follow-up — one `matchPackageNames` line in `.github/renovate-global.json`
+(operator-direct). Grouping is a trade-off taken only where nothing is reasoned about: a grouped
+revert is coarse (one bad pin holds N good ones red) and a grouped lens ride has no partial
+verdict, which is why graduated majors are one PR per dependency. The drill (agent-coordinator#20
+→ revert #21, 2026-09-27) proved the lane and found two chain defects on the way (PR#2005 the token
+mint, PR#2006 the candidate query).
