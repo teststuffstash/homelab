@@ -1253,7 +1253,8 @@ the block needs pruning, not more headings.
       and sits **16.0/16.0 GiB** (was 6.3/25.7). **Next:** (1) nx-02 boot disk → the SA400 (online
       `pvmove`, swap leaves the spinner; host window for the reboot; pick the SSD in `Hard Disk Drive BBS
       Priorities` over SOL — nx-02's COM2/SOL redirection is on, recipe + `bios2.py` in the private
-      hardware register `docs/nx-6035-g5.md`; pulling the HDD is the last resort), (2) THEN unpark ci-runner-02
+      hardware register `docs/nx-6035-g5.md`; pulling the HDD is the last resort; GRUB + kernel are on SOL
+      since 2026-09-27, `ansible/pve-serial-console.yml`, #2044), (2) THEN unpark ci-runner-02
       (`var.ci_runner_02_running`, PR#1978) and rerun the oracle e2e comparison under the belts.
       Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and

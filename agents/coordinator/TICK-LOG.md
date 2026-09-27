@@ -11389,4 +11389,9 @@ SA400 is in the box as /dev/sdb) — FU-289 §Next. Window closed 19:21Z with `-
 off-baseline item was `PodSigkilled` for the four DaemonSet pods our own shutdown killed (30-minute
 lookback) — GAPS maintenance-window resight filed; nothing else moved off baseline (13 nodes, 186
 targets, cilium 13/13, hard-failed pods 1 → 0). All four PRs merged (#2040 #2041 #2042 #2043).
+**Evening add-on (operator: "GRUB serial — this session", the next one runs unattended overnight):**
+`pve-serial-console` role (#2044) — GRUB menu + kernel console on nx-02's SOL (ttyS1, 115200) beside
+VGA, host_vars-gated (pve no-op), applied and verified in grub.cfg; lands at the next boot. Operator
+also reports both NX CMOS batteries replaced and nx-01's console redirection enabled (private
+register amended, dated, unverified until a watched boot).
 
