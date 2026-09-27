@@ -392,12 +392,17 @@ grafana:
       editable: false
       isDefault: false
       name: oracle-feedback
-      type: postgres
+      # The real plugin id, not the `postgres` alias: the backend's root-`database` →
+      # `jsonData.database` copy is keyed on the stored type and misses the alias, and the
+      # SQL frontend reads ONLY `jsonData.database` — every panel errored "no default
+      # database configured" while the backend health check said OK (oracle handoff 2026-09-27).
+      type: grafana-postgresql-datasource
       uid: oracle-feedback
       url: oracle-pg-ro.oracle-fleet.svc:5432
       database: feedback
       user: feedback_ro
       jsonData:
+        database: feedback
         sslmode: require
         timescaledb: false
       secureJsonData:
