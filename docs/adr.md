@@ -2438,3 +2438,34 @@ safe belongs to the service, and a PDB is the one place every drain already read
 **Consequences:** fail closed needs an override. It is an expiring PDB annotation, or
 `kubectl drain --disable-eviction` for a single drain. There are two belts (closed 2h, open
 against the signal). Design and override: [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22).
+
+### ADR-141 — GitHub Actions majors merge on their own: blast class picks the lane, semver picks the lens, the revert chain is the second gate (2026-09-27)
+
+**Decision:** a Renovate major on the `github-actions` manager is ARMED at creation
+(`.github/renovate-global.json`, the rule after the major catch-all) and keeps `major`: the review
+reflex reviews armed non-`automerge` PRs, so the reviewer's migration lens (upstream notes, known
+issues, runner compatibility) is the merge gate — its APPROVED satisfies the one-review rule as a
+distinct identity — and CI on the bumped head is the runner-compat proof (a `pull_request` workflow
+runs the PR's own file). Workflows CI cannot exercise (push-only: `build-image`, deploy jobs) are
+gated AFTER the merge by the FU-1990 chain (`deploy-revert-argo.yaml`): `GithubWorkflowRunFailed`
+on master → the pin-only merge is reverted as an `automerge`+`dependencies` PR (labels landed in
+PR#2002 — before it the revert PR sat BLOCKED on the one-review rule) the renovate-approve reflex
+approves; the revert body names the reverted versions on a `reverted-pins:` line, and
+`scripts/pin-only-lint.sh` check (e), inside every platform repo's required `ci`, refuses an added
+SHA named there for 30 days — so the re-proposed version stays red until Renovate moves it to a newer
+release (a reflex close could never fire on a lens-reviewed PR, which carries no `automerge` label).
+Actions bumps are grouped per repo per wave and ride `rebaseWhen: behind-base-branch` (Renovate keeps
+and re-extracts its own branch; the updater leaves untouched Renovate PRs alone). CODEOWNERS un-owns
+`/.github/workflows/`
+per repo only once `pin-only-lint`'s third shape runs in that repo's required `ci` (ADR-100's
+owner→rule replacement) and the rollback drill has passed. **Considered:** keep majors human-gated
+(rejected — the operator's time is the cost function, and 13 Actions majors sat parked across the
+platform repos with nothing a human could add to green CI); drop `major` from Actions majors and
+ride the mechanical `automerge` lane (rejected — that skips the lens; semver still says "major");
+a separate reviewer role for majors (rejected — roles.md 10:1, the lens lives on the existing
+reviewer). **Consequences:** "no PR is ever both armed and `major`" is replaced by "the arm, never
+the label, decides the owner" (`coordinator-scan.sh` keys on `autoMergeRequest == null`, the reflex
+on the arm); the reviewer prompt is lane-aware; runtime-in-prod and substrate majors stay un-armed
+until their rows are complete (#1988); a bad Actions major costs one failed master run + one revert,
+never operator minutes. Stint S9 (homelab#1985), originals #1988/#1990; docs: `docs/renovate.md`
+§"The automerge vs review split", `docs/designs/fu-1990-workflow-pin-revert.md`.

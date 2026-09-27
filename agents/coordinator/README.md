@@ -44,7 +44,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) — **or the scan itself**, parking an issue whose worker ruled the deliverable not implementable as written (one `AGENT_INFEASIBLE: <path/resource>` comment → IL-T26, §The infeasible terminal). Excluded from the C4/C5 predicate by the selector, not by assumption: a human gate is never re-dispatched | coordinator — **or the deterministic scan** |
 | `agent/done` | merged | coordinator; the deterministic scan RECONCILES it when a CLOSED issue still carries a stale `agent/blocked` or `agent/review` label — a merged PR mentions the issue, the state persisted past `C4C5_PERSIST_S`, and the merged-closeout clause (C6) was skipped (homelab#1106) |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
-| `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
+| `major` | a MAJOR dependency-bump PR — the migration-lens marker. **Un-armed** = human-gated, coordinator-owned (§Dependency major bumps); **armed** = the CI-exercised blast class (GitHub Actions majors, ADR-141) — the reflex's, not yours | `devbox-update.sh`, `renovate-global.json` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | `agents/major-handoff.sh` ONLY (requires the bot's APPROVED at head + the four migration headings; §Dependency major bumps step 5) — never by hand |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
@@ -1491,7 +1491,10 @@ lands squarely in your lap. Own it end-to-end; do **not** hand-dispatch it throu
 The PR is typically **red at birth** (the major breaks CI — that's the point, CI caught it). Drive it
 like an `agent-fix` issue, but PR-first and keyed on the `major` label:
 
-1. **List** open PRs labelled `major` (across your stack's repos) that are not yet `major/awaiting-human`.
+1. **List** open PRs labelled `major` (across your stack's repos) that are not yet `major/awaiting-human`
+   **and are NOT armed** — an armed `major` (a GitHub Actions major, ADR-141) is the reflex's: the
+   reviewer's lens is its merge gate and the FU-1990 chain its rollback; never touch it (the scan's
+   major clause already keys on `autoMergeRequest == null`).
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
    *investigation* whose whole job is to explain the red):
@@ -1524,7 +1527,7 @@ Why this is yours and not the reflex's: a major bump is a **judgment** call (is 
 is the breakage worth adopting now? is a human happy to merge?), and reviews for it must run **while red**
 — both are outside the reflex's decision-free, green-only mandate. Keeping `major` un-armed makes the
 split automatic: reflex = armed track (auto-merge), coordinator = un-armed `major` (human-merge). They
-never fight over the same PR because no PR is ever both armed and `major`. See
+never fight over the same PR because the ARM decides the owner, never the label (ADR-141). See
 [`../../docs/agents/merge-path.md`](../../docs/agents/merge-path.md) §"Reflexes vs judgment".
 
 ## Runtime

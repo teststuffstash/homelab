@@ -49,9 +49,20 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **Digest bumps automerge** (base-image `@sha256`, SHA-pinned Actions). A human comparing two hashes
   is security theatre; the real gates are the **cooldown + CI + the reviewer reflex**, not eyeballs.
 - **Reviewable bumps go to the LLM reviewer, not a human** — runtime dep *version* bumps (changelogs
-  exist; they run in prod), major base-image / major Action changes. These carry `deps-review`, arm
+  exist; they run in prod), major base-image changes. These carry `deps-review`, arm
   auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the
   harmless ones (→ auto-merge) and requests changes on the rest (→ a worker adapts the code). No human.
+- **GitHub Actions MAJORS merge on their own (ADR-141, S9 homelab#1985).** Blast class decides the lane,
+  semver decides the lens: an Actions major carries `major` (the reviewer runs the migration lens —
+  upstream notes, known issues, runner compatibility — as the merge gate) and is ARMED (the
+  CI-exercised class: a `pull_request` workflow runs the PR's own file, so green CI on the bumped head
+  is the proof). Push-only workflows (`build-image`, deploy jobs) are covered after the merge by the
+  FU-1990 revert chain: `GithubWorkflowRunFailed` on master → `workflow-pin-revert` reverts the pin PR
+  as an `automerge`+`dependencies` PR the reflex approves (PR#2002) → the re-proposed version is
+  refused by `pin-only-lint` check (e) in `ci` (the revert body's `reverted-pins:` line, 30 days), so it
+  stays red until Renovate proposes a newer release. Bumps are grouped per repo per wave (one PR, one
+  review, one revert) and rebase themselves. Every other major stays un-armed on the human lane until
+  its class row is complete (#1988).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
