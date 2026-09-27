@@ -11363,3 +11363,30 @@ sleep-tracking / sleep-iac / oracle-iac renovate.json (now inert).
 **Mechanics learned:** a jail-authored PR labelled `automerge` gets NO reviewer (exporter skips the label,
 renovate-approve wants a Bot author) — Renovate-only label; `git pull --rebase origin master` on a PR
 branch the updater has merged into diverges from its remote tip — rebase onto `origin/<branch>` instead.
+
+## 2026-09-27 — FU-289: the placement belts, then wk-04 rebalanced (16/16)
+
+**Condition:** operator asked for an opinion on the NUMA spike (three models' input), then
+"start with 1 and 2". Counters on nx-02 settled the mechanism the write-up left open: `pgsteal_kswapd`
+9.0 GiB vs 462 direct stalls, `numa_miss` 36.8 GiB — fallback worked, **kswapd** emptied node 1
+per its own watermarks because wk-04's 25.7 GiB there was pinned and the only evictable pages were
+the other guests'. Detector first (#2040): both hypervisors' node_exporter gain `meminfo_numa` +
+reclaim/compaction vmstat, the textfile collector publishes per-guest placement/swap/pin, four
+rules replayed — `PveHostSwapUsed` would have fired ~23:00Z 09-24, 8 h before the stalls;
+`PveHostSwapThrash` through both failing runs. Reviewer's one blocking finding (verify gated on a
+guest-only series) was right. nx-02's apt was enterprise-only (401) → `pve-apt-repos` role, first
+in both pve plays (#2042). The box's plan died on a stale provider cache after the Renovate bump →
+`mgmt-tf` inits every run (#2043).
+
+**The window (seat-1790534883-8752):** `down wk-04` needed FORCE=1 (single-replica Deployments
+reschedule). Apply 1: HTTP 500 `only root can set 'hugepages' config` — hugepages is root@pam-only
+like raw hostpci; quickfix `04b08852` drops it and makes the policy `preferred` (a `bind` on a
+short node would swap the neighbours out to satisfy the pin). Apply 2: "1 changed", VM started
+20.5/11.6 — pvedaemon shows the request carried only `-name wk-04` (GAPS tofu-apply-G3 resight).
+Apply 3: numa0/numa1 landed, provider shut down + started, **16.0/16.0 GiB**, host nodes 7.6/12.7
+GiB free. `up wk-04` uncordoned 19:02Z. ci-runner-02 stays PARKED until the boot-disk move (the
+SA400 is in the box as /dev/sdb) — FU-289 §Next. Window closed 19:21Z with `--force`: the only
+off-baseline item was `PodSigkilled` for the four DaemonSet pods our own shutdown killed (30-minute
+lookback) — GAPS maintenance-window resight filed; nothing else moved off baseline (13 nodes, 186
+targets, cilium 13/13, hard-failed pods 1 → 0). All four PRs merged (#2040 #2041 #2042 #2043).
+

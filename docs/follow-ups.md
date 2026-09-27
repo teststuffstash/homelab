@@ -1244,16 +1244,18 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement suspect.**
-      **POINTER:** [diagnosis, placement options and settling experiment](spikes/nx-02-numa-placement.md).
-      Operator prefers automatic best-effort placement without Kubernetes resource enforcement;
-      wk-04's running Talos kernel lacks automatic NUMA balancing. No placement change applied.
-      **Next:** detector first (swap activity + I/O pressure, fixture + event replay), add per-node/
-      per-VM visibility, then compare placement in a maintenance window, budgeting all three VMs
-      and rerunning e2e. Exact reclaim trigger and locality benefits remain unverified.
-      **ci-runner-02 PARKED 2026-09-25** (operator; drained + stopped,
-      `var.ci_runner_02_running=false`, PR#1978) — flip back after validation.
-      Relates FU-266, FU-225, FU-280.
+- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
+      [diagnosis, counters, placement and the detectors](spikes/nx-02-numa-placement.md).
+      DONE 2026-09-27: detectors live on both hypervisors (#2040/#2042: `meminfo_numa` + reclaim
+      vmstat, per-guest placement/swap/pin series, `PveHostSwapUsed`/`PveHostSwapThrash`/
+      `PveNumaNodeMemoryLow`/`PveGuestSwapped`, replayed against the event); wk-04 restarted with
+      `numa_pin` (#2041 + `04b08852`: `numa0/1` hostnodes `preferred` — `hugepages` is root@pam-only)
+      and sits **16.0/16.0 GiB** (was 6.3/25.7). **Next:** (1) nx-02 boot disk → the SA400 (online
+      `pvmove`, swap leaves the spinner; host window for the reboot; pick the SSD in `Hard Disk Drive BBS
+      Priorities` over SOL — nx-02's COM2/SOL redirection is on, recipe + `bios2.py` in the private
+      hardware register `docs/nx-6035-g5.md`; pulling the HDD is the last resort), (2) THEN unpark ci-runner-02
+      (`var.ci_runner_02_running`, PR#1978) and rerun the oracle e2e comparison under the belts.
+      Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`

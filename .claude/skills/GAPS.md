@@ -158,6 +158,16 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       homelab#1727). Next: the skill should say a failed apply is NOT a no-op — verify state
       against live before retrying — and that `github-tofu` needs the org-admin wallet, not any
       token that happens to plan cleanly.
+      **RESIGHT 2026-09-27 (seat, FU-289, bpg/proxmox this time) — the OTHER half of the class: a
+      SUCCESSFUL apply that did not land.** The first apply of wk-04's placement change 500'd
+      (`only root can set 'hugepages'`); the quickfix apply then printed `Modifications complete
+      … 1 changed`, but pvedaemon's own record of the request was `update VM 8114: -name wk-04`
+      — no `numa0`/`numa1` — and `qm config` had none. A third plan+apply sent them. The apply
+      line is not the end state for a VM config: `qm config <vmid>` (or `journalctl -u
+      pvedaemon | grep 'update VM'`) is, and the 2026-09-24 hostpci apply had the same shape
+      (config accepted, the start failed on a mapping property). Next, sharpened: the skill's
+      post-apply check for a `proxmox_virtual_environment_vm` change is a `qm config` diff
+      against the plan's `+`/`~` lines, read on the hypervisor, before `node-maintenance up`.
 - [ ] tofu-apply-G2 — **a `machines.yaml` `longhorn_disks` apply REBOOTS the node**, and the skill
       does not say so. Talos provisions user disks at boot, so the provider's default (auto) mode
       staged the config and rebooted `m70s` — a node then carrying garage-1, loki-0 and six
@@ -292,3 +302,16 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       window). Sighted 2026-09-22. **fixed→** state keyed by window id (`$STATE_DIR/<id>/`),
       `check`/`close --id`, no-`--id` refuses + lists when several are open, `list` verb; skill
       says to note the id; self-test §7 — same commit.
+- [ ] maintenance-window-G5 — **`close` refuses on the window's OWN expected consequences, and the
+      seat waits out a 30-minute lookback for nothing.** The wk-04 placement restart (FU-289,
+      2026-09-27) shut the node down through `node-maintenance down`; the four DaemonSet pods that
+      die at a node shutdown fired `PodSigkilled` (`increase(...restarts[30m])`) and the node fired
+      `NodeRebooted` (10 min after boot). `check` listed both as NEW, `close` refused, and the seat
+      sat in a poll loop for the 30 minutes until the lookback drained — operator: "this is wasting
+      time. Is the alert the problem or the silence or the waiting?" The silence is irrelevant
+      (`check` reads Prometheus firing state, not Alertmanager's muting); the alert is right
+      elsewhere; the WAIT was the defect. Closed with `--force`, stated. Sighted 2026-09-27 (seat).
+      Next: `check` should classify an alert whose labels pin it to the window's `--node` (node,
+      the pods of that node's DaemonSets) AND whose class is the declared act's known consequence
+      (NodeRebooted, PodSigkilled, KubeNodeNotReady …) as EXPECTED, printed but not blocking
+      `close`; the baseline-diff stays strict for everything else.
