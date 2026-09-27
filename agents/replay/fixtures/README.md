@@ -74,3 +74,18 @@ drain of hp-01 took two of three JetStream replicas, i.e. the bus's quorum and w
 loop. After (same two commands, 07:56Z): `-js-2` moved to wk-02, one replica per node, and
 `eventbus-default-js` reports `ALLOWED DISRUPTIONS 1`. The drain of hp-01 — last in the upgrade
 order, for this reason — is the real exercise.
+
+## 2026-09-27 — reviewer no-container rule: operator-only paths read from CODEOWNERS (homelab#2031)
+
+No fixture applies. The change edits PROMPT PROSE inside `agents/reviewer-session.sh`'s no-container
+rule — the hard-coded list `(.github/**, .agents/**, devbox.json, CI-invoked scripts/**, pin-only
+guarded files)` becomes an instruction to read the repo's CODEOWNERS — and no shell branch, exit code,
+label, comment or `gh` call changes. The replay harness records the launcher's action stream and
+pod-side blocks; a prompt string is opaque to it, so a fixture here could only assert that the prompt
+contains the words it contains — the cosmetic fixture this ratchet exists to prevent.
+
+What pins the change is the reviewer's behaviour on the next dependency PR of a repo whose CODEOWNERS
+un-owns a member of the version set (openrouter-operator: `devbox.json`, replaced by deps-pin-guard):
+a finding on it must be classified as a worker's adaptation, not as `Operator-lane (no container):`.
+The pre-state is the finding — openrouter-operator#80 (2026-09-27), where the hard-coded list read
+`devbox.json` as operator-only on a repo where it was not, and #81 then merged on the bot alone.
