@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-291** (2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-292** (2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -454,6 +454,19 @@ the block needs pruning, not more headings.
       consumer spends (scan vs session vs reflex), then decide the lever (doorbell debounce per stack,
       scan query batching, or a separate App/installation per stack). **2026-09-25 (operator):**
       renovate.yaml's org-wide `{"repo":"all"}` ring removed meanwhile. Relates FU-125, ADR-094.
+
+- [ ] **FU-291** — **The reviewer finds in round N what already existed at round N-1's head.** Measured
+      2026-09-27: homelab#2002 round 1 named 3 stale-text sites, 4 more siblings of the same class sat at
+      that head (yaml L419/L451, design doc L13/L189) and surfaced one per later round; #2004 round 2's
+      two findings (the ADR-141 citations, merge-path §Levers) existed at round 1's head. Each late
+      finding = a CI run + a reviewer ride + a fix round (~10 min, operator-visible). The prompt's
+      "COMPREHENSIVE, in ONE review" rule (reviewer-session.sh ~L700) is prose and does not hold: the
+      reviewer reads the diff hunks, not the branch, so same-class siblings outside the hunks it read stay
+      invisible until a fresh session. **Next (detector first):** a `late-finding` count per review — at a
+      CHANGES_REQUESTED round N≥2, did the cited file:line text exist at the previously reviewed head
+      (`git show <prev-head>:<path> | grep -F`)? — emitted to the ledger, ranked by the retro; then the
+      mechanical assist (a branch-wide grep for every term a finding names, appended to the review).
+      Relates ADR-103, FU-046.
 
 - [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.**
       Fleet read 2026-09-23 (comments on the six Goals with a store): 19 checkpoint rulings, 11 of
