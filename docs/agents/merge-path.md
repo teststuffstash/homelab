@@ -163,7 +163,7 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 
 | event | who acts | what happens |
 |---|---|---|
-| PR green + behind | reflex (updater workflow) | update-branch API call |
+| PR green + behind | reflex (updater workflow) | update-branch API call — EXCEPT an untouched Renovate PR on a grouped Actions branch (`renovate/github-actions`, `renovate/github-actions-major`): those ride `rebaseWhen: behind-base-branch` and Renovate rebases them itself; an updater push would mark the PR edited and stop Renovate maintaining it (ADR-141, PR#2004) |
 | PR green + current + unapproved | reflex (exporter POST → Argo Events → review WorkflowTemplate; `*/15` CronWorkflow backstop) | dispatch reviewer session |
 | approval lands | reflex (GitHub auto-merge) | merge, delete branch |
 | update-branch returns 422 (conflict) | reflex labels → **coordinator decides** | the brief's §The `merge-conflict` clause: resume on the branch (a merge-only fix round; the push dismisses approvals, so the codeowner re-reads the resolution only) when the conflict is confined to the PR's own files or append-only surfaces; close + re-queue when it reaches the diff's substance, the PR was never approved, or a resume already failed; escalate when the conflicting master change is the seat's |
@@ -171,6 +171,7 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 | rounds exhausted (`workflow.md` §Hazards: bounded rounds) or worker↔reviewer flip-flop | reflex labels → **coordinator tie-breaks** | reads the diff + review thread (discovery), rules: re-dispatch with clarified instructions, close as not-mergeable, or escalate to the human |
 | CI red beyond T hours | reflex labels → **coordinator decides** | re-dispatch, park, or escalate |
 | PR merged (issue auto-closed via `Fixes #N`) | **coordinator closes the loop** | next tick: verify the outcome actually holds; comment; reopen + re-dispatch if it doesn't |
+| ARMED `major` PR opens (a GitHub Actions major — the CI-exercised blast class, ADR-141) | **reflex** (armed = its world) | reviewer runs the migration lens as a batch member (Renovate has no fixer behind it — a missed-on-master call site is its next rebase, never a finding); APPROVED is the merge gate (distinct identity, one-review rule); a post-merge master failure rolls back via the FU-1990 chain (`deploy-revert-argo.yaml`, PR#2002), the re-proposal is refused by `pin-only-lint` check (e) in `ci` until a newer release |
 | un-armed `major` devbox bump PR opens (FU-022 gate) | **coordinator owns end-to-end** (never the reflex — it's un-armed) | investigate (dispatch reviewer *even while red* — the review explains the break) → worker fixes breakage if within budget → green + approved → relabel `major/awaiting-human`; a **human** merges. See `agents/coordinator/README.md` §"Dependency major bumps". |
 
 Two properties fall out. First, the merge path stays fully deterministic (constraint 1): every
@@ -186,8 +187,11 @@ PRs; everything un-armed is outside its world. The FU-022 major-devbox gate lean
 **`major`** bump is deliberately left **un-armed** (a human merges a major crossing, not the bot), so it
 is invisible to the reflex and falls to the **coordinator**, which owns it end-to-end (investigate →
 fix-if-in-budget → `major/awaiting-human` → human merge — the new escalation-table row). This keeps the
-split collision-free *by construction*: no PR is ever both armed and `major`, so the reflex and the
-coordinator can never contend for the same PR. Crucially the coordinator dispatches the major's
+split collision-free *by construction*: **the arm, never the label, decides the owner** — an un-armed
+`major` is the coordinator's, an armed `major` is the reflex's (ADR-141: a GitHub Actions major is the
+CI-exercised blast class, so Renovate arms it and the reflex's reviewer runs the migration lens as the
+merge gate; `coordinator-scan.sh` keys its major clause on `autoMergeRequest == null`, and the reflex's
+selector on the arm) — so the reflex and the coordinator can never contend for the same PR. Crucially the coordinator dispatches the major's
 investigation review **directly, while the PR is still red** — the review's job there is to *explain* the
 break — which is precisely why a major can't ride the reflex (green-only, decision-free) path. Non-major
 devbox bumps stay armed and ride the reflex like any other PR. **Proven E2E (2026-07-05):** an opus
