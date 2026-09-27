@@ -42,7 +42,7 @@ jobs:
           owner: teststuffstash
 
       - name: Renovate
-        uses: renovatebot/github-action@v46.1.17
+        uses: renovatebot/github-action@1a96852b0384df1837619d04c60b2d10d1f9ff08 # v46.1.21
         with:
           token: ${{ steps.app.outputs.token }}
         env:
