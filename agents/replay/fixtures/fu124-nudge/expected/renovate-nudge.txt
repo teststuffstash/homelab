@@ -1,0 +1,4 @@
+CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n}}/update-branch -f expected_head_sha={{oid}}
+OUT   [testrepo] FU-124: nudged updater — update-branch on armed BEHIND PR #{{n}}
+RC 0

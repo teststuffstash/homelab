@@ -8,3 +8,8 @@ fail-422  | board | gh/pr-list.json @ patches/add-behind.jq   | STUB_GH_api_repo
 # pre-#1649 source (selector = armed ∧ BEHIND alone) BOTH were nudged, so both red on base.
 park-noop       | board | gh/pr-list.json @ patches/add-parked-behind.jq     | | noop |
 unreviewed-noop | board | gh/pr-list.json @ patches/add-unreviewed-behind.jq | | noop |
+# ── ADR-141: an UNTOUCHED Renovate PR is Renovate's to rebase (rebaseWhen behind-base-branch) —
+# the same predicate as update-pr-branch.sh legs 1+2. Both rows probe commits; on the pre-ADR-141
+# source the untouched row was nudged (red on base), the worker-pushed one still is.
+renovate-untouched-noop      | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-skip  | n=150
+renovate-worker-pushed-nudge | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-nudge | n=150 oid=ren150oid789

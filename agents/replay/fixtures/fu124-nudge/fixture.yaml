@@ -28,6 +28,9 @@
 #      (#1649 — the park waits for its human; leg 1 leaves it BEHIND by design)
 #   5. One armed+BEHIND UNREVIEWED PR (reviewDecision "") → NO call, no output (#1649 — not
 #      merge-ready; the updater's `bot_approved_head` arm owns it)
+#   6. One armed+BEHIND APPROVED Renovate-authored PR: commits probed (rows/<id>/gh/pr-view-150);
+#      all Renovate's → NO call, a skip line (ADR-141 — Renovate rebases its own untouched
+#      branches, and one foreign merge commit makes it stop); a worker commit present → nudged
 #
 # The `prsjson` snapshot is set up by the bridge from the world file. The `gh api` call is a
 # mutation (PUT), so the stub records it and returns success by default. For the failure row,
