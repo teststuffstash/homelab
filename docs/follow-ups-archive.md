@@ -10,6 +10,14 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-125** *(archived 2026-09-27)* — **Renovate's silent zero-PR regression: root cause fixed, the
+  homelab acceptance MET.** Cause: the App never held `statuses` (403 on read → `integration-unauthorized`,
+  on write → `repository-changed`); declared PR#1969, granted 2026-09-25 → 20 PRs on 10 repos in the first
+  run. Acceptance ("one `renovate/*` PR opened, gated, merged in homelab") met 2026-09-27 through the S9
+  lanes (homelab#1985): #2008/#2021 (Actions, grouped mechanical), #2012 (npm), #1983/#1996/#1997
+  (providers, human plan). Per-class proofs: `docs/dependency-upgrades.md` §"Last proven end to end".
+  Residue owned elsewhere: the liveness gauge + coverage table → #1992; `NIX_VERSION` manager hygiene →
+  that doc's §Next steps. `dependencyDashboard: false` stands (ruling 2026-08-18).
 - **FU-215** *(archived 2026-09-24)* — **Unbound's `github.com` SERVFAILs: root cause fixed, soak PROVEN.**
   Every SERVFAIL was "exceeded the maximum number of sends" — `do-ip6` on a v4-only WAN burned the send
   budget on unreachable v6 authoritatives. Fix 2026-09-16 17:55Z: OPNsense *Turn off IPv6* (GUI-only,

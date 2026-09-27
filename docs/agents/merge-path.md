@@ -508,8 +508,11 @@ the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK
 ## Decisions (formerly open questions — all resolved)
 
 - **Dep-bump review = split by class (FU-046):** `automerge`-labelled bumps get mechanical
-  CI-only approval (the reflex SKIPS them); `deps-review`/major bumps ride the LLM review path.
-  See [`../renovate.md`](../renovate.md).
+  CI-only approval (the reflex SKIPS them); `deps-review` bumps and ARMED `major` bumps ride the LLM
+  review path (the migration lens); an UN-ARMED `major` is the coordinator's human lane. The lane is
+  the BLAST CLASS's, not semver's (ADR-141, amended 2026-09-27: GitHub Actions bumps of every type
+  ride the grouped `automerge` lane until a dependency graduates on evidence; terraform providers
+  are the human-plan lane). See [`../renovate.md`](../renovate.md).
 - **Squash** for auto-merge (linear master; what the worker arms).
 - **Reflex runs in-cluster** (reviewer secrets stay in ns `agent-coordinator`, never GitHub org
   secrets; realized as Argo CronWorkflow + Events edge, ADR-093).

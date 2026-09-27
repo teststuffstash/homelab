@@ -10,12 +10,14 @@ the App autodiscovers and is not repeated here. The **app-stack** deploy shapes 
 operator chart, pod image) are `ROADMAP.md` → *Programs in flight* → "Deploy paths" (FU-051). The
 surfaces homelab doesn't reconcile at all are FU-097, same section.
 
-**Tracked by:** **FU-125** (Renovate is silently doing nothing — the §Ground truth finding),
-FU-097 (the ruling table this feeds), FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
+**Tracked by:** FU-097 (the ledger rule this feeds — generalized to dependency classes 2026-09-27),
+FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
 **FU-151** (the `automerge` label — §2's mechanical lane — is not set by the `-iac` deploy
 producers, so those bumps skip LLM review only by timing), FU-016 (SLSA signing/SBOM). ADR-084
 (deploy shape), ADR-093 (Argo as the orchestration engine), ADR-088/089 (the invariants a bump
-must not break).
+must not break), ADR-141 (blast class picks the lane). The §Ground truth finding was FU-125
+(archived 2026-09-27); the lanes and the residue are stint S9, homelab#1985 (open originals:
+#1988 lanes by class, #1992 the generated coverage table + liveness gauges, #2014 version sets).
 
 ---
 
@@ -75,10 +77,13 @@ and all ten installs). The fix is the declaration in [`github-apps.yaml`](github
 grant in the App settings (the `GithubAppPermissionDrift` belt rings until it lands).
 
 > **Acceptance for "Renovate works in homelab":** at least one `renovate/*` PR has been opened,
-> gated and merged. Until then, treat every claim about automated dependency hygiene in this repo
-> as aspirational. (The dashboard-issue-exists half of this acceptance was RETIRED 2026-08-18:
-> `dependencyDashboard` is now `false` in the global config by operator ruling — the dashboard is
-> an interactive click-ops surface nothing here reads; liveness is the gauge, next-step 2.)
+> gated and merged. **MET 2026-09-27** — #2008 (an Actions minor through the grouped mechanical
+> lane), #2021 (the SHA-pinning PR, rebuilt under the first-party exclusion), #2012 (npm),
+> #1983/#1996/#1997 (terraform providers through the human plan); the per-class record is
+> §"Last proven end to end" below. (The dashboard-issue-exists half of this acceptance was
+> RETIRED 2026-08-18: `dependencyDashboard` is now `false` in the global config by operator
+> ruling — the dashboard is an interactive click-ops surface nothing here reads; liveness is the
+> gauge, next-step 2.)
 
 ---
 
@@ -101,10 +106,10 @@ deployment?" has a different answer per class, because homelab runs **three reco
 | 2 | **In-cluster images** (loki 3.4.2, alloy v1.5.1, otel 0.116.1, pushgateway v1.11.1, blackbox v0.27.0, registry 3.0.0, nginx, python:3.13-slim, docker:29.6.2-dind, aws-cli) | `argocd/resources/*/**.yaml` | `dockerfile`/regex — **mostly unmanaged today** | ✅ **yes** | ArgoCD auto-syncs the manifest. These are the cheapest win: pure GitOps, already path-scoped per resource dir |
 | 3 | **First-party images** (agent-base, agent-coordinator, arc-runner) | `agents/images.env`, `argocd/**`, `docker/arc-runner` | n/a — first-party | ✅ **yes, built** | The deploy-pin PR flow (ADR-084). Renovate deliberately never touches our own artifacts (git-sha is unorderable) |
 | 4 | **Helm charts, tofu-managed** — now only **cilium, longhorn, argo-cd** (metrics-server, kube-prometheus-stack, forgejo and garage all moved to class 1 on 2026-08-04 — the lever is complete, FU-136 archived) | `tofu/*.tf` | `terraform` (part of the 47) | ⚠ **plan only** | Merge deploys nothing until the management box applies it (`devbox run mgmt-tf`; the box's apply loop owns the allowlisted residue). A path rule can open a **plan-report** PR comment; applying stays human. What remains is close to ADR-005's substrate — which is the point: "tofu = human-applied" becomes a coherent rule rather than a lump |
-| 5 | **Tofu providers** (bpg/proxmox ~0.107, cloudflare ~5.0, github ~6.0, infisical ~0.16) | `tofu/**/versions.tf` | `terraform` | ⚠ **plan only** | Same as 4. Note `~>` ranges mean the *lockfile* is the real pin |
+| 5 | **Tofu providers** (bpg/proxmox ~0.113, cloudflare ~5.0, github ~6.0 (6.13.0), infisical ~0.19, tls ~4.0, talos ~0.11, helm ~2.17, kubernetes ~2.31) | `tofu/**/versions.tf` + `.terraform.lock.hcl` | `terraform` — the HUMAN-PLAN lane: `major/awaiting-human` on ANY update type, un-armed (the sentinel refuses lockfile heads by design, ADR-131) | ⚠ **plan only** | Same as 4. `~>` ranges mean the *lockfile* is the real pin. Lane: `devbox run mgmt-human-plan -- <pr>`, read, merge; a root the box does NOT plan (infisical) needs the jail plan BEFORE the merge (#1984, 2026-09-27) |
 | 6 | **Cluster substrate** (Talos, Kubernetes v1.36.1, Cilium 1.19.1) | `tofu/variables.tf` defaults | `terraform` (weak) | ❌ **no, and must not** | A node-level rollout. The installer must match (platform, schematic, version) or a node loses its identity or its extensions — **ADR-014 as amended 2026-09-18**, recipe in [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. The fleet moved to v1.14.1 on 2026-09-22 through the box-run rollout (`mgmt-reconcile`, FU-033/FU-273 archived); the class stays human-proposed until Renovate's G-D launches (operator, 2026-09-18 — ROADMAP G-D) |
 | 7 | **devbox/nix toolchain** (28 pkgs, all `@latest`) | `devbox.json` / `devbox.lock` | **disabled on purpose** | ❌ n/a | `@latest` is untrackable (it once proposed a 5-year-old gitleaks). Owned by the weekly `devbox-update.yaml` instead — see [`renovate.md`](renovate.md) §Gotchas |
-| 8 | **GitHub Actions** (16 deps, 7 files) | `.github/workflows/*` | `github-actions` | ✅ **self-deploying** | The next run uses the merged file. SHA-pinning is the Trivy mitigation — **and it is exactly what's stuck on the orphaned branch** |
+| 8 | **GitHub Actions** (16 deps, 7 files) | `.github/workflows/*` | `github-actions` — the grouped MECHANICAL lane for every update type, majors included (ADR-141 as amended 2026-09-27); `/.github/workflows/` un-owned behind `pin-only-lint`'s third shape (ADR-100 addendum) | ✅ **self-deploying** | The next run uses the merged file. SHA-pinned since 2026-09-27 (#2021, the Trivy mitigation); a push-only workflow that breaks on master rolls back via the FU-1990 chain (`workflow-pin-revert`, drill-proven on agent-coordinator 2026-09-27) |
 | 9 | **Ansible collections/roles** | `ansible/requirements.yml`, `collections/` | `ansible-galaxy` (1) | ❌ **no** | Merge deploys nothing; someone must run `scripts/opnsense-playbook.sh`. The FU-097 gap, sharpest here — this is the router |
 | 10 | **arc-runner toolchain ARGs** (DEVBOX_VERSION, NIX_VERSION) | `docker/arc-runner/Dockerfile` | `regex` custom (2) | ✅ yes | `runner-image.yaml` builds and opens the pin PR. ⚠ the NIX_VERSION half resolves nothing (above) |
 | 11 | **Harness + tool versions baked into first-party images** (claude-code ×3: agent-base via devbox, agent-coordinator + claude-jail via npm; `gh` via apt; s5cmd; `KUBECTL_VERSION` ARG in the coordinator image) | three Dockerfiles in three repos | devbox-update (agent-base only); `regex` custom for s5cmd (2026-09-27); **none** for claude-code (npm), gh, KUBECTL_VERSION | ✅ built weekly (`schedule` on `build-image.yaml`, 2026-09-27) + on push | A rebuild is a new build-date tag → deploy-pin rolls it; the cluster pin is the revert. **GAP (register):** claude-code floats to npm latest in two images and rides nixpkgs in the third — no shared version, nothing checks they agree; the jail only moves on a hand rebuild; kubectl in the coordinator image is a hand ARG outside the weekly devbox sync. Owner of the fix: #2014 (version sets). |
@@ -113,6 +118,29 @@ deployment?" has a different answer per class, because homelab runs **three reco
 have a deliberate human gate that should stay but has **no drift detection** between applies. Class
 6 is a node rollout that must never be automated. Classes 7 and 9 are outside Renovate entirely, and
 **9 is the one that silently does nothing** — a merged OPNsense change sits until a human remembers.
+
+### Last proven end to end — per class (S9 #1991; the 7th column, hand-kept until #1992 generates it)
+
+The rule this table serves ([FU-097's ledger rule](management-box.md), generalized from box
+surfaces to dependency classes 2026-09-27): **an owner leaves a class only when the class's row is
+complete** — proposer, merge gate, deploy edge, detector, revert, canary, and a RECENT proof. The
+lanes are [`renovate.md`](renovate.md) §"The automerge vs review split" and ADR-141; this table
+records only the proof — one merge per lane, with the evidence that it went through the gates it
+claims. A class without a dated row here is unproven, whatever its rule says.
+
+| Class → lane | Last proven end to end | Evidence |
+|---|---|---|
+| **GitHub Actions, pin/minor** → grouped `automerge` (reflex approves, CI at head) | **2026-09-27** | homelab#2008 (renovatebot/github-action v46.1.21) merged 11:08Z on the reflex's approval; #2021 (`pin dependencies`, the SHA-pinning wave) 11:34Z once pins went `minimumReleaseAgeBehaviour: timestamp-optional`; agent-runtime#157 + openrouter-operator#77 (pin waves) merged on their own once `/.github/workflows/` was un-owned |
+| **GitHub Actions, major** → the same grouped lane (ADR-141 amended: no lens until a dependency graduates) | **2026-09-27** | agent-coordinator#22 (`github-actions (major)`) auto-merged 09:51Z, no human, no lens |
+| **Actions pin, post-merge rollback** → the FU-1990 chain (`workflow-pin-revert`) | **2026-09-27 (drill)** | agent-coordinator#20 (deliberate bad pin) merged 09:11Z → `GithubWorkflowRunFailed` 09:17Z → revert #21 opened by the App, reflex-approved, merged 09:37Z; ~3.5 min from alert to merged revert, zero human touch; two chain defects found only by the drill (PR#2005 the token mint, PR#2006 the candidate query). Timeline: homelab#1990 |
+| **pre-commit hooks, patch/minor** → `automerge` | **2026-09-27** | openrouter-operator#73 (gitleaks v8.30.1) merged 12:30Z on the bot approval once `/.pre-commit-config.yaml` was carved out of that repo's whole-repo CODEOWNERS (it had sat REVIEW_REQUIRED two days with APPROVED at head) |
+| **npm patch/minor** (`scripts/mermaid-lint`) → `automerge` | **2026-09-27** | homelab#2012 (jsdom v30.1.0) merged 12:37Z; the lane + the CODEOWNERS carve-out landed the same day (6ddcdc21) — before that the class had no lane at all (#1977/#2012 parked) |
+| **terraform providers, any type** → `major/awaiting-human`, the human plan (`mgmt-human-plan`) | **2026-09-27** | homelab#1997 (tls 4.4.1), #1996 (proxmox ~> 0.113, main + provisioning), #1983 (github 6.13.0) — each `+0 ~0 -0` from the box, merged 12:26–12:29Z; #1984 (infisical 0.19) merged WITHOUT a plan — the box holds no infisical root — and was reconciled from the jail afterwards (2 in-place provider-schema updates, re-plan clean): a root the box does not plan needs the jail plan BEFORE the merge |
+| **base-image major** → un-armed `major`, the migration lens, a human merges | **2026-09-27** | agent-coordinator#23 (node 22 → 24): lens review under the four headings, `ci` + `build-image` gained a runtime smoke (`claude --version` et al. on the built image, 2b6a9fa), the seat merged 12:18Z; the real acceptance is the first coordinator/reviewer run on `2026.9.27-gca94f4a2dd99` (homelab#2024) |
+| **Python runtime deps, patch/minor** → `deps-review` (reflex → CHANGES_REQUESTED → a worker on the `renovate/*` branch) | ❌ **not yet** | FU-046 — no `deps-review` PR has drawn a CHANGES_REQUESTED; openrouter-operator#80 (python 3.14) is `deps-review` but a human merge by that repo's chokepoint rule (operator) |
+| **base-image major merging WITHOUT a human** | ❌ **not yet, by design** | stays un-armed until #1988's runtime-in-prod post-merge half exists: a `deploy/agent-coordinator` pin revert on `ArgoWorkflowsFailing` whose pod runs the PREVIOUS tag (a broken coordinator image would otherwise revert the revert lane out of existence) |
+| **substrate** (Talos, Kubernetes, Cilium) → never self-merges | ❌ **no Renovate proof** | the 2026-09-22 box-run rollout to Talos v1.14.1 was hand-proposed (row 6 above, ADR-132); the Renovate proposer for class 6 is #1988's substrate row |
+| **Helm charts / in-cluster images** (classes 1, 2) → `deps-review` / `major` | ❌ **not yet** | no chart or image bump has ridden Renovate into `argocd/` since the 2026-09-25 restart; the deploy edge (ArgoCD) is proven, the Renovate proposer→gate→merge is not |
 
 ### Version SETS — what must move together (operator ruling 2026-09-27; owner #2014)
 
@@ -125,6 +153,7 @@ sync — the register `#1992`'s generated table will carry; until then this list
 | **claude-code** | worker (agent-base): devbox `claude-code@latest` → weekly synchronized `devbox-update`; coordinator + reviewer (agent-coordinator image): npm latest at build, rebuilt weekly (Mon 06:00Z); the seat (claude-jail): npm latest at a hand rebuild | ❌ three mechanisms; the two cluster images rebuild on the same cron minute (roughly equal), the jail drifts; no detector |
 | **kubectl / kubernetes / kind** | fleet Kubernetes: `machines/machines.yaml` + `tofu/variables.tf`, box-run rollout; kubectl in repos: devbox `@latest` weekly; kubectl in the coordinator image: hand `ARG` (v1.36.1); kind: devbox `@latest` in the e2e repos | ⚠ the skew rule (kubectl within one minor of the server) is nobody's check; the ARG only moves when someone edits it |
 | **devbox / nix** | `DEVBOX_VERSION` / `NIX_VERSION` in the arc-runner image (regex-managed); devbox in the jail (`DEVBOX_USE_VERSION`, FU-240); the host `/nix` | ⚠ FU-240's pin is not the runner's |
+| **python (per service)** | image `FROM python:X.Y-slim` (Renovate `dockerfile`, `deps-review`); `devbox.json` `python@X.Y` (hand — `devbox update` re-resolves `@latest` only, a pinned major.minor never moves); `pyproject.toml` `requires-python`, ruff `target-version`, mypy `python_version` (hand) | ❌ openrouter-operator#80 (2026-09-27): image 3.11→3.14, everything else 3.11 — CI ran the old runtime, the review approved "no adaptation"; the lens now names the set (`agents/lenses/migration.md` §Version SETS) |
 
 **The model to match:** `devbox-update.yaml` — one weekly job re-resolves every repo together, one PR
 per repo, majors to the human lane. Anything that floats on its own cron (row 11) is a tracked gap,
@@ -280,8 +309,10 @@ classes** — stages 4 and 5 are where the gaps are.
 ### 1. Propose
 
 - **Renovate opens the PR** against the global policy in
-  [`renovate-global.json`](../.github/renovate-global.json): 7-day cooldown (security bypasses it),
-  Actions SHA-pinned, OSV alerts on, majors always human-gated.
+  [`renovate-global.json`](../.github/renovate-global.json): 7-day cooldown (security bypasses it;
+  pins, digests and Docker tags are timestamp-optional since 2026-09-27 — a tag without a release
+  timestamp used to sit pending forever), Actions SHA-pinned, OSV alerts on, every major labelled
+  `major` (the lens marker) — the LANE is the blast class's (ADR-141).
 - **The classification decides the lane, not the reviewer's mood:** digest/pin → `automerge`;
   runtime version bumps and base-image minors → `deps-review`; **every** major → `major` (the lens
   marker), un-armed — EXCEPT GitHub Actions, where every update type rides the grouped `automerge`
@@ -289,7 +320,8 @@ classes** — stages 4 and 5 are where the gaps are.
   [`renovate.md`](renovate.md) §"The automerge vs review split").
 - **First-party artifacts never ride Renovate** — a `2026.<m>.<d>-g<sha>` version doesn't order, so
   the deploy-pin PR opens them (ADR-084).
-- *Gap:* none of this currently fires in homelab (see Ground truth).
+- Fires in homelab since 2026-09-25 (§Ground truth); which lane has actually carried a merge is
+  §"Last proven end to end" — a class without a dated row there is still aspirational.
 
 ### 2. Review
 
@@ -300,8 +332,12 @@ classes** — stages 4 and 5 are where the gaps are.
   adapts the code **on the `renovate/*` branch**. Never close the PR: closing is not a terminal
   action — [`renovate.md`](renovate.md) §Coordinator × Renovate explains why (churn, and
   vulnerability PRs are recreated regardless). To abandon an upgrade durably, change the **config**.
-- **`major` lane** — un-armed, coordinator-owned, human merges. An ARMED `major` (GitHub Actions,
-  ADR-141) is the reflex's: the reviewer's lens approves, CI + the FU-1990 revert chain are the gate.
+- **`major` lane** — un-armed, coordinator-owned, human merges (`agents/major-handoff.sh` sets
+  `major/awaiting-human` only on the reviewer's APPROVED at head under the lens's four headings). An
+  ARMED `major` (a GRADUATED GitHub Actions dependency, ADR-141 as amended) is the reflex's: the
+  reviewer's lens approves, CI + the FU-1990 revert chain are the gate. Un-graduated Actions majors
+  carry no `major` at all — they ride the grouped `automerge` lane. Terraform providers are neither:
+  `major/awaiting-human` on any type, the human plan is the gate (row 5).
 - **Platform-specific review question the app lanes don't ask:** *does this bump violate a platform
   invariant?* The ip-plan ranges (ADR-088), storage caps (ADR-089,
   [`storage-ledger.md`](storage-ledger.md)), the `bgp=advertise` label contract, secret
@@ -383,7 +419,7 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | Blackbox probes on service endpoints | ✅ | FU-099 — seconds-grade, dumb |
 | Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
 | Storage-cap breach visibility | ✅ | Garage admin metrics scraped + `garage-alerts` belts since #965 (2026-08-25); Longhorn metering since 2026-08-04 — the pve thin-pool `Data%` is FU-093's remaining gap ([`storage-ledger.md`](storage-ledger.md)) |
-| **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc |
+| **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc; the gauge (time since the last `renovate/*` PR, plus the ⚠-row count of the coverage table) is #1992's deliverable |
 | **Substrate currency / support window** | ✅ | the management box's belt compares the declared Talos / Kubernetes / Cilium versions against upstream releases and alerts on "a newer minor exists" and on "ours is EOL" — [`management-box.md`](management-box.md) §MB2 (FU-254). The sibling of the row above, and **not** a thing Renovate could have covered: class 6 must not auto-deploy |
 | Drift between tofu applies | ⚠ partial — `MgmtApplyResidueStanding` + `MgmtNode*Drift` | FU-097, FU-235 |
 
@@ -395,17 +431,17 @@ and then nothing is watching.
 
 ## Next steps, in dependency order
 
-1. **Make Renovate actually run again** — the cause is the missing `statuses` permission (§Ground
-   truth, diagnosed 2026-09-25); granted 2026-09-25 (PRs flow); the invalid `vulnerabilityAlerts.prPriority` is dropped
-   (validator-clean). Remaining: either fix or remove the `NIX_VERSION` custom manager. Then land the
-   `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single highest-value
-   security item on this page — but only once a Renovate run has REBUILT it under the
-   first-party exclusion (its first cut also froze `teststuffstash/homelab/…reusable.yml@master`
-   at one SHA; §Gotchas in [`renovate.md`](renovate.md)): no `uses: teststuffstash/` line may
-   change in the diff.
+1. ✅ **Renovate runs again** — the cause was the missing `statuses` permission (§Ground truth,
+   diagnosed and granted 2026-09-25); the invalid `vulnerabilityAlerts.prPriority` is dropped
+   (validator-clean). ✅ The Actions SHA-pinning landed 2026-09-27 as #2021, rebuilt by Renovate
+   under the first-party exclusion (the first cut, #1970, froze
+   `teststuffstash/homelab/…reusable.yml@master` at one SHA and was closed — §Gotchas in
+   [`renovate.md`](renovate.md)). Remaining: either fix or remove the `NIX_VERSION` custom manager
+   (it still resolves nothing).
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a
-   `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix. (The
-   dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
+   `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix — owner #1992,
+   together with the generated coverage table. (The dashboard-issue-exists option is gone —
+   `dependencyDashboard: false` by ruling, 2026-08-18.)
 3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`) over
    `argocd/resources/*` and `tofu fmt -check -recursive` are both required checks. Two residues by
    decision, not omission: `tofu validate` stays the local `devbox run tf-validate` gate (a provider

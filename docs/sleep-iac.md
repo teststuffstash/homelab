@@ -15,7 +15,7 @@ section below is kept as the build record — the status banner is the current s
 > dashboard moved to GitOps** (`sleep-tracking/` kustomize `configMapGenerator`; tofu CM +
 > `tofu/dashboards/sleep-overview.json` removed; Grafana provisions it from the sleep-tracking ns).
 > **Done (FU-025 archived 2026-07-04):** step-7a shipped as the ADR-084 deploy-pin flow (§Deploy
-> pipeline); repo dependency automation is FU-125's problem (see [`renovate.md`](renovate.md)).
+> pipeline); repo dependency automation is Renovate's (see [`renovate.md`](renovate.md)).
 > Op note: the Grafana k8s-sidecar
 > (`UNIQUE_FILENAMES=false`) only writes on CM watch events, so removing one of two same-key dashboard
 > CMs needs a MODIFY event / grafana restart on the survivor to rewrite the file.
@@ -29,7 +29,7 @@ Three layers, so app repos know nothing about homelab and a deploy is a reviewab
 - **`sleep-iac`** (new): the stack's deployment truth — ArgoCD child Applications + values +
   version pins **+ the apps' infra CRs** (Garage Workspaces, ExternalSecrets, OpenRouterKeys,
   agent git-token). Own CI gates; **a deploy = a version-bump PR here** (Renovate — see
-  [`renovate.md`](renovate.md) / FU-125 — and the coordinator's step-7a automation both plug in at this seam).
+  [`renovate.md`](renovate.md) — and the coordinator's step-7a automation both plug in at this seam).
 - **homelab**: the platform — operators, SERVICES.md, the `sleep` **AppProject** (tenancy
   boundary), and one root Application pointing at sleep-iac. **sleep-iac is public** (it's
   deployment config with no secret material — the CRs carry Garage *key ids* and Infisical
