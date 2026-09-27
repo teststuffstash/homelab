@@ -29,3 +29,6 @@ renovate-untouched-no-update   | board | gh/pr-list.json @ patches/add-renovate-
 renovate-worker-pushed-update  | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | picks-probe1  | p1=150 n=150 oid=ren150oid789
 renovate-untouched-cr-no-update | board | gh/pr-list.json @ patches/add-renovate-cr-behind.jq |     | unstrand-renovate-skip | n=151
 renovate-other-class-update    | board | gh/pr-list.json @ patches/add-renovate-other-class.jq |     | picks         | n=152 oid=ren152oid789
+# Login shape (homelab#2007): the rows carry the REAL `app/homelab-renovate-1234` list shape — the raw-prefix
+# test missed it and the updater edited a live grouped-Actions branch; `renovate-untouched-cr-no-update`
+# keeps the plain `homelab-renovate-1234[bot]` shape so both spellings stay pinned.
