@@ -134,12 +134,12 @@ PIN_LINE_RE='^[-+][[:space:]]*(- )?uses:[[:space:]]*[A-Za-z0-9-]+/[A-Za-z0-9_.-]
 
 **Fail-closed:** empty/unreadable diff = FAIL, never "no offending lines found". If any line does NOT match the regex, the PR is outside the revert class → report-only.
 
-#### Step 5: Record the Reverted Pins (the close happens later, in the reflex)
+#### Step 5: Record the Reverted Pins (the refusal happens later, in CI)
 Renovate re-proposes a merged-then-reverted version on its next run — a MERGED PR is not a rejected one — and that re-opened PR does not exist yet at revert time. So the chain only RECORDS: the `+` lines of the original PR's diff (the versions reverted FROM) go into the revert PR body as one machine-readable line:
 ```
 reverted-pins: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 docker/login-action@…
 ```
-The close is a step in `.github/workflows/renovate-approve.reusable.yml` (which already runs on every Renovate PR of every caller repo): before approving, it reads the `reverted-pins:` lines of the repo's merged `revert-wf-*` PRs from the last 30 days, and if the incoming PR's diff re-adds any of those pins it is CLOSED with a comment instead of approved. A closed PR is a rejected version in Renovate's semantics — the same version is not re-proposed, the next release gets a fresh PR.
+The refusal is `scripts/pin-only-lint.sh` check (e), which runs inside every platform repo's required `ci` (b609c1e8): it reads the `reverted-pins:` lines of the repo's merged `revert-wf-*` PRs from the last 30 days (REST, fail-closed), and an added SHA named there fails the lint — so the re-proposed PR stays RED until Renovate moves it to a newer release, on which it greens on its own. One home for the rule, and CI is the gate for both the mechanical (`automerge`) and the lens-reviewed (`major`) lane; a reflex-side close could only ever have covered the first.
 
 #### Step 6: Revert the Merge Commit
 Clone the repo, create a revert branch, revert the merge commit, push, create a PR with auto-merge:
@@ -165,7 +165,7 @@ The branch name is deterministic, so a racing instance hits `already-exists` and
 2. **Ledger**: `responder-seen` ConfigMap keyed on `wf-<repo>-<sha>` — one revert decision per (repo, merge-sha)
 3. **Fail-closed**: every probe failure is loud and report-only (no revert on bad data)
 4. **Pin-only predicate**: empty/unreadable diff = FAIL, never "no offending lines found"
-5. **Renovate close**: reflex-side, keyed on the `reverted-pins:` lines of merged `revert-wf-*` PRs (30-day window); closing an already-closed PR is fine
+5. **Re-proposal refusal**: `pin-only-lint` check (e), keyed on the `reverted-pins:` lines of merged `revert-wf-*` PRs (30-day window); a refused PR is red, never closed
 6. **Rate limit**: 4 requests/minute on the Sensor trigger
 
 ## Composition with Responder Lane

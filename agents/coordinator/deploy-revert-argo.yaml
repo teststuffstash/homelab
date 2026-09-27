@@ -267,10 +267,10 @@ spec:
 #   (b) records the reverted pins (the versions reverted FROM) as a machine-readable
 #       `reverted-pins:` line in the revert PR body. Renovate re-proposes a merged-then-reverted
 #       version on its next run (a MERGED PR is not a rejected one), and that re-opened PR does
-#       not exist yet at revert time — so the close happens later, in
-#       .github/workflows/renovate-approve.reusable.yml: a Renovate PR that re-adds a pin listed
-#       on a merged `revert-wf-*` PR of the last 30 days is CLOSED instead of approved (a closed
-#       PR IS a rejected version in Renovate's semantics — the next release gets a fresh PR).
+#       not exist yet at revert time — so the refusal happens later, in scripts/pin-only-lint.sh
+#       check (e), inside every platform repo's required `ci`: a Renovate PR that re-adds a pin
+#       listed on a merged `revert-wf-*` PR of the last 30 days stays RED until Renovate moves it
+#       to a newer release (one gate for the mechanical and the lens-reviewed lane alike).
 #   (c) the revert PR follows the same pattern as deploy-revert (branch name, commit message, body)
 #       and carries `automerge` + `dependencies`: the platform repos require ONE approving review
 #       (tofu/github protected_repos), and the renovate-approve reflex posts it for exactly that
@@ -418,8 +418,8 @@ spec:
 
             # ── THE REVERTED PINS (for the reflex-side close) ────────────────────────────────
             # In the ORIGINAL PR's diff the `+` lines are the versions this revert removes again.
-            # They go into the revert PR body as one `reverted-pins:` line; the renovate-approve
-            # reflex closes a Renovate PR that re-adds any of them (header note (b)). The close
+            # They go into the revert PR body as one `reverted-pins:` line; pin-only-lint check (e)
+            # refuses a Renovate PR that re-adds any of them (header note (b)). The refusal
             # cannot happen here: Renovate re-creates the PR only AFTER this revert merges.
             # >>>REPLAY:workflow-pin-revert-reverted-pins>>>
             REVERTED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^+' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
@@ -448,7 +448,7 @@ spec:
             # Compute the PR body — printf, not a multi-line shell string: a literal newline at column 0
             # would close this YAML block scalar, and indenting it instead would emit a markdown code block.
             RUN_NUM="$(printf '%s' "$ALERT" | jq -r '.number')"
-            BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. A Renovate PR that re-proposes a reverted pin is closed by the renovate-approve reflex (a closed PR is a rejected version in Renovate'"'"'s semantics; the next release gets a fresh PR). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)\n\nreverted-pins: %s' \
+            BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. A Renovate PR that re-proposes a reverted pin is refused by pin-only-lint check (e) in ci (it stays red until Renovate proposes a newer release). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)\n\nreverted-pins: %s' \
               "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM" "$REVERTED_PINS")"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — workflow '${WF}' failed post-merge)" \

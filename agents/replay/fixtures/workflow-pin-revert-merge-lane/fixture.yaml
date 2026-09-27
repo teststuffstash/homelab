@@ -1,7 +1,7 @@
 # workflow-pin-revert-merge-lane — the FU-1990 revert chain's two 2026-09-27 fixes (homelab S9
 # #1990, the pre-drill read): (1) the reverted pins are the ORIGINAL PR's `+` lines (the versions
 # reverted FROM), one `owner/repo@sha` per line, de-duplicated, space-joined — the `reverted-pins:`
-# line the renovate-approve reflex keys its close on; the earlier code read the `-` lines (the OLD
+# line pin-only-lint check (e) keys its refusal on; the earlier code read the `-` lines (the OLD
 # pins) and closed nothing. (2) the revert PR is labelled `automerge` + `dependencies` BEFORE it is
 # armed — the platform repos require one approving review and the reflex posts it only for that
 # label pair on a Bot-authored PR; an unlabelled revert sat BLOCKED on a human. The action stream
