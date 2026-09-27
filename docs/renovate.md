@@ -64,7 +64,14 @@ not the coordinator, owns whether an update should exist:
 
 - **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
   won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **dispatch a worker to adapt
-  the code on the renovate branch** (FU-046) — never close.
+  the code on the renovate branch** (FU-046) — never close. **Not on the GitHub Actions lane** (ADR-141):
+  those PRs are grouped per repo per wave and ride `rebaseWhen: behind-base-branch` — Renovate keeps its
+  own branch current and re-extracts master on every rebase (a call site added on master after the PR
+  opened gets bumped on the next rebase, never by a request-changes), and it stops maintaining a branch
+  the moment anyone else pushes to it (its edited-PR rule — the operator's update-branch on
+  agent-coordinator#14 is why the third `actions/checkout` site there was never bumped). The reviewer
+  reads such a PR as a batch member with no fixer behind it; the in-cluster updater leaves untouched
+  Renovate PRs to Renovate.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
   DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and
