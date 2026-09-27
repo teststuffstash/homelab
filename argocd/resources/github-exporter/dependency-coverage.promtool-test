@@ -1,0 +1,112 @@
+# Behaviour fixture for RenovateSilent + DependencyClassProofStale (homelab#1992, FU-125).
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/dependency-coverage.promtool-test
+#
+# `devbox run prometheus-rules-lint` checks that the alerts PARSE; this checks that they FIRE on the
+# shape they were written for and stay QUIET on the shape that looks like it.
+#
+# CLOCK: promtool's test clock starts at 0, so a `_timestamp: 0` series is "it happened at t=0" and
+# `time()` is seconds since then — the exporter publishes TIMESTAMPS and the alerts do the
+# arithmetic (the mgmt-apply lesson: a precomputed age cannot be replayed).
+rule_files:
+  - dependency-coverage.promtool-rules
+
+evaluation_interval: 1h
+
+tests:
+  # ── RenovateSilent, shape 1 — the 2026-07-27 regression: the last Renovate PR anywhere was at
+  #    t=0 and nothing followed. Two repos; the org-wide max is what counts. ─────────────────────
+  - interval: 1h
+    input_series:
+      - series: 'github_renovate_last_pr_timestamp{owner="teststuffstash",repo="homelab"}'
+        values: "0+0x400"
+      - series: 'github_renovate_last_pr_timestamp{owner="teststuffstash",repo="oracle-fleet"}'
+        values: "0+0x400"
+    alert_rule_test:
+      # 13 days: inside the window — a quiet fortnight is not the incident.
+      - eval_time: 312h
+        alertname: RenovateSilent
+        exp_alerts: []
+      # 14 d + 5 h: past the threshold but inside `for: 6h` — pending, not firing.
+      - eval_time: 341h
+        alertname: RenovateSilent
+        exp_alerts: []
+      # 14 d + 7 h: firing — no labels beyond the rule's own (max() drops repo/owner).
+      - eval_time: 343h
+        alertname: RenovateSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "Renovate has not opened a PR anywhere in the org for 14 days"
+              description: 'The newest `renovate/*` PR on any teststuffstash repo is over 14 days old (github_renovate_last_pr_timestamp, org-wide max). Renovate runs every 6h from .github/workflows/renovate.yaml and reports success even when it opens nothing (FU-125, docs/dependency-upgrades.md §Ground truth): read the latest run log for `integration-unauthorized` / `repository-changed` per repo, then `gh api /orgs/teststuffstash/installations` for the homelab-renovate App and its permissions (GithubAppPermissionDrift is the sibling belt). Never re-enable the dependency dashboard as the fix — liveness is this gauge by ruling.'
+
+  # ── RenovateSilent, shape 2 — ONE repo went quiet (its App install was removed) while another
+  #    keeps receiving PRs: the org-wide max stays fresh, so silence is CORRECT. ─────────────────
+  - interval: 1h
+    input_series:
+      - series: 'github_renovate_last_pr_timestamp{owner="teststuffstash",repo="homelab"}'
+        values: "0+0x400"
+      # oracle-fleet's newest PR advances every 6 days (a step of 518400 s per 144 samples of 1h)
+      - series: 'github_renovate_last_pr_timestamp{owner="teststuffstash",repo="oracle-fleet"}'
+        values: "0+0x143 518400+0x143 1036800+0x112"
+    alert_rule_test:
+      - eval_time: 343h
+        alertname: RenovateSilent
+        exp_alerts: []
+      - eval_time: 400h
+        alertname: RenovateSilent
+        exp_alerts: []
+
+  # ── DependencyClassProofStale, shape 1 — a COMPLETE class whose proof was at t=0 and never
+  #    moved: fires after 90 d + the 1 d `for`. An INCOMPLETE class with the same old proof stays
+  #    silent — incompleteness is the table's business, not this alert's. ───────────────────────
+  - interval: 1h
+    input_series:
+      - series: 'github_dependency_coverage_complete{class="8",class_name="GitHub Actions"}'
+        values: "1+0x2300"
+      - series: 'github_dependency_coverage_last_proven_timestamp{class="8",class_name="GitHub Actions"}'
+        values: "0+0x2300"
+      - series: 'github_dependency_coverage_complete{class="7",class_name="devbox/nix toolchain"}'
+        values: "0+0x2300"
+      - series: 'github_dependency_coverage_last_proven_timestamp{class="7",class_name="devbox/nix toolchain"}'
+        values: "0+0x2300"
+    alert_rule_test:
+      # 89 d: recent enough.
+      - eval_time: 2136h
+        alertname: DependencyClassProofStale
+        exp_alerts: []
+      # 90 d + 12 h: past the threshold, inside `for: 1d` — pending.
+      - eval_time: 2172h
+        alertname: DependencyClassProofStale
+        exp_alerts: []
+      # 91 d + 2 h: firing for class 8 only.
+      - eval_time: 2186h
+        alertname: DependencyClassProofStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              class: "8"
+              class_name: GitHub Actions
+            exp_annotations:
+              summary: "Dependency class 8 (GitHub Actions) is complete but its proof is over 90 days old"
+              description: 'docs/dependency-upgrades.md §The dependency inventory marks class 8 (GitHub Actions) complete — no ⚠ column — but its newest end-to-end proof (a merged proposer PR, or the capability-ledger date) is older than 90 days: the owner may have left and nothing has exercised propose → gate → deploy since. Re-run `devbox run dependency-coverage` (it refreshes the proofs from GitHub); if the date does not move, the class has stalled — find why nothing proposed (docs/renovate.md) or re-add the owner in docs/dependency-classes.yaml.'
+
+  # ── DependencyClassProofStale, shape 2 — the proof REFRESHES (a regeneration moved the date to
+  #    t=60 d at the 70-day mark): the age resets and the alert never fires. ─────────────────────
+  - interval: 1h
+    input_series:
+      - series: 'github_dependency_coverage_complete{class="8",class_name="GitHub Actions"}'
+        values: "1+0x2300"
+      # 60 d = 5184000 s, published from the 70-day mark (sample 1680) onward
+      - series: 'github_dependency_coverage_last_proven_timestamp{class="8",class_name="GitHub Actions"}'
+        values: "0+0x1679 5184000+0x620"
+    alert_rule_test:
+      - eval_time: 2186h
+        alertname: DependencyClassProofStale
+        exp_alerts: []
+      - eval_time: 2300h
+        alertname: DependencyClassProofStale
+        exp_alerts: []

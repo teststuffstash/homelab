@@ -1,0 +1,209 @@
+# dependency-classes.yaml — the RULINGS half of the dependency coverage table (homelab#1992, stint S9
+# homelab#1985). Hand-owned, like machines/machines.yaml: `scripts/dependency-coverage.py` joins
+# each class below with the dependencies it EXTRACTS from the repo's own files and rewrites the
+# generated block in docs/dependency-upgrades.md §The dependency inventory. Edit THIS file (a
+# cell), never the generated block; then run `devbox run dependency-coverage`.
+#
+# One class per reconciliation shape (the class ids continue the numbering the hand table used
+# since 2026-08-01, so old references still resolve). Each class fills the six MECHANISM columns —
+# proposer, merge gate, deploy edge, detector, revert, canary — with a status + one grounded line:
+#
+#   status: ok     ✅  built and proven on this class (name the proof: an FU/ADR/PR/date)
+#   status: human  👤  a human by RULING (ADR-005/-014/-131 …) — filled, not a gap; the owner STAYS
+#   status: gap    ⚠   missing — the owner cannot leave this class until it is ok or human
+#
+# The seventh column, last proven end to end, is never written here: the generator reads it from
+# GitHub (the newest MERGED PR from the class's proposer that named the dependency —
+# `proof_head_prefixes` × `proof_paths`) or, for the substrate, from the capability ledger in
+# docs/management-box.md (`ledger_row`). FU-097's ledger rule generalized from box surfaces to
+# dependency classes: a class enters "complete" with its first proof, never with a belief.
+#
+# A per-dependency exception (a dependency inside a class whose one cell differs — the
+# NIX_VERSION manager that resolves nothing) goes under `overrides:` keyed by the dependency name
+# the generator prints; the override wins for that cell only.
+
+proof_recent_days: 90 # "the proof is recent" — a complete row whose newest proof is older re-opens (⚠)
+
+classes:
+  - id: 1
+    name: Helm charts, GitOps
+    extract: helm_gitops
+    where: "`argocd/platform/*.yaml` `spec.source.chart` + `targetRevision`"
+    manager: "argocd (needs `managerFilePatterns` — NOT configured, so nothing proposes these today)"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["argocd/platform/"]
+    proposer: {status: gap, text: "Renovate's `argocd` manager has no default file match and renovate-global.json does not configure one — no PR has ever proposed a chart bump here (§Ground truth: 97 deps extracted, none of them these)"}
+    merge_gate: {status: ok, text: "minor → `deps-review` (reflex + lens), major → un-armed `major` lane (renovate-global.json; ADR-141 for the arm rule)"}
+    deploy_edge: {status: ok, text: "ArgoCD `syncPolicy.automated` — a merge IS the deploy (27 of 34 Applications auto-sync)"}
+    detector: {status: gap, text: "ArgoCD health is shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe); the contract probe is FU-102"}
+    revert: {status: human, text: "a human `git revert` — the FU-044 deterministic revert is scoped to first-party image pins; extending it to charts REJECTED (operator 2026-08-04, IAC-G09: CRD/schema downgrades are not reversible by a revert)"}
+    canary: {status: gap, text: "none — a chart bump lands on the only instance; ARC controller/runners must move in lockstep (two files, one version)"}
+
+  - id: 2
+    name: In-cluster images, GitOps
+    extract: images_gitops
+    where: "`image:` in `argocd/resources/**/*.yaml` + `agents/coordinator/*.yaml` (third-party refs; first-party = class 3)"
+    manager: "kubernetes (needs `managerFilePatterns` — NOT configured) / none for agents/images.env"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["argocd/resources/", "agents/coordinator/", "agents/images.env"]
+    proposer: {status: gap, text: "unmanaged — Renovate's `kubernetes` manager has no default file match and none is configured; digest-pinned refs never move (cloudflared 2026.5.2, python:3.13-slim@sha256, k3d:5-dind@sha256)"}
+    merge_gate: {status: ok, text: "digest → `automerge` (reflex), version minor → `deps-review`, major → un-armed (renovate-global.json) — the lanes exist, nothing feeds them"}
+    deploy_edge: {status: ok, text: "ArgoCD auto-sync of the manifest — path-scoped per resource dir"}
+    detector: {status: gap, text: "ArgoCD health (shallow) + the per-service alert belts where they exist; no post-deploy contract probe (FU-102)"}
+    revert: {status: human, text: "a human `git revert`; the FU-044 chain's pin-only predicate covers FIRST-PARTY pins only (class 3)"}
+    canary: {status: gap, text: "none — single replica for most of these"}
+
+  - id: 3
+    name: First-party images
+    extract: first_party_images
+    where: "`agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`)"
+    manager: "n/a — the deploy-pin PR (ADR-084); Renovate never touches our own artifacts (a `2026.<m>.<d>-g<sha>` tag does not order)"
+    proof_head_prefixes: ["deploy/", "runner-image-pin"]
+    proof_paths: ["agents/images.env", "argocd/platform/arc-runners", "agents/coordinator/"]
+    proposer: {status: ok, text: "the image repo's `deploy-pin` job (agent-runtime → agent-base, agent-coordinator) and `runner-image.yaml` (arc-runner) open `deploy/*` / `runner-image-pin` PRs; weekly `schedule` rebuilds since 2026-09-27"}
+    merge_gate: {status: ok, text: "`automerge`+`dependencies` → renovate-approve reflex → CI-green auto-merge (`pin-only-lint` guards the diff shape)"}
+    deploy_edge: {status: ok, text: "ArgoCD auto-sync; the deploy-pin sweep bumps every mirrored literal by git-grep (images.env header) — a ref with a DIFFERENT tag than images.env is one the sweep missed (⚠ on the row)"}
+    detector: {status: gap, text: "ArgoCD Degraded → `/deploy-degraded` (wired 2026-08-04) but NEVER fired by a real Degraded homelab app (FU-044); a bare `:latest`-equivalent ref is invisible to it"}
+    revert: {status: ok, text: "the cluster pin IS the revert (operator 2026-09-27): `deploy-revert-argo.yaml`'s pin-only predicate opens the revert PR; the FU-1990 sibling chain proved the shape end to end in the 2026-09-27 drill (agent-coordinator#20 → #21, ~3.5 min)"}
+    canary: {status: gap, text: "none — the pin rolls every consumer at once (the coordinator, the reviewer, the sentinel, the transcript viewer)"}
+
+  - id: 4
+    name: Helm charts, tofu-managed
+    extract: helm_tofu
+    where: "`helm_release` blocks in `tofu/*.tf`, version from `tofu/variables.tf` defaults"
+    manager: "terraform (a `var.*_version` default — Renovate's helm datasource does not follow it)"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["tofu/variables.tf", "tofu/argocd.tf", "tofu/longhorn.tf", "tofu/cilium.tf"]
+    proposer: {status: gap, text: "a hand edit of the variable default — Renovate's terraform manager reads `helm_release.version` literals, not a `var.` indirection (§Ground truth: 0 PRs)"}
+    merge_gate: {status: human, text: "PR + the management sentinel's plan-on-PR (ADR-131) + the codeowner read — these are ADR-005 substrate (ArgoCD, Longhorn) by ruling"}
+    deploy_edge: {status: human, text: "the management box applies only the allowlisted residue; a `helm_release` change refuses to a human `devbox run mgmt-tf -- apply` (docs/management-box.md §The test surface)"}
+    detector: {status: ok, text: "`MgmtApplyResidueStanding` — merged-but-unapplied residue alerts after 24 h (FU-252); plan-on-PR shows the diff before merge"}
+    revert: {status: human, text: "`git revert` + a human apply; ArgoCD/Longhorn downgrades carry CRD/schema risk (IAC-G09)"}
+    canary: {status: gap, text: "none — one release per chart"}
+
+  - id: 5
+    name: Tofu providers
+    extract: tofu_providers
+    where: "`tofu/**/versions.tf` `required_providers` (the `~>` range) + `.terraform.lock.hcl` (the real pin)"
+    manager: terraform
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["tofu/"]
+    proposer: {status: ok, text: "Renovate `terraform` — lockfile + constraint PRs flow since the `statuses` grant (2026-09-25; #1976/#1981/#1983/#1984/#1996/#1997 merged 2026-09-27); the two roots the box does not plan are excluded from the manager (row overrides)"}
+    merge_gate: {status: ok, text: "the management box is the gate, mechanically (ADR-131 amended 2026-09-27, #2026): stage 1 admits the `provider-pin` diff shape, stage 2 plans the head with the new provider and a pin must plan EMPTY — `management-sentinel` green on `+0 ~0 -0` → `automerge` (reflex approves, auto-merge lands); red = the only provider PRs a human sees (`mgmt-human-plan`). Built on six human-ordered `+0` plans; the first merge on the sentinel's own green is still owed (§Last proven end to end)"}
+    deploy_edge: {status: ok, text: "an empty plan IS the deploy: the box's next plan/apply runs the new provider binary (registry-signed, hash-verified by tofu); nothing to apply by construction"}
+    detector: {status: ok, text: "the sentinel's plan-on-PR (red = `provider bump changes the plan`, by design) + `MgmtApplyResidueStanding` on main; the external roots plan read-only on the box (FU-237/FU-238)"}
+    revert: {status: human, text: "`git revert` of the lockfile + the same empty plan; a provider downgrade re-plans clean (lockfile-only)"}
+    canary: {status: gap, text: "none — `tofu/provisioning` is the low-blast root a provider bump could land on first, but nothing orders the roots"}
+
+  - id: 6
+    name: Cluster substrate
+    extract: substrate
+    where: "`tofu/variables.tf` defaults (`talos_version_*`, `kubernetes_version`, `cilium_version`) + `machines/machines.yaml`"
+    manager: "terraform (weak) — human-proposed until ROADMAP G-D (operator 2026-09-18)"
+    proof_head_prefixes: []
+    proof_paths: []
+    ledger_row: "Talos install rollout"
+    proposer: {status: human, text: "a human bump PR of the variable default — Renovate stays off class 6 until a few ATTENDED bumps through the box path have passed (operator 2026-09-21, ROADMAP G-D); the substrate belt says when we are behind or EOL (FU-254, docs/management-box.md §MB2)"}
+    merge_gate: {status: human, text: "PR + plan-on-PR + the install-impact line (§MB3) + the codeowner read; Kubernetes minors need a recreate-from-git drill first (design sitting 2026-09-25)"}
+    deploy_edge: {status: ok, text: "the box-run rollout: `mgmt-reconcile` rolls `reconcile: auto` nodes — 13/13 incl. 3 CPs on 2026-09-22 (#1879, ADR-132; VMs in place since ADR-014's 2026-09-18 amendment)"}
+    detector: {status: ok, text: "`MgmtNode*Drift` declared-vs-live per node (FU-235) + the substrate currency belt (FU-254) + the rollout's workload-health hold (FU-278)"}
+    revert: {status: human, text: "forward by default (rollout ruling 2026-09-22): a revert is a human commit + the same rollout; the post-apply health gate parks, never reverts"}
+    canary: {status: ok, text: "per-type canary node via the per-node `talos_version` override (FU-033 lever) — the reconciler rolls canaries first, CPs last"}
+
+  - id: 7
+    name: devbox/nix toolchain
+    extract: devbox
+    where: "`devbox.json` (all `@latest`) → `devbox.lock` (the resolved version)"
+    manager: "nix/devbox DISABLED on purpose (an `@latest` pin is untrackable — docs/renovate.md §Gotchas)"
+    proof_head_prefixes: ["devbox-update"]
+    proof_paths: ["devbox.lock"]
+    proposer: {status: ok, text: "the weekly synchronized `devbox-update.yaml` — one job re-resolves EVERY repo's lock together, one PR per repo (the model other classes must match, #2014)"}
+    merge_gate: {status: ok, text: "`automerge`+`dependencies` → reflex → CI-green; a major in the resolved set relabels the PR `major` and disarms it (scripts/devbox-update.sh)"}
+    deploy_edge: {status: ok, text: "self-deploying for CI and the jail (`devbox run` reads the lock); the agent-base image rebuilds weekly (class 3 carries the pin)"}
+    detector: {status: gap, text: "CI on the PR is the only check; nothing compares the jail's, the runner's and the worker image's resolved versions (the #2014 version-set gap; FU-240 for the box↔jail devbox skew)"}
+    revert: {status: ok, text: "`git revert` of the lock — nothing else references the store paths"}
+    canary: {status: gap, text: "none — every repo moves in the same weekly pass by design (alignment over caution)"}
+
+  - id: 8
+    name: GitHub Actions
+    extract: github_actions
+    where: "`uses:` in `.github/workflows/*.y*ml` (third-party; first-party `teststuffstash/**@master` floats by contract)"
+    manager: github-actions
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: [".github/workflows/"]
+    proposer: {status: ok, text: "Renovate `github-actions`, SHA-pinned (`helpers:pinGitHubActionDigests`), grouped per repo per wave — #2021 (pin) and #2008 merged 2026-09-27"}
+    merge_gate: {status: ok, text: "every update type incl. majors rides the grouped `automerge` lane (ADR-141 as amended 2026-09-27): reflex approval + CI on the bumped head (a `pull_request` workflow runs the PR's own file)"}
+    deploy_edge: {status: ok, text: "self-deploying — the next run uses the merged file"}
+    detector: {status: ok, text: "`GithubWorkflowRunFailed` on master (github-exporter) covers the push-only workflows CI cannot exercise"}
+    revert: {status: ok, text: "the FU-1990 chain: `workflow-pin-revert` reverts the pin PR as `automerge`+`dependencies`, `pin-only-lint` check (e) refuses the reverted pin for 30 d — DRILLED 2026-09-27 (agent-coordinator#20 → #21, no human touch)"}
+    canary: {status: ok, text: "the PR's own `pull_request` run on the bumped head is the pre-merge proof; push-only workflows are canaried by the revert chain instead"}
+
+  - id: 9
+    name: Ansible collections/roles
+    extract: ansible
+    where: "`ansible/requirements.yml` (roles live in-repo today — the file is the extraction seam)"
+    manager: ansible-galaxy
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["ansible/requirements.yml"]
+    proposer: {status: ok, text: "Renovate `ansible-galaxy` reads `requirements.yml` by default — nothing is pinned there yet, so nothing to propose"}
+    merge_gate: {status: ok, text: "the standard lanes (minor → `deps-review`, major → un-armed)"}
+    deploy_edge: {status: gap, text: "NONE — a merge deploys nothing until a human runs `scripts/opnsense-playbook.sh`; the FU-097 gap, sharpest here (this is the router)"}
+    detector: {status: gap, text: "no nightly `--check` diff; a merged OPNsense change sits until a human remembers"}
+    revert: {status: human, text: "`git revert` + a human playbook run; an in-cluster applier would sit inside its own blast radius (the dependency-cone rule)"}
+    canary: {status: gap, text: "none — one router; Matchbox (near-zero cone) is the natural first target"}
+
+  - id: 10
+    name: arc-runner image inputs
+    extract: arc_runner
+    where: "`docker/arc-runner/Dockerfile` — `FROM ghcr.io/actions/actions-runner` + `ARG DEVBOX_VERSION` / `ARG NIX_VERSION`"
+    manager: "dockerfile (FROM) + custom.regex (the two ARGs — renovate-global.json customManagers)"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["docker/arc-runner/Dockerfile"]
+    proposer: {status: ok, text: "Renovate `dockerfile` + `custom.regex` — #2022 (actions-runner 2.337.0, `deps-review`) merged 2026-09-27"}
+    merge_gate: {status: ok, text: "FROM minor → `deps-review`; ARG patch/minor → `automerge` (custom.regex rule, 2026-09-27); majors → un-armed"}
+    deploy_edge: {status: ok, text: "`runner-image.yaml` builds on the merge and opens the `runner-image-pin` PR (class 3 lands it)"}
+    detector: {status: ok, text: "the image build in `ci` (push: false) fails the PR; `GithubWorkflowRunFailed` covers the master build"}
+    revert: {status: ok, text: "the cluster pin is the revert (the previous `arc-runner:` tag stays pullable); the FU-1990 chain covers the workflow half"}
+    canary: {status: gap, text: "none — the pin PR rolls both scale sets (arc-runners + arc-runners-large) together"}
+
+  - id: 11
+    name: Harness + tool versions baked into first-party images
+    extract: none
+    where: "three Dockerfiles in three repos (agent-runtime, agent-coordinator, claude-jail) — NOT extractable from this repo; the in-repo half is class 7/10. Members + sync state: §Version SETS below"
+    manager: "devbox-update (agent-base only); custom.regex for s5cmd; none for claude-code (npm), gh, KUBECTL_VERSION"
+    proof_head_prefixes: []
+    proof_paths: []
+    proposer: {status: gap, text: "claude-code floats to npm latest in two images and rides nixpkgs in the third; kubectl in the coordinator image is a hand ARG — owner of the fix: #2014 (version sets)"}
+    merge_gate: {status: ok, text: "the weekly `build-image` rebuild + the class 3 deploy-pin lanes"}
+    deploy_edge: {status: ok, text: "a rebuild is a new build-date tag → deploy-pin rolls it (weekly `schedule` since 2026-09-27)"}
+    detector: {status: gap, text: "nothing checks the three claude-code versions agree, or kubectl's skew against the fleet minor (#2014)"}
+    revert: {status: ok, text: "the cluster pin is the revert (operator 2026-09-27)"}
+    canary: {status: gap, text: "none"}
+
+  - id: 12
+    name: npm CI tooling
+    extract: npm
+    where: "`scripts/mermaid-lint/package.json` (+ lockfile) — the docs' mermaid parser, CI-only"
+    manager: npm
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["scripts/mermaid-lint/"]
+    proposer: {status: ok, text: "Renovate `npm` — #2012 (jsdom 30.1.0) merged 2026-09-27; #1977 (mermaid) open"}
+    merge_gate: {status: ok, text: "patch/minor → `automerge` (rule added 2026-09-27, S9 #1988 (c)); majors → the un-armed catch-all; manifest + lockfile un-owned in CODEOWNERS"}
+    deploy_edge: {status: ok, text: "self-deploying — `ci` runs `npm ci` + a parse on every PR"}
+    detector: {status: ok, text: "required `ci` (`mermaid-lint`) is the detector — a broken parser reds the PR before merge"}
+    revert: {status: ok, text: "`git revert` — no runtime consumer"}
+    canary: {status: ok, text: "the PR's own `ci` run exercises the exact dependency that ships"}
+
+overrides:
+  # keyed by the printed dependency name, or by the FULL row key (`<class>:<name>@<where>`) when the
+  # same dependency appears in several places and only one of them differs
+  "5:Infisical/infisical@tofu/infisical":
+    proposer: {status: gap, text: "DISABLED for this root (renovate-global.json, #2026): the box does not plan `tofu/infisical` (policy foreign_roots), so a bump here has no gate — moved by hand with a jail plan; the root is slated to leave tofu"}
+  "5:hashicorp/kubernetes@tofu/infisical":
+    proposer: {status: gap, text: "DISABLED for this root (renovate-global.json, #2026): the box does not plan `tofu/infisical` — moved by hand with a jail plan"}
+  "5:cloudflare/cloudflare@tofu/cloudflare-token":
+    proposer: {status: gap, text: "DISABLED for this root (renovate-global.json, #2026): `tofu/cloudflare-token` is the one-shot admin-token root the box never plans — moved by hand with a jail plan"}
+  cchv-server:
+    proposer: {status: gap, text: "a hand pin — the viewer image is built from the upstream cchv tag by hand (agents/coordinator/transcripts-viewer.yaml header); no deploy-pin job, no Renovate manager for a first-party tag"}
+  NixOS/nix:
+    proposer: {status: gap, text: "the custom manager resolves nothing — `Found no results from datasource that look like a version (dependency=NixOS/nix)` (§Ground truth); fix or remove (#502 acceptance 4)"}
