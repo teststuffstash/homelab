@@ -267,8 +267,9 @@ classes** — stages 4 and 5 are where the gaps are.
   Actions SHA-pinned, OSV alerts on, majors always human-gated.
 - **The classification decides the lane, not the reviewer's mood:** digest/pin → `automerge`;
   runtime version bumps and base-image minors → `deps-review`; **every** major → `major` (the lens
-  marker), un-armed — EXCEPT GitHub Actions majors, which are armed (the CI-exercised blast class,
-  ADR-141; [`renovate.md`](renovate.md) §"The automerge vs review split").
+  marker), un-armed — EXCEPT GitHub Actions, where every update type rides the grouped `automerge`
+  lane until a dependency graduates on evidence (ADR-141 as amended 2026-09-27;
+  [`renovate.md`](renovate.md) §"The automerge vs review split").
 - **First-party artifacts never ride Renovate** — a `2026.<m>.<d>-g<sha>` version doesn't order, so
   the deploy-pin PR opens them (ADR-084).
 - *Gap:* none of this currently fires in homelab (see Ground truth).
