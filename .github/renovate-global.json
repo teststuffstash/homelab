@@ -81,10 +81,16 @@
       "enabled": false
     },
     {
-      "description": "EVERY major bump (all repos, all managers) → the HUMAN-GATED coordinator lane: `major` label + NOT armed. The coordinator investigates the migration (dispatch reviewer while red), a worker adapts if in-budget, a human merges — same lane as devbox majors (docs/agents/merge-path.md §Reflexes vs judgment). Un-armed = invisible to the review reflex (arming is the boundary); coordinator-scan owns it. Placed LAST so it overrides any manager rule's automerge for a major.",
+      "description": "EVERY major bump (all repos, all managers) carries `major` — the MIGRATION LENS marker (semver decides whether the lens runs: the reviewer does upstream research + known issues + platform compatibility before any verdict). The LANE is decided by BLAST CLASS (S9 homelab#1985, 2026-09-25): by default a major is NOT armed = the HUMAN-GATED coordinator lane (investigate while red, worker adapts if in-budget, agents/major-handoff.sh → a human merges — docs/agents/merge-path.md §Reflexes vs judgment; un-armed = invisible to the review reflex, coordinator-scan owns it). The rule AFTER this one arms the CI-exercised class. Order matters: the last matching rule's automerge wins, addLabels merge.",
       "matchUpdateTypes": ["major"],
       "addLabels": ["major"],
       "automerge": false
+    },
+    {
+      "description": "GitHub Actions MAJORS = the CI-EXERCISED blast class (S9 homelab#1985; operator 2026-09-27: 'the github majors should all merge on their own — and rollback also'). ARMED (auto-merge) but NOT `automerge`-labelled: the review reflex reviews armed non-automerge PRs, so the reviewer's migration lens runs and its APPROVED is the merge gate (a distinct identity satisfies the one-review rule); CI on the bumped head is the runner-compat proof (a pull_request workflow runs the PR's own file). Post-merge failure of a push-only workflow (build-image, deploy) is rolled back by the FU-1990 revert chain (agents/coordinator/deploy-revert-argo.yaml: GithubWorkflowRunFailed on master → revert PR → the reflex approves → merges; the re-proposed version is closed by the renovate-approve reflex). First-party refs are excluded above. An armed `major` PR is the CI-exercised class, an un-armed `major` PR is the human lane — coordinator-scan already keys on the arm, never on the label alone. The other blast classes (runtime-in-prod, substrate) stay un-armed until their rows are complete (#1988).",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "automerge": true
     }
   ],
 
