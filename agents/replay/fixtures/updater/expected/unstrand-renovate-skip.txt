@@ -1,5 +1,5 @@
 CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName
-CALL gh label create merge-conflict --repo teststuffstash/testrepo --color e11d21 --description PR branch conflicts with master — updater can't auto-resolve --force
-CALL gh pr edit {{n}} --repo teststuffstash/testrepo --add-label merge-conflict
+CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits,reviews
 OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update
+OUT unstrand: #{{n}} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping
 RC 0

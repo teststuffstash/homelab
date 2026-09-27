@@ -1,10 +1,17 @@
 # fu124-nudge — decision table
 # id       | world | patch (relpath @ patches/*.jq)          | env | expect       | params
 noop      | board |                                           |     | noop         |
-success   | board | gh/pr-list.json @ patches/add-behind.jq   |     | success      |
+success   | board | gh/pr-list.json @ patches/add-behind.jq   |     | success      | n=101 oid=abc123def456
 fail-422  | board | gh/pr-list.json @ patches/add-behind.jq   | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | fail-422 |
 # ── #1649: the nudge carries leg 1's merge-ready predicate (it is the third call site of the
 # update-branch mutation, and a sibling of leg 1's pick). The two rows below are the pin: on the
 # pre-#1649 source (selector = armed ∧ BEHIND alone) BOTH were nudged, so both red on base.
 park-noop       | board | gh/pr-list.json @ patches/add-parked-behind.jq     | | noop |
 unreviewed-noop | board | gh/pr-list.json @ patches/add-unreviewed-behind.jq | | noop |
+# ── ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences): an UNTOUCHED Renovate PR on a GROUPED-ACTIONS branch is Renovate's to rebase (the two
+# rules with rebaseWhen behind-base-branch); any other Renovate class is still nudged (PR#2004 review) —
+# the same predicate as update-pr-branch.sh legs 1+2. Both rows probe commits; on the pre-carve-out
+# source the untouched row was nudged (red on base), the worker-pushed one still is.
+renovate-untouched-noop      | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-skip  | n=150
+renovate-worker-pushed-nudge | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-nudge | n=150 oid=ren150oid789
+renovate-other-class-nudge   | board | gh/pr-list.json @ patches/add-renovate-other-class.jq | | success | n=152 oid=ren152oid789
