@@ -2232,6 +2232,16 @@ relaxation (bot-vs-human considered, rejected as a second gate), no non-blocking
 escape hatch the policy already named gets its mechanism instead: a human who has read the diff
 orders the plan (`mgmt-human-plan`), the verdict posts marked as a human plan with the overridden
 rules named, and a full human apply of master advances the apply loop's baseline. §MB3 "When the box refuses".
+**Amended 2026-09-27 (operator, S9 #1988):** one RULE-shaped exception to the stage-1 deny — the
+`provider-pin` shape (`admit_shapes` in the policy, `mgmt_provider_pin_shape`): a `.terraform.lock.hcl`
+/ `versions.tf` diff that changes only version / constraint / hash lines with every provider source
+unchanged is admitted and planned; the box downloads only from sources master already trusts, tofu
+verifies the zip against the head's hash and the registry's signature, and a pin head whose plan is
+NOT empty fails the context — the one thing a human reads. Six Renovate provider PRs planned +0 ~0 -0
+under human orders on 2026-09-27; the human added nothing. Not an author-based relaxation (the diff
+shape is judged, not who wrote it). The Renovate half — the terraform manager moving to the mechanical
+`automerge` lane, roots the box does not plan (`foreign_roots`) excluded from the manager — is a
+separate operator-direct edit of `.github/renovate-global.json` (`docs/renovate.md`).
 
 ### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
 

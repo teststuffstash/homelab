@@ -43,6 +43,14 @@ roots:                      # what the box plans; a PR path under the root's dir
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
   - tofu/cloudflare-token
   - tofu/infisical
+admit_shapes:               # rule-shaped exceptions INSIDE a denied file (ADR-131 amended 2026-09-27, S9 #1988)
+  # provider-pin: `.terraform.lock.hcl` / `versions.tf` whose diff is ONLY version / constraints /
+  # hash lines, every provider source unchanged, file present in base (mgmt_provider_pin_shape).
+  # The Renovate provider-bump shape. The box then plans with the head's providers (registry-
+  # signed, hash-verified by tofu) and a pin head must plan EMPTY — a non-empty plan fails the
+  # context and is what a human reads. Why: six such PRs (2026-09-25..27) all planned +0 ~0 -0
+  # under a human order; the human added nothing (operator: "I don't want to see these PRs").
+  - provider-pin
 deny_paths:                 # basename globs a PR may not touch inside a root (stage 1) — provider/backend/CLI surface
   - ".terraform.lock.hcl"
   - "versions.tf"

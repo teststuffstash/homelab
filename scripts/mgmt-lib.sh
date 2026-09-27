@@ -129,6 +129,39 @@ _yq() { ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); }
 # mgmt_policy_get <policy> <expr> — yq over the policy file, raw lines out
 mgmt_policy_get() { _yq -r "$2" "$1"; }
 
+# mgmt_provider_pin_shape <repo> <base> <head> <file> → 0 when the file's diff is the PROVIDER-PIN
+# shape (ADR-131 amended 2026-09-27, S9 #1988): what a Renovate provider bump looks like and nothing
+# more. In `.terraform.lock.hcl` every changed line is a `version =`, a `constraints =` or an
+# `"h1:…"`/`"zh:…"` hash entry; in `versions.tf` every changed line is a `version = "…"`
+# constraint. In BOTH, the provider SOURCES — the `provider "registry…/x/y" {` headers, the
+# `source = "x/y"` lines — are identical between base and head, and the file exists in base (a new
+# lockfile is not a bump). Why this is safe to plan: the box downloads only from sources master
+# already trusts, and tofu verifies the zip against the head's h1 hash AND the registry's signature —
+# a hostile hash fails `init`, it never runs. What the shape cannot vouch for is the new version's
+# BEHAVIOUR: the plan is, and a pin head whose plan is not empty is a failure by construction
+# (mgmt-sentinel.sh) — the one thing a human reads.
+# rc 1 = not the shape (the deny stands). Reads that fail read as "not the shape", never as a pass.
+mgmt_provider_pin_shape() {
+  local repo="$1" base="$2" head="$3" f="$4" base_f="${f##*/}" changed srcs_b srcs_h line_re src_re
+  git -C "$repo" cat-file -e "$base:$f" 2>/dev/null || return 1
+  case "$base_f" in
+    .terraform.lock.hcl)
+      line_re='^[[:space:]]*(version[[:space:]]*=[[:space:]]*"[0-9][0-9A-Za-z.+-]*"|constraints[[:space:]]*=[[:space:]]*"[-~>=<!,.[:space:][:alnum:]]*"|"(h1|zh):[A-Za-z0-9+/=]+",?)[[:space:]]*$'
+      src_re='^[[:space:]]*provider[[:space:]]+"' ;;
+    versions.tf)
+      line_re='^[[:space:]]*version[[:space:]]*=[[:space:]]*"[-~>=<!,.[:space:][:alnum:]]*"[[:space:]]*$'
+      src_re='^[[:space:]]*source[[:space:]]*=' ;;
+    *) return 1 ;;
+  esac
+  changed="$(git -C "$repo" diff --no-color --unified=0 "$base" "$head" -- "$f" | grep -E '^[-+]' | grep -Ev '^(\+\+\+|---) ')" || return 1
+  [ -n "$changed" ] || return 1
+  if printf '%s\n' "$changed" | sed -E 's/^[-+]//' | grep -Evq -- "$line_re"; then return 1; fi   # any other changed line → not the shape
+  srcs_b="$(git -C "$repo" show "$base:$f" 2>/dev/null | grep -E -- "$src_re" | sort)" || srcs_b=""
+  srcs_h="$(git -C "$repo" show "$head:$f" 2>/dev/null | grep -E -- "$src_re" | sort)" || srcs_h=""
+  [ "$srcs_b" = "$srcs_h" ] || return 1
+  return 0
+}
+
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
 # root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
@@ -228,6 +261,12 @@ mgmt_stage1() {
   denyre_out="$(mgmt_policy_get "$pol" '.deny_patterns[]?')" || return 1
   denyp=(); [ -n "$denyp_out" ] && mapfile -t denyp <<<"$denyp_out"
   denyre=(); [ -n "$denyre_out" ] && mapfile -t denyre <<<"$denyre_out"
+  # admit_shapes: the rule-shaped exceptions INSIDE a denied file (ADR-131 amended 2026-09-27). Read
+  # from the policy like every rule — absent = none admitted. An admitted file prints an
+  # `admitted` line instead of its deny_paths hit; the sentinel separates the two.
+  local admit_out admit_pin=0
+  admit_out="$(mgmt_policy_get "$pol" '.admit_shapes[]?')" || return 1
+  [ -n "$admit_out" ] && grep -qx 'provider-pin' <<<"$admit_out" && admit_pin=1
   local f inside d pat mode base_f
   local -a judged=()
   for f in "${files[@]}"; do
@@ -238,7 +277,13 @@ mgmt_stage1() {
     base_f="${f##*/}"
     for pat in "${denyp[@]}"; do
       # shellcheck disable=SC2254
-      case "$base_f" in $pat) printf 'deny_paths\t%s\t%s\n' "$f" "$pat" ;; esac
+      case "$base_f" in $pat)
+        if [ $admit_pin = 1 ] && mgmt_provider_pin_shape "$repo" "$base" "$head" "$f"; then
+          printf 'admitted\t%s\tprovider-pin (deny_paths %s)\n' "$f" "$pat"
+        else
+          printf 'deny_paths\t%s\t%s\n' "$f" "$pat"
+        fi ;;
+      esac
     done
     mode="$(git -C "$repo" ls-tree "$head" -- "$f" 2>/dev/null | awk '{print $1}')"
     [ "$mode" = "120000" ] && printf 'symlink\t%s\t%s\n' "$f" "mode 120000 in the head tree"
