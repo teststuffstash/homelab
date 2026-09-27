@@ -404,9 +404,12 @@ signature, so a hostile hash fails `init` and never runs. What the shape cannot 
 version's behaviour — the plan does: **a pin head must plan empty**; a non-empty plan fails
 `management-sentinel` with `provider bump changes the plan: <root>(+a ~c -d) — human read`, and the
 comment names the root. That failure is the whole human lane for this class; a human who agrees
-with the change orders `mgmt-human-plan` as before. The infisical / cloudflare-token roots are
-`foreign_roots` (no box plan) and are excluded from Renovate's terraform manager rather than merged
-unplanned (#1984 merged that way on 2026-09-27 and was reconciled from the jail after the fact).
+with the change orders `mgmt-human-plan` as before. The Renovate side — the terraform rule moving from
+`major/awaiting-human` to the `automerge` lane, and the infisical / cloudflare-token roots
+(`foreign_roots`, no box plan) excluded from the manager rather than merged unplanned (#1984 merged
+that way on 2026-09-27 and was reconciled from the jail after the fact) — is a separate
+operator-direct edit of `.github/renovate-global.json`; until it lands the sentinel side here admits
+and plans, and the PRs still wait for a human merge.
 
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but

@@ -2239,9 +2239,9 @@ unchanged is admitted and planned; the box downloads only from sources master al
 verifies the zip against the head's hash and the registry's signature, and a pin head whose plan is
 NOT empty fails the context — the one thing a human reads. Six Renovate provider PRs planned +0 ~0 -0
 under human orders on 2026-09-27; the human added nothing. Not an author-based relaxation (the diff
-shape is judged, not who wrote it); Renovate's terraform manager rides the mechanical `automerge`
-lane on it (`docs/renovate.md`). Roots the box does not plan (`foreign_roots`) are excluded from
-Renovate's terraform manager instead.
+shape is judged, not who wrote it). The Renovate half — the terraform manager moving to the mechanical
+`automerge` lane, roots the box does not plan (`foreign_roots`) excluded from the manager — is a
+separate operator-direct edit of `.github/renovate-global.json` (`docs/renovate.md`).
 
 ### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
 
