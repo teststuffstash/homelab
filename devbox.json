@@ -195,6 +195,9 @@
       "machines-lint": [
         "bash scripts/machines-lint.sh"
       ],
+      "dependency-coverage": [
+        "python3 scripts/dependency-coverage.py \"$@\""
+      ],
       "prometheus-rules-lint": [
         "bash scripts/prometheus-rules-lint.sh"
       ],

@@ -29,7 +29,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
-| [dependency-upgrades.md](dependency-upgrades.md) | **homelab's own dependency lifecycle** — propose → review → test/lint → rollout → monitor, per dependency class; plus what Renovate has *measurably* done here (FU-097/FU-051) |
+| [dependency-upgrades.md](dependency-upgrades.md) | **homelab's own dependency lifecycle** — propose → review → test/lint → rollout → monitor, per dependency class; the **generated dependency coverage table** (one row per pin × proposer/gate/edge/detector/revert/canary/last proven — rulings in [`dependency-classes.yaml`](dependency-classes.yaml), `devbox run dependency-coverage`; homelab#1992) and what Renovate has *measurably* done here (FU-097/FU-051) |
 | [renovate.md](renovate.md) | The **org-wide Renovate policy** — threat model (Trivy-style compromise), cooldown/SHA-pinning/OSV, the automerge-vs-review split, coordinator × Renovate verbs |
 | [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
 | [garage-bulk-migration.md](garage-bulk-migration.md) | Garage data → longhorn-bulk migration recipe — repeats for any STS volumeClaimTemplate change |

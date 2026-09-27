@@ -1,0 +1,1889 @@
+{
+  "classes": [
+    {
+      "complete": false,
+      "gap_cells": [
+        "proposer",
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 12,
+      "human_cells": [
+        "revert"
+      ],
+      "id": 1,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Helm charts, GitOps",
+      "owner_may_leave": false,
+      "rows": 12
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "proposer",
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 16,
+      "human_cells": [
+        "revert"
+      ],
+      "id": 2,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "In-cluster images, GitOps",
+      "owner_may_leave": false,
+      "rows": 16
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 4,
+      "human_cells": [],
+      "id": 3,
+      "last_proven": "2026-09-27T12:57:20Z",
+      "last_proven_pr": 2024,
+      "name": "First-party images",
+      "owner_may_leave": false,
+      "rows": 4
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "proposer",
+        "canary"
+      ],
+      "gap_rows": 3,
+      "human_cells": [
+        "merge_gate",
+        "deploy_edge",
+        "revert"
+      ],
+      "id": 4,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Helm charts, tofu-managed",
+      "owner_may_leave": false,
+      "rows": 3
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "canary"
+      ],
+      "gap_rows": 14,
+      "human_cells": [
+        "revert"
+      ],
+      "id": 5,
+      "last_proven": "2026-09-27T12:32:16Z",
+      "last_proven_pr": 1976,
+      "name": "Tofu providers",
+      "owner_may_leave": false,
+      "rows": 14
+    },
+    {
+      "complete": true,
+      "gap_cells": [],
+      "gap_rows": 0,
+      "human_cells": [
+        "proposer",
+        "merge_gate",
+        "revert"
+      ],
+      "id": 6,
+      "last_proven": "2026-09-22T00:00:00Z",
+      "last_proven_pr": null,
+      "name": "Cluster substrate",
+      "owner_may_leave": false,
+      "rows": 4
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 36,
+      "human_cells": [],
+      "id": 7,
+      "last_proven": "2026-09-21T08:32:15Z",
+      "last_proven_pr": 1832,
+      "name": "devbox/nix toolchain",
+      "owner_may_leave": false,
+      "rows": 36
+    },
+    {
+      "complete": true,
+      "gap_cells": [],
+      "gap_rows": 0,
+      "human_cells": [],
+      "id": 8,
+      "last_proven": "2026-09-27T11:34:01Z",
+      "last_proven_pr": 2021,
+      "name": "GitHub Actions",
+      "owner_may_leave": true,
+      "rows": 5
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "deploy_edge",
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 0,
+      "human_cells": [
+        "revert"
+      ],
+      "id": 9,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Ansible collections/roles",
+      "owner_may_leave": false,
+      "rows": 0
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "canary"
+      ],
+      "gap_rows": 3,
+      "human_cells": [],
+      "id": 10,
+      "last_proven": "2026-09-27T11:39:05Z",
+      "last_proven_pr": 2022,
+      "name": "arc-runner image inputs",
+      "owner_may_leave": false,
+      "rows": 3
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "proposer",
+        "detector",
+        "canary"
+      ],
+      "gap_rows": 0,
+      "human_cells": [],
+      "id": 11,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Harness + tool versions baked into first-party images",
+      "owner_may_leave": false,
+      "rows": 0
+    },
+    {
+      "complete": true,
+      "gap_cells": [],
+      "gap_rows": 0,
+      "human_cells": [],
+      "id": 12,
+      "last_proven": "2026-09-27T12:37:22Z",
+      "last_proven_pr": 2012,
+      "name": "npm CI tooling",
+      "owner_may_leave": true,
+      "rows": 2
+    }
+  ],
+  "generated_by": "scripts/dependency-coverage.py (devbox run dependency-coverage) — never hand-edit",
+  "proof_recent_days": 90,
+  "proofs": {
+    "classes": {
+      "10": {
+        "merged_at": "2026-09-27T11:39:05Z",
+        "pr": 2022,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.337.0"
+      },
+      "12": {
+        "merged_at": "2026-09-27T12:37:22Z",
+        "pr": 2012,
+        "title": "fix(deps): update dependency jsdom to v30.1.0"
+      },
+      "3": {
+        "merged_at": "2026-09-27T12:57:20Z",
+        "pr": 2024,
+        "title": "deploy: agent-coordinator 2026.9.27-gca94f4a2dd99"
+      },
+      "5": {
+        "merged_at": "2026-09-27T12:32:16Z",
+        "pr": 1976,
+        "title": "chore(deps): update terraform random to v3.9.1"
+      },
+      "6": {
+        "merged_at": "2026-09-22T00:00:00Z",
+        "pr": null,
+        "title": "capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last"
+      },
+      "7": {
+        "merged_at": "2026-09-21T08:32:15Z",
+        "pr": 1832,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "8": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      }
+    },
+    "rows": {
+      "10:ghcr.io/actions/actions-runner": {
+        "merged_at": "2026-09-27T11:39:05Z",
+        "pr": 2022,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.337.0"
+      },
+      "12:jsdom": {
+        "merged_at": "2026-09-27T12:37:22Z",
+        "pr": 2012,
+        "title": "fix(deps): update dependency jsdom to v30.1.0"
+      },
+      "3:agent-base": {
+        "merged_at": "2026-09-27T11:18:48Z",
+        "pr": 2020,
+        "title": "deploy: agent-base 2026.9.27-g031de946d9e9"
+      },
+      "3:agent-coordinator": {
+        "merged_at": "2026-09-27T12:57:20Z",
+        "pr": 2024,
+        "title": "deploy: agent-coordinator 2026.9.27-gca94f4a2dd99"
+      },
+      "3:homelab/arc-runner": {
+        "merged_at": "2026-09-27T12:46:30Z",
+        "pr": 2023,
+        "title": "arc-runners: pin runner image 2026.9.27-gacb0d300b46a"
+      },
+      "5:Infisical/infisical@tofu/infisical": {
+        "merged_at": "2026-09-27T12:28:32Z",
+        "pr": 1984,
+        "title": "chore(deps): update terraform infisical to ~> 0.19"
+      },
+      "5:bpg/proxmox@tofu": {
+        "merged_at": "2026-09-27T12:28:23Z",
+        "pr": 1996,
+        "title": "chore(deps): update terraform proxmox to ~> 0.113"
+      },
+      "5:bpg/proxmox@tofu/provisioning": {
+        "merged_at": "2026-09-27T12:28:23Z",
+        "pr": 1996,
+        "title": "chore(deps): update terraform proxmox to ~> 0.113"
+      },
+      "5:cloudflare/cloudflare@tofu/cloudflare": {
+        "merged_at": "2026-09-27T12:31:17Z",
+        "pr": 1981,
+        "title": "chore(deps): update terraform cloudflare to v5.25.0"
+      },
+      "5:hashicorp/random@tofu": {
+        "merged_at": "2026-09-27T12:32:16Z",
+        "pr": 1976,
+        "title": "chore(deps): update terraform random to v3.9.1"
+      },
+      "5:hashicorp/tls@tofu/cloudflare": {
+        "merged_at": "2026-09-27T12:26:36Z",
+        "pr": 1997,
+        "title": "chore(deps): update terraform tls to v4.4.1"
+      },
+      "5:integrations/github@tofu/github": {
+        "merged_at": "2026-09-27T12:29:49Z",
+        "pr": 1983,
+        "title": "chore(deps): update terraform github to v6.13.0"
+      },
+      "7:age": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:argo-workflows": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:argocd": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:awscli2": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:bind": {
+        "merged_at": "2026-09-07T07:51:27Z",
+        "pr": 1488,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:cilium-cli": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:cloudflared": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:gh": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:gitleaks": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:hubble": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:infisical": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:jq": {
+        "merged_at": "2026-09-07T07:51:27Z",
+        "pr": 1488,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:k9s": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:keepassxc": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:kubeconform": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:kubectl": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:kubernetes-helm": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:kyverno": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:netcat-gnu": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:nixpkgs-unstable": {
+        "merged_at": "2026-09-21T08:32:15Z",
+        "pr": 1832,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:nmap": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:opentofu": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:prometheus": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:qrencode": {
+        "merged_at": "2026-09-07T07:51:27Z",
+        "pr": 1488,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:sops": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:tea": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:wireguard-tools": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "7:yq-go": {
+        "merged_at": "2026-08-31T09:50:54Z",
+        "pr": 1131,
+        "title": "chore: devbox update (align toolchain lock)"
+      },
+      "8:actions/checkout": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      },
+      "8:actions/create-github-app-token": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      },
+      "8:docker/login-action": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      },
+      "8:docker/setup-buildx-action": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      },
+      "8:renovatebot/github-action": {
+        "merged_at": "2026-09-27T11:34:01Z",
+        "pr": 2021,
+        "title": "chore(deps): pin dependencies"
+      }
+    }
+  },
+  "rows": [
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:argo-events",
+      "last_proven": null,
+      "name": "argo-events",
+      "version": "2.4.23",
+      "where": [
+        "argocd/platform/argo-events.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:argo-workflows",
+      "last_proven": null,
+      "name": "argo-workflows",
+      "version": "1.0.20",
+      "where": [
+        "argocd/platform/argo-workflows.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:cloudnative-pg",
+      "last_proven": null,
+      "name": "cloudnative-pg",
+      "version": "0.28.3",
+      "where": [
+        "argocd/platform/cnpg-operator.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:crossplane",
+      "last_proven": null,
+      "name": "crossplane",
+      "version": "2.3.2",
+      "where": [
+        "argocd/platform/crossplane.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:external-secrets",
+      "last_proven": null,
+      "name": "external-secrets",
+      "version": "2.6.0",
+      "where": [
+        "argocd/platform/eso-operator.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:forgejo",
+      "last_proven": null,
+      "name": "forgejo",
+      "version": "17.1.1",
+      "where": [
+        "argocd/platform/forgejo.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:gateway-api",
+      "last_proven": null,
+      "name": "gateway-api",
+      "version": "v1.4.1",
+      "where": [
+        "argocd/platform/gateway-api-crds.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:gha-runner-scale-set",
+      "last_proven": null,
+      "name": "gha-runner-scale-set",
+      "version": "0.14.2",
+      "where": [
+        "argocd/platform/arc-runners-large.yaml",
+        "argocd/platform/arc-runners.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:gha-runner-scale-set-controller",
+      "last_proven": null,
+      "name": "gha-runner-scale-set-controller",
+      "version": "0.14.2",
+      "where": [
+        "argocd/platform/arc-controller.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:infisical-standalone",
+      "last_proven": null,
+      "name": "infisical-standalone",
+      "version": "1.9.0",
+      "where": [
+        "argocd/platform/infisical.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:kube-prometheus-stack",
+      "last_proven": null,
+      "name": "kube-prometheus-stack",
+      "version": "86.1.0",
+      "where": [
+        "argocd/platform/kube-prometheus-stack.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:metrics-server",
+      "last_proven": null,
+      "name": "metrics-server",
+      "version": "3.12.2",
+      "where": [
+        "argocd/platform/metrics-server.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:alpine",
+      "last_proven": null,
+      "name": "alpine",
+      "version": "3.20",
+      "where": [
+        "argocd/resources/node-fstrim/fstrim.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:cloudflare/cloudflared",
+      "last_proven": null,
+      "name": "cloudflare/cloudflared",
+      "version": "2026.5.2@sha256:12ff5c6992a9",
+      "where": [
+        "argocd/resources/publicroute/composition.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:docker.io/library/busybox",
+      "last_proven": null,
+      "name": "docker.io/library/busybox",
+      "version": "1.36.1@sha256:73aaf090f3d8",
+      "where": [
+        "argocd/resources/loki/kmsg-reader.yaml",
+        "argocd/resources/runner-image-prepull/daemonset.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:docker.io/prometheuscommunity/smartctl-exporter",
+      "last_proven": null,
+      "name": "docker.io/prometheuscommunity/smartctl-exporter",
+      "version": "v0.14.0@sha256:cfe22c36d7d2",
+      "where": [
+        "argocd/resources/smartctl-exporter/daemonset.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:ghcr.io/k3d-io/k3d",
+      "last_proven": null,
+      "name": "ghcr.io/k3d-io/k3d",
+      "version": "5-dind@sha256:ee3872700ed0",
+      "where": [
+        "agents/images.env"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:ghcr.io/lablabs/cloudflare_exporter",
+      "last_proven": null,
+      "name": "ghcr.io/lablabs/cloudflare_exporter",
+      "version": "0.2.3@sha256:6bf84a81725c",
+      "where": [
+        "argocd/resources/cloudflare-exporter/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:grafana/alloy",
+      "last_proven": null,
+      "name": "grafana/alloy",
+      "version": "v1.5.1",
+      "where": [
+        "argocd/resources/loki/alloy.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:grafana/loki",
+      "last_proven": null,
+      "name": "grafana/loki",
+      "version": "3.4.2",
+      "where": [
+        "argocd/resources/loki/loki.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:nginx",
+      "last_proven": null,
+      "name": "nginx",
+      "version": "1.27-alpine",
+      "where": [
+        "argocd/resources/registry/registry-fs.yaml",
+        "argocd/resources/registry/registry.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:nginxinc/nginx-unprivileged",
+      "last_proven": null,
+      "name": "nginxinc/nginx-unprivileged",
+      "version": "1.27-alpine",
+      "where": [
+        "argocd/resources/cf-api-proxy/deployment.yaml",
+        "argocd/resources/devbox-search/deployment.yaml",
+        "argocd/resources/nix-cache/deployment.yaml",
+        "argocd/resources/pypi-cache/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:otel/opentelemetry-collector-contrib",
+      "last_proven": null,
+      "name": "otel/opentelemetry-collector-contrib",
+      "version": "0.116.1",
+      "where": [
+        "argocd/resources/otel-collector/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:prom/pushgateway",
+      "last_proven": null,
+      "name": "prom/pushgateway",
+      "version": "v1.11.1",
+      "where": [
+        "argocd/resources/pushgateway/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:python",
+      "last_proven": null,
+      "name": "python",
+      "version": "3.13-slim, 3.13-slim@sha256:cc9dffa47c82",
+      "where": [
+        "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
+        "argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml",
+        "argocd/resources/garage-disruption/controller.yaml",
+        "argocd/resources/garage-meta-rotation/rotation.yaml",
+        "argocd/resources/garage-write-probe/cronjob.yaml",
+        "argocd/resources/github-exporter/deployment.yaml",
+        "argocd/resources/openrouter-proxy/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:quay.io/brancz/kube-rbac-proxy",
+      "last_proven": null,
+      "name": "quay.io/brancz/kube-rbac-proxy",
+      "version": "v0.22.1",
+      "where": [
+        "argocd/resources/loki/loki-rbac-proxy.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:quay.io/prometheus/blackbox-exporter",
+      "last_proven": null,
+      "name": "quay.io/prometheus/blackbox-exporter",
+      "version": "v0.27.0",
+      "where": [
+        "argocd/resources/blackbox/blackbox.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "2:registry",
+      "last_proven": null,
+      "name": "registry",
+      "version": "3.0.0",
+      "where": [
+        "argocd/resources/registry-cache/mirror-docker-io.yaml",
+        "argocd/resources/registry-cache/mirror-ghcr.yaml",
+        "argocd/resources/registry-cache/mirror-mcr.yaml",
+        "argocd/resources/registry/registry-fs.yaml",
+        "argocd/resources/registry/registry-gc-cronjob.yaml",
+        "argocd/resources/registry/registry.yaml"
+      ]
+    },
+    {
+      "class": 3,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "3:agent-base",
+      "last_proven": "2026-09-27T11:18:48Z",
+      "name": "agent-base",
+      "version": "`AGENT_BASE_IMAGE`=2026.9.27-g031de946d9e9",
+      "where": [
+        "agents/images.env"
+      ]
+    },
+    {
+      "class": 3,
+      "gap_columns": [
+        "canary",
+        "deploy_edge",
+        "detector"
+      ],
+      "key": "3:agent-coordinator",
+      "last_proven": "2026-09-27T12:57:20Z",
+      "name": "agent-coordinator",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.27-gca94f4a2dd99; 24 manifest ref(s)",
+      "where": [
+        "agents/coordinator/coordinate-argo.yaml",
+        "agents/coordinator/corpus-dispatch-argo.yaml",
+        "agents/coordinator/deploy-revert-argo.yaml",
+        "agents/coordinator/fix-debounce-argo.yaml",
+        "agents/coordinator/reflexes-argo.yaml",
+        "agents/coordinator/responder-argo.yaml",
+        "agents/coordinator/retro-argo.yaml",
+        "agents/coordinator/review-argo.yaml",
+        "agents/coordinator/transcripts-sync.yaml",
+        "agents/coordinator/transcripts-viewer.yaml",
+        "agents/coordinator/update-pr-argo.yaml",
+        "agents/images.env",
+        "argocd/resources/agentstack/composition.yaml",
+        "argocd/resources/registry-cache/gc-mirrors.yaml"
+      ]
+    },
+    {
+      "class": 3,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "3:cchv-server",
+      "last_proven": null,
+      "name": "cchv-server",
+      "version": "v1.18.0 (×1)",
+      "where": [
+        "agents/coordinator/transcripts-viewer.yaml"
+      ]
+    },
+    {
+      "class": 3,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "3:homelab/arc-runner",
+      "last_proven": "2026-09-27T12:46:30Z",
+      "name": "homelab/arc-runner",
+      "version": "2026.9.27-gf89fa348d8db (×3)",
+      "where": [
+        "agents/coordinator/sentinel-argo.yaml",
+        "argocd/resources/runner-image-prepull/daemonset.yaml"
+      ]
+    },
+    {
+      "class": 4,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "4:argo-cd",
+      "last_proven": null,
+      "name": "argo-cd",
+      "version": "9.5.21",
+      "where": [
+        "tofu/argocd.tf",
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 4,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "4:argocd-apps",
+      "last_proven": null,
+      "name": "argocd-apps",
+      "version": "2.0.5",
+      "where": [
+        "tofu/argocd.tf",
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 4,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "4:longhorn",
+      "last_proven": null,
+      "name": "longhorn",
+      "version": "1.12.0",
+      "where": [
+        "tofu/longhorn.tf"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:bpg/proxmox@tofu",
+      "last_proven": "2026-09-27T12:28:23Z",
+      "name": "bpg/proxmox",
+      "version": "0.113.1 (`~> 0.113`)",
+      "where": [
+        "tofu/versions.tf",
+        "tofu/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:bpg/proxmox@tofu/provisioning",
+      "last_proven": "2026-09-27T12:28:23Z",
+      "name": "bpg/proxmox",
+      "version": "0.113.1 (`~> 0.113`)",
+      "where": [
+        "tofu/provisioning/versions.tf",
+        "tofu/provisioning/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:cloudflare/cloudflare@tofu/cloudflare",
+      "last_proven": "2026-09-27T12:31:17Z",
+      "name": "cloudflare/cloudflare",
+      "version": "5.25.0 (`~> 5.0`)",
+      "where": [
+        "tofu/cloudflare/versions.tf",
+        "tofu/cloudflare/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "5:cloudflare/cloudflare@tofu/cloudflare-token",
+      "last_proven": null,
+      "name": "cloudflare/cloudflare",
+      "version": "5.25.0 (`~> 5.0`)",
+      "where": [
+        "tofu/cloudflare-token/versions.tf",
+        "tofu/cloudflare-token/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:hashicorp/helm@tofu",
+      "last_proven": null,
+      "name": "hashicorp/helm",
+      "version": "2.17.0 (`~> 2.17`)",
+      "where": [
+        "tofu/versions.tf",
+        "tofu/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:hashicorp/kubernetes@tofu",
+      "last_proven": null,
+      "name": "hashicorp/kubernetes",
+      "version": "2.38.0 (`~> 2.31`)",
+      "where": [
+        "tofu/versions.tf",
+        "tofu/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:hashicorp/kubernetes@tofu/cloudflare",
+      "last_proven": null,
+      "name": "hashicorp/kubernetes",
+      "version": "2.38.0 (`~> 2.31`)",
+      "where": [
+        "tofu/cloudflare/versions.tf",
+        "tofu/cloudflare/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "5:hashicorp/kubernetes@tofu/infisical",
+      "last_proven": null,
+      "name": "hashicorp/kubernetes",
+      "version": "2.38.0 (`~> 2.31`)",
+      "where": [
+        "tofu/infisical/versions.tf",
+        "tofu/infisical/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:hashicorp/random@tofu",
+      "last_proven": "2026-09-27T12:32:16Z",
+      "name": "hashicorp/random",
+      "version": "3.9.1 (`~> 3.6`)",
+      "where": [
+        "tofu/versions.tf",
+        "tofu/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:hashicorp/tls@tofu/cloudflare",
+      "last_proven": "2026-09-27T12:26:36Z",
+      "name": "hashicorp/tls",
+      "version": "4.4.1 (`~> 4.0`)",
+      "where": [
+        "tofu/cloudflare/versions.tf",
+        "tofu/cloudflare/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "5:Infisical/infisical@tofu/infisical",
+      "last_proven": "2026-09-27T12:28:32Z",
+      "name": "Infisical/infisical",
+      "version": "0.19.32 (`~> 0.19`)",
+      "where": [
+        "tofu/infisical/versions.tf",
+        "tofu/infisical/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:integrations/github@tofu/github",
+      "last_proven": "2026-09-27T12:29:49Z",
+      "name": "integrations/github",
+      "version": "6.13.0 (`~> 6.0`)",
+      "where": [
+        "tofu/github/versions.tf",
+        "tofu/github/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:poseidon/matchbox@tofu/provisioning",
+      "last_proven": null,
+      "name": "poseidon/matchbox",
+      "version": "0.5.4 (`~> 0.5`)",
+      "where": [
+        "tofu/provisioning/versions.tf",
+        "tofu/provisioning/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 5,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "5:siderolabs/talos@tofu",
+      "last_proven": null,
+      "name": "siderolabs/talos",
+      "version": "0.11.0 (`~> 0.11`)",
+      "where": [
+        "tofu/versions.tf",
+        "tofu/.terraform.lock.hcl"
+      ]
+    },
+    {
+      "class": 6,
+      "gap_columns": [],
+      "key": "6:Cilium",
+      "last_proven": "2026-09-22T00:00:00Z",
+      "name": "Cilium",
+      "version": "1.19.1",
+      "where": [
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 6,
+      "gap_columns": [],
+      "key": "6:Kubernetes",
+      "last_proven": "2026-09-22T00:00:00Z",
+      "name": "Kubernetes",
+      "version": "v1.36.1",
+      "where": [
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 6,
+      "gap_columns": [],
+      "key": "6:Talos (control planes)",
+      "last_proven": "2026-09-22T00:00:00Z",
+      "name": "Talos (control planes)",
+      "version": "v1.14.1",
+      "where": [
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 6,
+      "gap_columns": [],
+      "key": "6:Talos (workers)",
+      "last_proven": "2026-09-22T00:00:00Z",
+      "name": "Talos (workers)",
+      "version": "v1.14.1",
+      "where": [
+        "tofu/variables.tf"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:age",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "age",
+      "version": "1.3.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:ansible",
+      "last_proven": null,
+      "name": "ansible",
+      "version": "2.21.3",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:argo-workflows",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "argo-workflows",
+      "version": "3.6.10",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:argocd",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "argocd",
+      "version": "3.4.6",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:awscli2",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "awscli2",
+      "version": "2.35.11",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:bind",
+      "last_proven": "2026-09-07T07:51:27Z",
+      "name": "bind",
+      "version": "9.20.26",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:cilium-cli",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "cilium-cli",
+      "version": "0.19.7",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:cloudflared",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "cloudflared",
+      "version": "2026.8.2",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:crossplane-cli",
+      "last_proven": null,
+      "name": "crossplane-cli",
+      "version": "2.4.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:curl",
+      "last_proven": null,
+      "name": "curl",
+      "version": "8.17.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:gh",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "gh",
+      "version": "2.98.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:gitleaks",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "gitleaks",
+      "version": "8.30.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:hubble",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "hubble",
+      "version": "1.19.4",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:infisical",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "infisical",
+      "version": "0.43.123",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:jq",
+      "last_proven": "2026-09-07T07:51:27Z",
+      "name": "jq",
+      "version": "1.8.2",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:k9s",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "k9s",
+      "version": "0.51.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:keepassxc",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "keepassxc",
+      "version": "2.7.12",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:kubeconform",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "kubeconform",
+      "version": "0.8.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:kubectl",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "kubectl",
+      "version": "1.36.3",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:kubernetes-helm",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "kubernetes-helm",
+      "version": "4.2.4",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:kyverno",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "kyverno",
+      "version": "1.19.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:netcat-gnu",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "netcat-gnu",
+      "version": "0.7.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:nixpkgs-unstable",
+      "last_proven": "2026-09-21T08:32:15Z",
+      "name": "nixpkgs-unstable",
+      "version": "nixpkgs@0a3468a402c4",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:nmap",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "nmap",
+      "version": "7.991",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:nodejs_22",
+      "last_proven": null,
+      "name": "nodejs_22",
+      "version": "22.23.2",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:openssl",
+      "last_proven": null,
+      "name": "openssl",
+      "version": "3.6.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:opentofu",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "opentofu",
+      "version": "1.12.5",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:prometheus",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "prometheus",
+      "version": "3.14.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:python3",
+      "last_proven": null,
+      "name": "python3",
+      "version": "3.12.8",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:qrencode",
+      "last_proven": "2026-09-07T07:51:27Z",
+      "name": "qrencode",
+      "version": "4.1.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:sops",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "sops",
+      "version": "3.13.3",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:talosctl",
+      "last_proven": null,
+      "name": "talosctl",
+      "version": "nixpkgs@4975466d3247",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:tea",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "tea",
+      "version": "0.15.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:terraform-providers.cloudflare_cloudflare",
+      "last_proven": null,
+      "name": "terraform-providers.cloudflare_cloudflare",
+      "version": "5.23.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:wireguard-tools",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "wireguard-tools",
+      "version": "1.0.20260223",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
+      "key": "7:yq-go",
+      "last_proven": "2026-08-31T09:50:54Z",
+      "name": "yq-go",
+      "version": "4.53.3",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 8,
+      "gap_columns": [],
+      "key": "8:actions/checkout",
+      "last_proven": "2026-09-27T11:34:01Z",
+      "name": "actions/checkout",
+      "version": "11d5960a326750d5838078e36cf38b85af677262 (v4)",
+      "where": [
+        ".github/workflows/ci.yaml",
+        ".github/workflows/devbox-cache.reusable.yml",
+        ".github/workflows/devbox-update.yaml",
+        ".github/workflows/pin-only.reusable.yml",
+        ".github/workflows/renovate.yaml",
+        ".github/workflows/runner-image.yaml"
+      ]
+    },
+    {
+      "class": 8,
+      "gap_columns": [],
+      "key": "8:actions/create-github-app-token",
+      "last_proven": "2026-09-27T11:34:01Z",
+      "name": "actions/create-github-app-token",
+      "version": "d72941d797fd3113feb6b93fd0dec494b13a2547 (v1)",
+      "where": [
+        ".github/workflows/devbox-update.yaml",
+        ".github/workflows/renovate-approve.reusable.yml",
+        ".github/workflows/renovate.yaml",
+        ".github/workflows/runner-image.yaml"
+      ]
+    },
+    {
+      "class": 8,
+      "gap_columns": [],
+      "key": "8:docker/login-action",
+      "last_proven": "2026-09-27T11:34:01Z",
+      "name": "docker/login-action",
+      "version": "c94ce9fb468520275223c153574b00df6fe4bcc9 (v3)",
+      "where": [
+        ".github/workflows/devbox-cache.reusable.yml",
+        ".github/workflows/runner-image.yaml"
+      ]
+    },
+    {
+      "class": 8,
+      "gap_columns": [],
+      "key": "8:docker/setup-buildx-action",
+      "last_proven": "2026-09-27T11:34:01Z",
+      "name": "docker/setup-buildx-action",
+      "version": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f (v3)",
+      "where": [
+        ".github/workflows/runner-image.yaml"
+      ]
+    },
+    {
+      "class": 8,
+      "gap_columns": [],
+      "key": "8:renovatebot/github-action",
+      "last_proven": "2026-09-27T11:34:01Z",
+      "name": "renovatebot/github-action",
+      "version": "dcfba84a42d1b5d5e49bf131b1bf53511851a123 (v46.3.1)",
+      "where": [
+        ".github/workflows/renovate.yaml"
+      ]
+    },
+    {
+      "class": 10,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "10:ghcr.io/actions/actions-runner",
+      "last_proven": "2026-09-27T11:39:05Z",
+      "name": "ghcr.io/actions/actions-runner",
+      "version": "2.337.0",
+      "where": [
+        "docker/arc-runner/Dockerfile"
+      ]
+    },
+    {
+      "class": 10,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "10:jetify-com/devbox",
+      "last_proven": null,
+      "name": "jetify-com/devbox",
+      "version": "0.18.3",
+      "where": [
+        "docker/arc-runner/Dockerfile"
+      ]
+    },
+    {
+      "class": 10,
+      "gap_columns": [
+        "canary",
+        "proposer"
+      ],
+      "key": "10:NixOS/nix",
+      "last_proven": null,
+      "name": "NixOS/nix",
+      "version": "2.35.1",
+      "where": [
+        "docker/arc-runner/Dockerfile"
+      ]
+    },
+    {
+      "class": 12,
+      "gap_columns": [],
+      "key": "12:jsdom",
+      "last_proven": "2026-09-27T12:37:22Z",
+      "name": "jsdom",
+      "version": "30.1.0",
+      "where": [
+        "scripts/mermaid-lint/package.json"
+      ]
+    },
+    {
+      "class": 12,
+      "gap_columns": [],
+      "key": "12:mermaid",
+      "last_proven": null,
+      "name": "mermaid",
+      "version": "11.17.0",
+      "where": [
+        "scripts/mermaid-lint/package.json"
+      ]
+    }
+  ]
+}

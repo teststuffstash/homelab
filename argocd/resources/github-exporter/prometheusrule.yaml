@@ -864,6 +864,42 @@ spec:
           annotations:
             summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
             description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
+        # ── homelab#1992 / FU-125: Renovate liveness + the dependency coverage table ─────────
+        # 2026-08-01: 115 GREEN renovate.yaml runs and ZERO PRs org-wide (every repo aborted after
+        # extraction on a missing `statuses` permission). The workflow verdict is not a liveness
+        # signal; only Renovate's OUTPUT is. `dependencyDashboard` is OFF by ruling (2026-08-18), so
+        # this gauge is the one liveness signal (#502 acceptance 3). 14 days: Renovate runs every
+        # 6h across ~10 repos and ~200 dependencies under a 7-day cooldown — two weeks without a
+        # single new `renovate/*` PR anywhere is not a quiet fortnight, it is the 2026-07-27
+        # regression again. Org-wide max(): a repo Renovate is not installed on has no series.
+        - alert: RenovateSilent
+          expr: time() - max(github_renovate_last_pr_timestamp) > 14 * 86400
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "Renovate has not opened a PR anywhere in the org for 14 days"
+            description: 'The newest `renovate/*` PR on any teststuffstash repo is over 14 days old (github_renovate_last_pr_timestamp, org-wide max). Renovate runs every 6h from .github/workflows/renovate.yaml and reports success even when it opens nothing (FU-125, docs/dependency-upgrades.md §Ground truth): read the latest run log for `integration-unauthorized` / `repository-changed` per repo, then `gh api /orgs/teststuffstash/installations` for the homelab-renovate App and its permissions (GithubAppPermissionDrift is the sibling belt). Never re-enable the dependency dashboard as the fix — liveness is this gauge by ruling.'
+        # The coverage table's owner rule (docs/dependency-upgrades.md §The dependency inventory):
+        # an owner leaves a dependency class only when its row is complete AND the proof is recent.
+        # The generator writes the proof DATE, never a recency verdict (a regeneration must be a
+        # stable diff); this alert is the recency half. A class that is complete but whose newest
+        # end-to-end proof is older than proof_recent_days (90) has silently re-opened — the owner
+        # left and nothing has exercised the chain since. Incomplete classes are the table's
+        # business (github_dependency_coverage_gap_rows), not this alert's.
+        - alert: DependencyClassProofStale
+          expr: |-
+            (github_dependency_coverage_complete == 1)
+              and on (class, class_name)
+            (time() - github_dependency_coverage_last_proven_timestamp) > 90 * 86400
+          for: 1d
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "Dependency class {{ $labels.class }} ({{ $labels.class_name }}) is complete but its proof is over 90 days old"
+            description: 'docs/dependency-upgrades.md §The dependency inventory marks class {{ $labels.class }} ({{ $labels.class_name }}) complete — no ⚠ column — but its newest end-to-end proof (a merged proposer PR, or the capability-ledger date) is older than 90 days: the owner may have left and nothing has exercised propose → gate → deploy since. Re-run `devbox run dependency-coverage` (it refreshes the proofs from GitHub); if the date does not move, the class has stalled — find why nothing proposed (docs/renovate.md) or re-add the owner in docs/dependency-classes.yaml.'
         - alert: AgentModelDrift
           expr: max by (project, role) (max_over_time(agent_model_drift[10m])) > 0
           for: 30m

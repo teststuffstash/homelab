@@ -4,8 +4,11 @@ Self-hosted Renovate keeps our dependencies current **and** is our first line of
 things we *ingest* — the consumer side of the supply chain ([`slsa.md`](slsa.md) names this **S2C2F**
 but hadn't built it — since built). LIVE since 2026-09-25 (the App's missing `statuses` grant,
 FU-125 — archived 2026-09-27) and routed through the S9 lanes since 2026-09-27 (homelab#1985,
-ADR-141); which class has actually merged through which lane is
-[`dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to end".
+ADR-141); which class has actually merged through which lane is the generated coverage table in
+[`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory (homelab#1992 — one row
+per pin × proposer/gate/edge/detector/revert/canary/last proven) and its per-lane companion §"Last
+proven end to end"; liveness is the `github_renovate_last_pr_timestamp` gauge → `RenovateSilent`,
+never the workflow's own verdict.
 
 ## Shape
 

@@ -89,8 +89,10 @@ grant in the App settings (the `GithubAppPermissionDrift` belt rings until it la
 
 ## The dependency inventory, and whether a path rule can trigger deployment
 
-homelab has **97 tracked dependencies across 7 managers**. The question "can a path rule trigger
-deployment?" has a different answer per class, because homelab runs **three reconciliation regimes**:
+Renovate extracted **97 dependencies across 7 managers** on 2026-08-01 (§Ground truth); the generated
+register below carries the current count from the repo's own files. The question "can a path rule
+trigger deployment?" has a different answer per class, because homelab runs **three reconciliation
+regimes**:
 
 - **GitOps (ArgoCD)** — 27 of 34 platform Applications have `syncPolicy.automated`, watching
   `argocd/resources/*`, `argocd/platform/*`, `agents/coordinator`, `agents/fixer/*`. A merge here
@@ -100,42 +102,170 @@ deployment?" has a different answer per class, because homelab runs **three reco
 - **Unreconciled** — ansible (OPNsense, Matchbox), Home Assistant config, the Proxmox host. A merge
   deploys **nothing**. This is the FU-097 gap.
 
-| # | Class | Where pinned | Renovate manager | Path rule → deploy? | What actually happens on merge |
-|---|---|---|---|---|---|
-| 1 | **Helm charts, GitOps** (crossplane 2.3.2, cnpg 0.28.3, ESO 2.6.0, argo-events 2.4.23, gateway-api CRDs, ARC 0.14.2 ×2) | `argocd/platform/*.yaml` `targetRevision` | `helm-values` (2) + raw YAML | ✅ **yes, already** | ArgoCD auto-syncs. Path rule = the existing Application. ⚠ ARC controller/runners must move **in lockstep** — two files, one version |
-| 2 | **In-cluster images** (loki 3.4.2, alloy v1.5.1, otel 0.116.1, pushgateway v1.11.1, blackbox v0.27.0, registry 3.0.0, nginx, python:3.13-slim, docker:29.6.2-dind, aws-cli) | `argocd/resources/*/**.yaml` | `dockerfile`/regex — **mostly unmanaged today** | ✅ **yes** | ArgoCD auto-syncs the manifest. These are the cheapest win: pure GitOps, already path-scoped per resource dir |
-| 3 | **First-party images** (agent-base, agent-coordinator, arc-runner) | `agents/images.env`, `argocd/**`, `docker/arc-runner` | n/a — first-party | ✅ **yes, built** | The deploy-pin PR flow (ADR-084). Renovate deliberately never touches our own artifacts (git-sha is unorderable) |
-| 4 | **Helm charts, tofu-managed** — now only **cilium, longhorn, argo-cd** (metrics-server, kube-prometheus-stack, forgejo and garage all moved to class 1 on 2026-08-04 — the lever is complete, FU-136 archived) | `tofu/*.tf` | `terraform` (part of the 47) | ⚠ **plan only** | Merge deploys nothing until the management box applies it (`devbox run mgmt-tf`; the box's apply loop owns the allowlisted residue). A path rule can open a **plan-report** PR comment; applying stays human. What remains is close to ADR-005's substrate — which is the point: "tofu = human-applied" becomes a coherent rule rather than a lump |
-| 5 | **Tofu providers** (bpg/proxmox ~0.113, cloudflare ~5.0, github ~6.0 (6.13.0), infisical ~0.19, tls ~4.0, talos ~0.11, helm ~2.17, kubernetes ~2.31) | `tofu/**/versions.tf` + `.terraform.lock.hcl` | `terraform` — the HUMAN-PLAN lane: `major/awaiting-human` on ANY update type, un-armed (the sentinel refuses lockfile heads by design, ADR-131) | ⚠ **plan only** | Same as 4. `~>` ranges mean the *lockfile* is the real pin. Lane: `devbox run mgmt-human-plan -- <pr>`, read, merge; a root the box does NOT plan (infisical) needs the jail plan BEFORE the merge (#1984, 2026-09-27) |
-| 6 | **Cluster substrate** (Talos, Kubernetes v1.36.1, Cilium 1.19.1) | `tofu/variables.tf` defaults | `terraform` (weak) | ❌ **no, and must not** | A node-level rollout. The installer must match (platform, schematic, version) or a node loses its identity or its extensions — **ADR-014 as amended 2026-09-18**, recipe in [`provisioning.md`](provisioning.md) §Upgrading a node's Talos. The fleet moved to v1.14.1 on 2026-09-22 through the box-run rollout (`mgmt-reconcile`, FU-033/FU-273 archived); the class stays human-proposed until Renovate's G-D launches (operator, 2026-09-18 — ROADMAP G-D) |
-| 7 | **devbox/nix toolchain** (28 pkgs, all `@latest`) | `devbox.json` / `devbox.lock` | **disabled on purpose** | ❌ n/a | `@latest` is untrackable (it once proposed a 5-year-old gitleaks). Owned by the weekly `devbox-update.yaml` instead — see [`renovate.md`](renovate.md) §Gotchas |
-| 8 | **GitHub Actions** (16 deps, 7 files) | `.github/workflows/*` | `github-actions` — the grouped MECHANICAL lane for every update type, majors included (ADR-141 as amended 2026-09-27); `/.github/workflows/` un-owned behind `pin-only-lint`'s third shape (ADR-100 addendum) | ✅ **self-deploying** | The next run uses the merged file. SHA-pinned since 2026-09-27 (#2021, the Trivy mitigation); a push-only workflow that breaks on master rolls back via the FU-1990 chain (`workflow-pin-revert`, drill-proven on agent-coordinator 2026-09-27) |
-| 9 | **Ansible collections/roles** | `ansible/requirements.yml`, `collections/` | `ansible-galaxy` (1) | ❌ **no** | Merge deploys nothing; someone must run `scripts/opnsense-playbook.sh`. The FU-097 gap, sharpest here — this is the router |
-| 10 | **arc-runner toolchain ARGs** (DEVBOX_VERSION, NIX_VERSION) | `docker/arc-runner/Dockerfile` | `regex` custom (2) | ✅ yes | `runner-image.yaml` builds and opens the pin PR. ⚠ the NIX_VERSION half resolves nothing (above) |
-| 11 | **Harness + tool versions baked into first-party images** (claude-code ×3: agent-base via devbox, agent-coordinator + claude-jail via npm; `gh` via apt; s5cmd; `KUBECTL_VERSION` ARG in the coordinator image) | three Dockerfiles in three repos | devbox-update (agent-base only); `regex` custom for s5cmd (2026-09-27); **none** for claude-code (npm), gh, KUBECTL_VERSION | ✅ built weekly (`schedule` on `build-image.yaml`, 2026-09-27) + on push | A rebuild is a new build-date tag → deploy-pin rolls it; the cluster pin is the revert. **GAP (register):** claude-code floats to npm latest in two images and rides nixpkgs in the third — no shared version, nothing checks they agree; the jail only moves on a hand rebuild; kubectl in the coordinator image is a hand ARG outside the weekly devbox sync. Owner of the fix: #2014 (version sets). |
+<!-- BEGIN GENERATED dependency-coverage — do not edit; edit docs/dependency-classes.yaml (rulings) or the pinned files (dependencies) and run `devbox run dependency-coverage` -->
 
-**The honest summary:** classes 1, 2, 3, 8, 10 and 11 already have a working path→deploy edge (11 since the 2026-09-27 weekly rebuild — but see its GAP cell). Class 4/5
-have a deliberate human gate that should stay but has **no drift detection** between applies. Class
-6 is a node rollout that must never be automated. Classes 7 and 9 are outside Renovate entirely, and
-**9 is the one that silently does nothing** — a merged OPNsense change sits until a human remembers.
+**99 pinned dependencies in 12 classes; 88 rows carry a ⚠ column; 3 class(es) complete, 2 of them without a 👤 cell.** ✅ built and proven · 👤 a human by ruling (filled, not a gap — the owner stays by design) · ⚠ missing. A row is complete when no column is ⚠ and the proof is recent (≤90 d — `DependencyClassProofStale` fires when a complete class's proof ages out; `github_dependency_coverage_gap_rows` counts the ⚠ rows).
 
-### Last proven end to end — per class (S9 #1991; the 7th column, hand-kept until #1992 generates it)
+#### Per class — the seven columns
 
-The rule this table serves ([FU-097's ledger rule](management-box.md), generalized from box
-surfaces to dependency classes 2026-09-27): **an owner leaves a class only when the class's row is
-complete** — proposer, merge gate, deploy edge, detector, revert, canary, and a RECENT proof. The
-lanes are [`renovate.md`](renovate.md) §"The automerge vs review split" and ADR-141; this table
-records only the proof — one merge per lane, with the evidence that it went through the gates it
-claims. A class without a dated row here is unproven, whatever its rule says.
+| # | Class | Pinned where · manager | Proposer | Merge gate | Deploy edge | Detector | Revert | Canary | Last proven E2E | Rows (⚠) | Owner may leave? |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | **Helm charts, GitOps** | `argocd/platform/*.yaml` `spec.source.chart` + `targetRevision` · `argocd (needs `managerFilePatterns` — NOT configured, so nothing proposes these today)` | ⚠ Renovate's `argocd` manager has no default file match and renovate-global.json does not configure one — no PR has ever proposed a chart bump here (§Ground truth: 97 deps extracted, none of them these) | ✅ minor → `deps-review` (reflex + lens), major → un-armed `major` lane (renovate-global.json; ADR-141 for the arm rule) | ✅ ArgoCD `syncPolicy.automated` — a merge IS the deploy (27 of 34 Applications auto-sync) | ⚠ ArgoCD health is shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe); the contract probe is FU-102 | 👤 a human `git revert` — the FU-044 deterministic revert is scoped to first-party image pins; extending it to charts REJECTED (operator 2026-08-04, IAC-G09: CRD/schema downgrades are not reversible by a revert) | ⚠ none — a chart bump lands on the only instance; ARC controller/runners must move in lockstep (two files, one version) | — never | 12 (12) | no — 3 ⚠ column(s), never proven |
+| 2 | **In-cluster images, GitOps** | `image:` in `argocd/resources/**/*.yaml` + `agents/coordinator/*.yaml` (third-party refs; first-party = class 3) · `kubernetes (needs `managerFilePatterns` — NOT configured) / none for agents/images.env` | ⚠ unmanaged — Renovate's `kubernetes` manager has no default file match and none is configured; digest-pinned refs never move (cloudflared 2026.5.2, python:3.13-slim@sha256, k3d:5-dind@sha256) | ✅ digest → `automerge` (reflex), version minor → `deps-review`, major → un-armed (renovate-global.json) — the lanes exist, nothing feeds them | ✅ ArgoCD auto-sync of the manifest — path-scoped per resource dir | ⚠ ArgoCD health (shallow) + the per-service alert belts where they exist; no post-deploy contract probe (FU-102) | 👤 a human `git revert`; the FU-044 chain's pin-only predicate covers FIRST-PARTY pins only (class 3) | ⚠ none — single replica for most of these | — never | 16 (16) | no — 3 ⚠ column(s), never proven |
+| 3 | **First-party images** | `agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`) · `n/a — the deploy-pin PR (ADR-084); Renovate never touches our own artifacts (a `2026.<m>.<d>-g<sha>` tag does not order)` | ✅ the image repo's `deploy-pin` job (agent-runtime → agent-base, agent-coordinator) and `runner-image.yaml` (arc-runner) open `deploy/*` / `runner-image-pin` PRs; weekly `schedule` rebuilds since 2026-09-27 | ✅ `automerge`+`dependencies` → renovate-approve reflex → CI-green auto-merge (`pin-only-lint` guards the diff shape) | ✅ ArgoCD auto-sync; the deploy-pin sweep bumps every mirrored literal by git-grep (images.env header) — a ref with a DIFFERENT tag than images.env is one the sweep missed (⚠ on the row) | ⚠ ArgoCD Degraded → `/deploy-degraded` (wired 2026-08-04) but NEVER fired by a real Degraded homelab app (FU-044); a bare `:latest`-equivalent ref is invisible to it | ✅ the cluster pin IS the revert (operator 2026-09-27): `deploy-revert-argo.yaml`'s pin-only predicate opens the revert PR; the FU-1990 sibling chain proved the shape end to end in the 2026-09-27 drill (agent-coordinator#20 → #21, ~3.5 min) | ⚠ none — the pin rolls every consumer at once (the coordinator, the reviewer, the sentinel, the transcript viewer) | 2026-09-27 ([#2024](https://github.com/teststuffstash/homelab/pull/2024)) | 4 (4) | no — 2 ⚠ column(s) |
+| 4 | **Helm charts, tofu-managed** | `helm_release` blocks in `tofu/*.tf`, version from `tofu/variables.tf` defaults · `terraform (a `var.*_version` default — Renovate's helm datasource does not follow it)` | ⚠ a hand edit of the variable default — Renovate's terraform manager reads `helm_release.version` literals, not a `var.` indirection (§Ground truth: 0 PRs) | 👤 PR + the management sentinel's plan-on-PR (ADR-131) + the codeowner read — these are ADR-005 substrate (ArgoCD, Longhorn) by ruling | 👤 the management box applies only the allowlisted residue; a `helm_release` change refuses to a human `devbox run mgmt-tf -- apply` (docs/management-box.md §The test surface) | ✅ `MgmtApplyResidueStanding` — merged-but-unapplied residue alerts after 24 h (FU-252); plan-on-PR shows the diff before merge | 👤 `git revert` + a human apply; ArgoCD/Longhorn downgrades carry CRD/schema risk (IAC-G09) | ⚠ none — one release per chart | — never | 3 (3) | no — 2 ⚠ column(s), never proven |
+| 5 | **Tofu providers** | `tofu/**/versions.tf` `required_providers` (the `~>` range) + `.terraform.lock.hcl` (the real pin) · `terraform` | ✅ Renovate `terraform` — lockfile + constraint PRs flow since the `statuses` grant (2026-09-25; #1976/#1981/#1983/#1984/#1996/#1997 merged 2026-09-27); the two roots the box does not plan are excluded from the manager (row overrides) | ✅ the management box is the gate, mechanically (ADR-131 amended 2026-09-27, #2026): stage 1 admits the `provider-pin` diff shape, stage 2 plans the head with the new provider and a pin must plan EMPTY — `management-sentinel` green on `+0 ~0 -0` → `automerge` (reflex approves, auto-merge lands); red = the only provider PRs a human sees (`mgmt-human-plan`). Built on six human-ordered `+0` plans; the first merge on the sentinel's own green is still owed (§Last proven end to end) | ✅ an empty plan IS the deploy: the box's next plan/apply runs the new provider binary (registry-signed, hash-verified by tofu); nothing to apply by construction | ✅ the sentinel's plan-on-PR (red = `provider bump changes the plan`, by design) + `MgmtApplyResidueStanding` on main; the external roots plan read-only on the box (FU-237/FU-238) | 👤 `git revert` of the lockfile + the same empty plan; a provider downgrade re-plans clean (lockfile-only) | ⚠ none — `tofu/provisioning` is the low-blast root a provider bump could land on first, but nothing orders the roots | 2026-09-27 ([#1976](https://github.com/teststuffstash/homelab/pull/1976)) | 14 (14) | no — 1 ⚠ column(s) |
+| 6 | **Cluster substrate** | `tofu/variables.tf` defaults (`talos_version_*`, `kubernetes_version`, `cilium_version`) + `machines/machines.yaml` · `terraform (weak) — human-proposed until ROADMAP G-D (operator 2026-09-18)` | 👤 a human bump PR of the variable default — Renovate stays off class 6 until a few ATTENDED bumps through the box path have passed (operator 2026-09-21, ROADMAP G-D); the substrate belt says when we are behind or EOL (FU-254, docs/management-box.md §MB2) | 👤 PR + plan-on-PR + the install-impact line (§MB3) + the codeowner read; Kubernetes minors need a recreate-from-git drill first (design sitting 2026-09-25) | ✅ the box-run rollout: `mgmt-reconcile` rolls `reconcile: auto` nodes — 13/13 incl. 3 CPs on 2026-09-22 (#1879, ADR-132; VMs in place since ADR-014's 2026-09-18 amendment) | ✅ `MgmtNode*Drift` declared-vs-live per node (FU-235) + the substrate currency belt (FU-254) + the rollout's workload-health hold (FU-278) | 👤 forward by default (rollout ruling 2026-09-22): a revert is a human commit + the same rollout; the post-apply health gate parks, never reverts | ✅ per-type canary node via the per-node `talos_version` override (FU-033 lever) — the reconciler rolls canaries first, CPs last | 2026-09-22 (capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last) | 4 (0) | no — complete, but a 👤 cell keeps the human by ruling |
+| 7 | **devbox/nix toolchain** | `devbox.json` (all `@latest`) → `devbox.lock` (the resolved version) · `nix/devbox DISABLED on purpose (an `@latest` pin is untrackable — docs/renovate.md §Gotchas)` | ✅ the weekly synchronized `devbox-update.yaml` — one job re-resolves EVERY repo's lock together, one PR per repo (the model other classes must match, #2014) | ✅ `automerge`+`dependencies` → reflex → CI-green; a major in the resolved set relabels the PR `major` and disarms it (scripts/devbox-update.sh) | ✅ self-deploying for CI and the jail (`devbox run` reads the lock); the agent-base image rebuilds weekly (class 3 carries the pin) | ⚠ CI on the PR is the only check; nothing compares the jail's, the runner's and the worker image's resolved versions (the #2014 version-set gap; FU-240 for the box↔jail devbox skew) | ✅ `git revert` of the lock — nothing else references the store paths | ⚠ none — every repo moves in the same weekly pass by design (alignment over caution) | 2026-09-21 ([#1832](https://github.com/teststuffstash/homelab/pull/1832)) | 36 (36) | no — 2 ⚠ column(s) |
+| 8 | **GitHub Actions** | `uses:` in `.github/workflows/*.y*ml` (third-party; first-party `teststuffstash/**@master` floats by contract) · `github-actions` | ✅ Renovate `github-actions`, SHA-pinned (`helpers:pinGitHubActionDigests`), grouped per repo per wave — #2021 (pin) and #2008 merged 2026-09-27 | ✅ every update type incl. majors rides the grouped `automerge` lane (ADR-141 as amended 2026-09-27): reflex approval + CI on the bumped head (a `pull_request` workflow runs the PR's own file) | ✅ self-deploying — the next run uses the merged file | ✅ `GithubWorkflowRunFailed` on master (github-exporter) covers the push-only workflows CI cannot exercise | ✅ the FU-1990 chain: `workflow-pin-revert` reverts the pin PR as `automerge`+`dependencies`, `pin-only-lint` check (e) refuses the reverted pin for 30 d — DRILLED 2026-09-27 (agent-coordinator#20 → #21, no human touch) | ✅ the PR's own `pull_request` run on the bumped head is the pre-merge proof; push-only workflows are canaried by the revert chain instead | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) | 5 (0) | **yes** — complete |
+| 9 | **Ansible collections/roles** | `ansible/requirements.yml` (roles live in-repo today — the file is the extraction seam) · `ansible-galaxy` | ✅ Renovate `ansible-galaxy` reads `requirements.yml` by default — nothing is pinned there yet, so nothing to propose | ✅ the standard lanes (minor → `deps-review`, major → un-armed) | ⚠ NONE — a merge deploys nothing until a human runs `scripts/opnsense-playbook.sh`; the FU-097 gap, sharpest here (this is the router) | ⚠ no nightly `--check` diff; a merged OPNsense change sits until a human remembers | 👤 `git revert` + a human playbook run; an in-cluster applier would sit inside its own blast radius (the dependency-cone rule) | ⚠ none — one router; Matchbox (near-zero cone) is the natural first target | — never | 0 (0) | no — 3 ⚠ column(s), never proven |
+| 10 | **arc-runner image inputs** | `docker/arc-runner/Dockerfile` — `FROM ghcr.io/actions/actions-runner` + `ARG DEVBOX_VERSION` / `ARG NIX_VERSION` · `dockerfile (FROM) + custom.regex (the two ARGs — renovate-global.json customManagers)` | ✅ Renovate `dockerfile` + `custom.regex` — #2022 (actions-runner 2.337.0, `deps-review`) merged 2026-09-27 | ✅ FROM minor → `deps-review`; ARG patch/minor → `automerge` (custom.regex rule, 2026-09-27); majors → un-armed | ✅ `runner-image.yaml` builds on the merge and opens the `runner-image-pin` PR (class 3 lands it) | ✅ the image build in `ci` (push: false) fails the PR; `GithubWorkflowRunFailed` covers the master build | ✅ the cluster pin is the revert (the previous `arc-runner:` tag stays pullable); the FU-1990 chain covers the workflow half | ⚠ none — the pin PR rolls both scale sets (arc-runners + arc-runners-large) together | 2026-09-27 ([#2022](https://github.com/teststuffstash/homelab/pull/2022)) | 3 (3) | no — 1 ⚠ column(s) |
+| 11 | **Harness + tool versions baked into first-party images** | three Dockerfiles in three repos (agent-runtime, agent-coordinator, claude-jail) — NOT extractable from this repo; the in-repo half is class 7/10. Members + sync state: §Version SETS below · `devbox-update (agent-base only); custom.regex for s5cmd; none for claude-code (npm), gh, KUBECTL_VERSION` | ⚠ claude-code floats to npm latest in two images and rides nixpkgs in the third; kubectl in the coordinator image is a hand ARG — owner of the fix: #2014 (version sets) | ✅ the weekly `build-image` rebuild + the class 3 deploy-pin lanes | ✅ a rebuild is a new build-date tag → deploy-pin rolls it (weekly `schedule` since 2026-09-27) | ⚠ nothing checks the three claude-code versions agree, or kubectl's skew against the fleet minor (#2014) | ✅ the cluster pin is the revert (operator 2026-09-27) | ⚠ none | — never | 0 (0) | no — 3 ⚠ column(s), never proven |
+| 12 | **npm CI tooling** | `scripts/mermaid-lint/package.json` (+ lockfile) — the docs' mermaid parser, CI-only · `npm` | ✅ Renovate `npm` — #2012 (jsdom 30.1.0) merged 2026-09-27; #1977 (mermaid) open | ✅ patch/minor → `automerge` (rule added 2026-09-27, S9 #1988 (c)); majors → the un-armed catch-all; manifest + lockfile un-owned in CODEOWNERS | ✅ self-deploying — `ci` runs `npm ci` + a parse on every PR | ✅ required `ci` (`mermaid-lint`) is the detector — a broken parser reds the PR before merge | ✅ `git revert` — no runtime consumer | ✅ the PR's own `ci` run exercises the exact dependency that ships | 2026-09-27 ([#2012](https://github.com/teststuffstash/homelab/pull/2012)) | 2 (0) | **yes** — complete |
+
+#### Per dependency — the register
+
+Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / detector / revert / canary; a cell carries text only where the dependency differs from its class. Last proven = the newest merged proposer PR whose diff named the dependency (class 6: the capability ledger).
+
+| Class | Dependency | Version | Pinned in | P | G | D | Det | R | C | Last proven E2E |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `argo-events` | 2.4.23 | `argocd/platform/argo-events.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `argo-workflows` | 1.0.20 | `argocd/platform/argo-workflows.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `cloudnative-pg` | 0.28.3 | `argocd/platform/cnpg-operator.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `crossplane` | 2.3.2 | `argocd/platform/crossplane.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `external-secrets` | 2.6.0 | `argocd/platform/eso-operator.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `forgejo` | 17.1.1 | `argocd/platform/forgejo.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `gateway-api` | v1.4.1 | `argocd/platform/gateway-api-crds.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `gha-runner-scale-set` | 0.14.2 | `argocd/platform/arc-runners-large.yaml`, `argocd/platform/arc-runners.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `gha-runner-scale-set-controller` | 0.14.2 | `argocd/platform/arc-controller.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `infisical-standalone` | 1.9.0 | `argocd/platform/infisical.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `kube-prometheus-stack` | 86.1.0 | `argocd/platform/kube-prometheus-stack.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `metrics-server` | 3.12.2 | `argocd/platform/metrics-server.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `alpine` | 3.20 | `argocd/resources/node-fstrim/fstrim.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `cloudflare/cloudflared` | 2026.5.2@sha256:12ff5c6992a9 | `argocd/resources/publicroute/composition.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `docker.io/library/busybox` | 1.36.1@sha256:73aaf090f3d8 | `argocd/resources/loki/kmsg-reader.yaml`, `argocd/resources/runner-image-prepull/daemonset.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `docker.io/prometheuscommunity/smartctl-exporter` | v0.14.0@sha256:cfe22c36d7d2 | `argocd/resources/smartctl-exporter/daemonset.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `ghcr.io/k3d-io/k3d` | 5-dind@sha256:ee3872700ed0 | `agents/images.env` | ⚠ no Renovate manager reads `agents/images.env` (`AGENT_DIND_IMAGE`) | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `ghcr.io/lablabs/cloudflare_exporter` | 0.2.3@sha256:6bf84a81725c | `argocd/resources/cloudflare-exporter/deployment.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `grafana/alloy` | v1.5.1 | `argocd/resources/loki/alloy.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `grafana/loki` | 3.4.2 | `argocd/resources/loki/loki.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `nginx` | 1.27-alpine | `argocd/resources/registry/registry-fs.yaml`, `argocd/resources/registry/registry.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `nginxinc/nginx-unprivileged` | 1.27-alpine | `argocd/resources/cf-api-proxy/deployment.yaml`, `argocd/resources/devbox-search/deployment.yaml`, `argocd/resources/nix-cache/deployment.yaml` +1 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `otel/opentelemetry-collector-contrib` | 0.116.1 | `argocd/resources/otel-collector/deployment.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `prom/pushgateway` | v1.11.1 | `argocd/resources/pushgateway/deployment.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `python` | 3.13-slim, 3.13-slim@sha256:cc9dffa47c82 | `argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml`, `argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml`, `argocd/resources/garage-disruption/controller.yaml` +4 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `quay.io/brancz/kube-rbac-proxy` | v0.22.1 | `argocd/resources/loki/loki-rbac-proxy.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `quay.io/prometheus/blackbox-exporter` | v0.27.0 | `argocd/resources/blackbox/blackbox.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `registry` | 3.0.0 | `argocd/resources/registry-cache/mirror-docker-io.yaml`, `argocd/resources/registry-cache/mirror-ghcr.yaml`, `argocd/resources/registry-cache/mirror-mcr.yaml` +3 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 3 | `agent-base` | `AGENT_BASE_IMAGE`=2026.9.27-g031de946d9e9 | `agents/images.env` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-27 ([#2020](https://github.com/teststuffstash/homelab/pull/2020)) |
+| 3 | `agent-coordinator` | `AGENT_COORDINATOR_IMAGE`=2026.9.27-gca94f4a2dd99; 24 manifest ref(s) | `agents/coordinator/coordinate-argo.yaml`, `agents/coordinator/corpus-dispatch-argo.yaml`, `agents/coordinator/deploy-revert-argo.yaml` +11 | ✅ | ✅ | ⚠ 3 ref(s) NOT at the images.env pin (18× (none — floats to :latest), 1× 2026.7.25-g141235c93140, 5× 2026.8.7-gd6dc9ced82f2) — the deploy-pin sweep misses them | ⚠ | ✅ | ⚠ | 2026-09-27 ([#2024](https://github.com/teststuffstash/homelab/pull/2024)) |
+| 3 | `cchv-server` | v1.18.0 (×1) | `agents/coordinator/transcripts-viewer.yaml` | ⚠ a hand pin — the viewer image is built from the upstream cchv tag by hand (agents/coordinator/transcripts-viewer.yaml header); no deploy-pin job, no Renovate manager for a first-party tag | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 3 | `homelab/arc-runner` | 2026.9.27-gf89fa348d8db (×3) | `agents/coordinator/sentinel-argo.yaml`, `argocd/resources/runner-image-prepull/daemonset.yaml` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-27 ([#2023](https://github.com/teststuffstash/homelab/pull/2023)) |
+| 4 | `argo-cd` | 9.5.21 | `tofu/argocd.tf`, `tofu/variables.tf` | ⚠ | 👤 | 👤 | ✅ | 👤 | ⚠ | — never |
+| 4 | `argocd-apps` | 2.0.5 | `tofu/argocd.tf`, `tofu/variables.tf` | ⚠ | 👤 | 👤 | ✅ | 👤 | ⚠ | — never |
+| 4 | `longhorn` | 1.12.0 | `tofu/longhorn.tf` | ⚠ | 👤 | 👤 | ✅ | 👤 | ⚠ | — never |
+| 5 | `bpg/proxmox` | 0.113.1 (`~> 0.113`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1996](https://github.com/teststuffstash/homelab/pull/1996)) |
+| 5 | `bpg/proxmox` | 0.113.1 (`~> 0.113`) | `tofu/provisioning/versions.tf`, `tofu/provisioning/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1996](https://github.com/teststuffstash/homelab/pull/1996)) |
+| 5 | `cloudflare/cloudflare` | 5.25.0 (`~> 5.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1981](https://github.com/teststuffstash/homelab/pull/1981)) |
+| 5 | `cloudflare/cloudflare` | 5.25.0 (`~> 5.0`) | `tofu/cloudflare-token/versions.tf`, `tofu/cloudflare-token/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): `tofu/cloudflare-token` is the one-shot admin-token root the box never plans — moved by hand with a jail plan | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `hashicorp/helm` | 2.17.0 (`~> 2.17`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `hashicorp/kubernetes` | 2.38.0 (`~> 2.31`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `hashicorp/kubernetes` | 2.38.0 (`~> 2.31`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `hashicorp/kubernetes` | 2.38.0 (`~> 2.31`) | `tofu/infisical/versions.tf`, `tofu/infisical/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): the box does not plan `tofu/infisical` — moved by hand with a jail plan | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `hashicorp/random` | 3.9.1 (`~> 3.6`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1976](https://github.com/teststuffstash/homelab/pull/1976)) |
+| 5 | `hashicorp/tls` | 4.4.1 (`~> 4.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1997](https://github.com/teststuffstash/homelab/pull/1997)) |
+| 5 | `Infisical/infisical` | 0.19.32 (`~> 0.19`) | `tofu/infisical/versions.tf`, `tofu/infisical/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): the box does not plan `tofu/infisical` (policy foreign_roots), so a bump here has no gate — moved by hand with a jail plan; the root is slated to leave tofu | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1984](https://github.com/teststuffstash/homelab/pull/1984)) |
+| 5 | `integrations/github` | 6.13.0 (`~> 6.0`) | `tofu/github/versions.tf`, `tofu/github/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | 2026-09-27 ([#1983](https://github.com/teststuffstash/homelab/pull/1983)) |
+| 5 | `poseidon/matchbox` | 0.5.4 (`~> 0.5`) | `tofu/provisioning/versions.tf`, `tofu/provisioning/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 5 | `siderolabs/talos` | 0.11.0 (`~> 0.11`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 6 | `Cilium` | 1.19.1 | `tofu/variables.tf` | 👤 | 👤 | ✅ | ✅ | 👤 | ✅ | 2026-09-22 (capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last) |
+| 6 | `Kubernetes` | v1.36.1 | `tofu/variables.tf` | 👤 | 👤 | ✅ | ✅ | 👤 | ✅ | 2026-09-22 (capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last) |
+| 6 | `Talos (control planes)` | v1.14.1 | `tofu/variables.tf` | 👤 | 👤 | ✅ | ✅ | 👤 | ✅ | 2026-09-22 (capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last) |
+| 6 | `Talos (workers)` | v1.14.1 | `tofu/variables.tf` | 👤 | 👤 | ✅ | ✅ | 👤 | ✅ | 2026-09-22 (capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last) |
+| 7 | `age` | 1.3.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `ansible` | 2.21.3 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `argo-workflows` | 3.6.10 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `argocd` | 3.4.6 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `awscli2` | 2.35.11 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `bind` | 9.20.26 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-07 ([#1488](https://github.com/teststuffstash/homelab/pull/1488)) |
+| 7 | `cilium-cli` | 0.19.7 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `cloudflared` | 2026.8.2 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `crossplane-cli` | 2.4.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `curl` | 8.17.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `gh` | 2.98.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `gitleaks` | 8.30.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `hubble` | 1.19.4 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `infisical` | 0.43.123 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `jq` | 1.8.2 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-07 ([#1488](https://github.com/teststuffstash/homelab/pull/1488)) |
+| 7 | `k9s` | 0.51.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `keepassxc` | 2.7.12 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `kubeconform` | 0.8.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `kubectl` | 1.36.3 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `kubernetes-helm` | 4.2.4 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `kyverno` | 1.19.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `netcat-gnu` | 0.7.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `nixpkgs-unstable` | nixpkgs@0a3468a402c4 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-21 ([#1832](https://github.com/teststuffstash/homelab/pull/1832)) |
+| 7 | `nmap` | 7.991 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `nodejs_22` | 22.23.2 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `openssl` | 3.6.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `opentofu` | 1.12.5 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `prometheus` | 3.14.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `python3` | 3.12.8 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `qrencode` | 4.1.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-09-07 ([#1488](https://github.com/teststuffstash/homelab/pull/1488)) |
+| 7 | `sops` | 3.13.3 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `talosctl` | nixpkgs@4975466d3247 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `tea` | 0.15.1 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `terraform-providers.cloudflare_cloudflare` | 5.23.0 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | — never |
+| 7 | `wireguard-tools` | 1.0.20260223 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 7 | `yq-go` | 4.53.3 | `devbox.lock` | ✅ | ✅ | ✅ | ⚠ | ✅ | ⚠ | 2026-08-31 ([#1131](https://github.com/teststuffstash/homelab/pull/1131)) |
+| 8 | `actions/checkout` | 11d5960a326750d5838078e36cf38b85af677262 (v4) | `.github/workflows/ci.yaml`, `.github/workflows/devbox-cache.reusable.yml`, `.github/workflows/devbox-update.yaml` +3 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) |
+| 8 | `actions/create-github-app-token` | d72941d797fd3113feb6b93fd0dec494b13a2547 (v1) | `.github/workflows/devbox-update.yaml`, `.github/workflows/renovate-approve.reusable.yml`, `.github/workflows/renovate.yaml` +1 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) |
+| 8 | `docker/login-action` | c94ce9fb468520275223c153574b00df6fe4bcc9 (v3) | `.github/workflows/devbox-cache.reusable.yml`, `.github/workflows/runner-image.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) |
+| 8 | `docker/setup-buildx-action` | 8d2750c68a42422c14e847fe6c8ac0403b4cbd6f (v3) | `.github/workflows/runner-image.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) |
+| 8 | `renovatebot/github-action` | dcfba84a42d1b5d5e49bf131b1bf53511851a123 (v46.3.1) | `.github/workflows/renovate.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2021](https://github.com/teststuffstash/homelab/pull/2021)) |
+| 10 | `ghcr.io/actions/actions-runner` | 2.337.0 | `docker/arc-runner/Dockerfile` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-09-27 ([#2022](https://github.com/teststuffstash/homelab/pull/2022)) |
+| 10 | `jetify-com/devbox` | 0.18.3 | `docker/arc-runner/Dockerfile` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | — never |
+| 10 | `NixOS/nix` | 2.35.1 | `docker/arc-runner/Dockerfile` | ⚠ the custom manager resolves nothing — `Found no results from datasource that look like a version (dependency=NixOS/nix)` (§Ground truth); fix or remove (#502 acceptance 4) | ✅ | ✅ | ✅ | ✅ | ⚠ | — never |
+| 12 | `jsdom` | 30.1.0 | `scripts/mermaid-lint/package.json` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 2026-09-27 ([#2012](https://github.com/teststuffstash/homelab/pull/2012)) |
+| 12 | `mermaid` | 11.17.0 | `scripts/mermaid-lint/package.json` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — never |
+
+<!-- END GENERATED dependency-coverage -->
+
+**The owner rule (homelab#1992 — FU-097's capability-ledger rule, generalized from box surfaces to
+dependency classes):** a CODEOWNER leaves a dependency class only when the class's row above is
+**complete** — all seven columns filled (✅ or 👤, no ⚠) and the newest proof ≤90 days old — and no
+column is 👤 (a human by ruling is filled, not a gap: the owner stays by design, as on the router
+and the substrate). A class enters "complete" with its first proven end-to-end pass, never with a
+belief about what the machinery could do. The table is **generated, never hand-written**
+(`scripts/dependency-coverage.py`, the `machines/generate.py` pattern): the rulings live in
+[`dependency-classes.yaml`](dependency-classes.yaml), the dependencies are extracted from the
+repo's own files the way Renovate's managers read them, and the proof column is read from GitHub
+(the newest merged proposer PR whose diff named the dependency) or, for class 6, from the
+[capability ledger](management-box.md#the-capability-ledger--what-the-box-has-been-tested-doing-on-its-own-fu-097).
+`devbox run dependency-coverage` regenerates (`-- --offline` from the committed proofs, `-- --check`
+is the currency gate); the same facts ship to the github-exporter as `dependency-coverage.json`, so
+the table alerts instead of rotting: `github_dependency_coverage_gap_rows` (rows with a ⚠ column),
+`github_dependency_coverage_last_proven_timestamp` (→ `DependencyClassProofStale`) and
+`github_renovate_last_pr_timestamp` (→ `RenovateSilent`, the #502 acceptance-3 liveness gauge).
+Class 11's members live in three other repos and are not extractable here — §Version SETS below
+carries them by hand until #2014 gives them one source.
+
+### Last proven end to end — per LANE, org-wide (S9 #1991; hand-kept)
+
+The generated table above carries homelab's own proof column per class and per dependency
+(machine-read from this repo's merged PRs and the capability ledger). This table is its
+hand-kept companion for what the generator does not read: **other repos' merges, drills and
+negative proofs, one row per LANE** ([`renovate.md`](renovate.md) §"The automerge vs review
+split", ADR-141) — the evidence that a lane went through the gates it claims, wherever it first
+did. Rows whose evidence is a homelab merge live in the generated column and are not repeated here.
 
 | Class → lane | Last proven end to end | Evidence |
 |---|---|---|
-| **GitHub Actions, pin/minor** → grouped `automerge` (reflex approves, CI at head) | **2026-09-27** | homelab#2008 (renovatebot/github-action v46.1.21) merged 11:08Z on the reflex's approval; #2021 (`pin dependencies`, the SHA-pinning wave) 11:34Z once pins went `minimumReleaseAgeBehaviour: timestamp-optional`; agent-runtime#157 + openrouter-operator#77 (pin waves) merged on their own once `/.github/workflows/` was un-owned |
+| **GitHub Actions, pin/minor** → grouped `automerge` (reflex approves, CI at head) | **2026-09-27** | agent-runtime#157 + openrouter-operator#77 (pin waves) merged on their own once `/.github/workflows/` was un-owned; homelab's #2008/#2021 are class 8's generated row |
 | **GitHub Actions, major** → the same grouped lane (ADR-141 amended: no lens until a dependency graduates) | **2026-09-27** | agent-coordinator#22 (`github-actions (major)`) auto-merged 09:51Z, no human, no lens |
 | **Actions pin, post-merge rollback** → the FU-1990 chain (`workflow-pin-revert`) | **2026-09-27 (drill)** | agent-coordinator#20 (deliberate bad pin) merged 09:11Z → `GithubWorkflowRunFailed` 09:17Z → revert #21 opened by the App, reflex-approved, merged 09:37Z; ~3.5 min from alert to merged revert, zero human touch; two chain defects found only by the drill (PR#2005 the token mint, PR#2006 the candidate query). Timeline: homelab#1990 |
 | **pre-commit hooks, patch/minor** → `automerge` | **2026-09-27** | openrouter-operator#73 (gitleaks v8.30.1) merged 12:30Z on the bot approval once `/.pre-commit-config.yaml` was carved out of that repo's whole-repo CODEOWNERS (it had sat REVIEW_REQUIRED two days with APPROVED at head) |
-| **npm patch/minor** (`scripts/mermaid-lint`) → `automerge` | **2026-09-27** | homelab#2012 (jsdom v30.1.0) merged 12:37Z; the lane + the CODEOWNERS carve-out landed the same day (6ddcdc21) — before that the class had no lane at all (#1977/#2012 parked) |
-| **terraform providers, any type** → `major/awaiting-human`, the human plan (`mgmt-human-plan`) | **2026-09-27** | homelab#1997 (tls 4.4.1), #1996 (proxmox ~> 0.113, main + provisioning), #1983 (github 6.13.0) — each `+0 ~0 -0` from the box, merged 12:26–12:29Z; #1984 (infisical 0.19) merged WITHOUT a plan — the box holds no infisical root — and was reconciled from the jail afterwards (2 in-place provider-schema updates, re-plan clean): a root the box does not plan needs the jail plan BEFORE the merge |
+| **terraform providers** → the box's provider-pin plan gates a mechanical `automerge` (ADR-131 amended, #2026) | ❌ **human-ordered only** | six homelab PRs (2026-09-25..27, class 5's generated rows) each planned `+0 ~0 -0` under HUMAN orders — the evidence the lane was built on; the first bump merged on the sentinel's own green is still owed. #1984 (infisical) merged without a plan — the box holds no infisical root — and was reconciled from the jail afterwards; that root and `tofu/cloudflare-token` are now excluded from the manager |
 | **base-image major** → un-armed `major`, the migration lens, a human merges | **2026-09-27** | agent-coordinator#23 (node 22 → 24): lens review under the four headings, `ci` + `build-image` gained a runtime smoke (`claude --version` et al. on the built image, 2b6a9fa), the seat merged 12:18Z; the real acceptance is the first coordinator/reviewer run on `2026.9.27-gca94f4a2dd99` (homelab#2024) |
 | **Python runtime deps, patch/minor** → `deps-review` (reflex → CHANGES_REQUESTED → a worker on the `renovate/*` branch) | ❌ **not yet** | FU-046 — no `deps-review` PR has drawn a CHANGES_REQUESTED; openrouter-operator#80 (python 3.14) is `deps-review` but a human merge by that repo's chokepoint rule (operator) |
 | **base-image major merging WITHOUT a human** | ❌ **not yet, by design** | stays un-armed until #1988's runtime-in-prod post-merge half exists: a `deploy/agent-coordinator` pin revert on `ArgoWorkflowsFailing` whose pod runs the PREVIOUS tag (a broken coordinator image would otherwise revert the revert lane out of existence) |
@@ -146,7 +276,11 @@ claims. A class without a dated row here is unproven, whatever its rule says.
 
 Some versions are used in several places and a bump in one place alone is worse than no bump
 ("doing things prematurely is also bad"). The sets, their sources today, and whether they are in
-sync — the register `#1992`'s generated table will carry; until then this list is it:
+sync. The in-repo members (kubectl in `devbox.lock`, Kubernetes in `tofu/variables.tf`,
+`DEVBOX_VERSION`/`NIX_VERSION` in the arc-runner image, `python` images) are rows of the generated
+register above; the cross-repo members (the three claude-code installs, the coordinator image's
+`KUBECTL_VERSION` ARG, kind in the e2e repos, each service's python set) are class 11's and stay in
+this hand list until #2014 gives each set one source:
 
 | Set | Members and how each is set today | In sync? |
 |---|---|---|
@@ -419,7 +553,8 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | Blackbox probes on service endpoints | ✅ | FU-099 — seconds-grade, dumb |
 | Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
 | Storage-cap breach visibility | ✅ | Garage admin metrics scraped + `garage-alerts` belts since #965 (2026-08-25); Longhorn metering since 2026-08-04 — the pve thin-pool `Data%` is FU-093's remaining gap ([`storage-ledger.md`](storage-ledger.md)) |
-| **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc; the gauge (time since the last `renovate/*` PR, plus the ⚠-row count of the coverage table) is #1992's deliverable |
+| **Renovate liveness** | ✅ | `github_renovate_last_pr_timestamp` per repo on the github-exporter → `RenovateSilent` (14 d org-wide, `warning`) since homelab#1992 — the #502 acceptance-3 gauge; the dashboard-issue half was retired by ruling |
+| **Coverage-table rot** | ✅ | `github_dependency_coverage_gap_rows` / `_complete` / `_last_proven_timestamp` per class → `DependencyClassProofStale` (a complete class whose proof is >90 d old) — §The dependency inventory |
 | **Substrate currency / support window** | ✅ | the management box's belt compares the declared Talos / Kubernetes / Cilium versions against upstream releases and alerts on "a newer minor exists" and on "ours is EOL" — [`management-box.md`](management-box.md) §MB2 (FU-254). The sibling of the row above, and **not** a thing Renovate could have covered: class 6 must not auto-deploy |
 | Drift between tofu applies | ⚠ partial — `MgmtApplyResidueStanding` + `MgmtNode*Drift` | FU-097, FU-235 |
 
@@ -438,10 +573,9 @@ and then nothing is watching.
    `teststuffstash/homelab/…reusable.yml@master` at one SHA and was closed — §Gotchas in
    [`renovate.md`](renovate.md)). Remaining: either fix or remove the `NIX_VERSION` custom manager
    (it still resolves nothing).
-2. **Add a Renovate-liveness signal** so the next silent stall is loud: a
-   `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix — owner #1992,
-   together with the generated coverage table. (The dashboard-issue-exists option is gone —
-   `dependencyDashboard: false` by ruling, 2026-08-18.)
+2. ✅ **Renovate-liveness signal landed (homelab#1992)** — `github_renovate_last_pr_timestamp` on the
+   github-exporter + `RenovateSilent`, and the generated coverage table's own rot detector beside it.
+   (The dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
 3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`) over
    `argocd/resources/*` and `tofu fmt -check -recursive` are both required checks. Two residues by
    decision, not omission: `tofu validate` stays the local `devbox run tf-validate` gate (a provider
