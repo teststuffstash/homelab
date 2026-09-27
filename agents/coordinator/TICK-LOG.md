@@ -11193,3 +11193,47 @@ bumps of EVERY type ride the grouped mechanical lane; a dependency graduates to 
 lens-reviewed `major` on evidence (a revert naming it, a red major PR, an in-PR adaptation or a
 follow-up from a review) — one `matchPackageNames` line (8a75d351; ADR-141 amended, PR#2009).
 Renovate dispatched by the operator at 09:25Z to apply the rules sooner (run 36309312970).
+**Late findings (operator → agent-coordinator#1, the Dependency Dashboard):** Renovate reopened the
+dashboard on 2026-09-25 and kept writing it on agent-coordinator only, against the fleet-wide
+`dependencyDashboard: false`; its source re-ensures the issue only for an enabled dashboard,
+`dependencyDashboardApproval`, or a `prCreation: approval` branch — none set. Closed again as the
+experiment (a reopen on the next run = a config-resolution defect for a debug dry-run). The
+"cannot access vulnerability alerts" WARN is the DECIDED absence of the Dependabot permission (OSV
+is the source). In `coordinator/Dockerfile` Renovate tracks ONLY `FROM node:22-bookworm-slim`
+(node 24 pending, a Dockerfile major → human lane); `@anthropic-ai/claude-code` and `gh` float to
+latest on every rebuild (the drill rebuilt the image twice today), `s5cmd`/`KUBECTL_VERSION` are
+hand-pinned — proposed: ARG pins + regex managers (the arc-runner shape) for claude-code and s5cmd.
+**homelab's grouped Actions PRs (#2007/#2008) were red on `ci`:** the pin-only-lint step ran `gh`
+with NO token in Actions (unauthenticated = per-IP limited; "all gh calls must be authenticated",
+operator) — `GH_TOKEN` added (47b23058), a sweep finds no other token-less `gh` step in homelab's
+workflows; and `pin-only.reusable.yml` carried a trailing comment on a `uses:` line, which the pin
+grammar forbids — moved. openrouter-operator#77 and agent-runtime#157 merged on their own under
+the amended lane; CODEOWNERS un-owned `/.github/workflows/` on all three repos.
+**Operator ruling (coordinator/Dockerfile):** "only pin things that Renovate will update — better a
+weekly latest than a year-old pin; the image is versioned, a pin in the cluster reverts it; not
+having updates to claude goes unnoticed for months." → `build-image.yaml` on agent-coordinator
+(3b05a11) and agent-runtime (aa4182b): a WEEKLY scheduled rebuild (Mon 06:00Z) + BUILD-date tags
+(a rebuild of an unchanged commit is a new revertable version, never an overwritten tag; a
+same-day collision appends the run number after a manifest probe). claude-code and gh keep
+floating; s5cmd gets a Renovate regex manager (github-releases) and the regex-managed class gets
+its lane (`custom.regex` patch/minor → automerge — the arc-runner's devbox/nix pins had none);
+kubectl stays hand-set to the fleet version.
+**agent-coordinator#1 (the Dependency Dashboard) — root cause by a local Renovate debug dry-run
+(Node 24 via nix, renovate@44.115.10, `--autodiscover=false teststuffstash/agent-coordinator`):**
+the resolved config carries `dependencyDashboard: false`, yet "Ensuring Dependency Dashboard" —
+because `renovate/node-24.x` is a branch whose creation "is disabled because internalChecksFilter
+was not met", and this Renovate auto-enables the dashboard to host pending-check branches. The
+branch is pending FOREVER: "Marking 29 release(s) as pending, as they do not have a releaseTimestamp
+(minimumReleaseAgeBehaviour=timestamp-required)" — Docker tags have no timestamp, so under the 7-day
+cooldown NO base-image bump has ever been proposable (a silent gap on every repo, not just the
+dashboard's cause). Fix: a docker-datasource rule `minimumReleaseAgeBehaviour: timestamp-optional`
+(no cooldown on base images; CI + the deploy-pin revert are the gate) — the node 24 major will now
+arrive as an un-armed `major` PR (human lane, lens) and the dashboard has nothing to host.
+**Run 7 (docker cooldown timestamp-optional) confirmed the diagnosis:** 11 base-image PRs on 7 repos
+in one run (python 3.14, nginx 1.31, node 24 → agent-coordinator#23 un-armed `major`, uv, the
+actions-runner image) — updates that had been unproposable for months. The dashboard on
+agent-coordinator kept being re-ensured while any PR is open (an existing issue is maintained
+regardless of `dependencyDashboard: false`) → the issue DELETED (GraphQL; its only human content,
+the 08-18 ruling, lives here). homelab's clean grouped Actions PR #2021: `ci` green, but
+`renovate/stability-days` PENDING forever — pinned action releases without timestamps, the same
+class → pins/digests made timestamp-optional too.

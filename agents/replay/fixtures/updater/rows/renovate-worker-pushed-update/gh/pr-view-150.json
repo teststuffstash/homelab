@@ -1,7 +1,7 @@
 {
   "commits": [
     { "messageHeadline": "chore(deps): update actions/checkout action to v7", "committedDate": "2026-09-27T06:00:00Z",
-      "authors": [ { "login": "homelab-renovate-1234[bot]" } ] },
+      "authors": [ { "login": "app/homelab-renovate-1234" } ] },
     { "messageHeadline": "fix: adapt the workflow to v7", "committedDate": "2026-09-27T06:20:00Z",
       "authors": [ { "login": "homelab-agents[bot]" } ] },
     { "messageHeadline": "Merge branch 'master' into renovate/actions-checkout-7.x", "committedDate": "2026-09-27T06:25:00Z",

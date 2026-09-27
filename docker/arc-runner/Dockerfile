@@ -12,7 +12,7 @@
 # iac-sentinel WorkflowTemplate, and the runner-image-prepull DaemonSet (every worker holds the 4.9 GiB
 # image before a pod asks — a first pull cost 429–909 s and failed a sentinel run, 2026-09-03).
 # Phase 2 (FU-015): a warm /nix store layer per devbox.lock closure.
-FROM ghcr.io/actions/actions-runner:2.336.0
+FROM ghcr.io/actions/actions-runner:2.337.0
 
 USER root
 RUN apt-get update \

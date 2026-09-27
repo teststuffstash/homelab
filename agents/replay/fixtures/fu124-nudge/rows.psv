@@ -15,3 +15,4 @@ unreviewed-noop | board | gh/pr-list.json @ patches/add-unreviewed-behind.jq | |
 renovate-untouched-noop      | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-skip  | n=150
 renovate-worker-pushed-nudge | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-nudge | n=150 oid=ren150oid789
 renovate-other-class-nudge   | board | gh/pr-list.json @ patches/add-renovate-other-class.jq | | success | n=152 oid=ren152oid789
+# Login shape (homelab#2007): the rows carry the REAL `app/homelab-renovate-1234` list shape the raw test missed.
