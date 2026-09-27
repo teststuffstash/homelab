@@ -3461,7 +3461,7 @@ EOF_GTHEMES_OPEN
     # `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch does not
     # carry, and duplicating it here would be a second reader of one predicate). A park
     # (REVIEW_REQUIRED) is therefore never nudged: it waits for its human, as leg 1 intends.
-    # RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences) (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27) — the same predicate as
+    # RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27) — the same predicate as
     # agents/update-pr-branch.sh legs 1+2, at this third call site: Renovate stops maintaining a
     # branch the moment a commit it did not author lands on it (agent-coordinator#14 went
     # "Edited/Blocked" after ONE update-branch and its third actions/checkout call site, added on

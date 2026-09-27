@@ -54,7 +54,7 @@ if [ "${UPDATER_MERGE_READY_ONLY:-1}" = "0" ]; then MERGE_READY_ONLY=false; else
 PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
   --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName)"
 
-# RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences) (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27). Renovate stops maintaining a branch the
+# RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27). Renovate stops maintaining a branch the
 # moment a commit it did not author lands on it (its edited-PR rule — this updater's merge commit
 # counts: agent-coordinator#14 went "Edited/Blocked" after one update-branch and its third
 # `actions/checkout` call site, added on master later, was never bumped). The GitHub Actions rules
