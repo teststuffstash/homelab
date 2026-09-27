@@ -154,11 +154,15 @@ APPS_DECLARED = os.environ.get("APPS_DECLARED", "/app/github-apps.json")
 # committed dependency-coverage.json, shipped in the script ConfigMap like github-apps.json). The
 # collector republishes its per-class facts as gauges so the table alerts instead of rotting.
 COVERAGE_DECLARED = os.environ.get("COVERAGE_DECLARED", "/app/dependency-coverage.json")
-# #502 acceptance 3 / FU-125: Renovate liveness. Renovate labels EVERY PR `dependencies`
-# (renovate-global.json `labels`), so the newest `dependencies`-labelled PRs per repo, filtered to
-# a `renovate/` head, give "when did Renovate last open anything here" in ONE small GraphQL walk.
+# #502 acceptance 3 / FU-125: Renovate liveness — the newest `renovate/*`-headed PR per repo, read
+# off each repo's RENOVATE_PR_WINDOW newest PRs of ANY state and ANY label in one small GraphQL
+# walk. No label filter on purpose (PR#2028 review): security fixes carry `security`+`automerge`
+# instead of `dependencies`, and `deploy/*` PRs carry `dependencies` too — a label filter would hide
+# the former and let the latter fill the window. A repo whose newest Renovate PR is older than its
+# RENOVATE_PR_WINDOW newest PRs emits NOTHING (absent, never a stale value); the org-wide max() is
+# the liveness signal, the per-repo series is "Renovate was among this repo's recent PRs".
 RENOVATE_HEAD_PREFIX = os.environ.get("RENOVATE_HEAD_PREFIX", "renovate/")
-RENOVATE_PR_LABEL = os.environ.get("RENOVATE_PR_LABEL", "dependencies")
+RENOVATE_PR_WINDOW = int(os.environ.get("RENOVATE_PR_WINDOW", "30"))
 
 _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
@@ -2047,20 +2051,21 @@ query($org:String!, $cursor:String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
-        pullRequests(first:10, labels:["__LABEL__"], orderBy:{field:CREATED_AT, direction:DESC}) {
+        pullRequests(first:__WINDOW__, orderBy:{field:CREATED_AT, direction:DESC}) {
           nodes { headRefName createdAt }
         }
       }
     }
   }
 }
-""".replace("__LABEL__", RENOVATE_PR_LABEL)
+""".replace("__WINDOW__", str(RENOVATE_PR_WINDOW))
 
 
 def renovate_last_pr_per_repo(repos):
     """{repo: epoch of its newest `renovate/*` PR} from the GraphQL repo nodes — a repo with no
-    such PR among its newest labelled ones emits NOTHING (absent ≠ zero: the alert reads the
-    org-wide max, and a repo Renovate is not installed on must not read as 'stalled since 1970')."""
+    such PR among its RENOVATE_PR_WINDOW newest PRs (any state, any label) emits NOTHING (absent ≠
+    zero: the alert reads the org-wide max, and a repo Renovate is not installed on — or one whose
+    last Renovate PR fell out of the window — must not read as 'stalled since 1970')."""
     out = {}
     for repo in repos:
         if not repo:
@@ -2073,14 +2078,16 @@ def renovate_last_pr_per_repo(repos):
 
 def collect_renovate_liveness(lines):
     """FU-125 / #502 acceptance 3: `github_renovate_last_pr_timestamp` per repo — the created-at
-    epoch of the newest PR Renovate opened there (open OR closed; a merge is still evidence it ran).
+    epoch of the newest PR Renovate opened there among the repo's RENOVATE_PR_WINDOW newest PRs
+    (open OR closed, any label — security PRs are labelled `security`, not `dependencies`; a merge
+    is still evidence it ran).
     The 2026-08-01 finding was 115 GREEN workflow runs and zero PRs: the workflow's own verdict is
     worthless as a liveness signal, only Renovate's OUTPUT counts. `RenovateSilent` reads
     `time() - max(...)`; `dependencyDashboard` stays off by ruling (2026-08-18), so this gauge is the
     ONLY liveness signal — never dashboard-issue-exists."""
     lines += [
         "# TYPE github_renovate_last_pr_timestamp gauge",
-        "# HELP github_renovate_last_pr_timestamp Created-at epoch of the newest PR Renovate opened on the repo (head renovate/*, any state). Absent = no Renovate PR among the repo's newest dependency PRs; the org-wide liveness is max() over repos.",
+        "# HELP github_renovate_last_pr_timestamp Created-at epoch of the newest PR Renovate opened on the repo (head renovate/*, any state, any label) among the repo's 30 newest PRs. Absent = no Renovate PR in that window (not installed, or older than the window) — never a stale value; the org-wide liveness is max() over repos.",
     ]
     cursor = None
     last = {}
@@ -3969,12 +3976,16 @@ def self_test():
         assert _none == [], "an unreadable coverage file must publish nothing"
     finally:
         globals()["COVERAGE_DECLARED"] = _saved_cov_path
-    # Renovate liveness: the newest renovate/* PR per repo, NOT the newest dependencies-labelled
-    # one (a deploy/* PR carries the label too and must not count); a repo with only first-party
-    # dependency PRs emits nothing.
+    # Renovate liveness: the newest renovate/* PR per repo among its newest PRs of ANY label — a
+    # deploy/* PR (labelled dependencies) must not count, a security-labelled renovate/* PR must
+    # (the query carries no label filter: PR#2028 review); a repo with only first-party PRs emits
+    # nothing.
+    assert "labels:" not in _RENOVATE_QUERY, "the liveness query must not filter by label (security PRs carry `security`, not `dependencies`)"
+    assert f"first:{RENOVATE_PR_WINDOW}," in _RENOVATE_QUERY
     _rl_repos = [
         {"name": "homelab", "pullRequests": {"nodes": [
             {"headRefName": "deploy/agent-base", "createdAt": "2026-09-27T12:50:00Z"},
+            {"headRefName": "fix/1992-coverage-table", "createdAt": "2026-09-27T12:40:00Z"},
             {"headRefName": "renovate/jsdom-30.x", "createdAt": "2026-09-27T09:00:00Z"},
             {"headRefName": "renovate/github-actions", "createdAt": "2026-09-27T08:00:00Z"}]}},
         {"name": "agent-runtime", "pullRequests": {"nodes": [
@@ -3996,6 +4007,12 @@ def self_test():
         assert 'repo="agent-runtime"' not in _rl_body, "no renovate/* PR ⇒ no series for that repo"
     finally:
         globals()["graphql"] = _saved_graphql_rl
+    # DependencyClassProofStale's day literal is docs/dependency-classes.yaml's proof_recent_days,
+    # carried into the committed JSON — the two must agree (PR#2028 review follow-up, closed here).
+    _days = _committed.get("proof_recent_days")
+    _stale_expr = " ".join(ln for ln in alert_rule(RULE_FILE, "DependencyClassProofStale") if "86400" in ln)
+    assert isinstance(_days, int) and f"> {_days} * 86400" in _stale_expr, (
+        f"DependencyClassProofStale must compare against proof_recent_days={_days!r} × 86400; expr: {_stale_expr!r}")
     # The promtool copies of the two alerts cannot drift from the CR (the mgmt-apply pin's shape).
     for _alert in ("RenovateSilent", "DependencyClassProofStale"):
         _shipped_cov = alert_rule(RULE_FILE, _alert)

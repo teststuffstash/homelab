@@ -32,6 +32,7 @@ Outputs (both generated, both committed; CONTEXT.md principle 2 — a regenerati
     devbox run dependency-coverage                # regenerate (online: refreshes the proofs)
     devbox run dependency-coverage -- --offline   # regenerate from the committed proofs
     devbox run dependency-coverage -- --check     # exit 1 if the committed outputs are stale
+    devbox run dependency-coverage -- --self-test # the proof matcher's counterexamples
 
 Deterministic: sorted rows, sorted JSON keys, no timestamps of its own — "recent" is evaluated by
 the alert (`DependencyClassProofStale`, PromQL over the proof epoch), never baked into the doc.
@@ -478,14 +479,32 @@ def newer(a, b):
     return a if (b is None or (a and a["merged_at"] > b["merged_at"])) else b
 
 
+def names_dependency(text, match):
+    """True when `text` names the dependency: every match key is matched as a WHOLE token — bounded
+    by anything that is not a word character (`/`, `-`, `:`, `@`, `"`, space, line start/end count
+    as boundaries; letters, digits and `_` do not). Provider short names are real words (`time`,
+    `null`, `local`, `tls`, `random`): unanchored substring matching would let "runtime", "nullable"
+    or "timeout" in an unrelated added line prove a provider nobody bumped (PR#2028 review)."""
+    word = re.compile(r"[A-Za-z0-9_]")
+    for key in match:
+        # a key that already starts/ends with its own delimiter (`-age-1.3.1`, `"jq@latest"`) needs no
+        # boundary on that side — the self-test's store-path case caught the over-strict version
+        pattern = ((r"(?<![A-Za-z0-9_])" if word.match(key[0]) else "") + re.escape(key)
+                   + (r"(?![A-Za-z0-9_])" if word.match(key[-1]) else ""))
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
 def attribute_proofs(registry, rows, prs, proofs):
     """Per row: the newest merged proposer PR that touched one of the row's pinned files AND named
-    the dependency (in its added lines, title or branch — a lockfile bump's `provider "…"` line is
-    diff CONTEXT, so only the title / `renovate/<dep>-…` branch carry the name; hunk headers are NOT
-    used: git's funcname context names the PREVIOUS provider block for a change on a block's first
-    lines, which mis-attributed every lockfile PR on the first run).
-    Per class: the newest proposer PR that touched the class's proof paths at all."""
-    class_proofs = {str(c["id"]): proofs.get("classes", {}).get(str(c["id"])) for c in registry["classes"]}
+    the dependency as a whole token (in its added lines, title or branch — a lockfile bump's
+    `provider "…"` line is diff CONTEXT, so only the title / `renovate/<dep>-…` branch carry the
+    name; hunk headers are NOT used: git's funcname context names the PREVIOUS provider block for a
+    change on a block's first lines, which mis-attributed every lockfile PR on the first run).
+    Per class: the newest proof among ITS ROWS — never a PR that merely touched the class's paths
+    (class 4's paths are a subset of class 5's `tofu/`; a chart-variable bump must not keep the
+    providers' proof fresh). The ledger-backed substrate has no proposer PR by design."""
     row_proofs = dict(proofs.get("rows", {}))
     by_class = {c["id"]: c for c in registry["classes"]}
     for pr in prs:
@@ -496,20 +515,24 @@ def attribute_proofs(registry, rows, prs, proofs):
             if not files:
                 continue
             record = {"pr": pr["number"], "merged_at": pr["merged_at"], "title": pr["title"]}
-            class_proofs[str(cls["id"])] = newer(record, class_proofs.get(str(cls["id"])))
             touched = {f["filename"] for f in files}
-            text = "\n".join([pr["title"], pr["head"]] + [ln for f in files for ln in f["text"]]).lower()
+            text = "\n".join([pr["title"], pr["head"]] + [ln for f in files for ln in f["text"]])
             for row in rows:
                 if row["class"] != cls["id"] or not touched.intersection(row["where"]):
                     continue
-                if any(m.lower() in text for m in row["match"]):
+                if names_dependency(text, row["match"]):
                     row_proofs[row["key"]] = newer(record, row_proofs.get(row["key"]))
-    # the ledger-backed classes (no proposer PR by design)
-    for cls in registry["classes"]:
-        if cls.get("ledger_row"):
-            class_proofs[str(cls["id"])] = ledger_proof(cls["ledger_row"])
     live_keys = {r["key"] for r in rows}
     row_proofs = {k: v for k, v in row_proofs.items() if k in live_keys}
+    class_proofs = {}
+    for cls in registry["classes"]:
+        cid = str(cls["id"])
+        if cls.get("ledger_row"):
+            class_proofs[cid] = ledger_proof(cls["ledger_row"])
+            continue
+        for row in rows:
+            if row["class"] == cls["id"] and row_proofs.get(row["key"]):
+                class_proofs[cid] = newer(row_proofs[row["key"]], class_proofs.get(cid))
     for row in rows:
         row["proof"] = row_proofs.get(row["key"])
         if by_class[row["class"]].get("ledger_row"):
@@ -600,7 +623,7 @@ def render(registry, rows, proofs, summary):
             verdict = "no — complete, but a 👤 cell keeps the human by ruling"
         else:
             reasons = ([f"{len(s['gap_cells'])} ⚠ column(s)"] if s["gap_cells"] else [])
-            if s["gap_rows"] and not s["gap_cells"]:
+            if s["gap_rows"]:
                 reasons.append(f"{s['gap_rows']} ⚠ row(s)")
             if not proof:
                 reasons.append("never proven")
@@ -656,7 +679,30 @@ def exporter_json(registry, rows, proofs, summary):
 # ── main ───────────────────────────────────────────────────────────────────────────────────────
 
 
+def self_test():
+    """`--self-test`: the token-boundary matcher against the review's counterexamples."""
+    # a provider's short name inside an English word must NOT prove it
+    assert not names_dependency("bump runtime image", ["time"])
+    assert not names_dependency("set a timeout", ["time"])
+    assert not names_dependency("nullable field", ["null"])
+    assert not names_dependency("localhost", ["local"])
+    # Renovate's own title / branch forms DO name it
+    assert names_dependency("chore(deps): update terraform tls to v4.4.1", ["hashicorp/tls", "tls"])
+    assert names_dependency("renovate/random-3.9.x-lockfile", ["hashicorp/random", "random"])
+    # a store path, an image ref, an action ref, a lock key (the shapes each extractor emits)
+    assert names_dependency("/nix/store/abc-age-1.3.1", ["-age-1.3.1"])
+    assert names_dependency("AGENT_COORDINATOR_IMAGE=ghcr.io/teststuffstash/agent-coordinator:2026.9.27-gca94", ["agent-coordinator"])
+    assert names_dependency("uses: actions/checkout@11d5960a # v4", ["actions/checkout"])
+    assert names_dependency('  "jq@latest": {', ['"jq@latest"'])
+    # case-insensitive, like Renovate's lower-cased branch names vs `Infisical/infisical`
+    assert names_dependency("renovate/infisical-0.x", ["Infisical/infisical", "infisical"])
+    print("dependency-coverage self-test: OK (token-boundary proof matcher)")
+
+
 def main():
+    if "--self-test" in sys.argv:
+        self_test()
+        return
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--offline", action="store_true", help="reuse the committed proofs; no `gh api`")
     ap.add_argument("--check", action="store_true", help="offline; exit 1 if the committed outputs are stale")

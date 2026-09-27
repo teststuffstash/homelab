@@ -111,8 +111,8 @@
       "gap_rows": 36,
       "human_cells": [],
       "id": 7,
-      "last_proven": "2026-09-21T08:32:15Z",
-      "last_proven_pr": 1832,
+      "last_proven": "2026-09-07T07:51:27Z",
+      "last_proven_pr": 1488,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
       "rows": 36
@@ -220,8 +220,8 @@
         "title": "capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last"
       },
       "7": {
-        "merged_at": "2026-09-21T08:32:15Z",
-        "pr": 1832,
+        "merged_at": "2026-09-07T07:51:27Z",
+        "pr": 1488,
         "title": "chore: devbox update (align toolchain lock)"
       },
       "8": {
@@ -384,11 +384,6 @@
       "7:netcat-gnu": {
         "merged_at": "2026-08-31T09:50:54Z",
         "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
-      },
-      "7:nixpkgs-unstable": {
-        "merged_at": "2026-09-21T08:32:15Z",
-        "pr": 1832,
         "title": "chore: devbox update (align toolchain lock)"
       },
       "7:nmap": {
@@ -1570,7 +1565,7 @@
         "detector"
       ],
       "key": "7:nixpkgs-unstable",
-      "last_proven": "2026-09-21T08:32:15Z",
+      "last_proven": null,
       "name": "nixpkgs-unstable",
       "version": "nixpkgs@0a3468a402c4",
       "where": [
