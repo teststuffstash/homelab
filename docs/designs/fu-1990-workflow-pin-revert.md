@@ -10,7 +10,7 @@ When a Renovate PR bumps a GitHub Action pin (`.github/workflows/*.yml`) and the
 1. Identify the failing workflow's newest merged change
 2. Determine if it was a pin-only PR (every changed line is `uses: owner/repo@sha # tag`)
 3. Revert the merge commit
-4. Close any open Renovate PR that re-opens the same pin version (Renovate won't re-propose closed versions)
+4. Keep the same version from merging again when Renovate re-proposes it (a merged PR is not a rejected one)
 5. Create a revert PR with auto-merge
 
 This is deterministic, mechanical work — exactly the class the platform automates.
@@ -134,24 +134,12 @@ PIN_LINE_RE='^[-+][[:space:]]*(- )?uses:[[:space:]]*[A-Za-z0-9-]+/[A-Za-z0-9_.-]
 
 **Fail-closed:** empty/unreadable diff = FAIL, never "no offending lines found". If any line does NOT match the regex, the PR is outside the revert class → report-only.
 
-#### Step 5: Close Renovate PRs That Re-Open the Same Pin
-Extract the removed pins (the NEW versions we're reverting FROM):
-```bash
-REMOVED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^-[^-]' | sed -E 's/.../\2/')"
+#### Step 5: Record the Reverted Pins (the refusal happens later, in CI)
+Renovate re-proposes a merged-then-reverted version on its next run — a MERGED PR is not a rejected one — and that re-opened PR does not exist yet at revert time. So the chain only RECORDS: the `+` lines of the original PR's diff (the versions reverted FROM) go into the revert PR body as one machine-readable line:
 ```
-
-For each removed pin, search for open Renovate PRs mentioning that pin's SHA:
-```bash
-gh pr list --repo "$SLUG" --state open --search "$SHORT_SHA" --json number,title,author \
-  --jq '.[] | select(.author.login == "renovate[bot]") | .number'
+reverted-pins: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 docker/login-action@…
 ```
-
-Verify the PR body mentions the pin, then close it with a comment:
-```bash
-gh pr close "$pr" --repo "$SLUG" --comment "Closing: this pin was reverted by the workflow-pin-revert chain (FU-1990). Renovate will not re-propose a closed version."
-```
-
-**Idempotent:** closing an already-closed PR is fine.
+The refusal is `scripts/pin-only-lint.sh` check (e), which runs inside every platform repo's required `ci` (b609c1e8): it reads the `reverted-pins:` lines of the repo's merged `revert-wf-*` PRs from the last 30 days (REST, fail-closed), and an added SHA named there fails the lint — so the re-proposed PR stays RED until Renovate moves it to a newer release, on which it greens on its own. One home for the rule, and CI is the gate for both the mechanical (`automerge`) and the lens-reviewed (`major`) lane; a reflex-side close could only ever have covered the first.
 
 #### Step 6: Revert the Merge Commit
 Clone the repo, create a revert branch, revert the merge commit, push, create a PR with auto-merge:
@@ -163,8 +151,11 @@ git push origin "$BR"
 gh pr create --repo "$SLUG" --base master --head "$BR" \
   --title "revert: ${TITLE} (auto-rollback — workflow '$WF' failed post-merge)" \
   --body "FU-1990 deterministic rollback: ..."
+gh pr edit "$PR" --add-label automerge --add-label dependencies   # the reflex approves this label pair
 gh pr merge --auto --squash "$PR" --repo "$SLUG"
 ```
+
+The platform repos require one approving review (tofu/github `protected_repos`); the `automerge` + `dependencies` labels are what make the renovate-approve reflex post it (Bot author, distinct identity), so the revert merges with no human touch. Without the labels the revert PR would sit BLOCKED — the gap the 2026-09-27 pre-drill read found.
 
 The branch name is deterministic, so a racing instance hits `already-exists` and exits idempotently.
 
@@ -174,7 +165,7 @@ The branch name is deterministic, so a racing instance hits `already-exists` and
 2. **Ledger**: `responder-seen` ConfigMap keyed on `wf-<repo>-<sha>` — one revert decision per (repo, merge-sha)
 3. **Fail-closed**: every probe failure is loud and report-only (no revert on bad data)
 4. **Pin-only predicate**: empty/unreadable diff = FAIL, never "no offending lines found"
-5. **Renovate close**: idempotent (closing an already-closed PR is fine)
+5. **Re-proposal refusal**: `pin-only-lint` check (e), keyed on the `reverted-pins:` lines of merged `revert-wf-*` PRs (30-day window); a refused PR is red, never closed
 6. **Rate limit**: 4 requests/minute on the Sensor trigger
 
 ## Composition with Responder Lane
@@ -195,7 +186,7 @@ The workflow can be tested by:
 2. Observing the CI failure on master
 3. Checking the `workflow-pin-revert-*` Workflow runs in the `agent-coordinator` namespace
 4. Verifying the revert PR is created and auto-merges on CI green
-5. Verifying any open Renovate PR that re-opens the same pin is closed
+5. Verifying a Renovate PR that re-proposes the reverted pin fails `ci` on pin-only-lint check (e)
 
 ## Future Work
 

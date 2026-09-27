@@ -360,9 +360,17 @@ Levers that shrink L before it ever hurts (see [`../renovate.md`](../renovate.md
 
 - **Grouping** — Renovate group presets (e.g. all non-major weekly) collapse 10 PRs into 1–2.
   The single biggest lever; turns L into M.
-- `rebaseWhen: conflicted` — Renovate must NOT self-rebase for freshness (its default `auto`
-  detects strict mode and would race our updater; two writers, one branch). The updater owns
-  freshness for *all* PRs, Renovate only rebases its own conflicts.
+- `rebaseWhen` — **one writer per branch.** The org default stays `conflicted` for every
+  dependency class but one: Renovate must NOT self-rebase those for freshness (its default `auto`
+  detects strict mode and would race our updater; two writers, one branch), so the updater owns
+  their freshness and Renovate only rebases its own conflicts. The two `github-actions` rules in
+  `.github/renovate-global.json` (`groupName` `github-actions` / `github-actions (major)`) ride
+  `behind-base-branch` instead: Renovate rebases those itself and re-extracts master on every
+  rebase (a call site added on master after the PR opened gets bumped — the agent-coordinator#14
+  defect), and `agents/update-pr-branch.sh` + the FU-124 nudge in `agents/coordinator-scan.sh`
+  skip them while untouched — an updater push would mark the PR edited and Renovate would stop
+  maintaining it (ADR-141, minted in homelab PR#2003 — GitHub Actions majors merge on their own;
+  this carve-out is one of its consequences).
 - **Dep-bump review** — decided: split by class (FU-046), see §Decisions below.
 
 ## Scaling model

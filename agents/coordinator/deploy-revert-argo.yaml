@@ -264,9 +264,17 @@ spec:
 # finds the newest merged PR within the revert window whose files touch `.github/workflows/`, checks
 # if every changed line is a `uses:` pin (the third shape from scripts/pin-only-lint.sh), and if so:
 #   (a) reverts the merge commit as a new auto-merging PR
-#   (b) closes any open Renovate PR that re-opens the same pin version (a closed PR is a rejected
-#       version in Renovate's own semantics — it will not re-propose the same pin)
+#   (b) records the reverted pins (the versions reverted FROM) as a machine-readable
+#       `reverted-pins:` line in the revert PR body. Renovate re-proposes a merged-then-reverted
+#       version on its next run (a MERGED PR is not a rejected one), and that re-opened PR does
+#       not exist yet at revert time — so the refusal happens later, in scripts/pin-only-lint.sh
+#       check (e), inside every platform repo's required `ci`: a Renovate PR that re-adds a pin
+#       listed on a merged `revert-wf-*` PR of the last 30 days stays RED until Renovate moves it
+#       to a newer release (one gate for the mechanical and the lens-reviewed lane alike).
 #   (c) the revert PR follows the same pattern as deploy-revert (branch name, commit message, body)
+#       and carries `automerge` + `dependencies`: the platform repos require ONE approving review
+#       (tofu/github protected_repos), and the renovate-approve reflex posts it for exactly that
+#       label pair — without the labels the revert would sit BLOCKED on a human forever.
 #
 # COMPOSITION with the responder lane: Alertmanager routes GithubWorkflowRunFailed to BOTH
 # deploy-pin-revert (this workflow) AND agent-responder (the triage lane, when not paused). The
@@ -408,35 +416,15 @@ spec:
 
             echo "→ $SLUG#$PRNUM is pin-only — inside the revert class"
 
-            # ── CLOSE RENOVATE PRs THAT RE-OPEN THE SAME PIN ───────────────────────────────────
-            # Renovate's semantics: a closed PR is a rejected version. If there's an open Renovate
-            # PR that bumps the same action to the same (now-reverted) SHA, close it — Renovate will
-            # not re-propose a closed version.
-            # We extract the removed pins (the OLD versions we're reverting TO) and close any open
-            # PR whose title/body mentions those pins.
-            # The diff has - lines (removed, the NEW pins we're reverting FROM) and + lines (added,
-            # the OLD pins we're reverting TO). We want to close PRs that propose the - lines.
-            # Extract: owner/repo@sha from the - lines.
-            REMOVED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^-[^-]' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' || true)"
-            if [ -n "$REMOVED_PINS" ]; then
-              echo "→ looking for open Renovate PRs that re-open the reverted pins..."
-              while read -r pin; do
-                [ -n "$pin" ] || continue
-                # pin = "owner/repo@sha" — search for open PRs mentioning this pin
-                # Renovate PR titles are like "chore(deps): update actions/checkout digest to abc1234"
-                # or the body contains the pin. We search both.
-                SHORT_SHA="$(printf '%s' "$pin" | grep -oE '@[0-9a-f]{40}$' | tr -d '@' | cut -c1-7)"
-                MATCHING_PRS="$(gh pr list --repo "$SLUG" --state open --search "$SHORT_SHA" --json number,title,author --jq '.[] | select(.author.login == "renovate[bot]" or .author.login == "renovate") | .number' 2>/dev/null || true)"
-                for pr in $MATCHING_PRS; do
-                  # Verify this PR actually mentions the pin (the search is broad).
-                  PR_BODY="$(gh pr view "$pr" --repo "$SLUG" --json body --jq .body 2>/dev/null || true)"
-                  if printf '%s' "$PR_BODY" | grep -qF "$pin"; then
-                    echo "  → closing Renovate PR #$pr (re-opens reverted pin $pin)"
-                    gh pr close "$pr" --repo "$SLUG" --comment "Closing: this pin was reverted by the workflow-pin-revert chain (FU-1990). Renovate will not re-propose a closed version." 2>/dev/null || true
-                  fi
-                done
-              done <<< "$REMOVED_PINS"
-            fi
+            # ── THE REVERTED PINS (for the CI refusal, pin-only-lint check (e)) ────────────────────────────────
+            # In the ORIGINAL PR's diff the `+` lines are the versions this revert removes again.
+            # They go into the revert PR body as one `reverted-pins:` line; pin-only-lint check (e)
+            # refuses a Renovate PR that re-adds any of them (header note (b)). The refusal
+            # cannot happen here: Renovate re-creates the PR only AFTER this revert merges.
+            # >>>REPLAY:workflow-pin-revert-reverted-pins>>>
+            REVERTED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^+' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
+            echo "→ reverted pins: ${REVERTED_PINS:-<none>}"
+            # <<<REPLAY:workflow-pin-revert-reverted-pins<<<
 
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — workflow '$WF' failed on $BRANCH within ${REVERT_WINDOW_MIN}m of the merge"
             BR="revert-wf-$(printf '%s' "$SHA" | cut -c1-8)"
@@ -460,14 +448,22 @@ spec:
             # Compute the PR body — printf, not a multi-line shell string: a literal newline at column 0
             # would close this YAML block scalar, and indenting it instead would emit a markdown code block.
             RUN_NUM="$(printf '%s' "$ALERT" | jq -r '.number')"
-            BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. Renovate PRs that re-open the reverted pins are closed (a closed PR is a rejected version in Renovate'"'"'s semantics). CI-only lane; no approval gate by design (ADR-084).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)' \
-              "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM")"
+            BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. A Renovate PR that re-proposes a reverted pin is refused by pin-only-lint check (e) in ci (it stays red until Renovate proposes a newer release). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)\n\nreverted-pins: %s' \
+              "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM" "$REVERTED_PINS")"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — workflow '${WF}' failed post-merge)" \
               --body "$BODY" \
               | grep -oE '[0-9]+$')"
+            # >>>REPLAY:workflow-pin-revert-merge-lane>>>
+            # The MECHANICAL lane, same as the deploy-pin job: the platform repos require one
+            # approving review and the renovate-approve reflex posts it ONLY for this label pair
+            # (Bot author + automerge + dependencies). Labels BEFORE arming — the `labeled` event is
+            # what fires the reflex. Fail loudly: an unlabelled revert waits on a human, silently.
+            gh pr edit "$PR" --repo "$SLUG" --add-label automerge --add-label dependencies \
+              || { echo "FATAL: could not label $SLUG#$PR — the reflex will not approve it (a human must)"; exit 1; }
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
-            echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
+            echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green)"
+            # <<<REPLAY:workflow-pin-revert-merge-lane<<<
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }

@@ -3461,9 +3461,33 @@ EOF_GTHEMES_OPEN
     # `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch does not
     # carry, and duplicating it here would be a second reader of one predicate). A park
     # (REVIEW_REQUIRED) is therefore never nudged: it waits for its human, as leg 1 intends.
+    # RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27) — the same predicate as
+    # agents/update-pr-branch.sh legs 1+2, at this third call site: Renovate stops maintaining a
+    # branch the moment a commit it did not author lands on it (agent-coordinator#14 went
+    # "Edited/Blocked" after ONE update-branch and its third actions/checkout call site, added on
+    # master later, was never bumped), and the GitHub Actions rules ride rebaseWhen
+    # behind-base-branch, so an UNTOUCHED Renovate PR is Renovate's to rebase — ONLY on those two
+    # rules (PR#2004 review): every other class inherits the global `conflicted` and needs this
+    # nudge for currency, so the skip is scoped to Renovate's grouped-rule branches
+    # `renovate/<groupSlug>` for the two groupNames in .github/renovate-global.json (`github-actions`,
+    # `github-actions (major)` → `^renovate/github-actions(-major)?$`; that file is the one home).
+    # `author` + `headRefName` are in the snapshot; commit authorship needs a per-PR `gh pr view --json commits` probe (the field is
+    # not listable — the 500k-node cap, 2026-09-08), paid only for Renovate-authored candidates.
+    # Unreadable probe = HOLD (rule #6), never a nudge on unknown authorship.
     # >>>REPLAY:fu124-nudge>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND") and (.reviewDecision=="APPROVED"))|.number'); do
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
+      if printf '%s' "$prsjson" | jq -e --argjson u "$u" '.[]|select(.number==$u)|(((.author.login//"")|startswith("homelab-renovate")) and ((.headRefName//"")|test("^renovate/github-actions(-major)?$")))' >/dev/null 2>&1; then
+        u_cj="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$u_cj" >/dev/null 2>&1 || u_cj=""
+        if [ -z "$u_cj" ]; then
+          echo "  [$repo] FU-124: #${u} commit probe unreadable — HOLDING, not nudging (rule #6; the updater cron retries)"
+          continue
+        fi
+        if jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | (.login // "") ] | all(startswith("homelab-renovate"))' <<<"$u_cj" >/dev/null 2>&1; then
+          echo "  [$repo] FU-124: #${u} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
+          continue
+        fi
+      fi
       if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" \
         ${u_oid:+-f expected_head_sha="$u_oid"} >/dev/null 2>&1; then
         echo "  [$repo] FU-124: nudged updater — update-branch on armed BEHIND PR #${u}"

@@ -1,0 +1,9 @@
+{
+  "commits": [
+    { "messageHeadline": "chore(deps): update docker/login-action action to v4", "committedDate": "2026-09-27T06:00:00Z",
+      "authors": [ { "login": "homelab-renovate-1234[bot]" } ] }
+  ],
+  "reviews": [
+    { "author": { "login": "homelab-reviewer[bot]" }, "state": "CHANGES_REQUESTED", "submittedAt": "2026-09-27T05:00:00Z" }
+  ]
+}
