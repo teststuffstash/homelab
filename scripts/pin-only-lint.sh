@@ -37,6 +37,14 @@
 #       tag is dereferenced once via `git/tags/<sha>`) must name exactly the added commit SHA.
 #       One API call per added line, `gh` from $PATH (CI has GH_TOKEN; the jail gh is logged
 #       in); ANY failure to resolve is a FAIL — a check that cannot see does not pass.
+#   (e) no added SHA is a pin the FU-1990 revert chain rolled back in the last REVERT_MEMORY_DAYS
+#       (30): merged `revert-wf-*` PRs of THIS repo carry a `reverted-pins: <owner/repo@sha> …`
+#       body line (agents/coordinator/deploy-revert-argo.yaml). Renovate re-proposes a
+#       merged-then-reverted version on its next run (a MERGED PR is not a rejected one), and
+#       without this the lane loops merge → fail → revert → re-propose → merge. Refusing it HERE
+#       keeps the re-proposal open and red until Renovate moves it to a newer version (then it
+#       greens on its own) — one home, and CI is the gate for both the mechanical and the
+#       lens-reviewed lane. The repo is $PIN_ONLY_SLUG, else $GITHUB_REPOSITORY, else origin.
 # A revert of a pin is itself a pin change that passes (a)–(d), so the rollback needs no bypass.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
@@ -48,6 +56,7 @@
 set -euo pipefail
 cd "${PIN_ONLY_REPO:-$(dirname "$0")/..}"
 GH="${PIN_ONLY_GH:-gh}"
+REVERT_MEMORY_DAYS="${REVERT_MEMORY_DAYS:-30}"
 
 BASE="${1:-origin/master}"
 GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml|agents/coordinator/sentinel-argo\.yaml|argocd/platform/openrouter-operator\.yaml'
@@ -201,8 +210,23 @@ for f in $wf_changed; do
     printf '  added:   %s\n' "$(printf '%s' "$added_or" | sort | tr '\n' ' ')" >&2
     rc=1; continue
   fi
+  # (e) the reverted-pin memory — read once per file set, fail-closed like (d).
+  if [ -z "${reverted_pins+x}" ]; then
+    slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+    [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+    cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+    if [ -z "$slug" ] || ! reverted_pins="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+        --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-wf-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-pins:\")) | ltrimstr(\"reverted-pins:\")" 2>&1)"; then
+      echo "pin-only-lint: FAIL — cannot read the merged revert-wf-* PRs of ${slug:-<no repo slug>} (the reverted-pin memory, check (e)): ${reverted_pins:-}; refusing to report success." >&2
+      rc=2; reverted_pins=""
+    fi
+  fi
   while read -r or sha tag; do
     [ -n "$or" ] || continue
+    if printf '%s\n' $reverted_pins | grep -qxF "$or@$sha"; then
+      echo "pin-only-lint: FAIL — $f: $or@$sha # $tag is a REVERTED pin — the FU-1990 chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-wf-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1; continue
+    fi
     if ! got="$(resolve_tag_commit "$or" "$tag")"; then
       echo "pin-only-lint: FAIL — $f: cannot verify $or@$sha # $tag upstream ($got); refusing to report success." >&2
       [ "$rc" = 0 ] && rc=2; continue
