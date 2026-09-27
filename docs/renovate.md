@@ -58,9 +58,11 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   CI-exercised class: a `pull_request` workflow runs the PR's own file, so green CI on the bumped head
   is the proof). Push-only workflows (`build-image`, deploy jobs) are covered after the merge by the
   FU-1990 revert chain: `GithubWorkflowRunFailed` on master → `workflow-pin-revert` reverts the pin PR
-  as an `automerge`-labelled PR the reflex approves → the re-proposed version is closed by
-  `renovate-approve.reusable.yml` (a closed PR is a rejected version). Every other major stays
-  un-armed on the human lane until its class row is complete (#1988).
+  as an `automerge`+`dependencies` PR the reflex approves (PR#2002) → the re-proposed version is
+  refused by `pin-only-lint` check (e) in `ci` (the revert body's `reverted-pins:` line, 30 days), so it
+  stays red until Renovate proposes a newer release. Bumps are grouped per repo per wave (one PR, one
+  review, one revert) and rebase themselves. Every other major stays un-armed on the human lane until
+  its class row is complete (#1988).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy

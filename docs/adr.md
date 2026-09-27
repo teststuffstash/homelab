@@ -2448,9 +2448,15 @@ issues, runner compatibility) is the merge gate — its APPROVED satisfies the o
 distinct identity — and CI on the bumped head is the runner-compat proof (a `pull_request` workflow
 runs the PR's own file). Workflows CI cannot exercise (push-only: `build-image`, deploy jobs) are
 gated AFTER the merge by the FU-1990 chain (`deploy-revert-argo.yaml`): `GithubWorkflowRunFailed`
-on master → the pin-only merge is reverted as an `automerge`+`dependencies` PR the renovate-approve
-reflex approves → the re-proposed version is closed by `renovate-approve.reusable.yml` (a closed PR
-is a rejected version; the next release gets a fresh PR). CODEOWNERS un-owns `/.github/workflows/`
+on master → the pin-only merge is reverted as an `automerge`+`dependencies` PR (labels landed in
+PR#2002 — before it the revert PR sat BLOCKED on the one-review rule) the renovate-approve reflex
+approves; the revert body names the reverted versions on a `reverted-pins:` line, and
+`scripts/pin-only-lint.sh` check (e), inside every platform repo's required `ci`, refuses an added
+SHA named there for 30 days — so the re-proposed version stays red until Renovate moves it to a newer
+release (a reflex close could never fire on a lens-reviewed PR, which carries no `automerge` label).
+Actions bumps are grouped per repo per wave and ride `rebaseWhen: behind-base-branch` (Renovate keeps
+and re-extracts its own branch; the updater leaves untouched Renovate PRs alone). CODEOWNERS un-owns
+`/.github/workflows/`
 per repo only once `pin-only-lint`'s third shape runs in that repo's required `ci` (ADR-100's
 owner→rule replacement) and the rollback drill has passed. **Considered:** keep majors human-gated
 (rejected — the operator's time is the cost function, and 13 Actions majors sat parked across the
