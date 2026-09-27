@@ -33,9 +33,11 @@
       "automerge": true
     },
     {
-      "description": "GitHub Actions patch/minor — SHA-pinned org-wide (pinGitHubActionDigests already defeats tag-repointing) → mechanical automerge.",
+      "description": "GitHub Actions patch/minor/digest/pin — SHA-pinned org-wide (pinGitHubActionDigests already defeats tag-repointing) → mechanical automerge. ONE PR PER REPO PER WAVE (groupName): Renovate works in batches, and a batch reviewed as N single-dependency PRs is N reviewer rides that each see one member and N updater/CI rounds as each merge puts the rest BEHIND (agent-coordinator#14–#18, 2026-09-26). rebaseWhen behind-base-branch: Renovate keeps its OWN branch current and RE-EXTRACTS master on every rebase (a call site added on master after the PR opened gets bumped — the #14 third-call-site defect), which the org default `conflicted` cannot do and the docs call wrong for automerge + strict checks; a branch someone else pushed to stays untouched (Renovate's edited-PR rule), so the in-cluster updater (agents/update-pr-branch.sh) leaves untouched Renovate PRs to Renovate.",
       "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["patch", "minor"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin", "pinDigest"],
+      "groupName": "github-actions",
+      "rebaseWhen": "behind-base-branch",
       "addLabels": ["automerge"],
       "automerge": true
     },
@@ -90,6 +92,8 @@
       "description": "GitHub Actions MAJORS = the CI-EXERCISED blast class (S9 homelab#1985; operator 2026-09-27: 'the github majors should all merge on their own — and rollback also'). ARMED (auto-merge) but NOT `automerge`-labelled: the review reflex reviews armed non-automerge PRs, so the reviewer's migration lens runs and its APPROVED is the merge gate (a distinct identity satisfies the one-review rule); CI on the bumped head is the runner-compat proof (a pull_request workflow runs the PR's own file). Post-merge failure of a push-only workflow (build-image, deploy) is rolled back by the FU-1990 revert chain (agents/coordinator/deploy-revert-argo.yaml: GithubWorkflowRunFailed on master → revert PR → the reflex approves → merges; the re-proposed version is closed by the renovate-approve reflex). First-party refs are excluded above. An armed `major` PR is the CI-exercised class, an un-armed `major` PR is the human lane — coordinator-scan already keys on the arm, never on the label alone. The other blast classes (runtime-in-prod, substrate) stay un-armed until their rows are complete (#1988).",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["major"],
+      "groupName": "github-actions (major)",
+      "rebaseWhen": "behind-base-branch",
       "automerge": true
     }
   ],
