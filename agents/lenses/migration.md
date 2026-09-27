@@ -75,7 +75,7 @@ its call sites (PEP 695 generics for a `ParamSpec`/`TypeVar` decorator, `fromiso
 `target-version` moves — as ORDINARY review follow-ups: the standard `Follow-ups:` shape, one
 issue-ready bullet each (no term of its own). Nothing in it blocks the bump. ⚠ A dependency PR
 usually has NO container (ADR-127), so nothing harvests those bullets today — the seat files the one
-backlog issue from the review body until FU-293 closes that gap; write them anyway, they are the
+backlog issue from the review body until FU-292 closes that gap; write them anyway, they are the
 record. An empty list is a finding too: say the pages were read and name why nothing applies.
 
 ## Version SETS — a runtime bump moves its whole set, or names what it leaves behind
