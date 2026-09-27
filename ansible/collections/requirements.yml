@@ -13,4 +13,4 @@ collections:
   # 26.1 the schema gained those fields, so 1.2.13 broke the other way and we moved
   # to oxlorg 25.7.8. Lesson: keep this pin aligned with the OPNsense/os-frr version.
   - name: oxlorg.opnsense
-    version: "25.7.8"
+    version: "26.1.11"
