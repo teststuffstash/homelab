@@ -62,7 +62,7 @@ handoff gate matches them literally):
   durable "not this version" is a config change (`.github/renovate-global.json`) — name it when
   that is the remedy.
 
-## Language / tool RUNTIME majors: the read produces an ADOPT list, not a "needed" list
+## Language / tool RUNTIME majors: the read produces follow-ups (what to adopt), not a "needed" list
 
 A runtime (Python, Node, Go, the JDK) is backwards compatible by policy: across three feature
 releases the "must change" list is usually EMPTY (openrouter-operator#80, python 3.11→3.14: nothing
