@@ -6,6 +6,14 @@
 
   "dependencyDashboard": false,
 
+  "force": {
+
+    "description": "Force-wins over PRESETS resolved at REPO level (renovate merge order: the global file's `extends` is moved into the repo config, resolved there, and merged ON TOP of the global keys — so `config:recommended` → `:dependencyDashboard` → true beat the `dependencyDashboard: false` above on EVERY repo; 10 dashboards open 2026-09-27, agent-coordinator#24 reopened within one run of being closed even with no Repository Problems and no pending branches — debug dry-run, renovate 44.115.12, dependency-dashboard.js:205 gates on this value alone). With the gate false Renovate runs ensureIssueClosing on the next run: the dashboards close themselves. `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac renovate.json is overridden too (delete those lines for hygiene).",
+
+    "dependencyDashboard": false
+
+  },
+
   "onboarding": false,
   "requireConfig": "optional",
 
