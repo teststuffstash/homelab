@@ -270,3 +270,137 @@ tests:
       - eval_time: 36m
         alertname: PveHostMemoryLow
         exp_alerts: []
+
+  # ── FU-289 placement belts. Same shape as the 2026-09-24 nx-02 event: 9 GiB MemAvailable
+  # throughout (PveHostMemoryLow must stay quiet), swap crosses 1 GiB at t=10 and stays (SwapUsed
+  # after 30m), then a swap-in burst at ~100 pages/s with 20% I/O pressure from t=45 for 10 min
+  # (Thrash after 5m, gone once the burst ends). pve sits idle beside it.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_SwapTotal_bytes{job="pve-node",host="nx-02",instance="192.168.2.59:9100"}'
+        values: '8589934592x70'
+      - series: 'node_memory_SwapFree_bytes{job="pve-node",host="nx-02",instance="192.168.2.59:9100"}'
+        values: '8589934592x10 4294967296x60'
+      - series: 'node_memory_MemAvailable_bytes{job="pve-node",host="nx-02",instance="192.168.2.59:9100"}'
+        values: '10050000000x70'
+      - series: 'node_vmstat_pswpin{job="pve-node",host="nx-02",instance="192.168.2.59:9100"}'
+        values: '0x45 0+6000x10 60000x15'
+      - series: 'node_pressure_io_waiting_seconds_total{job="pve-node",host="nx-02",instance="192.168.2.59:9100"}'
+        values: '0x45 0+12x10 120x15'
+      - series: 'node_memory_SwapTotal_bytes{job="pve-node",host="pve",instance="192.168.2.3:9100"}'
+        values: '8589934592x70'
+      - series: 'node_memory_SwapFree_bytes{job="pve-node",host="pve",instance="192.168.2.3:9100"}'
+        values: '8589934592x70'
+      - series: 'node_vmstat_pswpin{job="pve-node",host="pve",instance="192.168.2.3:9100"}'
+        values: '0x70'
+      - series: 'node_pressure_io_waiting_seconds_total{job="pve-node",host="pve",instance="192.168.2.3:9100"}'
+        values: '0x70'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
+        values: '60x70'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '43x70'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PveHostSwapUsed
+        exp_alerts: []          # 4 GiB in swap since t=11: 19m in, `for: 30m` not yet met
+      - eval_time: 42m
+        alertname: PveHostSwapUsed
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" }
+            exp_annotations:
+              summary: "nx-02 has 4GiB in swap"
+              description: >-
+                A hypervisor is paging guest memory out. This is the PRECURSOR with hours of lead:
+                nx-02 crossed 1 GiB at 2026-09-24 ~23:00Z and the CI stalls came at 07:24 next morning
+                when those pages were needed back (FU-289). PveHostMemoryLow stays quiet for it — the
+                box had 9 GiB available globally while kswapd emptied one NUMA node. On nx-02: which
+                guest (`pve_qemu_swap_bytes{host="nx-02"}`), which node is starved
+                (`node_memory_numa_MemFree{host="nx-02"}`), what is pinned there
+                (`pve_qemu_numa_resident_bytes`, `pve_qemu_locked_bytes`). Relief is placement —
+                hugepages + `numaN: hostnodes=` on the pinned guest, a restart — or a smaller
+                allocation; while the swap lives on a spinning disk this becomes PveHostSwapThrash.
+      - eval_time: 42m
+        alertname: PveHostMemoryLow
+        exp_alerts: []          # the old belt: 9.4 GiB available, blind to this — by design of the event
+      - eval_time: 49m
+        alertname: PveHostSwapThrash
+        exp_alerts: []          # burst began at t=46; the 5m rate still averages in the zeros before it, so the
+                                # expr first clears 256 KiB/s at t=49 and `for: 5m` is met at t=54
+      - eval_time: 56m
+        alertname: PveHostSwapThrash
+        exp_alerts:
+          - exp_labels: { severity: critical, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" }
+            exp_annotations:
+              summary: "nx-02 swapping in at 400kiB/s with I/O pressure"
+              description: >-
+                Guest memory is coming back from swap at disk speed and the host is I/O-bound on it —
+                every guest on nx-02 crawls (a CI runner in this state took 397 s for a 2 s step,
+                FU-289; the 09-25 runs showed ~1 MiB/s swap-in at 20% I/O pressure, i.e. a 5400 rpm
+                disk at 98%). It ends when the pages are back, not when memory frees. Now: stop
+                adding load on nx-02 (park the runner: `var.ci_runner_0N_running=false`); then the
+                cause via PveHostSwapUsed. Structural: swap on the SSD/NVMe, never the spinner.
+      - eval_time: 65m
+        alertname: PveHostSwapThrash
+        exp_alerts: []          # burst over at t=55; the 5m rate window has drained
+      - eval_time: 65m
+        alertname: PveThinPoolFillingUp
+        exp_alerts: []
+
+  # One NUMA node starves while the other is wide open (the 08:21Z reading: node 0 ~12 GiB free,
+  # node 1 ~1 GiB with ~0.1 GiB of reclaimable file) → PveNumaNodeMemoryLow after 15m, on node 1
+  # only. In the same run ci-runner-02 sits 3.7 GiB in swap from t=10 → PveGuestSwapped after 15m;
+  # wk-04 (pinned, 18 MiB swapped) stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_numa_MemFree{job="pve-node",host="nx-02",instance="192.168.2.59:9100",node="0"}'
+        values: '12884901888x40'
+      - series: 'node_memory_numa_Inactive_file{job="pve-node",host="nx-02",instance="192.168.2.59:9100",node="0"}'
+        values: '400000000x40'
+      - series: 'node_memory_numa_MemFree{job="pve-node",host="nx-02",instance="192.168.2.59:9100",node="1"}'
+        values: '4294967296x10 1073741824x30'
+      - series: 'node_memory_numa_Inactive_file{job="pve-node",host="nx-02",instance="192.168.2.59:9100",node="1"}'
+        values: '100000000x40'
+      - series: 'pve_qemu_swap_bytes{job="pve-node",host="nx-02",vmid="9002",name="ci-runner-02"}'
+        values: '0x10 3972844748x30'
+      - series: 'pve_qemu_swap_bytes{job="pve-node",host="nx-02",vmid="8114",name="wk-04"}'
+        values: '18313216x40'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="pve",vg="pve",lv="data"}'
+        values: '60x40'
+      - series: 'pve_lvm_thin_pool_data_percent{job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}'
+        values: '43x40'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: PveNumaNodeMemoryLow
+        exp_alerts: []          # node 1 under 1.5 GiB since t=11: 13m in, `for: 15m` not yet met
+      - eval_time: 27m
+        alertname: PveNumaNodeMemoryLow
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100", node: "1" }
+            exp_annotations:
+              summary: "nx-02 NUMA node 1 down to 1.093GiB free + reclaimable file"
+              description: >-
+                One physical memory node of a dual-socket hypervisor is nearly exhausted while the
+                other may be wide open. MemAvailable hides it, and kswapd works PER NODE: it evicts
+                whatever is evictable on that node — the unpinned guests, to swap — to hold its
+                watermarks, regardless of free RAM on the other node (FU-289: wk-04 pinned 6/26 GiB
+                across the nodes of nx-02, node 1 at ~1 GiB, ci-runner-02 went to the HDD). On nx-02:
+                `pve_qemu_numa_resident_bytes{host="nx-02",node="1"}` names the guests on that node,
+                `pve_qemu_locked_bytes` which is pinned (VFIO). A pinned guest is rebalanced only by a
+                restart with explicit `numaN: hostnodes=` (+ hugepages) —
+                docs/spikes/nx-02-numa-placement.md.
+      - eval_time: 27m
+        alertname: PveGuestSwapped
+        exp_alerts:
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vmid: "9002", name: ci-runner-02 }
+            exp_annotations:
+              summary: "nx-02 guest ci-runner-02 (vmid 9002) has 3.7GiB on host swap"
+              description: >-
+                The host has paged part of this guest out. The guest cannot know — it sees its RAM as
+                present — so every touch of a swapped page is a disk read it did not ask for; a Talos
+                node or a CI runner in this state stalls for minutes, and a control-plane guest here
+                is an etcd member on a spinning disk. Find the pressure with PveHostSwapUsed /
+                PveNumaNodeMemoryLow on nx-02; the guest recovers when its pages are back (`vmstat 1`
+                on the host, column si), not when this clears.
+      - eval_time: 27m
+        alertname: PveHostMemoryLow
+        exp_alerts: []
