@@ -11576,3 +11576,8 @@ on #2037/#2047. PR#2073: stage 2 plans the head merged onto master (what would l
 does not merge gets a failure verdict). Operator direction for the next session: the Forgejo
 runner rolls with no downtime first (2 replicas + RollingUpdate + PDB, ADR-140 amendment), then
 #2037's class gets its detector + revert and arms — parked in meta-state.
+**12:10Z:** the box re-judged the three heads at 12:06–12:08Z under `[e:425b49c]` — but with the
+PRE-#2073 script (verdict text lacks "merged onto master"): #2059's engine revision hashed the
+sentinel clone's `origin/master` blobs, which the clone fetches every run, while the script
+executes from the hourly-pulled `/var/lib/homelab`. PR#2076 hashes the executing files. The
+merge-plan proof (#2047 planning EMPTY) is the ~13:10Z re-judge, next session's first read.
