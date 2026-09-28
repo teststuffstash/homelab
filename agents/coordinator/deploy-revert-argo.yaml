@@ -668,14 +668,34 @@ spec:
             cd /work/repo
             git config user.name "tofu-image-revert (#1988)"
             git config user.email "noreply@teststuff.net"
-            # The COUPLING check: the candidate's files must declare the stuck Deployment (its
-            # metadata name), or the stuck rollout is not this merge's — report-only. Read from
-            # the tree, never inferred from the alert.
+            # The COUPLING check: a changed file must declare the stuck Deployment — a
+            # `resource "kubernetes_deployment[_v1]"` block whose OWN `metadata { name = "<dep>" }`
+            # (depth 1 under the resource: never the pod template's metadata, a container name, a
+            # volume name or a sibling resource's name — review finding on PR#2082: tofu/unifi.tf
+            # declares two Deployments in one file and forgejo-runner.tf's containers are `dind` /
+            # `runner`). Or the stuck rollout is not this merge's — report-only. Read from the
+            # tree, never inferred from the alert. Brace-depth walk; a one-line `metadata { name = "x" }`
+            # is checked before its own braces are counted.
             # >>>REPLAY:tofu-image-revert-coupling>>>
-            if ! printf '%s\n' "$FILES" | xargs -r grep -lE "name[[:space:]]*=[[:space:]]*\"${DEP}\"" -- >/dev/null 2>&1; then
-              echo "→ $SLUG#$PRNUM changed no file that declares a resource named \"$DEP\" — the stuck $NS/$DEP is not this merge's; report-only (responder/operator lane)"; exit 0
+            declares_dep() {
+              awk -v dep="$1" '
+                /^[[:space:]]*resource[[:space:]]+"kubernetes_deployment(_v1)?"[[:space:]]+"[^"]+"[[:space:]]*\{/ { in_res=1; depth=0; in_meta=0 }
+                {
+                  if (!in_res) next
+                  if (depth==1 && $0 ~ /^[[:space:]]*metadata[[:space:]]*\{/) { in_meta=1; meta_depth=2 }
+                  if (in_meta && $0 ~ ("name[[:space:]]*=[[:space:]]*\"" dep "\"")) found=1
+                  depth += gsub(/\{/,"{") - gsub(/\}/,"}")
+                  if (in_meta && depth < meta_depth) in_meta=0
+                  if (depth <= 0) { in_res=0; in_meta=0 }
+                }
+                END { exit(found ? 0 : 1) }' "$2"
+            }
+            COUPLED=""
+            while read -r f; do [ -n "$f" ] && [ -f "$f" ] && declares_dep "$DEP" "$f" && COUPLED="$f" && break; done <<< "$FILES"
+            if [ -z "$COUPLED" ]; then
+              echo "→ $SLUG#$PRNUM changed no file whose kubernetes_deployment metadata names \"$DEP\" — the stuck $NS/$DEP is not this merge's; report-only (responder/operator lane)"; exit 0
             fi
-            echo "→ coupling: $SLUG#$PRNUM declares \"$DEP\""
+            echo "→ coupling: $SLUG#$PRNUM declares Deployment \"$DEP\" in $COUPLED"
             # <<<REPLAY:tofu-image-revert-coupling<<<
             if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
               echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
