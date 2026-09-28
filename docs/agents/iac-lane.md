@@ -88,6 +88,8 @@ structure that would make path-based rules easy — CI-invoked checks (governanc
 governance-lint treats ALL of `scripts/` as such) sit beside operational one-shots in one flat
 directory. Restructuring it is its own future candidate, not part of any current leg — tracked
 as FU-293 since 2026-09-28 (the operator re-raised it as a coming CODEOWNERS problem).
+First cut the same day: the management box's closure moved to `mgmt/` (`mgmt/nixos/` + `mgmt/scripts/`,
+PR#2088), and the rest of `scripts/` went un-owned under the [ADR-142](../adr.md) trial.
 
 
 Every stack splits an app repo (behavior; CI carries the evidence) from `-iac` (form + post-merge
@@ -112,7 +114,8 @@ cannot key on the repo. It keys on the **path**.
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) — *trial: CI + bot; the apply is still the seat's* |
 | `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply — *trial: CI + bot; the apply is still the seat's* |
 | `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below (*trial: `tofu/cloudflare/**` rides with `tofu/`*) |
-| `.github/**`, `devbox.json`, CI-invoked `scripts/**`, `.agents/**` | executes BEFORE review | ❌ **never** | operator only |
+| `.github/**`, `devbox.json`, `.agents/**`, `mgmt/scripts/**` + the three box-executed `scripts/` verbs | executes BEFORE review (or the box runs it from master) | ❌ **never** | operator only |
+| the rest of `scripts/**` — the repo's CI checks | executes BEFORE review | ✅ *ADR-142 trial (2026-09-28)* | **bot review under the gate-change lens** + the gate-drift report; no human codeowner |
 
 ### ⚠ The trap: one root cause, N alert issues, N concurrent fixers
 
@@ -185,7 +188,7 @@ is granted ONLY by the set-judged debouncer:
   independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned
   code acts). Downstream issues get `agent/linked` + a comment naming the cause; `unsure` waits.
 - **Queue-time deny = the ❌ table only** (`.github/`, `.agents/`, `devbox.json|lock`,
-  `scripts/`): the paths where authoring takes effect before a human approves. Everything else
+  `mgmt/scripts/**` + the three box-executed `scripts/` verbs — the rest of `scripts/` left it in the ADR-142 trial): the paths where authoring takes effect before a human approves. Everything else
   queues freely — CODEOWNERS gates the MERGE (the §above correction). `self-referential: true`
   bodies are skipped at wake: dispatch onto broken substrate stays a human call.
 - **Backstop** (machinery slot 3): a 2h cron re-derives the pending set a lost bell left behind,
@@ -222,7 +225,7 @@ Three things genuinely do take effect first, and they are the whole ❌ list:
 | path | why it beats the gate |
 |---|---|
 | `.github/**` | `on: pull_request` runs the PR's OWN workflow — arbitrary code on the runner with its token, and a green `ci` by fiat, before anyone looks |
-| `devbox.json` + CI-invoked `scripts/**` | CI executes them from the branch; here the scripts ARE the checks (adding a tool is normal in a STACK repo, not in this one) |
+| `devbox.json` + CI-invoked `scripts/**` | CI executes them from the branch; here the scripts ARE the checks (adding a tool is normal in a STACK repo, not in this one). ⚖ **`scripts/**` is in a TRIAL outside this list since 2026-09-28** ([ADR-142](../adr.md)): the check runs from the branch still, but the reviewer's gate-change lens reads every edit to it with CI's gate-drift report — master's side of the edit replayed on the PR — as evidence; `mgmt/scripts/**` + the three box-executed `scripts/` verbs stay |
 | `.agents/**` | a fix round resumes with `--work-branch` on the PR's branch, so the NEXT round reads its recipe from there — it can loosen its own ceiling mid-PR |
 
 ⚠ Consequence worth stating: a faked green does NOT merge anything here, because every remaining

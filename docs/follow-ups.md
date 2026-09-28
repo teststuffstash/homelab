@@ -426,16 +426,13 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
-- [ ] **FU-293** — **`scripts/` is one flat directory of 103 files and path-based ownership cannot
-      cut it.** Box-executed `mgmt-*.sh` (16), CI-invoked lint gates, seat wrappers, one-shot audits
-      and cluster-side helpers all sit under the single `/scripts/ @RasmusSoot` row; carve-outs
-      already started (mermaid-lint's npm manifest + lockfile, 2026-09-27) and every Renovate /
-      deploy lane that touches a script will need another. Parked as structural debt in
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (operator, 2026-08-12); the operator re-raised it
-      2026-09-28 ("it will become a problem for codeowner rules anyway"). **Next:** an inventory by
-      EXECUTOR (box / CI / seat / cluster pod) — that is the tier, per iac-lane's table — then move by
-      density into `scripts/<executor>/` with `devbox.json`, `ci.yaml` and the docs following; the
-      CODEOWNERS rows then name subdirs, not files. Design-shaped: a corpus sitting, not a worker.
+- [ ] **FU-293** — **`scripts/` is one flat directory and path-based ownership cannot cut it.**
+      Inventory by executor 2026-09-28 (~26 CI gates, 16 box, 1 cluster pod, ~45 seat-only; 143/146
+      commits in a month seat-authored). First cuts the same day: the box's closure → `mgmt/`
+      (PR#2088) and the rest of `scripts/` un-owned + worker-authorable under the
+      [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
+      re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
+      until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
 - [ ] **FU-294** — **The npm Renovate lane produces work no ride can do.** Rule [7] (2026-09-27)
       routes `scripts/mermaid-lint` bumps through Renovate, but a lens finding that needs the
       lockfile regenerated (homelab#2032: mermaid 12 pulls a `lodash-es` with CVE-2026-4800 — the

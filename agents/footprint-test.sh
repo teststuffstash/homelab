@@ -121,8 +121,8 @@ expect_classify "codeowner-author" "dot-github"              ".github/workflows/
 expect_classify "codeowner-author" "dot-agents"              ".agents/fix.yaml"
 expect_classify "codeowner-author" "devbox.json"             "devbox.json"
 expect_classify "codeowner-author" "devbox.lock"             "devbox.lock"
-expect_classify "codeowner-author" "scripts"                 "scripts/governance-lint.sh"
-expect_classify "codeowner-author" "scripts-dir"             "scripts/"
+expect_classify "codeowner-author" "box-verb"                "scripts/node-maintenance.sh"
+expect_classify "codeowner-author" "box-verb-cp"             "scripts/controlplane-upgrade.sh"
 expect_classify "codeowner-author" "mgmt-scripts"            "mgmt/scripts/mgmt-lib.sh"
 
 # Tier 1 — machine-merge (CI gate, unowned)

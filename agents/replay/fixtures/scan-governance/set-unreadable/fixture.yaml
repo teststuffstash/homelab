@@ -12,7 +12,7 @@
 #
 # The operator-lane half: classify_touches() reads CODEOWNERS at runtime. If CODEOWNERS is
 # unreadable, non-❌ paths default to machine-merge; the ❌ set (`.github/`, `.agents/`,
-# `devbox.json|lock`, `scripts/`) is hardcoded in classify_touches() and works regardless.
+# `devbox.json|lock`, `mgmt/scripts/` + the box verbs) is hardcoded in classify_touches() and works regardless.
 #
 # THE THREE CASES (hold order: operator-lane-hold runs first, governance-hold second; a hold
 # `continue`s, so each case reaches at most one message):
