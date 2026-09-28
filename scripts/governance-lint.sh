@@ -28,11 +28,13 @@ BASE="${1:-origin/master}"
 # One greppable line, the pin-only-lint/guarded-set convention: other readers eval THIS line,
 # never a second copy. Anchored patterns over the diff's repo-relative paths.
 GOVERNANCE='^(\.github/|\.agents/|scripts/(node-maintenance|maintenance-window|controlplane-upgrade)\.sh$|mgmt/scripts/|policy/|devbox\.json$|devbox\.lock$|CODEOWNERS$)'
-# The worker App's PR-author login. Event context shows "homelab-agents-1234[bot]" (the REST
-# surface; GraphQL shows "app/homelab-agents-1234" — the known [bot]-suffix mismatch), so match
-# on the App NAME prefix and neither suffix shape matters. Deliberately NOT "any [bot]":
-# renovate[bot] must keep its update lane.
-WORKER_PATTERN="${WORKER_PATTERN:-^(app/)?homelab-agents}"
+# The worker App's PR-author login: the App slug plus its numeric suffix, with GraphQL's
+# optional "app/" prefix. ANCHORED at both ends — a bare prefix match on the App name would also
+# swallow any sibling App whose slug merely STARTS with it (a future "homelab-agents-probe" or
+# "homelab-agents-ci" would be judged as the worker lane). The numeric-suffix form is the one
+# login shape the worker App has; nothing else can satisfy `-[0-9]+$`. Deliberately NOT
+# "any [bot]": renovate[bot] must keep its update lane.
+WORKER_PATTERN="${WORKER_PATTERN:-^(app/)?homelab-agents-[0-9]+$}"
 
 author="${PR_AUTHOR:-}"
 if [ -z "$author" ]; then
