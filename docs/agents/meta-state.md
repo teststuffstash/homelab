@@ -32,64 +32,34 @@ never the session's arc — that is TICK-LOG's.)
   way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
   the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
   `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
-- **⚑ PICKUP (2026-09-28 — S9 #1985 OPEN; the un-armed major lane is now a MECHANISM, TICK-LOG
-  2026-09-28 has the arc).** Landed: Renovate terraform rule non-major only + the approve reflex
-  refuses `major` (31ee7482); stale-stamp repair + `kubernetes_deployment.*` on the box allowlist +
-  sentinel error positions (#2054); the un-armed major play — every state is the `unarmed-major`
-  unit, debounced, the lens reviews red heads (#2058); the sentinel verdict keyed to the engine
-  revision (#2059); ci base-sha fix for behind PRs (9eef297d, #2064); coverage outputs regenerated
-  (#2056); rubric quickfix (cc821156: ADR-128 standing, CODEOWNERS paths, FU-097 intent paragraph).
-  Also landed: #2055 (rebase tick — untouched Renovate branches only), #2065 (fingerprint folds
-  `startedAt`), #2067 (a fix round never arms an un-armed `major`), #2069 (handoff matches the
-  heading WORD), #2060 (the npm mirror, `192.168.40.35`, Opus subagent — FU-294 next: drop
-  `MERMAID_LINT_NO_INSTALL=1`; note the mirror unblocked EGRESS only: `scripts/**` lockfile edits
-  stay the seat's by the path tier). **Drill state at 11:30Z:** #2037/#2046/#2032 sit at
-  `major/awaiting-human` — the designed terminal: read + merge (#2046: the box says +0 ~5 -0 helm 3
-  in-place updates, `devbox run mgmt-human-plan -- 2046`). **CORRECTION 11:50Z: the
-  `ci_runner_02[0]` address on #2037/#2047 was NOT drift** — master plans clean; the sentinel
-  planned the bare PR head, and the FU-289 unpark (#2048, after the fork) read as the PR's own
-  change. PR#2073 (in flight) makes stage 2 plan the head MERGED onto master; the engine-keyed
-  verdict then re-judges all heads on the box's next hourly pull — expect #2047 EMPTY (→ green →
-  lens/handoff), #2037 `+0 ~1` (Deployment only, inside the allowlist), #2046 `+0 ~4`. **The 12:06Z re-judge was a FALSE proof:** it wore a new tag but ran the pre-#2073 script (#2059
-  hashed the clone's master blobs, not the executing files — fixed by PR#2076, in flight). The
-  real proof is the re-judge after the box's ~13:00Z pull: #2047's sentinel comment must read
-  "merged onto master@…" and plan EMPTY; if it still shows `ci_runner_02`, read the box journal. #2033: un-latched 11:17Z, must stay un-armed through its
-  next round (#2067's drill). #1977: rebase box ticked 10:36Z, Renovate's 12:00Z run is the mover.
-  **Unproven:** #2064's ci base-sha fix — a `gh run rerun` reuses the old workflow file; the next
-  fresh event on a behind PR is the proof. The Monday weekly image rebuild did NOT fire on
-  agent-coordinator (agent-runtime rebuilt on a push instead).
-  **Operator decisions surfaced (design-shaped, not built):** (a) arm terraform majors AT HANDOFF
-  when the box is the gate (plan-empty + lens APPROVED → auto-merge instead of `major/awaiting-
-  human`) — the last human click in this lane; (b) the sentinel could post the changed ATTRIBUTE
-  PATHS per address (values-free) so a provider-schema-only diff like #2046's can be judged by
-  the lens, or count as "plan empty"; (c) the cloudflare root on the box (operator: maybe in
-  scope — needs a box-held scoped token minted by tofu/cloudflare-token, operator-run); (d) the
-  post-merge dependency-coverage regenerator (#1985 comment) instead of a PR-time `--check`;
-  (e) retro-argo.yaml's marker for the C9 re-arm (unchanged). **S9 closeout residue:** #1988
-  (base-image post-merge half — design fork), #1991 (record written; add a "terraform major via the
-  lens" row from today's #2037/#2046 and close at the sweep), #2014 (version sets — design fork).
-  **Unobserved first that did NOT fire:** the Monday 06:00Z weekly image rebuild on
-  agent-coordinator + agent-runtime (workflows `active`; no scheduled run by 10:30Z) — no detector
-  for a missed scheduled run; re-check next Monday before building one. Hygiene from the old
-  bullet still stands: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac
-  renovate.json (inert); agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy; dead
-  `update-pr-branch.reusable.yml` callers on agent-coordinator + agent-runtime; platform
-  `coordinatorModel` rides `opencode-go/deepseek-v4-flash` — revert to `opus` when the Anthropic 7d
-  window resets. `automerge` label = Renovate-only (a jail-authored PR wearing it gets no reviewer).
-- **⚑ NEXT SESSION FIRST ACT (operator, 2026-09-28): the Forgejo runner rolls with NO downtime,
-  then #2037's class arms.** One PR: `tofu/forgejo-runner.tf` → replicas 2, `RollingUpdate`
-  (`max_unavailable 0`, `max_surge 1`), a `kubernetes_pod_disruption_budget_v1` with
-  `minAvailable 1` (add `kubernetes_pod_disruption_budget*` to the box allowlist in the same PR
-  or the apply parks), keep the emptyDir self-registration (pod name = runner name; stale offline
-  records are a later API sweep). Plus the ADR-140 amendment: a STATELESS platform Deployment that
-  Renovate bumps carries 2 replicas + zero-unavailable rollout + a PDB and may arm; an RWO
-  singleton (HA, UniFi, Mongo — `Recreate` by necessity) stays on the human lane or takes its
-  restart in a [declared window](../glossary.md) (the responder term). Then the class row on #1988: a rollout-stuck detector
-  (kube-state-metrics Progressing=false / unavailable replicas ≥10 min, promtool fixture, proven by
-  a bad-tag drill in a window), a tofu image-line shape in the deploy-revert lane's reversible
-  predicate + an alert-driven trigger, and only then the Renovate rule arms
-  `kubernetes_deployment` image bumps (majors keep `major` for the lens). Grounding: ADR-140,
-  ADR-141, #1988's row rule, docs/management-box.md §The test surface.
+- **⚑ PICKUP (2026-09-28 evening — the Forgejo chain PROVEN: merge without a human AND roll back;
+  TICK-LOG 2026-09-28 (afternoon) has the arc + the drill record).** Landed by the machine lane:
+  #2078 (runner shape), #2082 (`tofu-image-revert`), #2084 (apply loop admits provider-pin spans),
+  drill #2085 (bad dind tag, as the App) → `KubeDeploymentRolloutStuck` 15:06Z → revert #2086
+  merged 15:12Z, 6.5 min, no human. **In flight: PR#2087** (the drill's three findings:
+  `wait_for_rollout = false` on the runner; the candidate walk is newest-first image-line-only; the
+  apply span reads `git log --name-only`, not the endpoint diff — armed). **First reads:** (1) #2087
+  merged → the box's next pull/apply (`systemctl start mgmt-pull mgmt-apply` on 192.168.2.53 to skip
+  the hourly tick) plans `main`, applies `kubernetes_deployment.forgejo_runner` (live: the drill
+  tag; config: `docker:27-dind`), and `kubectl -n forgejo-runner get pods` shows 2/2 on `docker:27-dind`
+  — that is the drill's LAST leg; until then the cluster runs the drill tag with the two old pods
+  serving (harmless) and `MgmtDrift`/`KubeDeploymentRolloutStuck` stay up; close the seat window
+  (`bash agents/seat-window.sh list` → close by id). (2) Then the Renovate rule (scratchpad
+  `renovate-rule.py` or ADR-141's 2026-09-28 amendment text) committed DIRECT to
+  `.github/renovate-global.json` — terraform docker-datasource majors armed + `major`,
+  `behind-base-branch` — so #2037 is Renovate's to rebase, the lens re-reviews, and it merges on its
+  own; never a seat click. (3) Comment the class row on #1988 (built + drilled; close it). (4) Push
+  the batched direct commits (ci.yaml belt step, incident, bookkeeping) through the pre-push gate.
+  **Shelf-life finding for the operator:** `major/awaiting-human` PRs go BEHIND/DIRTY within hours
+  (#2032 DIRTY, the others BEHIND) — decision (a) from the previous S9 bullet is now the open one.
+  **Operator decisions still open:** (a)–(e) of the S9 bullet + the retro r6 marker. **S9 closeout
+  residue:** #1991, #2014. **Hygiene still standing:** `:dependencyDashboard` in sleep-tracking /
+  sleep-iac / oracle-iac; agent-runtime's `deps-pin-guard.sh` pre-#83; dead
+  `update-pr-branch.reusable.yml` callers; `coordinatorModel` on `opencode-go/deepseek-v4-flash`
+  (revert to `opus` when the Anthropic 7d window resets); agent-runtime's CI `unit` job never runs
+  on the ARC runner (devbox-install-action vs pre-installed nix — `.github/`, operator-direct;
+  agent-runtime#161 is parked on it); the Monday 06:00Z image rebuild did not fire (re-check next
+  Monday). `automerge` label = Renovate-only.
 - **⚑ PICKUP (2026-09-24 — registry2 / FU-280 CUT OVER).** `registry.teststuff.net` → `registry-fs` on
   the `registry-data` volume since 14:50Z (#1961/#1962); the S3 Deployment runs unrouted as the rollback.
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a

@@ -11581,3 +11581,85 @@ PRE-#2073 script (verdict text lacks "merged onto master"): #2059's engine revis
 sentinel clone's `origin/master` blobs, which the clone fetches every run, while the script
 executes from the hourly-pulled `/var/lib/homelab`. PR#2076 hashes the executing files. The
 merge-plan proof (#2047 planning EMPTY) is the ~13:10Z re-judge, next session's first read.
+
+## 2026-09-28 (afternoon) — the loop's own issues triaged by CLASS; the Forgejo chain built to merge and roll back without a human
+
+Operator: read meta-state S9, "look at the issues the loop created during these Renovate updates
+— #2036 and newer", then mid-session *"we are here to create/fix the process not fix individual
+problems"*, then *"I'm going away, continue with the Forgejo until it automerges without a human
+and rolls back if there is a problem."* Everything below is a mechanism; instances were touched
+only as the drill of one.
+
+**The nine open issues, by class.** Retired on master already: #2068 (heading WORD, PR#2069)
+and #2070 (stage 2 plans the head merged onto master, PR#2073/#2076) — both closed by hand with
+the proof: the box's 13:05Z run after its 13:03Z pull posted "merged onto master@da4b02b6" and
+`ci_runner_02` vanished from #2047/#2037 (the 12:37Z run was still pre-#2073 because the pull
+had run six seconds before that merge). Carriers whose work is on the branch: #2036/#2071 close
+at #2033's merge (strong links in the body); #2063 could not — the worker wrote only `Refs` in a
+commit, and the in-pod strong-link write had died on `GraphQL: API rate limit already exceeded`
+(the installation pool). Built by four subagents, each its own PR: **#2079** (#2066: the
+`unarmed-major` fingerprint folds `startedAt` ONLY for the `management-sentinel` status —
+`iac-sentinel` re-posted SUCCESS every ~4 min and bought a ride per tick; two fixtures), **#2077**
+(#2072: `diff-ci --coverage-only` runs in CI so the MAP cannot rot on master unseen; the ci.yaml
+step committed direct, 44b072c7), **agent-runtime#161** (#2063's class: `agent-finalize` writes
+the strong link over REST end to end, 40 tests; open, its `unit` job red on a pre-existing
+devbox-install-action/nix conflict on the ARC runner, `.github/` operator-direct), **#2080**
+(#2052: one report-only ORPHANS line for an adopted-open Goal member with no state label;
+#1910 untouched — the operator's pending decision). #2053 is the weekly scout (report-only).
+Finding for the operator, not built: **the `major/awaiting-human` terminal has a shelf life of
+hours** — all five parked majors were BEHIND and #2032 DIRTY within the day; sharpens decision (a).
+
+**wk-03 NotReady 13:10Z — a real incident mid-session** ([incident](../../docs/incidents/2026-09-28-wk-03-runner-memory-thrash.md)):
+an ARC runner job (request 1536Mi, no limit by design) thrashed the 8 GiB VM past its kubelet —
+kvm at 700 %, console full of page-fault backtraces, no OOM kill of any kind; the FU-112
+reservations did not act on a page-cache thrash. `KubeNodeNotReady` fired (the detector held).
+Window `wk-03-1790601393-193`, `qm reset 8113` at 13:16:34Z, Ready 13:17:54Z. Class: the same
+container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01) — an 8 GiB node in
+that pool is luck. Residuals on FU-218 (the envelope) and FU-155 (evidence: no kill at all).
+Probe lesson: `qm status` uptime is the qemu process age, it kept counting through the reset.
+
+**The Forgejo chain (operator's first act), as PRs:** **#2078** — 2 replicas, `RollingUpdate`
+0/1, a PDB of one, `kubernetes_pod_disruption_budget_v1.*` on the box allowlist, ADR-140
+amended (a STATELESS platform Deployment carries this shape before its bumps may arm; an RWO
+singleton never does); review round 1 added a readiness probe on the runner container keyed on
+`/data/.runner` (a probe-less container was Ready at start — the roll and the PDB gated on
+dind's health) + soft anti-affinity. **#2082** — the rollback half, #1988's class row: the
+detector already existed (`KubeDeploymentRolloutStuck`, Progressing=false 15 m); new receiver
+`deploy-rollout-revert` → EventSource `/rollout-stuck` → third `deploy-revert` trigger →
+WorkflowTemplate `tofu-image-revert` (candidate ≤180 m under tofu/, every line `image = "<ref>"`,
+a changed file's `resource "kubernetes_deployment"` OWN metadata must name the stuck Deployment
+— review round 1 found the whole-file `name =` grep matched container names; brace-depth walk +
+four coupling fixtures), `revert-img-<sha8>` + `reverted-images:`, `automerge`+`dependencies`;
+`pin-only-lint` check (f) refuses a re-added reverted image ref for 30 days (5 self-test cases);
+design doc Part 3, ADR-141 amended (blast class picks the lane for the terraform docker-image
+class), docs/renovate.md. **#2084** — found on the way and BLOCKING the whole chain: since the
+proxmox provider bump #2075 auto-merged (12:49Z) the box refused every later master with
+"stage 1: admitted on master diff — human apply" — `mgmt-apply.sh` read stage 1's `admitted`
+line as a hit while the sentinel separates it; now the loop admits the provider-pin shape on a
+master span and the plan + allowlist gate it. **Not yet:** the drill (script ready in the
+scratchpad: a bad dind tag opened AS THE APP via coordinator-git, `automerge`+`dependencies`,
+armed) and the Renovate rule arming terraform docker-image majors (`.github/`, operator-direct;
+text ready) — both after #2078/#2082/#2084 merge, the ArgoCD sync and the box's apply.
+
+**The drill (14:25–15:13Z) — PASSED as a chain, and it found three defects around the chain.**
+#2078 merged 14:06Z (bot re-review after the fix push), #2082 15:15Z→14:15Z, #2084 14:23Z — all
+by the machine lane. The box (pull + apply triggered by the seat instead of the hourly tick —
+cadence, not judgment) admitted the provider-pin span it had refused since #2075, planned
+`+1 ~1`, applied the runner shape + PDB at 14:25Z; two pods Ready = registered on wk-03 +
+wk-metal-04. **#2085** (a non-existent dind tag, opened AS THE APP via `coordinator-git`,
+`automerge`+`dependencies`, armed): reflex APPROVED 14:27Z, merged 14:40Z; box applied 14:41Z
+— the surge pod ImagePullBackOff, the two old pods served throughout (`ready=2 unavail=1`);
+`ProgressDeadlineExceeded` 14:51:12Z; `KubeDeploymentRolloutStuck` pending → **firing 15:06:27Z**;
+`tofu-image-revert-gnl5b` 15:07:16Z: candidate #2085, image-line-only, coupling "declares
+Deployment forgejo-runner in tofu/forgejo-runner.tf", **revert #2086** opened as the App with
+`reverted-images: docker:29-dind-drill-0928`, labelled + armed 15:07:17Z; reflex APPROVED 15:08Z;
+**merged 15:12:51Z**. Alert → merged revert: 6.5 minutes, no human. The three findings, all in
+**PR#2087** (armed): (1) the provider's `wait_for_rollout` default turned the stuck roll into an
+ERRORED box apply after 10 min ("half-applied? human") on an object already written →
+`wait_for_rollout = false` on the runner; (2) the chain took THE newest tofu merge as its only
+candidate, so any later unrelated tofu merge would have masked the bump → newest-first walk,
+first image-line-only `tofu/*.tf`-only merge wins (fixture); (3) the apply loop read the span's
+ENDPOINT diff — the bad tag and its revert net to zero files — and logged "touches no apply:true
+root (0 files) — stamping" at 15:13Z while the cluster still ran the bad tag → `git log
+--name-only` over the span decides. The last leg (the box applying the revert, the runner back
+on `docker:27-dind`) completes when #2087 lands: its tofu change makes the span plan.
