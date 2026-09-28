@@ -27,7 +27,13 @@ never the session's arc — that is TICK-LOG's.)
   the `automerge` label → the lens's own rubber stamp deadlocks STEP 0(a); cause filed on #1988) is
   RESERVED for the next Renovate S9 session (operator, 2026-09-28) — do not touch them.**
   `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z 09-27 on the #2043 class — un-wedged
-  by hand, fixed by PR#2045 (init every run in probe + reconciler).
+  by hand, fixed by PR#2045 (init every run in probe + reconciler). **Retro r6 = PR#2050, merged 05:36Z
+  by the agents App 6 s after the bot approval — the "HUMAN-GATED, auto-merge NOT armed" gate in
+  `retro-argo.yaml` is defeated by `review-reflex.sh`'s C9 re-arm (worker-App author, no parking marker:
+  C9 honours only `major/awaiting-human`, `major`, `agent/error`, `research/*`); r4 #1645 went the same
+  way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
+  the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
+  `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
 - **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
   Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
   bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
