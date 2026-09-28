@@ -46,6 +46,17 @@ fi
 
 echo "machines-lint: machines/generate.py outputs are current (machines/README.md, machines/machines.html, README.md, CLAUDE.md)"
 
+# --- check 1b: no two machines claim the same primary IP --------------------------------------
+# generate.py refuses a duplicate NAME but renders a duplicate `ip:` without complaint — a
+# copy-pasted entry (or a host renumbered onto an address still listed for another) would then
+# show two rows with one address in the host tables, and ip-plan.md's "a VIP never lives inside
+# a real-host range" reasoning assumes one row per address.
+dup_ips=$(devbox run -- yq '.machines[].ip' machines/machines.yaml | sort | uniq -d)
+if [ -n "$dup_ips" ]; then
+  echo "machines-lint: FAIL — machines/machines.yaml lists the same ip for more than one machine:" $dup_ips >&2
+  exit 1
+fi
+
 # --- check 2: the PXE/USB Talos pins follow var.talos_version_worker (FU-246) -----------------
 #
 # Three files declare the Talos version a machine BOOTS from outside the cluster's own tofu root
