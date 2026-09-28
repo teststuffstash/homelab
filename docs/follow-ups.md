@@ -442,9 +442,10 @@ six OVERSIZE items pointer-ized into
       fix is a two-line `overrides` + `npm install`) cannot be dispatched: homelab's fixer claim is
       `egress.profile: none` and the baseline mirror set has docker/ghcr/mcr/pypi but **no npm
       mirror** (`docs/agents/agentstack.md` §ecosystem profile) — so the coordinator parked it on a
-      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). **Next:**
-      decide the shape in a design sitting — an npm mirror at baseline (the pypi pattern, benefits
-      every stack) vs the `node` profile on homelab's claim — then the parked #2032 is the drill.
+      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). Shape
+      ruled 2026-09-28 (operator): a BASELINE npm mirror (`npm-cache`, VIP `.40.35`, every ride's
+      `NPM_CONFIG_REGISTRY`). **Status:** mirror PR #2060 in flight. **Next:** drill = re-dispatch
+      #2032 once the mirror is LIVE; after it passes, drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
