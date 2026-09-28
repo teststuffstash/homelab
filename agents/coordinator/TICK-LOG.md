@@ -11544,3 +11544,27 @@ the diff was the 09-27 pin merges; amended before review. **Observed, unacted:**
 on GitHub; agent-runtime's push build produced agent-base 2026.9.28 anyway via #2062) — no
 detector exists for a missed scheduled run (dependency-coverage's `DependencyClassProofStale` is
 the nearest shape). Retro C9 re-arm question (retro-argo.yaml marker) untouched — operator's call.
+
+**Late (11:00–11:30Z) — the rest of the drill, and three more mechanisms it surfaced.** (1) The
+box re-judged all three parked heads under the new engine within a minute of its hourly pull
+(`[e:92d2129]`, 11:06–11:07Z): #2047's kubernetes-3 plan now RUNS (+0 ~1 -0, human read — the
+09-27 "plan errored" was never republished before #2059), #2046 +0 ~5 -0 as before, #2037 now
++0 ~2 -0 with the forgejo-runner Deployment INSIDE the allowlist — the second address is
+`proxmox_virtual_environment_vm.ci_runner_02[0]`, pre-existing drift unrelated to the PR that
+makes the box refuse every `main` apply until a human plans it (`MgmtApplyResidueStanding` is
+the belt). (2) #2032 (mermaid 12, FU-294's drill): the npm mirror unblocked EGRESS, not the PATH
+TIER — `scripts/**` is codeowner-author because CI executes the lockfile from the branch, so the
+`overrides` pin + lockfile regeneration was the SEAT's act by design (pushed 10:55Z, master merged
+in); the lens re-approved at the new head 11:00Z; then `major-handoff.sh` REFUSED on
+`## Evidence — re-review at new head …` (a `$`-anchored heading regex) and the ride parked the
+PR again — PR#2069: the heading WORD is the match; the seat-run handoff then landed
+`major/awaiting-human` 11:26Z. (3) #2033: the round-3 worker ride ARMED the un-armed major (the
+launcher's post-ride bookkeeping arms every PR); the reviewer refused to review into an
+auto-deploy and latched — PR#2067: a fix round resumed on the branch of an un-armed `major` PR
+derives `--no-arm` (fail-closed on an unreadable lookup); brief passes it explicitly; un-latched
+11:17Z as the drill. (4) #1977: the rebase-tick clause ticked the box 10:36Z — Renovate's 12:00Z
+run is the mover. (5) #2064's ci fix is UNPROVEN on a behind PR: a `gh run rerun` reuses the
+original workflow file, so the proof waits for the next fresh event on a behind PR. Session end
+~11:30Z: five majors sit at the designed human terminals (#2037/#2046/#2032 `major/awaiting-
+human`; #2046's +0 ~5 -0 and #2037's ci_runner_02 drift want `mgmt-human-plan`), #2047 and #2033
+ride the lane on their own.

@@ -39,16 +39,21 @@ never the session's arc — that is TICK-LOG's.)
   unit, debounced, the lens reviews red heads (#2058); the sentinel verdict keyed to the engine
   revision (#2059); ci base-sha fix for behind PRs (9eef297d, #2064); coverage outputs regenerated
   (#2056); rubric quickfix (cc821156: ADR-128 standing, CODEOWNERS paths, FU-097 intent paragraph).
-  **In flight at wind-down:** #2055 (rebase tick on DIRTY untouched Renovate PRs — the #1977 wedge;
-  read its verdict, fix in-PR), #2065 (unarmed-major fingerprint folds `startedAt`), the Opus
-  subagent's npm-mirror PR (FU-294 — read its report; drill = re-dispatch #2032 once LIVE).
-  **Drill state:** #2037 + #2046 sit at `major/awaiting-human` — the designed terminal: a human
-  reads (#2046: the box says +0 ~5 -0, four `helm_release` + `ci_runner_02` in-place updates —
-  `devbox run mgmt-human-plan -- 2046` shows the plan; #2037: after the box re-judges under the
-  new engine its forgejo-runner Deployment is INSIDE the allowlist) and merges. #2047: lens stood
-  aside `checks-red-unattributed` until the box re-plans its head under the new engine (#2059;
-  #2065 makes that re-verdict re-open the debounce) — expect a position line for the kubernetes-3
-  error, then the lens names the adaptation and a worker applies it. #2033 re-enters on its own.
+  Also landed: #2055 (rebase tick — untouched Renovate branches only), #2065 (fingerprint folds
+  `startedAt`), #2067 (a fix round never arms an un-armed `major`), #2069 (handoff matches the
+  heading WORD), #2060 (the npm mirror, `192.168.40.35`, Opus subagent — FU-294 next: drop
+  `MERMAID_LINT_NO_INSTALL=1`; note the mirror unblocked EGRESS only: `scripts/**` lockfile edits
+  stay the seat's by the path tier). **Drill state at 11:30Z:** #2037/#2046/#2032 sit at
+  `major/awaiting-human` — the designed terminal: read + merge (#2046: the box says +0 ~5 -0 helm 3
+  in-place updates, `devbox run mgmt-human-plan -- 2046`; #2037: +0 ~2 -0 where the second address
+  is PRE-EXISTING drift `proxmox_virtual_environment_vm.ci_runner_02[0]` that makes the box refuse
+  every `main` apply until a human plans it — `MgmtApplyResidueStanding`). #2047: re-judged under
+  the new engine (`[e:92d2129]`), plan RUNS (+0 ~1 -0, human read) — the lens re-review follows on
+  its own (the fingerprint re-opened). #2033: un-latched 11:17Z, must stay un-armed through its
+  next round (#2067's drill). #1977: rebase box ticked 10:36Z, Renovate's 12:00Z run is the mover.
+  **Unproven:** #2064's ci base-sha fix — a `gh run rerun` reuses the old workflow file; the next
+  fresh event on a behind PR is the proof. The Monday weekly image rebuild did NOT fire on
+  agent-coordinator (agent-runtime rebuilt on a push instead).
   **Operator decisions surfaced (design-shaped, not built):** (a) arm terraform majors AT HANDOFF
   when the box is the gate (plan-empty + lens APPROVED → auto-merge instead of `major/awaiting-
   human`) — the last human click in this lane; (b) the sentinel could post the changed ATTRIBUTE
