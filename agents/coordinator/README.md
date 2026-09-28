@@ -344,7 +344,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    line on the PR's `<!-- agent-summary -->` comment (ADR-103/#210 — not a per-round comment). When a
    PR opens → relabel `agent/review`. Auto-merge is armed by `agent-session.sh` (confirm with `gh pr
    merge <PR> --repo teststuffstash/<project> --auto --squash`; arm it yourself only if the worker
-   didn't). You do NOT merge by hand — GitHub auto-merge fires once the gate is satisfied (1 approving
+   didn't — and NEVER on a PR carrying `major` that is not already armed: that is the human-merge lane,
+   #2033). You do NOT merge by hand — GitHub auto-merge fires once the gate is satisfied (1 approving
    review + CI green).
 7. **Get it reviewed — by the bot, not you.** The reviewer is a **distinct GitHub identity**
    (`homelab-reviewer[bot]`), never the coordinator or the worker: GitHub blocks self-approval, and its
@@ -1525,7 +1526,9 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    the PR; if you meet one, it is the next tick's, not a reason to latch.
 3. **Fix, if within budget.** On `CHANGES_REQUESTED`, estimate the adaptation
    (`estimate_budget.py`); if it's within the cap, dispatch a **worker** to apply it **on the PR branch**
-   (not a new branch), feeding it the reviewer's comments — same round mechanics as steps 3–5 above. If
+   (not a new branch) with `--work-branch <branch> --no-arm`, feeding it the reviewer's comments — same
+   round mechanics as steps 3–5 above, except that the round NEVER arms the PR (the launcher derives
+   `--no-arm` for an un-armed `major` branch itself since 2026-09-28, #2033 — say it anyway). If
    the estimator says `⚠ ESCALATE` → `agent/blocked` + comment, stop.
 4. **Loop to green.** Worker pushes → CI re-runs → re-dispatch the reviewer. Repeat within the round
    bound (max 5, ADR-127). Green + `APPROVED` is the target.
