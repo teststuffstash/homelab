@@ -1204,8 +1204,11 @@ round, it did not spend a fresh one.
 
 The updater labels a worker-authored PR `merge-conflict` when its update-branch call 422s on a
 DIRTY head; the scan emits `merge-conflict|<repo>|pr-<n>` once per state (the #198 fingerprint;
-a seat-authored conflict never reaches you — report line only). A conflict is not a review
-finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
+a seat-authored conflict never reaches you — report line only; a **Renovate-authored** conflict
+never reaches you either: the scan ticks Renovate's rebase/retry checkbox — one foreign commit,
+such as the updater's merge, flips a Renovate PR to "Edited/Blocked" and it would otherwise
+never rebase again (#1977, 2026-09-28) — and Renovate's next run rebases it). A conflict is not
+a review finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
 DIRTY? a human may have resolved it — exit clean). Then rule exactly one of:
 
 - **Resume on the branch — the default.** Dispatch a fix round with `--work-branch` on the PR's
@@ -1509,13 +1512,17 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    ```
    The reviewer reads the tool's upstream migration notes, maps them onto this repo's usage, and comments
    exactly what must change (e.g. helm-4 needs `--verify=false` on `helm plugin install`).
-   **Never `update-branch` a Renovate PR** (2026-09-28, #2037): the merge commit is a foreign
-   author, Renovate marks the PR "Edited/Blocked" and stops rebasing it — and a re-point does not
-   clear an own-identity review anyway. BEHIND is not your problem here: a human merge updates the
-   branch; if the branch must move, tick Renovate's rebase checkbox in the PR body (`- [x] <!--
-   rebase-check -->`). A reflex rubber stamp or a leaked `automerge` label on an un-armed major is
-   not yours either — the scan's stale-stamp repair clears both before you see the PR; if you
-   meet one, it is the next tick's, not a reason to latch.
+   **Moving a Renovate branch — two cases, and the box is only for one (2026-09-28, #2037/#2046).**
+   UNTOUCHED (every non-merge commit is Renovate's): tick Renovate's rebase checkbox in the PR
+   body (`- [x] <!-- rebase-check -->`) — the scan does this itself on a DIRTY one; never
+   `update-branch` it (the foreign merge commit flips it to "Edited/Blocked" and Renovate stops
+   rebasing for good). ADAPTED (a worker commit sits on the branch): NEVER the rebase box — a
+   Renovate rebase regenerates the branch and drops the adaptation; the branch moves by merging
+   master into it, a fix round with `--work-branch` on the PR branch (§The `merge-conflict` clause,
+   "resume on the branch"), or a human merge that updates it. BEHIND alone is not your problem: a
+   human merge updates the branch. A reflex rubber stamp or a leaked `automerge` label on an
+   un-armed major is not yours either — the scan's stale-stamp repair clears both before you see
+   the PR; if you meet one, it is the next tick's, not a reason to latch.
 3. **Fix, if within budget.** On `CHANGES_REQUESTED`, estimate the adaptation
    (`estimate_budget.py`); if it's within the cap, dispatch a **worker** to apply it **on the PR branch**
    (not a new branch), feeding it the reviewer's comments — same round mechanics as steps 3–5 above. If

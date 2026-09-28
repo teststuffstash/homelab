@@ -1,0 +1,9 @@
+# renovate-rebase-tick: a Renovate-authored DIRTY (merge-conflict) PR — Renovate will not rebase an
+# "edited" PR on its own; the scan ticks its rebase/retry checkbox (no-checkbox case: a body without the marker is a human-check line, nothing written)
+name: renovate-rebase-tick-no-checkbox
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:renovate-rebase-tick
+  - file:post.sh

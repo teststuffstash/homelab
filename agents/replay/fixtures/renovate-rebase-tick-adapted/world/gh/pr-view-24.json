@@ -1,0 +1,21 @@
+{
+  "body": "Renovate body\n\n - [ ] <!-- rebase-check -->If you want to rebase/retry this PR, check this box\n",
+  "commits": [
+    {
+      "messageHeadline": "Update Terraform helm to v3",
+      "authors": [
+        {
+          "login": "homelab-renovate-1234[bot]"
+        }
+      ]
+    },
+    {
+      "messageHeadline": "tofu: adapt the helm provider block for terraform-provider-helm 3.x",
+      "authors": [
+        {
+          "login": "homelab-agents-1234[bot]"
+        }
+      ]
+    }
+  ]
+}

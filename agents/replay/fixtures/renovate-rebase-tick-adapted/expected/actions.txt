@@ -1,0 +1,3 @@
+CALL gh pr view 24 --repo teststuffstash/homelab --json body,commits
+OUT [homelab] ⏳ merge-conflict Renovate PR #24 carries a non-Renovate commit (an adaptation) — a rebase would drop it; the branch moves by merging master (the unarmed-major ride's merge-conflict play), not by the rebase box
+RC 0
