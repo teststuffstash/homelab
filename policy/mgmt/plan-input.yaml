@@ -93,11 +93,17 @@ apply_addresses:            # resource addresses (globs) the box may APPLY unatt
   main:
     - "kubernetes_config_map.*"
     - "kubernetes_namespace.*"
-    - "kubernetes_deployment.ha"
+    # EVERY raw-k8s Deployment (widened 2026-09-28, operator: "management box … up for change as
+    # needed"): the named trio (ha, unifi, mongo) was the 2026-09-13 first cut; the fourth,
+    # kubernetes_deployment.forgejo_runner, carries the docker:dind image tag Renovate bumps
+    # through the terraform manager (homelab#2037: `docker:27-dind → 29-dind`, sentinel green,
+    # "1 address OUTSIDE the apply allowlist — human apply"). An image bump on a Deployment the
+    # cluster rolls (readiness-gated, the old ReplicaSet stays until the new one is Ready) is the
+    # exact nondestructive residue class §The test surface names — a human apply added nothing.
+    # Services and PVCs stay named: a Service change can move a VIP, a PVC change can re-create.
+    - "kubernetes_deployment.*"
     - "kubernetes_service.ha"
     - "kubernetes_persistent_volume_claim.ha"
-    - "kubernetes_deployment.unifi"
-    - "kubernetes_deployment.mongo"
     - "kubernetes_service.unifi"
     - "kubernetes_service.mongo"
     - "kubernetes_persistent_volume_claim.mongo"

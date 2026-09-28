@@ -83,6 +83,17 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
   (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
+  **Terraform MAJORS are not this lane** (2026-09-28): a provider major, or an image tag Renovate
+  extracts from a `kubernetes_deployment` in tofu, takes the major catch-all — un-armed, `major`,
+  the coordinator's lane (README §Dependency major bumps), because a major here typically needs an
+  in-PR adaptation (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046).
+  The lane's marker must not leak: the terraform rule is restricted to non-major update types
+  (Renovate MERGES `addLabels` across rules and nothing removes a label — three majors were born
+  `automerge`+`major` on 2026-09-27, #2037/#2046/#2047), `renovate-approve` refuses any
+  `major`-labelled PR (its stamp shares the migration lens's identity, so it deadlocked the lens
+  at STEP 0(a)), and the coordinator scan's **stale-stamp repair** dismisses a stamp that landed
+  anyway and strips the label. What a merged major then applies is the box's, inside its allowlist
+  (`kubernetes_deployment.*` since the same day — the #2037 image bump was "1 address outside").
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy

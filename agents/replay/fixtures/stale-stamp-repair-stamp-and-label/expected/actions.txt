@@ -1,0 +1,10 @@
+CALL gh api repos/teststuffstash/homelab/pulls/10/reviews?per_page=100
+CALL gh pr view 10 --repo teststuffstash/homelab --json commits
+CALL gh api -X PUT repos/teststuffstash/homelab/pulls/10/reviews/555/dismissals -f event=DISMISS -f message=stale-stamp repair: this APPROVED is the renovate-approve reflex's rubber stamp on an UN-ARMED `major` PR — it shares the migration lens's identity and blocks the lens at STEP 0(a); dismissed by the coordinator scan so the lens can review (homelab#2037 class, cause #1988).
+CALL gh pr edit 10 --repo teststuffstash/homelab --remove-label automerge
+CALL gh api repos/teststuffstash/homelab/issues/10/comments --paginate
+CALL gh api --method POST repos/teststuffstash/homelab/issues/10/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-09-28T09:00:00Z` · **stale-stamp repair** — un-armed `major` wearing the mechanical lane's marker: dismissed the reflex's rubber stamp (review 555); stripped the leaked `automerge` label. The migration lens can now review; `unarmed-major` picks this PR up on the next tick (homelab#2037 class, cause #1988). <!-- agent-event kind=repair ts=2026-09-28T09:00:00Z -->
+OUT REACHED: case 1 — reflex stamp at head + leaked automerge label ⇒ dismissed + stripped
+OUT [homelab] ✓ stale-stamp repair: PR #10 — dismissed the reflex's rubber stamp (review 555); stripped the leaked `automerge` label
+OUT Case 1 complete: review 555 dismissed, automerge stripped, PR #10 left for unarmed-major
+RC 0
