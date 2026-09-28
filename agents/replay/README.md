@@ -306,8 +306,10 @@ is stale, so it cannot drift the way the prose register did.
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
+| `major-arm-guard-armed-major` | actions | - | `agents/agent-session.sh` | - |
 | `major-arm-guard-ordinary` | actions | - | `agents/agent-session.sh` | - |
 | `major-arm-guard-unarmed-major` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `major-handoff` | table | - | `agents/major-handoff.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
