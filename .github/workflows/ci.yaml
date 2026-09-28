@@ -412,8 +412,14 @@ jobs:
         # commit's first parent is exactly the master the diff must exclude; the object is listed
         # in the merge commit itself, so it resolves under a depth-1 checkout after one fetch.
         # A non-merge HEAD (no second parent) falls back to base.sha.
+        # ⚠ READ THE RAW OBJECT (2026-09-28, PR#2087 red on a belt step master had just merged):
+        # under actions/checkout's depth-1 fetch the merge commit is the SHALLOW BOUNDARY, and
+        # `git rev-list --parents` / `%P` report a boundary commit as PARENTLESS — P1 came back
+        # empty on every run and the fallback base.sha silently re-created the #1441 attribution
+        # (the drill's follow-up was red on the coverage-belt step it never touched). The parent
+        # lines are in the commit object itself; `cat-file -p` reads them shallow or not.
         run: |
-          P1="$(git rev-list --parents -n1 HEAD | awk 'NF>=3{print $2}')"; BASE="${P1:-$BASE_SHA}"
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"
           git fetch --no-tags --depth=1 origin "$BASE"
           devbox run pin-only-lint "$BASE"
         env:
@@ -432,7 +438,7 @@ jobs:
         # homelab#1441: same base.sha rule as pin-only-lint above (the two-dot diff against a
         # moved tip is what failed PR#1435 on files master added after its fork).
         run: |
-          P1="$(git rev-list --parents -n1 HEAD | awk 'NF>=3{print $2}')"; BASE="${P1:-$BASE_SHA}"   # #2064: the merge ref's first parent, as above
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"   # #2064 + the shallow-boundary read, as above
           git fetch --no-tags --depth=1 origin "$BASE"
           devbox run governance-lint "$BASE"
         env:
