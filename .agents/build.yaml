@@ -67,8 +67,10 @@ instructions: |
     deliberately changes pinned behaviour, stated explicitly in the PR body (homelab#354).
 
   NEVER TOUCH — refuse and report, even if the issue asks:
-  - `.github/**`, `devbox.json`/`devbox.lock`, CI-invoked `scripts/**`, `.agents/**` — these
-    take effect BEFORE a human approves (CI runs your branch's copy; a fix round reads its
+  - `.github/**`, `devbox.json`/`devbox.lock`, `.agents/**`, `mgmt/scripts/**` + the three
+    box-executed `scripts/` verbs (node-maintenance, maintenance-window, controlplane-upgrade) —
+    these take effect BEFORE a human approves (the rest of `scripts/` is authorable under the
+    ADR-142 trial; the reviewer's gate-change lens reads it) (CI runs your branch's copy; a fix round reads its
     recipe from your branch). If the deliverable genuinely requires one, that IS the finding:
     post ONE comment starting exactly `AGENT_INFEASIBLE: <the path or resource>` and END the
     run without pushing (the scan parks the issue for a human — retro r3 F4).
