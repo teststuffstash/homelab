@@ -719,7 +719,12 @@ the block needs pruning, not more headings.
       week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
       **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)
       for ≥10 GB-scratch jobs — its template is a COPY of the general one, diff on every change.
-      Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
+      **2026-09-28 — the envelope is wrong, not the slot count:** a 1536Mi-request runner thrashed
+      wk-03 (8 GiB) past its kubelet — hard reset, [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md);
+      the same container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01).
+      **Next:** either the request states the heavy jobs' envelope (→ only nx-01/16 GiB nodes fit)
+      or the 8 GiB nodes leave the pool — operator call; the job→runner-size split (#1582's shape)
+      is the alternative. Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
       content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
       base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
@@ -1335,7 +1340,9 @@ the block needs pruning, not more headings.
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
       container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
-      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). **2026-09-28
+      evidence:** a page-cache thrash on wk-03 (v1.14.1, FU-112 reservations in place) produced NO kill
+      at all — kubelet starved, OOMController silent — [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
       (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past
