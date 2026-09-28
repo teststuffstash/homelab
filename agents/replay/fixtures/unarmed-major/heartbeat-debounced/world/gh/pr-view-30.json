@@ -4,12 +4,19 @@
   "reviewDecision": "CHANGES_REQUESTED",
   "statusCheckRollup": [
     {
-      "name": "ci",
-      "conclusion": "SUCCESS"
+      "context": "iac-sentinel",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-28T10:42:46Z"
     },
     {
-      "name": "management-sentinel",
-      "conclusion": "SUCCESS"
+      "context": "management-sentinel",
+      "state": "FAILURE",
+      "startedAt": "2026-09-28T10:30:00Z"
+    },
+    {
+      "name": "ci",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-09-27T17:45:00Z"
     }
   ],
   "reviews": [
@@ -30,8 +37,8 @@
   ],
   "comments": [
     {
-      "body": "🤖 `state-fp:unarmed-major:45c35bd51220` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-28T09:10:00Z.",
-      "createdAt": "2026-09-28T09:10:00Z",
+      "body": "🤖 `state-fp:unarmed-major:1f22f9d312e8` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-28T10:20:00Z.",
+      "createdAt": "2026-09-28T10:20:00Z",
       "author": {
         "login": "homelab-agents-1234"
       }
