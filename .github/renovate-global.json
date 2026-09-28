@@ -26,7 +26,7 @@
 
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). `automerge` label → the renovate-approve reflex approves; auto-merged so exposure is minimal.",
+    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). `automerge` label → the renovate-approve reflex approves; auto-merged so exposure is minimal. A security fix that is ALSO a major keeps the `major` label from the catch-all rule (this block cannot filter by update type): the reflex refuses `major` and the un-armed major rides the coordinator's lane — the cooldown exception still applies.",
     "minimumReleaseAge": null,
     "labels": ["security", "automerge"],
     "addLabels": ["automerge"],
@@ -90,8 +90,9 @@
       "automerge": true
     },
     {
-      "description": "Terraform providers (lockfile + version constraints) — the MANAGEMENT BOX is the gate, mechanically (ADR-131 amended 2026-09-27, homelab#2026, S9 #1988): stage 1 of the sentinel admits the `provider-pin` diff shape (only version / constraints / hash lines, every provider source unchanged), stage 2 plans the head with the new provider (registry-signed, hash-verified by tofu) and a pin head must plan EMPTY — `management-sentinel` is green on +0 ~0 -0 and red (`provider bump changes the plan: <root>(…) — human read`) otherwise. With ci + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red ones are the only provider PRs a human sees. Six such PRs (2026-09-25..27) all planned +0 under human orders — the human added nothing (operator: 'I don't want to see these PRs for years to come'). Roots the box does NOT plan (policy foreign_roots) are excluded by the rule after this one rather than merged unplanned (#1984 merged that way, reconciled from the jail after the fact).",
+      "description": "Terraform providers (lockfile + version constraints) — the MANAGEMENT BOX is the gate, mechanically (ADR-131 amended 2026-09-27, homelab#2026, S9 #1988): stage 1 of the sentinel admits the `provider-pin` diff shape (only version / constraints / hash lines, every provider source unchanged), stage 2 plans the head with the new provider (registry-signed, hash-verified by tofu) and a pin head must plan EMPTY — `management-sentinel` is green on +0 ~0 -0 and red (`provider bump changes the plan: <root>(…) — human read`) otherwise. With ci + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red ones are the only provider PRs a human sees. Six such PRs (2026-09-25..27) all planned +0 under human orders — the human added nothing (operator: 'I don't want to see these PRs for years to come'). Roots the box does NOT plan (policy foreign_roots) are excluded by the rule after this one rather than merged unplanned (#1984 merged that way, reconciled from the jail after the fact). NON-MAJOR ONLY (2026-09-28, homelab#2037/#2046/#2047): without a matchUpdateTypes restriction this rule's `addLabels` leaked `automerge` onto terraform MAJORS — the major catch-all below flips automerge to false but addLabels MERGE and nothing removes a label — so a major was born un-armed AND wearing the mechanical lane's marker; the renovate-approve reflex rubber-stamped it as the reviewer's own identity and the migration lens refused on own-verdict-at-head forever. Majors here take the catch-all (un-armed, `major`, the coordinator's lane); the reflex additionally refuses any `major`-labelled PR and the scan strips a leaked label (coordinator-scan.sh stale-stamp repair).",
       "matchManagers": ["terraform"],
+      "matchUpdateTypes": ["patch", "minor", "pin", "pinDigest", "digest"],
       "addLabels": ["automerge"],
       "automerge": true
     },
