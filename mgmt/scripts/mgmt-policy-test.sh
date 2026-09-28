@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # mgmt-policy-test — fixture test of the management sentinel's STAGE-1 checker (mgmt_stage1 in
-# scripts/mgmt-lib.sh) against policy/mgmt/plan-input.yaml as committed HERE: a synthetic repo, a
+# mgmt/scripts/mgmt-lib.sh) against policy/mgmt/plan-input.yaml as committed HERE: a synthetic repo, a
 # clean dashboard edit must pass, every deny rule must fire exactly on its own change, a symlink
 # is caught, a foreign-root-only change selects no root. `devbox run mgmt-policy-test`.
 # Since 2026-09-22 also the APPLY side: the allowlist, the Talos config precondition, the post-check polling.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-export REPO="$HERE/.."
+export REPO="$HERE/../.."
 # shellcheck source=mgmt-lib.sh
 . "$HERE/mgmt-lib.sh"
 POL="$REPO/policy/mgmt/plan-input.yaml"

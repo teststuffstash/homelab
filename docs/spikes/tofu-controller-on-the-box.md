@@ -41,7 +41,7 @@ retire this spike with the reason. **No** on 5 alone = adopt with a belt written
 ## Out of scope
 
 Metal lifecycle (Tinkerbell/Rufio), the management network, control planes — ADR-132/-133 sequence them
-after this. Nothing here touches `nixos/hosts/mgmt/`.
+after this. Nothing here touches `mgmt/nixos/hosts/mgmt/`.
 
 ## Findings (run 2026-09-21)
 

@@ -311,7 +311,7 @@ six OVERSIZE items pointer-ized into
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
       3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
       creds MOVED to the R12 box 2026-09-13** (the jail applies main through `devbox run mgmt-tf`).
-      **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
+      **Next:** box-scoped credentials — the `mgmt/scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
       plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
       stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.

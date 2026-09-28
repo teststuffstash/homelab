@@ -27,14 +27,15 @@ let
   repoUrl = "https://github.com/teststuffstash/homelab.git";
 
   # The ref the box follows: MASTER (ADR-129 as amended 2026-09-14). The human gate is the
-  # `/nixos/` CODEOWNERS row — every change to this closure is a human read before it merges —
-  # plus `scripts/` and `policy/` staying owned through the ADR-128 trial, so everything the box
-  # executes from its checkout is codeowner-gated at merge. The operator-advanced `mgmt-release`
-  # ref this was born with (2026-09-12) was a SECOND promotion of already-reviewed commits, not
-  # safety: it was never created, and the box had pull + gate + rollback the whole time. What
-  # stays deliberate is the ACTIVATION: mgmt-pull rebuilds the closure only when `nixos/` changed
-  # between the activated revision and the target; a master move that touches only scripts or
-  # policy advances the checkout (the units read those files at each start) and activates nothing.
+  # `/mgmt/` CODEOWNERS row — every change to this closure (mgmt/nixos/) and to the box scripts
+  # (mgmt/scripts/) is a human read before it merges — plus `scripts/` (the shared verbs) and
+  # `policy/` staying owned, so everything the box executes from its checkout is codeowner-gated
+  # at merge. The operator-advanced `mgmt-release` ref this was born with (2026-09-12) was a
+  # SECOND promotion of already-reviewed commits, not safety: it was never created, and the box
+  # had pull + gate + rollback the whole time. What stays deliberate is the ACTIVATION: mgmt-pull
+  # rebuilds the closure only when `mgmt/nixos/` changed between the activated revision and the
+  # target; a master move that touches only scripts or policy advances the checkout (the units
+  # read those files at each start) and activates nothing.
   mgmtRef = "master";
 
   # Written after a successful `nixos-rebuild test`, read to decide whether a promotion is even
@@ -165,7 +166,7 @@ in
   assertions = [{
     assertion = authorizedKeys != [ ];
     message = ''
-      nixos/hosts/mgmt/keys/ holds no TRACKED *.pub — the box would install with no way to log in.
+      mgmt/nixos/hosts/mgmt/keys/ holds no TRACKED *.pub — the box would install with no way to log in.
       Add the operator's key AND the jail's (rotation = add-new → verify → remove-old), and
       `git add` them: a flake cannot see untracked files.
     '';
@@ -229,14 +230,14 @@ in
 
   # ── the pull loop (ARMED 2026-09-14 — ADR-129 amended: follow master) ──────────────────
   # Fetch master AUTHENTICATED (the #1637 rule: never an anonymous request from this box),
-  # advance the checkout, and ACTIVATE the closure only when `nixos/` changed since the last
+  # advance the checkout, and ACTIVATE the closure only when `mgmt/nixos/` changed since the last
   # activated revision (`test` leaves the boot default alone); then hand the verdict to the
-  # deadman. A move that touches nothing under nixos/ only moves the checkout + the stamp.
+  # deadman. A move that touches nothing under mgmt/nixos/ only moves the checkout + the stamp.
   systemd.services.mgmt-pull = {
-    description = "follow master; re-activate the closure only when nixos/ changed";
+    description = "follow master; re-activate the closure only when mgmt/nixos/ changed";
     after = [ "mgmt-checkout.service" "network-online.target" ];
     wants = [ "mgmt-checkout.service" "network-online.target" ];
-    # bash/curl/jq/openssl: scripts/mgmt-lib.sh's mgmt_git mints the App token (JWT → installation
+    # bash/curl/jq/openssl: mgmt/scripts/mgmt-lib.sh's mgmt_git mints the App token (JWT → installation
     # token) for the per-invocation auth header; no token (unprovisioned box) → plain git, loudly.
     path = with pkgs; [ bash git nix nixos-rebuild systemd curl jq openssl coreutils gnugrep gawk gnused ];
     serviceConfig = {
@@ -250,7 +251,7 @@ in
       cd ${repoPath}
       # The lib is read from the checkout BEFORE the reset — the shape the sentinel/apply units
       # already rely on; a broken lib on master is a merged, codeowner-read commit, not a surprise.
-      . ${repoPath}/scripts/mgmt-lib.sh
+      . ${repoPath}/mgmt/scripts/mgmt-lib.sh
       if ! mgmt_gh_token >/dev/null 2>&1; then
         echo "no App token available (/var/lib/mgmt/env unprovisioned?) — fetching unauthenticated" >&2
       fi
@@ -265,15 +266,15 @@ in
         exit 0
       fi
       if [ -n "$activated" ] && git cat-file -e "$activated^{commit}" 2>/dev/null \
-         && git diff --quiet "$activated" "$target" -- nixos/; then
+         && git diff --quiet "$activated" "$target" -- mgmt/nixos/; then
         git reset --hard --quiet "$target"
         printf '%s' "$target" > ${activatedStamp}
-        echo "advanced the checkout to $target — nixos/ unchanged since $activated, closure not re-activated"
+        echo "advanced the checkout to $target — mgmt/nixos/ unchanged since $activated, closure not re-activated"
         exit 0
       fi
       git reset --hard --quiet "$target"
-      echo "activating $target (nixos/ changed; boot default unchanged until the gate passes)"
-      nixos-rebuild test --flake ${repoPath}/nixos#mgmt
+      echo "activating $target (mgmt/nixos/ changed; boot default unchanged until the gate passes)"
+      nixos-rebuild test --flake ${repoPath}/mgmt/nixos#mgmt
       printf '%s' "$target" > ${activatedStamp}
       # --no-block: this oneshot must not wait on a unit that may reboot the machine.
       systemctl start --no-block mgmt-confirm.service
@@ -309,9 +310,9 @@ in
     };
     script = ''
       set -uo pipefail
-      if ${repoPath}/scripts/mgmt-probe.sh; then
+      if ${repoPath}/mgmt/scripts/mgmt-probe.sh; then
         echo "gate PASS — promoting this closure to the boot default"
-        nixos-rebuild boot --flake ${repoPath}/nixos#mgmt
+        nixos-rebuild boot --flake ${repoPath}/mgmt/nixos#mgmt
       else
         echo "gate FAIL — rebooting into the untouched boot default" >&2
         rm -f ${activatedStamp}   # so the next pull re-activates and re-gates rather than skipping
@@ -335,13 +336,13 @@ in
       TimeoutStartSec = "30m";
       Environment = [ "HOME=/root" "MODE=belt" ];
       # The credentials. NOT in this closure (public repo, world-readable store): a root-only file
-      # placed by scripts/mgmt-provision-secrets.sh (--extra-files at install, --push to rotate),
+      # placed by mgmt/scripts/mgmt-provision-secrets.sh (--extra-files at install, --push to rotate),
       # read at each start so a rotation needs no restart. The leading "-" means a missing file
       # does not fail the unit — the probe then SKIPS loudly, which is the "not provisioned yet"
       # signal, not a fault. The same line goes on the apply unit when phase B adds one.
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
-    script = "${repoPath}/scripts/mgmt-probe.sh";
+    script = "${repoPath}/mgmt/scripts/mgmt-probe.sh";
   };
   systemd.timers.mgmt-belt = {
     # ARMED 2026-09-21. It was parked at phase A "the creds it probes are not here yet" — they have
@@ -376,7 +377,7 @@ in
       Environment = [ "HOME=/root" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # TOFU_STATE_PASSPHRASE + the Garage state key
     };
-    script = "${repoPath}/scripts/mgmt-state-snapshot.sh";
+    script = "${repoPath}/mgmt/scripts/mgmt-state-snapshot.sh";
   };
   systemd.timers.mgmt-state-snapshot = {
     enable = true;
@@ -404,7 +405,7 @@ in
       Environment = [ "HOME=/root" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
-    script = "${repoPath}/scripts/mgmt-sentinel.sh";
+    script = "${repoPath}/mgmt/scripts/mgmt-sentinel.sh";
   };
   systemd.timers.mgmt-sentinel = {
     wantedBy = [ "timers.target" ];
@@ -431,7 +432,7 @@ in
       Environment = [ "HOME=/root" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
-    script = "${repoPath}/scripts/mgmt-apply.sh";
+    script = "${repoPath}/mgmt/scripts/mgmt-apply.sh";
   };
   systemd.timers.mgmt-apply = {
     wantedBy = [ "timers.target" ];
@@ -465,7 +466,7 @@ in
       Environment = [ "HOME=/root" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
-    script = "${repoPath}/scripts/mgmt-reconcile.sh";
+    script = "${repoPath}/mgmt/scripts/mgmt-reconcile.sh";
   };
   systemd.timers.mgmt-reconcile = {
     wantedBy = [ "timers.target" ];

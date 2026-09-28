@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mgmt-rollout-evidence-test — the rollout's exercise predicate (scripts/mgmt-rollout-evidence.sh)
+# mgmt-rollout-evidence-test — the rollout's exercise predicate (mgmt/scripts/mgmt-rollout-evidence.sh)
 # against a FAKE kubectl, talosctl and Prometheus: the type classification from labels + history,
 # each type's evidence, and the three exit codes (0 exercised / 1 not yet / 2 cannot tell) —
 # including every read failure landing on 2, never on a success-shaped 0 or 1. No cluster.

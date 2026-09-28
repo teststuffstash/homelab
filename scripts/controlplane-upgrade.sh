@@ -46,7 +46,7 @@ SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/var/lib/mgmt/etcd-snapshots}"
 if [ ! -d /var/lib/mgmt ]; then SNAPSHOT_DIR="${CP_SNAPSHOT_DIR:-/tmp/controlplane-upgrade-snapshots}"; fi
 
 # EXIT CODES — the same contract as `node-maintenance.sh upgrade`, because the box's reconciler
-# (scripts/mgmt-reconcile.sh) calls this verb for a control plane and maps them identically:
+# (mgmt/scripts/mgmt-reconcile.sh) calls this verb for a control plane and maps them identically:
 #   2  REFUSED — a gate said no BEFORE anything was touched (quorum, endpoint, etcd health, cilium,
 #      the snapshot, or the shared verb's own preflight/floors); a later attempt may pass
 #   4  IMPOSSIBLE — the declared version path (the shared verb's cross-minor downgrade / skipped

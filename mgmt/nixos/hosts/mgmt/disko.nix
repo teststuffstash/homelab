@@ -64,7 +64,7 @@ in
   assertions = [{
     assertion = !(lib.hasInfix "CHANGE-ME" device);
     message = ''
-      nixos/hosts/mgmt/disko.nix still carries the CHANGE-ME device placeholder. Replace it with
+      mgmt/nixos/hosts/mgmt/disko.nix still carries the CHANGE-ME device placeholder. Replace it with
       the real /dev/disk/by-id/... path read in the installer: it is both the install target AND
       what grub-install writes to on every later promotion, so a placeholder breaks the update
       loop and the manual rollback path, not merely the install.

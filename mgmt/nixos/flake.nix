@@ -8,14 +8,14 @@
 # is not optional: sshd GENERATES a host key when none is present, and a reinstall that regenerates
 # it silently breaks the jail's known_hosts. The tree it ships (host key + the belt's env file +
 # talosconfig/kubeconfig) is staged from the wallet by ONE script — no secret is ever in this flake:
-#   scripts/mgmt-provision-secrets.sh          # stages ~/.claude/homelab-mgmt/extra-files, prints:
-#   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./nixos#mgmt root@<installer-ip>
-# Rotation later = `scripts/mgmt-provision-secrets.sh --push` (same tree, onto the running box).
-# Update — the box does this itself from MASTER (ADR-129 amended 2026-09-14; the `/nixos/`
-# CODEOWNERS row is the gate), re-activating the closure only when nixos/ changed
+#   mgmt/scripts/mgmt-provision-secrets.sh          # stages ~/.claude/homelab-mgmt/extra-files, prints:
+#   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./mgmt/nixos#mgmt root@<installer-ip>
+# Rotation later = `mgmt/scripts/mgmt-provision-secrets.sh --push` (same tree, onto the running box).
+# Update — the box does this itself from MASTER (ADR-129 amended 2026-09-14; the `/mgmt/`
+# CODEOWNERS row is the gate), re-activating the closure only when mgmt/nixos/ changed
 # (mgmt-pull.service → mgmt-confirm.service). By hand, the same two steps in the same order:
-#   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt test   # live now, boot default UNCHANGED
-#   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt boot    # promote, then reboot
+#   nixos-rebuild --flake /var/lib/homelab/mgmt/nixos#mgmt test   # live now, boot default UNCHANGED
+#   nixos-rebuild --flake /var/lib/homelab/mgmt/nixos#mgmt boot    # promote, then reboot
 {
   description = "homelab management box (R12) — the out-of-band applier";
 
@@ -39,7 +39,7 @@
     };
 
     # The stick: `MGMT_USB_DEV=/dev/disk/by-id/usb-... devbox run mgmt-usb` ON THE HOST where it is
-    # plugged in (scripts/mgmt-usb.sh — probes the device, THEN builds this output, dd-s, verifies).
+    # plugged in (mgmt/scripts/mgmt-usb.sh — probes the device, THEN builds this output, dd-s, verifies).
     # The jail can build it too (host daemon, shared /nix) but cannot see the stick.
     nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";

@@ -1,4 +1,4 @@
-# Authorized keys for [the management box](../../../../docs/management-box.md)
+# Authorized keys for [the management box](../../../../../docs/management-box.md)
 
 One `*.pub` per key, read at build time by `../default.nix` AND `../installer.nix` (the stick
 trusts the same keys, so the box is reachable headless from the moment it boots the installer). Public keys are **config, not

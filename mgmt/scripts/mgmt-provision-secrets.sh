@@ -31,13 +31,13 @@
 # for a box-scoped entry as those are minted (FU-012's next) — one line per credential, on purpose.
 #
 # Usage:
-#   scripts/mgmt-provision-secrets.sh                 # stage → ~/.claude/homelab-mgmt/extra-files
-#   scripts/mgmt-provision-secrets.sh --push          # stage + rsync onto root@192.168.2.53
-#   scripts/mgmt-provision-secrets.sh --push 192.168.2.99   # e.g. the installer's DHCP address
+#   mgmt/scripts/mgmt-provision-secrets.sh                 # stage → ~/.claude/homelab-mgmt/extra-files
+#   mgmt/scripts/mgmt-provision-secrets.sh --push          # stage + rsync onto root@192.168.2.53
+#   mgmt/scripts/mgmt-provision-secrets.sh --push 192.168.2.99   # e.g. the installer's DHCP address
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/.." && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
 MGMT_HOST_DEFAULT="192.168.2.53"
 
 # Resolve the cred root (the dir holding homelab-keepass/) — jail vs host, like wallet-files.sh.
@@ -64,7 +64,7 @@ case "${1:-}" in
 esac
 
 # ── the TABLE: env var → wallet entry ──────────────────────────────────────────────────────────
-# What scripts/mgmt-probe.sh's belt needs for the cone-clean roots (provisioning), the OPNsense
+# What mgmt/scripts/mgmt-probe.sh's belt needs for the cone-clean roots (provisioning), the OPNsense
 # --check and talosctl — PLUS, since 2026-09-13, the MAIN root's TF_VAR_* set: the operator ruled
 # the main root's raw-k8s residue the box's test surface (docs/management-box.md §The test
 # surface), so the box plans and applies main (ADR-131 sentinel + the apply loop). main's
@@ -119,7 +119,7 @@ echo "  + etc/ssh/ssh_host_ed25519_key  (← mgmt-ssh-host)"
 ENVF="$OUT/var/lib/mgmt/env"
 : > "$ENVF"; chmod 600 "$ENVF"
 {
-  echo "# written by scripts/mgmt-provision-secrets.sh $(date -u +%FT%TZ) — DO NOT EDIT, re-run the script"
+  echo "# written by mgmt/scripts/mgmt-provision-secrets.sh $(date -u +%FT%TZ) — DO NOT EDIT, re-run the script"
   for row in "${ENV_TABLE[@]}"; do
     var="${row%%=*}"; entry="${row#*=}"
     v="$(kp_val "$entry")"
@@ -142,11 +142,11 @@ ENVF="$OUT/var/lib/mgmt/env"
   echo "TF_VAR_proxmox_ssh_private_key_file=/var/lib/mgmt/pve-ssh/id_ed25519"
   # main root: ci-runner.tf reads the runner App's key by path (tf.sh's TF_VAR_github_app_private_key_file)
   echo "TF_VAR_github_app_private_key_file=/var/lib/mgmt/runner-app/private-key.pem"
-  # the sentinel + apply loop (scripts/mgmt-sentinel.sh, scripts/mgmt-apply.sh): the App key, where
+  # the sentinel + apply loop (mgmt/scripts/mgmt-sentinel.sh, mgmt/scripts/mgmt-apply.sh): the App key, where
   # main's state lives on the box (local backend via -state=, ADR-131), the provider cache
   echo "MGMT_GH_APP_KEY_FILE=/var/lib/mgmt/sentinel/app-key.pem"
   # tofu/github's three App keys are VALUES of tofu variables (PEM, multi-line — not env-file-safe):
-  # files under this dir, exported per root by scripts/mgmt-root-env/github.sh
+  # files under this dir, exported per root by mgmt/scripts/mgmt-root-env/github.sh
   echo "MGMT_CRED_DIR=/var/lib/mgmt/cred"
   echo "MGMT_STATE_DIR=/var/lib/mgmt/state"
   echo "TF_PLUGIN_CACHE_DIR=/var/lib/mgmt/plugin-cache"
@@ -222,7 +222,7 @@ done
 echo "staged: $OUT"
 if [ "$PUSH" = 0 ]; then
   cat <<EOF
-install:  nix run nixpkgs#nixos-anywhere -- --extra-files $OUT --flake $REPO/nixos#mgmt root@<installer-ip>
+install:  nix run nixpkgs#nixos-anywhere -- --extra-files $OUT --flake $REPO/mgmt/nixos#mgmt root@<installer-ip>
 rotate:   $0 --push
 EOF
   exit 0

@@ -145,7 +145,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    # own master checkout, so a run from a PR-branch REF that predates it still snapshots. It is
    # idempotent by serial, so a read-only `state list` costs nothing. It never changes rc.
    if [ $rc = 0 ]; then case "${1:-}" in apply|state|import|taint|untaint|refresh)
-     S=/var/lib/homelab/scripts/mgmt-state-snapshot.sh
+     S=/var/lib/homelab/mgmt/scripts/mgmt-state-snapshot.sh
      if [ -x "$S" ]; then "$S" --lock-held main >&2 || echo "mgmt-tf: WARN snapshot failed - the tofu command itself succeeded" >&2; fi
    ;; esac; fi
    if [ "$MODE" = plan ] && [ $rc -le 2 ] && [ -f "$P/$PLAN_ID.bin" ]; then

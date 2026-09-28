@@ -102,7 +102,7 @@
 # Exit 0 = the tick evaluated (any verdict). Exit 1 = it could not read an input; nothing was run
 # and last-run is not stamped, so MgmtReconcileLoopStale sees a loop that cannot look.
 #
-# Test seams (scripts/mgmt-reconcile-test.sh — the state machine against a fake verb):
+# Test seams (mgmt/scripts/mgmt-reconcile-test.sh — the state machine against a fake verb):
 #   RECONCILE_DIR  RECONCILE_MACHINES_JSON  RECONCILE_TARGETS_JSON  RECONCILE_WINDOWS_JSON
 #   RECONCILE_DIFF_CMD "<cmd> <targets-file> <drift-out>"   RECONCILE_VERB "<cmd> upgrade <node>"
 #   RECONCILE_VERIFY "<cmd> <node>" (the health check; 0 = pass)
@@ -113,7 +113,7 @@
 #            RECONCILE_KUBECTL "<cmd>" (kubectl for the taints)   RECONCILE_CANARY_TIMEOUT (s)
 #            RECONCILE_WORKLOAD_HEALTH_CMD "<cmd>" (workload-health's JSON lines; non-zero = unreadable)
 set -uo pipefail
-REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
+REPO="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
 export HOME="${HOME:-/root}"
 DIR="${RECONCILE_DIR:-/var/lib/mgmt/reconcile}"
 STATE="$DIR/state.json"
@@ -121,7 +121,7 @@ RO_FILE="$DIR/rollout.json"   # its own file: `rm state.json` (clearing a park) 
 TEXTDIR="${MGMT_TEXTFILE_DIR:-/var/lib/node-exporter-textfile}"
 MAIN_STATE="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}"
 CANARY_TIMEOUT="${RECONCILE_CANARY_TIMEOUT:-14400}"
-EVIDENCE="${RECONCILE_EVIDENCE:-$REPO/scripts/mgmt-rollout-evidence.sh}"
+EVIDENCE="${RECONCILE_EVIDENCE:-$REPO/mgmt/scripts/mgmt-rollout-evidence.sh}"
 PROM="${NM_PROM:-http://192.168.40.13:9090}"
 TAINT_KEY=homelab.io/talos-behind
 WH_ACK="$DIR/workload-health.ack"   # FU-278: a human's ack of the workloads held right now
@@ -322,7 +322,7 @@ diff_nodes() {  # <targets-file> <out>
   # `substrate` is in the SKIP list for the same reason as the rest (FU-254): these callers want
   # the node diff, not the belt — and the substrate check reaches out to the GitHub API.
   MODE=belt DRY_RUN=1 SKIP="tofu talos ansible creds substrate" NODE_TARGETS_JSON="$1" NODE_DRIFT_OUT="$2" \
-    bash "$REPO/scripts/mgmt-probe.sh" >/dev/null 2>&1
+    bash "$REPO/mgmt/scripts/mgmt-probe.sh" >/dev/null 2>&1
   [ -s "$2" ]
 }
 diff_nodes "$tf.auto" "$df" || { log "FATAL the node diff produced nothing — no tick"; emit; exit 1; }

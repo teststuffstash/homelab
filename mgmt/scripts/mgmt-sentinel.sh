@@ -14,9 +14,9 @@
 # A head touching no box-held surface gets success "no box-held surface touched" (v1: the box
 # posts every verdict; the in-cluster no-root poster arrives with the required flip — §MB3).
 #
-# Usage:  scripts/mgmt-sentinel.sh            # one pass over the open PRs (the timer's unit)
-#         MGMT_SHADOW=1 scripts/mgmt-sentinel.sh   # no GitHub writes; verdict ledger under done/
-#         scripts/mgmt-sentinel.sh --human-plan <pr> [--yes]
+# Usage:  mgmt/scripts/mgmt-sentinel.sh            # one pass over the open PRs (the timer's unit)
+#         MGMT_SHADOW=1 mgmt/scripts/mgmt-sentinel.sh   # no GitHub writes; verdict ledger under done/
+#         mgmt/scripts/mgmt-sentinel.sh --human-plan <pr> [--yes]
 #            THE ESCAPE HATCH (FU-237 (e), §MB3 "When the box refuses"): ONE PR head, ordered by a
 #            human who has read the diff (the jail's `devbox run mgmt-human-plan -- <pr>` ssh-es
 #            here). Stage 1 still runs and is REPORTED — in the terminal and in the verdict
@@ -24,7 +24,7 @@
 #            is shown in the terminal (the human READS it, as with mgmt-tf plan) and the verdict
 #            is posted only after a y/N confirmation (`--yes` skips it; no tty + no --yes = no
 #            post). The timer never takes this path: a refused head stays red until a human acts.
-# Env: see scripts/mgmt-lib.sh. Plus MGMT_SENTINEL_DIR (default /var/lib/mgmt/sentinel) — its clone,
+# Env: see mgmt/scripts/mgmt-lib.sh. Plus MGMT_SENTINEL_DIR (default /var/lib/mgmt/sentinel) — its clone,
 # worktrees, done/ ledger, last-run stamp, and .lock (shared with mgmt-apply: one state file).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -145,7 +145,7 @@ install_impact() {
     local tj dj; tj="$(mktemp)"; dj="$(mktemp)"
     if mgmt_install_after "$out" "${nodes[@]}" >"$tj" 2>/dev/null && [ "$(jq 'length' "$tj" 2>/dev/null || echo 0)" -gt 0 ]; then
       SKIP="tofu talos ansible creds substrate" DRY_RUN=1 NODE_TARGETS_JSON="$tj" NODE_DRIFT_OUT="$dj" \
-        bash "$REPO/scripts/mgmt-probe.sh" >"$out.live.log" 2>&1 || true
+        bash "$REPO/mgmt/scripts/mgmt-probe.sh" >"$out.live.log" 2>&1 || true
       drift="$(cat "$dj" 2>/dev/null)"
     fi
     rm -f "$tj" "$dj"

@@ -13,7 +13,7 @@
 #   MGMT_USB_DEV=/dev/disk/by-id/usb-... devbox run mgmt-usb   # probe → confirm → build → dd → verify
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 export NIX_CONFIG="${NIX_CONFIG:-experimental-features = nix-command flakes}"
 
 # ── 1. probe: the device, before anything else ──────────────────────────────────────────────────
@@ -53,8 +53,8 @@ read -rp "Write the mgmt installer to $REAL? This ERASES it. Type 'yes': " ok
 
 # ── 2. build: only now ──────────────────────────────────────────────────────────────────────────
 LINK="${MGMT_USB_OUT:-/tmp/mgmt-iso}"
-echo "==> nix build $REPO/nixos#installerIso"
-nix build "$REPO/nixos#installerIso" --out-link "$LINK"
+echo "==> nix build $REPO/mgmt/nixos#installerIso"
+nix build "$REPO/mgmt/nixos#installerIso" --out-link "$LINK"
 ISO="$(readlink -f "$LINK"/iso/*.iso)"
 echo "    $ISO ($(du -h "$ISO" | cut -f1))"
 

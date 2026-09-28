@@ -17,7 +17,7 @@
 governance_paths() {
   local p="$1"
   case "$p" in
-    agents/*|.agents/*|scripts/*|policy/*|.github/*|tofu/github/*|tofu/cloudflare/*)
+    agents/*|.agents/*|scripts/*|mgmt/scripts/*|policy/*|.github/*|tofu/github/*|tofu/cloudflare/*)
       printf 'governance'
       return 0
       ;;

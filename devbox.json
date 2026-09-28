@@ -127,24 +127,24 @@
         "sh scripts/tf.sh apply \"$@\""
       ],
       "mgmt-tf": [
-        "bash scripts/mgmt-tf.sh \"$@\""
+        "bash mgmt/scripts/mgmt-tf.sh \"$@\""
       ],
       "mgmt-state-pull": [
-        "bash scripts/mgmt-state-pull.sh \"$@\""
+        "bash mgmt/scripts/mgmt-state-pull.sh \"$@\""
       ],
       "mgmt-human-plan": [
-        "bash scripts/mgmt-human-plan.sh \"$@\""
+        "bash mgmt/scripts/mgmt-human-plan.sh \"$@\""
       ],
       "mgmt-policy-test": [
-        "bash scripts/mgmt-policy-test.sh",
-        "bash scripts/mgmt-reconcile-test.sh",
-        "bash scripts/mgmt-rollout-evidence-test.sh"
+        "bash mgmt/scripts/mgmt-policy-test.sh",
+        "bash mgmt/scripts/mgmt-reconcile-test.sh",
+        "bash mgmt/scripts/mgmt-rollout-evidence-test.sh"
       ],
       "mgmt-reconcile-test": [
-        "bash scripts/mgmt-reconcile-test.sh"
+        "bash mgmt/scripts/mgmt-reconcile-test.sh"
       ],
       "mgmt-rollout-evidence-test": [
-        "bash scripts/mgmt-rollout-evidence-test.sh"
+        "bash mgmt/scripts/mgmt-rollout-evidence-test.sh"
       ],
       "labels-handoff": [
         "bash scripts/labels-handoff.sh \"$@\""
@@ -289,7 +289,7 @@
         "bash scripts/talos-usb.sh"
       ],
       "mgmt-usb": [
-        "bash scripts/mgmt-usb.sh"
+        "bash mgmt/scripts/mgmt-usb.sh"
       ],
       "keepass-init": [
         "bash scripts/keepass-init.sh"

@@ -19,7 +19,7 @@
 # then `close --id <it> --force`.
 #
 # `snapshot` + `compare` are the UNATTENDED form — no window, no CI probe (the caller has no gh):
-# the management box's apply loop brackets a Talos config apply with them (scripts/mgmt-apply.sh,
+# the management box's apply loop brackets a Talos config apply with them (mgmt/scripts/mgmt-apply.sh,
 # docs/management-box.md §MB3 "Talos config applies"). Same probes, same verdicts, one home.
 #
 # WHY. `agents/seat-window.sh` declares a window to the responder and `node-maintenance.sh`

@@ -28,7 +28,7 @@ ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 WHICH="${1:?usage: client-configs.sh kubeconfig|talosconfig|both}"
 MGMT_HOST="${MGMT_HOST:-192.168.2.53}"
 
-# Same precedence as scripts/mgmt-tf.sh: an explicit CLAUDE_CRED_DIR wins. Inverted here at
+# Same precedence as mgmt/scripts/mgmt-tf.sh: an explicit CLAUDE_CRED_DIR wins. Inverted here at
 # first (review, #1803): with a stale homelab-pve-ssh cache under ~/.claude, an explicitly-set
 # override was silently ignored and the wrong SSH identity went to the box.
 CRED=""
@@ -53,7 +53,7 @@ fetch_one() {
   local tmp
   tmp="$(mktemp)"
   # mgmt-tf prints its own banner line to stdout before tofu's output; drop it and the ssh notice.
-  bash "$ROOT/scripts/mgmt-tf.sh" output -raw "$name" 2>/dev/null \
+  bash "$ROOT/mgmt/scripts/mgmt-tf.sh" output -raw "$name" 2>/dev/null \
     | grep -v '^mgmt-tf:' | grep -v 'Pseudo-terminal will not be allocated' > "$tmp"
   # Fail closed: a truncated or error-shaped answer must never overwrite a working config.
   head -1 "$tmp" | grep -qE '^(apiVersion|context):' \
@@ -71,7 +71,7 @@ fetch_one() {
     # exit status from `pipefail` and kill the function HERE — skipping the "wrote it unchecked"
     # fallback below and aborting `devbox run kubeconfig` with no explanation, after the config
     # was already fetched and validated (review, #1825).
-    declared="$(bash "$ROOT/scripts/mgmt-tf.sh" output -raw cluster_endpoint 2>/dev/null \
+    declared="$(bash "$ROOT/mgmt/scripts/mgmt-tf.sh" output -raw cluster_endpoint 2>/dev/null \
       | grep -v '^mgmt-tf:' | grep -v 'Pseudo-terminal will not be allocated' | tr -d '[:space:]')" \
       || declared=""
     server="$(grep -m1 -oE 'server: *\S+' "$tmp" | awk '{print $2}')" || server=""

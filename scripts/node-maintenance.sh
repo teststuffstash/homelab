@@ -690,7 +690,7 @@ load_targets() {
       || { fail "could not read node_install_targets from the local main state"; return 1; }
   else
     log "reading the declared install targets from the management box (mgmt-tf output)"
-    TARGETS_JSON="$(bash "$REPO/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
+    TARGETS_JSON="$(bash "$REPO/mgmt/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
       fail "could not read node_install_targets from the box — is the output on master yet?"
       fail "  INSTALL_TARGETS=<file> $0 upgrade $NODE  to use a pre-fetched dump instead"
       return 1; }
@@ -937,7 +937,7 @@ verify_installed() {
 # PDB-respecting: an eviction a budget refuses is retried until DRAIN_TIMEOUT, and then kubectl
 # gives up with exit 1. That is a workload saying "not now", so this turns it into a REFUSAL:
 # name what stayed and which budgets held it, uncordon, close the window, return 2 — the verb's
-# exit 2, which the reconciler retries next tick (scripts/mgmt-reconcile.sh's exit contract), never
+# exit 2, which the reconciler retries next tick (mgmt/scripts/mgmt-reconcile.sh's exit contract), never
 # a half-done window and never a park. Nothing was written to the node yet. Pods the drain DID
 # evict before the budget refused stay wherever their controllers put them; preflight's
 # pdb_blockers keeps that to the rare budget that closed during settle.
@@ -1247,7 +1247,7 @@ verify() {
 # moved Forgejo onto hp-01, where its init container crash-looped (the FU-277 DNS trap), and the
 # rollout took cp-01, cp-02 and wk-metal-02 down after it: between windows it read node Ready, cilium
 # and multi-node budgets, none of which a single-replica Deployment moves. This verb is only the
-# READ — generic, no service named, no judgement: the reconciler (scripts/mgmt-reconcile.sh) owns
+# READ — generic, no service named, no judgement: the reconciler (mgmt/scripts/mgmt-reconcile.sh) owns
 # the rollout-start baseline and the comparison.
 #
 # One JSON object per line, per workload keyed by its TOP OWNER — "<ns>/<Kind>/<name>": a pod's

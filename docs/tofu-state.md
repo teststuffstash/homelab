@@ -137,8 +137,8 @@ used to call that copy "a frozen backup", which is how the gap looked designed.
 
 | | where | written by | when |
 |---|---|---|---|
-| box copy | `/var/lib/mgmt/state/<root>/snapshots/` | `scripts/mgmt-state-snapshot.sh` | after every `mgmt-tf` command that can write state, after every `mgmt-apply` apply, and hourly (`mgmt-state-snapshot.timer`) |
-| wallet copy | `~/.claude/homelab-tofu-state-backups/mgmt/<root>/snapshots/` | `scripts/mgmt-state-pull.sh` (`devbox run mgmt-state-pull`) | after every successful `mgmt-tf -- apply`, and by hand at session wind-down |
+| box copy | `/var/lib/mgmt/state/<root>/snapshots/` | `mgmt/scripts/mgmt-state-snapshot.sh` | after every `mgmt-tf` command that can write state, after every `mgmt-apply` apply, and hourly (`mgmt-state-snapshot.timer`) |
+| wallet copy | `~/.claude/homelab-tofu-state-backups/mgmt/<root>/snapshots/` | `mgmt/scripts/mgmt-state-pull.sh` (`devbox run mgmt-state-pull`) | after every successful `mgmt-tf -- apply`, and by hand at session wind-down |
 
 **One key, not two.** `main` is plaintext on disk, so its snapshot is encrypted with openssl —
 AES-256-CBC, PBKDF2-SHA256, 600 000 iterations — under the **same** `tofu-state-passphrase` the

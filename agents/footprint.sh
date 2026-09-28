@@ -106,11 +106,12 @@ classify_touches() (
     #   .agents/**       — next round reads its recipe from the branch
     #   devbox.json|lock — CI executes from the branch
     #   scripts/**       — CI executes from the branch (in homelab the scripts ARE the checks)
+    #   mgmt/scripts/** — the same scripts, grouped with the management box (mgmt/, 2026-09-28)
     case "$path" in
       .github/*|.github) _new_tier="codeowner-author" ;;
       .agents/*|.agents) _new_tier="codeowner-author" ;;
       devbox.json|devbox.lock) _new_tier="codeowner-author" ;;
-      scripts/*|scripts) _new_tier="codeowner-author" ;;
+      scripts/*|scripts|mgmt/scripts/*|mgmt/scripts) _new_tier="codeowner-author" ;;
       *)
         # ── CODEOWNERS-based classification ──────────────────────────────────────────────────
         # Parse CODEOWNERS at runtime: last-matching-pattern wins. A pattern with an owner makes

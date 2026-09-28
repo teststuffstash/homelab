@@ -581,7 +581,7 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   ] | join("|")'
 # unarmed-major clause fingerprint (homelab#2066): STATE_FP_JQ, plus startedAt folded for ONE
 # rollup entry — the `management-sentinel` commit status. The fold must see a sentinel RE-JUDGE:
-# `scripts/mgmt-lib.sh` `mgmt_post_status` is an unconditional POST, so a re-judge on the same
+# `mgmt/scripts/mgmt-lib.sh` `mgmt_post_status` is an unconditional POST, so a re-judge on the same
 # head (same FAILURE, new engine revision, fresh position lines for the lens) always moves its
 # startedAt while nothing else in the rollup changes. Every OTHER entry keeps the generic
 # name=conclusion form on purpose: folding all startedAts (STATE_FP_JQ_CIRED, the #2065 shape)

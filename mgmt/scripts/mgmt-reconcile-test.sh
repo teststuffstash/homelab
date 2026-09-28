@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mgmt-reconcile-test — the node reconciler's state machine (scripts/mgmt-reconcile.sh) against a
+# mgmt-reconcile-test — the node reconciler's state machine (mgmt/scripts/mgmt-reconcile.sh) against a
 # FAKE verb and a FAKE live fleet: every transition the loop owns — idle, sync → idle, a gate's
 # refusal (retried), a failure (PARKED, never retried on the same key), a new key un-parking, a
 # zero-exit verb whose diff disagrees, a sync the loop died in, WIP 1 (windows, queueing), the
@@ -469,10 +469,10 @@ check "wh: a REVERT rollout is never held (the revert is the fix)" eval '[ "$(ro
 # ── REPLAY 2026-09-22 (fixtures reconstructed from Prometheus kube-state-metrics, gen.py beside them):
 # baseline = the fleet at the rollout's start (09:45Z); after wk-04's window (drain 12:47–12:50Z) the
 # read at 12:54:45Z — the moment before the reconciler took cp-01 down (sync 12:55:14Z). ──
-FX="$HERE/fixtures/workload-health-2026-09-22"
+FX="$HERE/../../scripts/fixtures/workload-health-2026-09-22"
 cat >"$T/wh-replay.sh" <<'EOF'
 WH_DIR="$FX/$WH_AT" WH_NOW="$(date -u -d "2026-09-22 ${WH_AT:1:2}:${WH_AT:3:2}:$([ "$WH_AT" = t0945 ] && echo 00 || echo 45)" +%s)" \
-  bash "$HERE/node-maintenance.sh" workload-health
+  bash "$HERE/../../scripts/node-maintenance.sh" workload-health
 EOF
 export FX HERE
 rreset; fleet_machines; fleet_targets v2; fleet_live v1
@@ -525,7 +525,7 @@ echo '{"items":[]}' >"$WD/daemonsets.json"
 echo '{"items":[{"metadata":{"namespace":"oracle-fleet","name":"api-pdb"},"spec":{"selector":{"matchLabels":{"app":"api"}}}}]}' >"$WD/pdb.json"
 echo '{"items":[{"metadata":{"namespace":"oracle-fleet","name":"oracle-pg"},"spec":{"instances":2}}]}' >"$WD/clusters.json"
 echo '{"items":[{"metadata":{"name":"oracle"},"spec":{"repos":[{"name":"oracle-fleet"},{"name":"oracle-iac"}]}},{"metadata":{"name":"platform"},"spec":{"repos":[{"name":"homelab"},{"name":"agent-coordinator"}]}}]}' >"$WD/agentstacks.json"
-whrun() { WH_DIR="$WD" WH_NOW=$NOW bash "$HERE/node-maintenance.sh" workload-health >"$T/whout" 2>"$T/out"; echo $? >"$T/rc"; }
+whrun() { WH_DIR="$WD" WH_NOW=$NOW bash "$HERE/../../scripts/node-maintenance.sh" workload-health >"$T/whout" 2>"$T/out"; echo $? >"$T/rc"; }
 wget_() { jq -r --arg k "$1" --arg f "$2" 'select(.key == $k) | .[$f] | tostring' "$T/whout"; }
 whrun
 check "read: exit 0, one line per TOP OWNER (ReplicaSet → Deployment, CNPG → Cluster.postgresql.cnpg.io)" eval '[ "$(cat $T/rc)" = 0 ] && [ "$(wget_ forgejo/Deployment/forgejo healthy)" = false ] && [ "$(wget_ oracle-fleet/Cluster.postgresql.cnpg.io/oracle-pg healthy)" = true ]'
@@ -576,7 +576,7 @@ EOF
 chmod +x "$VB/kubectl" "$VB/talosctl"
 echo '{"wk-03":{"version":"v2","schematic":"s","role":"worker"}}' >"$T/vtargets.json"
 vrun() { rm -f "$VF/kcalls"; PATH="$VB:$PATH" KUBECONFIG=/dev/null TALOSCONFIG=/dev/null INSTALL_TARGETS="$T/vtargets.json" NM_AM=http://127.0.0.1:9 \
-           bash "$HERE/node-maintenance.sh" verify wk-03 >"$T/out" 2>&1; echo $? >"$T/rc"; }
+           bash "$HERE/../../scripts/node-maintenance.sh" verify wk-03 >"$T/out" 2>&1; echo $? >"$T/rc"; }
 no_writes() { ! grep -qE '(^| )(cordon|uncordon|drain|taint|label|annotate|apply|delete|patch|create|scale|rollout) ' "$VF/kcalls"; }
 rm -f "$VF"/*; vrun
 check "verify: healthy node → exit 0, and not one mutating kubectl call" eval '[ "$(cat $T/rc)" = 0 ] && no_writes && grep -q "verify: wk-03 healthy" "$T/out"'

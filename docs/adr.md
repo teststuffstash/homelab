@@ -2143,9 +2143,9 @@ ADR-100's owner→rule replacement is the next act, not a wider trial). Tracker:
 ### ADR-129 — The management box runs NixOS, installed once from a stick, updated by a git pull it can undo by itself (2026-09-12)
 
 **Status:** Accepted (operator, 2026-09-12, across the R12 design sitting). **Decision:** the R12
-out-of-band applier runs **NixOS** from a flake in this repo (`nixos/`), installed **once from a
+out-of-band applier runs **NixOS** from a flake in this repo (`mgmt/nixos/`), installed **once from a
 USB stick** via `disko` + `nixos-anywhere` (the stick carries only an SSH-able installer; the
-config comes from git). Its **system closure** is pinned by `nixos/flake.lock`; its **toolchain**
+config comes from git). Its **system closure** is pinned by `mgmt/nixos/flake.lock`; its **toolchain**
 (`tofu`, `talosctl`, `ansible`) is NOT in that closure — it rides the repo's existing
 `devbox.lock`, so the jail and the box hold one pin. Updates are a **git pull by the box**, on a
 timer, from a reviewed ref; the cluster may poke it but holds no credential into it. A **local**
@@ -2161,7 +2161,7 @@ not; generations are the only self-update shape that needs no second machine, wh
 spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a first `apply` (a
 newer binary may write state an older one cannot read — assumed, unverified for our pin);
 **kernel-class bumps need hands on the pilot**, because boot counting is systemd-boot's and the
-box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a new surface with no
+box ships `bootMode = "bios"` pending a firmware read; the `mgmt/nixos/` tree is a new surface with no
 CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).
@@ -2169,10 +2169,10 @@ Mechanism, phases and the probe set: [`management-box.md`](management-box.md). T
 `master`, not a reviewed ref.** The original "from a reviewed ref" became an operator-advanced
 `mgmt-release` branch that was never created in two days, while the box already had the three
 things an ArgoCD-shaped updater needs — pull, a gate, a local rollback. The human gate moves to
-where it already was: the `/nixos/` CODEOWNERS row (plus `scripts/` and `policy/`, owned through
+where it already was: the `/mgmt/nixos/` CODEOWNERS row (plus `scripts/` and `policy/`, owned through
 the ADR-128 trial), so every file the box executes from its checkout is a human read at merge;
 the ref was a second promotion of reviewed commits, not safety. Activation stays deliberate —
-`mgmt-pull` re-activates the closure only when `nixos/` changed since the last activated
+`mgmt-pull` re-activates the closure only when `mgmt/nixos/` changed since the last activated
 revision, and every fetch carries the App token (#1637). **Considered:** keep `mgmt-release` and
 advance it by hand (rejected: a promotion step with no second reviewer, and the box's whole point
 is fewer operator touches); a cluster-pushed update (rejected as before — an inbound credential to

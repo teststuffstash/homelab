@@ -31,7 +31,7 @@ in
   # A stick with no key is a stick nobody can reach: fail the build, like the system config does.
   assertions = [{
     assertion = authorizedKeys != [ ];
-    message = "nixos/hosts/mgmt/keys/ holds no TRACKED *.pub — the installer would be unreachable.";
+    message = "mgmt/nixos/hosts/mgmt/keys/ holds no TRACKED *.pub — the installer would be unreachable.";
   }];
 
   # Faster to build, a little larger — this image is written once.

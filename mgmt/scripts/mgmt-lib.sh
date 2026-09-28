@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # mgmt-lib — shared helpers for the management box's two loops (ADR-131, docs/management-box.md
-# §MB3): scripts/mgmt-sentinel.sh (plan-on-PR) and scripts/mgmt-apply.sh (master → apply).
+# §MB3): mgmt/scripts/mgmt-sentinel.sh (plan-on-PR) and mgmt/scripts/mgmt-apply.sh (master → apply).
 # SOURCED, never run. Tools: bash git curl jq openssl coreutils gnugrep gawk gnused + `devbox run`
 # (tofu, yq) — resolved from $REPO, a checkout of this repo. No `gh`: the box mints its own App
 # token (mgmt_gh_token) — gh is not in the closure and the App IS the identity (ADR-130).
 #
-# Env the callers set (from /var/lib/mgmt/sentinel.env — scripts/mgmt-provision-secrets.sh):
+# Env the callers set (from /var/lib/mgmt/sentinel.env — mgmt/scripts/mgmt-provision-secrets.sh):
 #   MGMT_GH_APP_ID MGMT_GH_APP_INSTALLATION_ID MGMT_GH_APP_KEY_FILE   the homelab-sentinel App
 #   ORG (teststuffstash) MGMT_REPO (homelab)
 #   MGMT_STATE_DIR   main's LOCAL state lives at $MGMT_STATE_DIR/main/terraform.tfstate (-state=)
@@ -357,8 +357,8 @@ mgmt_plan_root() {
     if [ -f "$dir/backend.tf" ]; then
       TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root" >&2; exit 1; }
     fi
-    # per-root env hook from the TRUSTED tree (scripts/mgmt-root-env/<root>.sh) — e.g. github's App keys
-    [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
+    # per-root env hook from the TRUSTED tree (mgmt/scripts/mgmt-root-env/<root>.sh) — e.g. github's App keys
+    [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
       || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     excl_out="$(mgmt_root_excludes "$pol" "$root" "$dir")" || { echo "plan_exclude_types for $root could not be resolved (policy or state list unreadable) — not planning un-excluded" >&2; exit 1; }
@@ -394,7 +394,7 @@ mgmt_plan_changes() {
     if [ -f "$dir/backend.tf" ]; then
       TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root (show)" >&2; exit 1; }
     fi
-    [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"
+    [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" show -json "$out" 2>&1
   )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | head -c 300)" >&2; return 1; }
   printf '%s' "$json" | mgmt_plan_digest "$out" \
@@ -403,7 +403,7 @@ mgmt_plan_changes() {
 # mgmt_plan_digest <plan-out> <`tofu show -json` on stdin> → writes the side channels beside
 # <plan-out> ($out.planned / .outputs / .install.json / .talos) and prints the changed-resource
 # lines "address<TAB>actions". rc 1 when the JSON carries no resource_changes. Pure — the fixture
-# tests (scripts/mgmt-policy-test.sh) feed it synthetic plans.
+# tests (mgmt/scripts/mgmt-policy-test.sh) feed it synthetic plans.
 mgmt_plan_digest() {
   local out="$1" json rc
   json="$(mktemp)"; cat >"$json"

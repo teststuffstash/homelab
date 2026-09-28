@@ -1,5 +1,5 @@
 # mgmt-root-env/cloudflare.sh — per-ROOT environment for the box's plans of tofu/cloudflare (FU-238).
-# SOURCED by scripts/mgmt-lib.sh (mgmt_plan_root / mgmt_plan_changes) and scripts/mgmt-probe.sh
+# SOURCED by mgmt/scripts/mgmt-lib.sh (mgmt_plan_root / mgmt_plan_changes) and mgmt/scripts/mgmt-probe.sh
 # right before tofu runs for this root, with $dir = the root's directory in the tree being
 # planned; never run. Why a hook: the root's kubernetes provider reads a FILE by relative path
 # (`config_path = "${path.module}/../kubeconfig"`, providers.tf — the main root writes it out,
