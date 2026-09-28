@@ -252,11 +252,26 @@ while IFS=$'\t' read -r pr sha; do
     continue
   fi
   # stage 2
+  # PLAN WHAT WOULD LAND, not the stale head (2026-09-28, homelab#2047/#2037): the worktree is
+  # master with the head MERGED onto it — the same tree GitHub's merge ref holds. Planning the bare
+  # head made every master change since the fork read as the PR's own (#2047, kubernetes 3, showed
+  # "+0 ~1" = the FU-289 unpark of ci_runner_02 that #2048 had already applied; #2037 the same);
+  # the box then refused to auto-apply and three provider bumps sat on a human for nothing. Stage 1
+  # keeps judging the PR's OWN diff (base..head) — this only changes what stage 2 executes.
+  # A head that does not merge cleanly gets a failure verdict and no plan (GitHub blocks it too).
   wt="$SDIR/wt-${sha:0:8}"; rm -rf "$wt"; git -C "$REPO" worktree prune
-  git -C "$REPO" worktree add --quiet --detach "$wt" "$sha" || { log "[#$pr] worktree add failed"; continue; }
+  m8="$(git -C "$REPO" rev-parse --short=8 origin/master 2>/dev/null || echo master)"
+  git -C "$REPO" worktree add --quiet --detach "$wt" origin/master || { log "[#$pr] worktree add failed"; continue; }
+  if ! git -c user.name=management-sentinel -c user.email=management-sentinel@homelab.invalid -C "$wt" merge --quiet --no-edit --no-ff "$sha" >/dev/null 2>&1; then
+    git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+    log "[#$pr] head ${sha:0:8} does not merge cleanly onto master@${m8} — no plan"
+    if [ $HUMAN = 1 ]; then continue; fi
+    post_verdict "$sha" failure "head does not merge onto master@${m8} — rebase/update the branch; nothing planned"
+    continue
+  fi
   bodyf="$(mktemp)"; desc=""; state=success; failed_roots=""; pin_changed=""
   if [ $HUMAN = 1 ]; then
-    { echo "**management-sentinel: HUMAN PLAN** — \`tofu plan\` of ${sha:0:8} on the management box, ordered from the jail by a human who read the diff (ADR-131's escape hatch, §MB3 \"When the box refuses\"). Addresses and counts only; the plan text stays on the box."
+    { echo "**management-sentinel: HUMAN PLAN** — \`tofu plan\` of ${sha:0:8} merged onto master@${m8} (what would land) on the management box, ordered from the jail by a human who read the diff (ADR-131's escape hatch, §MB3 \"When the box refuses\"). Addresses and counts only; the plan text stays on the box."
       if [ -n "$overridden" ]; then
         echo; echo "Stage 1 would have refused this head — **overridden** by the human order:"
         echo; echo "| rule | file | detail |"; echo "|---|---|---|"
@@ -265,7 +280,7 @@ while IFS=$'\t' read -r pr sha; do
     } >"$bodyf"
     desc="human plan: "
   else
-    echo "**management-sentinel** — \`tofu plan\` of ${sha:0:8} on the management box (ADR-131). Addresses and counts only; the plan text stays on the box." >"$bodyf"
+    echo "**management-sentinel** — \`tofu plan\` of ${sha:0:8} merged onto master@${m8} (what would land) on the management box (ADR-131). Addresses and counts only; the plan text stays on the box." >"$bodyf"
     if [ $PIN = 1 ]; then
       { echo; echo "**Provider-pin head** — stage 1 admitted the \`provider-pin\` shape (only version / constraint / hash lines change, every provider source unchanged; ADR-131 amended 2026-09-27) in: $(awk -F'\t' -v bt='`' '{printf "%s%s%s ", bt, $2, bt}' <<<"$admitted"). The plan ran with the head's providers, verified against its lockfile hashes and the registry's signatures. **A bump must plan empty** — any change below fails this context and is the evidence a human reads."; } >>"$bodyf"
     fi
