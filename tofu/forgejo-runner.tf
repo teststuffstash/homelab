@@ -112,6 +112,20 @@ resource "kubernetes_deployment" "forgejo_runner" {
           key      = "homelab.io/ephemeral"
           operator = "Exists"
         }
+        # Two replicas on two nodes when the scheduler can (soft): the PDB serializes a graceful
+        # drain either way, this only keeps an unplanned single-node failure from taking the
+        # whole pool — a preference, never a constraint (a one-node-left cluster still schedules).
+        affinity {
+          pod_anti_affinity {
+            preferred_during_scheduling_ignored_during_execution {
+              weight = 100
+              pod_affinity_term {
+                topology_key = "kubernetes.io/hostname"
+                label_selector { match_labels = { app = "forgejo-runner" } }
+              }
+            }
+          }
+        }
 
         # --- DinD: the Docker daemon job containers run on. TLS off → tcp on localhost. ---
         container {
@@ -193,6 +207,17 @@ resource "kubernetes_deployment" "forgejo_runner" {
           volume_mount {
             name       = "runner-data"
             mount_path = "/data"
+          }
+          # Ready = REGISTERED, not merely running (review finding on PR#2078): a probe-less
+          # container counts Ready the moment it starts, so the roll's `max_unavailable 0` and the
+          # PDB's `min_available 1` would both have gated on dind's health while the runner was
+          # still waiting for dind / registering. `.runner` is what `forgejo-runner register`
+          # writes just before the script execs the daemon — the real "this pod can take a job"
+          # signal this Deployment has.
+          readiness_probe {
+            exec { command = ["test", "-f", "/data/.runner"] }
+            initial_delay_seconds = 5
+            period_seconds        = 5
           }
           resources { # FU-082: the daemon itself is light (~50Mi); requests-only, no throttle cap.
             requests = { cpu = "50m", memory = "128Mi" }
