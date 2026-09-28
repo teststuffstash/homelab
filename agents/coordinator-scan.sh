@@ -650,6 +650,11 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
+    # unarmed-major folds each check's startedAt too (2026-09-28, #2047): the management sentinel
+    # RE-POSTS its status when its engine revision changes (a new plan on the same head, with the
+    # position lines the lens needs) — same state, new startedAt — and that re-verdict must re-open
+    # the debounce, or the lens that stood aside as checks-red-unattributed is never re-dispatched.
+    unarmed-major) fp_jq="$STATE_FP_JQ_CIRED" ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
