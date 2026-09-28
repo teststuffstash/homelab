@@ -1,0 +1,9 @@
+# renovate-rebase-tick: a Renovate-authored DIRTY (merge-conflict) PR — Renovate will not rebase an
+# "edited" PR on its own; the scan ticks its rebase/retry checkbox (adapted case: a worker commit sits on the branch — a rebase would drop it, so nothing is written and the line names the merge-conflict play)
+name: renovate-rebase-tick-adapted
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:renovate-rebase-tick
+  - file:post.sh
