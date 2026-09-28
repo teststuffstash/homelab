@@ -130,7 +130,7 @@ resource "kubernetes_deployment" "forgejo_runner" {
         # --- DinD: the Docker daemon job containers run on. TLS off → tcp on localhost. ---
         container {
           name  = "dind"
-          image = "docker:29-dind-drill-0928"
+          image = "docker:27-dind"
           security_context { privileged = true }
           env {
             name  = "DOCKER_TLS_CERTDIR"
