@@ -579,6 +579,29 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# unarmed-major clause fingerprint (homelab#2066): STATE_FP_JQ, plus startedAt folded for ONE
+# rollup entry — the `management-sentinel` commit status. The fold must see a sentinel RE-JUDGE:
+# `scripts/mgmt-lib.sh` `mgmt_post_status` is an unconditional POST, so a re-judge on the same
+# head (same FAILURE, new engine revision, fresh position lines for the lens) always moves its
+# startedAt while nothing else in the rollup changes. Every OTHER entry keeps the generic
+# name=conclusion form on purpose: folding all startedAts (STATE_FP_JQ_CIRED, the #2065 shape)
+# let third-party heartbeat re-posts re-arm the clause — `iac-sentinel` re-posts SUCCESS on every
+# open head every ~4 min (30 posts in 2 h on PR #2047) and `approve / approve` check-runs
+# re-appear too — so the hash moved every beat and the clause bought a ride per tick with nothing
+# to decide (#2047, 2026-09-28). Sibling #1939 is the same over-sensitivity direction on the
+# assembly-cr clause and is left as is here. Statuses arrive as {context,state,startedAt} and
+# check-runs as {name,conclusion,startedAt}; the fold reads both shapes.
+STATE_FP_JQ_UNARMED='[ "head=" + (.headRefOid // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "checks=" + ([ .statusCheckRollup[]?
+                   | ((.name // .context // "?") as $n
+                      | $n + "="
+                        + (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end)
+                        + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
+                 | sort | join(","))
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
 # conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
 # arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
@@ -624,8 +647,9 @@ state_fp_for_clause() {
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
-# conclusions and narrows head to the newest non-merge commit — homelab#1011); other clauses use
-# STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
+# uses STATE_FP_JQ_UNARMED (startedAt folded for the management-sentinel status only —
+# homelab#2066); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
@@ -650,11 +674,10 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
-    # unarmed-major folds each check's startedAt too (2026-09-28, #2047): the management sentinel
-    # RE-POSTS its status when its engine revision changes (a new plan on the same head, with the
-    # position lines the lens needs) — same state, new startedAt — and that re-verdict must re-open
-    # the debounce, or the lens that stood aside as checks-red-unattributed is never re-dispatched.
-    unarmed-major) fp_jq="$STATE_FP_JQ_CIRED" ;;
+    # unarmed-major folds startedAt for the management-sentinel status ONLY (homelab#2066): a
+    # sentinel re-judge (same state, new startedAt) re-opens the debounce; a third-party heartbeat
+    # re-post (iac-sentinel every ~4 min on #2047) or a re-appearing approve check-run does not.
+    unarmed-major) fp_jq="$STATE_FP_JQ_UNARMED" ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
