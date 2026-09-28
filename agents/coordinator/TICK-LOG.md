@@ -11640,3 +11640,26 @@ master span and the plan + allowlist gate it. **Not yet:** the drill (script rea
 scratchpad: a bad dind tag opened AS THE APP via coordinator-git, `automerge`+`dependencies`,
 armed) and the Renovate rule arming terraform docker-image majors (`.github/`, operator-direct;
 text ready) — both after #2078/#2082/#2084 merge, the ArgoCD sync and the box's apply.
+
+**The drill (14:25–15:13Z) — PASSED as a chain, and it found three defects around the chain.**
+#2078 merged 14:06Z (bot re-review after the fix push), #2082 15:15Z→14:15Z, #2084 14:23Z — all
+by the machine lane. The box (pull + apply triggered by the seat instead of the hourly tick —
+cadence, not judgment) admitted the provider-pin span it had refused since #2075, planned
+`+1 ~1`, applied the runner shape + PDB at 14:25Z; two pods Ready = registered on wk-03 +
+wk-metal-04. **#2085** (a non-existent dind tag, opened AS THE APP via `coordinator-git`,
+`automerge`+`dependencies`, armed): reflex APPROVED 14:27Z, merged 14:40Z; box applied 14:41Z
+— the surge pod ImagePullBackOff, the two old pods served throughout (`ready=2 unavail=1`);
+`ProgressDeadlineExceeded` 14:51:12Z; `KubeDeploymentRolloutStuck` pending → **firing 15:06:27Z**;
+`tofu-image-revert-gnl5b` 15:07:16Z: candidate #2085, image-line-only, coupling "declares
+Deployment forgejo-runner in tofu/forgejo-runner.tf", **revert #2086** opened as the App with
+`reverted-images: docker:29-dind-drill-0928`, labelled + armed 15:07:17Z; reflex APPROVED 15:08Z;
+**merged 15:12:51Z**. Alert → merged revert: 6.5 minutes, no human. The three findings, all in
+**PR#2087** (armed): (1) the provider's `wait_for_rollout` default turned the stuck roll into an
+ERRORED box apply after 10 min ("half-applied? human") on an object already written →
+`wait_for_rollout = false` on the runner; (2) the chain took THE newest tofu merge as its only
+candidate, so any later unrelated tofu merge would have masked the bump → newest-first walk,
+first image-line-only `tofu/*.tf`-only merge wins (fixture); (3) the apply loop read the span's
+ENDPOINT diff — the bad tag and its revert net to zero files — and logged "touches no apply:true
+root (0 files) — stamping" at 15:13Z while the cluster still ran the bad tag → `git log
+--name-only` over the span decides. The last leg (the box applying the revert, the runner back
+on `docker:27-dind`) completes when #2087 lands: its tofu change makes the span plan.
