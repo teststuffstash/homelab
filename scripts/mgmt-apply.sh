@@ -119,6 +119,18 @@ fi
 log "${last:0:8}..${sha:0:8} touches: ${apply_roots[*]}"
 
 hits="$(mgmt_stage1 "$POL" "$REPO" "$last" "$sha")" || { log "PROBE-FAIL: stage 1 could not run (policy unreadable) — not applying, not stamping; next run retries"; exit 1; }
+# The provider-pin shape (ADR-131 amended 2026-09-27) is ADMITTED on a master span exactly as on a
+# PR head: stage 1 prints an `admitted` line for a lockfile / versions.tf diff that is only version,
+# constraint and hash lines (mgmt_provider_pin_shape), and the sentinel separates those from the
+# hits (mgmt-sentinel.sh). This loop did not — an admitted line read as a hit, so EVERY master after
+# an auto-merged provider bump was refused ("stage 1: admitted on master diff — human apply";
+# 2026-09-28: #2075's merge parked #2077/#2079/#2080 and everything after, until a human apply).
+# The PR-time sentinel already required the pin head to plan EMPTY merged onto master; here the
+# plan below and the apply allowlist are the gate — a provider whose schema moves an address
+# outside the allowlist refuses like any other change, and `init` (every run, #2045) verifies the
+# new provider against the lockfile's hashes and the registry's signature before anything plans.
+admitted="$(grep $'^admitted\t' <<<"$hits" || true)"; hits="$(grep -v $'^admitted\t' <<<"$hits" || true)"
+[ -n "$admitted" ] && log "provider-pin master diff — stage 1 admitted: $(awk -F'\t' '{printf "%s ", $2}' <<<"$admitted")"
 if [ -n "$hits" ]; then
   first="$(head -1 <<<"$hits")"; rule="${first%%$'\t'*}"
   refuse "$sha" "stage 1: $rule on master diff — human apply" "$hits"; exit 0

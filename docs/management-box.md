@@ -436,7 +436,11 @@ its baseline (`applied-rev`) only ever advanced on its own applies, so every lat
 the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
 `refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
 that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
-rather than from the apply's own flags, which a plan-file apply no longer has.
+rather than from the apply's own flags, which a plan-file apply no longer has. **Since 2026-09-28
+the loop ADMITS the provider-pin shape on a master span exactly as the sentinel does on a head**
+— it used to read stage 1's `admitted` line as a hit, so the first auto-merged provider bump
+(#2075) parked every later master on "stage 1: admitted on master diff — human apply" until a
+human apply; now the plan and the apply allowlist are the gate for that span, as for any other.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
