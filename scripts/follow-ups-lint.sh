@@ -32,6 +32,10 @@
 # - NO-BACKLINK: a pointer's target doc never mentions the id, so the two halves can drift
 #   apart silently.
 # - UNARCHIVED: a checked `- [x]` item still in the tracker — resolution = archive, not tick.
+#
+# OUTPUT: per-id findings of the high-volume classes are collected and printed as ONE summary
+# line per class at the end (`<CLASS> (<n>): FU-…, FU-…`) instead of one line per id — the
+# per-item form printed ~20 lines on every master push and buried the real failures.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
@@ -60,6 +64,16 @@ referenced=$( { git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(e
                 grep -v 'Next free id' "$TRACKER" | grep -o 'FU-[0-9][0-9][0-9]'; } | sort -u)
 
 status=0
+# Summary collector: `summarize <CLASS> <id>` appends; print_summary emits one line per class.
+SUMMARY="${TMPDIR:-/tmp}/fu-lint-summary-$$"; : > "$SUMMARY"
+summarize() { printf '%s %s\n' "$1" "$2" >> "$SUMMARY"; }
+print_summary() {
+  for cls in $(cut -d' ' -f1 "$SUMMARY" | sort -u); do
+    ids=$(awk -v c="$cls" '$1==c {print $2}' "$SUMMARY" | sort -u)
+    echo "$cls ($(printf '%s\n' "$ids" | grep -c .)): $(printf '%s\n' "$ids" | paste -sd, - | sed 's/,/, /g')"
+  done
+  rm -f "$SUMMARY"
+}
 
 # One entry per id (homelab#1500, 2026-09-08): the tracker held two divergent copies each of
 # FU-220 and FU-221 — an appended pair landed twice — and `sort -u` above hid it from every
@@ -83,8 +97,7 @@ for id in $referenced; do
   if ! printf '%s\n' "$defined" | grep -qx "$id"; then
     n=$(printf '%s' "${id#FU-}" | sed 's/^0*//'); [ -n "$n" ] || n=0
     if [ "$n" -ge "$nf_num" ]; then
-      echo "DANGLING $id — at/past the Next-free counter (FU-$next_free): this id never existed. Clean up: git grep $id"
-      status=1
+      summarize DANGLING "$id"
     fi
     # below the counter: provenance-legal (name-anchor ruling); TODO shapes are checked below
   fi
@@ -148,7 +161,7 @@ printf '%s\n' "$items" | while IFS='|' read -r id n body; do
   [ -n "$id" ] || continue
 
   if [ "$n" -gt "$MAX_ITEM_LINES" ]; then
-    echo "OVERSIZE $id — ${n} lines (> ${MAX_ITEM_LINES}): move the detail to a doc, leave a pointer"
+    summarize OVERSIZE "$id"
   fi
 
   if printf '%s' "$body" | grep -qE "$DONE_RE"; then
@@ -201,6 +214,8 @@ if [ -f "$ARCHIVE" ]; then
     fi
   done
 fi
+
+print_summary
 
 open_items=$(printf '%s\n' "$items" | grep -c . || true)
 tracker_lines=$(wc -l < "$TRACKER" | tr -d ' ')

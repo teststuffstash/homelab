@@ -53,6 +53,9 @@ Gotchas:
   (`~/.claude`) or on the host (`~/Projects/.claude-data`)** — same dual-path trick as `garage-s3`.
   `proxmox_api_token` + non-secret IDs stay in `tofu/terraform.tfvars`. `devbox run tf-validate`
   needs no secrets. To seed/refresh the wallet (incl. the Forgejo runner token): `devbox run keepass-init`.
+- `devbox run follow-ups-lint` (CI + the pre-push hook) prints its per-id classes as ONE summary line
+  each — `OVERSIZE (19): FU-058, …` — instead of a line per item; the oversize backlog itself is
+  tracked as FU-990.
 
 ## Secrets (out of repo)
 
