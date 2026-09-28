@@ -11663,3 +11663,17 @@ ENDPOINT diff — the bad tag and its revert net to zero files — and logged "t
 root (0 files) — stamping" at 15:13Z while the cluster still ran the bad tag → `git log
 --name-only` over the span decides. The last leg (the box applying the revert, the runner back
 on `docker:27-dind`) completes when #2087 lands: its tofu change makes the span plan.
+
+**Closing (17:40Z).** #2087 merged 17:38Z after four review rounds (each a real finding: the walk
+must couple INSIDE the loop and move on, a blind diff read ABORTS, stage 1's pattern scan reads
+the span via `git log -p`, the apply-loop span read fails closed on its own). On the way, a fifth
+class defect, fixed direct (c18bfe3f): `ci.yaml`'s #2064 base read used `git rev-list --parents`
+on a depth-1 checkout, where the merge commit is the shallow boundary and reads as PARENTLESS —
+so it had never fired, and every behind PR still went red on master's guarded-file commits (this
+PR did, on the coverage-belt step); `git cat-file -p` reads the parent line from the object. Then
+the box (pull + apply triggered): span `c18bfe3f..8ced275e` touches main → `+0 ~1` →
+`kubernetes_deployment.forgejo_runner` APPLIED in 4 s (no rollout wait) → the Deployment rolled
+back to `docker:27-dind` on the two original pods, the drill pod gone. Window closed. The Renovate
+rule arming the class committed direct (terraform docker-datasource majors: `automerge` +
+`major` + `behind-base-branch`); #1988's row commented. Operator's ask met: the Forgejo runner's
+image bumps now merge without a human and roll back on a problem — proven on a live drill.

@@ -142,6 +142,14 @@
       "addLabels": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "Deployment IMAGE tags in tofu — the docker datasource under the terraform manager (`image = \"<ref>\"` on a kubernetes_deployment) — are ARMED at every update type (ADR-141 amended 2026-09-28, #1988's class row; drilled the same day): non-majors already ride the terraform `automerge` rule above; a MAJOR keeps `major` from the catch-all (this rule only arms it, no `automerge` label) so the migration lens reviews it and its APPROVED completes the merge — the Actions pattern. The management box applies the merge (kubernetes_deployment.* is allowlisted), the tofu-image-revert chain (agents/coordinator/deploy-revert-argo.yaml) reverts a stuck rollout, and scripts/pin-only-lint.sh check (f) refuses the re-proposal for 30 days. Precondition per Deployment: the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB) — an RWO singleton never enters this lane, which is why the rule is scoped by datasource, not by file. `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["terraform"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
     }
   ],
 
