@@ -34,6 +34,9 @@ tagobj_() { mkdir -p "$STUB/repos/$1/git/tags"; printf '{"tag":"x","sha":"%s","o
 # (check (e)); reverts_ "" is the empty memory every case gets by default (see case_).
 CLOSED='pulls?state=closed&sort=updated&direction=desc&per_page=100'
 reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf '[]\n'; else printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; fi >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+# reverts_img_ <image ref …>: the closed-PR list with ONE merged revert-img-* PR naming those
+# image refs (check (f), the tofu-image-revert chain's memory).
+reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-img-abcd1234"},"body":"#1988 rollback\\n\\nreverted-images: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
 OLD=1111111111111111111111111111111111111111
@@ -71,6 +74,9 @@ jobs:
 EOF
 printf 'spec:\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
 printf 'spec:\n  source:\n    targetRevision: 2026.9.1-gaaaa\n    chart: x\n' >"$R/argocd/platform/openrouter-operator.yaml"
+# the fourth shape's home: a tofu Deployment with the dind sidecar's image line (check (f)).
+mkdir -p "$R/tofu"
+printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
 
@@ -169,6 +175,18 @@ case_ target-revision-smuggled 'may only receive PIN lines' "" \
   "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|; s|chart: x|chart: y|' argocd/platform/openrouter-operator.yaml"
 # An untouched guarded set is the no-op verdict (the common case on every PR).
 case_ nothing-guarded ok "" "echo x > README.md"
+
+# (f) the reverted-image memory — tofu/*.tf is not guarded (a non-image edit never reads the
+# memory), an image bump passes on an empty memory, is REFUSED when a merged revert-img-* PR
+# names the new ref, and the check fails closed when the memory cannot be read.
+case_ tofu-non-image-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "printf '# comment\\n' >> tofu/x.tf"
+case_ tofu-image-bump ok "" "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
+case_ tofu-image-reverted-refused 'is a REVERTED image' "reverts_img_ docker:29-dind" \
+  "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
+case_ tofu-image-other-reverted ok "reverts_img_ docker:28-dind" \
+  "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
+case_ tofu-image-memory-unreadable 'cannot read the merged revert-img-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
 
 # ── the initial-pin scenario: a repo whose workflows were NEVER pinned before. Renovate's first
 # pass removes unpinned refs (`@v4`) and adds pinned ones (`@sha # v4`). The removed lines are

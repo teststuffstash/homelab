@@ -45,6 +45,11 @@ spec:
     - name: workflow-failed-dep
       eventSourceName: agent-loop
       eventName: workflow-failed
+    # #1988's class row (2026-09-28): KubeDeploymentRolloutStuck on a tofu-managed Deployment —
+    # the tofu-image-revert chain (the third template below).
+    - name: rollout-stuck-dep
+      eventSourceName: agent-loop
+      eventName: rollout-stuck
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 4 }
       template:
@@ -91,6 +96,30 @@ spec:
                       value: "{}"
           parameters:
             - src: { dependencyName: workflow-failed-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+    # #1988's class row: the tofu-image-revert trigger — fires on rollout-stuck-dep, submits the
+    # tofu-image-revert WorkflowTemplate. Rate-limited separately.
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-tofu-image-revert
+        conditions: "rollout-stuck-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: tofu-image-revert-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: tofu-image-revert }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: rollout-stuck-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -479,6 +508,215 @@ spec:
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green)"
             # <<<REPLAY:workflow-pin-revert-merge-lane<<<
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "512Mi" }
+---
+# tofu-image-revert — #1988's class row (2026-09-28, ADR-141 amended): deterministic revert of an
+# IMAGE-LINE-ONLY tofu PR whose Deployment rollout is STUCK after the management box applied it.
+# The trigger is KubeDeploymentRolloutStuck (kube-prometheus default: Progressing=false for 15m; the
+# Deployment's own progressDeadlineSeconds=600 sets the condition — a bad tag is ImagePullBackOff or
+# a crash-looping new ReplicaSet, and with RollingUpdate max_unavailable=0 the OLD pods keep serving
+# meanwhile, ADR-140 as amended). The workflow finds the newest merge under tofu/ in the window,
+# checks that EVERY changed line is `image = "<ref>"` (the fourth pin shape, scripts/pin-only-lint.sh
+# check (f)) and that a changed file DECLARES the stuck Deployment, and if so:
+#   (1) reverts the merge commit on a `revert-img-<sha8>` branch,
+#   (2) records the reverted image refs on a `reverted-images:` body line — pin-only-lint check (f)
+#       refuses a Renovate PR that re-adds any of them for REVERT_MEMORY_DAYS, so the lane never
+#       loops merge → stuck → revert → re-propose → merge,
+#   (3) opens the revert as `automerge`+`dependencies` and arms it — the reflex approves, CI is the
+#       gate, the box applies the revert on its next pull (kubernetes_deployment.* is allowlisted).
+# COMPOSITION: Alertmanager routes KubeDeploymentRolloutStuck to BOTH this chain and the responder.
+# SAFETY: fail-closed on every read (report-only, never a revert on bad data); the predicate is
+# byte-strict; the coupling check is read from the tree, not inferred; the ledger + the deterministic
+# branch name make it idempotent; a `revert-*` merge is never a candidate.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: tofu-image-revert
+  namespace: agent-coordinator
+spec:
+  entrypoint: revert
+  serviceAccountName: agent-coordinator
+  # Same podSpecPatch as deploy-revert (homelab#103 soft hostname spread, homelab#867 soft Longhorn-
+  # disk de-preference). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: revert
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: tofu-image-revert-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          # Only bumps merged within this window are revert candidates. Wider than the pin chain's
+          # 120: the box pulls master hourly, the Deployment's progressDeadlineSeconds (600 s) sets
+          # Progressing=false, and the alert holds `for: 15m` — merge → alert can take ~90 min.
+          - { name: REVERT_WINDOW_MIN, value: "180" }
+          # The repo whose tofu/ the management box applies (ADR-131/-132). One repo by design.
+          - { name: REPO_SLUG, value: "teststuffstash/homelab" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            printf '%s' "$PAYLOAD" > /tmp/alert.json
+
+            # Alertmanager POSTs an array of alerts; only a FIRING KubeDeploymentRolloutStuck counts.
+            ALERT="$(jq -c '.alerts[] | select(.status == "firing") | select(.labels.alertname == "KubeDeploymentRolloutStuck") | .labels' /tmp/alert.json 2>/dev/null | head -1)"
+            [ -n "$ALERT" ] || { echo "→ no firing KubeDeploymentRolloutStuck in payload — nothing to do"; exit 0; }
+            NS="$(printf '%s' "$ALERT" | jq -r '.namespace // empty')"
+            DEP="$(printf '%s' "$ALERT" | jq -r '.deployment // empty')"
+            [ -n "$NS" ] && [ -n "$DEP" ] || { echo "→ no namespace/deployment on the alert — nothing to do"; exit 0; }
+            SLUG="${REPO_SLUG:-teststuffstash/homelab}"
+            echo "→ $NS/$DEP rollout stuck — looking for an image-line-only merge under tofu/ in $SLUG"
+
+            # The revert candidate: newest merge within the window whose files touch tofu/.
+            # revert-* branches excluded (never revert a revert). Fail-closed: no candidate = report-only.
+            # >>>REPLAY:tofu-image-revert-candidate>>>
+            # ⚠ `gh … --jq` takes ONLY the expression: the cutoff is embedded (homelab#2006's lesson);
+            # CUTOFF is overridable so a replay can pin the date.
+            CUTOFF="${CUTOFF:-$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)}"
+            CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
+              --json number,title,headRefName,mergedAt,mergeCommit,files \
+              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(.files[]?.path | startswith(\"tofu/\"))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
+            [ -n "$CAND" ] || { echo "→ $SLUG: NO tofu-touching merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+            PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
+            SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
+            TITLE="$(printf '%s' "$CAND" | jq -r .title)"
+            FILES="$(printf '%s' "$CAND" | jq -r '.files[]?.path')"
+            echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE)"
+            # <<<REPLAY:tofu-image-revert-candidate<<<
+
+            # Every file of the candidate is a tofu/*.tf file — a PR that also edits docs, policy or
+            # anything else is outside the reversible class.
+            if printf '%s\n' "$FILES" | grep -qvE '^tofu/.*\.tf$'; then
+              echo "→ $SLUG#$PRNUM touches files outside tofu/*.tf — outside the revert class, report-only:"; printf '%s\n' "$FILES" | grep -vE '^tofu/.*\.tf$' | head; exit 0
+            fi
+
+            # Ledger: one revert decision per (repo, merge-sha).
+            KEY="ri-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"
+            SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$KEY}" 2>/dev/null || true)"
+            [ -n "$SEEN" ] && { echo "→ $SLUG@$SHA: already handled ($SEEN) — skip"; exit 0; }
+            kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$KEY\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}" >/dev/null 2>&1 \
+              || echo "WARN: ledger patch failed — branch-name idempotency is the remaining belt"
+
+            # ── THE IMAGE-LINE PREDICATE (the fourth pin shape, scripts/pin-only-lint.sh check (f)) ──
+            # Every changed line is `image = "<ref>"` — registry/path, optional :tag, optional
+            # @sha256 digest, nothing else — the line Renovate's terraform manager rewrites on a
+            # kubernetes_deployment. A values/locals/resource edit riding along puts the PR outside
+            # the reversible class. Fail-closed: empty/unreadable diff = FAIL.
+            DIFF="$(gh pr diff "$PRNUM" --repo "$SLUG" 2>/dev/null || true)"
+            [ -n "$DIFF" ] || { echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0; }
+            CONTENT_LINES="$(printf '%s\n' "$DIFF" | grep -E '^[-+][^-+]' || true)"
+            [ -n "$CONTENT_LINES" ] || { echo "→ $SLUG#$PRNUM has no content lines in the diff — not an image bump (report-only)"; exit 0; }
+            IMAGE_LINE_RE='^[-+][[:space:]]*image[[:space:]]*=[[:space:]]*"[A-Za-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?"$'
+            OFFENDING="$(printf '%s\n' "$CONTENT_LINES" | grep -Ev "$IMAGE_LINE_RE" || true)"
+            if [ -n "$OFFENDING" ]; then
+              echo "→ $SLUG#$PRNUM is NOT image-line-only — outside the revert class, report-only:"; printf '%s\n' "$OFFENDING" | head -20; exit 0
+            fi
+            echo "→ $SLUG#$PRNUM is image-line-only — inside the revert class"
+
+            # ── THE REVERTED IMAGES (for the CI refusal, pin-only-lint check (f)) ─────────────────
+            # The `+` lines are the refs this revert removes again; they go into the revert PR body
+            # as one `reverted-images:` line. Renovate re-proposes a merged-then-reverted version on
+            # its next run, so the refusal happens later, in CI, not here.
+            # >>>REPLAY:tofu-image-revert-reverted-images>>>
+            REVERTED_IMAGES="$(printf '%s\n' "$CONTENT_LINES" | grep '^+' | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/' | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
+            echo "→ reverted images: ${REVERTED_IMAGES:-<none>}"
+            # <<<REPLAY:tofu-image-revert-reverted-images<<<
+
+            echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — $NS/$DEP rollout stuck within ${REVERT_WINDOW_MIN}m of the merge"
+            BR="revert-img-$(printf '%s' "$SHA" | cut -c1-8)"
+            rm -rf /work/repo
+            _cu="https://github.com/${SLUG}.git"
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 30 "$_cu" /work/repo
+            cd /work/repo
+            git config user.name "tofu-image-revert (#1988)"
+            git config user.email "noreply@teststuff.net"
+            # The COUPLING check: a changed file must declare the stuck Deployment — a
+            # `resource "kubernetes_deployment[_v1]"` block whose OWN `metadata { name = "<dep>" }`
+            # (depth 1 under the resource: never the pod template's metadata, a container name, a
+            # volume name or a sibling resource's name — review finding on PR#2082: tofu/unifi.tf
+            # declares two Deployments in one file and forgejo-runner.tf's containers are `dind` /
+            # `runner`). Or the stuck rollout is not this merge's — report-only. Read from the
+            # tree, never inferred from the alert. Brace-depth walk; a one-line `metadata { name = "x" }`
+            # is checked before its own braces are counted.
+            # >>>REPLAY:tofu-image-revert-coupling>>>
+            declares_dep() {
+              awk -v dep="$1" '
+                /^[[:space:]]*resource[[:space:]]+"kubernetes_deployment(_v1)?"[[:space:]]+"[^"]+"[[:space:]]*\{/ { in_res=1; depth=0; in_meta=0 }
+                {
+                  if (!in_res) next
+                  if (depth==1 && $0 ~ /^[[:space:]]*metadata[[:space:]]*\{/) { in_meta=1; meta_depth=2 }
+                  if (in_meta && $0 ~ ("name[[:space:]]*=[[:space:]]*\"" dep "\"")) found=1
+                  depth += gsub(/\{/,"{") - gsub(/\}/,"}")
+                  if (in_meta && depth < meta_depth) in_meta=0
+                  if (depth <= 0) { in_res=0; in_meta=0 }
+                }
+                END { exit(found ? 0 : 1) }' "$2"
+            }
+            COUPLED=""
+            while read -r f; do [ -n "$f" ] && [ -f "$f" ] && declares_dep "$DEP" "$f" && COUPLED="$f" && break; done <<< "$FILES"
+            if [ -z "$COUPLED" ]; then
+              echo "→ $SLUG#$PRNUM changed no file whose kubernetes_deployment metadata names \"$DEP\" — the stuck $NS/$DEP is not this merge's; report-only (responder/operator lane)"; exit 0
+            fi
+            echo "→ coupling: $SLUG#$PRNUM declares Deployment \"$DEP\" in $COUPLED"
+            # <<<REPLAY:tofu-image-revert-coupling<<<
+            if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+              echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
+            fi
+            git checkout -b "$BR"
+            git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
+            git push origin "$BR"
+            BODY="$(printf '#1988 deterministic rollback (ADR-141 as amended 2026-09-28): the rollout of **%s/%s** was STUCK (`KubeDeploymentRolloutStuck`) within %sm of #%s merging. The merge was image-line-only under tofu/ (every changed line is `image = "<ref>"`) and declares this Deployment, so reverting restores the previous image and the management box applies it on its next pull. A Renovate PR that re-proposes a reverted image is refused by pin-only-lint check (f) in ci (it stays red until Renovate proposes a newer version). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate.\n\n**Reverted PR:** #%s — %s\n**Stuck rollout:** %s/%s\n\nreverted-images: %s' \
+              "$NS" "$DEP" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$NS" "$DEP" "$REVERTED_IMAGES")"
+            PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
+              --title "revert: ${TITLE} (auto-rollback — ${NS}/${DEP} rollout stuck post-merge)" \
+              --body "$BODY" \
+              | grep -oE '[0-9]+$')"
+            # >>>REPLAY:tofu-image-revert-merge-lane>>>
+            # The MECHANICAL lane: labels BEFORE arming — the `labeled` event fires the reflex, and
+            # the platform repos require one approving review it posts only for this label pair.
+            gh pr edit "$PR" --repo "$SLUG" --add-label automerge --add-label dependencies \
+              || { echo "FATAL: could not label $SLUG#$PR — the reflex will not approve it (a human must)"; exit 1; }
+            gh pr merge --auto --squash "$PR" --repo "$SLUG"
+            echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green; the box applies the revert on its next pull)"
+            # <<<REPLAY:tofu-image-revert-merge-lane<<<
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }

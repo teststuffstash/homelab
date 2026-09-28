@@ -1,0 +1,17 @@
+# tofu-image-revert-merge-lane — the tofu-image chain's two contracts inherited from the pin chain
+# (#1988's class row, 2026-09-28): (1) the reverted images are the ORIGINAL PR's `+` lines (the
+# refs reverted FROM), de-duplicated, space-joined — the `reverted-images:` line pin-only-lint
+# check (f) keys its refusal on; the `-` lines (the OLD refs) must not appear. (2) the revert PR is
+# labelled `automerge` + `dependencies` BEFORE it is armed. The action stream pins the ORDER and the
+# exact label pair.
+name: tofu-image-revert-merge-lane
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - PR=2081
+parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-reverted-images
+  - block:tofu-image-revert-merge-lane
+  - file:post.sh
