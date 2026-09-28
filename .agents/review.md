@@ -89,13 +89,24 @@ never a bullet the harvest would mint into a standalone inert issue that no cont
   worker write to it is blocking — appending, editing, or ARCHIVING an item. The verb matters: the
   ADR-128 trial week's one real cost was a worker PR archiving FU-213 on a premise refuted three
   days later, and the rule as worded ("appending") did not cover the removal.
-- **Path tier decides who merges, and the PR should say so.** During the ADR-128 trial week
-  (2026-09-11 → 09-18) only `agents/**`, `policy/**`, `tofu/github/**` and the governance dotdirs
-  need a human; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`, `machines/` and `docs/`
-  merge on CI + your approval like tier 1 — so your read IS the gate there: a `docs/` line that
-  contradicts what shipped, or an `argocd/platform/**` edit that prunes a service without its
-  data story, is BLOCKING, not a nit. If the diff needs a human and the body does not say it,
-  that is a follow-up — someone will otherwise wait in silence for an auto-merge that cannot come.
+- **Path tier decides who merges, and the PR should say so.** Standing since ADR-128 (the
+  2026-09-11 trial week, ruled standing by FU-233 — read CODEOWNERS, not this list, when they
+  disagree): only `agents/**`, `scripts/**` (except mermaid-lint's npm manifest + lockfile),
+  `policy/**`, `nixos/**`, `tofu/github/**`, `CODEOWNERS` and the governance dotdirs (`.agents/`,
+  `.claude/`, `.github/` — its `workflows/` are un-owned, but `pin-only-lint` admits only verified
+  action pin bumps there) need a human; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`,
+  `machines/` and `docs/` merge on CI + your approval like tier 1 — so your read IS the gate
+  there: a `docs/` line that contradicts what shipped, or an `argocd/platform/**` edit that prunes
+  a service without its data story, is BLOCKING, not a nit. If the diff needs a human and the
+  body does not say it, that is a follow-up — someone will otherwise wait in silence for an
+  auto-merge that cannot come.
+- **On a surface the management box applies on its own, your read replaces the codeowner read —
+  so review INTENT** (FU-097; `docs/management-box.md` §The capability ledger: the main-root
+  apply allowlist, Talos versions, Talos config). Does the plan + the sentinel's install-impact
+  line do what the linked issue asked, given what the fleet and the box already run — a version
+  that skips the canary type, a config that needs a reboot under `no_reboot`, a control-plane
+  change while the CP toggle is off? Intent and plan disagreeing is BLOCKING even when every
+  check is green.
 
 Greenfield bias does NOT apply here: this repo is prod-serving and public. But "better than master"
 still wins over "perfect" for a change that is contained, validated, and inside its tier.
