@@ -1,0 +1,2 @@
+OUT [homelab] ⏳ merge-conflict Renovate PR #22: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean
+RC 0

@@ -3673,8 +3673,37 @@ EOF_GTHEMES_OPEN
     # surfaces. Report-only — the account's lane is unknowable, so dispatching would risk the #595
     # per-tick leak on a PR that might have been seat-authored; the catch-all line keeps it in a
     # human's sight instead of silent.
+    # Renovate rebase-tick (2026-09-28, homelab#1977/#2037): a Renovate-authored DIRTY PR is NOT
+    # "the author's own push" — Renovate rebases only what it still recognizes as its own, and ONE
+    # foreign commit (the updater's update-branch merge on a non-grouped branch, a seat's) flips it
+    # to "Edited/Blocked: will not automatically rebase" for good (#1977 sat DIRTY from 2026-09-27
+    # "waiting for Renovate's rebase" that could never come). Renovate's own escape hatch is the
+    # rebase/retry checkbox in the PR body: honoured on an edited PR too, cleared by Renovate after
+    # the rebase (custom changes are lost — a dependency PR carries none worth keeping). Launcher-
+    # owned and idempotent: a ticked box is left alone (Renovate's next run, ≤6h, is the mover), a
+    # body without the box is a report line. The seat-authored report loop below excludes Renovate.
+    # >>>REPLAY:renovate-rebase-tick>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("merge-conflict")) and (((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")))|.number'); do
+      rt_body="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.body // ""' 2>/dev/null)" || rt_body=''
+      if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
+        continue
+      fi
+      if ! printf '%s' "$rt_body" | grep -q -- '- \[ \] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u} has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)\n"
+        continue
+      fi
+      rt_new="$(printf '%s' "$rt_body" | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/')"
+      if gh pr edit "$u" --repo "$slug" --body "$rt_new" >/dev/null 2>&1; then
+        mc_event "$slug" "$u" repair "**rebase requested** — DIRTY Renovate PR: ticked Renovate's rebase/retry checkbox (a foreign commit had flipped it to Edited/Blocked, so Renovate would never rebase on its own); its next run rebases, the updater clears \`merge-conflict\` (homelab#1977 class)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ merge-conflict Renovate PR #${u}: rebase requested via the checkbox — Renovate's next run (≤6h) rebases it\n"
+      else
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u}: could not tick the rebase checkbox — human check\n"
+      fi
+    done
+    # <<<REPLAY:renovate-rebase-tick<<<
     # >>>REPLAY:merge-conflict-gate>>>
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa) and ((((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")) | not))|.number'); do
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author == null))|.number'); do

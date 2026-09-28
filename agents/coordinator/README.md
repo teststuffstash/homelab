@@ -1204,8 +1204,11 @@ round, it did not spend a fresh one.
 
 The updater labels a worker-authored PR `merge-conflict` when its update-branch call 422s on a
 DIRTY head; the scan emits `merge-conflict|<repo>|pr-<n>` once per state (the #198 fingerprint;
-a seat-authored conflict never reaches you — report line only). A conflict is not a review
-finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
+a seat-authored conflict never reaches you — report line only; a **Renovate-authored** conflict
+never reaches you either: the scan ticks Renovate's rebase/retry checkbox — one foreign commit,
+such as the updater's merge, flips a Renovate PR to "Edited/Blocked" and it would otherwise
+never rebase again (#1977, 2026-09-28) — and Renovate's next run rebases it). A conflict is not
+a review finding and not a red: the diff is fine, master moved under it. Re-read live state first (still
 DIRTY? a human may have resolved it — exit clean). Then rule exactly one of:
 
 - **Resume on the branch — the default.** Dispatch a fix round with `--work-branch` on the PR's
