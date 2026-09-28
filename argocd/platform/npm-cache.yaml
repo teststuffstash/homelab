@@ -1,0 +1,28 @@
+# npm pull-through cache (wave 1, no deps): an nginx mirror of registry.npmjs.org on a Longhorn PVC,
+# so agent-worker rides can `npm ci` / regenerate a package-lock.json with NO registry.npmjs.org
+# egress (FU-294 — baseline, like the pypi-cache VIP). Raw manifests in argocd/resources/npm-cache/.
+# Consumed by agent-worker rides via NPM_CONFIG_REGISTRY (launcher env plumbing).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: npm-cache
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/npm-cache
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: npm-cache
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

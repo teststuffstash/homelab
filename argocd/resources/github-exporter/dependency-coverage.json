@@ -799,6 +799,7 @@
         "argocd/resources/cf-api-proxy/deployment.yaml",
         "argocd/resources/devbox-search/deployment.yaml",
         "argocd/resources/nix-cache/deployment.yaml",
+        "argocd/resources/npm-cache/deployment.yaml",
         "argocd/resources/pypi-cache/deployment.yaml"
       ]
     },

@@ -150,7 +150,7 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 2 | `grafana/alloy` | v1.5.1 | `argocd/resources/loki/alloy.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 2 | `grafana/loki` | 3.4.2 | `argocd/resources/loki/loki.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 2 | `nginx` | 1.27-alpine | `argocd/resources/registry/registry-fs.yaml`, `argocd/resources/registry/registry.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
-| 2 | `nginxinc/nginx-unprivileged` | 1.27-alpine | `argocd/resources/cf-api-proxy/deployment.yaml`, `argocd/resources/devbox-search/deployment.yaml`, `argocd/resources/nix-cache/deployment.yaml` +1 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 2 | `nginxinc/nginx-unprivileged` | 1.27-alpine | `argocd/resources/cf-api-proxy/deployment.yaml`, `argocd/resources/devbox-search/deployment.yaml`, `argocd/resources/nix-cache/deployment.yaml` +2 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 2 | `otel/opentelemetry-collector-contrib` | 0.116.1 | `argocd/resources/otel-collector/deployment.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 2 | `prom/pushgateway` | v1.11.1 | `argocd/resources/pushgateway/deployment.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 2 | `python` | 3.13-slim, 3.13-slim@sha256:cc9dffa47c82 | `argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml`, `argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml`, `argocd/resources/garage-disruption/controller.yaml` +4 | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |

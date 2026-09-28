@@ -1,0 +1,21 @@
+# In-cluster consumers reach it at http://npm-cache.npm-cache.svc.cluster.local (the ClusterIP a
+# LoadBalancer Service still carries). The BGP VIP exists for KATA worker rides (FU-073e): kata
+# guests can't reach ClusterIP service VIPs (FU-072), so every agent-worker ride gets
+# NPM_CONFIG_REGISTRY=http://192.168.40.35/ from the launcher — the pypi-cache (.40.34) shape,
+# but BASELINE (FU-294): a no-profile ride (homelab's own claim) must be able to `npm ci` /
+# regenerate a package-lock.json without registry.npmjs.org egress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: npm-cache
+  namespace: npm-cache
+  labels:
+    app: npm-cache
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.35"
+spec:
+  type: LoadBalancer
+  selector: { app: npm-cache }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }

@@ -80,7 +80,7 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
-- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21, mcr @ .40.31, pypi @ .40.34) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
+- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21, mcr @ .40.31, pypi @ .40.34; npm @ .40.35 in `argocd/resources/npm-cache/`, FU-294) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
 
 ## 3 · Resource Plane
 

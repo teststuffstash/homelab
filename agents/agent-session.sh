@@ -763,7 +763,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}" npm_cache="${AGENT_NPM_CACHE_URL-http://192.168.40.35/}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -803,7 +803,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable); node → \`npm ci\`/\`npm install\` against \`\$NPM_CONFIG_REGISTRY\` (${npm_cache}, every ride, automatic — no registry.npmjs.org egress needed; a package-lock.json keeps its canonical \`https://registry.npmjs.org/…\` \`resolved\` URLs and npm swaps the host at fetch time, so never rewrite them to the proxy). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -2113,6 +2113,16 @@ if [ "${EGRESS_PROFILE:-}" = "python" ]; then
 fi
 # <<<REPLAY:python-profile-env<<<
 
+# FU-294: the npm pull-through cache (argocd/resources/npm-cache/, VIP .40.35) is BASELINE — every
+# ride gets NPM_CONFIG_REGISTRY regardless of egress profile (the CNP allows the VIP on every ride,
+# composition.yaml), so a no-profile ride can `npm ci` / regenerate a package-lock.json. No lock
+# coupling like UV_FROZEN: npm records the packument's canonical dist.tarball URL
+# (registry.npmjs.org) in `resolved` and swaps the host for this registry at fetch time
+# (replace-registry-host=npmjs, the default) — measured, see the configmap header. The address
+# rides an AGENT_NPM_CACHE_URL launcher-side override, like AGENT_PYPI_CACHE_URL; the
+# registry.npmjs.org hostAliases stub below stays (npm never dials that host with this set).
+NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://192.168.40.35/}"
+
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
 # via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
 # and adds the substituter so the per-pod `devbox install` skips the eval tax. Mount ONLY when
@@ -2613,6 +2623,10 @@ ${DIND_CONTAINER}
         # argocd/resources/devbox-search/ + ip-plan.md; the egress CNP allows .40.27 (composition.yaml).
         - name: DEVBOX_SEARCH_HOST
           value: "http://192.168.40.27"
+        # FU-294: npm resolves through the baseline npm pull-through cache (VIP .40.35) — see the
+        # NPM_CACHE_URL note above; argocd/resources/npm-cache/.
+        - name: NPM_CONFIG_REGISTRY
+          value: "${NPM_CACHE_URL}"
         - name: REPO_URL
           value: "${REPO_URL}"
         - name: BASE_REF
