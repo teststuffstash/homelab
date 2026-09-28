@@ -86,7 +86,8 @@ stops being a memory.
 ⚠ Known structural debt, deliberately parked (operator, 2026-08-12): `scripts/` has no internal
 structure that would make path-based rules easy — CI-invoked checks (governance-class: the
 governance-lint treats ALL of `scripts/` as such) sit beside operational one-shots in one flat
-directory. Restructuring it is its own future candidate, not part of any current leg.
+directory. Restructuring it is its own future candidate, not part of any current leg — tracked
+as FU-293 since 2026-09-28 (the operator re-raised it as a coming CODEOWNERS problem).
 
 
 Every stack splits an app repo (behavior; CI carries the evidence) from `-iac` (form + post-merge

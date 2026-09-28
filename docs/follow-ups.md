@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-293** (2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-295** (2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -426,6 +426,25 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
+- [ ] **FU-293** — **`scripts/` is one flat directory of 103 files and path-based ownership cannot
+      cut it.** Box-executed `mgmt-*.sh` (16), CI-invoked lint gates, seat wrappers, one-shot audits
+      and cluster-side helpers all sit under the single `/scripts/ @RasmusSoot` row; carve-outs
+      already started (mermaid-lint's npm manifest + lockfile, 2026-09-27) and every Renovate /
+      deploy lane that touches a script will need another. Parked as structural debt in
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (operator, 2026-08-12); the operator re-raised it
+      2026-09-28 ("it will become a problem for codeowner rules anyway"). **Next:** an inventory by
+      EXECUTOR (box / CI / seat / cluster pod) — that is the tier, per iac-lane's table — then move by
+      density into `scripts/<executor>/` with `devbox.json`, `ci.yaml` and the docs following; the
+      CODEOWNERS rows then name subdirs, not files. Design-shaped: a corpus sitting, not a worker.
+- [ ] **FU-294** — **The npm Renovate lane produces work no ride can do.** Rule [7] (2026-09-27)
+      routes `scripts/mermaid-lint` bumps through Renovate, but a lens finding that needs the
+      lockfile regenerated (homelab#2032: mermaid 12 pulls a `lodash-es` with CVE-2026-4800 — the
+      fix is a two-line `overrides` + `npm install`) cannot be dispatched: homelab's fixer claim is
+      `egress.profile: none` and the baseline mirror set has docker/ghcr/mcr/pypi but **no npm
+      mirror** (`docs/agents/agentstack.md` §ecosystem profile) — so the coordinator parked it on a
+      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). **Next:**
+      decide the shape in a design sitting — an npm mirror at baseline (the pypi pattern, benefits
+      every stack) vs the `node` profile on homelab's claim — then the parked #2032 is the drill.
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
