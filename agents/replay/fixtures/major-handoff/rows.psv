@@ -3,6 +3,7 @@
 handoff                     | approved     |                                                                                             |                          | handoff              |
 merge-commit-not-content    | approved     | gh/pr-view-738.json @ patches/merge-commit-after-review.jq                                  |                          | handoff              |
 bot-suffix-normalized       | approved     | gh/pr-view-738.json @ patches/bot-suffix.jq                                                 |                          | handoff              |
+suffixed-headings           | approved     | gh/pr-view-738.json @ patches/suffixed-headings.jq                                          |                          | handoff              |
 approved-without-headings   | approved     | gh/pr-view-738.json @ patches/strip-headings.jq                                             |                          | refused-headings     |
 approval-stale              | approved     | gh/pr-view-738.json @ patches/commit-after-review.jq                                        |                          | refused-stale        |
 not-major-lane              | approved     | gh/pr-view-738.json @ patches/label-not-major.jq                                            |                          | refused-not-major    |

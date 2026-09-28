@@ -85,8 +85,13 @@ verdict="$(printf '%s' "$pr_json" | jq -r --arg bot "$REVIEWER_LOGIN" --arg lane
       elif ($a.submittedAt // "") > newest_commit_at then $a
       else null end;
   # The four migration headings, each line-anchored: `## Upstream` (any heading level) or
-  # `**Upstream**` / `**Upstream:**` / `**Upstream**:` — case-insensitive, trailing spaces ok.
-  def heading_re(h): "^[ \\t]*(#{1,6}[ \\t]+|\\*\\*)[ \\t]*" + h + "[ \\t]*:?[ \\t]*(\\*\\*)?[ \\t]*:?[ \\t]*$";
+  # `**Upstream**` / `**Upstream:**` / `**Upstream**:` — case-insensitive. The heading WORD is
+  # the match, not the whole line (2026-09-28, homelab#2032): a lens re-review wrote
+  # `## Evidence — re-review at new head …` and the old `$`-anchored form refused a complete,
+  # APPROVED review while the remedy the brief names (re-dispatch the reviewer) is a guaranteed no-op on
+  # an own-verdict-at-head. After the word: whitespace, a colon, the bold close, or end of line —
+  # so `## Evidenced` still fails and a suffix after a separator passes.
+  def heading_re(h): "^[ \\t]*(#{1,6}[ \\t]+|\\*\\*)[ \\t]*" + h + "([ \\t]|:|\\*\\*|$)";
   def missing_headings(body):
     # LINE-anchored by construction: jq (Oniguruma) anchors ^/$ to the whole string, not per line
     # (probed 2026-09-25: "x\n## Upstream" fails `^`), so the body is split into CR-stripped
