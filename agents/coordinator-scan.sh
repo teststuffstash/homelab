@@ -384,7 +384,7 @@ EOF
 #   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-held-malformed-block, queued-ready,
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
-#   footprint-held, cap-held, blockpark
+#   footprint-held, cap-held, blockpark, goal-adopted-unlabelled
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|base" (ADR-125 lane label)
@@ -3194,6 +3194,40 @@ EOF_GOVERNANCE
                              and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
+        # ── ADOPTED-OPEN-UNLABELLED — the silent deadlock (homelab#2052; live: #1910 under theme
+        # #1907 / Goal #1906). A member that is `adopted` on the store, OPEN, not a container, and
+        # carrying NO `agent/*` lifecycle label is COUNTED by the completion predicate above (it
+        # holds (b) and the tree-empty key) while no waker is its own: dispatch reads
+        # `agent/queued` only (ADR-122 (2)), trigger (c) sees UNDISPOSITIONED members only, and
+        # the report-only reader that would have named it was retired with the bare-tree-member
+        # walk (ADR-122 (1)) because it QUEUED from shape. Visibility only: ONE report line, no
+        # re-queue, no label write — a human queues it or rules it deferred on the store.
+        # Containers by title (the theme-candidate regex, scripts/goal-lint.sh) are excluded: a
+        # `theme:` container is adopted-open-unlabelled by construction and trigger (e) IS its
+        # waker. rule #6: only from a store that READ (`gdisp_ok`) — a blind read has no
+        # `adopted` rows to name and must not fabricate the class. Byte-stable on purpose: sorted
+        # numbers, no ages/timestamps — `kidsall` carries no createdAt (widening its --json list
+        # would re-pin every goal fixture's CALL line), and the replayed report must be
+        # deterministic. Own-repo members print bare `#n`, cross-repo ones `repo#n` (the two
+        # spellings `gopen_n_ckpt` matches against $AD).
+        gadopt_unl=""
+        if [ "$gdisp_ok" = 1 ]; then
+          gadopt_unl="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | ($ad | split(" ") | map(select(. != ""))) as $AD
+             | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN")
+                    | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
+                    | select(("\(.repo)#\(.number)") as $qk
+                             | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                             | ($AD | index($qk)) != null or ($bk != null and ($AD | index($bk)) != null))
+                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+             | sort_by(.repo, .number) | map(if .repo == $GREPO then "#\(.number)" else "\(.repo)#\(.number)" end) | join(" ")' 2>/dev/null || echo "")"
+        fi
+        if [ -n "$gadopt_unl" ]; then
+          orphans="${orphans}[$repo] ⏸ goal #${g}: adopted-open member(s) ${gadopt_unl} carry NO agent/* state label — counted by the completion predicate (assembly held) but with no waker of their own (dispatch reads agent/queued only, ADR-122 (2); trigger (c) sees undispositioned only). Visibility only, nothing written: a human queues (agent/queued) or rules it deferred on the store (homelab#2052).\n"
+          item_class_push "$repo" "issue-${g}" "goal-adopted-unlabelled" "operator" "${default_branch:-}"
+        fi
         set -- $gdesc; gtotal_n=$#
         if [ -n "$gcomments" ]; then
           _gf_find "$slug" "$g" "$gcomments" && gf_rc=0 || gf_rc=$?
