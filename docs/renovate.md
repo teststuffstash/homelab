@@ -83,10 +83,18 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
   (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
-  **Terraform MAJORS are not this lane** (2026-09-28): a provider major, or an image tag Renovate
-  extracts from a `kubernetes_deployment` in tofu, takes the major catch-all — un-armed, `major`,
-  the coordinator's lane (README §Dependency major bumps), because a major here typically needs an
-  in-PR adaptation (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046).
+  **Terraform PROVIDER majors are not this lane** (2026-09-28): a provider major takes the major
+  catch-all — un-armed, `major`, the coordinator's lane (README §Dependency major bumps), because
+  a major here typically needs an in-PR adaptation (helm 3 turned the provider's `kubernetes {}`
+  block into an attribute, #2046).
+  **Deployment IMAGE tags in tofu are their own armed lane** (ADR-141 amended 2026-09-28, #1988's
+  class row): an `image = "<ref>"` line Renovate rewrites on a `kubernetes_deployment` is armed at
+  every update type — non-majors on the terraform `automerge` rule, majors armed + `major` (the
+  lens reviews). The box applies the merge, and the `tofu-image-revert` chain
+  ([design](designs/fu-1990-workflow-pin-revert.md) Part 3) reverts an image-line-only merge whose
+  Deployment rollout sticks (`KubeDeploymentRolloutStuck`), records `reverted-images:`, and
+  `pin-only-lint` check (f) refuses the re-proposal for 30 days. Precondition per Deployment:
+  the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB — the forgejo runner first).
   The lane's marker must not leak: the terraform rule is restricted to non-major update types
   (Renovate MERGES `addLabels` across rules and nothing removes a label — three majors were born
   `automerge`+`major` on 2026-09-27, #2037/#2046/#2047), `renovate-approve` refuses any

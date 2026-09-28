@@ -2492,3 +2492,17 @@ revert is coarse (one bad pin holds N good ones red) and a grouped lens ride has
 verdict, which is why graduated majors are one PR per dependency. The drill (agent-coordinator#20
 → revert #21, 2026-09-27) proved the lane and found two chain defects on the way (PR#2005 the token
 mint, PR#2006 the candidate query).
+**Amended 2026-09-28 (operator: "until it automerges without a human and rolls back if there is a
+problem" — the #2037 class):** blast class picks the lane for the terraform docker-image class
+too. An image tag Renovate's terraform manager rewrites on a `kubernetes_deployment` in `tofu/`
+is ARMED at every update type: non-majors on the terraform `automerge` rule, majors armed and
+keeping `major` (the lens reviews, its APPROVED completes the merge — the Actions pattern). The
+second gate is the `tofu-image-revert` chain (`docs/designs/fu-1990-workflow-pin-revert.md`
+Part 3): `KubeDeploymentRolloutStuck` on the rolled Deployment → the image-line-only merge that
+declares it is reverted as an `automerge`+`dependencies` PR, `reverted-images:` recorded,
+`pin-only-lint` check (f) refuses the re-proposal for 30 days, the box applies the revert.
+Precondition per Deployment: the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB), so
+the old pods serve throughout a stuck roll; an RWO singleton never enters this lane. Considered:
+a human read of every image bump (rejected — the operator's time; #2037 sat a day for a tag
+change); reverting on `KubePodCrashLooping` too (rejected for now — a crash loop inside a
+readiness-gated roll IS a stuck rollout, one detector is enough until evidence says otherwise).

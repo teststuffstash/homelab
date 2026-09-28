@@ -1,0 +1,3 @@
+OUT → coupling: teststuffstash/homelab#2037 declares "forgejo-runner"
+OUT REACHED: end
+RC 0
