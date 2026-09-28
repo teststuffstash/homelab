@@ -221,6 +221,14 @@ exfiltrates), reads the PR's locals and var files — all with the root's creden
 environment. A worker-authored head is hostile by assumption (the sentinel runs BEFORE review), so
 plan-on-PR without a pre-execution gate is remote code execution on the recovery root.
 
+**One verdict per (head, engine revision).** The timer judges a head once — the `management-sentinel`
+status IS the memo — but the memo is keyed to the engine that wrote it: the status description
+starts with `[e:<rev>]`, a hash of `scripts/mgmt-sentinel.sh`, `scripts/mgmt-lib.sh` and
+`policy/mgmt/plan-input.yaml` as master holds them (2026-09-28). A change to any of the three
+re-judges every open head on the next tick, so a sentinel fix or a policy widening reaches a parked
+PR without a push and without `mgmt-human-plan` — before this, #2046/#2047 kept a red whose cause
+the box would never republish, and the widened Deployment allowlist could not reach #2037's head.
+
 **Two stages, and the first never executes anything:**
 
 | Stage | Reads | Does | Fails as |
