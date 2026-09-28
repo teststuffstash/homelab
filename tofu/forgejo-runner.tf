@@ -79,6 +79,14 @@ resource "kubernetes_deployment" "forgejo_runner" {
     name      = "forgejo-runner"
     namespace = kubernetes_namespace.forgejo_runner.metadata[0].name
   }
+  # The APPLY does not wait for the roll (2026-09-28, the tofu-image-revert drill #2085): the
+  # provider's default waits up to 10 min for the new ReplicaSet to become Ready, so a bad image
+  # tag turned the management box's apply into "apply errored — half-applied? human" — an
+  # errored apply and a refusal on a change the cluster had already taken (the surge pod sat in
+  # ImagePullBackOff while the two old pods served). In this lane the roll is judged by
+  # `KubeDeploymentRolloutStuck` + the `tofu-image-revert` chain (ADR-141 as amended), not by the
+  # apply: the box writes the object, returns, stamps; a stuck roll is the ALERT's to catch.
+  wait_for_rollout = false
   spec {
     # Two replicas + zero-unavailable rollout + the PDB below = the shape a STATELESS platform
     # Deployment must have before its image bumps may arm (ADR-140 as amended, 2026-09-28). The

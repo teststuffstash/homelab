@@ -218,13 +218,14 @@ not complete the lane reverts it — no human in the loop.
 |---|---|---|
 | detector | `GithubWorkflowRunFailed` (master) | `KubeDeploymentRolloutStuck` — kube-prometheus default, `Progressing=false` for 15 m; the Deployment's `progressDeadlineSeconds` (600 s) sets the condition. With `RollingUpdate max_unavailable 0` the OLD pods keep serving while the new ReplicaSet is stuck (ImagePullBackOff, crash loop) |
 | route | receiver `deploy-pin-revert` → `/workflow-failed` | receiver `deploy-rollout-revert` → `/rollout-stuck`, `continue: true` (the responder still triages) |
-| candidate | newest merge ≤120 m touching `.github/workflows/` | newest merge ≤180 m touching `tofu/` (wider: hourly pull + 600 s deadline + 15 m `for`), every file `tofu/*.tf` |
+| candidate | newest merge ≤120 m touching `.github/workflows/` | the merges ≤180 m touching `tofu/` (wider: hourly pull + 600 s deadline + 15 m `for`) walked NEWEST-FIRST; the first whose files are all `tofu/*.tf` AND whose diff passes the predicate wins — a later, unrelated tofu merge never masks the bump (the drill's own follow-up PR would have) |
 | predicate | every line `uses: owner/repo@sha # tag` | every line `image = "<registry/path>[:tag][@sha256:…]"` — the fourth pin shape (`scripts/pin-only-lint.sh` check (f)) |
 | coupling | (the failed workflow is the merged file) | a changed file must DECLARE the stuck Deployment: `name = "<deployment>"` grepped from the tree, never inferred from the alert |
 | memory | `reverted-pins:` → check (e) refuses the SHA | `reverted-images:` → check (f) refuses the ref for `REVERT_MEMORY_DAYS` — runs on any PR that adds an `image =` line under `tofu/` |
 | branch | `revert-wf-<sha8>` | `revert-img-<sha8>` |
 | ledger key | `wf-<hash>` | `ri-<hash>` |
 | recovery | CI green on master | the box applies the revert on its next hourly pull — recovery ≤ ~1 h after the alert, service intact throughout (the old pods never left) |
+| the apply | n/a | `wait_for_rollout = false` on the Deployment (the drill, 2026-09-28): the provider's default waited 10 min for the new ReplicaSet and turned a bad tag into an ERRORED box apply ("half-applied? human") on a change the cluster had already taken. In this lane the roll is the alert's to judge, so the apply writes the object and returns |
 
 What arms the class: ADR-141 as amended 2026-09-28 — `.github/renovate-global.json`'s terraform
 docker-datasource majors are ARMED and keep `major` (the lens reviews them, its APPROVED completes

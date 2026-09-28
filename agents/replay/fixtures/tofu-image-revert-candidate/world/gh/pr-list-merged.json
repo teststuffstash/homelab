@@ -14,6 +14,20 @@
     ]
   },
   {
+    "number": 2090,
+    "title": "forgejo-runner: the apply does not wait for the roll (wait_for_rollout = false)",
+    "headRefName": "fix/image-lane-apply-decoupled",
+    "mergedAt": "2026-09-28T14:50:00Z",
+    "mergeCommit": {
+      "oid": "6666666666666666666666666666666666666666"
+    },
+    "files": [
+      {
+        "path": "tofu/forgejo-runner.tf"
+      }
+    ]
+  },
+  {
     "number": 2080,
     "title": "scan: report an adopted-open Goal member with no state label",
     "headRefName": "fix/goal-adopted-open-unlabelled",
