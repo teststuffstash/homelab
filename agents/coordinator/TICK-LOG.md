@@ -11568,3 +11568,11 @@ original workflow file, so the proof waits for the next fresh event on a behind 
 ~11:30Z: five majors sit at the designed human terminals (#2037/#2046/#2032 `major/awaiting-
 human`; #2046's +0 ~5 -0 and #2037's ci_runner_02 drift want `mgmt-human-plan`), #2047 and #2033
 ride the lane on their own.
+
+**Correction (11:50Z):** the `ci_runner_02[0]` "drift" above was a sentinel artifact, not drift —
+master plans clean (`mgmt-tf plan` 11:44Z); the sentinel planned the bare PR head, so the FU-289
+unpark (#2048, merged after the three PRs forked) read as their change and put "human read" reds
+on #2037/#2047. PR#2073: stage 2 plans the head merged onto master (what would land; a head that
+does not merge gets a failure verdict). Operator direction for the next session: the Forgejo
+runner rolls with no downtime first (2 replicas + RollingUpdate + PDB, ADR-140 amendment), then
+#2037's class gets its detector + revert and arms — parked in meta-state.
