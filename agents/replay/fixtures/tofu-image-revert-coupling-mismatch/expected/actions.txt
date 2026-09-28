@@ -1,0 +1,2 @@
+OUT → teststuffstash/homelab#2037 changed no file whose kubernetes_deployment metadata names "home-assistant" — the stuck home-assistant/home-assistant is not this merge's; report-only (responder/operator lane)
+RC 0

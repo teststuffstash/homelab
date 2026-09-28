@@ -1,0 +1,3 @@
+OUT → coupling: teststuffstash/homelab#2037 declares Deployment "forgejo-runner" in tofu/forgejo-runner.tf
+OUT REACHED: end
+RC 0
