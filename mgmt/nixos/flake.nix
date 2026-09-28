@@ -9,13 +9,13 @@
 # it silently breaks the jail's known_hosts. The tree it ships (host key + the belt's env file +
 # talosconfig/kubeconfig) is staged from the wallet by ONE script — no secret is ever in this flake:
 #   mgmt/scripts/mgmt-provision-secrets.sh          # stages ~/.claude/homelab-mgmt/extra-files, prints:
-#   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./nixos#mgmt root@<installer-ip>
+#   nix run nixpkgs#nixos-anywhere -- --extra-files <that dir> --flake ./mgmt/nixos#mgmt root@<installer-ip>
 # Rotation later = `mgmt/scripts/mgmt-provision-secrets.sh --push` (same tree, onto the running box).
 # Update — the box does this itself from MASTER (ADR-129 amended 2026-09-14; the `/mgmt/`
 # CODEOWNERS row is the gate), re-activating the closure only when mgmt/nixos/ changed
 # (mgmt-pull.service → mgmt-confirm.service). By hand, the same two steps in the same order:
-#   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt test   # live now, boot default UNCHANGED
-#   nixos-rebuild --flake /var/lib/homelab/nixos#mgmt boot    # promote, then reboot
+#   nixos-rebuild --flake /var/lib/homelab/mgmt/nixos#mgmt test   # live now, boot default UNCHANGED
+#   nixos-rebuild --flake /var/lib/homelab/mgmt/nixos#mgmt boot    # promote, then reboot
 {
   description = "homelab management box (R12) — the out-of-band applier";
 
