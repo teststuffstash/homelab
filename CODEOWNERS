@@ -30,10 +30,8 @@
 # management box's kernel, bootloader or sshd and the box would apply it on its next pull — and
 # the spike lists this box beside the CA keys as a trust anchor. The box follows MASTER (ADR-129 amended
 # 2026-09-14), so this row IS the gate for the recovery root's closure, not a second belt: the box
-# re-activates only when nixos/ changed, and every file it executes from its checkout is owned here.
-/nixos/             @RasmusSoot
-# /mgmt/ (2026-09-28) groups the closure (mgmt/nixos/) with the box scripts (mgmt/scripts/); the
-# /nixos/ row above goes once fix/mgmt-dir lands.
+# re-activates only when mgmt/nixos/ changed, and every file it executes from its checkout is owned here.
+# /mgmt/ (2026-09-28, PR#2088) = the closure (mgmt/nixos/) + the box scripts (mgmt/scripts/).
 /mgmt/              @RasmusSoot
 /.github/           @RasmusSoot
 

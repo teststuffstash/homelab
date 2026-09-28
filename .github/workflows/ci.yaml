@@ -453,6 +453,31 @@ jobs:
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
 
+      # ADR-142 trial (2026-09-28): the gate-drift REPORT — master's side of every scripts/ edit,
+      # replayed on this PR: (A) master's gate × this content, (B) master's tests × these scripts.
+      # NON-FAILING by design (the gate is the reviewer's BLOCKING gate-change lens, which reads the
+      # GATE-DRIFT block from this log). The script is extracted from the BASE commit, so a PR cannot
+      # edit its own detector; before the script exists on the base, the step says so and passes.
+      - name: gate-drift report — master's side of each scripts/ edit (non-failing, ADR-142)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"
+          git fetch --no-tags --depth=1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- scripts/; then echo "gate-drift: no scripts/ change — nothing to replay"; exit 0; fi
+          if ! git show "$BASE:scripts/gate-drift.sh" > "$RUNNER_TEMP/gate-drift.sh" 2>/dev/null; then
+            echo "gate-drift: the base has no scripts/gate-drift.sh yet — report unavailable"; exit 0
+          fi
+          bash "$RUNNER_TEMP/gate-drift.sh" "$BASE"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
       - name: machines/generate.py outputs current (devbox run machines-lint)
         run: devbox run machines-lint
 
