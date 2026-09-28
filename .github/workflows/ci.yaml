@@ -395,6 +395,12 @@ jobs:
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
         run: devbox run pin-only-lint-test
 
+      # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
+      # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local
+      # pre-flight, so a new step here rotted the map on master unseen (the unexecuted-gate class).
+      - name: diff-ci coverage belt — every ci.yaml devbox task has a MAP row (devbox run diff-ci -- --coverage-only)
+        run: devbox run diff-ci -- --coverage-only
+
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
         # homelab#1441 → #2064 (2026-09-28): diff against the MERGE REF'S OWN FIRST PARENT, read
