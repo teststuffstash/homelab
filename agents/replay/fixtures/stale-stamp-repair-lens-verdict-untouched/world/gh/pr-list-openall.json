@@ -1,0 +1,10 @@
+[
+  {
+    "number": 11,
+    "title": "Update Terraform kubernetes to v3",
+    "labels": [{"name": "dependencies"}, {"name": "major"}],
+    "autoMergeRequest": null,
+    "reviewDecision": "APPROVED",
+    "author": {"login": "app/homelab-renovate-1234"}
+  }
+]

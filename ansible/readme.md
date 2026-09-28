@@ -42,8 +42,10 @@ because their real values are here, not baked in).
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |
 | `matchbox-talos-assets.yml` | `matchbox-talos-assets` | Talos kernel/initramfs into Matchbox assets |
+| `pve-serial-console.yml` | `pve-serial-console` | the hypervisor's own console on its BMC's SOL: GRUB menu + kernel on ttyS1 beside VGA (nx-02 via host_vars; pve is a no-op); next boot, never reboots; `devbox run -- ansible-playbook ansible/pve-serial-console.yml` |
+| (role only) | `pve-apt-repos` | the Proxmox repos as code — enterprise entries disabled, no-subscription declared (deb822, PVE ≥ 9); runs first in both pve plays, because a fresh install's enterprise-only apt 401s every cache refresh (nx-02, 2026-09-27) |
 | `pve-upgrade.yml` | — | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
-| `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093): node_exporter + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
+| `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093) + the guest memory-placement meter (FU-289): node_exporter (+ meminfo_numa, reclaim vmstat) + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
 | `pve-serial-log.yml` | `pve-serial-log` | serial-console capture for the VMs flagged `serial = true` in `tofu/variables.tf` (#882): a `qemu-serial-log@<vmid>` socat unit per vmid → `/var/log/qemu-serial/<vmid>.log`; `devbox run -- ansible-playbook ansible/pve-serial-log.yml` |
 
 ## Running

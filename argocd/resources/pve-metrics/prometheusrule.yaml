@@ -132,6 +132,47 @@ spec:
               /var/run/qemu-server/<vmid>.pid)`); relief is a smaller allocation in
               `tofu/variables.tf` (reboots that VM), or the VM moves to the other hypervisor —
               never a RAM buy for pve (operator direction: the second hypervisor was the answer).
+        # ── Memory placement (FU-289, docs/spikes/nx-02-numa-placement.md) ─────────────────────
+        # 2026-09-24 22:43Z: nx-02 began swapping ci-runner-02 to its HDD with 9 GiB MemAvailable —
+        # wk-04's VFIO-pinned 32 GiB sat 6/26 across the two NUMA nodes, node 1 had ~1 GiB, and
+        # kswapd (per node, always) swapped the only evictable thing there: the other guests. The
+        # e2e "Preparing nodes" stalls came 8 h later, when the pages were needed back at ~1 MiB/s
+        # from a 5400 rpm disk. PveHostMemoryLow cannot see any of it. Four detectors, two of them
+        # replayed against the event: SwapUsed fired ~23:00 (the precursor, hours of lead), Thrash
+        # fired through both failing runs (07:24–07:31, 07:44–07:47); the per-node and per-guest
+        # ones read series the event predates (fixture-tested, calm on the live box at ship).
+        - alert: PveHostSwapUsed
+          expr: (node_memory_SwapTotal_bytes{job="pve-node"} - node_memory_SwapFree_bytes{job="pve-node"}) > 1 * 1024 * 1024 * 1024
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.host }} has {{ $value | humanize1024 }}B in swap'
+            description: 'A hypervisor is paging guest memory out. This is the PRECURSOR with hours of lead: nx-02 crossed 1 GiB at 2026-09-24 ~23:00Z and the CI stalls came at 07:24 next morning when those pages were needed back (FU-289). PveHostMemoryLow stays quiet for it — the box had 9 GiB available globally while kswapd emptied one NUMA node. On {{ $labels.host }}: which guest (`pve_qemu_swap_bytes{host="{{ $labels.host }}"}`), which node is starved (`node_memory_numa_MemFree{host="{{ $labels.host }}"}`), what is pinned there (`pve_qemu_numa_resident_bytes`, `pve_qemu_locked_bytes`). Relief is placement — hugepages + `numaN: hostnodes=` on the pinned guest, a restart — or a smaller allocation; while the swap lives on a spinning disk this becomes PveHostSwapThrash.'
+        - alert: PveHostSwapThrash
+          expr: rate(node_vmstat_pswpin{job="pve-node"}[5m]) * 4096 > 256 * 1024 and rate(node_pressure_io_waiting_seconds_total{job="pve-node"}[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: '{{ $labels.host }} swapping in at {{ $value | humanize1024 }}B/s with I/O pressure'
+            description: 'Guest memory is coming back from swap at disk speed and the host is I/O-bound on it — every guest on {{ $labels.host }} crawls (a CI runner in this state took 397 s for a 2 s step, FU-289; the 09-25 runs showed ~1 MiB/s swap-in at 20% I/O pressure, i.e. a 5400 rpm disk at 98%). It ends when the pages are back, not when memory frees. Now: stop adding load on {{ $labels.host }} (park the runner: `var.ci_runner_0N_running=false`); then the cause via PveHostSwapUsed. Structural: swap on the SSD/NVMe, never the spinner.'
+        - alert: PveNumaNodeMemoryLow
+          expr: (node_memory_numa_MemFree{job="pve-node"} + node_memory_numa_Inactive_file{job="pve-node"}) < 1536 * 1024 * 1024
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.host }} NUMA node {{ $labels.node }} down to {{ $value | humanize1024 }}B free + reclaimable file'
+            description: 'One physical memory node of a dual-socket hypervisor is nearly exhausted while the other may be wide open. MemAvailable hides it, and kswapd works PER NODE: it evicts whatever is evictable on that node — the unpinned guests, to swap — to hold its watermarks, regardless of free RAM on the other node (FU-289: wk-04 pinned 6/26 GiB across the nodes of nx-02, node 1 at ~1 GiB, ci-runner-02 went to the HDD). On {{ $labels.host }}: `pve_qemu_numa_resident_bytes{host="{{ $labels.host }}",node="{{ $labels.node }}"}` names the guests on that node, `pve_qemu_locked_bytes` which is pinned (VFIO). A pinned guest is rebalanced only by a restart with explicit `numaN: hostnodes=` (+ hugepages) — docs/spikes/nx-02-numa-placement.md.'
+        - alert: PveGuestSwapped
+          expr: pve_qemu_swap_bytes > 512 * 1024 * 1024
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.host }} guest {{ $labels.name }} (vmid {{ $labels.vmid }}) has {{ $value | humanize1024 }}B on host swap'
+            description: 'The host has paged part of this guest out. The guest cannot know — it sees its RAM as present — so every touch of a swapped page is a disk read it did not ask for; a Talos node or a CI runner in this state stalls for minutes, and a control-plane guest here is an etcd member on a spinning disk. Find the pressure with PveHostSwapUsed / PveNumaNodeMemoryLow on {{ $labels.host }}; the guest recovers when its pages are back (`vmstat 1` on the host, column si), not when this clears.'
         - alert: PveMetricsStale
           expr: time() - node_textfile_mtime_seconds{job="pve-node", file=~".*/pve.prom"} > 600
           for: 5m

@@ -33,7 +33,7 @@ jobs:
   ci:
     runs-on: homelab-ephemeral
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # ── #518 wall-time structure (operator-direct 2026-08-31): the two heavy suites and the
       # pin-bump mirror pre-warm run in the BACKGROUND, overlapping the serial small steps, and
@@ -397,14 +397,19 @@ jobs:
 
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
-        # homelab#1441: diff against the PR's base SHA AT EVENT TIME — the merge commit's first
-        # parent — never the base BRANCH tip. The checkout is refs/pull/N/merge; fetching the tip
-        # separately races a busy master, and a two-dot diff against a NEWER tip lists every file
-        # master added since as a "change" of the PR (a merely-behind worker PR went red on
-        # governance files it never touched). base.sha is depth-independent and exact.
+        # homelab#1441 → #2064 (2026-09-28): diff against the MERGE REF'S OWN FIRST PARENT, read
+        # off the checked-out merge commit — never the base BRANCH tip, and not base.sha either.
+        # The checkout is refs/pull/N/merge = merge(master-as-GitHub-merged-it, head); base.sha is
+        # master at EVENT time, which is the fork point for a behind PR, so a two-dot diff from it
+        # spans fork → merge ref and attributes every master commit since (three guarded-file
+        # merges on 2026-09-28) to the PR (#2046 red on files it never touched). The merge
+        # commit's first parent is exactly the master the diff must exclude; the object is listed
+        # in the merge commit itself, so it resolves under a depth-1 checkout after one fetch.
+        # A non-merge HEAD (no second parent) falls back to base.sha.
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          devbox run pin-only-lint "$BASE_SHA"
+          P1="$(git rev-list --parents -n1 HEAD | awk 'NF>=3{print $2}')"; BASE="${P1:-$BASE_SHA}"
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run pin-only-lint "$BASE"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # The third shape (PR#1993) resolves every added action SHA against the tag upstream, and
@@ -421,8 +426,9 @@ jobs:
         # homelab#1441: same base.sha rule as pin-only-lint above (the two-dot diff against a
         # moved tip is what failed PR#1435 on files master added after its fork).
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          devbox run governance-lint "$BASE_SHA"
+          P1="$(git rev-list --parents -n1 HEAD | awk 'NF>=3{print $2}')"; BASE="${P1:-$BASE_SHA}"   # #2064: the merge ref's first parent, as above
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run governance-lint "$BASE"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # homelab#1441 (b): the file list comes from GitHub's three-dot compare (the checkout is the

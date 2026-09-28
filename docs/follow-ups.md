@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-292** (2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-295** (2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -426,6 +426,26 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
+- [ ] **FU-293** — **`scripts/` is one flat directory of 103 files and path-based ownership cannot
+      cut it.** Box-executed `mgmt-*.sh` (16), CI-invoked lint gates, seat wrappers, one-shot audits
+      and cluster-side helpers all sit under the single `/scripts/ @RasmusSoot` row; carve-outs
+      already started (mermaid-lint's npm manifest + lockfile, 2026-09-27) and every Renovate /
+      deploy lane that touches a script will need another. Parked as structural debt in
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (operator, 2026-08-12); the operator re-raised it
+      2026-09-28 ("it will become a problem for codeowner rules anyway"). **Next:** an inventory by
+      EXECUTOR (box / CI / seat / cluster pod) — that is the tier, per iac-lane's table — then move by
+      density into `scripts/<executor>/` with `devbox.json`, `ci.yaml` and the docs following; the
+      CODEOWNERS rows then name subdirs, not files. Design-shaped: a corpus sitting, not a worker.
+- [ ] **FU-294** — **The npm Renovate lane produces work no ride can do.** Rule [7] (2026-09-27)
+      routes `scripts/mermaid-lint` bumps through Renovate, but a lens finding that needs the
+      lockfile regenerated (homelab#2032: mermaid 12 pulls a `lodash-es` with CVE-2026-4800 — the
+      fix is a two-line `overrides` + `npm install`) cannot be dispatched: homelab's fixer claim is
+      `egress.profile: none` and the baseline mirror set has docker/ghcr/mcr/pypi but **no npm
+      mirror** (`docs/agents/agentstack.md` §ecosystem profile) — so the coordinator parked it on a
+      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). Shape
+      ruled 2026-09-28 (operator): a BASELINE npm mirror (`npm-cache`, VIP `.40.35`, every ride's
+      `NPM_CONFIG_REGISTRY`). **Status:** mirror PR #2060 in flight. **Next:** drill = re-dispatch
+      #2032 once the mirror is LIVE; after it passes, drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
@@ -434,6 +454,14 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
+- [ ] **FU-292** — **Runtime-major adoptables have no harvest.** The migration lens now lists what a new
+      Python/Node/Go release lets the code adopt as ordinary `Follow-ups:` bullets (PR#2025 + this
+      change), but a Renovate PR has no container (ADR-127), so no merged-closeout harvest turns them
+      into an issue — the seat files one backlog issue per runtime bump by hand (openrouter-operator#80
+      → the py314 items landed in #82). **Why deferred:** the container rule is a design ruling; the fix
+      is a harvest target for dependency PRs (one issue per runtime bump on the repo), not a lens edit.
+      **Next:** decide the harvest's owner (coordinator scan at the bump's merge vs the stint closeout)
+      in a design sitting with #2014; until then the lens tells the reviewer to write the bullets anyway.
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran
@@ -776,12 +804,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
       SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
       `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,
-      the single CODEOWNERS carve-out is in place). **Remaining residue:** the composition
-      (`argocd/resources/agentstack/composition.yaml`, 2 sites) still carries the literal — a
-      different app that kustomize cannot reach, so each coordinator bump sweeps one OWNED file
-      and parks on a codeowner click. Needs a small design (feed the composition the tag) before
+      the single CODEOWNERS carve-out is in place). **Remaining residue (re-counted 2026-09-28):**
+      the composition (`argocd/resources/agentstack/composition.yaml`, 5 sites, all at `2026.8.7`)
+      and `argocd/resources/registry-cache/gc-mirrors.yaml` (1 site, `2026.7.25`) carry literals
+      the deploy-pin sweep never reaches — the kustomize pin is at `2026.9.27`, so those pods run
+      images two months behind. Needs a small design (feed the composition the tag) before
       building — NOT an FU-165 goal child for that reason. **Next:** design the composition-side
-      feed, or accept the one-click cost and archive.
+      feed (one source for the tag), or accept the drift and archive.
 - [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
       circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
       (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
@@ -1236,16 +1265,18 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
-- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement suspect.**
-      **POINTER:** [diagnosis, placement options and settling experiment](spikes/nx-02-numa-placement.md).
-      Operator prefers automatic best-effort placement without Kubernetes resource enforcement;
-      wk-04's running Talos kernel lacks automatic NUMA balancing. No placement change applied.
-      **Next:** detector first (swap activity + I/O pressure, fixture + event replay), add per-node/
-      per-VM visibility, then compare placement in a maintenance window, budgeting all three VMs
-      and rerunning e2e. Exact reclaim trigger and locality benefits remain unverified.
-      **ci-runner-02 PARKED 2026-09-25** (operator; drained + stopped,
-      `var.ci_runner_02_running=false`, PR#1978) — flip back after validation.
-      Relates FU-266, FU-225, FU-280.
+- [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
+      [diagnosis, counters, placement, detectors, the boot-disk move](spikes/nx-02-numa-placement.md).
+      DONE 2026-09-27: detectors live (#2040/#2042); wk-04 `numa_pin` 16.0/16.0 GiB on both restarts;
+      nx-02 root+swap on the SA400 and booted from it 20:58Z (the LSI HBA's legacy `Maximum INT 13 Devices`
+      1 → 2 was the missing piece — recipe in the private register `hardware/docs/nx-6035-g5.md`);
+      ci-runner-02 UNPARKED (#2048); its first oracle `kind e2e` (run 36351320341) prepared nodes in **3.9 s**
+      (was 397/67 s; runner-01 2.5 s), green, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire — ONE sample.
+      **Next:** (1) the belts judge a week of real PR load (a second slow sample reopens placement, not the
+      disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
+      boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
+      maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`

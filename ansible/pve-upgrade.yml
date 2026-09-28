@@ -7,4 +7,5 @@
   hosts: pve
   gather_facts: false
   roles:
+    - pve-apt-repos   # repos first: a fresh install's enterprise-only apt 401s every cache refresh
     - pve-upgrade

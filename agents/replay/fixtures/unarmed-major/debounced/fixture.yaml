@@ -1,0 +1,16 @@
+# unarmed-major/debounced (2026-09-28, homelab#2051 + the #2046/#2047 drill): the un-armed major
+# play's unit is emitted for EVERY state of the PR (here: a Renovate-authored major in
+# CHANGES_REQUESTED — the changes-requested clause never sees a non-worker author), bounded by
+# the homelab#198 state-fp debounce and the blocked-on predicate.
+name: unarmed-major-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

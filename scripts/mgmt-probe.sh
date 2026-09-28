@@ -139,12 +139,12 @@ check_tofu() {
       TOFU_STATE_ROOT_DIR="$REPO/tofu/$root" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || exit 90
       [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"   # per-root env (github: the App keys)
       cd "$REPO" || exit 1
-      # A fresh checkout (the box after install, 2026-09-13) has no .terraform/: plan fails with
-      # "Backend initialization required". Init once, with the backend creds already in the env —
-      # the same thing scripts/tf.sh does for the main root on every call.
-      if [ ! -d "$REPO/tofu/$root/.terraform" ]; then
-        devbox run --quiet -- tofu -chdir="tofu/$root" init -input=false -lock=false >/dev/null 2>&1 || exit 91
-      fi
+      # Init EVERY run, lockfile read-only, with the backend creds already in the env — a no-op
+      # while the cached providers match the lock, and the only thing that heals them when a
+      # provider bump lands on master (Renovate moved integrations/github to 6.13.0 and every
+      # tick from 13:17Z 2026-09-27 failed "Required plugins are not installed"; the old
+      # `[ ! -d .terraform ]` guard skipped init forever after the first clone — the #2043 class).
+      devbox run --quiet -- tofu -chdir="tofu/$root" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 || exit 91
       varfile=""
       [ -n "$TOFU_VAR_DIR" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
       # the policy's plan_exclude_types for this root (github: repo settings a read-only token cannot
@@ -231,17 +231,15 @@ check_nodes() {
     # (/var/lib/mgmt/apply/homelab) is, because that is where mgmt-tf and mgmt-apply run. The
     # first real run of this check on the box therefore died with "Required plugins are not
     # installed" (2026-09-21, found by starting mgmt-belt by hand right after #1828 merged).
-    # Decided UP FRONT from the missing directory, exactly as check_tofu does — not by retrying
-    # on any failure, which would also swallow a real regression (review, #1831): a renamed or
-    # removed `node_install_targets` must stay a loud FAIL.
-    if [ ! -d "$REPO/tofu/.terraform" ]; then
-      log "nodes: main root not initialised in this checkout — init once (-lockfile=readonly)"
-      if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
-        # The one case that is a tool problem rather than a finding (the sentinel's 2026-08-19
-        # discrimination): the probe could not read its input, so it has not seen the fleet.
-        # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
-        skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
-      fi
+    # Init EVERY run (lockfile read-only: a no-op while the cached providers match the lock),
+    # because a provider bump on master leaves an initialised checkout in the same state
+    # (2026-09-27, integrations/github 6.13.0 — the #2043 class). Init is the one step allowed
+    # to skip rather than fail — a tool problem, not a finding (the sentinel's 2026-08-19
+    # discrimination; review #1831): the `output` below is never retried, so a renamed or
+    # removed `node_install_targets` stays a loud FAIL.
+    if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
+      # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
+      skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
     fi
     declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
       failed nodes "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }

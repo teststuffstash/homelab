@@ -1,0 +1,12 @@
+# The hypervisor's own console on its BMC's serial-over-LAN (GRUB + kernel on ttyS1 beside VGA), so
+# a host boot can be watched with `ipmitool … sol activate` — FU-289's boot-disk move needs it.
+# Per-host: only a host with `pve_serial_console_unit` in host_vars/ is touched (nx-02; pve has no
+# BMC). Takes effect at the next boot; never reboots. Thin role-caller — logic in
+# roles/pve-serial-console.
+# Run: devbox run -- ansible-playbook ansible/pve-serial-console.yml
+#      (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local, no creds env)
+- name: Proxmox host serial console on SOL
+  hosts: pve
+  gather_facts: false
+  roles:
+    - pve-serial-console

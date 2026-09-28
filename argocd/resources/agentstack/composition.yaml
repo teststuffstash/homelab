@@ -1699,6 +1699,7 @@ spec:
                     - 192.168.40.21/32 # ghcr mirror VIP
                     - 192.168.40.31/32 # mcr.microsoft.com mirror VIP (2026-08-26, the Playwright image)
                     - 192.168.40.34/32 # pypi.org mirror VIP (FU-048) — belt; identity leg below
+                    - 192.168.40.35/32 # registry.npmjs.org mirror VIP (FU-294) — belt; identity leg below
                   toPorts:
                     - ports:
                         - { port: "80", protocol: TCP }
@@ -1738,6 +1739,10 @@ spec:
                     # .40.34 VIP belt above. Its own namespace, not registry-cache.
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: pypi-cache
+                - toEndpoints: # npm pull-through cache (FU-294) — the DNAT'd primary match for the
+                    # .40.35 VIP belt above. Baseline like pypi: a no-profile ride can `npm ci`.
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: npm-cache
                 - toEndpoints: # transcript uploads (agent-finalize)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: garage

@@ -650,6 +650,11 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
+    # unarmed-major folds each check's startedAt too (2026-09-28, #2047): the management sentinel
+    # RE-POSTS its status when its engine revision changes (a new plan on the same head, with the
+    # position lines the lens needs) — same state, new startedAt — and that re-verdict must re-open
+    # the debounce, or the lens that stood aside as checks-red-unattributed is never re-dispatched.
+    unarmed-major) fp_jq="$STATE_FP_JQ_CIRED" ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
@@ -3673,8 +3678,54 @@ EOF_GTHEMES_OPEN
     # surfaces. Report-only — the account's lane is unknowable, so dispatching would risk the #595
     # per-tick leak on a PR that might have been seat-authored; the catch-all line keeps it in a
     # human's sight instead of silent.
+    # Renovate rebase-tick (2026-09-28, homelab#1977/#2037): a Renovate-authored DIRTY PR is NOT
+    # "the author's own push" — Renovate rebases only what it still recognizes as its own, and ONE
+    # foreign commit (the updater's update-branch merge on a non-grouped branch, a seat's) flips it
+    # to "Edited/Blocked: will not automatically rebase" for good (#1977 sat DIRTY from 2026-09-27
+    # "waiting for Renovate's rebase" that could never come). Renovate's own escape hatch is the
+    # rebase/retry checkbox in the PR body: honoured on an edited PR too, cleared by Renovate after
+    # the rebase (custom changes are lost — a dependency PR carries none worth keeping). Launcher-
+    # owned and idempotent: a ticked box is left alone (Renovate's next run, ≤6h, is the mover), a
+    # body without the box is a report line. The seat-authored report loop below excludes Renovate.
+    # >>>REPLAY:renovate-rebase-tick>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")))|.number'); do
+      # FRESH body read right before the only full-body overwrite in this file: the per-repo
+      # `prsjson` snapshot can be minutes old, and Renovate regenerates PR bodies on its runs — a
+      # stale copy with one box flipped would clobber the newer text (review finding, #2055).
+      # UNTOUCHED branches only (2026-09-28, #2046): a Renovate rebase REGENERATES the branch from
+      # master + Renovate's own change — a worker's adaptation commit on an un-armed major would be
+      # lost. The updater's definition (agents/update-pr-branch.sh renovate_untouched): every
+      # non-merge commit is Renovate-authored. An adapted branch moves by merging master into it
+      # — the unarmed-major ride's merge-conflict play — never by the box; report it and move on.
+      rt_pr="$(gh pr view "$u" --repo "$slug" --json body,commits 2>/dev/null)" || rt_pr=''
+      if ! printf '%s' "$rt_pr" | jq -e '.commits | type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: could not read body + commits (rule #6) — no write; next tick\n"
+        continue
+      fi
+      if ! printf '%s' "$rt_pr" | jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | (.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate") ] | all' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u} carries a non-Renovate commit (an adaptation) — a rebase would drop it; the branch moves by merging master (the unarmed-major ride's merge-conflict play), not by the rebase box\n"
+        continue
+      fi
+      rt_body="$(printf '%s' "$rt_pr" | jq -r '.body // ""' 2>/dev/null)" || rt_body=''
+      if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
+        continue
+      fi
+      if ! printf '%s' "$rt_body" | grep -q -- '- \[ \] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u} has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)\n"
+        continue
+      fi
+      rt_new="$(printf '%s' "$rt_body" | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/')"
+      if gh pr edit "$u" --repo "$slug" --body "$rt_new" >/dev/null 2>&1; then
+        mc_event "$slug" "$u" repair "**rebase requested** — DIRTY Renovate PR: ticked Renovate's rebase/retry checkbox (a foreign commit had flipped it to Edited/Blocked, so Renovate would never rebase on its own); its next run rebases, the updater clears \`merge-conflict\` (homelab#1977 class)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ merge-conflict Renovate PR #${u}: rebase requested via the checkbox — Renovate's next run (≤6h) rebases it\n"
+      else
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u}: could not tick the rebase checkbox — human check\n"
+      fi
+    done
+    # <<<REPLAY:renovate-rebase-tick<<<
     # >>>REPLAY:merge-conflict-gate>>>
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa) and ((((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")) | not))|.number'); do
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author == null))|.number'); do
@@ -3719,10 +3770,93 @@ EOF_GTHEMES_OPEN
       item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
     done
     # <<<REPLAY:merge-conflict-gate<<<
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
+    # stale-stamp repair (2026-09-28, homelab#2037/#2046/#2047 — cause on #1988): an UN-ARMED `major`
+    # PR that wears the mechanical lane's `automerge` label, or carries the renovate-approve reflex's
+    # rubber stamp ("Auto-approved: Renovate automerge dep bump …") as a LIVE APPROVED of the
+    # reviewer's OWN identity at head, is a contradiction the lanes cannot resolve on their own: the
+    # label reached majors through a Renovate addLabels merge (fixed at the source the same day), the
+    # reflex now refuses `major`, but a stamp that already landed shares the migration lens's identity
+    # — reviewer-session.sh STEP 0(a) refuses on own-verdict-at-head, an update-branch RE-POINTS the
+    # review instead of dismissing it (homelab#1422), and major-handoff.sh never sees the four
+    # headings. Launcher-owned repair (ADR-094: shell ACTS on a deterministic contradiction, no LLM
+    # judgment): strip the label, DISMISS the stamp (a DISMISSED review is an ended round the lens
+    # does not count — STEP 0(a), homelab#556), one ADR-103 event line; the PR enters `unarmed-major`
+    # below on its own. Only the reflex's literal stamp body qualifies — a real lens verdict (four
+    # headings) is never touched. Rule #6 on every probe; `agent/error` PRs stay human-first (a human
+    # un-latches, this clause repairs on the next tick); `major/awaiting-human` is already handed off.
+    # >>>REPLAY:stale-stamp-repair>>>
+    ss_bot="${REVIEWER_AUTHOR:-homelab-reviewer}"; ss_bot="${ss_bot%\[bot\]}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null))|.number'); do
+      ss_leaked=0
+      printf '%s' "$prsjson" | jq -e --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name))|index("automerge")' >/dev/null 2>&1 && ss_leaked=1
+      # the REST list carries the numeric review id the dismissal endpoint needs (gh pr view's is a node id)
+      ss_reviews="$(gh api "repos/$slug/pulls/$u/reviews?per_page=100" 2>/dev/null)" || ss_reviews=''
+      if ! printf '%s' "$ss_reviews" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not list reviews (rule #6). No write; next tick.\n"
+        continue
+      fi
+      ss_cands="$(printf '%s' "$ss_reviews" | jq -c --arg bot "$ss_bot" '[.[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == $bot and .state == "APPROVED" and ((.body // "") | startswith("Auto-approved: Renovate automerge dep bump")))]' 2>/dev/null)" || ss_cands='[]'
+      ss_rid=''
+      if [ "$(printf '%s' "$ss_cands" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+        # "at head" is the reflex's own definition: submitted at or after the newest NON-merge commit
+        # (an update-branch merge commit is not new content) — the exact predicate STEP 0(a) refuses on.
+        ss_pr="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" || ss_pr=''
+        ss_since="$(printf '%s' "$ss_pr" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate] | max) // ""' 2>/dev/null)" || ss_since=''
+        if [ -z "$ss_since" ]; then
+          orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not read commits (rule #6). No write; next tick.\n"
+          continue
+        fi
+        ss_rid="$(printf '%s' "$ss_cands" | jq -r --arg since "$ss_since" '[.[] | select((.submitted_at // "") >= $since)] | last | .id // empty' 2>/dev/null)" || ss_rid=''
+      fi
+      [ "$ss_leaked" = 1 ] || [ -n "$ss_rid" ] || continue
+      ss_ok=1; ss_what=''
+      if [ -n "$ss_rid" ]; then
+        gh api -X PUT "repos/$slug/pulls/$u/reviews/$ss_rid/dismissals" -f event=DISMISS -f message="stale-stamp repair: this APPROVED is the renovate-approve reflex's rubber stamp on an UN-ARMED \`major\` PR — it shares the migration lens's identity and blocks the lens at STEP 0(a); dismissed by the coordinator scan so the lens can review (homelab#2037 class, cause #1988)." >/dev/null 2>&1 \
+          && ss_what="dismissed the reflex's rubber stamp (review ${ss_rid})" || ss_ok=0
+      fi
+      if [ "$ss_leaked" = 1 ]; then
+        gh pr edit "$u" --repo "$slug" --remove-label automerge >/dev/null 2>&1 \
+          && ss_what="${ss_what:+$ss_what; }stripped the leaked \`automerge\` label" || ss_ok=0
+      fi
+      if [ $ss_ok = 1 ]; then
+        mc_event "$slug" "$u" repair "**stale-stamp repair** — un-armed \`major\` wearing the mechanical lane's marker: ${ss_what}. The migration lens can now review; \`unarmed-major\` picks this PR up on the next tick (homelab#2037 class, cause #1988)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ stale-stamp repair: PR #${u} — ${ss_what}\n"
+      else
+        orphans="${orphans}[$repo] ⚠ stale-stamp repair FAILED on PR #${u} (${ss_what:-nothing written}) — human check\n"
+      fi
+    done
+    # <<<REPLAY:stale-stamp-repair<<<
+    # unarmed-major (the brief's §Dependency major bumps play) — EVERY state of an un-armed `major`
+    # is this unit's (2026-09-28, homelab#2051 + the #2046/#2047 drill): red at birth (the lens
+    # investigates the red — reviewer STEP 0's un-armed-major exception), CHANGES_REQUESTED (the
+    # ride dispatches a worker on the PR branch; the changes-requested clause is WORKER_AUTHOR-
+    # scoped and never sees a Renovate-authored PR — #2033 sat immobile after its adaptation was
+    # pushed), pushed-not-re-reviewed (the ride re-dispatches the lens), APPROVED with the four
+    # headings (major-handoff.sh). The old `reviewDecision != CHANGES_REQUESTED` guard closed the
+    # only door after the first verdict. What bounds it: the homelab#198 state-fp debounce (the
+    # dispatch-marker case below records `state-fp:unarmed-major:` — a byte-identical state never
+    # buys a second ride; a verdict, a push, a check flip or a dismissal re-opens it) and the
+    # blocked-on predicate (a ride that parks on a human/issue/PR is honoured, homelab#1188).
+    # >>>REPLAY:unarmed-major>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
+      pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
+      um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
+      case "$um_boc" in
+        blocked*)
+          reason="${um_boc#blocked|}"
+          orphans="${orphans}[$repo] ⏳ unarmed-major held — PR #${u} is blocked-on: ${reason}\n"
+          continue
+          ;;
+      esac
+      umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
+      if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push, a check flip or a dismissal re-opens it.\n"
+        continue
+      fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
+    # <<<REPLAY:unarmed-major<<<
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
     # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
@@ -5549,8 +5683,9 @@ EOF
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
-    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the three
-    # clauses whose emission is gated on it (arbitrate, ci-red, and merge-conflict since homelab#595).
+    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the clauses
+    # whose emission is gated on it (arbitrate, ci-red, merge-conflict since homelab#595, and
+    # unarmed-major since 2026-09-28 — its play needs several rides per PR, one per STATE).
     # Here and not at emission because this is the one place a unit is known to be THE dispatched
     # one; and BEFORE the spawn because the session's own work (a pushed fix round, a dismissal, a
     # rerun) is exactly the state change that must re-open the gate — recording afterwards would
@@ -5559,7 +5694,7 @@ EOF
     # it never blocks the ride it is annotating.
     # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
-      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*)
+      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*|unarmed-major:pr-*)
         dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}" "${uclause}")"; dfp="${dfp%%|*}"
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2

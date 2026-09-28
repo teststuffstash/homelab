@@ -1,0 +1,10 @@
+[
+  {
+    "id": 556,
+    "user": {"login": "homelab-reviewer[bot]"},
+    "state": "APPROVED",
+    "body": "## Upstream\nhelm provider 3.x: `kubernetes {}` block became an attribute …\n\n## Known issues\nnone found, 40 open issues scanned\n\n## Platform compatibility\nfleet runs opentofu 1.10 …\n\n## Evidence\nmanagement-sentinel planned +0 ~0 -0 at head.",
+    "commit_id": "3c497139aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "submitted_at": "2026-09-28T08:00:00Z"
+  }
+]

@@ -301,10 +301,11 @@ tf="$(mktemp)"; df="$(mktemp)"; trap 'rm -f "$tf" "$df" "$tf.auto"' EXIT
 if [ -n "${RECONCILE_TARGETS_JSON:-}" ]; then cp "$RECONCILE_TARGETS_JSON" "$tf"
 else
   [ -f "$MAIN_STATE" ] || { log "FATAL no main state at $MAIN_STATE — the reconciler runs on the box"; emit; exit 1; }
-  if [ ! -d "$REPO/tofu/.terraform" ]; then
-    ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 ) \
-      || { log "FATAL cannot initialise the main root — declaration unreadable"; emit; exit 1; }
-  fi
+  # init EVERY run, lockfile read-only — a no-op while the cached providers match the lock, and
+  # what heals them after a provider bump on master (the #2043 class; 2026-09-27 every reconcile
+  # tick from 13:17Z died at the `output` below with the checkout initialised but plugins missing)
+  ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 ) \
+    || { log "FATAL cannot initialise the main root — declaration unreadable"; emit; exit 1; }
   ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu output -state="$MAIN_STATE" -json node_install_targets ) >"$tf" 2>/dev/null \
     || { log "FATAL tofu output node_install_targets failed"; emit; exit 1; }
 fi

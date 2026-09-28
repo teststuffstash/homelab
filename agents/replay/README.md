@@ -306,6 +306,10 @@ is stale, so it cannot drift the way the prose register did.
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
+| `major-arm-guard-armed-major` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-ordinary` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-unarmed-major` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `major-handoff` | table | - | `agents/major-handoff.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
@@ -343,6 +347,10 @@ is stale, so it cannot drift the way the prose register did.
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
+| `renovate-rebase-tick-adapted` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-already-ticked` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-no-checkbox` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -469,6 +477,8 @@ is stale, so it cannot drift the way the prose register did.
 | `slo-teeth/slo-teeth` | suite | - | `-` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-stamp-and-label` | actions | - | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `strike-retry` | table | - | `agents/agent-session.sh` | - |
@@ -476,6 +486,9 @@ is stale, so it cannot drift the way the prose register did.
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
+| `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |

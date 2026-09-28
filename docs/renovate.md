@@ -73,16 +73,27 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
   `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
   2026-09-27). Majors → the catch-all.
-- **Terraform providers: the [management box](management-box.md) is the gate; the mechanical `automerge` lane is the TARGET, wired by a separate operator-direct edit of `renovate-global.json` (the terraform rule still labels `major/awaiting-human`, un-armed, until that lands).** Stage 1
+- **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
   (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
   `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
   `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
   ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
-  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are to be excluded from the manager
-  (`matchFileNames`, the same `.github` edit) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
+  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
+  (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
+  **Terraform MAJORS are not this lane** (2026-09-28): a provider major, or an image tag Renovate
+  extracts from a `kubernetes_deployment` in tofu, takes the major catch-all — un-armed, `major`,
+  the coordinator's lane (README §Dependency major bumps), because a major here typically needs an
+  in-PR adaptation (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046).
+  The lane's marker must not leak: the terraform rule is restricted to non-major update types
+  (Renovate MERGES `addLabels` across rules and nothing removes a label — three majors were born
+  `automerge`+`major` on 2026-09-27, #2037/#2046/#2047), `renovate-approve` refuses any
+  `major`-labelled PR (its stamp shares the migration lens's identity, so it deadlocked the lens
+  at STEP 0(a)), and the coordinator scan's **stale-stamp repair** dismisses a stamp that landed
+  anyway and strips the label. What a merged major then applies is the box's, inside its allowlist
+  (`kubernetes_deployment.*` since the same day — the #2037 image bump was "1 address outside").
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
@@ -132,6 +143,10 @@ Safe: no duplication, no churn, nothing auto-acts on it.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
-- **GitHub Dependabot alerts** need an App permission + repo Dependency-graph/Dependabot settings; we
-  use **OSV instead** and ignore that warning. (Grant `vulnerability_alerts:read` to the App only if you
-  specifically want GitHub's alert source too.)
+- **GitHub Dependabot alerts**: OSV stays the vulnerability source, but the `Cannot access vulnerability
+  alerts` WARN cannot be ignored — it is a *Repository Problem*, and Renovate ensures a Dependency
+  Dashboard issue on every repo that has one, `dependencyDashboard: false` notwithstanding (10 open
+  dashboards org-wide on 2026-09-27; agent-coordinator#1 deleted → #24 re-created within the hour).
+  So the App declares `vulnerability_alerts: read` (`docs/github-apps.yaml`, the FU-098 flow: PR the
+  declaration, click in the App settings + approve the install, `GithubAppPermissionDrift` clears).
+  With the WARN gone and no pending branches, the dashboards stop being ensured — close them once.
