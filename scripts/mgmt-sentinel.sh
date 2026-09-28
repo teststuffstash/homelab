@@ -63,7 +63,12 @@ trap 'rm -f "$POL"' EXIT
 # lines) or a policy widening (the Deployment allowlist) reaches a parked PR without a push and
 # without `mgmt-human-plan`. Before this the box memoized per sha forever: #2046/#2047 kept a red
 # whose cause the box would never republish. Empty on a probe failure → the old per-sha memo.
-ENGINE_REV="$( { git -C "$REPO" rev-parse origin/master:scripts/mgmt-sentinel.sh origin/master:scripts/mgmt-lib.sh origin/master:policy/mgmt/plan-input.yaml; } 2>/dev/null | sha256sum | cut -c1-7)" || ENGINE_REV=""
+# The revision hashes the files that EXECUTE — this script and the lib next to it come from the
+# box's hourly-pulled checkout (/var/lib/homelab), not from the sentinel's own clone, which is
+# fetched every run and can be an hour ahead of what runs (2026-09-28 12:06Z: a re-judge wore a
+# new tag while the old script ran, and the "proof" it produced was the old engine's). The policy
+# is read from the clone's origin/master every run, so its blob id is the right input for it.
+ENGINE_REV="$( { cat "$0" "$HERE/mgmt-lib.sh"; git -C "$REPO" rev-parse origin/master:policy/mgmt/plan-input.yaml; } 2>/dev/null | sha256sum | cut -c1-7)" || ENGINE_REV=""
 case "$ENGINE_REV" in *[!0-9a-f]*|'') ENGINE_REV="";; esac
 [ -n "$ENGINE_REV" ] || log "engine revision unreadable — verdicts fall back to the per-sha memo this run"
 ETAG="${ENGINE_REV:+[e:$ENGINE_REV] }"
