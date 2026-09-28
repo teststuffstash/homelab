@@ -75,7 +75,8 @@ fp_goal_exempt() {
 #   machine-merge    — CI gate only (tier 1: argocd/resources/** and unowned paths)
 #   codeowner-merge  — agent may author, human merges (tier 2 + tier 3 CODEOWNERS-owned paths)
 #   codeowner-author — only codeowner may author (❌ set: .github/, .agents/, devbox.json|lock,
-#                      scripts/ — paths that take effect BEFORE a human approves)
+#                      mgmt/scripts/ + the three box-executed scripts/ verbs — paths that take
+#                      effect BEFORE a human approves, or that the management box runs from master)
 # Callers: coordinator-scan.sh (queued-dispatch operator-lane hold), fix-debounce-argo.yaml
 # (queue-time deny), and any future reader — one definition, N readers.
 classify_touches() (
@@ -105,13 +106,16 @@ classify_touches() (
     #   .github/**       — PR runs its own workflow (arbitrary code on the runner)
     #   .agents/**       — next round reads its recipe from the branch
     #   devbox.json|lock — CI executes from the branch
-    #   scripts/**       — CI executes from the branch (in homelab the scripts ARE the checks)
-    #   mgmt/scripts/** — the same scripts, grouped with the management box (mgmt/, 2026-09-28)
+    #   mgmt/scripts/**  — the management box runs them from master (mgmt/, 2026-09-28)
+    #   the box verbs    — scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh,
+    #                      also run by the box (mgmt-reconcile / mgmt_health)
+    # The rest of scripts/** LEFT this set on 2026-09-28 (ADR-142 trial): CI still executes it
+    # from the branch, but the gate is now the reviewer's gate-change lens + the gate-drift report.
     case "$path" in
       .github/*|.github) _new_tier="codeowner-author" ;;
       .agents/*|.agents) _new_tier="codeowner-author" ;;
       devbox.json|devbox.lock) _new_tier="codeowner-author" ;;
-      scripts/*|scripts|mgmt/scripts/*|mgmt/scripts) _new_tier="codeowner-author" ;;
+      scripts/node-maintenance.sh|scripts/maintenance-window.sh|scripts/controlplane-upgrade.sh|mgmt/scripts/*|mgmt/scripts) _new_tier="codeowner-author" ;;
       *)
         # ── CODEOWNERS-based classification ──────────────────────────────────────────────────
         # Parse CODEOWNERS at runtime: last-matching-pattern wins. A pattern with an owner makes

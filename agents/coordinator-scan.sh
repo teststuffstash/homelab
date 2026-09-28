@@ -166,7 +166,7 @@ GUARDED_PATHS="$(guarded_paths || true)"
 # `classify_touches()` in agents/footprint.sh is the ONE machine-readable home for the platform
 # lane path tables (docs/agents/iac-lane.md §The platform lane). It returns `codeowner-author`
 # for the ❌ operator-author set — paths where authoring takes effect BEFORE a human approves
-# (`.github/`, `.agents/`, `devbox.json|lock`, `scripts/`). A queued issue whose declared
+# (`.github/`, `.agents/`, `devbox.json|lock`, `mgmt/scripts/` + the box-executed `scripts/` verbs — ADR-142 trial). A queued issue whose declared
 # `Touches:` footprint lands on any of these paths is undeliverable by any worker PR — the
 # required `ci` check is structurally red before the worker writes a line, and the documented
 # route is an operator push to master. The scan must not dispatch into that hole.

@@ -2521,3 +2521,25 @@ the old pods serve throughout a stuck roll; an RWO singleton never enters this l
 a human read of every image bump (rejected — the operator's time; #2037 sat a day for a tag
 change); reverting on `KubePodCrashLooping` too (rejected for now — a crash loop inside a
 readiness-gated roll IS a stuck rollout, one detector is enough until evidence says otherwise).
+
+### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
+**Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
+worker gates, I can always revert"); re-read **2026-10-05** (a week) and **2026-10-28** (a month).
+**Decision:** `scripts/**` is un-owned in CODEOWNERS and leaves every worker gate — except
+`mgmt/scripts/**` and the three box-executed verbs
+(`scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh`): the management box runs
+them from master and stays out of the trial. In their place: the **gate-change lens**
+(`agents/lenses/gate-change.md`, BLOCKING, selected on any `scripts/` diff in a repo whose default
+branch carries the report script) and the **gate-drift report** (`scripts/gate-drift.sh`, a
+non-failing `ci` step run from the BASE commit): (A) master's version of each changed gate × the
+PR's content, (B) master's version of each changed test × the PR's scripts, each beside the PR's own
+run. **Considered:** keep the gate (143 of 146 `scripts/` commits in a month were seat-authored: the
+author read itself under the sole-codeowner waiver); un-own without a replacement (ADR-100's
+doctrine forbids it); run gates from the base ref as the enforced gate (rejected for now — a PR that
+changes a rule could never pass its own new rule; kept as the report's evidence instead). **Why:**
+ADR-100 un-gates only by owner→rule replacement; the self-gating hazard is what the rule must cover,
+and the report replays exactly the edit the PR could hide behind. **Consequences:** drills (seat
+subagents, issue says one thing, PR does another) against a throwaway `goal/**` base before trusting
+it; the re-reads count gate-change PRs, lens verdicts, DIFFERS lines and any weakened gate found
+after merge. Revert = restore `/scripts/` in CODEOWNERS + `scripts/` in GOVERNANCE (the ❌ table rows
+follow). Tracker: FU-293; lane table: [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.

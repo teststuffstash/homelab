@@ -4,7 +4,7 @@ OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded
 OUT pending set: 1 issue(s)
 OUT single pending issue — deterministic fast path
-OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge: agents/coordinator/retro-argo.yaml,scripts/reflex-now.sh (iac-lane ❌ table — classify_touches)
+OUT inert teststuffstash/homelab#{{issue}} — footprint takes effect pre-merge: agents/coordinator/retro-argo.yaml,scripts/node-maintenance.sh (iac-lane ❌ table — classify_touches)
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#{{issue}}
 ERR LEGACY-GRAMMAR alert-fp teststuffstash/homelab#226
 ERR LEGACY-GRAMMAR self-referential teststuffstash/homelab#226

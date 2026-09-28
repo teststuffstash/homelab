@@ -72,8 +72,8 @@ test_escapes "compelled counterparts exempt when undeclared" \
 # so all paths are escaped.
 test_escapes "undeclared sentinel — all paths escape" \
   "*" \
-  "$(printf 'docs/readme.md\nscripts/example.sh\n')" \
-  "$(printf 'docs/readme.md\nscripts/example.sh|governance\n')"
+  "$(printf 'docs/readme.md\nagents/example.sh\n')" \
+  "$(printf 'docs/readme.md\nagents/example.sh|governance\n')"
 
 # ── CASE 6: Mixed governance and non-governance escapes ──────────────────────────────────
 # When some escaped paths are governance and others are not, both should be reported but
@@ -105,12 +105,12 @@ test_escapes "escape into .agents governance tier" \
   ".agents/review.md|governance"
 
 # ── CASE 10: Multiple governance tiers in escapes ──────────────────────────────────────────
-# Check that all governance tiers are recognized: agents/**, .agents/**, scripts/**, policy/**,
+# Check that all governance tiers are recognized: agents/**, .agents/**, the box verbs, policy/**,
 # .github/**, tofu/github/**, tofu/cloudflare/**
 test_escapes "multiple governance tiers" \
   "docs/**" \
-  "$(printf 'docs/file.md\nagents/file.sh\nscripts/file.sh\npolicy/rule.rego\n.github/workflow.yaml\ntofu/github/main.tf\ntofu/cloudflare/dns.tf\n')" \
-  "$(printf 'agents/file.sh|governance\nscripts/file.sh|governance\npolicy/rule.rego|governance\n.github/workflow.yaml|governance\ntofu/github/main.tf|governance\ntofu/cloudflare/dns.tf|governance\n')"
+  "$(printf 'docs/file.md\nagents/file.sh\nscripts/node-maintenance.sh\nscripts/file.sh\npolicy/rule.rego\n.github/workflow.yaml\ntofu/github/main.tf\ntofu/cloudflare/dns.tf\n')" \
+  "$(printf 'agents/file.sh|governance\nscripts/node-maintenance.sh|governance\nscripts/file.sh\npolicy/rule.rego|governance\n.github/workflow.yaml|governance\ntofu/github/main.tf|governance\ntofu/cloudflare/dns.tf|governance\n')"
 
 # ── CASE 11: the replay-tree exemption (ADR-097 addendum, 2026-08-18) ──────────────────────
 # A changed path under agents/replay/ is NEVER an escape: the ADR-103 ratchet COMPELS a replay

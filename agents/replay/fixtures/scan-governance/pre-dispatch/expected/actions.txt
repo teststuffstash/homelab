@@ -2,10 +2,11 @@ OUT DISPATCH #993 (homelab, declared: agents/coordinator-scan.sh, agents/replay/
 OUT DISPATCH #1002 (homelab, declared: argocd/resources/loki/)
 OUT DISPATCH #1003 (homelab, declared: *)
 OUT DISPATCH #1008 (oracle-fleet, declared: scripts/)
+OUT DISPATCH #1009 (homelab, declared: scripts/governance-lint.sh)
 OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
 OUT ORPHAN   issue #1000 — bump the checkout action version (declared: .github/workflows/ci.yaml)
 OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
-OUT ORPHAN   issue #1001 — widen the governance set (declared: scripts/governance-lint.sh)
+OUT ORPHAN   issue #1001 — change the box-executed maintenance verb (declared: scripts/node-maintenance.sh)
 OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
 OUT ORPHAN   issue #1004 — update the access policy (declared: policy/ → governance: policy/)
 OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
