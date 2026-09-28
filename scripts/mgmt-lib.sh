@@ -300,8 +300,16 @@ mgmt_stage1() {
     [ "$mode" = "120000" ] && printf 'symlink\t%s\t%s\n' "$f" "mode 120000 in the head tree"
   done
   [ ${#judged[@]} -gt 0 ] || return 0
-  # ADDED lines of the diff over the judged files, tagged by file
-  local cur=""
+  # ADDED lines over the judged files, tagged by file — from the endpoint diff AND from every
+  # commit's own diff across the span (`git log -p`), because a denied PATTERN added and reverted
+  # inside one span is invisible at the endpoints (review on PR#2087, 2026-09-28 — the sibling of
+  # the span-wide file list above). Both reads fail closed; hits are de-duplicated at the end.
+  local scan cur=""
+  scan="$(git -C "$repo" diff --no-color --unified=0 "$base" "$head" -- "${judged[@]}")" || return 1
+  local scan_log
+  scan_log="$(git -C "$repo" log -p --no-color --unified=0 --format= "${base}..${head}" -- "${judged[@]}" 2>/dev/null)" || return 1
+  scan="$(printf '%s\n%s\n' "$scan" "$scan_log")"
+  local hits_out=""
   while IFS= read -r line; do
     case "$line" in
       +++\ b/*) cur="${line#+++ b/}"; continue ;;
@@ -309,11 +317,12 @@ mgmt_stage1() {
       +*) line="${line#+}"
           for pat in "${denyre[@]}"; do
             if printf '%s' "$line" | grep -Eq -- "$pat"; then
-              printf 'deny_patterns\t%s\t%s\n' "$cur" "$pat"
+              hits_out="${hits_out}deny_patterns"$'\t'"${cur}"$'\t'"${pat}"$'\n'
             fi
           done ;;
     esac
-  done < <(git -C "$repo" diff --no-color --unified=0 "$base" "$head" -- "${judged[@]}")
+  done <<< "$scan"
+  [ -n "$hits_out" ] && printf '%s' "$hits_out" | sort -u
   return 0
 }
 

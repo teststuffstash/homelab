@@ -70,6 +70,9 @@ case_ shell-script      deny_paths    'echo "#!/bin/sh" > tofu/apply.sh'
 case_ tfvars-json       deny_paths    'echo "{}" > tofu/x.auto.tfvars.json'
 case_ tf-json           deny_paths    'echo "{}" > tofu/evil.tf.json'
 case_ remote-module     deny_patterns 'printf "module \"m\" { source = \"git::https://x/y.git\" }\n" >> tofu/monitoring.tf'
+# A denied PATTERN added in one commit and reverted in the next nets to nothing at the span's
+# endpoints; the span-wide scan (2026-09-28, review on PR#2087) still sees the added line.
+case_ remote-module-added-then-reverted deny_patterns 'printf "module \"m\" { source = \"git::https://x/y.git\" }\n" > tofu/evil.tf; git add -A; git commit -q -m add-evil; rm tofu/evil.tf'
 case_ data-external     deny_patterns 'printf "data \"external\" \"x\" {}\n" >> tofu/monitoring.tf'
 case_ data-http         deny_patterns 'printf "data \"http\" \"x\" {}\n" >> tofu/monitoring.tf'
 case_ provisioner       deny_patterns 'printf "  provisioner \"local-exec\" {}\n" >> tofu/monitoring.tf'
