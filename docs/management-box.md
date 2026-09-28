@@ -441,6 +441,11 @@ the loop ADMITS the provider-pin shape on a master span exactly as the sentinel 
 — it used to read stage 1's `admitted` line as a hit, so the first auto-merged provider bump
 (#2075) parked every later master on "stage 1: admitted on master diff — human apply" until a
 human apply; now the plan and the apply allowlist are the gate for that span, as for any other.
+**And the span's surface is what any commit in it touched, not the endpoint diff** (same day, the
+tofu-image-revert drill): a bad image tag and its revert net to zero files, so the loop stamped
+past a span whose first half had already reached the cluster (the apply had errored on the
+provider's rollout wait, `wait_for_rollout`, after the object was written) — `git log --name-only`
+over the span now decides whether a root plans.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the

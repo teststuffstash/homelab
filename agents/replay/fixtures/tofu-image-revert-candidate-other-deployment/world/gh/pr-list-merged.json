@@ -1,5 +1,19 @@
 [
   {
+    "number": 2095,
+    "title": "Update mongo Docker tag to v8",
+    "headRefName": "renovate/mongo-8.x",
+    "mergedAt": "2026-09-28T14:55:00Z",
+    "mergeCommit": {
+      "oid": "5555555555555555555555555555555555555555"
+    },
+    "files": [
+      {
+        "path": "tofu/unifi.tf"
+      }
+    ]
+  },
+  {
     "number": 2081,
     "title": "revert: Update docker Docker tag to v29 (auto-rollback \u2014 forgejo-runner/forgejo-runner rollout stuck post-merge)",
     "headRefName": "revert-img-0abc1234",

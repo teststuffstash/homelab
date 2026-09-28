@@ -1,6 +1,8 @@
 CALL gh pr list --repo teststuffstash/homelab --state merged --limit 10 --json number,title,headRefName,mergedAt,mergeCommit,files --jq [.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= "2026-09-28T12:00:00Z") | select(.files[]?.path | startswith("tofu/"))] | sort_by(.mergedAt) | reverse | .[] | tojson
+CALL gh pr diff 2095 --repo teststuffstash/homelab
 CALL gh pr diff 2090 --repo teststuffstash/homelab
 CALL gh pr diff 2037 --repo teststuffstash/homelab
+OUT → teststuffstash/homelab#2095 changed no file whose kubernetes_deployment metadata names "forgejo-runner" — not the stuck forgejo-runner/forgejo-runner's merge; next
 OUT → teststuffstash/homelab#2090 is NOT image-line-only — a later, unrelated tofu merge does not mask the bump; next
 OUT → coupling: teststuffstash/homelab#2037 declares Deployment "forgejo-runner" in tofu/forgejo-runner.tf
 OUT → candidate: teststuffstash/homelab#2037 @ 0abc1234 (Update docker Docker tag to v29) — image-line-only, declares forgejo-runner, inside the revert class

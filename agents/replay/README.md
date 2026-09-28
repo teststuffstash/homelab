@@ -483,6 +483,7 @@ is stale, so it cannot drift the way the prose register did.
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `strike-retry` | table | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
+| `tofu-image-revert-candidate-other-deployment` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-coupling-container` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-coupling-match` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |

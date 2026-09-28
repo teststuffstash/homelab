@@ -1,0 +1,10 @@
+diff --git a/tofu/forgejo-runner.tf b/tofu/forgejo-runner.tf
+--- a/tofu/forgejo-runner.tf
++++ b/tofu/forgejo-runner.tf
+@@ -77,6 +77,7 @@
+     name      = "forgejo-runner"
+     namespace = kubernetes_namespace.forgejo_runner.metadata[0].name
+   }
++  wait_for_rollout = false
+   spec {
+     replicas = 2

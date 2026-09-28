@@ -15,4 +15,5 @@ env:
 parts:
   - file:bridge.sh
   - block:tofu-image-revert-coupling
+  - file:call.sh
   - file:post.sh
