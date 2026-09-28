@@ -1,0 +1,10 @@
+[
+  {
+    "id": 555,
+    "user": {"login": "homelab-reviewer[bot]"},
+    "state": "APPROVED",
+    "body": "Auto-approved: Renovate automerge dep bump — CI is the gate.",
+    "commit_id": "71686359aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "submitted_at": "2026-09-27T20:44:00Z"
+  }
+]

@@ -269,8 +269,16 @@ while IFS=$'\t' read -r pr sha; do
       # the detail body — a provider's message can name live objects and values, and this comment
       # is public (the #1635 review: an error quoted verbatim is an existence oracle)
       heads="$(grep -E '^(│ )?Error: ' "$out.log" 2>/dev/null | sed -E 's/^│ //' | grep -v 'error running script' | head -3)"
+      # …plus the POSITIONS (2026-09-28, homelab#2046/#2047): tofu's `  on <file> line N, in <block>:`
+      # lines name a file, a line and a block header — never a value — and they are what a worker
+      # or the migration lens needs to adapt the PR without a human reading the box journal (the
+      # helm 3 major errored "Unsupported block type" with no location; the kubernetes 3 major
+      # posted nothing at all because its headline carried an `=`). Same `=` guard as the headlines.
+      locs="$(grep -E '^(│ )?[[:space:]]+on [^[:space:]]+ line [0-9]+' "$out.log" 2>/dev/null | sed -E 's/^│ //; s/^[[:space:]]+//' | grep -v '=' | head -3)"
       { echo; echo "### \`$root\` — plan ERRORED"
-        if [ -n "$heads" ] && ! printf '%s' "$heads" | grep -q '='; then echo '```'; printf '%s\n' "$heads"; echo '```'; echo "(headlines only — the full log stays in the box journal)"; else echo "see the box journal (output withheld: it may carry values)"; fi
+        if [ -n "$heads" ] && ! printf '%s' "$heads" | grep -q '='; then echo '```'; printf '%s\n' "$heads"; [ -n "$locs" ] && printf '%s\n' "$locs"; echo '```'; echo "(headlines + positions only — the full log stays in the box journal)"
+        elif [ -n "$locs" ]; then echo '```'; printf '%s\n' "$locs"; echo '```'; echo "(positions only — the headline may carry values; the full log stays in the box journal)"
+        else echo "see the box journal (output withheld: it may carry values)"; fi
       } >>"$bodyf"
       log "[#$pr] $root plan errored: $(tr '\n' ' ' <<<"$tail3" | head -c 200)"
       continue

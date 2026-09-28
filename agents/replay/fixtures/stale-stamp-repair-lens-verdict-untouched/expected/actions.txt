@@ -1,0 +1,4 @@
+CALL gh api repos/teststuffstash/homelab/pulls/11/reviews?per_page=100
+OUT REACHED: case 2 — lens verdict at head, no leaked label ⇒ nothing written
+OUT Case 2 complete: PR #11 untouched (no dismissal, no label write)
+RC 0

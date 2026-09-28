@@ -3719,6 +3719,62 @@ EOF_GTHEMES_OPEN
       item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
     done
     # <<<REPLAY:merge-conflict-gate<<<
+    # stale-stamp repair (2026-09-28, homelab#2037/#2046/#2047 — cause on #1988): an UN-ARMED `major`
+    # PR that wears the mechanical lane's `automerge` label, or carries the renovate-approve reflex's
+    # rubber stamp ("Auto-approved: Renovate automerge dep bump …") as a LIVE APPROVED of the
+    # reviewer's OWN identity at head, is a contradiction the lanes cannot resolve on their own: the
+    # label reached majors through a Renovate addLabels merge (fixed at the source the same day), the
+    # reflex now refuses `major`, but a stamp that already landed shares the migration lens's identity
+    # — reviewer-session.sh STEP 0(a) refuses on own-verdict-at-head, an update-branch RE-POINTS the
+    # review instead of dismissing it (homelab#1422), and major-handoff.sh never sees the four
+    # headings. Launcher-owned repair (ADR-094: shell ACTS on a deterministic contradiction, no LLM
+    # judgment): strip the label, DISMISS the stamp (a DISMISSED review is an ended round the lens
+    # does not count — STEP 0(a), homelab#556), one ADR-103 event line; the PR enters `unarmed-major`
+    # below on its own. Only the reflex's literal stamp body qualifies — a real lens verdict (four
+    # headings) is never touched. Rule #6 on every probe; `agent/error` PRs stay human-first (a human
+    # un-latches, this clause repairs on the next tick); `major/awaiting-human` is already handed off.
+    # >>>REPLAY:stale-stamp-repair>>>
+    ss_bot="${REVIEWER_AUTHOR:-homelab-reviewer}"; ss_bot="${ss_bot%\[bot\]}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null))|.number'); do
+      ss_leaked=0
+      printf '%s' "$prsjson" | jq -e --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name))|index("automerge")' >/dev/null 2>&1 && ss_leaked=1
+      # the REST list carries the numeric review id the dismissal endpoint needs (gh pr view's is a node id)
+      ss_reviews="$(gh api "repos/$slug/pulls/$u/reviews?per_page=100" 2>/dev/null)" || ss_reviews=''
+      if ! printf '%s' "$ss_reviews" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not list reviews (rule #6). No write; next tick.\n"
+        continue
+      fi
+      ss_cands="$(printf '%s' "$ss_reviews" | jq -c --arg bot "$ss_bot" '[.[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == $bot and .state == "APPROVED" and ((.body // "") | startswith("Auto-approved: Renovate automerge dep bump")))]' 2>/dev/null)" || ss_cands='[]'
+      ss_rid=''
+      if [ "$(printf '%s' "$ss_cands" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+        # "at head" is the reflex's own definition: submitted at or after the newest NON-merge commit
+        # (an update-branch merge commit is not new content) — the exact predicate STEP 0(a) refuses on.
+        ss_pr="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" || ss_pr=''
+        ss_since="$(printf '%s' "$ss_pr" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate] | max) // ""' 2>/dev/null)" || ss_since=''
+        if [ -z "$ss_since" ]; then
+          orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not read commits (rule #6). No write; next tick.\n"
+          continue
+        fi
+        ss_rid="$(printf '%s' "$ss_cands" | jq -r --arg since "$ss_since" '[.[] | select((.submitted_at // "") >= $since)] | last | .id // empty' 2>/dev/null)" || ss_rid=''
+      fi
+      [ "$ss_leaked" = 1 ] || [ -n "$ss_rid" ] || continue
+      ss_ok=1; ss_what=''
+      if [ -n "$ss_rid" ]; then
+        gh api -X PUT "repos/$slug/pulls/$u/reviews/$ss_rid/dismissals" -f event=DISMISS -f message="stale-stamp repair: this APPROVED is the renovate-approve reflex's rubber stamp on an UN-ARMED \`major\` PR — it shares the migration lens's identity and blocks the lens at STEP 0(a); dismissed by the coordinator scan so the lens can review (homelab#2037 class, cause #1988)." >/dev/null 2>&1 \
+          && ss_what="dismissed the reflex's rubber stamp (review ${ss_rid})" || ss_ok=0
+      fi
+      if [ "$ss_leaked" = 1 ]; then
+        gh pr edit "$u" --repo "$slug" --remove-label automerge >/dev/null 2>&1 \
+          && ss_what="${ss_what:+$ss_what; }stripped the leaked \`automerge\` label" || ss_ok=0
+      fi
+      if [ $ss_ok = 1 ]; then
+        mc_event "$slug" "$u" repair "**stale-stamp repair** — un-armed \`major\` wearing the mechanical lane's marker: ${ss_what}. The migration lens can now review; \`unarmed-major\` picks this PR up on the next tick (homelab#2037 class, cause #1988)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ stale-stamp repair: PR #${u} — ${ss_what}\n"
+      else
+        orphans="${orphans}[$repo] ⚠ stale-stamp repair FAILED on PR #${u} (${ss_what:-nothing written}) — human check\n"
+      fi
+    done
+    # <<<REPLAY:stale-stamp-repair<<<
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
       units="${units}unarmed-major|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
