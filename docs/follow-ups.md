@@ -784,12 +784,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
       SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
       `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,
-      the single CODEOWNERS carve-out is in place). **Remaining residue:** the composition
-      (`argocd/resources/agentstack/composition.yaml`, 2 sites) still carries the literal — a
-      different app that kustomize cannot reach, so each coordinator bump sweeps one OWNED file
-      and parks on a codeowner click. Needs a small design (feed the composition the tag) before
+      the single CODEOWNERS carve-out is in place). **Remaining residue (re-counted 2026-09-28):**
+      the composition (`argocd/resources/agentstack/composition.yaml`, 5 sites, all at `2026.8.7`)
+      and `argocd/resources/registry-cache/gc-mirrors.yaml` (1 site, `2026.7.25`) carry literals
+      the deploy-pin sweep never reaches — the kustomize pin is at `2026.9.27`, so those pods run
+      images two months behind. Needs a small design (feed the composition the tag) before
       building — NOT an FU-165 goal child for that reason. **Next:** design the composition-side
-      feed, or accept the one-click cost and archive.
+      feed (one source for the tag), or accept the drift and archive.
 - [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
       circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
       (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
