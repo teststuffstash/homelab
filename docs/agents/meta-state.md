@@ -32,6 +32,15 @@ never the session's arc — that is TICK-LOG's.)
   way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
   the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
   `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
+- **⚑ PICKUP (2026-09-28 late night — ADR-142 trial LIVE; TICK-LOG 2026-09-28 (evening → night)).**
+  `scripts/` is un-owned + worker-authorable (except `mgmt/scripts/` + the three box verbs);
+  the gate is the BLOCKING gate-change lens + ci's gate-drift report. Drills: 2 caught, control
+  approved, 1 not run. **Re-reads (operator): 2026-10-05 and 2026-10-28** — count gate-change
+  PRs, lens verdicts, DIFFERS lines, any weakened gate found after merge; revert = `/scripts/`
+  in CODEOWNERS + `scripts/` in governance-lint GOVERNANCE. Box moved to `mgmt/` (PR#2088),
+  re-activated by hand, green. Open from tonight: FU-295 (box sentinel vs goal/** PRs),
+  FU-296 (governance-lint self-test), FU-294 → #2032 rebuild (override on master, Renovate
+  rebuilds the branch).
 - **⚑ PICKUP (2026-09-28 night — the Forgejo chain DONE end to end; TICK-LOG 2026-09-28
   (afternoon) + its Closing paragraph have the record).** Landed by the machine lane: #2078,
   #2082, #2084, #2087 (the drill's findings, four review rounds), drill #2085 → revert #2086

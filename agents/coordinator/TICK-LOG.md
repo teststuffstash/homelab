@@ -11677,3 +11677,43 @@ back to `docker:27-dind` on the two original pods, the drill pod gone. Window cl
 rule arming the class committed direct (terraform docker-datasource majors: `automerge` +
 `major` + `behind-base-branch`); #1988's row commented. Operator's ask met: the Forgejo runner's
 image bumps now merge without a human and roll back on a problem — proven on a live drill.
+
+## 2026-09-28 (evening → night) — S9 #2032 read; `mgmt/` carved out; the ADR-142 trial built and drilled
+
+**Condition.** Operator picked up S9 at #2032 (mermaid 11→12) + #2068. #2032: lens APPROVED at
+`79245410`, handed off 11:26Z after #2069 — then #1977 (the "moot" 11.17.2 sibling, `automerge`)
+merged 12:21Z and made it DIRTY (both edit `scripts/mermaid-lint/package*.json`). Four human
+touches for one lint dependency; root: `scripts/**` was codeowner-AUTHOR (CI runs it from the
+branch), so neither the mirror (#2060) nor a worker could apply the lodash-es override. #2068
+closed (fixed by #2069, never linked). Operator turned it into the open `scripts/` question
+(FU-293): inventory by executor — ~26 CI gates, 16 box, 1 cluster pod (`iac-sentinel.sh`), ~45
+seat-only; 143/146 `scripts/` commits in 30 days seat-authored (the owner read = the author
+reading itself under the sole-codeowner waiver).
+
+**`mgmt/` (PR#2088, merged 20:04Z).** `nixos/` → `mgmt/nixos/`, `scripts/mgmt-*` + `mgmt-root-env/`
+→ `mgmt/scripts/` (names kept); `/mgmt/` owned (6b79eff8, 290fd520 dropped `/nixos/`). Review r1
+caught the `nixos#` form escaping the path rewrite (flake.nix's recovery commands). Box driven by
+hand as the operator ruled ("the box has a backdoor"): window seat-1790625906-697, `mgmt-pull`
+failed at activation as predicted → `nixos-rebuild test --flake …/mgmt/nixos#mgmt` (drv
+identical to the jail's pre-merge eval) → stamp → `mgmt-confirm` gate 5/0/0, promoted; pull
+idempotent, sentinel/apply/belt/reconcile green; check clean, window closed. ~4 min.
+
+**ADR-142 trial (operator: "remove codeowner from scripts and all the worker gates, I can always
+revert"; re-read 2026-10-05 + 2026-10-28).** CODEOWNERS un-owns `/scripts/` (fbeadfbd); PR#2089
+(merged 20:29Z) takes `scripts/` out of governance-lint / classify_touches / touches-check / the
+reviewer's escape list — except `mgmt/scripts/` + the three box verbs; adds the BLOCKING
+`gate-change` lens and `scripts/gate-drift.sh` (non-failing ci step from the BASE commit, 290fd520:
+(A) master's gate × PR content, (B) master's tests × PR scripts). `.agents/` wording ca20ab6d.
+
+**Drills (seat subagents, base `goal/0-scripts-upkeep`, deleted after).** D1 weakened
+follow-ups-lint (DANGLING no longer fails) + a phantom FU-990 → report A DIFFERS, lens CAUGHT
+(#2095, 7 min). D3 re-anchored governance-lint's WORKER_PATTERN so the REST `[bot]` login
+misses — report `same` on both legs (blind by design) → lens CAUGHT from its own read (#2092,
+8 min, grep repro). D4 honest control (machines-lint duplicate-ip) → APPROVED, no false positive
+(#2093). D2 (gate + test loosened together) did not run — the subagent's safety classifier
+stopped it; leg B was proven locally (27/27 master cases failing against a neutered
+pin-only-lint). Findings filed: **FU-295** (the box sentinel never reports on goal/** PRs, which
+the ruleset requires — D4 sat BLOCKED approved), **FU-296** (governance-lint's worker match has
+no self-test); FU-294 re-pointed (both #2032 blockers gone). Report noise: A's excerpt carried
+19 OVERSIZE lines when the PR's output format changed — trim to failure-shaped lines at the
+first re-read if it recurs.

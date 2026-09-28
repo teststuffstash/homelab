@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-295** (2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-297** (2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -433,16 +433,25 @@ six OVERSIZE items pointer-ized into
       [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
       re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
       until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
-- [ ] **FU-294** — **The npm Renovate lane produces work no ride can do.** Rule [7] (2026-09-27)
-      routes `scripts/mermaid-lint` bumps through Renovate, but a lens finding that needs the
-      lockfile regenerated (homelab#2032: mermaid 12 pulls a `lodash-es` with CVE-2026-4800 — the
-      fix is a two-line `overrides` + `npm install`) cannot be dispatched: homelab's fixer claim is
-      `egress.profile: none` and the baseline mirror set has docker/ghcr/mcr/pypi but **no npm
-      mirror** (`docs/agents/agentstack.md` §ecosystem profile) — so the coordinator parked it on a
-      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). Shape
-      ruled 2026-09-28 (operator): a BASELINE npm mirror (`npm-cache`, VIP `.40.35`, every ride's
-      `NPM_CONFIG_REGISTRY`). **Status:** mirror PR #2060 in flight. **Next:** drill = re-dispatch
-      #2032 once the mirror is LIVE; after it passes, drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
+- [ ] **FU-294** — **The npm Renovate lane produced work no ride could do** (homelab#2032: a lens
+      finding needing `scripts/mermaid-lint/package-lock.json` regenerated). Both blockers are gone:
+      the baseline npm mirror is LIVE (`.40.35`, PR#2060) and the path tier that parked the fix on a
+      human (`scripts/**` codeowner-author) is lifted by the ADR-142 trial (2026-09-28).
+      **Next:** #2032 (now DIRTY after #1977 merged) — land the `lodash-es` override on master, let
+      Renovate rebuild its branch (a Renovate-owned branch keeps itself current), and let the lane
+      run it; then drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
+- [ ] **FU-295** — **The box's management-sentinel never reports on a homelab `goal/**` PR**, but the
+      `required-checks` ruleset (`refs/heads/goal/**` + default) requires it — an APPROVED goal-based
+      PR sits BLOCKED forever (the ADR-142 control drill #2093, 2026-09-28, 20+ min). Cause:
+      `mgmt/scripts/mgmt-sentinel.sh:89,94` judges master-bound PRs only. Why deferred: a box
+      change (mgmt/ is operator-owned, window + ssh). **Next:** for a non-master base, post the
+      no-box-surface SUCCESS in seconds (the FU-237 (b) shape) — or plan against the goal base.
+- [ ] **FU-296** — **governance-lint's worker match has no self-test**, and under the ADR-142
+      trial it is worker-authorable: drill D3 (#2092, 2026-09-28) anchored `WORKER_PATTERN` so it
+      missed the REST `homelab-agents-1234[bot]` login — every worker PR would pass — and the
+      gate-drift report read `same` on both legs (nothing pins it); only the lens's own read caught
+      it. **Next:** `scripts/governance-lint-test.sh` (REST `[bot]`, GraphQL `app/`, a sibling App,
+      renovate, a seat login) + devbox task + diff-ci MAP row + the ci.yaml step — then leg B pins it.
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
