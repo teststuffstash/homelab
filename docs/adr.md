@@ -2448,6 +2448,21 @@ safe belongs to the service, and a PDB is the one place every drain already read
 **Consequences:** fail closed needs an override. It is an expiring PDB annotation, or
 `kubectl drain --disable-eviction` for a single drain. There are two belts (closed 2h, open
 against the signal). Design and override: [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22).
+**Amended 2026-09-28 (operator, the #2037 class):** the PDB is also the third leg of the shape a
+platform Deployment needs before Renovate may ARM its image bumps. A **stateless** platform
+Deployment (the forgejo runner first: registration is per pod, the volumes are emptyDirs) carries
+`replicas = 2`, a `RollingUpdate` with `max_unavailable = 0` / `max_surge = 1`, and a PDB with
+`minAvailable = 1`; a bump is then a readiness-gated roll the management box applies unattended,
+and the lane may arm it once the class row on #1988 is complete (a rollout-stuck detector proven
+by a bad-tag drill in a window, the tofu image-line shape in the deploy-revert lane's reversible
+predicate, an alert-driven trigger). An **RWO singleton** (Home Assistant, UniFi, its Mongo —
+`Recreate` by necessity, one PVC) never gets this shape: its image bumps stay on the human lane
+or take their restart inside a [declared window](glossary.md) (the responder term). Considered:
+arming the singleton bumps too with the roll as the only gate (rejected — a `Recreate` roll IS the
+outage, and a bad tag on Home Assistant has no second replica to hide behind); keeping the runner
+at one replica and accepting the blip (rejected — the operator's cost function is minutes, and a
+parked bump costs a read each time). Live: `tofu/forgejo-runner.tf`,
+`policy/mgmt/plan-input.yaml` `apply_addresses.main` (`kubernetes_pod_disruption_budget_v1.*`).
 
 ### ADR-141 — GitHub Actions majors merge on their own: blast class picks the lane, semver picks the lens, the revert chain is the second gate (2026-09-27)
 
