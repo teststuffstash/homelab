@@ -111,8 +111,12 @@ trap 'rc=$?; rm -f "$POL"; emit_metrics $rc' EXIT
 # cluster (the apply of the bad tag errored on the rollout wait — "half-applied? human" — and
 # the object was updated regardless). The plan is the only honest read of what the cluster holds;
 # a span that contained a tofu change plans, whatever its endpoints say.
-files_out="$(git -C "$REPO" log --name-only --format= "${last}..${sha}" -- | grep . | sort -u)" || true
-[ -n "$files_out" ] || files_out="$(git -C "$REPO" diff --name-only "$last" "$sha" --)" || { log "PROBE-FAIL: diff ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
+# Both reads FAIL CLOSED on their own (review round 3 on PR#2087): a failed span read must never
+# downgrade to the endpoint diff this comment says cannot be trusted alone — `$(…) ||`, never
+# `|| true`, and "empty" is only ever a successful read's answer. The union is what plans.
+log_files="$(git -C "$REPO" log --name-only --format= "${last}..${sha}" --)" || { log "PROBE-FAIL: log ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
+diff_files="$(git -C "$REPO" diff --name-only "$last" "$sha" --)" || { log "PROBE-FAIL: diff ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
+files_out="$(printf '%s\n%s\n' "$log_files" "$diff_files" | grep . | sort -u || true)"
 files=(); [ -n "$files_out" ] && mapfile -t files <<<"$files_out"
 roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")" || { log "PROBE-FAIL: classifier failed (policy unreadable) — not stamping, next run retries"; exit 1; }
 roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
