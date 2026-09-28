@@ -1,0 +1,10 @@
+# major-arm-guard-ordinary (2026-09-28, homelab#2033): a fix round resumed on the branch of an UN-ARMED `major` PR
+# derives --no-arm (the human-merge lane is never armed by a worker round); an ordinary branch's
+# PR keeps the normal arming path.
+name: major-arm-guard-ordinary
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:major-arm-guard
+  - file:post.sh

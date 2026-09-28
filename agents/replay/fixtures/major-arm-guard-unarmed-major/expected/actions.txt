@@ -1,0 +1,5 @@
+CALL gh pr list --repo teststuffstash/homelab --head renovate/oxlorg-opnsense-26.x --state open --json number,labels,autoMergeRequest
+OUT → --no-arm derived: renovate/oxlorg-opnsense-26.x is the branch of an UN-ARMED `major` PR #2033 — a fix round never arms the human-merge lane (homelab#2033)
+OUT → VERIFIED: NO_ARM is set — the fix round will NOT arm
+OUT REACHED: end
+RC 0
