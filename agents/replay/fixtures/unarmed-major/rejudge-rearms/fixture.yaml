@@ -1,0 +1,19 @@
+# unarmed-major/rejudge-rearms (2026-09-28, homelab#2066): a management-sentinel RE-JUDGE re-arms
+# the clause. The rollup carries production-shaped commit statuses ({context,state,startedAt}) plus
+# a `ci` check-run; the recorded `state-fp:unarmed-major:<hash>` marker was computed from the SAME
+# world with management-sentinel's startedAt at its first verdict (2026-09-27T20:49:19Z). The world
+# now shows the sentinel's status re-posted at 2026-09-28T10:30:00Z — same FAILURE, new startedAt
+# (`mgmt_post_status` is an unconditional POST, so a re-judge always moves it) — while head, review
+# decision, verdict and every other rollup entry are unchanged. Expected: the unit is emitted.
+name: unarmed-major-rejudge-rearms
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
