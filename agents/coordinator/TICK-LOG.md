@@ -11439,3 +11439,35 @@ with `[ ! -d .terraform ]` (#2043 fixed only mgmt-tf.sh). Un-wedged by hand (thr
 reconciler "nothing to sync"; PR#2045 (init every run, `mgmt-reconcile-test` 154 pass) merged. S9 read:
 agent-coordinator's grouped github-actions PR #22 and the node 24 major #23 merged on their own; homelab
 #2008 merged, #2007 closed (superseded); master CI green.
+
+## 2026-09-28 (morning) — alert session: three board items read, two cleared, the Renovate three reserved for S9
+
+Operator: "maintenance session for alerts"; the WD spinner was PULLED from nx-02 overnight (FU-289's
+BIOS residual is moot — the SA400 is the only INT13 disk; recorded in FU-289, the spike, meta-state).
+Ruling mid-session: **the `agent/error` PRs #2037/#2046/#2047 are for the next Renovate S9 session —
+not touched.** Read only: terraform majors born with the `automerge` label (rule [8]/[9] add it, the
+majors rule [14] never removes it) → `renovate-approve` rubber-stamps with the reviewer's own identity
+→ the migration lens refuses at STEP 0(a); cause filed on #1988 by the anomaly comments themselves.
+
+**`GithubStorageHeldHigh` (04:25Z, 1.7 GB/day held):** all oracle-fleet — `unit-allure-results`, 853
+artifacts × 2.1 MB on the 90-day default since July (+1608 tiny `e2e-evidence`), both consumed by the
+same run's `evidence` job and never read again. Deleted every artifact older than 7 days by API (1873,
+1.08 GB — a long loop, ~1/s) and opened **oracle-fleet#763** (`retention-days: 1` on both uploads,
+auto-merge armed, bot review pending). The alert clears as the 24 h average catches up.
+
+**`LonghornNodeOverProvisioned` wk-metal-01 (since 09-27 20:01Z):** NOT FU-285's co-location — no volume
+had two replicas there. registry-data (pvc-8a14f095, 150 Gi) lost its wk-04 replica when nx-02 went
+down in the FU-289 window; after the 600 s `replica-replenishment-wait-interval` Longhorn rebuilt it
+onto the mx500 at 19:01Z (manager log: "Cannot find a reusable failed replica … Schedule replica to node
+wk-metal-01"), 623 G promised on 391 G allocatable = 160 %. The runbook §Single worker maintenance
+already names this class. Window `seat-1790582118-779`: deleted that replica, Longhorn placed the
+replacement on **wk-04's sn530** (bulk, 251 G free) within the wait interval; rebuild 45 GB, ratio back
+to 1.18, alert cleared 08:0xZ.
+
+**Retro r6 PR #2050 is not missing — it merged at 05:36Z, 6 s after the bot approval, by the agents App.**
+`retro-argo.yaml` says "HUMAN-GATED, auto-merge NOT armed", but `review-reflex.sh`'s C9 re-arm arms every
+worker-App PR without a parking marker, and the retro PR carries none of the four C9 honours. r4 #1645
+went the same way (8 min); r5 only waited on a changes-requested. Operator's call which marker the retro
+PR should state — recorded in meta-state.
+
+Housekeeping: four archive entries past 35 d expired (FU-117/163/179/183; no TODO-shaped refs).
