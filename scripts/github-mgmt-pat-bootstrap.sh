@@ -6,7 +6,7 @@
 # Sibling of github-exporter-pat-bootstrap.sh: a fine-grained PAT is CLICK-ONLY (GitHub has no
 # API for it), so this drives the clicks, stores the value, and verifies the scopes — including
 # that a WRITE is refused, which is the property the box's copy depends on. Differences from the
-# exporter's: the store is the Tier-0 WALLET (scripts/mgmt-provision-secrets.sh ships it to the
+# exporter's: the store is the Tier-0 WALLET (mgmt/scripts/mgmt-provision-secrets.sh ships it to the
 # box as GITHUB_TOKEN), not Infisical — the box exists to work with the cluster down; and the
 # mint-page expiry is stored beside the token (docs/secrets.md §Expiry belt: PATs are declared).
 #
@@ -40,7 +40,7 @@ cmd_check() {
   2. 'secrets' -> prompts for the token + its expiry date (no shell history) and stores both in
                   the wallet ($DB: $ENTRY, $ENTRY-expiry).
   3. 'verify'  -> every read the tofu/github root performs succeeds; a write is refused (403).
-  Then: scripts/mgmt-provision-secrets.sh --push ships it to the box as GITHUB_TOKEN (FU-238's
+  Then: mgmt/scripts/mgmt-provision-secrets.sh --push ships it to the box as GITHUB_TOKEN (FU-238's
   wiring PR adds that row + the policy root), and the box's next sentinel/belt tick plans the root.
 EOT
 }

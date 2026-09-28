@@ -2,7 +2,7 @@
 #
 #   devbox run -- promtool test rules argocd/resources/mgmt-metrics/reconcile-rollout.promtool-test
 #
-# The series are what scripts/mgmt-reconcile.sh emits (its own tests pin the emitting side).
+# The series are what mgmt/scripts/mgmt-reconcile.sh emits (its own tests pin the emitting side).
 rule_files:
   - reconcile-rollout.promtool-rules
 

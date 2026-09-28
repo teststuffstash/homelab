@@ -23,17 +23,17 @@
 # Read-only by construction in both modes: plan/--check/version only, never an apply.
 #
 # Usage:
-#   scripts/mgmt-probe.sh                  # belt: every applicable check, metrics to the textfile dir
-#   MODE=gate scripts/mgmt-probe.sh        # the box-local gate (what mgmt-confirm.service runs)
-#   DRY_RUN=1 scripts/mgmt-probe.sh        # never publish (the textfile dir is absent in the jail anyway)
-#   ROOTS="provisioning" scripts/mgmt-probe.sh
+#   mgmt/scripts/mgmt-probe.sh                  # belt: every applicable check, metrics to the textfile dir
+#   MODE=gate mgmt/scripts/mgmt-probe.sh        # the box-local gate (what mgmt-confirm.service runs)
+#   DRY_RUN=1 mgmt/scripts/mgmt-probe.sh        # never publish (the textfile dir is absent in the jail anyway)
+#   ROOTS="provisioning" mgmt/scripts/mgmt-probe.sh
 #
 # Env:
 #   ROOTS         space-separated tofu roots to plan. Default = the roots whose plan is CONE-CLEAN,
 #                 which is not the same set as "the roots on remote state":
 #                   provisioning  Matchbox LXC on Proxmox
 #                   github        org/repos/rulesets — read-only PAT (GITHUB_TOKEN) + the App keys via
-#                                 scripts/mgmt-root-env/github.sh; plan-only, applies stay on the host (FU-238)
+#                                 mgmt/scripts/mgmt-root-env/github.sh; plan-only, applies stay on the host (FU-238)
 #                 ⛔ `cloudflare` is NOT cone-clean, contrary to the 2026-09-12 reading: half of it
 #                 is in-cluster (the cloudflared Deployment via the kubernetes provider) — the
 #                 SENTINEL plans it per PR head (policy root, read-only token, FU-238), the belt
@@ -44,7 +44,7 @@
 #                 the LIVE in-cluster Infisical via a port-forward (tofu/infisical/apply.sh). Both
 #                 would cry wolf exactly when the cluster is down — the opposite of this box's job.
 #   TOFU_VAR_DIR  directory holding optional per-root var files named <root>.tfvars (the box:
-#                 /var/lib/mgmt, placed by scripts/mgmt-provision-secrets.sh — a gitignored
+#                 /var/lib/mgmt, placed by mgmt/scripts/mgmt-provision-secrets.sh — a gitignored
 #                 terraform.tfvars in the jail's checkout is invisible to a fresh clone)
 #                 ⛔ `main` is LOCAL state until FU-012's out-of-cone copy lands here; planning it
 #                 from the box is a phase-A deliverable, not a probe.
@@ -52,7 +52,7 @@
 #                 means "do not publish" — the jail-safe default, as the dir exists only on the box
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
-#                 file scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
+#                 file mgmt/scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
 #   SKIP          space-separated check names to skip: tofu talos nodes ansible creds substrate
 #   GITHUB_TOKEN  the read-only PAT the env file already carries for tofu/github — also used to
 #                 authenticate the substrate check's upstream release reads (5000/hr vs 60/hr);
@@ -70,7 +70,7 @@
 #                      line (NODE_TARGETS_JSON = the PR head's declaration; ADR-132 §MB4 layer 2)
 set -uo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
+REPO="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
 # `-e`, not `-d`: in a git WORKTREE .git is a file pointing at the real gitdir, and the jail's PR
 # lane runs entirely out of worktrees (a branch is never checked out in the shared tree), so the
 # `-d` form made this script the one thing that could not be exercised before it shipped.
@@ -137,7 +137,7 @@ check_tofu() {
       set +u
       . "$REPO/scripts/keepass-env.sh" >/dev/null 2>&1 || true
       TOFU_STATE_ROOT_DIR="$REPO/tofu/$root" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || exit 90
-      [ -f "$REPO/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/scripts/mgmt-root-env/$root.sh"   # per-root env (github: the App keys)
+      [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"   # per-root env (github: the App keys)
       cd "$REPO" || exit 1
       # Init EVERY run, lockfile read-only, with the backend creds already in the env — a no-op
       # while the cached providers match the lock, and the only thing that heals them when a
@@ -530,7 +530,7 @@ substrate_declared() {
   ' "$REPO/tofu/variables.tf"
 }
 
-# ⚠ CACHE, and it is not an optimisation. The belt runs every 15 minutes (nixos/hosts/mgmt:
+# ⚠ CACHE, and it is not an optimisation. The belt runs every 15 minutes (mgmt/nixos/hosts/mgmt:
 # mgmt-belt.timer, OnCalendar=*:0/15) = 96 runs a day; three upstream repos fetched every tick is
 # ~288 GitHub API calls a day for an answer that changes a few times a YEAR, and unauthenticated
 # the per-IP budget is 60/hour for the whole box. **6 h** (below): 3 repos × 4 refreshes = 12 calls
@@ -597,7 +597,7 @@ substrate_upstream_minors() {
   return 1
 }
 
-# curl and jq are in the belt unit's closure (nixos/hosts/mgmt/default.nix) but not on the jail's
+# curl and jq are in the belt unit's closure (mgmt/nixos/hosts/mgmt/default.nix) but not on the jail's
 # bare PATH; devbox is the other way round. Try the binary, fall back to the pinned one — and NOT
 # through tool(), which merges stderr into stdout and would corrupt the JSON.
 _substrate_curl() {

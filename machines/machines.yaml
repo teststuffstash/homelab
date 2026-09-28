@@ -111,7 +111,7 @@
 #                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
 #   reconcile         auto | manual (default manual) — ADR-132 §MB4 layer 3. `auto` hands the node's
 #                     INSTALL (Talos version + schematic, from node_install_targets) to the management
-#                     box's reconciler (scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
+#                     box's reconciler (mgmt/scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
 #                     declared install differs from live it runs `node-maintenance.sh upgrade` (a
 #                     control plane: `controlplane-upgrade.sh`) — WIP 1, the verb's floors, ONE attempt
 #                     per declared target, then PARKED + an alert. A `manual` node's diff is drift on

@@ -6,7 +6,7 @@
 #   - a parked node / a stuck sync / a dead loop: MgmtReconcile* in prometheusrule.yaml.
 # The workload-health HOLD (FU-278) is here: the named workloads carry their own alerts, but nothing
 # else says the ROLLOUT stopped on them, or that the hold needs a person (fix, or ack).
-# Series: scripts/mgmt-reconcile.sh's emit(), through the box's node_exporter textfile (job mgmt-node).
+# Series: mgmt/scripts/mgmt-reconcile.sh's emit(), through the box's node_exporter textfile (job mgmt-node).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -27,7 +27,7 @@ spec:
             description: >-
               The node reconciler's rollout waited out its canary timeout (default 4h) and at least
               one canary type was never shown exercised on the new version by
-              scripts/mgmt-rollout-evidence.sh — so it advanced to the fleet anyway (default
+              mgmt/scripts/mgmt-rollout-evidence.sh — so it advanced to the fleet anyway (default
               forward, FU-273: a wall-clock soak never blocks). Nothing is broken by itself; the
               point is that the new version reached the fleet UNPROVEN for that type. Read which
               canary lacked evidence (`mgmt_reconcile_rollout_canary_exercised == 0`, `jq .

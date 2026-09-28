@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mgmt-state-pull — bring the management box's state snapshots into the wallet cache, and VERIFY
 # every one of them HERE (docs/tofu-state.md §Snapshots). The jail half of
-# scripts/mgmt-state-snapshot.sh, which writes them on the box.
+# mgmt/scripts/mgmt-state-snapshot.sh, which writes them on the box.
 #
 #   devbox run mgmt-state-pull            # fetch what is new, verify it, print the per-root newest
 #   devbox run mgmt-state-pull -- --list  # compare box vs local, fetch nothing
@@ -24,7 +24,7 @@
 # second writer the locking ruling forbids.
 set -euo pipefail
 
-ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 HOST="${MGMT_HOST:-192.168.2.53}"
 REMOTE_DIR=/var/lib/mgmt/state
 DEST="${TOFU_STATE_BACKUP_DIR:-$HOME/.claude/homelab-tofu-state-backups}/mgmt"

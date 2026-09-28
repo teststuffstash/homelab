@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The REPLAY fixtures for the rollout's workload-health hold (FU-278, scripts/mgmt-reconcile-test.sh).
+"""The REPLAY fixtures for the rollout's workload-health hold (FU-278, mgmt/scripts/mgmt-reconcile-test.sh).
 
 Reconstructs, at instant T, the k8s-shaped dumps `node-maintenance.sh workload-health` reads
 (WH_DIR) from kube-state-metrics series in Prometheus: kube_pod_info (owner, node), kube_pod_created,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mgmt-state-snapshot — dated, encrypted, verified snapshots of every tofu root's state, ON the
 # management box (docs/tofu-state.md §Snapshots, FU-012). Runs on the box; the jail's half is
-# scripts/mgmt-state-pull.sh.
+# mgmt/scripts/mgmt-state-pull.sh.
 #
 #   mgmt-state-snapshot.sh                  # every root: main + each Garage-backed root
 #   mgmt-state-snapshot.sh main             # one root
@@ -42,7 +42,7 @@
 # re-verifies each file independently. It is NOT an integrity seal against an attacker in between.
 set -euo pipefail
 
-REPO="${REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
+REPO="${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}"
 STATE_DIR="${MGMT_STATE_DIR:-/var/lib/mgmt/state}"
 LOCK="${MGMT_LOCK:-/var/lib/mgmt/sentinel/.lock}"
 KEEP="${SNAPSHOT_KEEP:-50}"      # per root; ~1.7 MB each for main — cheap, and a cache that has to

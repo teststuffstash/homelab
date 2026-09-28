@@ -14,7 +14,7 @@
 #               gate: baseline before, bounded post-check after — a regression = status failure +
 #               mgmt_apply_post_check_failed, never a revert. Clear by hand: rm $ADIR/post-check-failed
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
-# Usage: scripts/mgmt-apply.sh   (the timer's unit). Env: scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
+# Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=mgmt-lib.sh
@@ -209,7 +209,7 @@ for root in "${apply_roots[@]}"; do
     # A dated, verified snapshot of the state this apply just wrote (docs/tofu-state.md
     # §Snapshots). Still inside this loop's lock (fd 9), hence --lock-held. A failed snapshot is
     # logged, never allowed to turn a successful apply into a refusal.
-    snap="${MGMT_SNAPSHOT:-/var/lib/homelab/scripts/mgmt-state-snapshot.sh}"
+    snap="${MGMT_SNAPSHOT:-/var/lib/homelab/mgmt/scripts/mgmt-state-snapshot.sh}"
     if [ -x "$snap" ]; then "$snap" --lock-held "$root" || log "$root: WARN snapshot failed — the apply itself succeeded"; fi
     if [ "$talos_n" -gt 0 ]; then
       # The post-apply health gate. A regression reports — status failure naming it, the

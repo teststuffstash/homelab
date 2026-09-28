@@ -4,7 +4,7 @@
 # a canary stage ends when the node has carried its own kind of work on the new version, never
 # when a clock runs out. Time passing on an idle node proves nothing.
 #
-#   scripts/mgmt-rollout-evidence.sh <node> <since-unix-ts>
+#   mgmt/scripts/mgmt-rollout-evidence.sh <node> <since-unix-ts>
 #
 # Exit 0 = exercised · 1 = not yet · 2 = cannot tell (a read failed — the caller treats it as
 # "not yet" and asks again). ONE line on stdout: what was found, or what is still missing.
@@ -52,7 +52,7 @@
 #                          failure for the arc type, not a "no job yet" (default 900)
 set -uo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
 # ON THE MANAGEMENT BOX the client configs live in /var/lib/mgmt/, and `devbox run` exports

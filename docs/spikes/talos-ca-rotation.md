@@ -229,7 +229,7 @@ CPS=192.168.2.51,192.168.2.65,192.168.2.183
 WKS=192.168.2.54,192.168.2.56,192.168.2.58,192.168.2.61,192.168.2.62,192.168.2.63,192.168.2.64,192.168.2.182,192.168.2.184,192.168.2.186
 env -u KUBECONFIG $TCTL --talosconfig $OLD -n $CPS -e 192.168.2.51 etcd status          # 3 members, one leader, no errors
 env -u KUBECONFIG $TCTL --talosconfig $OLD -n 192.168.2.51 -e 192.168.2.51 etcd snapshot /var/lib/mgmt/etcd-snapshots/pre-rotate-ca-$(date -u +%Y%m%dT%H%M%SZ).db
-/var/lib/homelab/scripts/mgmt-state-snapshot.sh main && install -m600 /var/lib/mgmt/state/main/terraform.tfstate $R/pre-rotate.tfstate
+/var/lib/homelab/mgmt/scripts/mgmt-state-snapshot.sh main && install -m600 /var/lib/mgmt/state/main/terraform.tfstate $R/pre-rotate.tfstate
 ```
 
 **Abort here** if etcd is not 3/3 healthy or either snapshot fails.
@@ -383,7 +383,7 @@ plan does NOT mean the captured kubeconfig is current. Lab finding 6, FU-259.)
   from state, replacing step 4's interim copy. Check that both carry the same new fingerprint:
   `yq -r '.contexts[].crt' <file> | base64 -d | openssl x509 -noout -fingerprint -sha256 -enddate`.
   The import mints a fresh one-year client cert, so `notAfter` is no longer 2027-05-29.
-- `bash scripts/mgmt-provision-secrets.sh`, without `--push`. It re-stages
+- `bash mgmt/scripts/mgmt-provision-secrets.sh`, without `--push`. It re-stages
   `~/.claude/homelab-mgmt/extra-files/var/lib/mgmt/talosconfig`, the nixos-anywhere reinstall seed.
   That copy is the leaked identity today.
 - The **wallet** holds no talosconfig. `wallet-files.sh`/`keepass-env.sh` name none (grep,

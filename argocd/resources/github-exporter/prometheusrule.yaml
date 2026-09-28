@@ -834,7 +834,7 @@ spec:
               count by (project, role) (increase(claude_code_token_usage_tokens_total[1h]) > 0)
             )
         # ── FU-252: the management box's apply loop, standing-refusal detector ───────────────
-        # The box refuses an apply by posting a COMMIT STATUS on master (scripts/mgmt-apply.sh →
+        # The box refuses an apply by posting a COMMIT STATUS on master (mgmt/scripts/mgmt-apply.sh →
         # mgmt_post_status). Until this alert NOTHING watched it: no mgmt_* series exists, nothing
         # scrapes 192.168.2.53, and a status is not a check-run — so /commits/<sha>/check-runs
         # reads green while master carries a failure (how a jail session called master green on

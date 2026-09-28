@@ -8,7 +8,7 @@
 #
 # A SECOND READER, and it treats the record as a mutex (a sign on the door — not a lock: `open` is
 # a blind merge patch, and a person who declares nothing is invisible). The box's node reconciler
-# (scripts/mgmt-reconcile.sh) refuses to open a window while ANY live window is declared — on
+# (mgmt/scripts/mgmt-reconcile.sh) refuses to open a window while ANY live window is declared — on
 # another node, seat-wide, or on its target. `--admit-reconciler` (needs `--node`) is the one
 # exception: "I am watching this node, the reconciler may act on it inside my window" — the
 # attended canary. Without it, a seat's hands-on work on a node is never interrupted by a sync.

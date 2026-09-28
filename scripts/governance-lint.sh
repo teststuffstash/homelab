@@ -23,7 +23,7 @@ cd "$(dirname "$0")/.."
 BASE="${1:-origin/master}"
 # One greppable line, the pin-only-lint/guarded-set convention: other readers eval THIS line,
 # never a second copy. Anchored patterns over the diff's repo-relative paths.
-GOVERNANCE='^(\.github/|\.agents/|scripts/|policy/|devbox\.json$|devbox\.lock$|CODEOWNERS$)'
+GOVERNANCE='^(\.github/|\.agents/|scripts/|mgmt/scripts/|policy/|devbox\.json$|devbox\.lock$|CODEOWNERS$)'
 # The worker App's PR-author login. Event context shows "homelab-agents-1234[bot]" (the REST
 # surface; GraphQL shows "app/homelab-agents-1234" — the known [bot]-suffix mismatch), so match
 # on the App NAME prefix and neither suffix shape matters. Deliberately NOT "any [bot]":
