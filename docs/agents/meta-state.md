@@ -16,14 +16,18 @@ never the session's arc — that is TICK-LOG's.)
   **Read (1):** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (failure 397/67 s,
   runner-01 2.5 s), e2e green 7m11s, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire; …24933 was cancelled by
   the concurrency group, …30352 ran on ci-runner-01-2 (~0 s, image cached). One sample — the belts judge the
-  week. (2) BIOS residual: `Hard Disk Drive BBS Priorities` #1 = `ID01`, assumed the Kingston — confirm
-  at the next attended BIOS visit, or pull the WD (both GRUBs are installed). (3) Board reads, nothing
-  done: `LonghornNodeOverProvisioned` on wk-metal-01 since 19:01Z (mx500 463 G max / 580 G scheduled — the
-  FU-285 rebuild's residue, check its ratio before acting); homelab#2037 wears `agent/error` (Renovate
-  docker v29 `major`, the unarmed-major dispatch predates the anomaly latch — class question for a corpus
-  session, not per-PR); `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z on the
-  #2043 class (provider bump → "Required plugins are not installed") — un-wedged by hand, fixed by PR#2045
-  (init every run in probe + reconciler).
+  week. (2) DONE 2026-09-28: the operator PULLED the WD spinner, so the SA400 is the only INT13 disk —
+  the BIOS-priority question is moot. (3) Board, 2026-09-28 morning session: `LonghornNodeOverProvisioned`
+  on wk-metal-01 CLEARED — it was registry-data's replica, replenished onto the mx500 at 19:01Z while wk-04
+  (nx-02) was down in the FU-289 window (the runbook §Single worker maintenance 600 s class, not FU-285's
+  co-location); the seat deleted that replica in a window and Longhorn rebuilt it on wk-04's sn530.
+  `GithubStorageHeldHigh` = oracle-fleet's `unit-allure-results` artifacts on the 90-day default (853 ×
+  2.1 MB); old ones deleted by API, oracle-fleet#763 sets `retention-days: 1` — expect the alert to clear
+  as the 24 h average catches up. **`agent/error` on homelab #2037/#2046/#2047 (terraform majors born with
+  the `automerge` label → the lens's own rubber stamp deadlocks STEP 0(a); cause filed on #1988) is
+  RESERVED for the next Renovate S9 session (operator, 2026-09-28) — do not touch them.**
+  `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z 09-27 on the #2043 class — un-wedged
+  by hand, fixed by PR#2045 (init every run in probe + reconciler).
 - **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
   Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
   bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped

@@ -155,7 +155,8 @@ Two consequences the original write-up did not draw:
   2 in the LSI utility over SOL, the SSD ranked first in `Hard Disk Drive BBS Priorities`, host up
   from the SSD 20:58Z; swap is `/dev/pve/swap` on `sdb3`, 0 B used. Recipe, key-mapping traps and
   the UEFI alternative are in the private hardware register (`hardware/docs/nx-6035-g5.md`).
-  wk-04's fresh start placed **16.02 / 16.02 GiB** again.
+  wk-04's fresh start placed **16.02 / 16.02 GiB** again. **2026-09-28: the WD was pulled** (operator) —
+  the SA400 is the only INT13 disk, so the BBS-priority residual is gone; the HBA cap stays at 2.
 
 Two workers instead of one is not justified by NUMA: the per-socket capacity math is identical
 (16 GiB of worker + one 12 GiB guest per socket either way), the SN530 passes through to one VM

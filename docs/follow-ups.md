@@ -1252,8 +1252,10 @@ the block needs pruning, not more headings.
       ci-runner-02 UNPARKED (#2048); its first oracle `kind e2e` (run 36351320341) prepared nodes in **3.9 s**
       (was 397/67 s; runner-01 2.5 s), green, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire — ONE sample.
       **Next:** (1) the belts judge a week of real PR load (a second slow sample reopens placement, not the
-      disk); (2) next attended BIOS visit: confirm `ID01` = the Kingston (or pull the WD, now a spare); UEFI
-      boot mode is the structural fix. Relates FU-266, FU-280.
+      disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
+      boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
+      maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
