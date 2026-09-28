@@ -629,7 +629,6 @@ health signal.
 | `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
 | `container` | none | Post-launch bucket, container issue |
 | `backlog-aggregate` | operator | Suitable-unqueued backlog (ADR-109: count + oldest, never per-issue) |
-| `goal-adopted-unlabelled` | operator | A Goal with `adopted`-open member(s) carrying no `agent/*` label — counted, but no waker of their own; queue or defer on the store (homelab#2052) |
 
 **Hold-chain propagation rule:** a `queued-held` item whose blocking item is itself
 `who=operator` (ghost / merged-held / parked) becomes `queued-held-by-ghost`,

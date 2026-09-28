@@ -384,7 +384,7 @@ EOF
 #   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-held-malformed-block, queued-ready,
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
-#   footprint-held, cap-held, blockpark, goal-adopted-unlabelled
+#   footprint-held, cap-held, blockpark
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|base" (ADR-125 lane label)
@@ -3210,6 +3210,9 @@ EOF_GOVERNANCE
         # would re-pin every goal fixture's CALL line), and the replayed report must be
         # deterministic. Own-repo members print bare `#n`, cross-repo ones `repo#n` (the two
         # spellings `gopen_n_ckpt` matches against $AD).
+        # No `item_class_push` row: a new board class has three homes (this enum, agents/board.sh,
+        # the class table in docs/agents/observability-and-retro.md) and #2052 declares none of
+        # them — the ORPHANS surface is the deliverable; the class is its own issue if wanted.
         gadopt_unl=""
         if [ "$gdisp_ok" = 1 ]; then
           gadopt_unl="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg GREPO "$repo" \
@@ -3226,7 +3229,6 @@ EOF_GOVERNANCE
         fi
         if [ -n "$gadopt_unl" ]; then
           orphans="${orphans}[$repo] ⏸ goal #${g}: adopted-open member(s) ${gadopt_unl} carry NO agent/* state label — counted by the completion predicate (assembly held) but with no waker of their own (dispatch reads agent/queued only, ADR-122 (2); trigger (c) sees undispositioned only). Visibility only, nothing written: a human queues (agent/queued) or rules it deferred on the store (homelab#2052).\n"
-          item_class_push "$repo" "issue-${g}" "goal-adopted-unlabelled" "operator" "${default_branch:-}"
         fi
         set -- $gdesc; gtotal_n=$#
         if [ -n "$gcomments" ]; then

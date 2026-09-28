@@ -412,7 +412,6 @@ if [ "$machine" = 1 ]; then
       orphan-unarmed)          echo "who=operator class=orphan-unarmed id=${id} since=${elapsed} note=\"open PR not on merge path — arm or park\"${dtok}" ;;
       container)               echo "who=none     class=container id=${id} note=\"post-launch bucket, container\"${dtok}" ;;
       backlog-aggregate)       echo "who=operator class=backlog-aggregate id=${repo}/aggregate note=\"suitable-unqueued backlog\"" ;;
-      goal-adopted-unlabelled) echo "who=operator class=goal-adopted-unlabelled id=${id} since=${elapsed} note=\"adopted-open member(s) with no agent/* label — queue or defer on the store (homelab#2052)\"${dtok}" ;;
       *)                       echo "who=${who} class=${class} id=${id} since=${elapsed}${dtok}" ;;
     esac
     had_rows=1
