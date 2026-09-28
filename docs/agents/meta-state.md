@@ -50,8 +50,10 @@ never the session's arc — that is TICK-LOG's.)
   planned the bare PR head, and the FU-289 unpark (#2048, after the fork) read as the PR's own
   change. PR#2073 (in flight) makes stage 2 plan the head MERGED onto master; the engine-keyed
   verdict then re-judges all heads on the box's next hourly pull — expect #2047 EMPTY (→ green →
-  lens/handoff), #2037 `+0 ~1` (Deployment only, inside the allowlist), #2046 `+0 ~4`. Read that
-  as the drill; if #2047 still shows `ci_runner_02`, the merge-plan did not land on the box. #2033: un-latched 11:17Z, must stay un-armed through its
+  lens/handoff), #2037 `+0 ~1` (Deployment only, inside the allowlist), #2046 `+0 ~4`. **The 12:06Z re-judge was a FALSE proof:** it wore a new tag but ran the pre-#2073 script (#2059
+  hashed the clone's master blobs, not the executing files — fixed by PR#2076, in flight). The
+  real proof is the re-judge after the box's ~13:00Z pull: #2047's sentinel comment must read
+  "merged onto master@…" and plan EMPTY; if it still shows `ci_runner_02`, read the box journal. #2033: un-latched 11:17Z, must stay un-armed through its
   next round (#2067's drill). #1977: rebase box ticked 10:36Z, Renovate's 12:00Z run is the mover.
   **Unproven:** #2064's ci base-sha fix — a `gh run rerun` reuses the old workflow file; the next
   fresh event on a behind PR is the proof. The Monday weekly image rebuild did NOT fire on
