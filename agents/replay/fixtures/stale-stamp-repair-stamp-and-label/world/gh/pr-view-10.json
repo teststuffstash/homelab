@@ -1,0 +1,7 @@
+{
+  "number": 10,
+  "commits": [
+    {"oid": "71686359aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "messageHeadline": "Update Terraform helm to v3", "committedDate": "2026-09-27T20:43:31Z"},
+    {"oid": "558e3a91bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "messageHeadline": "Merge branch 'master' into renovate/helm-3.x", "committedDate": "2026-09-27T21:30:00Z"}
+  ]
+}

@@ -1503,6 +1503,13 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    ```
    The reviewer reads the tool's upstream migration notes, maps them onto this repo's usage, and comments
    exactly what must change (e.g. helm-4 needs `--verify=false` on `helm plugin install`).
+   **Never `update-branch` a Renovate PR** (2026-09-28, #2037): the merge commit is a foreign
+   author, Renovate marks the PR "Edited/Blocked" and stops rebasing it — and a re-point does not
+   clear an own-identity review anyway. BEHIND is not your problem here: a human merge updates the
+   branch; if the branch must move, tick Renovate's rebase checkbox in the PR body (`- [x] <!--
+   rebase-check -->`). A reflex rubber stamp or a leaked `automerge` label on an un-armed major is
+   not yours either — the scan's stale-stamp repair clears both before you see the PR; if you
+   meet one, it is the next tick's, not a reason to latch.
 3. **Fix, if within budget.** On `CHANGES_REQUESTED`, estimate the adaptation
    (`estimate_budget.py`); if it's within the cap, dispatch a **worker** to apply it **on the PR branch**
    (not a new branch), feeding it the reviewer's comments — same round mechanics as steps 3–5 above. If

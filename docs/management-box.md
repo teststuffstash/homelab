@@ -50,6 +50,12 @@ deliberately** (operator ruling, 2026-09-13): it is the one nondestructive thing
 With a single OPNsense (and, when this was ruled, a single control plane — three since 2026-09-22,
 ADR-133), anything that touched the router, the CPs or the Proxmox host was instant whole-cluster downtime — so phases B and C run on this residue, where a
 wrong apply costs a dashboard or a Home Assistant restart, and the quirks get ironed out there.
+The allowlist (`policy/mgmt/plan-input.yaml` `apply_addresses.main`) named three Deployments at
+first; since 2026-09-28 it covers **every `kubernetes_deployment.*`** — the fourth, the forgejo
+runner, carries the docker-in-docker tag Renovate bumps through the terraform manager, and its
+first bump (#2037) planned green and then parked as "1 address outside the allowlist — human
+apply", which the operator ruled adds nothing (a Deployment roll is readiness-gated; the old
+ReplicaSet stays until the new one is Ready). Services and PVCs stay named.
 
 The sequence, in this order:
 
@@ -284,7 +290,10 @@ and remote module sources (init would fetch them) — and, since the #1635 revie
 credentials, which for the kubernetes provider is the cluster-admin kubeconfig (`main` and
 `cloudflare` both ride it; no scoped variant exists yet — FU-012's next mint), and an error
 quoted back would make the sentinel an existence oracle for any object from any PR. The same
-review narrowed what an errored plan posts: the tofu `Error:` headlines only, never the body.
+review narrowed what an errored plan posts: the tofu `Error:` headlines only, never the body —
+plus, since 2026-09-28, the `on <file> line N, in <block>:` POSITION lines (a file, a line, a block
+header; never a value), because a worker adapting a provider major (#2046: helm 3 rejects the
+`kubernetes {}` block) cannot read the box journal and a headline alone is not actionable.
 
 **What the verdict covers, per root — the reviewer's expectation.** `main`: everything, and the
 apply allowlist decides what ships. `provisioning`: everything, plan only. `github`: repo rulesets

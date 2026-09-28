@@ -469,6 +469,8 @@ is stale, so it cannot drift the way the prose register did.
 | `slo-teeth/slo-teeth` | suite | - | `-` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-stamp-and-label` | actions | - | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `strike-retry` | table | - | `agents/agent-session.sh` | - |
