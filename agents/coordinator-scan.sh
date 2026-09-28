@@ -3683,8 +3683,15 @@ EOF_GTHEMES_OPEN
     # owned and idempotent: a ticked box is left alone (Renovate's next run, ≤6h, is the mover), a
     # body without the box is a report line. The seat-authored report loop below excludes Renovate.
     # >>>REPLAY:renovate-rebase-tick>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("merge-conflict")) and (((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")))|.number'); do
-      rt_body="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.body // ""' 2>/dev/null)" || rt_body=''
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")))|.number'); do
+      # FRESH body read right before the only full-body overwrite in this file: the per-repo
+      # `prsjson` snapshot can be minutes old, and Renovate regenerates PR bodies on its runs — a
+      # stale copy with one box flipped would clobber the newer text (review finding, #2055).
+      rt_body="$(gh pr view "$u" --repo "$slug" --json body --jq '.body // ""' 2>/dev/null)" || rt_body=''
+      if [ -z "$rt_body" ]; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: could not read the body (rule #6) — no write; next tick\n"
+        continue
+      fi
       if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
         orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
         continue
