@@ -55,7 +55,9 @@ first; since 2026-09-28 it covers **every `kubernetes_deployment.*`** — the fo
 runner, carries the docker-in-docker tag Renovate bumps through the terraform manager, and its
 first bump (#2037) planned green and then parked as "1 address outside the allowlist — human
 apply", which the operator ruled adds nothing (a Deployment roll is readiness-gated; the old
-ReplicaSet stays until the new one is Ready). Services and PVCs stay named.
+ReplicaSet stays until the new one is Ready). Since 2026-09-28 it also covers every
+`kubernetes_pod_disruption_budget_v1.*` (a PDB changes nothing running; ADR-140 as amended makes
+it one leg of the roll-without-downtime shape). Services and PVCs stay named.
 
 The sequence, in this order:
 
