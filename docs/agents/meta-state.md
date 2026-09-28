@@ -23,10 +23,8 @@ never the session's arc — that is TICK-LOG's.)
   co-location); the seat deleted that replica in a window and Longhorn rebuilt it on wk-04's sn530.
   `GithubStorageHeldHigh` = oracle-fleet's `unit-allure-results` artifacts on the 90-day default (853 ×
   2.1 MB); old ones deleted by API, oracle-fleet#763 sets `retention-days: 1` — expect the alert to clear
-  as the 24 h average catches up. **`agent/error` on homelab #2037/#2046/#2047 (terraform majors born with
-  the `automerge` label → the lens's own rubber stamp deadlocks STEP 0(a); cause filed on #1988) is
-  RESERVED for the next Renovate S9 session (operator, 2026-09-28) — do not touch them.**
-  `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z 09-27 on the #2043 class — un-wedged
+  as the 24 h average catches up. The `agent/error` trio #2037/#2046/#2047 was the 2026-09-28 process session's material — see the
+  S9 bullet below. `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z 09-27 on the #2043 class — un-wedged
   by hand, fixed by PR#2045 (init every run in probe + reconciler). **Retro r6 = PR#2050, merged 05:36Z
   by the agents App 6 s after the bot approval — the "HUMAN-GATED, auto-merge NOT armed" gate in
   `retro-argo.yaml` is defeated by `review-reflex.sh`'s C9 re-arm (worker-App author, no parking marker:
@@ -34,68 +32,46 @@ never the session's arc — that is TICK-LOG's.)
   way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
   the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
   `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
-- **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
-  Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
-  bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
-  lens-reviewed `major` on evidence (`.github/renovate-global.json`, 8a75d351); the migration lens as a
-  file (`agents/lenses/migration.md`, PR#2002) with the four handoff headings — the producer #1989 lacked;
-  the reviewer pod clones homelab; the revert chain merges on its own (labels, PR#2002), its identity
-  can push workflow files (PR#2005), its candidate query works (PR#2006 — both rollback chains had NEVER
-  found a candidate: `gh --jq` takes no `--arg`); pin-only-lint check (e) refuses a reverted pin;
-  updater + FU-124 nudge leave untouched grouped-Actions Renovate PRs to Renovate (PR#2004). **DRILL
-  PASSED** (agent-coordinator#20 → revert #21, 09:10–09:37Z, zero human touch). FU-291 filed
-  (late-round reviewer findings, detector first). **Next, in order:** (a) read Renovate run 36309312970's
-  effect on agent-coordinator — the five parked majors #14–#18 (`major/awaiting-human`, #14 human-edited so
-  Renovate will not autoclose it) should be superseded by ONE grouped `github-actions` PR under the
-  amended rule; whatever the run leaves behind is a class call, never per-PR fixes; watch that grouped PR
-  merge on its own (reflex approve + CI) and master's build-image stay green; (b) only then the
-  CODEOWNERS unown of `/.github/workflows/` on openrouter-operator, agent-runtime, homelab (the block
-  text is in the 2026-09-27 TICK-LOG entry's spirit: replacement, not removal — pin-only-lint already
-  runs in their `ci`: c9f0416, 9775c12, homelab ci.yaml L398) and their parked majors follow the same
-  class path; (c) #1988's remaining rules (terraform/npm lanes — the seven unlabelled homelab PRs) and
-  #1989's closeout; (d) DONE 2026-09-27 (PR#2011). **Late 2026-09-27:** (b) DONE — CODEOWNERS un-owned on all
-  three repos, openrouter-operator#77 + agent-runtime#157 merged on their own, homelab #2007/#2008 red on
-  `ci` until 47b23058 (GH_TOKEN on the lint step — all gh calls authenticated, operator; trailing comment
-  on a `uses:` line) — confirm they merged. **S9 original 7 = #2014** (version SETS: claude-code across
-  jail/worker/coordinator, kubectl/kubernetes/kind — design first, the devbox-update job is the model;
-  the interim register is dependency-upgrades.md §Version SETS + row 11, PR#2015). Weekly image
-  rebuilds with build-date tags live on agent-coordinator (3b05a11) + agent-runtime (aa4182b) — the first
-  Monday run (2026-09-28 06:00Z) is an unobserved first: expect a deploy-pin PR per image. agent-coordinator#1
-  (the Dependency Dashboard) was closed again 10:16Z — a reopen by Renovate = a config-resolution defect
-  (debug dry-run on that repo) — DONE, see below.
-  **Latest (2026-09-27 ~10:50Z):** agent-coordinator#1 root-caused (docker tags have no releaseTimestamp → every
-  base-image bump pending forever under the 7-day cooldown → the pending branch force-enables the dashboard);
-  fixed by the docker-datasource `minimumReleaseAgeBehaviour: timestamp-optional` rule — EXPECT on the next
-  Renovate runs: a node 22→24 `major` PR on agent-coordinator (human lane, lens) and base-image bumps across the
-  repos that never appeared before (python, docker:dind, …) — read them as a WAVE, not incidents. The updater's
-  Renovate-author predicate missed the `app/` login shape (#2007 got a merge commit → edited → DIRTY); PR#2017
-  fixes it with both spellings pinned. Closing a Renovate PR does NOT delete its branch — delete the branch too
-  or Renovate re-attaches to the edited history (#2018). Weekly image rebuilds proved on both repos (deploy PRs
-  #2013 agent-base, #2016 agent-coordinator carry build-date tags). Dry-run recipe (jail): `nix shell
-  nixpkgs#nodejs_24 -c npx --yes renovate@<ver> --autodiscover=false <owner/repo>` with RENOVATE_CONFIG_FILE,
-  RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
-  Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
-  `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup).
-  **2026-09-27 ~17:15Z (TICK-LOG has the arc — S9 mostly LANDED):** provider-pin lane live + drilled;
-  lens: version SETS + adoptables-as-follow-ups (FU-292 = no harvest for no-container PRs); reviewer reads
-  CODEOWNERS for operator-only paths (PR#2031); #1992 register + gauges (PR#2028); #1987/#1989/#1990
-  CLOSED; openrouter-operator python set complete (#81/#82/#83), guard covers pyproject/uv.lock; Dependency
-  Dashboards root-caused twice and gone (force.dependencyDashboard, e67b00fe). **Next:** (1) S9 #1985
-  closeout — open originals: #1988 (base-image post-merge half: pin revert on `ArgoWorkflowsFailing`, pod
-  on the PREVIOUS tag — design fork, corpus sitting), #1991 (record written, close at the sweep), #2014 (set
-  mechanism: regex manager over devbox/pyproject pins keyed to the image datasource vs worker round — design
-  fork). (2) Operator-direct `.github`: a `devbox run dependency-coverage -- --check` ci step. (3) FU-152
-  extension: agent-coordinator refs outside the kustomize pin (composition.yaml 5× `2026.8.7`,
-  gc-mirrors.yaml `2026.7.25`) — the deploy-pin sweep misses them. (4) FU-097 intent-review paragraph in
-  `.agents/review.md` — still unlanded. (5) Monday 06:00Z: weekly image rebuilds → a deploy-pin PR per
-  image; `runner-image.yaml`'s pin PR must run as the App (bf00a329). (6) #1977 waits for Renovate's rebase.
-  (7) Hygiene: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac renovate.json (inert now);
-  agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy. (8) `automerge` label = Renovate-only (a
-  jail-authored PR wearing it gets no reviewer) — subagent-card material if it bites again. ⚠ `update-pr-branch.reusable.yml`
-  retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
-  `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
-  Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
-  stacks.json mirror).
+- **⚑ PICKUP (2026-09-28 — S9 #1985 OPEN; the un-armed major lane is now a MECHANISM, TICK-LOG
+  2026-09-28 has the arc).** Landed: Renovate terraform rule non-major only + the approve reflex
+  refuses `major` (31ee7482); stale-stamp repair + `kubernetes_deployment.*` on the box allowlist +
+  sentinel error positions (#2054); the un-armed major play — every state is the `unarmed-major`
+  unit, debounced, the lens reviews red heads (#2058); the sentinel verdict keyed to the engine
+  revision (#2059); ci base-sha fix for behind PRs (9eef297d, #2064); coverage outputs regenerated
+  (#2056); rubric quickfix (cc821156: ADR-128 standing, CODEOWNERS paths, FU-097 intent paragraph).
+  Also landed: #2055 (rebase tick — untouched Renovate branches only), #2065 (fingerprint folds
+  `startedAt`), #2067 (a fix round never arms an un-armed `major`), #2069 (handoff matches the
+  heading WORD), #2060 (the npm mirror, `192.168.40.35`, Opus subagent — FU-294 next: drop
+  `MERMAID_LINT_NO_INSTALL=1`; note the mirror unblocked EGRESS only: `scripts/**` lockfile edits
+  stay the seat's by the path tier). **Drill state at 11:30Z:** #2037/#2046/#2032 sit at
+  `major/awaiting-human` — the designed terminal: read + merge (#2046: the box says +0 ~5 -0 helm 3
+  in-place updates, `devbox run mgmt-human-plan -- 2046`; #2037: +0 ~2 -0 where the second address
+  is PRE-EXISTING drift `proxmox_virtual_environment_vm.ci_runner_02[0]` that makes the box refuse
+  every `main` apply until a human plans it — `MgmtApplyResidueStanding`). #2047: re-judged under
+  the new engine (`[e:92d2129]`), plan RUNS (+0 ~1 -0, human read) — the lens re-review follows on
+  its own (the fingerprint re-opened). #2033: un-latched 11:17Z, must stay un-armed through its
+  next round (#2067's drill). #1977: rebase box ticked 10:36Z, Renovate's 12:00Z run is the mover.
+  **Unproven:** #2064's ci base-sha fix — a `gh run rerun` reuses the old workflow file; the next
+  fresh event on a behind PR is the proof. The Monday weekly image rebuild did NOT fire on
+  agent-coordinator (agent-runtime rebuilt on a push instead).
+  **Operator decisions surfaced (design-shaped, not built):** (a) arm terraform majors AT HANDOFF
+  when the box is the gate (plan-empty + lens APPROVED → auto-merge instead of `major/awaiting-
+  human`) — the last human click in this lane; (b) the sentinel could post the changed ATTRIBUTE
+  PATHS per address (values-free) so a provider-schema-only diff like #2046's can be judged by
+  the lens, or count as "plan empty"; (c) the cloudflare root on the box (operator: maybe in
+  scope — needs a box-held scoped token minted by tofu/cloudflare-token, operator-run); (d) the
+  post-merge dependency-coverage regenerator (#1985 comment) instead of a PR-time `--check`;
+  (e) retro-argo.yaml's marker for the C9 re-arm (unchanged). **S9 closeout residue:** #1988
+  (base-image post-merge half — design fork), #1991 (record written; add a "terraform major via the
+  lens" row from today's #2037/#2046 and close at the sweep), #2014 (version sets — design fork).
+  **Unobserved first that did NOT fire:** the Monday 06:00Z weekly image rebuild on
+  agent-coordinator + agent-runtime (workflows `active`; no scheduled run by 10:30Z) — no detector
+  for a missed scheduled run; re-check next Monday before building one. Hygiene from the old
+  bullet still stands: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac
+  renovate.json (inert); agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy; dead
+  `update-pr-branch.reusable.yml` callers on agent-coordinator + agent-runtime; platform
+  `coordinatorModel` rides `opencode-go/deepseek-v4-flash` — revert to `opus` when the Anthropic 7d
+  window resets. `automerge` label = Renovate-only (a jail-authored PR wearing it gets no reviewer).
 - **⚑ PICKUP (2026-09-24 — registry2 / FU-280 CUT OVER).** `registry.teststuff.net` → `registry-fs` on
   the `registry-data` volume since 14:50Z (#1961/#1962); the S3 Deployment runs unrouted as the rollback.
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
