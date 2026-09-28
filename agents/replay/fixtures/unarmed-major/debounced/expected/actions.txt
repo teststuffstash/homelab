@@ -1,0 +1,4 @@
+CALL gh pr view 30 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT ORPHAN [homelab] ⏳ unarmed-major DEBOUNCED — PR #30: head, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (`state-fp:unarmed-major:eded25a122a1`, homelab#198). The ride that read this state already ruled; a verdict, a push, a check flip or a dismissal re-opens it.
+OUT REACHED: end
+RC 0

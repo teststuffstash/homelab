@@ -3775,10 +3775,37 @@ EOF_GTHEMES_OPEN
       fi
     done
     # <<<REPLAY:stale-stamp-repair<<<
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
+    # unarmed-major (the brief's §Dependency major bumps play) — EVERY state of an un-armed `major`
+    # is this unit's (2026-09-28, homelab#2051 + the #2046/#2047 drill): red at birth (the lens
+    # investigates the red — reviewer STEP 0's un-armed-major exception), CHANGES_REQUESTED (the
+    # ride dispatches a worker on the PR branch; the changes-requested clause is WORKER_AUTHOR-
+    # scoped and never sees a Renovate-authored PR — #2033 sat immobile after its adaptation was
+    # pushed), pushed-not-re-reviewed (the ride re-dispatches the lens), APPROVED with the four
+    # headings (major-handoff.sh). The old `reviewDecision != CHANGES_REQUESTED` guard closed the
+    # only door after the first verdict. What bounds it: the homelab#198 state-fp debounce (the
+    # dispatch-marker case below records `state-fp:unarmed-major:` — a byte-identical state never
+    # buys a second ride; a verdict, a push, a check flip or a dismissal re-opens it) and the
+    # blocked-on predicate (a ride that parks on a human/issue/PR is honoured, homelab#1188).
+    # >>>REPLAY:unarmed-major>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
+      pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
+      um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
+      case "$um_boc" in
+        blocked*)
+          reason="${um_boc#blocked|}"
+          orphans="${orphans}[$repo] ⏳ unarmed-major held — PR #${u} is blocked-on: ${reason}\n"
+          continue
+          ;;
+      esac
+      umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
+      if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push, a check flip or a dismissal re-opens it.\n"
+        continue
+      fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
+    # <<<REPLAY:unarmed-major<<<
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
     # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
@@ -5605,8 +5632,9 @@ EOF
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
-    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the three
-    # clauses whose emission is gated on it (arbitrate, ci-red, and merge-conflict since homelab#595).
+    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the clauses
+    # whose emission is gated on it (arbitrate, ci-red, merge-conflict since homelab#595, and
+    # unarmed-major since 2026-09-28 — its play needs several rides per PR, one per STATE).
     # Here and not at emission because this is the one place a unit is known to be THE dispatched
     # one; and BEFORE the spawn because the session's own work (a pushed fix round, a dismissal, a
     # rerun) is exactly the state change that must re-open the gate — recording afterwards would
@@ -5615,7 +5643,7 @@ EOF
     # it never blocks the ride it is annotating.
     # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
-      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*)
+      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*|unarmed-major:pr-*)
         dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}" "${uclause}")"; dfp="${dfp%%|*}"
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2

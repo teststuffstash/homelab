@@ -1495,9 +1495,15 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    **and are NOT armed** — an armed `major` (a GitHub Actions major, ADR-141) is the reflex's: the
    reviewer's lens is its merge gate and the FU-1990 chain its rollback; never touch it (the scan's
    major clause already keys on `autoMergeRequest == null`).
+   The scan's `unarmed-major` unit brings you EVERY state of such a PR — red at birth, `CHANGES_REQUESTED`
+   (Renovate-authored: the changes-requested clause never sees it), pushed-but-not-re-reviewed, green +
+   APPROVED — debounced on the homelab#198 state fingerprint, so the ride you are on is the one this
+   state gets: rule the step below that matches, and never re-derive a state a `state-fp:unarmed-major:`
+   marker already carries (2026-09-28, #2051).
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
-   *investigation* whose whole job is to explain the red):
+   *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded
+   FAILURE on an un-armed major as the subject, not a precondition, since 2026-09-28):
    ```sh
    bash agents/reviewer-session.sh <project> <PR>
    ```
