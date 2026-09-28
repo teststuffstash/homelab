@@ -11471,3 +11471,76 @@ went the same way (8 min); r5 only waited on a changes-requested. Operator's cal
 PR should state — recorded in meta-state.
 
 Housekeeping: four archive entries past 35 d expired (FU-117/163/179/183; no TODO-shaped refs).
+
+## 2026-09-28 — S9 pickup as a PROCESS session: the un-armed major lane, end to end, no hand fixes
+
+Operator: *"Pick up from meta-state S9. I don't want to do any one-time fixes but to fix the
+process so I don't have to do this again"* — and mid-session: the management box's apply
+allowlist and the codeowner reads are up for change as needed (even the cloudflare root may move
+to the box; only GitHub App clicks are the operator's); an Opus subagent may build the npm mirror.
+The reserved `agent/error` trio (#2037/#2046/#2047) was the material; every fix below is a
+mechanism, and the trio's un-latch + `devbox run ring platform` was the drill. Memory:
+`process-fix-over-one-time-fix`.
+
+**The first wall — the own-identity rubber stamp (cause on #1988).** Three belts, all landed:
+(1) `.github/renovate-global.json` terraform rule → non-major update types only (Renovate merges
+`addLabels`, nothing removes a label; a major was born `automerge`+`major`); (2)
+`renovate-approve.reusable.yml` refuses any `major`-labelled PR (its stamp shares the migration
+lens's identity); both direct, 31ee7482. (3) PR#2054: the scan's `stale-stamp-repair` clause
+(dismiss the reflex's literal stamp when it is a live own-identity APPROVED at head, strip a
+leaked label, one ADR-103 line; a real lens verdict is never touched — two fixtures) + the box
+allowlist widened to `kubernetes_deployment.*` (#2037's image bump had parked as "1 address
+outside — human apply") + the sentinel posts tofu's `on <file> line N` positions on an errored
+plan (values-free; #2046 had a headline with no location, #2047 nothing). Drill: un-latched at
+09:03Z, the scan dismissed all three stamps at 09:04Z; #2037 → lens APPROVED with the four
+headings 09:18Z → `major/awaiting-human` by `major-handoff.sh` — zero hand steps to the designed
+human-merge terminal.
+
+**The second wall — the play the brief described and the code did not emit (#2051, live on
+#2033).** The coordinator re-latched #2046/#2047: the reviewer's STEP 0 stood aside on any
+concluded FAILURE (so "dispatch the lens even while red" was a no-op), `unarmed-major` excluded
+CHANGES_REQUESTED while the changes-requested clause is WORKER_AUTHOR-scoped (a Renovate-authored
+major with a verdict had no door), no debounce (a ride per tick). PR#2058: `unarmed-major` emits
+for EVERY state of an un-armed major, bounded by the #198 state-fp (dispatch marker recorded) and
+the #1188 blocked-on read; reviewer STEP 0 reads `autoMergeRequest` and treats a red on an
+un-armed major as the SUBJECT (`pre=checks-red-unattributed` when the record cannot attribute
+it); brief aligned. Drill (second un-latch after the merge, 10:06Z): #2046's worker adaptation
+(`tofu/cilium.tf:6` `kubernetes = {…}`, 09:49Z, dispatched by the old-code ride) had landed and
+the box re-planned it (+0 ~5 -0 — the DESIGNED "must plan empty" red, a human reads that plan);
+the ride ticked Renovate's rebase box (per my own brief text — WRONG on an adapted branch, a
+rebase drops the worker commit; un-ticked by hand, the brief + the rebase-tick clause corrected
+to untouched-only, PR#2055); the lens then APPROVED #2046 at its red head with the four headings.
+#2047: the lens ran on the red head and stood aside `checks-red-unattributed` — the sentinel's
+09-27 verdict carried no cause, and the box never re-plans a judged head → PR#2059: a verdict is
+keyed to the ENGINE REVISION (`[e:<rev>]` in the status description = hash of sentinel + lib +
+policy at master; a change re-judges every open head on the next tick — the widened allowlist
+and the position lines reach parked PRs without a push) + PR#2065: the unarmed-major fingerprint
+folds each check's `startedAt` so that re-verdict re-opens the debounce. #2033 got its re-review
+under the new play (CHANGES_REQUESTED again, the loop continues). The ride also found and filed
+**#2064**: `pin-only-lint`/`governance-lint` diffed `base.sha` (master at EVENT time = the fork
+point) against the merge ref, so every behind PR went red on master's own guarded-file commits
+(three today) — fixed direct in `ci.yaml` (the merge ref's own first parent via `rev-list
+--parents`, 9eef297d), the failed run on #2046 re-run as the proof.
+
+**Also landed:** #2055 (in review) — a DIRTY Renovate PR gets its rebase checkbox ticked by the
+scan (#1977 sat "waiting for Renovate's rebase" that could never come after one foreign merge
+commit; untouched branches only). #2056 — dependency-coverage outputs regenerated; the S9 "ci
+`--check` step" cannot be PR-time (a pin PR's own bump makes the table stale) → post-merge
+regenerator proposed on #1985. Rubric quickfix direct (cc821156): ADR-128 gate stated as standing
+(FU-233), path list matches CODEOWNERS, the FU-097 intent-review paragraph. FU-152 residue
+re-counted (composition 5×2026.8.7 + gc-mirrors 2026.7.25 vs the 2026.9.27 pin). **FU-293**
+filed (flat `scripts/`, 103 files, vs path-based ownership — the operator's "it will become a
+problem for codeowner rules"; parked debt in iac-lane.md since 08-12). **FU-294** filed (the npm
+Renovate lane produces lockfile work no ride can do — #2032 parked on a human: homelab's claim
+egress `none`, no baseline npm mirror); operator: an Opus subagent builds the mirror — dispatched.
+#1977's stale codeowner request removed (the path was un-owned 09-27; GitHub kept the request).
+
+**Seat lessons:** (a) a background wait written `pr-wait …; echo $?` reports exit 0 for every
+outcome — two CHANGES_REQUESTED verdicts were read as merges and #2046/#2047 were un-latched
+against an unmerged fix (memory `pr-waits-run-in-background` updated: propagate `rc`, verify a
+merge by fetch); (b) the first regeneration commit blamed my rule edit for the coverage drift —
+the diff was the 09-27 pin merges; amended before review. **Observed, unacted:** the Monday
+06:00Z weekly image rebuild did NOT fire on agent-coordinator/agent-runtime (workflows `active`
+on GitHub; agent-runtime's push build produced agent-base 2026.9.28 anyway via #2062) — no
+detector exists for a missed scheduled run (dependency-coverage's `DependencyClassProofStale` is
+the nearest shape). Retro C9 re-arm question (retro-argo.yaml marker) untouched — operator's call.
