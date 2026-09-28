@@ -31,6 +31,9 @@
 # 2026-09-14), so this row IS the gate for the recovery root's closure, not a second belt: the box
 # re-activates only when nixos/ changed, and every file it executes from its checkout is owned here.
 /nixos/             @RasmusSoot
+# /mgmt/ (2026-09-28) groups the closure (mgmt/nixos/) with the box scripts (mgmt/scripts/); the
+# /nixos/ row above goes once fix/mgmt-dir lands.
+/mgmt/              @RasmusSoot
 /.github/           @RasmusSoot
 
 # ── Renovate's action-pin lane (homelab ADR-100 addendum / ADR-141, S9 #1990). Ownership is
