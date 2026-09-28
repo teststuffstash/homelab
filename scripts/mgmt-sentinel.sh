@@ -57,11 +57,25 @@ mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch of $REPO_URL fa
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master
 trap 'rm -f "$POL"' EXIT
 
-verdicted() {   # <sha> → 0 if already judged
-  if [ "${MGMT_SHADOW:-0}" = 1 ]; then [ -f "$SDIR/done/$1" ]; return; fi
+# ENGINE REVISION (2026-09-28, homelab#2046/#2047): a verdict is keyed to the head sha AND to the
+# engine that produced it — this script, its lib and the policy, all as MASTER holds them. A change
+# to any of the three re-judges every open head on the next tick, so a sentinel fix (the position
+# lines) or a policy widening (the Deployment allowlist) reaches a parked PR without a push and
+# without `mgmt-human-plan`. Before this the box memoized per sha forever: #2046/#2047 kept a red
+# whose cause the box would never republish. Empty on a probe failure → the old per-sha memo.
+ENGINE_REV="$( { git -C "$REPO" rev-parse origin/master:scripts/mgmt-sentinel.sh origin/master:scripts/mgmt-lib.sh origin/master:policy/mgmt/plan-input.yaml; } 2>/dev/null | sha256sum | cut -c1-7)" || ENGINE_REV=""
+case "$ENGINE_REV" in *[!0-9a-f]*|'') ENGINE_REV="";; esac
+[ -n "$ENGINE_REV" ] || log "engine revision unreadable — verdicts fall back to the per-sha memo this run"
+ETAG="${ENGINE_REV:+[e:$ENGINE_REV] }"
+
+verdicted() {   # <sha> → 0 if already judged BY THIS ENGINE REVISION
+  if [ "${MGMT_SHADOW:-0}" = 1 ]; then [ -f "$SDIR/done/$1${ENGINE_REV:+-$ENGINE_REV}" ]; return; fi
   local n
-  n="$(gh_api GET "commits/$1/status" | jq --arg c "$CTX" '[.statuses[]|select(.context==$c)]|length')" || { echo probe-fail; return 1; }
+  n="$(gh_api GET "commits/$1/status" | jq --arg c "$CTX" --arg e "$ETAG" '[.statuses[]|select(.context==$c and (($e == "") or ((.description // "") | startswith($e))))]|length')" || { echo probe-fail; return 1; }
   [ "${n:-0}" -gt 0 ]
+}
+post_verdict() {   # <sha> <state> <description> — the status carries the engine tag; the local memo is keyed the same way
+  mgmt_post_status "$1" "$CTX" "$2" "${ETAG}$3" && touch "$SDIR/done/$1${ENGINE_REV:+-$ENGINE_REV}"
 }
 
 if [ $HUMAN = 1 ]; then
@@ -206,7 +220,7 @@ while IFS=$'\t' read -r pr sha; do
   roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
   if [ ${#roots[@]} -eq 0 ]; then
     if [ $HUMAN = 1 ]; then log "[#$pr] touches no box-held surface — nothing to override; the in-cluster half posts this head's success"; continue; fi
-    mgmt_post_status "$sha" "$CTX" success "no box-held surface touched" && touch "$SDIR/done/$sha"
+    post_verdict "$sha" success "no box-held surface touched"
     continue
   fi
   # stage 1
@@ -234,7 +248,7 @@ while IFS=$'\t' read -r pr sha; do
       echo; echo "A PR that legitimately needs this lands the allowlist widening first (its own change), or a human who has read the diff orders the plan from the jail: \`devbox run mgmt-human-plan -- $pr\` (docs/management-box.md §MB3 \"When the box refuses\")."
     } >"$bodyf"
     mgmt_upsert_comment "$pr" "$MARKER" "$bodyf"; rm -f "$bodyf"
-    mgmt_post_status "$sha" "$CTX" failure "stage 1: $rule on ${file##*/} — human plan" && touch "$SDIR/done/$sha"
+    post_verdict "$sha" failure "stage 1: $rule on ${file##*/} — human plan"
     continue
   fi
   # stage 2
@@ -354,7 +368,7 @@ while IFS=$'\t' read -r pr sha; do
     fi
   fi
   mgmt_upsert_comment "$pr" "$MARKER" "$bodyf"; rm -f "$bodyf"
-  mgmt_post_status "$sha" "$CTX" "$state" "${desc% }" && touch "$SDIR/done/$sha"
+  post_verdict "$sha" "$state" "${desc% }"
   [ $HUMAN = 1 ] && human_stamp="$state"
   git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
 done < <(jq -r '.[] | [.number, .head.sha] | @tsv' <<<"$prs")
