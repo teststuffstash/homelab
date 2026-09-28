@@ -1,0 +1,18 @@
+# Cache storage. Pure regenerable cache (anything lost is re-fetched from registry.npmjs.org), so
+# size is a cost/throughput knob, not durability. Tier: `longhorn-bulk` like the other pull-through
+# caches (ADR-091 — re-warmable data belongs on the re-warmable tier; docs/storage-ledger.md §The
+# PyPI cache is the sibling reading). storageClassName is immutable — a tier change is a PVC
+# delete + ArgoCD recreate (cache re-warms from upstream).
+# Must stay comfortably above the nginx max_size in configmap.yaml: the tarball zone runs at
+# max_size=8g + the metadata zone at 1g, so 10Gi leaves headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: npm-cache-data
+  namespace: npm-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn-bulk
+  resources:
+    requests:
+      storage: 10Gi
