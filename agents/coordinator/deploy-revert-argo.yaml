@@ -520,7 +520,8 @@ spec:
 # meanwhile, ADR-140 as amended). The workflow walks the merges under tofu/ in the window
 # NEWEST-FIRST and takes the first whose EVERY changed line is `image = "<ref>"` (the fourth pin
 # shape, scripts/pin-only-lint.sh check (f)) — a later, unrelated tofu merge never masks the bump —
-# then requires that a changed file DECLARES the stuck Deployment, and if so:
+# and whose changed files DECLARE the stuck Deployment (a newer bump on ANOTHER Deployment is walked
+# past too), and if so:
 #   (1) reverts the merge commit on a `revert-img-<sha8>` branch,
 #   (2) records the reverted image refs on a `reverted-images:` body line — pin-only-lint check (f)
 #       refuses a Renovate PR that re-adds any of them for REVERT_MEMORY_DAYS, so the lane never
@@ -605,12 +606,56 @@ spec:
             SLUG="${REPO_SLUG:-teststuffstash/homelab}"
             echo "→ $NS/$DEP rollout stuck — looking for an image-line-only merge under tofu/ in $SLUG"
 
+            # The checkout FIRST: the coupling read inside the walk needs the tree, and master's tree
+            # is the right one (a Deployment's declaration does not move with the candidate).
+            rm -rf /work/repo
+            _cu="https://github.com/${SLUG}.git"
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 30 "$_cu" /work/repo
+            cd /work/repo
+            git config user.name "tofu-image-revert (#1988)"
+            git config user.email "noreply@teststuff.net"
+            # The COUPLING read: a changed file must declare the stuck Deployment — a
+            # `resource "kubernetes_deployment[_v1]"` block whose OWN `metadata { name = "<dep>" }`
+            # (depth 1 under the resource: never the pod template's metadata, a container name, a
+            # volume name or a sibling resource's name — review finding on PR#2082: tofu/unifi.tf
+            # declares two Deployments in one file and forgejo-runner.tf's containers are `dind` /
+            # `runner`). Read from the tree, never inferred from the alert. Brace-depth walk; a
+            # one-line `metadata { name = "x" }` is checked before its own braces are counted.
+            # >>>REPLAY:tofu-image-revert-coupling>>>
+            declares_dep() {
+              awk -v dep="$1" '
+                /^[[:space:]]*resource[[:space:]]+"kubernetes_deployment(_v1)?"[[:space:]]+"[^"]+"[[:space:]]*\{/ { in_res=1; depth=0; in_meta=0 }
+                {
+                  if (!in_res) next
+                  if (depth==1 && $0 ~ /^[[:space:]]*metadata[[:space:]]*\{/) { in_meta=1; meta_depth=2 }
+                  if (in_meta && $0 ~ ("name[[:space:]]*=[[:space:]]*\"" dep "\"")) found=1
+                  depth += gsub(/\{/,"{") - gsub(/\}/,"}")
+                  if (in_meta && depth < meta_depth) in_meta=0
+                  if (depth <= 0) { in_res=0; in_meta=0 }
+                }
+                END { exit(found ? 0 : 1) }' "$2"
+            }
+            # couple_or_report <pr> <files, one per line>: 0 when a changed file declares $DEP
+            # (prints the coupling line), 1 when none does (prints why) — the walk moves on.
+            couple_or_report() {
+              local pr="$1" files="$2" f coupled=""
+              while read -r f; do [ -n "$f" ] && [ -f "$f" ] && declares_dep "$DEP" "$f" && coupled="$f" && break; done <<< "$files"
+              if [ -z "$coupled" ]; then
+                echo "→ $SLUG#$pr changed no file whose kubernetes_deployment metadata names \"$DEP\" — not the stuck $NS/$DEP's merge; next"; return 1
+              fi
+              echo "→ coupling: $SLUG#$pr declares Deployment \"$DEP\" in $coupled"; return 0
+            }
+            # <<<REPLAY:tofu-image-revert-coupling<<<
+
             # The revert candidate: the NEWEST image-line-only merge under tofu/ within the window
-            # — walked newest-first, so a later, unrelated tofu merge (a doc-and-tofu PR, a
-            # `wait_for_rollout` toggle — the drill's own follow-up, 2026-09-28) never masks the
-            # bump that stuck. revert-* heads never qualify (never revert a revert). Fail-closed:
-            # no qualifying merge = report-only; an unreadable diff skips THAT candidate, never
-            # "no offending lines found".
+            # THAT DECLARES THE STUCK DEPLOYMENT — walked newest-first, so a later, unrelated tofu
+            # merge (a doc-and-tofu PR, a `wait_for_rollout` toggle — the drill's own follow-up,
+            # 2026-09-28) or a newer image bump on ANOTHER Deployment (review on PR#2087) never masks
+            # the bump that stuck. revert-* heads never qualify (never revert a revert). Fail-closed:
+            # no qualifying merge = report-only; an UNREADABLE diff ABORTS the whole walk (report-only)
+            # — trying an older, different merge in its place could revert the wrong one, and this
+            # lane merges its revert with no human in the loop (the IAC-G09 rule, same file above).
             # >>>REPLAY:tofu-image-revert-candidate>>>
             # ⚠ `gh … --jq` takes ONLY the expression: the cutoff is embedded (homelab#2006's lesson);
             # CUTOFF is overridable so a replay can pin the date.
@@ -633,20 +678,21 @@ spec:
                 echo "→ $SLUG#$n touches files outside tofu/*.tf — not the class, next"; continue
               fi
               d="$(gh pr diff "$n" --repo "$SLUG" 2>/dev/null || true)"
-              [ -n "$d" ] || { echo "→ cannot read the diff of $SLUG#$n — refusing to classify it, next (fail-closed)"; continue; }
+              [ -n "$d" ] || { echo "→ cannot read the diff of $SLUG#$n — a blind read classifies nothing: the walk ABORTS (report-only; the responder/operator lane owns it)"; exit 0; }
               cl="$(printf '%s\n' "$d" | grep -E '^[-+][^-+]' || true)"
               [ -n "$cl" ] || { echo "→ $SLUG#$n has no content lines in the diff — not an image bump, next"; continue; }
               if printf '%s\n' "$cl" | grep -qEv "$IMAGE_LINE_RE"; then
                 echo "→ $SLUG#$n is NOT image-line-only — a later, unrelated tofu merge does not mask the bump; next"; continue
               fi
+              couple_or_report "$n" "$(printf '%s' "$c" | jq -r '.files[]?.path')" || continue
               CAND="$c"; CONTENT_LINES="$cl"; break
             done <<< "$CANDS"
-            [ -n "$CAND" ] || { echo "→ $SLUG: no image-line-only merge under tofu/ in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+            [ -n "$CAND" ] || { echo "→ $SLUG: no image-line-only merge under tofu/ declaring $NS/$DEP in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
             SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"
             FILES="$(printf '%s' "$CAND" | jq -r '.files[]?.path')"
-            echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE) — image-line-only, inside the revert class"
+            echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE) — image-line-only, declares $DEP, inside the revert class"
             # <<<REPLAY:tofu-image-revert-candidate<<<
 
             # Ledger: one revert decision per (repo, merge-sha).
@@ -667,42 +713,6 @@ spec:
 
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — $NS/$DEP rollout stuck within ${REVERT_WINDOW_MIN}m of the merge"
             BR="revert-img-$(printf '%s' "$SHA" | cut -c1-8)"
-            rm -rf /work/repo
-            _cu="https://github.com/${SLUG}.git"
-            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-            git clone -c "$_ah" --depth 30 "$_cu" /work/repo
-            cd /work/repo
-            git config user.name "tofu-image-revert (#1988)"
-            git config user.email "noreply@teststuff.net"
-            # The COUPLING check: a changed file must declare the stuck Deployment — a
-            # `resource "kubernetes_deployment[_v1]"` block whose OWN `metadata { name = "<dep>" }`
-            # (depth 1 under the resource: never the pod template's metadata, a container name, a
-            # volume name or a sibling resource's name — review finding on PR#2082: tofu/unifi.tf
-            # declares two Deployments in one file and forgejo-runner.tf's containers are `dind` /
-            # `runner`). Or the stuck rollout is not this merge's — report-only. Read from the
-            # tree, never inferred from the alert. Brace-depth walk; a one-line `metadata { name = "x" }`
-            # is checked before its own braces are counted.
-            # >>>REPLAY:tofu-image-revert-coupling>>>
-            declares_dep() {
-              awk -v dep="$1" '
-                /^[[:space:]]*resource[[:space:]]+"kubernetes_deployment(_v1)?"[[:space:]]+"[^"]+"[[:space:]]*\{/ { in_res=1; depth=0; in_meta=0 }
-                {
-                  if (!in_res) next
-                  if (depth==1 && $0 ~ /^[[:space:]]*metadata[[:space:]]*\{/) { in_meta=1; meta_depth=2 }
-                  if (in_meta && $0 ~ ("name[[:space:]]*=[[:space:]]*\"" dep "\"")) found=1
-                  depth += gsub(/\{/,"{") - gsub(/\}/,"}")
-                  if (in_meta && depth < meta_depth) in_meta=0
-                  if (depth <= 0) { in_res=0; in_meta=0 }
-                }
-                END { exit(found ? 0 : 1) }' "$2"
-            }
-            COUPLED=""
-            while read -r f; do [ -n "$f" ] && [ -f "$f" ] && declares_dep "$DEP" "$f" && COUPLED="$f" && break; done <<< "$FILES"
-            if [ -z "$COUPLED" ]; then
-              echo "→ $SLUG#$PRNUM changed no file whose kubernetes_deployment metadata names \"$DEP\" — the stuck $NS/$DEP is not this merge's; report-only (responder/operator lane)"; exit 0
-            fi
-            echo "→ coupling: $SLUG#$PRNUM declares Deployment \"$DEP\" in $COUPLED"
-            # <<<REPLAY:tofu-image-revert-coupling<<<
             if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
               echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
             fi

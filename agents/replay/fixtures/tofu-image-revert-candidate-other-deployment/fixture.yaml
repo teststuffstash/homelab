@@ -1,0 +1,19 @@
+# tofu-image-revert-candidate-other-deployment — the walk's coupling leg (review on PR#2087,
+# 2026-09-28): the NEWEST image-line-only tofu merge (#2095, mongo:7 → 8 in tofu/unifi.tf) is
+# NOT the stuck Deployment's, so it is walked past — a bump on another Deployment must never
+# mask the older bump (#2037) on the one that stuck (forgejo-runner). The old walk `break`ed at
+# #2095 and then exited report-only on the coupling miss.
+name: tofu-image-revert-candidate-other-deployment
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - REVERT_WINDOW_MIN=180
+  - CUTOFF=2026-09-28T12:00:00Z
+  - NS=forgejo-runner
+  - DEP=forgejo-runner
+parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-coupling
+  - block:tofu-image-revert-candidate
+  - file:post.sh

@@ -13,6 +13,10 @@ env:
   - SLUG=teststuffstash/homelab
   - REVERT_WINDOW_MIN=180
   - CUTOFF=2026-09-28T12:00:00Z
+  - NS=forgejo-runner
+  - DEP=forgejo-runner
 parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-coupling
   - block:tofu-image-revert-candidate
   - file:post.sh

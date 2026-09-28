@@ -253,7 +253,14 @@ mgmt_stage1() {
   # rc: a failed git diff / policy read would otherwise judge the head CLEAN (empty file list, no
   # dirs, no deny rules) — the #1631 fail-open class, second round.
   local files_out roots_out dirs_out denyp_out denyre_out r
+  # The file list is EVERY file any commit in base..head touched, unioned with the endpoint
+  # diff (2026-09-28, review on PR#2087 — the sibling of mgmt-apply.sh's span read): a denied
+  # file added and reverted inside one span nets to zero at the endpoints and would otherwise
+  # never reach the deny rules below. Both reads fail closed.
+  local log_out
   files_out="$(git -C "$repo" diff --name-only "$base" "$head" --)" || return 1
+  log_out="$(git -C "$repo" log --name-only --format= "${base}..${head}" -- 2>/dev/null)" || return 1
+  files_out="$(printf '%s\n%s\n' "$files_out" "$log_out" | grep . | sort -u || true)"
   [ -n "$files_out" ] || return 0
   mapfile -t files <<<"$files_out"
   roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$pol")" || return 1   # classifier failed: no verdict
