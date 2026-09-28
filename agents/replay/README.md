@@ -343,6 +343,7 @@ is stale, so it cannot drift the way the prose register did.
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
+| `renovate-rebase-tick-adapted` | actions | - | `agents/coordinator-scan.sh` | - |
 | `renovate-rebase-tick-already-ticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `renovate-rebase-tick-no-checkbox` | actions | - | `agents/coordinator-scan.sh` | - |
 | `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |

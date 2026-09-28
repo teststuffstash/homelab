@@ -1,3 +1,3 @@
-CALL gh pr view 23 --repo teststuffstash/homelab --json body --jq .body // ""
+CALL gh pr view 23 --repo teststuffstash/homelab --json body,commits
 OUT [homelab] ⚠ merge-conflict Renovate PR #23 has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)
 RC 0

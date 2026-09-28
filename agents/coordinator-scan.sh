@@ -3687,11 +3687,21 @@ EOF_GTHEMES_OPEN
       # FRESH body read right before the only full-body overwrite in this file: the per-repo
       # `prsjson` snapshot can be minutes old, and Renovate regenerates PR bodies on its runs — a
       # stale copy with one box flipped would clobber the newer text (review finding, #2055).
-      rt_body="$(gh pr view "$u" --repo "$slug" --json body --jq '.body // ""' 2>/dev/null)" || rt_body=''
-      if [ -z "$rt_body" ]; then
-        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: could not read the body (rule #6) — no write; next tick\n"
+      # UNTOUCHED branches only (2026-09-28, #2046): a Renovate rebase REGENERATES the branch from
+      # master + Renovate's own change — a worker's adaptation commit on an un-armed major would be
+      # lost. The updater's definition (agents/update-pr-branch.sh renovate_untouched): every
+      # non-merge commit is Renovate-authored. An adapted branch moves by merging master into it
+      # — the unarmed-major ride's merge-conflict play — never by the box; report it and move on.
+      rt_pr="$(gh pr view "$u" --repo "$slug" --json body,commits 2>/dev/null)" || rt_pr=''
+      if ! printf '%s' "$rt_pr" | jq -e '.commits | type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: could not read body + commits (rule #6) — no write; next tick\n"
         continue
       fi
+      if ! printf '%s' "$rt_pr" | jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | (.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate") ] | all' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u} carries a non-Renovate commit (an adaptation) — a rebase would drop it; the branch moves by merging master (the unarmed-major ride's merge-conflict play), not by the rebase box\n"
+        continue
+      fi
+      rt_body="$(printf '%s' "$rt_pr" | jq -r '.body // ""' 2>/dev/null)" || rt_body=''
       if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
         orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
         continue
