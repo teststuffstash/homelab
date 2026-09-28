@@ -1,0 +1,5 @@
+CALL gh pr list --repo teststuffstash/homelab --head renovate/some-major --state open --json number,labels,autoMergeRequest
+OUT → --no-arm derived: could not read the open PR for renovate/some-major (rule #6 — a fix round must not arm what it cannot classify; the coordinator arms a worker PR itself if it should be armed)
+OUT → VERIFIED: NO_ARM is set — the fix round will NOT arm
+OUT REACHED: end
+RC 0

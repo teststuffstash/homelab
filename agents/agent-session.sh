@@ -985,6 +985,28 @@ if [ -n "${RECIPE:-}" ]; then
       esac
     fi
     # <<<REPLAY:research-arm-guard<<<
+    # A FIX ROUND ON AN UN-ARMED `major` PR NEVER ARMS IT (2026-09-28, homelab#2033): `major` is the
+    # human-merge lane marker (renovate-global.json / devbox-update.sh; ADR-141 — the arm decides the
+    # owner), and the coordinator's un-armed-major play dispatches worker rounds ONTO the Renovate
+    # branch. The post-ride arming below is the PR-open decision and must not run on a PR someone
+    # else owns the arm of: the round-3 ride on #2033 armed an OPNsense-collection major and the
+    # lens refused to review into an unintended auto-deploy. Keyed on the resumed branch's OPEN PR
+    # carrying `major` with no arm (an already-armed graduated major is left exactly as it is).
+    # Rule #6, the usual direction: an UNREADABLE lookup derives --no-arm too — "not armed" is the
+    # recoverable state (the coordinator arms a worker PR itself, brief step 6), an armed major
+    # is the incident; a probe failure must never fall INTO the write it guards (review finding).
+    # >>>REPLAY:major-arm-guard>>>
+    if [ -n "${WORK_BRANCH:-}" ] && [ -z "${NO_ARM:-}" ]; then
+      _wb_pr="$(gh pr list --repo "${ORG:-teststuffstash}/${PROJECT}" --head "$WORK_BRANCH" --state open --json number,labels,autoMergeRequest 2>/dev/null)" || _wb_pr=''
+      if ! printf '%s' "${_wb_pr:-null}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        NO_ARM=1
+        echo "→ --no-arm derived: could not read the open PR for ${WORK_BRANCH} (rule #6 — a fix round must not arm what it cannot classify; the coordinator arms a worker PR itself if it should be armed)"
+      elif printf '%s' "$_wb_pr" | jq -e '.[0] | (.labels | map(.name) | index("major")) != null and .autoMergeRequest == null' >/dev/null 2>&1; then
+        NO_ARM=1
+        echo "→ --no-arm derived: ${WORK_BRANCH} is the branch of an UN-ARMED \`major\` PR #$(printf '%s' "$_wb_pr" | jq -r '.[0].number') — a fix round never arms the human-merge lane (homelab#2033)"
+      fi
+    fi
+    # <<<REPLAY:major-arm-guard<<<
     # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────
     # The harvest/decompose plays link children as NATIVE sub-issues, and until now NOTHING read
     # those links back: the lineage rendered in the GitHub UI and meant nothing to the machinery,
