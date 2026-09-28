@@ -104,7 +104,15 @@ trap 'rc=$?; rm -f "$POL"; emit_metrics $rc' EXIT
 # FAIL CLOSED, no stamp (the #1631 third round): a failed diff or classifier read must never look
 # like "touches no apply root" — that path STAMPS the sha as applied and the loop would advance its
 # baseline past a master push it never classified. `$(…) ||`, never `mapfile < <(…)` (rc discarded).
-files_out="$(git -C "$REPO" diff --name-only "$last" "$sha" --)" || { log "PROBE-FAIL: diff ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
+# The span's surface is EVERY file any commit in it touched (`git log --name-only`), never the
+# endpoint diff (2026-09-28, the tofu-image-revert drill #2085/#2086): a bad image tag and its
+# revert net to ZERO files between the baseline and master, so the endpoint diff read "touches no
+# apply:true root" and this loop STAMPED past a span whose first half had already reached the
+# cluster (the apply of the bad tag errored on the rollout wait — "half-applied? human" — and
+# the object was updated regardless). The plan is the only honest read of what the cluster holds;
+# a span that contained a tofu change plans, whatever its endpoints say.
+files_out="$(git -C "$REPO" log --name-only --format= "${last}..${sha}" -- | grep . | sort -u)" || true
+[ -n "$files_out" ] || files_out="$(git -C "$REPO" diff --name-only "$last" "$sha" --)" || { log "PROBE-FAIL: diff ${last:0:8}..${sha:0:8} failed — not stamping, next run retries"; exit 1; }
 files=(); [ -n "$files_out" ] && mapfile -t files <<<"$files_out"
 roots_out="$(printf '%s\n' "${files[@]}" | mgmt_roots_touched "$POL")" || { log "PROBE-FAIL: classifier failed (policy unreadable) — not stamping, next run retries"; exit 1; }
 roots=(); [ -n "$roots_out" ] && mapfile -t roots <<<"$roots_out"
