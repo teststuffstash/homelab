@@ -11327,3 +11327,147 @@ loop FU-046, a base-image major merging without a human); FU-125 archived; FU-04
 ROADMAP G-D re-pointed to #1988/#1992/#2014. Operator-owed, untouched: the FU-097 intent-review
 paragraph in `.agents/review.md`. **#1992** (coverage table + gauges): subagent PR in flight at this
 write. **Node 24 acceptance:** first coordinator run on `2026.9.27-gca94f4a2dd99` Succeeded (13:01Z).
+
+## 2026-09-27 (evening) — S9 coordinated by subagents: #1992 landed, the reviewer reads CODEOWNERS, the guard covers python pins, the dashboards' real cause
+
+**#1992 DONE (PR#2028, two review rounds, subagent):** `scripts/dependency-coverage.py` + `docs/dependency-classes.yaml`
+→ the generated register in dependency-upgrades.md (99 rows / 12 classes, 88 ⚠), gauges
+`github_dependency_coverage_*` + `github_renovate_last_pr_timestamp`, alerts `RenovateSilent` (14 d) +
+`DependencyClassProofStale` (90 d). Operator-owed: a `dependency-coverage -- --check` ci step (`.github`).
+Register finding: agent-coordinator refs outside the kustomize pin — 5× `2026.8.7` in
+`argocd/resources/agentstack/composition.yaml`, 1× `2026.7.25` in `registry-cache/gc-mirrors.yaml` (the 18
+bare `image:` refs under agents/coordinator are kustomize-supplied by design, FU-152); the stale two are
+real (the 14 × `2026.8.7` templates seen live at 12:58Z) — extend FU-152 or the sweep.
+**openrouter-operator#82 MERGED (operator)** — python set complete on that repo. Operator read: "how much of
+this is automated for 3.15?" → answered on the board: Renovate PR + lens review + deploy/revert are machine;
+the set move needs FU-046's unproven worker round, `devbox.json` was hard-coded operator-only in the
+reviewer rule, the set has no single source (#2014), adoptables have no harvest, the merge is the `*` gate.
+**Operator directions, landed:** (1) PR#2031 — the reviewer's no-container rule READS the repo's CODEOWNERS
+for operator-only paths (the hard-coded list was wrong for every repo but one); adoptables are ORDINARY
+`Follow-ups:` bullets, no term ("does it deserve its own term" — no); **FU-292** = a dependency PR has no
+container so nothing harvests them (three review rounds: my FU id skipped the counter, then the counter
+note landed mid-sentence — the reviewer caught both). (2) openrouter-operator#83 (subagent, operator
+merged): `deps-pin-guard` admits pin-only `pyproject.toml`/`uv.lock` diffs (strict: a new `[[package]]`
+parks), both un-owned; a guarded file + an owned path now passes to the code owner instead of red (#82 was
+the live case). Survey: no other repo needs it — openrouter-operator was the only `*`-owned repo with
+python dep files; stack repos gate governance paths only. (3) **Dependency Dashboards** (agent-coordinator
+#24 reopened 4 h after #1 was deleted; 10 open org-wide): cause 1 = the `Cannot access vulnerability alerts`
+WARN is a Repository Problem → PR#2034 declares `vulnerability_alerts: read` on homelab-renovate (FU-098
+flow; the 'DECIDED absent' reading was wrong about the cost), operator clicked, WARN gone — and #24
+REOPENED anyway on the next run. Cause 2 (debug dry-run, renovate 44.115.12): `config:recommended` →
+`:dependencyDashboard` is resolved at REPO level and merged on top of the global keys, so the global
+`false` lost on every repo (dependency-dashboard.js:205 gates on that value alone). Fix e67b00fe:
+`force.dependencyDashboard=false`; next run closed all 10 dashboards itself. Orphan branch
+`renovate/actions-checkout-7.x` deleted (the #2018 class). Hygiene left: `:dependencyDashboard` lines in
+sleep-tracking / sleep-iac / oracle-iac renovate.json (now inert).
+**Mechanics learned:** a jail-authored PR labelled `automerge` gets NO reviewer (exporter skips the label,
+renovate-approve wants a Bot author) — Renovate-only label; `git pull --rebase origin master` on a PR
+branch the updater has merged into diverges from its remote tip — rebase onto `origin/<branch>` instead.
+
+## 2026-09-27 — FU-289: the placement belts, then wk-04 rebalanced (16/16)
+
+**Condition:** operator asked for an opinion on the NUMA spike (three models' input), then
+"start with 1 and 2". Counters on nx-02 settled the mechanism the write-up left open: `pgsteal_kswapd`
+9.0 GiB vs 462 direct stalls, `numa_miss` 36.8 GiB — fallback worked, **kswapd** emptied node 1
+per its own watermarks because wk-04's 25.7 GiB there was pinned and the only evictable pages were
+the other guests'. Detector first (#2040): both hypervisors' node_exporter gain `meminfo_numa` +
+reclaim/compaction vmstat, the textfile collector publishes per-guest placement/swap/pin, four
+rules replayed — `PveHostSwapUsed` would have fired ~23:00Z 09-24, 8 h before the stalls;
+`PveHostSwapThrash` through both failing runs. Reviewer's one blocking finding (verify gated on a
+guest-only series) was right. nx-02's apt was enterprise-only (401) → `pve-apt-repos` role, first
+in both pve plays (#2042). The box's plan died on a stale provider cache after the Renovate bump →
+`mgmt-tf` inits every run (#2043).
+
+**The window (seat-1790534883-8752):** `down wk-04` needed FORCE=1 (single-replica Deployments
+reschedule). Apply 1: HTTP 500 `only root can set 'hugepages' config` — hugepages is root@pam-only
+like raw hostpci; quickfix `04b08852` drops it and makes the policy `preferred` (a `bind` on a
+short node would swap the neighbours out to satisfy the pin). Apply 2: "1 changed", VM started
+20.5/11.6 — pvedaemon shows the request carried only `-name wk-04` (GAPS tofu-apply-G3 resight).
+Apply 3: numa0/numa1 landed, provider shut down + started, **16.0/16.0 GiB**, host nodes 7.6/12.7
+GiB free. `up wk-04` uncordoned 19:02Z. ci-runner-02 stays PARKED until the boot-disk move (the
+SA400 is in the box as /dev/sdb) — FU-289 §Next. Window closed 19:21Z with `--force`: the only
+off-baseline item was `PodSigkilled` for the four DaemonSet pods our own shutdown killed (30-minute
+lookback) — GAPS maintenance-window resight filed; nothing else moved off baseline (13 nodes, 186
+targets, cilium 13/13, hard-failed pods 1 → 0). All four PRs merged (#2040 #2041 #2042 #2043).
+**Evening add-on (operator: "GRUB serial — this session", the next one runs unattended overnight):**
+`pve-serial-console` role (#2044) — GRUB menu + kernel console on nx-02's SOL (ttyS1, 115200) beside
+VGA, host_vars-gated (pve no-op), applied and verified in grub.cfg; lands at the next boot. Operator
+also reports both NX CMOS batteries replaced and nx-01's console redirection enabled (private
+register amended, dated, unverified until a watched boot).
+
+
+## 2026-09-27 (night, unattended) — FU-289 hardware half: nx-02 boots from the SA400, the LSI HBA's one-disk INT13 cap, ci-runner-02 unparked
+
+**Condition:** operator at bedtime: "pick up from meta state, FU-289 hardware half and the rest."
+Window seat-1790538379-8332 (19:46–21:19Z), alert watch armed. Step 1 online: the SA400 wiped and
+partitioned like the WD (BIOS-boot / 1 G ESP / LVM), `vgextend pve`, the 0 %-used `local-lvm` pool
+dropped, `pvmove` of root+swap (104 G, 19 min at ~95 MB/s off the spinner), `vgreduce`, GRUB on BOTH
+disks, `local-lvm` recreated as a 700 G thin pool on the SSD (metadata grown to 1 G — lvcreate's 88 M
+auto-size was tight). Step 2: `down wk-04` (FORCE=1), `qm shutdown` cp-02 (etcd 3/3 healthy before,
+API on the VIP throughout), `chassis bootdev bios`, reboot.
+
+**The reboot did not come back.** `Hard Disk Drive BBS Priorities` listed ONE disk; booting it put the
+WD's GRUB in `grub rescue>` — `ls` saw `(hd0)` only. Cause: the SAS3008's legacy option ROM registers
+INT13 drives up to `Maximum INT 13 Devices for this Adapter`, shipped as **1** in this Nutanix IT
+NVDATA — so a legacy bootloader on a bay disk can never read a second bay disk, however BIOS ranks
+them. Reached the LSI utility over SOL by blind Ctrl-C through POST (its banner does not render on
+SOL; the keystroke is honoured), found both drives in SAS Topology (Kingston slot 0, WD slot 2), set
+the cap to 2 via the Enter-opened numeric dialog (Alt+keys and `+`/`-` do not cross SOL), saved, rebooted
+into setup, ranked `ID01` first in the BBS submenu (both disks now listed), F4 — host up from the SSD
+37 s later (20:58Z), `swap` on `sdb3`, VMs auto-started, wk-04 16.02/16.02 GiB again, `up wk-04` +
+uncordon cp-02, cilium 13/13, targets 186/186. Rollback plan if the utility had not rendered: BMC
+NFS virtual media with a serial-console rescue ISO (nix-built), pvmove back — not needed. Recipe and
+drivers (`lsi_catch2.py`, `lsi_keys.py`, `bbs.py`, `grub_probe.py` on `pve:/root`) are in the private
+register; the structural fix is UEFI boot mode (no INT13 cap), parked for an attended window.
+
+**Step 3:** `ci_runner_02_running` → true (#2048, merged 21:13Z, `mgmt-tf` plan = the one VM update,
+applied 21:16Z with MGMT_YES=1); nx-02 nodes 11.1/11.1 GiB free, swap 0 B. Three oracle-fleet CI runs
+dispatched 21:20Z for the "Preparing nodes" comparison (runner-01 baseline 2.5 s; the event was 397/67 s).
+**Result:** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (the event: 397 s and
+67 s; runner-01 baseline 2.5 s), e2e green in 7m11s, host swap 0 B, node free 9.1/6.3 GiB with all three
+guests up (runner-02 faulting in 3.0/5.4 GiB), no `PveHostSwap*`/`PveNuma*` fire; …24933 cancelled by the
+workflow's concurrency group, …30352 on ci-runner-01-2. One sample; the belts judge the week.
+Window closed `--force`: off-baseline = `PodSigkilled` (own shutdown) + `LonghornNodeOverProvisioned`
+wk-metal-01 (pending since 19:01Z, unrelated — mx500 463 G max / 580 G scheduled). GAPS G5 re-sighted
+(+ `NodeRebooted` on the HYPERVISOR's exporter, + the down node's nodeName-pinned `fstrim-guard`
+CronJob → `CronJobNotSucceeding` — expected-class members).
+
+**Side find while the pvmove ran:** `MgmtBeltCheckFailing{tofu:github,tofu:provisioning,nodes}` +
+`MgmtReconcileLoopStale` firing since 13:17Z — the box's checkout had "Required plugins are not
+installed" after Renovate's integrations/github 6.13.0 bump; the probe + reconciler still guarded init
+with `[ ! -d .terraform ]` (#2043 fixed only mgmt-tf.sh). Un-wedged by hand (three inits), belt 7/7 pass,
+reconciler "nothing to sync"; PR#2045 (init every run, `mgmt-reconcile-test` 154 pass) merged. S9 read:
+agent-coordinator's grouped github-actions PR #22 and the node 24 major #23 merged on their own; homelab
+#2008 merged, #2007 closed (superseded); master CI green.
+
+## 2026-09-28 (morning) — alert session: three board items read, two cleared, the Renovate three reserved for S9
+
+Operator: "maintenance session for alerts"; the WD spinner was PULLED from nx-02 overnight (FU-289's
+BIOS residual is moot — the SA400 is the only INT13 disk; recorded in FU-289, the spike, meta-state).
+Ruling mid-session: **the `agent/error` PRs #2037/#2046/#2047 are for the next Renovate S9 session —
+not touched.** Read only: terraform majors born with the `automerge` label (rule [8]/[9] add it, the
+majors rule [14] never removes it) → `renovate-approve` rubber-stamps with the reviewer's own identity
+→ the migration lens refuses at STEP 0(a); cause filed on #1988 by the anomaly comments themselves.
+
+**`GithubStorageHeldHigh` (04:25Z, 1.7 GB/day held):** all oracle-fleet — `unit-allure-results`, 853
+artifacts × 2.1 MB on the 90-day default since July (+1608 tiny `e2e-evidence`), both consumed by the
+same run's `evidence` job and never read again. Deleted every artifact older than 7 days by API (1873,
+1.08 GB — a long loop, ~1/s) and opened **oracle-fleet#763** (`retention-days: 1` on both uploads,
+auto-merge armed, bot review pending). The alert clears as the 24 h average catches up.
+
+**`LonghornNodeOverProvisioned` wk-metal-01 (since 09-27 20:01Z):** NOT FU-285's co-location — no volume
+had two replicas there. registry-data (pvc-8a14f095, 150 Gi) lost its wk-04 replica when nx-02 went
+down in the FU-289 window; after the 600 s `replica-replenishment-wait-interval` Longhorn rebuilt it
+onto the mx500 at 19:01Z (manager log: "Cannot find a reusable failed replica … Schedule replica to node
+wk-metal-01"), 623 G promised on 391 G allocatable = 160 %. The runbook §Single worker maintenance
+already names this class. Window `seat-1790582118-779`: deleted that replica, Longhorn placed the
+replacement on **wk-04's sn530** (bulk, 251 G free) within the wait interval; rebuild 45 GB, ratio back
+to 1.18, alert cleared 08:0xZ.
+
+**Retro r6 PR #2050 is not missing — it merged at 05:36Z, 6 s after the bot approval, by the agents App.**
+`retro-argo.yaml` says "HUMAN-GATED, auto-merge NOT armed", but `review-reflex.sh`'s C9 re-arm arms every
+worker-App PR without a parking marker, and the retro PR carries none of the four C9 honours. r4 #1645
+went the same way (8 min); r5 only waited on a changes-requested. Operator's call which marker the retro
+PR should state — recorded in meta-state.
+
+Housekeeping: four archive entries past 35 d expired (FU-117/163/179/183; no TODO-shaped refs).

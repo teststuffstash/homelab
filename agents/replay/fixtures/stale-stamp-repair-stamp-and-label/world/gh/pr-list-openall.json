@@ -1,0 +1,10 @@
+[
+  {
+    "number": 10,
+    "title": "Update Terraform helm to v3",
+    "labels": [{"name": "dependencies"}, {"name": "major"}, {"name": "automerge"}],
+    "autoMergeRequest": null,
+    "reviewDecision": "APPROVED",
+    "author": {"login": "app/homelab-renovate-1234"}
+  }
+]

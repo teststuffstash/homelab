@@ -29,10 +29,19 @@ permissions: {} # uses the reviewer App token, not GITHUB_TOKEN
 
 jobs:
   approve:
+    # NEVER a `major` (2026-09-28, homelab#2037/#2046/#2047): `major` is the migration-lens marker,
+    # and the lens runs under THIS SAME reviewer identity. A rubber stamp posted here on a major PR is
+    # an own-identity APPROVED at head, which the lens's STEP 0 self-guard treats as "already
+    # reviewed" — it refuses forever, major-handoff.sh never gets its four headings, and the PR
+    # deadlocks. The `automerge` label reached three terraform majors through a Renovate rule
+    # that merged addLabels across update types (fixed in renovate-global.json the same day; the
+    # scan's stale-stamp repair dismisses any stamp that already landed). This exclusion is the
+    # belt that holds regardless of how the label arrives (a security-alert major, a hand edit).
     if: >-
       github.event.pull_request.user.type == 'Bot' &&
       contains(github.event.pull_request.labels.*.name, 'automerge') &&
-      contains(github.event.pull_request.labels.*.name, 'dependencies')
+      contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+      !contains(github.event.pull_request.labels.*.name, 'major')
     runs-on: homelab-ephemeral
     # SERIALIZE per PR (homelab#114, 2026-08-11): one `labeled` event fires PER LABEL, so a
     # producer adding automerge+dependencies spawns concurrent instances that all pass the
@@ -59,7 +68,7 @@ jobs:
       - name: Mint homelab-reviewer token (scoped to the caller repo)
         if: steps.gate.outputs.ok == 'true'
         id: rev
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.REVIEWER_APP_ID }}
           private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}

@@ -199,10 +199,11 @@
         "statuses": {
           "level": "write",
           "why": "renovate reads branch commit statuses + writes renovate/stability-days (the minimumReleaseAge cooldown); missing, every repo aborts — 403 read → integration-unauthorized, 403 write → repository-changed (FU-125, 2026-09-25)"
+        },
+        "vulnerability_alerts": {
+          "level": "read",
+          "why": "NOT for the data (OSV stays the vulnerability source) — for the WARN's absence: without it every run logs 'Cannot access vulnerability alerts', a Repository Problem, and Renovate ENSURES a Dependency Dashboard on every repo to host it regardless of dependencyDashboard:false (10 open dashboards org-wide 2026-09-27; agent-coordinator#24 re-created within the hour after #1 was deleted; the 08-18 dashboard-OFF ruling was defeated by this one line). Read-only. The 2026-09-27 'DECIDED absent' reading was wrong about the cost of ignoring the warning"
         }
-      },
-      "absent": {
-        "vulnerability_alerts": "DECIDED — vulnerability data comes from Renovate's OSV alerts, not GitHub Dependabot (docs/renovate.md §OSV: 'we use OSV instead and ignore that warning'; self-host ethos, no repo Dependency-graph settings needed)"
       },
       "installs": "selected",
       "key_locations": [

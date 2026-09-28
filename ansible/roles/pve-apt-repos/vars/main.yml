@@ -1,0 +1,4 @@
+# Which Ceph release Proxmox pairs with which Debian codename — the `ceph-<name>` repo path.
+# (bookworm/reef is pve's hand-edited sources.list state and is NOT rewritten by this role.)
+pve_ceph_by_codename:
+  trixie: squid

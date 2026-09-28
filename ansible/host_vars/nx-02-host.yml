@@ -3,3 +3,11 @@
 # Nothing to override yet: nx-02 runs one VM (wk-04, vmid 8114) and it is not `serial = true` —
 # the pve-serial-log role only tails what tofu gave a serial device. This file exists so the
 # next per-host value has an obvious home rather than leaking into group_vars.
+
+# --- pve-serial-console (FU-289) ---
+# nx-02's BMC (Supermicro X10DRT-P, 192.168.2.173) redirects the BIOS to serial-over-LAN on COM2 —
+# the kernel sees it as ttyS1 (0x2F8, irq 3; ttyS0 is the physical COM1 header). GRUB and the
+# kernel console go there too, so `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P <bmc-password> sol
+# activate` shows POST → GRUB menu → kernel → login. 115200 matches the BMC's SOL bit rate.
+pve_serial_console_unit: 1
+pve_serial_console_baud: 115200

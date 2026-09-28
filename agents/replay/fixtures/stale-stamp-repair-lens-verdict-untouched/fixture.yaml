@@ -1,0 +1,10 @@
+# stale-stamp repair case 2: un-armed `major`, NO leaked label, the reviewer's APPROVED at head is
+# a REAL migration-lens verdict (four headings, not the reflex's literal body) ⇒ the clause reads
+# and writes NOTHING — a lens verdict is never dismissed by the repair (major-handoff.sh consumes it)
+name: stale-stamp-repair-lens-verdict-untouched
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:stale-stamp-repair
+  - file:post.sh

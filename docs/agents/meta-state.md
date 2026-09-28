@@ -10,6 +10,30 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
+  from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
+  LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.
+  **Read (1):** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (failure 397/67 s,
+  runner-01 2.5 s), e2e green 7m11s, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire; …24933 was cancelled by
+  the concurrency group, …30352 ran on ci-runner-01-2 (~0 s, image cached). One sample — the belts judge the
+  week. (2) DONE 2026-09-28: the operator PULLED the WD spinner, so the SA400 is the only INT13 disk —
+  the BIOS-priority question is moot. (3) Board, 2026-09-28 morning session: `LonghornNodeOverProvisioned`
+  on wk-metal-01 CLEARED — it was registry-data's replica, replenished onto the mx500 at 19:01Z while wk-04
+  (nx-02) was down in the FU-289 window (the runbook §Single worker maintenance 600 s class, not FU-285's
+  co-location); the seat deleted that replica in a window and Longhorn rebuilt it on wk-04's sn530.
+  `GithubStorageHeldHigh` = oracle-fleet's `unit-allure-results` artifacts on the 90-day default (853 ×
+  2.1 MB); old ones deleted by API, oracle-fleet#763 sets `retention-days: 1` — expect the alert to clear
+  as the 24 h average catches up. **`agent/error` on homelab #2037/#2046/#2047 (terraform majors born with
+  the `automerge` label → the lens's own rubber stamp deadlocks STEP 0(a); cause filed on #1988) is
+  RESERVED for the next Renovate S9 session (operator, 2026-09-28) — do not touch them.**
+  `MgmtBeltCheckFailing`×3 + `MgmtReconcileLoopStale` fired 13:17–19:56Z 09-27 on the #2043 class — un-wedged
+  by hand, fixed by PR#2045 (init every run in probe + reconciler). **Retro r6 = PR#2050, merged 05:36Z
+  by the agents App 6 s after the bot approval — the "HUMAN-GATED, auto-merge NOT armed" gate in
+  `retro-argo.yaml` is defeated by `review-reflex.sh`'s C9 re-arm (worker-App author, no parking marker:
+  C9 honours only `major/awaiting-human`, `major`, `agent/error`, `research/*`); r4 #1645 went the same
+  way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
+  the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
+  `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
 - **⚑ PICKUP (2026-09-27 — STINT S9 homelab#1985 OPEN; agent-coordinator FIRST, other repos wait — operator ruling).**
   Landed today (TICK-LOG 2026-09-27 has the arc): ADR-141 + amendment (PR#2003, #2009) — GitHub Actions
   bumps of every type ride the grouped mechanical lane, a dependency graduates to an ungrouped
@@ -52,22 +76,22 @@ never the session's arc — that is TICK-LOG's.)
   RENOVATE_TOKEN=$(gh auth token), RENOVATE_DRY_RUN=full, LOG_LEVEL=debug (node 22 lacks RegExp.escape).
   Residues from #1987 (unchanged): oracle-fleet#738 + oracle-iac#1001 wear `major/awaiting-human` with
   `reviews: []` (oracle-stack call); the code "S3" is defined twice (docs-cleanup).
-  **2026-09-27 ~14:20Z (TICK-LOG has the arc; operator away since ~13:05Z, seat coordinating via subagents):**
-  LANDED: provider-pin lane end to end (PR#2026 + rule flip 779f40fa + drill #2030 PASSED — Renovate
-  terraform PRs now merge on the box's empty plan; a non-empty plan is the only human read); lens
-  §Runtime majors ADOPT + §Version SETS (PR#2025); closeouts #1987/#1989/#1990 CLOSED (PR#2027);
-  agent-coordinator#23 node 24 merged + runtime smoke, first coordinator run on it Succeeded;
-  openrouter-operator#81 merged (devbox python 3.14). **Confirm/next:** (1) **openrouter-operator#82**
-  — the rest of the python set, armed, parked on the `*` gate: YOUR merge (supersedes Renovate #80;
-  do not close #80). (2) **#1992** coverage table PR — a subagent owned its cycle; check it merged.
-  (3) **#1988 base-image post-merge half** (pin revert on `ArgoWorkflowsFailing`, pod on the PREVIOUS
-  tag) and **#2014 set mechanism** (version file stamped by devbox-update vs images from the devbox
-  base; python: regex manager vs worker) — design forks, yours (corpus sitting). (4) FU-097 intent-
-  review paragraph in `.agents/review.md` — operator-direct, still unlanded. (5) Monday 06:00Z: the
-  weekly image rebuilds → one deploy-pin PR per image; and `runner-image.yaml`'s next pin PR must run as
-  the App (bf00a329). (6) #1977 waits for Renovate's rebase. (7) `automerge` label is Renovate-only —
-  a jail-authored PR wearing it gets no reviewer (exporter skips it, renovate-approve wants a Bot
-  author); a rule for the subagent card if it bites again. ⚠ `update-pr-branch.reusable.yml`
+  **2026-09-27 ~17:15Z (TICK-LOG has the arc — S9 mostly LANDED):** provider-pin lane live + drilled;
+  lens: version SETS + adoptables-as-follow-ups (FU-292 = no harvest for no-container PRs); reviewer reads
+  CODEOWNERS for operator-only paths (PR#2031); #1992 register + gauges (PR#2028); #1987/#1989/#1990
+  CLOSED; openrouter-operator python set complete (#81/#82/#83), guard covers pyproject/uv.lock; Dependency
+  Dashboards root-caused twice and gone (force.dependencyDashboard, e67b00fe). **Next:** (1) S9 #1985
+  closeout — open originals: #1988 (base-image post-merge half: pin revert on `ArgoWorkflowsFailing`, pod
+  on the PREVIOUS tag — design fork, corpus sitting), #1991 (record written, close at the sweep), #2014 (set
+  mechanism: regex manager over devbox/pyproject pins keyed to the image datasource vs worker round — design
+  fork). (2) Operator-direct `.github`: a `devbox run dependency-coverage -- --check` ci step. (3) FU-152
+  extension: agent-coordinator refs outside the kustomize pin (composition.yaml 5× `2026.8.7`,
+  gc-mirrors.yaml `2026.7.25`) — the deploy-pin sweep misses them. (4) FU-097 intent-review paragraph in
+  `.agents/review.md` — still unlanded. (5) Monday 06:00Z: weekly image rebuilds → a deploy-pin PR per
+  image; `runner-image.yaml`'s pin PR must run as the App (bf00a329). (6) #1977 waits for Renovate's rebase.
+  (7) Hygiene: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac renovate.json (inert now);
+  agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy. (8) `automerge` label = Renovate-only (a
+  jail-authored PR wearing it gets no reviewer) — subagent-card material if it bites again. ⚠ `update-pr-branch.reusable.yml`
   retired (ADR-111) but agent-coordinator + agent-runtime still carry dead callers — delete on the next
   `.github` touch there. Platform `coordinatorModel` rides `opencode-go/deepseek-v4-flash` while the
   Anthropic 7d window sits at the latch — **revert to `opus` when the window resets** (claim +
@@ -128,10 +152,12 @@ never the session's arc — that is TICK-LOG's.)
   owed by oracle: a null `origin` column means the header does not survive the tunnel hop. Also check
   whether our platform-stack deny on `deepseek/deepseek-v4-flash-0731` was meant to cover the
   permaslug-spelled cell, against which it is INERT.
-- **⚑ UNBUILT, NO HOME YET (single sightings — detector-first on a second):** `fstrim-guard-*` should
-  skip a cordoned node. `KubeJobFailed` fired 45 series during the 09-16 window, and adding it to
-  `DECLARED_ALERTS` was rejected as too broad. Separately, the registry exposes no scraped metric, so
-  push throughput has no belt.
+- **⚑ UNBUILT, NO HOME YET (single sightings — detector-first on a second):** `fstrim-guard-<node>`
+  is nodeName-pinned ON PURPOSE (the manifest: "must still run when cordoned") — so while a node is
+  OFF in a window its guard sits Pending and `CronJobNotSucceeding` fires (2026-09-27, wk-04): a window
+  consequence for GAPS maintenance-window-G5's EXPECTED class, not a skip-on-cordon change. `KubeJobFailed`
+  fired 45 series during the 09-16 window, and adding it to `DECLARED_ALERTS` was rejected as too broad.
+  Separately, the registry exposes no scraped metric, so push throughput has no belt.
 - **⚑ HYGIENE:** stale agent branches (homelab 11 as of 09-05, plus agent-runtime 1, oracle-fleet 4,
   circles 4, sleep 1): delete or resume. The ZOMBIE hosted runs 32217689970 and 34748702282 cannot be
   cancelled by API: operator UI, or ignore. Phantom `agent/done` closes: confirm or relabel

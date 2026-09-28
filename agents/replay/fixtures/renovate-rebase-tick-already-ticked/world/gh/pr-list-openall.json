@@ -1,0 +1,10 @@
+[
+  {
+    "number": 22,
+    "title": "fix(deps): update dependency mermaid to v11.17.2",
+    "labels": [{"name": "automerge"}, {"name": "dependencies"}, {"name": "merge-conflict"}],
+    "author": {"login": "homelab-renovate-1234[bot]"},
+    "mergeStateStatus": "DIRTY",
+    "body": "This PR contains the following updates.\n\n - [x] <!-- rebase-check -->If you want to rebase/retry this PR, check this box\n"
+  }
+]

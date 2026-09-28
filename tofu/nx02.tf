@@ -49,6 +49,31 @@ resource "proxmox_virtual_environment_vm" "nx02_node" {
 
   memory {
     dedicated = each.value.memory_mb
+    # ⚠ NO `hugepages` here, although it is the textbook backing for a VFIO-pinned guest (a pool
+    # reserved per host node before QEMU starts, fail-fast): Proxmox refuses it from anyone but
+    # `root@pam` — the apply returned HTTP 500 *"only root can set 'hugepages' config"*
+    # (2026-09-27), the same boundary as the raw-BDF hostpci above. The automation identity
+    # deliberately is not root, so the per-node split is done with the numa blocks below.
+  }
+
+  # numa_pin: guest node i ↔ host node i, cpus are GUEST vCPU ids (half per socket, matching the
+  # cpu block's `cores` = per-socket count), memory half each, host node PREFERRED. Without these
+  # blocks Proxmox splits the guest topology but attaches NO host-nodes/policy to the memory
+  # backends (PVE/QemuServer/Memory.pm, read 2026-09-27) — which is how the 6/26 skew happened.
+  # `preferred`, not `bind`: without hugepages the VFIO pin faults the 32 GiB in at start, and a
+  # `bind` on a host node that is short at that moment would reclaim — swap out — the OTHER
+  # guests on that node to satisfy the pin (or OOM one), which is worse than the skew it prevents.
+  # `preferred` takes the node while it has room and falls back otherwise; a skewed restart is
+  # what PveNumaNodeMemoryLow / PveGuestSwapped (argocd/resources/pve-metrics/) now report.
+  dynamic "numa" {
+    for_each = each.value.numa_pin ? [0, 1] : []
+    content {
+      device    = "numa${numa.value}"
+      cpus      = "${numa.value * each.value.cores / 2}-${(numa.value + 1) * each.value.cores / 2 - 1}"
+      memory    = each.value.memory_mb / 2
+      hostnodes = tostring(numa.value)
+      policy    = "preferred"
+    }
   }
 
   disk {

@@ -195,6 +195,19 @@ variable "nodes" {
     # hostpci is not hot-pluggable — so it rides a node-maintenance window. It also pins the VM to
     # that host, which is free here: nothing live-migrates in this fleet.
     hostpci_mapping = optional(string)
+    # Host memory PLACEMENT (FU-289, docs/spikes/nx-02-numa-placement.md). `sockets=2 + numa=1`
+    # (nx02.tf) only split the GUEST topology; the host still backs each guest node with whatever
+    # pages the faulting thread's socket had free, and for a VFIO-pinned guest (hostpci above) that
+    # first placement is permanent — wk-04 landed 6/26 GiB across nx-02's two 32 GiB nodes, node 1
+    # was left ~1 GiB, and kswapd swapped the OTHER guests there to the HDD (2026-09-24, the
+    # ci-runner-02 e2e stalls). With this flag each guest NUMA node's RAM is half the total,
+    # PREFERRED on the matching host node (nx02.tf has why not `bind`, and why not hugepages —
+    # the latter is root@pam-only in Proxmox, refused to the automation identity 2026-09-27). The
+    # pin still makes the placement permanent for the VM's life, so the balance is decided at
+    # start: restart it while both host nodes have 16 GiB free and it lands 16/16; the placement
+    # belts (PveNumaNodeMemoryLow, PveGuestSwapped) report a skewed start. Takes effect at the
+    # next full VM stop/start, inside a node-maintenance window; dual-socket hypervisors only.
+    numa_pin = optional(bool, false)
     # Extra Longhorn disks for a VM node, same shape and same rules as machines.yaml's
     # `longhorn_disks` for metal (locals.tf `metal_nodes`): [{device, name, tags}], mounted at
     # /var/lib/longhorn/<name> because longhorn-manager host-mounts only that path, and <name> is
@@ -284,6 +297,7 @@ variable "nodes" {
     # ever lands on an nx node — that is the moment the zone names must collapse.
     wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02",
       hostpci_mapping = "wk04-sn530",
+      numa_pin        = true,
       longhorn_disks  = [{ device = "/dev/disk/by-id/nvme-eui.e8238fa6bf530001001b448b49e4a8d0", name = "sn530", tags = ["bulk"] }]
     }
     # ADR-133's THIRD control plane, on the second hypervisor — one CP per chassis (pve, the X250,
