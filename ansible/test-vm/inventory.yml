@@ -1,0 +1,22 @@
+# Inventory for the THROWAWAY OPNsense test VM on nx-02 (FU-297) — used ONLY by
+# scripts/opnsense-test-vm.sh, always passed with `-i` (which replaces ansible.cfg's
+# `inventory = inventory.yml`, so the production router is never loaded at all).
+#
+# Deliberately NOT a host in ansible/inventory.yml: the prod wrapper
+# (scripts/opnsense-playbook.sh) must stay byte-identical in behaviour. The group is named
+# `opnsense` because the plays under test hard-code `hosts: opnsense`; the HOST differs, and
+# ansible/test-vm/guard.yml refuses to continue unless this host — and only this host — is
+# what the plays would target, with an API address that is not the router's.
+#
+# Lives in its own directory so NO group_vars sit next to it: the values come from the
+# group_vars next to the PLAYBOOK of the checkout under test (the real ones), then
+# ansible/test-vm/overrides.yml as extra-vars (the isolation overrides).
+all:
+  children:
+    opnsense:
+      hosts:
+        opnsense-test-vm:
+          # Set by the harness from OPN_TEST_HOST (the VM's WAN address on vmbr0). Empty =
+          # the guard fails; there is no default on purpose.
+          ansible_host: "{{ lookup('env', 'OPN_TEST_HOST') }}"
+          ansible_connection: local
