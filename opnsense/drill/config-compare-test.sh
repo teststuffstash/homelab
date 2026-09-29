@@ -20,6 +20,8 @@ cat > "$T/prod.xml" <<'X'
     </frontends>
   </HAProxy></OPNsense>
   <dnsmasq><hosts uuid="44444444-4444-4444-4444-444444444444"><host>pve</host><ip>192.168.2.3</ip></hosts></dnsmasq>
+  <sysctl><item><tunable>a.dead</tunable><value/></item><item><tunable>a.live</tunable><value>1</value></item></sysctl>
+  <flags><x></x><y>1</y></flags>
   <revision><time>1</time></revision>
 </opnsense>
 X
@@ -37,6 +39,7 @@ cat > "$T/drill.xml" <<'X'
     </frontends>
   </HAProxy></OPNsense>
   <dnsmasq><hosts uuid="55555555-5555-5555-5555-555555555555"><host>pve</host><ip>192.168.1.3</ip></hosts></dnsmasq>
+  <flags><x>0</x><y>0</y></flags>
   <revision><time>2</time></revision>
 </opnsense>
 X
@@ -47,6 +50,9 @@ env       value        system/hostname
 accepted  value        OPNsense/HAProxy/*/*[*]/id
 accepted  *            revision/**
 accepted  prod-only    never/matches
+accepted  prod-only    sysctl/item[*] | prod:value=
+accepted  value        flags/* | prod:.= drill:.=0
+accepted  value        system/timezone | prod:/system/hostname=not-the-hostname
 X
 
 python3 config-compare.py "$T/prod.xml" "$T/drill.xml" --map "$T/map.txt" \
@@ -65,6 +71,12 @@ row() { grep -P "^$1\t$2\t$3\t" "$T/detail.tsv" | wc -l | tr -d ' '; }
 #    "absent"), so ONE drill-only clickops row.
 #  - dnsmasq hosts[pve]/ip 192.168.1.3 remaps to 192.168.2.3 → env, not clickops.
 #  - revision/time → accepted.
+#  - conditions (map lines 7–9): sysctl item a.dead is prod-only with an EMPTY value → the
+#    `prod:value=` line holds → accepted; a.live has value 1 → the line fails → clickops.
+#    flags/x is "" on prod, "0" on the drill → both conditions hold → accepted; flags/y is "1"
+#    vs "0" → prod:.= fails → clickops. Line 9's absolute-path condition names a hostname prod
+#    does not have → never holds → timezone stays clickops and line 9 is reported unused.
+#  - score: fe-clicked + fe-empty + timezone + a.live + flags/y = 5; unused lines: 6, 9.
 check "hostname → env"                       "$(row env value system/hostname)" 1
 check "timezone → clickops"                  "$(row clickops value system/timezone)" 1
 check "empty vs self-closed → no row"        "$(grep -c 'system/extra' "$T/detail.tsv" || true)" 0
@@ -74,9 +86,13 @@ check "prod-only item counts once"           "$(row clickops prod-only 'OPNsense
 check "drill-only item counts once"          "$(row clickops drill-only 'OPNsense/HAProxy/frontends/frontend\[fe-empty\]')" 1
 check "remapped LAN prefix → env"            "$(row env value 'dnsmasq/hosts\[pve\]/ip')" 1
 check "revision → accepted"                  "$(row accepted value revision/time)" 1
-check "score = clickops rows"                "$(jq -r .score "$T/out.json")" 3
-check "prom score line"                      "$(grep -c '^mgmt_opnsense_drill_realism_score 3$' "$T/out.prom")" 1
-check "unused map line reported"             "$(grep -c 'matched nothing this run (stale?): 6$' "$T/report.md")" 1
+check "empty-valued prod-only item → accepted" "$(row accepted prod-only 'sysctl/item\[a.dead\]')" 1
+check "valued prod-only item → clickops"     "$(row clickops prod-only 'sysctl/item\[a.live\]')" 1
+check "\"\" vs 0 under condition → accepted"  "$(row accepted value flags/x)" 1
+check "1 vs 0 fails condition → clickops"    "$(row clickops value flags/y)" 1
+check "score = clickops rows"                "$(jq -r .score "$T/out.json")" 5
+check "prom score line"                      "$(grep -c '^mgmt_opnsense_drill_realism_score 5$' "$T/out.prom")" 1
+check "unused map lines reported"            "$(grep -c 'matched nothing this run (stale?): 6, 9$' "$T/report.md")" 1
 check "report redacts item keys"             "$(grep -c 'fe-clicked' "$T/report.md" || true)" 0
 check "detail file is 0600"                  "$(stat -c %a "$T/detail.tsv")" 600
 [ "$fail" -eq 0 ] && echo "config-compare-test: all checks pass" || { echo "config-compare-test: FAILED"; exit 1; }
