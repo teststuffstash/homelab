@@ -14,6 +14,11 @@
 #   converge   scripts/opnsense-test-vm.sh --ref <rev> --steps "1 all": every ansible/opnsense-*
 #              play + opnsense/dnsmasq-dhcp.py + opnsense/tuya-egress.py, at <rev>, through the
 #              harness's guard/inventory/overrides (+ ansible/test-vm/drill-overrides.yml)
+#   probe      BEHAVIOUR, from a throwaway Debian LXC on the drill's LAN (made after the build, so
+#              its packages come through the fresh router's NAT before any router code runs):
+#              DHCP leases (a reserved MAC → its pinned address, a random MAC → the pool), a
+#              DNS override answering, HAProxy answering TLS on a VIP, and a REAL BGP session
+#              from a fake ASN-64513 peer (FRR) whose /32 the router must learn
 #   compare    GET both config.xml (prod: GET /api/core/backup/download/this — the ONLY call this
 #              script makes to 192.168.2.1), opnsense/drill/config-compare.py → the realism score
 #   destroy    always (trap), unless --keep; the pool must return to its preflight reading
@@ -100,9 +105,60 @@ stage() { # stage <name> — closes the previous one
   [ -z "$STAGE" ] || STAGE_S[$STAGE]=$((now - STAGE_T))
   STAGE="$1"; STAGE_T=$now; log "stage: $1"
 }
-fail() { FAILED="${FAILED:+$FAILED }$STAGE"; STAGE_OK[$STAGE]=0; rep "- **FAIL** ($STAGE): $*"; log "FAIL ($STAGE): $*"; }
+fail() { case " $FAILED " in *" $STAGE "*) ;; *) FAILED="${FAILED:+$FAILED }$STAGE" ;; esac; STAGE_OK[$STAGE]=0; rep "- **FAIL** ($STAGE): $*"; log "FAIL ($STAGE): $*"; }
 pool_pct() { pve "lvs --noheadings -o data_percent nvme-thin/data" | tr -d ' '; }
 bootstrap() { bash "$ROOT/scripts/opnsense-test-vm-bootstrap.sh" "$@"; }
+CTID=$((VMID - 1)); CTNAME=opnsense-drill-probe
+PEER_ROUTE=192.168.40.254/32      # the fake node's "LoadBalancer" route; exists only inside the drill
+# A reservation from opnsense/dnsmasq-dhcp.py (its first), remapped onto the drill's LAN prefix.
+res_host() {
+  OPN_API_KEY=x OPN_API_SECRET=x OPN_HOST="$HOST" OPN_DHCP_REMAP="192.168.2.=192.168.1." python3 -c \
+    "import runpy; h = runpy.run_path('$ROOT/opnsense/dnsmasq-dhcp.py', run_name='drill')['HOSTS'][0]; print(h['$RES_FIELD'])"
+}
+vm_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }
+# ================================================================ probe container ===============
+# A Debian 12 LXC on the drill's LAN (template: tofu/opnsense-test.tf), made and destroyed per
+# run. eth0 = 192.168.1.2 static — the fake cluster node (ansible/test-vm/drill-overrides.yml's
+# BGP neighbour); eth1 carries a reserved MAC from opnsense/dnsmasq-dhcp.py (expects its pinned
+# address), eth2 a random one (expects a pool address). Packages come through the drill VM's own
+# NAT BEFORE the router code runs, so a converge that breaks egress cannot fail the setup.
+probe_ct() { pve "pct exec $CTID -- $*"; }
+probe_create() {
+  local res_mac tmpl=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst
+  res_mac="$(RES_FIELD=hwaddr res_host)"
+  pve "pct create $CTID $tmpl --hostname $CTNAME --tags 'opnsense;drill' --cores 1 --memory 512 --swap 0 \
+        --rootfs nvme-thin:2 --unprivileged 1 --features nesting=1 --onboot 0 \
+        --net0 name=eth0,bridge=$LAN_BRIDGE,ip=192.168.1.2/24,gw=192.168.1.1 \
+        --net1 name=eth1,bridge=$LAN_BRIDGE,ip=manual,hwaddr=$res_mac \
+        --net2 name=eth2,bridge=$LAN_BRIDGE,ip=manual \
+        --nameserver 192.168.1.1 --start 1 >/dev/null"
+  probe_ct "bash -c 'for i in \$(seq 1 30); do getent hosts deb.debian.org >/dev/null && break; sleep 2; done'"
+  probe_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends frr isc-dhcp-client dnsutils curl openssl ca-certificates >/dev/null'"
+  # The fake peer: cluster ASN, the router as its neighbour, one LB-shaped /32 announced.
+  # `no bgp network import-check`: announce without a RIB route; `no bgp ebgp-requires-policy`:
+  # the peer side needs no route-map (the ROUTER's side keeps prod's CILIUM-ALLOW-ALL).
+  pve "pct exec $CTID -- bash -c 'sed -i s/^bgpd=no/bgpd=yes/ /etc/frr/daemons && cat > /etc/frr/frr.conf'" <<FRR
+frr defaults traditional
+hostname $CTNAME
+router bgp 64513
+ bgp router-id 192.168.1.2
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+ neighbor 192.168.1.1 remote-as 64512
+ address-family ipv4 unicast
+  network $PEER_ROUTE
+ exit-address-family
+FRR
+  probe_ct "systemctl restart frr"
+}
+probe_destroy() {
+  local h
+  h="$(pve "if pct config $CTID >/dev/null 2>&1; then pct config $CTID | sed -n 's/^hostname: //p'; fi")"
+  [ -n "$h" ] || return 0
+  [ "$h" = "$CTNAME" ] || { log "REFUSING to destroy ct $CTID: hostname '$h'"; return 1; }
+  pve "pct stop $CTID >/dev/null 2>&1 || true; pct destroy $CTID --purge 1"
+}
 
 POOL_BEFORE=''; POOL_AFTER=''; SCORE=''
 TEXTFILE="${OPN_DRILL_TEXTFILE:-}"; STATE="${OPN_DRILL_STATE:-}"
@@ -128,7 +184,7 @@ emit_metrics() {
     echo "# TYPE ${P}_stage_seconds gauge"
     for s in "${!STAGE_S[@]}"; do echo "${P}_stage_seconds{stage=\"$s\"} ${STAGE_S[$s]}"; done
     echo "# TYPE ${P}_stage_failed gauge"
-    for s in preflight build converge probe compare destroy; do
+    for s in preflight build probe-setup converge probe compare destroy; do
       case " $FAILED " in *" $s "*) echo "${P}_stage_failed{stage=\"$s\"} 1" ;; *) echo "${P}_stage_failed{stage=\"$s\"} 0" ;; esac
     done
     for s in "${!PROBE_OK[@]}"; do echo "${P}_probe_success{probe=\"$s\"} ${PROBE_OK[$s]}"; done
@@ -145,6 +201,7 @@ finish() {
   rm -f "$SEC"/*.xml
   if [ "$KEEP" -eq 0 ]; then
     STAGE=destroy; STAGE_T=$(date +%s); log "stage: destroy"
+    probe_destroy >&2 || fail "destroy of probe container $CTID failed — clean up by hand (pct destroy $CTID)"
     bootstrap destroy >&2 || fail "destroy of vm $VMID failed — clean up by hand (qm destroy $VMID)"
     POOL_AFTER="$(pool_pct 2>/dev/null || echo '?')"
     STAGE_S[destroy]=$(( $(date +%s) - STAGE_T ))
@@ -162,7 +219,7 @@ finish() {
     echo "## OPNsense rebuild drill (FU-297) — $(date -u +%FT%TZ)"
     echo
     echo "- rev \`$SHA\`, vm $VMID on $PVE, WAN $HOST, LAN $LAN_BRIDGE; duration **${DURATION}s**"
-    echo "- stages: $(for s in preflight build converge compare destroy; do [ -n "${STAGE_S[$s]:-}" ] && printf '%s %ss · ' "$s" "${STAGE_S[$s]}"; done)"
+    echo "- stages: $(for s in preflight build probe-setup converge probe compare destroy; do [ -n "${STAGE_S[$s]:-}" ] && printf '%s %ss · ' "$s" "${STAGE_S[$s]}"; done)"
     echo "- nvme-thin data%: before $POOL_BEFORE → after ${POOL_AFTER:-kept}"
     echo "- verdict: **$([ -z "$FAILED" ] && [ "$rc" -eq 0 ] && echo PASS || echo "FAIL (${FAILED:-exit $rc})")**"
     echo
@@ -182,9 +239,9 @@ awk -v p="$POOL_BEFORE" -v m="$POOL_MAX" 'BEGIN { exit !(p + 0 < m + 0) }' \
   || { trap - EXIT; rm -rf "$SEC"; die "nvme-thin at ${POOL_BEFORE}% ≥ ${POOL_MAX}% — not writing a VM into it"; }
 [ "$mem_mb" -ge "$MEM_MIN_MB" ] \
   || { trap - EXIT; rm -rf "$SEC"; die "nx-02 MemAvailable ${mem_mb} MiB < ${MEM_MIN_MB} (FU-289's NUMA pressure)"; }
-if pve "qm config $VMID" >/dev/null 2>&1; then
-  log "vmid $VMID exists (a crashed run?) — destroying it by name first"
-  bootstrap destroy >&2
+if pve "qm config $VMID" >/dev/null 2>&1 || pve "pct config $CTID" >/dev/null 2>&1; then
+  log "vm $VMID / ct $CTID exists (a crashed run?) — destroying by name first"
+  bootstrap destroy >&2; probe_destroy >&2
   POOL_BEFORE="$(pool_pct)"
 fi
 
@@ -196,6 +253,11 @@ else
   tail -30 "$WORK/bootstrap.log" >&2 || true
   fail "the VM did not build (bootstrap log tail above)"; exit 1
 fi
+
+# ================================================================ probe setup ===================
+stage probe-setup
+probe_create > "$WORK/probe-setup.log" 2>&1 || { tail -20 "$WORK/probe-setup.log" >&2; fail "the probe container did not come up"; exit 1; }
+rep "- probe container $CTID on $LAN_BRIDGE: $(probe_ct "sh -c '. /etc/os-release; echo \$PRETTY_NAME, frr \$(dpkg-query -W frr | cut -f2)'" | tr '\n' ' ')"
 
 # ================================================================ converge ======================
 stage converge
@@ -211,6 +273,48 @@ else
   [ "$hrc" -eq 1 ] || exit 1      # 2 = guard/environment: nothing converged, nothing to score
 fi
 sed -n '/^### all\./,/^### /p' "$WORK/harness/report.md" 2>/dev/null | sed '$d' >> "$REPORT" || true
+
+# ================================================================ probe =========================
+# Behaviour, not saved config. Expected values are read from the code under test (the
+# reservation in dnsmasq-dhcp.py, the first unbound_hosts / haproxy_proxied_services entries in
+# group_vars), never restated here. A failing probe fails the drill; each has its own metric.
+stage probe
+GV="$ROOT/ansible/group_vars/opnsense.yml"
+probe() { # probe <name> <ok 0|1> <detail>
+  PROBE_OK[$1]=$2
+  rep "| \`$1\` | $([ "$2" = 1 ] && echo pass || echo **FAIL**) | $3 |"
+  [ "$2" = 1 ] || fail "probe $1: $3"
+}
+rep ''; rep '### Behaviour probes (from the LAN side)'; rep ''; rep '| probe | result | evidence |'; rep '|---|---|---|'
+lease() { # lease <iface> → the address the router's DHCP bound it to (-sf /bin/true: configure nothing)
+  pve "pct exec $CTID -- sh -s $1" <<'SH' | tail -1
+i=$1; rm -f /tmp/$i.lease
+timeout 60 dhclient -1 -v -sf /bin/true -lf /tmp/$i.lease -pf /tmp/$i.pid $i 2>&1 | sed -n 's/^bound to \([0-9.]*\).*/\1/p'
+dhclient -x -pf /tmp/$i.pid $i >/dev/null 2>&1 || true
+SH
+}
+want="$(RES_FIELD=ip res_host)"; got="$(lease eth1 || true)"
+probe dhcp_reservation "$([ -n "$got" ] && [ "$got" = "$want" ] && echo 1 || echo 0)" "reserved MAC → \`${got:-no lease}\` (want \`$want\`, dnsmasq-dhcp.py HOSTS[0] remapped)"
+got="$(lease eth2 || true)"; o="${got##*.}"
+probe dhcp_pool "$(case "$got" in 192.168.1.*) [ "$o" -ge 100 ] && [ "$o" -le 245 ] && echo 1 || echo 0 ;; *) echo 0 ;; esac)" "random MAC → \`${got:-no lease}\` (pool .100–.245)"
+dn="$(yq -r '.unbound_hosts[0] | .hostname + "." + .domain' "$GV")"; dv="$(yq -r '.unbound_hosts[0].value' "$GV")"
+got="$(probe_ct "dig +short +time=3 +tries=2 @192.168.1.1 $dn A" | tail -1 || true)"
+probe dns_override "$([ "$got" = "$dv" ] && echo 1 || echo 0)" "\`$dn\` → \`${got:-no answer}\` (want \`$dv\`, unbound_hosts[0])"
+hv="$(yq -r '.haproxy_proxied_services[0].vip' "$GV")"; hn="$(yq -r '.haproxy_proxied_services[0].cert_domain' "$GV")"
+got="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | grep -E \"^ *(Protocol|New, )\" | head -1'" || true)"
+probe haproxy_tls "$([ -n "$got" ] && echo 1 || echo 0)" "TLS handshake on VIP \`$hv:443\` (SNI \`$hn\`): \`$(echo "${got:-none}" | tr -s ' ' | cut -c1-60)\`"
+# BGP: the session from the PEER's side, and the route in the ROUTER's kernel table (what FRR
+# installs is what the LAN would forward by). Poll: the router's FRR reloads late in the converge.
+st=''; rt=''
+for i in $(seq 1 36); do
+  st="$(probe_ct "vtysh -c 'show bgp neighbors 192.168.1.1 json'" 2>/dev/null | jq -r '.["192.168.1.1"].bgpState // empty' 2>/dev/null || true)"
+  rt="$(vm_ssh "route -n get ${PEER_ROUTE%/32} 2>/dev/null | awk '/gateway:/ {print \$2}'" 2>/dev/null || true)"
+  [ "$st" = Established ] && [ "$rt" = 192.168.1.2 ] && break
+  sleep 5
+done
+bgpd="$(vm_ssh 'pgrep -x bgpd >/dev/null && echo running || echo "NOT running (FU-298)"' 2>/dev/null || echo '?')"
+probe bgp_session "$([ "$st" = Established ] && echo 1 || echo 0)" "fake peer AS64513 @192.168.1.2 ↔ router AS64512: \`${st:-no state}\` (router bgpd: $bgpd)"
+probe bgp_route "$([ "$rt" = 192.168.1.2 ] && echo 1 || echo 0)" "router kernel route \`$PEER_ROUTE\` → \`${rt:-none}\` (want the peer, 192.168.1.2)"
 
 # ================================================================ compare =======================
 stage compare
