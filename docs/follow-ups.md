@@ -144,19 +144,16 @@ six OVERSIZE items pointer-ized into
       `acmeclient/accounts/register` without the uuid → 404 (identical in 25.7.8 and 26.1.11; the
       controller wants `register/<uuid>`) — the harness pre-registers as a workaround (#2105). (2)
       enabling BGP writes `bgpd` into `/etc/rc.conf.d/frr` but the reload never restarts `watchfrr`,
-      so `bgpd` never runs until a stop/start. **Next:** (2) a role-side fix (restart FRR when bgpd is
+      so `bgpd` never runs until a stop/start — detected by the drill's bgp probes (MgmtOpnsenseDrillFailed
+      fires until fixed). **Next:** (2) a role-side fix (restart FRR when bgpd is
       absent) validated on the test VM; (1) an upstream issue at O-X-L (operator's call) + a pin bump.
-- [ ] **FU-297** — **OPNsense test VM on nx-02: validate router-config PRs against a real API.**
-      `--check` proves plumbing, not apply; #2033 (oxlorg.opnsense 25.7.8→26.1.11, the `reload`
-      default flip) was approved on a stub-`httpx` proof only. Build: a from-git VM (one WAN on
-      `vmbr0` with its own inventory IP = the management path, one LAN on an isolated bridge —
-      so its DHCP/VIPs/HAProxy serve nothing), baseline snapshot, rollback per run; the
-      validation = master plays converge → PR plays changed=0 → a mutation reaches the RUNNING
-      service → fresh converge + idempotent rerun. **Live 2026-09-29:** VM 9110 @ .67 (#2103/#2104),
-      harness `scripts/opnsense-test-vm.sh` (#2102) — [`opnsense-test-vm.md`](opnsense-test-vm.md).
-      First validation: #2033 PASS 2026-09-29 (#2105/#2107/#2110 on the way; FU-298 found).
-      **Next:** realism score + probes + weekly drill (in flight); then pre-merge runs; firmware trials. Relates FU-097, FU-013.
-
+- [ ] **FU-297** — **OPNsense test VM + rebuild drill: POINTER.** Router-config PRs validated
+      against a real API on VM 9110 (`scripts/opnsense-test-vm.sh`; #2033 PASS 2026-09-29); a weekly
+      from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`, VM 9199 + probe LXC on
+      `vmbr2`, `MgmtOpnsenseDrill*`) scores prod's click-ops residue — first score 115 (a) rows.
+      Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md). **Next:** bring the
+      score down — sysctl ruling, unbound settings into the role, prod's dead ISC `dhcpd` block, the
+      ACME `enabled` flag; later pre-merge runs + firmware trials. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
