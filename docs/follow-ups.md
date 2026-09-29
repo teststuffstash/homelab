@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-298** (2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-299** (2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -138,14 +138,24 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router** — boot-from-git for the
+      router fails today; prod hides both because its state predates the code (found by the FU-297
+      test VM, 2026-09-29). (1) upstream `oxlorg.opnsense` `acme_account` `register()` POSTs
+      `acmeclient/accounts/register` without the uuid → 404 (identical in 25.7.8 and 26.1.11; the
+      controller wants `register/<uuid>`) — the harness pre-registers as a workaround (#2105). (2)
+      enabling BGP writes `bgpd` into `/etc/rc.conf.d/frr` but the reload never restarts `watchfrr`,
+      so `bgpd` never runs until a stop/start. **Next:** (2) a role-side fix (restart FRR when bgpd is
+      absent) validated on the test VM; (1) an upstream issue at O-X-L (operator's call) + a pin bump.
 - [ ] **FU-297** — **OPNsense test VM on nx-02: validate router-config PRs against a real API.**
       `--check` proves plumbing, not apply; #2033 (oxlorg.opnsense 25.7.8→26.1.11, the `reload`
       default flip) was approved on a stub-`httpx` proof only. Build: a from-git VM (one WAN on
       `vmbr0` with its own inventory IP = the management path, one LAN on an isolated bridge —
       so its DHCP/VIPs/HAProxy serve nothing), baseline snapshot, rollback per run; the
       validation = master plays converge → PR plays changed=0 → a mutation reaches the RUNNING
-      service → fresh converge + idempotent rerun. **Next:** first validation posted on #2033.
-      Later: the box runs it pre-merge (the tofu-sentinel shape); firmware trials. Relates FU-097, FU-013.
+      service → fresh converge + idempotent rerun. **Live 2026-09-29:** VM 9110 @ .67 (#2103/#2104),
+      harness `scripts/opnsense-test-vm.sh` (#2102) — [`opnsense-test-vm.md`](opnsense-test-vm.md).
+      **Next:** first validation posted on #2033. Later: the box runs it pre-merge (the
+      tofu-sentinel shape); firmware trials. Relates FU-097, FU-013.
 
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
@@ -326,7 +336,13 @@ six OVERSIZE items pointer-ized into
       stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
-      doesn't DR). `tofu/homeassistant.tf`.
+      doesn't DR). `tofu/homeassistant.tf`. **Router leg (operator, 2026-09-29):** prod OPNsense has NO
+      off-box `config.xml` copy (only `/conf/backup`). Shape: an in-cluster CronJob (read-only belt —
+      the cone rule allows it; NOT the mgmt box) pulls `api/core/backup/download/this` → age →
+      private Garage bucket, and flags `backups/this` revisions by non-automation users (click
+      detector). Puller = an ansible-made user with `page-diagnostics-configurationhistory` +
+      `user-config-readonly` (the latter blocks `revertBackup`); playbooks move off root's key to their
+      own user. **Next:** role + CronJob validated on the FU-297 test VM, then the prod mint in a window.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
       completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
       rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
