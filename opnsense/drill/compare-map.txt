@@ -34,6 +34,13 @@ env    value       system/user[root]/apikeys
 env    value       system/user[root]/authorizedkeys
 env    value       system/user[root]/shell
 env    value       system/user[root]/pwd_changed_at
+# the FU-013 API users (opnsense-users role): a per-box scrambled password + minted key, like root's
+env    value       system/user[backup-puller]/password
+env    value       system/user[backup-puller]/apikeys
+env    value       system/user[backup-puller]/pwd_changed_at
+env    value       system/user[automation]/password
+env    value       system/user[automation]/apikeys
+env    value       system/user[automation]/pwd_changed_at
 env    *           system/ssh/**
 env    value       system/primaryconsole
 env    drill-only  system/secondaryconsole
