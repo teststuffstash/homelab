@@ -214,7 +214,7 @@ auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separa
 **Status:** Accepted (2026-05). **Decision:** manage OPNsense (BGP, ACME, HAProxy, Unbound) as code
 with the O-X-L collection, run through `scripts/opnsense-playbook.sh`. **Considered:** pfSense, manual GUI.
 **Why:** no click-ops (principle #3); OPNsense has the API + an Ansible collection. **Consequences:**
-the collection **pin must track the os-frr/OPNsense version** (currently `25.7.8` for os-frr 1.52 /
+the collection **pin must track the os-frr/OPNsense version** (currently `26.1.11` for os-frr 1.52 /
 OPNsense 26.1); the generic `raw` module needs `action: post` for mutations; `unbound_host` needs a
 reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.xyz/` dirs were deleted for publish.)
 

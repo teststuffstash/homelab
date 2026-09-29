@@ -84,8 +84,12 @@ Why the wrapper exists (the non-obvious bits):
   localhost anyway → the interpreter must be passed as **`-e ansible_python_interpreter=...`**.
 - The collection isn't preinstalled in a fresh jail (`ansible-galaxy collection install -r
   ansible/collections/requirements.yml`).
-- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==25.7.8` for
-  os-frr 1.52 / OPNsense 26.1).
+- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==26.1.11` for
+  OPNsense 26.1.x). ⚠ **26.x flipped the collection's global `reload` module-argument default
+  `true` → `false`**: a reload-capable module call without `reload: true` writes *saved* config
+  only — it still reports `changed` while the running service never learns the change. Every
+  reload-capable call site in `ansible/roles/opnsense-*/` sets it explicitly via a role-scoped
+  block-level `module_defaults`; keep new tasks inside that block.
 
 Settings with **no API at all** (legacy pages — a GUI click by necessity, recorded here so nobody
 hunts for a playbook; each one names the code it affects):
@@ -98,8 +102,10 @@ API/module gotchas:
 - The generic **`raw`** module is the escape hatch for plugins with no/incompatible module (HAProxy
   backend/frontend/server). **Mutating `raw` commands need `action: post`** — they default to `get`
   and silently no-op (`{"result":"failed"}`).
-- `unbound_host` **saves but does not apply** — Unbound keeps serving the old answer until you POST
-  `/unbound/service/reconfigure` (the `opnsense-unbound` role's handler does this). Match on
+- `unbound_host`'s API write alone **does not apply** — Unbound keeps serving the old answer until
+  you POST `/unbound/service/reconfigure`. Both paths are covered: the module call carries
+  `reload: true` (26.x requires it explicitly) and the `opnsense-unbound` role's handler
+  reconfigures after the `raw` settings/DNSBL writes. Match on
   `[hostname, domain, record_type]` (exclude `value`) to update-in-place on a repoint.
 - Verify a DNS record bypassing the jail's stale Docker/host cache: `devbox run -- dig +short
   <name> @192.168.2.1` (jail `getent` caches the pre-change answer).
@@ -146,6 +152,9 @@ converged with all router code and scored against prod, never `9110`:
    (all `40.x` black-holes while BGP still shows Established): recover with a real FRR cycle —
    `api/quagga/service/stop` + `start` (the `restart` endpoint is a no-op) — then confirm
    `40.x` rows in `api/diagnostics/interface/get_routes`. Full story: `group_vars/opnsense.yml`.
+   (The haproxy role's `interface_vip` call applies each VIP with `reload: true`, so this
+   reconfigure still fires — under 26.x's flipped default the VIP would be saved-but-unapplied
+   and the frontend two sections below would bind to an address that does not exist.)
 2. Run **in this order**:
    - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert spec **and now
      signs + polls it to `statusCode == 200`** before returning (FU-078, resolved 2026-07-15: the role

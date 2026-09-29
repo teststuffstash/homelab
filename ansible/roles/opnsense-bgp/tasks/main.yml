@@ -6,40 +6,60 @@
 #
 # Prereq: the os-frr plugin must be INSTALLED on OPNsense (the frr_* modules
 # configure it; they don't install it).
+#
+# ⚠ APPLY, DON'T JUST SAVE (oxlorg.opnsense 26.x): the collection flipped its global
+# `reload` module-argument default true -> false (plugins/module_utils/defaults/main.py,
+# RELOAD_MOD_ARG). A frr_* call WITHOUT an explicit reload writes SAVED config only: the
+# task still reports `changed` while the running FRR never learns the change. Every frr_*
+# call in this role therefore gets `reload: true` from a ROLE-SCOPED block-level
+# module_defaults — a task added inside the block cannot silently omit the apply.
+#
+# The value carries the whole `opnsense_conn` dict, not just `{reload: true}`: a
+# block-level module_defaults entry REPLACES the play's entry for the same module
+# (verified on the pinned ansible-core), so it has to restate the connection args the
+# playbook sets. Adding a new frr_* call? Keep it in this block and add its module here.
+- name: FRR/BGP configuration (every reload-capable call applies on change)
+  module_defaults:
+    oxlorg.opnsense.frr_general: "{{ opnsense_conn | combine({'reload': true}) }}"
+    oxlorg.opnsense.frr_bgp_general: "{{ opnsense_conn | combine({'reload': true}) }}"
+    oxlorg.opnsense.frr_bgp_route_map: "{{ opnsense_conn | combine({'reload': true}) }}"
+    oxlorg.opnsense.frr_bgp_neighbor: "{{ opnsense_conn | combine({'reload': true}) }}"
+  block:
+    - name: Enable FRR
+      oxlorg.opnsense.frr_general:
+        enabled: true
 
-- name: Enable FRR
-  oxlorg.opnsense.frr_general:
-    enabled: true
+    - name: "Enable BGP (AS {{ opnsense_asn }})"
+      oxlorg.opnsense.frr_bgp_general:
+        enabled: true
+        as_number: "{{ opnsense_asn }}"
+        router_id: "{{ bgp_router_id }}"
+        # We only need to ACCEPT the cluster's advertised LB routes; nothing to originate.
 
-- name: "Enable BGP (AS {{ opnsense_asn }})"
-  oxlorg.opnsense.frr_bgp_general:
-    enabled: true
-    as_number: "{{ opnsense_asn }}"
-    router_id: "{{ bgp_router_id }}"
-    # We only need to ACCEPT the cluster's advertised LB routes; nothing to originate.
+    # FRR defaults to `bgp ebgp-requires-policy`: an eBGP peer with no inbound route-map
+    # has ALL received routes filtered. A permit-all route-map (no match conditions)
+    # attached inbound lets us accept the cluster's 192.168.40.0/24 LB routes. We
+    # originate nothing, so no outbound policy is needed.
+    - name: Permit-all route-map (satisfies ebgp-requires-policy)
+      oxlorg.opnsense.frr_bgp_route_map:
+        name: CILIUM-ALLOW-ALL
+        action: permit
+        id: 10
 
-# FRR defaults to `bgp ebgp-requires-policy`: an eBGP peer with no inbound route-map
-# has ALL received routes filtered. A permit-all route-map (no match conditions)
-# attached inbound lets us accept the cluster's 192.168.40.0/24 LB routes. We
-# originate nothing, so no outbound policy is needed.
-- name: Permit-all route-map (satisfies ebgp-requires-policy)
-  oxlorg.opnsense.frr_bgp_route_map:
-    name: CILIUM-ALLOW-ALL
-    action: permit
-    id: 10
-
-- name: "BGP neighbor per Talos node (remote AS {{ cluster_asn }})"
-  oxlorg.opnsense.frr_bgp_neighbor:
-    peer_ip: "{{ item }}"
-    remote_as: "{{ cluster_asn }}"
-    route_map_in: CILIUM-ALLOW-ALL
-    enabled: true
-    # Match existing neighbors on peer IP alone. The default ['ip','description']
-    # never matches here (we set no description -> desired None vs stored '') so the
-    # module would append a duplicate neighbor on every run.
-    match_fields: ['ip']
-  loop: "{{ bgp_node_ips }}"
+    - name: "BGP neighbor per Talos node (remote AS {{ cluster_asn }})"
+      oxlorg.opnsense.frr_bgp_neighbor:
+        peer_ip: "{{ item }}"
+        remote_as: "{{ cluster_asn }}"
+        route_map_in: CILIUM-ALLOW-ALL
+        enabled: true
+        # Match existing neighbors on peer IP alone. The default ['ip','description']
+        # never matches here (we set no description -> desired None vs stored '') so the
+        # module would append a duplicate neighbor on every run.
+        match_fields: ['ip']
+      loop: "{{ bgp_node_ips }}"
 
 # A FRESH router needs FRR cycled once for bgpd to run at all — see bgpd-running.yml (FU-298).
+# Outside the block on purpose: its modules (frr_diagnostic, service) take no `reload`, and
+# the play's module_defaults (ansible/opnsense-bgp.yml) carry their connection args.
 - name: Start bgpd if FRR is running without it
   ansible.builtin.import_tasks: bgpd-running.yml
