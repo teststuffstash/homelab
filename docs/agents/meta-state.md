@@ -46,10 +46,13 @@ never the session's arc — that is TICK-LOG's.)
   + the management switch; Big Data stays intact 1–2 weeks before its card moves to pve.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
-  client configs: operator call); the 3 API pairs (wallet has them → seed renders them, so no
-  consumer flips); root password (no wallet entry yet); 17 ACME certs (import from the encrypted
-  backup for the isolated rehearsal, re-issue live); a fresh ACME account (FU-298's register-404
-  workaround must move into the real build); the WAN MAC (spoof `em0`).
+  client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →
+  seed renders them, so no consumer flips); root password (no wallet entry yet); the WAN MAC (spoof
+  `em0`). **Certs + ACME account: IMPORT from the newest encrypted backup** (operator, 2026-09-29 —
+  re-issuing 17 per rehearsal risks LE's per-domain weekly limit): decrypt with the wallet age
+  identity at build time, carry `cert`/`ca` + the `AcmeClient` section with refids intact (HAProxy
+  binds by refid); the registered account comes along, sidestepping FU-298's register-404; acme.sh
+  renews on its 60-day interval. Nothing lands in git.
   **Open:** FU-013 next = playbooks onto the `automation` key (needs privileges for the system role's endpoints too);
   FU-298 = the upstream ACME register 404 (O-X-L issue = operator's call); prod LAN is `.1/22`, not
   the `/24` `ip-plan.md` states — the ADR-088 CARP ruling must settle it; the reviewer exit-contract
