@@ -214,3 +214,46 @@ unbound_advanced:
   serveexpiredreplyttl: "30"
   serveexpiredttl: "86400"
   serveexpiredclienttimeout: "1800"
+
+# --- opnsense-users : one API user per consumer (FU-013) ---------------------------------
+# Privilege KEYS as the models' ACL/ACL.xml files name them (read on the 26.1.11 test VM +
+# prod's `auth/user/get` priv list, 2026-09-29). Never `page-all`, never a group.
+#
+# backup-puller — the in-cluster config.xml puller (argocd/resources/opnsense-config-backup/).
+#   page-diagnostics-configurationhistory = `api/core/backup/*` (download + the revision list),
+#   which ALSO matches revertBackup/deleteBackup; user-config-readonly is what makes it safe:
+#   both of those call throwReadOnly(), which refuses any user holding it.
+#
+# automation — the ansible plays' own identity (so their revisions stop reading as `root`).
+#   One privilege per API area the opnsense-* roles call (the ACL pattern it grants in brackets):
+#     page-routing                        bgp                  [api/quagga/*]
+#     page-services-acmeclient            acme, haproxy        [api/acmeclient/*]
+#     page-services-haproxy               haproxy              [api/haproxy/*]
+#     page-firewall-virtualipaddress-edit haproxy (VIP alias)  [api/interfaces/vip_settings/*]
+#     page-services-unbound               unbound, haproxy, wg [api/unbound/*]
+#     page-wireguard-config               wireguard            [api/wireguard/{server,client,general,service}/*]
+#     page-filter-api                     wireguard (WAN rule) [api/firewall/filter/*]
+#     page-services-dyndns                ddclient             [os-ddclient's ACL; prod only — the test VM has no plugin]
+#   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]), which
+#   the ddclient role uses to install os-ddclient when missing. Package install is root-equivalent;
+#   plugin installs stay a root/bootstrap step. Nor page-services-dnsforwarder ([api/dnsmasq/*],
+#   opnsense/dnsmasq-dhcp.py) — not an ansible play; add it when that script moves off root's key.
+#   Creating the user changes nothing by itself: scripts/opnsense-playbook.sh still reads root's
+#   key (opnsense-api-{key,secret}) until the wrapper is switched in a separate step.
+opnsense_api_users:
+  - name: backup-puller
+    description: "config.xml backup puller (in-cluster, read-only) - FU-013"
+    privileges:
+      - page-diagnostics-configurationhistory
+      - user-config-readonly
+  - name: automation
+    description: "ansible opnsense-* playbooks - FU-013"
+    privileges:
+      - page-routing
+      - page-services-acmeclient
+      - page-services-haproxy
+      - page-firewall-virtualipaddress-edit
+      - page-services-unbound
+      - page-wireguard-config
+      - page-filter-api
+      - page-services-dyndns

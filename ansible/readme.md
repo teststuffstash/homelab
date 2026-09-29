@@ -38,6 +38,7 @@ because their real values are here, not baked in).
 | `opnsense-unbound.yml` | `opnsense-unbound` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
 | `opnsense-wireguard.yml` | `opnsense-wireguard` | WireGuard full-LAN VPN (ADR-090) |
 | `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
+| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013) |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |

@@ -1,0 +1,96 @@
+---
+# OPNsense API users as code (FU-013): one local user per API consumer, privileges from
+# group_vars (opnsense_api_users), no group membership, no password login (the module scrambles
+# the password on create), and at most one API key each — minted here only when the user has
+# none. Why per-consumer users: every config revision records its author, so the router's own
+# history can tell the playbooks, the backup puller and a hand click apart (the click detector,
+# argocd/resources/opnsense-config-backup/).
+#
+# Privilege KEYS (not labels) — the ACL names from the models' ACL/ACL.xml files. How the
+# set for each user was chosen is in group_vars/opnsense.yml next to the list.
+#
+# `membership: []` is deliberate: a group grant would widen the user past its listed
+# privileges (a user put into `admins` gains page-all), so the role pins "no groups".
+
+# A privilege whose plugin is not installed does not exist on that box (page-services-dyndns
+# without os-ddclient — the test VM) and the API would reject the whole user. It also grants
+# nothing there, so it is dropped with a warning instead; a re-run after the plugin install adds it.
+- name: Read the privilege keys this router knows
+  oxlorg.opnsense.raw: { module: auth, controller: user, command: get }
+  register: opn_user_template
+
+- name: Warn about privileges this router does not have
+  ansible.builtin.debug:
+    msg: >-
+      WARNING {{ item.name }}: {{ item.privileges | difference(opn_user_template.response.user.priv.keys() | list) | join(', ') }}
+      unknown on this router (plugin not installed?) — skipped
+  loop: "{{ opnsense_api_users }}"
+  loop_control: { label: "{{ item.name }}" }
+  when: item.privileges | difference(opn_user_template.response.user.priv.keys() | list) | length > 0
+
+- name: API user (privileges pinned, no groups)
+  oxlorg.opnsense.user:
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+    privilege: "{{ item.privileges | intersect(opn_user_template.response.user.priv.keys() | list) }}"
+    membership: []
+  loop: "{{ opnsense_api_users }}"
+  loop_control: { label: "{{ item.name }}" }
+
+# --- API keys --------------------------------------------------------------------------------
+# The user module does not manage keys. `search_api_key` lists every key's owner + public half
+# (never the secret); a user with no row gets exactly one key via `add_api_key/<name>`, whose
+# response is the ONLY time the secret is readable. Rotation is deliberate, not automatic:
+# delete the old key (auth/user/del_api_key/<id>) and re-run — see scripts/opnsense-api-users.sh.
+- name: Read existing API keys
+  oxlorg.opnsense.raw: { module: auth, controller: user, command: search_api_key }
+  register: opn_user_keys
+  no_log: true   # the rows carry the keys' public halves
+
+- name: Users that need a key minted
+  ansible.builtin.set_fact:
+    opn_users_to_mint: >-
+      {{ opnsense_api_users | map(attribute='name')
+         | difference(opn_user_keys.response.rows | default([]) | map(attribute='username') | list) }}
+
+- name: Refuse to mint without a key sink (the secret is shown once)
+  ansible.builtin.assert:
+    that: opnsense_users_key_sink | length > 0
+    fail_msg: >-
+      {{ opn_users_to_mint | join(', ') }} need an API key, but opnsense_users_key_sink is empty.
+      Run through scripts/opnsense-api-users.sh, which provides one and stores the result.
+    quiet: true
+  when: opn_users_to_mint | length > 0 and not ansible_check_mode
+
+- name: Mint an API key
+  oxlorg.opnsense.raw:
+    module: auth
+    controller: user
+    command: "add_api_key/{{ item }}"
+    action: post
+  loop: "{{ opn_users_to_mint }}"
+  register: opn_minted
+  changed_when: true
+  no_log: true
+
+- name: Assert every mint returned a key pair
+  ansible.builtin.assert:
+    that:
+      - item.response.result | default('') == 'ok'
+      - item.response.key | default('') | length > 0
+      - item.response.secret | default('') | length > 0
+    fail_msg: "add_api_key/{{ item.item }} did not return a key pair (result: {{ item.response.result | default('?') }})"
+    quiet: true
+  loop: "{{ opn_minted.results | default([]) }}"
+  loop_control: { label: "{{ item.item }}" }
+  when: not ansible_check_mode   # --check skips the POST, so there is no pair to assert
+
+- name: Write the minted pair to the controller-side sink (0600)
+  ansible.builtin.copy:
+    dest: "{{ opnsense_users_key_sink }}/{{ item.0.item }}.{{ item.1 }}"
+    content: "{{ item.0.response[item.1] }}"
+    mode: "0600"
+  delegate_to: localhost
+  loop: "{{ (opn_minted.results | default([])) | product(['key', 'secret']) | list }}"
+  when: not ansible_check_mode
+  no_log: true
