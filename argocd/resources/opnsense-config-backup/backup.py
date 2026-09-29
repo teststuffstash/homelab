@@ -83,6 +83,11 @@ SYSTEM_ALLOWED_RE = re.compile(
     ENV(
         "SYSTEM_ALLOWED_RE",
         r"^(/usr/local/opnsense/scripts/OPNsense/AcmeClient/lecert\.php made changes"
+        # firmware updates migrate the config schema as (root) — machine-made, like the ACME renewal
+        # (prod 26.1 -> 26.7.4, 2026-09-29: three run_migrations.php revisions; the test-VM trial also
+        # saw firmware/register.php on plugin installs — docs/opnsense-test-vm.md §official update path)
+        r"|/usr/local/opnsense/\S*/run_migrations\.php made changes"
+        r"|/usr/local/opnsense/\S*/firmware/register\.php made changes"
         r"|Updated plugin interface configuration)$",
     )
 )
