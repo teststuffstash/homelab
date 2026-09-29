@@ -763,7 +763,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}" npm_cache="${AGENT_NPM_CACHE_URL-http://192.168.40.35/}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}" npm_cache="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -2143,7 +2143,11 @@ fi
 # (replace-registry-host=npmjs, the default) — measured, see the configmap header. The address
 # rides an AGENT_NPM_CACHE_URL launcher-side override, like AGENT_PYPI_CACHE_URL; the
 # registry.npmjs.org hostAliases stub below stays (npm never dials that host with this set).
-NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://192.168.40.35/}"
+# By NAME, not the VIP (2026-09-29, the FU-294 ride drill): Deno keys its npm cache folder by the
+# registry's DOMAIN, and a bare-IP URL has none — the fetch succeeded, then module resolution
+# failed ("Could not find referrer npm package"). npm-cache.teststuff.net is an Unbound override
+# (ansible/group_vars/opnsense.yml) → the same .40.35 VIP the CNP allows.
+NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
 
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
 # via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
@@ -2611,15 +2615,6 @@ ${DIND_CONTAINER}
         # to models.opencode.ai + registry.npmjs.org is the intended backstop (homelab#792, #456 r2).
         # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
-          value: "1"
-        # homelab#1247 (the #1190 caller hunt): scripts/mermaid-lint.sh's \`npm ci\` ran a full
-        # registry install on every md-touching homelab ride (~12k POLICY_DENIED/24h — the CNP
-        # denies npmjs correctly; the hostAliases fast-fail stub did not stop the retry storm).
-        # Kill at the tool per PR #503 doctrine: the script skips the install (and the lint,
-        # loudly) under this var when node_modules is not already populated — GitHub CI, which
-        # never sets it, stays the real gate. Unconditional like its siblings: only homelab's
-        # diff-ci reaches the script today, but the emitter rides along whichever repo runs it.
-        - name: MERMAID_LINT_NO_INSTALL
           value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
         # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
