@@ -433,13 +433,15 @@ six OVERSIZE items pointer-ized into
       [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
       re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
       until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
-- [ ] **FU-294** — **The npm Renovate lane produced work no ride could do** (homelab#2032: a lens
-      finding needing `scripts/mermaid-lint/package-lock.json` regenerated). Both blockers are gone:
-      the baseline npm mirror is LIVE (`.40.35`, PR#2060) and the path tier that parked the fix on a
-      human (`scripts/**` codeowner-author) is lifted by the ADR-142 trial (2026-09-28).
-      **Next:** #2032 (now DIRTY after #1977 merged) — land the `lodash-es` override on master, let
-      Renovate rebuild its branch (a Renovate-owned branch keeps itself current), and let the lane
-      run it; then drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
+- [ ] **FU-294** — **A vulnerable TRANSITIVE arrived via Renovate and only an LLM reviewer saw it**
+      (homelab#2032: mermaid 12 → chevrotain's exact pin → `lodash-es@4.17.23`, CVE-2026-4800).
+      Structural fix LIVE 2026-09-29 — [ADR-143](adr.md), PR#2098: mermaid-lint on Deno with zero
+      permissions, and `lock-intake-lint` in `ci` (OSV incl. `MAL-`, 7-day floor, install-time code —
+      transitive included). **Next:** Renovate re-proposes mermaid 12 on `deno.json` → expect red on
+      the intake until mermaid-js/mermaid#8278 ships; the loop must NOT pin (ADR-143). Then drop
+      `MERMAID_LINT_NO_INSTALL` after a ride drill of Deno's fetch via the npm mirror (homelab#1247);
+      then the stack repos (extractors for their lockfiles). Operator-open: the master/prod-side scan
+      (Dependabot vs Dependency-Track + `cosign attach sbom` + Kyverno) — not rolled until weighed.
 - [ ] **FU-295** — **The box's management-sentinel never reports on a homelab `goal/**` PR**, but the
       `required-checks` ruleset (`refs/heads/goal/**` + default) requires it — an APPROVED goal-based
       PR sits BLOCKED forever (the ADR-142 control drill #2093, 2026-09-28, 20+ min). Cause:
