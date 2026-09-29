@@ -1,0 +1,6 @@
+# Extra-vars for the REBUILD DRILL's VM (FU-297) — passed by scripts/opnsense-drill.sh through
+# the harness's OPN_TEST_EXTRA_VARS, AFTER overrides.yml (so these win). The drill's BGP peer is
+# REAL: a fake cluster node (ASN 64513, FRR) on the drill's isolated LAN, whose session the VM's
+# FRR must establish and learn a route from — docs/opnsense-test-vm.md §The rebuild drill.
+bgp_node_ips:
+  - 192.168.1.2

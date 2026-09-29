@@ -9,3 +9,4 @@ resources:
   - scrapeconfig.yaml
   - prometheusrule.yaml
   - reconcile-rollout.yaml   # the fleet rollout's own belts (FU-273) — a file of its own
+  - opnsense-drill.yaml      # the weekly OPNsense rebuild drill (FU-297)

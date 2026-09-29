@@ -1,0 +1,8 @@
+---
+# Values live in group_vars/opnsense.yml (opnsense_api_users); these are the role's safe defaults.
+opnsense_api_users: []
+# Directory on the CONTROLLER where a freshly minted key pair is written (mode 0600, one
+# <user>.key + <user>.secret each). Empty = minting refuses: a key the API returns exactly once
+# must have somewhere to land. scripts/opnsense-api-users.sh passes a private tmpdir and routes
+# the files to the wallet (+ Infisical for in-cluster consumers), then deletes them.
+opnsense_users_key_sink: ""

@@ -1,0 +1,76 @@
+# The OPNsense rebuild drill's belts (FU-297, docs/opnsense-test-vm.md §The rebuild drill). The
+# management box runs scripts/opnsense-drill.sh weekly (mgmt-opnsense-drill.timer): build a router
+# from nothing, converge ALL router code, probe it by behaviour, score its config.xml against
+# prod's, destroy it — and writes mgmt_opnsense_drill_* to its textfile (job mgmt-node).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-opnsense-drill
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-opnsense-drill
+      rules:
+        # The last run failed a stage: the build, the converge (a play or script erred), a
+        # behaviour probe, the compare, or the destroy. The gauge holds until the next run, so
+        # this fires for up to a week — rerun by hand to clear it (`systemctl start
+        # mgmt-opnsense-drill` on the box) once the cause is fixed.
+        - alert: MgmtOpnsenseDrillFailed
+          expr: |
+            mgmt_opnsense_drill_success == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The weekly OPNsense rebuild drill failed ({{ $labels.instance }})"
+            description: >-
+              Boot-from-git for the router did not hold on the last drill. Which stage failed is
+              mgmt_opnsense_drill_stage_failed{stage}; which behaviour probe,
+              mgmt_opnsense_drill_probe_success{probe} == 0. The full report is in the unit's
+              journal on the box: `journalctl -u mgmt-opnsense-drill -n 200`.
+              Recipe: docs/opnsense-test-vm.md §The rebuild drill.
+        # The drill runs weekly; nine days without a finished run = the timer, the unit or the
+        # box is not doing it.
+        - alert: MgmtOpnsenseDrillStale
+          expr: |
+            (time() - mgmt_opnsense_drill_last_run_timestamp_seconds) > 9 * 86400
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "The OPNsense rebuild drill has not finished a run in 9 days"
+            description: >-
+              mgmt-opnsense-drill.timer fires weekly; the last finished run is older than nine days.
+              On the box: `systemctl list-timers mgmt-opnsense-drill.timer`,
+              `journalctl -u mgmt-opnsense-drill -n 100`. A preflight refusal (nx-02's thin pool or
+              memory) writes no run — the journal says which.
+        # The box is scraped but the drill's file was never written (a box that has not run it
+        # yet, or a moved textfile dir) — MgmtOpnsenseDrillStale would be blind.
+        - alert: MgmtOpnsenseDrillMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_opnsense_drill_last_run_timestamp_seconds
+          for: 9d
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box publishes no OPNsense drill metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_opnsense_drill.prom
+              has been missing for nine days — the weekly drill never finished a run. Check the timer
+              is enabled and the unit's journal.
+        # The realism score (config.xml rows on prod that code does not explain) went UP since the
+        # previous run: something was clicked on the router, or code stopped converging a section.
+        # Both values are written by the same run (the previous one is kept box-side), so this
+        # compares run to run, not across Prometheus retention.
+        - alert: MgmtOpnsenseDrillScoreRegressed
+          expr: |
+            mgmt_opnsense_drill_realism_score > mgmt_opnsense_drill_realism_score_previous
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Router config drifted from code: the realism score rose to {{ $value }}"
+            description: >-
+              The drill's config comparison found more prod rows that code does not explain than
+              the previous run did. Per section: mgmt_opnsense_drill_config_diff_rows{bucket="clickops"}.
+              Either put the change in code (ansible/opnsense-*, opnsense/*.py) or, if it is
+              environment/accepted, add it to opnsense/drill/compare-map.txt — never leave it to
+              the next drill. Recipe: docs/opnsense-test-vm.md §The rebuild drill.

@@ -477,6 +477,58 @@ in
     };
   };
 
+  # ── the OPNsense REBUILD DRILL (FU-297, docs/opnsense-test-vm.md §The rebuild drill) ──────────
+  # Weekly: build a router VM from nothing on nx-02, converge ALL router code (the harness), probe
+  # it by behaviour from a throwaway container on its isolated LAN (DHCP lease, DNS override,
+  # HAProxy TLS on a VIP, a REAL BGP session from a fake ASN-64513 peer), score its config.xml
+  # against prod's (GET only), destroy both. Report-only: it changes nothing on the router or the
+  # fleet. Metrics → mgmt_opnsense_drill.prom (the textfile), belts in
+  # argocd/resources/mgmt-metrics/opnsense-drill.yaml. Creds: the env file's prod OPNsense pair
+  # (read into a 0600 curl config and unset before anything else runs) + the pve seed key; the
+  # drill VM's own creds are minted per run in memory.
+  #   restartIfChanged = false — an activation mid-drill must not kill it with a VM half-built
+  #     (the script's trap destroys on exit, but a SIGKILL after TimeoutStopSec would skip it; the
+  #     next run's preflight destroys a leftover `opnsense-drill` by name).
+  systemd.services.mgmt-opnsense-drill = {
+    description = "OPNsense rebuild drill: from-git router VM, converge, probe, score vs prod, destroy";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssl openssh util-linux coreutils findutils gnugrep gawk gnused ];
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "3h";
+      Environment = [
+        "HOME=/root"
+        "OPN_TEST_PVE_KEY=/var/lib/mgmt/pve-ssh/id_ed25519"
+        "OPN_DRILL_TEXTFILE=/var/lib/node-exporter-textfile/mgmt_opnsense_drill.prom"
+        "OPN_DRILL_STATE=/var/lib/mgmt/opnsense-drill"
+      ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    # The drill runs ~16 min from a DETACHED WORKTREE of the checkout's current revision, not from
+    # the checkout itself: mgmt-pull `git reset --hard`s the checkout hourly, and bash reads a
+    # script as it runs — a reset mid-drill would execute a mix of two revisions.
+    script = ''
+      set -euo pipefail
+      rev="$(git -C ${repoPath} rev-parse HEAD)"
+      src="$(mktemp -d /var/lib/mgmt/opnsense-drill-src.XXXXXX)"
+      trap 'git -C ${repoPath} worktree remove --force "$src" >/dev/null 2>&1 || rm -rf "$src"; git -C ${repoPath} worktree prune' EXIT
+      git -C ${repoPath} worktree add --quiet --detach "$src" "$rev"
+      bash "$src/scripts/opnsense-drill.sh" --ref "$rev"
+    '';
+  };
+  systemd.timers.mgmt-opnsense-drill = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # Sunday early morning: no rollout windows, CI quiet; the drill holds ~2.5 GiB of nx-02's
+      # memory and a few GB of nvme-thin for under an hour, and refuses at preflight otherwise.
+      OnCalendar = "Sun *-*-* 03:30:00";
+      RandomizedDelaySec = "20m";
+      Persistent = true;
+    };
+  };
+
   # ── the box holds no workloads, no storage, no container runtime ──────────────────────────────
   documentation.enable = false;
   services.xserver.enable = false;

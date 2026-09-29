@@ -7,13 +7,14 @@
 #   bash scripts/opnsense-test-vm.sh --pr 2033 [--post] [--status] [--keep] [--steps "1 2 3 4 5"]
 #   bash scripts/opnsense-test-vm.sh --pr 2033 --steps prep     # no VM: guard + syntax-check, both refs
 #   bash scripts/opnsense-test-vm.sh --base <ref> --head <ref> [...]
+#   bash scripts/opnsense-test-vm.sh --ref <rev> --steps "1 all"   # the rebuild drill: no fetch
 #
 # Steps (the flow in docs/runbook.md §OPNsense test VM):
 #   1  rollback   qm rollback <vmid> <snapshot> on nx-02, start, wait for the API; preflight
 #                 (os-frr / os-haproxy / os-acme-client present) + the fixture (below)
 #   2  base       master's collection pin + roles: acme, bgp, unbound, haproxy -> must succeed;
 #                 then a base RERUN (what is already non-idempotent on master: steps 3/5 label
-#                 those tasks pre-existing, never a regression). FU-298: bgpd started if absent
+#                 those tasks pre-existing, never a regression)
 #   3  head       the PR's collection + roles on top -> must succeed; changed= per play and the
 #                 changed task names are recorded (classified after step 5, see the report)
 #   4  mutation   with HEAD: one new value per service (BGP neighbour, Unbound override,
@@ -22,6 +23,11 @@
 #                 BASE roles + HEAD collection (the #2033 regression shape) — the same kind of
 #                 mutation is saved but should NOT reach the daemon
 #   5  fresh      rollback again, HEAD plays twice: run 1 succeeds, run 2 changed=0 everywhere
+#   all           (the rebuild drill, scripts/opnsense-drill.sh) converge ALL router code at HEAD
+#                 once: every ansible/opnsense-*.yml play (globbed), then every opnsense/*.py
+#                 (OPN_HOST pinned to the VM). ddclient gets a dummy Cloudflare token (its
+#                 account needs one; the VM's update is refused upstream); opnsense-users mints
+#                 the VM's keys into a 0700 sink under the workdir, deleted right after
 #
 # The production router is unreachable to this script BY CONSTRUCTION:
 #   - it never calls scripts/opnsense-playbook.sh and never loads ansible/inventory.yml as an
@@ -58,6 +64,9 @@
 #   OPN_TEST_KEY_ENTRY / OPN_TEST_SECRET_ENTRY  wallet entries   (default opnsense-test-api-key / -secret)
 #   OPN_TEST_API_KEY / OPN_TEST_API_SECRET      pre-set creds win over the wallet
 #   OPN_TEST_WORKDIR     worktrees, collections, logs, report    (default: mktemp -d)
+#   OPN_TEST_EXTRA_VARS  one more `-e @file` after overrides.yml on every play (the drill's
+#                        BGP neighbour = its fake peer)                (default: none)
+#   OPN_DHCP_REMAP       passed to opnsense/dnsmasq-dhcp.py by step `all` (its header)
 #
 # Exit: 0 PASS, 1 FAIL (a step assertion), 2 usage / guard / environment.
 set -euo pipefail
@@ -65,12 +74,13 @@ set -euo pipefail
 usage() { sed -n '2,24p' "$0" >&2; exit 2; }
 die() { echo "opnsense-test-vm: $*" >&2; exit 2; }
 
-PR=''; BASE_REF=''; HEAD_REF=''; STEPS='1 2 3 4 5'; POST=0; STATUS=0; KEEP=0
+PR=''; BASE_REF=''; HEAD_REF=''; STEPS='1 2 3 4 5'; POST=0; STATUS=0; KEEP=0; NOFETCH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr) PR="$2"; shift 2 ;;
     --base) BASE_REF="$2"; shift 2 ;;
     --head) HEAD_REF="$2"; shift 2 ;;
+    --ref) BASE_REF="$2"; HEAD_REF="$2"; NOFETCH=1; shift 2 ;;
     --steps) STEPS="$2"; shift 2 ;;
     --post) POST=1; shift ;;
     --status) STATUS=1; shift ;;
@@ -122,6 +132,7 @@ CURLCFG="$WORK/.curl-auth"
 WORKTREES=''
 cleanup() {
   rm -f "$CURLCFG"
+  rm -rf "${USERSINK:-}"   # step all's minted test-VM keys — on every exit path, a `die` included
   if [ "$KEEP" -eq 0 ]; then
     for wt in $WORKTREES; do git worktree remove --force "$wt" >/dev/null 2>&1 || true; done
   fi
@@ -178,7 +189,9 @@ if [ -n "$PR" ]; then
   BASE_SHA="$(git rev-parse "origin/$BASE_BRANCH")"
   git cat-file -e "$HEAD_SHA^{commit}" || die "PR head $HEAD_SHA not fetched"
 else
-  git fetch -q origin
+  # --ref: a revision already here (the box's checkout — whose fetches are authenticated by its
+  # own loop, never an anonymous one from this script).
+  [ "$NOFETCH" -eq 1 ] || git fetch -q origin
   BASE_SHA="$(git rev-parse --verify "$BASE_REF^{commit}")"
   HEAD_SHA="$(git rev-parse --verify "$HEAD_REF^{commit}")"
 fi
@@ -211,7 +224,7 @@ ansible_on() {
   env ANSIBLE_CONFIG="$wt/ansible/ansible.cfg" ANSIBLE_COLLECTIONS_PATH="${COL[$cref]}" \
       ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_RETRY_FILES_ENABLED=0 \
     ansible-playbook -i "$INV" --limit opnsense-test-vm "$wt/ansible/$play" \
-      -e "@$OVR" "$@" -e "opnsense_prod_host=$PROD_HOST" \
+      -e "@$OVR" ${OPN_TEST_EXTRA_VARS:+-e "@$OPN_TEST_EXTRA_VARS"} "$@" -e "opnsense_prod_host=$PROD_HOST" \
       -e "ansible_python_interpreter=${PY[$cref]}"
 }
 
@@ -369,24 +382,6 @@ preflight() {
   done
 }
 
-# FU-298 (fresh-router defect #2): enabling BGP writes `bgpd` into /etc/rc.conf.d/frr, but the
-# reload the plays trigger does not restart watchfrr, so on a FRESH box bgpd never starts and the
-# running config holds no neighbours at all — on base and head alike (master reproduces it).
-# Prod never meets it (bgpd has run for years). Called after the first bgp converge of a fresh
-# box, so the step-4 FRR check tests the reload flag, not daemon startup. A REAL cycle, stop then
-# start (docs/runbook.md: the quagga `restart` endpoint is a no-op).
-FRR_CYCLED=0
-frr_start_bgpd_if_absent() {
-  local i
-  vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 && return 0
-  api POST quagga/service/stop '{}' >/dev/null; sleep 3
-  api POST quagga/service/start '{}' >/dev/null
-  for i in $(seq 1 20); do vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 && break; sleep 3; done
-  vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 || die "FU-298: bgpd still not running after an FRR stop/start"
-  FRR_CYCLED=$((FRR_CYCLED + 1))
-  echo "  FU-298: bgpd was not running after the fresh bgp converge — FRR stopped + started" >&2
-}
-
 # A task in a tag's changed list? (for the base-rerun comparisons)
 changed_in() { grep -qF -- "$1" "$LOG/$2.changed" 2>/dev/null; }
 
@@ -462,7 +457,6 @@ if has 2; then
   for p in $PLAYS; do
     run_play "2-base-${p%.yml}" base base "$p"
     [ "$RC" -eq 0 ] || { failstep "base \`$p\` rc=$RC"; fail_tail "2-base-${p%.yml}"; }
-    if [ "$p" = opnsense-bgp.yml ] && [ "$RC" -eq 0 ]; then frr_start_bgpd_if_absent; fi
   done
   recap_table '2-base-'
   # Base rerun = what is ALREADY non-idempotent on master. Later steps compare against it, so a
@@ -536,7 +530,6 @@ if has 5; then
   for p in $PLAYS; do
     run_play "5-run1-${p%.yml}" head head "$p"
     [ "$RC" -eq 0 ] || { failstep "fresh HEAD \`$p\` rc=$RC"; fail_tail "5-run1-${p%.yml}"; }
-    if [ "$p" = opnsense-bgp.yml ] && [ "$RC" -eq 0 ]; then frr_start_bgpd_if_absent; fi
   done
   for p in $PLAYS; do
     run_play "5-run2-${p%.yml}" head head "$p"
@@ -554,6 +547,36 @@ if has 5; then
   rep ''; recap_table '5-run2-'
   rep ''
   for p in $PLAYS; do changed_list "5-run2-${p%.yml}"; done
+fi
+
+# Step all (the rebuild drill): every piece of router code once, at HEAD, onto the VM. The two
+# python scripts dial OPN_HOST — pinned here to the guarded test address, never their default.
+if has all; then
+  echo "step all: converge every router-code unit at HEAD" >&2
+  rep ''; rep '### all. Converge ALL router code at HEAD'; rep ''
+  # EVERY ansible/opnsense-*.yml of the ref (a new play joins the drill by existing), the four
+  # PLAYS first in their dependency order (acme before haproxy), the rest by name.
+  rest="$(cd "${WT[head]}/ansible" && ls opnsense-*.yml | grep -vxF -e "$(echo $PLAYS | tr ' ' '\n')" || true)"
+  USERSINK="$WORK/.user-keys"; ( umask 077; mkdir -p "$USERSINK" ); printf 'opnsense_users_key_sink: %s\n' "$USERSINK" > "$WORK/users-sink.yml"
+  for p in $PLAYS $rest; do
+    ev=()
+    case "$p" in
+      opnsense-ddclient.yml) export ACME_CF_TOKEN=fu297-drill-not-a-token ;;  # its account needs one; upstream refuses it
+      opnsense-users.yml) ev=("$WORK/users-sink.yml") ;;  # the VM's minted keys: 0600, sink removed after the loop AND by cleanup()
+    esac
+    run_play "all-${p%.yml}" head head "$p" "${ev[@]}"
+    unset ACME_CF_TOKEN
+    [ "$RC" -eq 0 ] || { failstep "\`$p\` rc=$RC"; fail_tail "all-${p%.yml}"; }
+  done
+  rm -rf "$USERSINK"
+  recap_table 'all-'
+  for py in $(cd "${WT[head]}/opnsense" && ls *.py | sed 's/\.py$//'); do
+    set +e
+    OPN_HOST="$OPN_TEST_HOST" python3 "${WT[head]}/opnsense/$py.py" > "$LOG/all-$py.log" 2>&1; RC=$?
+    set -e
+    rep "- \`opnsense/$py.py\`: rc=$RC"
+    [ "$RC" -eq 0 ] || { failstep "\`opnsense/$py.py\` rc=$RC"; fail_tail "all-$py"; }
+  done
 fi
 
 # Step 3 classification: a task that changed on HEAD-over-base AND again on the idempotent
@@ -582,9 +605,6 @@ fi
 rep ''
 rep '### Notes'
 rep '- **FU-298, fresh-router defect 1, both refs** (not the change under test): `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register` without the account uuid; os-acme-client only routes `register/<uuid>` → HTTP 404 on any unregistered account. Prod never reaches it (its account is registered, the module returns early); a fresh box cannot converge the acme play. The fixture pre-registers the account via `register/<uuid>` so the VM matches prod.'
-if [ "$FRR_CYCLED" -gt 0 ]; then
-  rep "- **FU-298, fresh-router defect 2, both refs**: after the first bgp converge bgpd was not running (the reload does not restart watchfrr, so the \`bgpd\` just written into rc.conf.d/frr never starts); the harness stopped + started FRR ($FRR_CYCLED×) so the step-4 FRR check tests the reload flag, not daemon startup."
-fi
 rep ''
 rep '### Not validated here'
 rep '- ACME issuance/signing, the Cloudflare DNS-01 validation repoint and the certs'"'"' restart actions (no specs, no `ACME_CF_TOKEN` on the VM). The acme play does converge general settings, the account and the actions; the fixture registers that account with Let'"'"'s Encrypt from the VM each run (account only — no order, no DNS write; LE allows 10 new accounts per IP per 3 h, a run uses 2).'
