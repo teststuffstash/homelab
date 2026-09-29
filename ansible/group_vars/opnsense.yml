@@ -281,3 +281,8 @@ opnsense_netflow:
     enable: "1"
   activeTimeout: "1800"
   inactiveTimeout: "15"
+# Reporting > Settings: the RRD health graphs, on as on prod. The model's default is 1, but 26.7's
+# migration (Diagnostics M1_0_0) writes 0 on any config without a legacy <rrd> — i.e. every
+# fresh build; prod reads 1, migrated from its old <rrd><enable/> (the drill's last (a) row, FU-297).
+opnsense_system_health:
+  enabled: "1"
