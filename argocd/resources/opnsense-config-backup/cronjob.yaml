@@ -7,11 +7,10 @@
 # forbids an in-cluster APPLY to the router, not a read. It cannot write the router even if the
 # code were wrong — user-config-readonly is enforced router-side.
 #
-# ⚠ suspend: true until the prod mint (FU-013 Next): the backup-puller user does not exist on
-# 192.168.2.1 yet, so a run could only fail. The flip to false is its own commit after
-# scripts/opnsense-api-users.sh has run and ESO shows SecretSynced. OpnsenseConfigBackupStale
-# stays quiet while suspended; OpnsenseConfigBackupSuspended fires if it is still suspended a
-# week after the CronJob was created, so the flip cannot be forgotten silently.
+# Live since 2026-09-29: scripts/opnsense-api-users.sh ran on 192.168.2.1 and ESO synced the
+# backup-puller key. Re-suspending is a deliberate act: OpnsenseConfigBackupStale stays quiet while
+# suspended, and OpnsenseConfigBackupSuspended fires after 1h of suspension once the CronJob is a
+# week old, so a forgotten suspend still surfaces.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -25,7 +24,7 @@ metadata:
   name: opnsense-config-backup
   namespace: opnsense-config-backup
 spec:
-  suspend: true
+  suspend: false
   schedule: "23 4 * * *" # daily, off the hour; the ACME renewal writes at 00:00 local
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
