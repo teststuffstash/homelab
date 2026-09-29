@@ -130,6 +130,10 @@ also sets an `opnsense-test-vm` commit status on the validated head sha — it n
 *Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
 comment, which names the sha, is the record.
 
+The same harness also drives the weekly **rebuild drill** — a second VM built from nothing,
+converged with all router code and scored against prod, never `9110`:
+[`opnsense-test-vm.md`](opnsense-test-vm.md) §The rebuild drill.
+
 ### Expose an in-cluster service over HTTPS (`<name>.teststuff.net`)
 
 1. Edit `group_vars/opnsense.yml`: add the hostname to **`acme_cert_specs`** (`restart_action: "reload

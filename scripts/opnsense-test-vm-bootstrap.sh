@@ -8,19 +8,28 @@
 #   bash scripts/opnsense-test-vm-bootstrap.sh finish      # resume after the import (VM up, no snapshot)
 #   bash scripts/opnsense-test-vm-bootstrap.sh status      # power, snapshots, version, plugins
 #   bash scripts/opnsense-test-vm-bootstrap.sh render F    # the seed config.xml to F (debug; mode 600)
+#   bash scripts/opnsense-test-vm-bootstrap.sh create      # EPHEMERAL VMs only (the rebuild drill):
+#   bash scripts/opnsense-test-vm-bootstrap.sh destroy     #   the hardware tofu gives 9110, by qm
 #
 # Same env names as the harness: OPN_TEST_VMID (9110), OPN_TEST_HOST (192.168.2.67),
-# OPN_TEST_SNAPSHOT (baseline) — the harness's own defaults/expectations, so what this builds
-# is what it rolls back to.
+# OPN_TEST_SNAPSHOT (baseline), OPN_TEST_VM_NAME (opnsense-test), OPN_TEST_PVE (nx-02),
+# OPN_TEST_PVE_KEY — the harness's own defaults/expectations, so what this builds is what it
+# rolls back to. OPN_TEST_LAN_BRIDGE (vmbr1) matters to `create` only.
 #
-# Secrets live in the wallet ONLY (created on first bootstrap if missing):
+# Secrets live in the wallet (created on first bootstrap if missing):
 #   opnsense-test-root-password  opnsense-test-api-key  opnsense-test-api-secret
+# unless ALL THREE are pre-set as OPN_TEST_ROOT_PASSWORD / OPN_TEST_API_KEY / OPN_TEST_API_SECRET —
+# the rebuild drill mints a throwaway set per run (in memory, dies with the VM) and the box has
+# no wallet (docs/opnsense-test-vm.md §The rebuild drill).
 # SSH: root key login with the shared pve seed key (~/.claude/homelab-pve-ssh/id_ed25519).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."   # repo root
 
 VMID="${OPN_TEST_VMID:-9110}"                       # = tofu var.opnsense_test_vm_id
+VMNAME="${OPN_TEST_VM_NAME:-opnsense-test}"         # what `qm config` must say (create/destroy guard)
+LAN_BRIDGE="${OPN_TEST_LAN_BRIDGE:-vmbr1}"          # create only; tofu wires 9110's
+TOFU_VMID=9110                                      # the tofu-owned VM: create/destroy never touch it
 WAN_IP="${OPN_TEST_HOST:-192.168.2.67}"           # = tofu var.opnsense_test_wan_ip_cidr
 WAN_BITS=24
 GATEWAY=192.168.2.1
@@ -33,12 +42,12 @@ SERIES=26.1.11                                     # prod's version (GET /api/co
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
 
-NX02=root@192.168.2.59
-SSH_KEY="$HOME/.claude/homelab-pve-ssh/id_ed25519"
+NX02="root@${OPN_TEST_PVE:-192.168.2.59}"
+SSH_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8 -i "$SSH_KEY")
 KP_DB="$HOME/.claude/homelab-keepass/homelab.kdbx"
 KP_KEY="$HOME/.claude/homelab-keepass/homelab.keyx"
-SEED_ISO=opnsense-test-seed.iso                    # on nx-02 local:iso, only during bootstrap
+SEED_ISO="opnsense-seed-$VMID.iso"                 # on nx-02 local:iso, only during bootstrap (per vmid)
 
 log() { printf '[opnsense-test] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -47,7 +56,14 @@ vm_ssh() { ssh "${SSH_OPTS[@]}" -o StrictHostKeyChecking=no -o UserKnownHostsFil
              -o LogLevel=ERROR "root@$WAN_IP" "$@"; }
 
 kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli "$@"; }
-kp_get() { kp show -q --no-password -k "$KP_KEY" -a Password "$KP_DB" "$1" 2>/dev/null; }
+kp_get() {  # pre-set env wins (all three or none — ensure_secrets checks)
+  case "$1" in
+    opnsense-test-root-password) [ -z "${OPN_TEST_ROOT_PASSWORD:-}" ] || { printf '%s\n' "$OPN_TEST_ROOT_PASSWORD"; return; } ;;
+    opnsense-test-api-key)       [ -z "${OPN_TEST_API_KEY:-}" ]       || { printf '%s\n' "$OPN_TEST_API_KEY"; return; } ;;
+    opnsense-test-api-secret)    [ -z "${OPN_TEST_API_SECRET:-}" ]    || { printf '%s\n' "$OPN_TEST_API_SECRET"; return; } ;;
+  esac
+  kp show -q --no-password -k "$KP_KEY" -a Password "$KP_DB" "$1" 2>/dev/null
+}
 kp_has() { kp show -q --no-password -k "$KP_KEY" "$KP_DB" "$1" >/dev/null 2>&1; }
 # Add an entry with a given value (stdin, never argv). Refuses to overwrite.
 kp_add() {
@@ -57,6 +73,10 @@ kp_add() {
 }
 
 ensure_secrets() {
+  local n=0
+  for v in OPN_TEST_ROOT_PASSWORD OPN_TEST_API_KEY OPN_TEST_API_SECRET; do [ -z "${!v:-}" ] || n=$((n + 1)); done
+  [ "$n" = 3 ] && return 0
+  [ "$n" = 0 ] || die "set all three of OPN_TEST_ROOT_PASSWORD / _API_KEY / _API_SECRET, or none (the wallet)"
   kp_has opnsense-test-root-password || kp_add opnsense-test-root-password "$(openssl rand -base64 24)"
   # Same shapes OPNsense's own ApiKeyField::add() mints: base64 of 60 random bytes each.
   kp_has opnsense-test-api-key    || kp_add opnsense-test-api-key    "$(openssl rand -base64 60 | tr -d '\n')"
@@ -90,7 +110,9 @@ render() {
   local root_hash api_line keys_b64
   root_hash="$(kp_get opnsense-test-root-password | openssl passwd -6 -stdin)"
   api_line="$(kp_get opnsense-test-api-key)|$(kp_get opnsense-test-api-secret | openssl passwd -6 -stdin)"
-  keys_b64="$(base64 -w0 < "$SSH_KEY.pub")"
+  # The public half; derived when no .pub sits beside the key (the box's copy is key-only).
+  if [ -f "$SSH_KEY.pub" ]; then keys_b64="$(base64 -w0 < "$SSH_KEY.pub")"
+  else keys_b64="$(ssh-keygen -y -f "$SSH_KEY" | base64 -w0)"; fi
   ( umask 077
     OUT="$out" ROOT_HASH="$root_hash" API_LINE="$api_line" KEYS_B64="$keys_b64" \
     WAN_IP="$WAN_IP" WAN_BITS="$WAN_BITS" GATEWAY="$GATEWAY" MGMT_NET="$MGMT_NET" \
@@ -165,18 +187,18 @@ cmd_bootstrap() {
   mkdir -p "$tmp/iso/conf"
   render "$tmp/iso/conf/config.xml"
   log "seed ISO → nx-02 local:iso/$SEED_ISO"
-  nx "umask 077; mkdir -p /root/opnsense-test-seed/conf && cat > /root/opnsense-test-seed/conf/config.xml" < "$tmp/iso/conf/config.xml"
-  nx "genisoimage -quiet -R -J -V OPNSEED -o /var/lib/vz/template/iso/$SEED_ISO /root/opnsense-test-seed && rm -rf /root/opnsense-test-seed && chmod 600 /var/lib/vz/template/iso/$SEED_ISO"
+  nx "umask 077; mkdir -p /root/opnsense-seed-$VMID/conf && cat > /root/opnsense-seed-$VMID/conf/config.xml" < "$tmp/iso/conf/config.xml"
+  nx "genisoimage -quiet -R -J -V OPNSEED -o /var/lib/vz/template/iso/$SEED_ISO /root/opnsense-seed-$VMID && rm -rf /root/opnsense-seed-$VMID && chmod 600 /var/lib/vz/template/iso/$SEED_ISO"
   nx "qm set $VMID --ide2 local:iso/$SEED_ISO,media=cdrom >/dev/null"
 
   log "first boot, answering the config importer over the serial socket"
   nx "qm start $VMID"
-  printf '%s\n' "$SERIAL_DRIVER" | nx "cat > /root/opnsense-importer-driver.py"
-  nx "python3 /root/opnsense-importer-driver.py /var/run/qemu-server/$VMID.serial0" > "$tmp/console.log" 2>&1 \
+  printf '%s\n' "$SERIAL_DRIVER" | nx "cat > /root/opnsense-importer-driver-$VMID.py"
+  nx "python3 /root/opnsense-importer-driver-$VMID.py /var/run/qemu-server/$VMID.serial0" > "$tmp/console.log" 2>&1 \
     || { tail -40 "$tmp/console.log" >&2; die "importer drive failed (console tail above)"; }
-  nx "rm -f /root/opnsense-importer-driver.py"
+  nx "rm -f /root/opnsense-importer-driver-$VMID.py"
   wait_api 600
-  log "API up on $WAN_IP with the wallet key; $(api GET core/firmware/info | jq -r .product.product_version)"
+  log "API up on $WAN_IP with its API key; $(api GET core/firmware/info | jq -r .product.product_version)"
 
   cmd_finish
 }
@@ -254,10 +276,46 @@ cmd_status() {
   fi
 }
 
+# ---- ephemeral VMs (the rebuild drill) — the hardware tofu gives 9110, made by qm --------------
+# Same shape as tofu/opnsense-test.tf's VM (2 cores host, 2 GiB, 8 GiB on nvme-thin born from the
+# nano image, net0 = LAN on the isolated bridge, net1 = WAN on vmbr0, serial console), created
+# STOPPED — `bootstrap` owns the first boot. Both verbs refuse the tofu-owned vmid and any VM
+# whose name is not OPN_TEST_VM_NAME, and that name may not be the tofu VM's.
+NANO_IMG="/var/lib/vz/template/iso/OPNsense-26.1.6-nano-amd64.img"   # = tofu proxmox_download_file.opnsense_nano_nx02 (local:iso — import-from wants the path)
+ephemeral_guard() {
+  [ "$VMID" != "$TOFU_VMID" ] || die "REFUSING: vmid $VMID is the tofu-owned test VM"
+  [ "$VMNAME" != opnsense-test ] || die "REFUSING: '$VMNAME' is the tofu-owned test VM's name — set OPN_TEST_VM_NAME"
+}
+cmd_create() {
+  ephemeral_guard
+  nx "qm config $VMID" >/dev/null 2>&1 && die "vmid $VMID already exists on nx-02 — destroy it first"
+  nx "grep -q '^iface $LAN_BRIDGE ' /etc/network/interfaces" || die "bridge $LAN_BRIDGE not on nx-02 (tofu/opnsense-test.tf)"
+  nx "pvesm list local --content iso | grep -q 'OPNsense-26.1.6-nano-amd64.img'" || die "$NANO_IMG not on nx-02 (tofu)"
+  log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, WAN vmbr0"
+  nx "qm create $VMID --name $VMNAME --tags 'opnsense;drill' --cores 2 --cpu host --memory 2048 --balloon 0 \
+        --ostype other --scsihw virtio-scsi-pci --serial0 socket --onboot 0 \
+        --net0 virtio,bridge=$LAN_BRIDGE,firewall=0 --net1 virtio,bridge=vmbr0,firewall=0 \
+        --scsi0 nvme-thin:0,import-from=$NANO_IMG,discard=on,ssd=1 --boot order=scsi0 >/dev/null"
+  nx "qm disk resize $VMID scsi0 8G >/dev/null"
+  nx "qm config $VMID | grep -E '^(name|net0|net1|scsi0):'"
+}
+cmd_destroy() {
+  ephemeral_guard
+  local name
+  name="$(nx "qm config $VMID 2>/dev/null" | sed -n 's/^name: //p')"
+  [ -n "$name" ] || { log "vmid $VMID not present — nothing to destroy"; return 0; }
+  [ "$name" = "$VMNAME" ] || die "REFUSING destroy: vmid $VMID is '$name', not '$VMNAME'"
+  nx "qm stop $VMID --skiplock 1 >/dev/null 2>&1 || true; qm destroy $VMID --purge 1 --destroy-unreferenced-disks 1"
+  nx "rm -f /var/lib/vz/template/iso/$SEED_ISO"
+  log "destroyed $VMNAME ($VMID)"
+}
+
 case "${1:-}" in
+  create)    cmd_create ;;
+  destroy)   cmd_destroy ;;
   bootstrap) cmd_bootstrap ;;
   finish)    cmd_finish ;;
   status)    cmd_status ;;
   render)    [ -n "${2:-}" ] || die "usage: render <out-file>"; ensure_secrets; render "$2" ;;
-  *) sed -n '2,14p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,24p' "$0" >&2; exit 2 ;;
 esac
