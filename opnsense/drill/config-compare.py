@@ -13,7 +13,9 @@ Every difference between the two documents becomes a ROW, and every row lands in
   accepted   (c) certs, generated ids, timestamps, revision history — an `accepted` line matched
 
 The map (opnsense/drill/compare-map.txt) is the committed, reviewable list of (b) and (c); its
-header documents the syntax. Anything it does not name is (a).
+header documents the syntax. Anything it does not name is (a). A line may carry CONDITIONS on the
+documents' values (`| prod:value=` — "only while prod's item has an empty value"), so a line can
+accept residue in its dead state without hiding the same path once it comes alive.
 
 How the two trees are aligned (docs/opnsense-test-vm.md §The rebuild drill):
   - A singleton child is matched by tag. A REPEATED child (or any MVC item carrying a `uuid`
@@ -120,6 +122,27 @@ def uuid_index(root):
     return idx
 
 
+def path_index(root):
+    """'<path>' -> element, every node of the document, keyed exactly like the rows' paths — what
+    a map line's `| side:path=literal` condition looks up (Map.classify)."""
+    idx = {}
+
+    def walk(e, path):
+        for tag in dict.fromkeys(c.tag for c in e):
+            if is_keyed(e, tag):
+                for k, c in keyed_children(e, tag).items():
+                    p = f"{path}/{tag}[{k}]"
+                    idx[p.lstrip("/")] = c
+                    walk(c, p)
+            else:
+                for c in e:
+                    if c.tag == tag:
+                        idx[f"{path}/{tag}".lstrip("/")] = c
+                        walk(c, f"{path}/{tag}")
+    walk(root, "")
+    return idx
+
+
 def deref(v, idx):
     parts = [p.strip() for p in v.split(",")] if v else []
     if parts and all(UUID_RE.match(p) for p in parts):
@@ -136,20 +159,54 @@ class Map:
             line = line.strip()
             if not line or line.startswith("#"):   # whole-line comments only: keys may hold '#'
                 continue
-            f = line.split(None, 2)
+            line, _, cond = line.partition(" | ")
+            conds = self._conds(path, n, cond)
+            f = line.strip().split(None, 2)
             bucket = f[0]
             if bucket == "remap":
                 f = line.split()
-                if len(f) != 4:
-                    sys.exit(f"{path}:{n}: remap <path-glob> <drill-prefix> <prod-prefix>")
+                if len(f) != 4 or conds:
+                    sys.exit(f"{path}:{n}: remap <path-glob> <drill-prefix> <prod-prefix> (no conditions)")
                 self.rules.append(("remap", "*", self._re(f[1]), f[2], f[3], n))
             elif bucket in ("env", "accepted"):
                 if len(f) != 3 or f[1] not in ("*", "value", "prod-only", "drill-only"):
                     sys.exit(f"{path}:{n}: {bucket} <kind: *|value|prod-only|drill-only> <path-glob>")
-                self.rules.append((bucket, f[1], self._re(f[2]), None, None, n))
+                self.rules.append((bucket, f[1], self._re(f[2]), conds, None, n))
             else:
                 sys.exit(f"{path}:{n}: unknown bucket {bucket!r} (env | accepted | remap)")
         self.hits = collections.Counter()
+        self.docs = {}              # side -> path_index(), set by compare() before classifying
+
+    @staticmethod
+    def _conds(path, n, text_):
+        """`side:node=literal ...` — every one must hold for the line to match. side: prod|drill;
+        node: `.` (the row's own node), a path relative to it (`..` = its parent, `value` = its
+        child), or `/abs/path`; literal: the exact text, empty allowed (`prod:value=`)."""
+        out = []
+        for tok in text_.split():
+            m = re.match(r"^(prod|drill):([^=]+)=(.*)$", tok)
+            if not m:
+                sys.exit(f"{path}:{n}: condition {tok!r} is not side:node=literal (side prod|drill)")
+            out.append(m.groups())
+        return out
+
+    def _holds(self, row_path, conds):
+        for side, node, want in conds:
+            if node.startswith("/"):
+                segs = node.strip("/").split("/")
+            else:
+                segs = row_path.split("/")
+                for part in node.split("/"):
+                    if part == "..":
+                        segs = segs[:-1]
+                    elif part not in (".", ""):
+                        segs.append(part)
+            e = self.docs[side].get("/".join(segs))
+            # a node missing on that side reads as empty (the tool's leaf rule); a subtree has no text
+            have = "" if e is None else (text(e) if len(e) == 0 else None)
+            if have != want:
+                return False
+        return True
 
     @staticmethod
     def _re(glob):  # `**` = anything, `*` = anything but '/', everything else literal
@@ -170,8 +227,9 @@ class Map:
         return drill_value, None
 
     def classify(self, path, kind):
-        for b, k, rx, _, _, n in self.rules:
-            if b in ("env", "accepted") and (k == "*" or k == kind) and rx.match(path):
+        for b, k, rx, conds, _, n in self.rules:
+            if b in ("env", "accepted") and (k == "*" or k == kind) and rx.match(path) \
+                    and self._holds(path, conds or []):
                 self.hits[n] += 1
                 return {"env": "env", "accepted": "accepted"}[b], n
         return "clickops", None
@@ -179,6 +237,7 @@ class Map:
 
 def compare(prod, drill, cmap):
     pidx, didx = uuid_index(prod), uuid_index(drill)
+    cmap.docs = {"prod": path_index(prod), "drill": path_index(drill)}
     rows = []
 
     def leaves(e, path):
