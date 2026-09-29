@@ -268,11 +268,12 @@ opnsense_interface_settings:
   disablelargereceiveoffloading: "1"
   disablevlanhwfilter: "1"
   disableipv6: "1"                 # "Allow IPv6" OFF — prod's LAN track6 / IPv6 rule are inert residue
-# Reporting > NetFlow: local capture for Insight (router-local by design — FU-205). opt1..opt3 are
-# the HP box's spare NICs (igb1-3); a build without them captures what it has.
+# Reporting > NetFlow: local capture for Insight (router-local by design — FU-205). LAN + WAN only:
+# opt1..opt3 (the HP box's spare igb1-3, no carrier, no address) are ignored — they were reserved
+# for a home-vs-platform network split that is not planned now (operator, 2026-09-29).
 opnsense_netflow:
   capture:
-    interfaces: [lan, opt1, opt2, opt3, wan]
+    interfaces: [lan, wan]
     egress_only: [wan]
     version: v9
     targets: "127.0.0.1:2056"
