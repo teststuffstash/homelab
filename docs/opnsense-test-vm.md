@@ -141,9 +141,10 @@ fail the setup. After the converge it asserts, each with its own metric/row:
 
 The VM's WAN-side block on TCP 179 stays: the peer is on the LAN side, so the session is real
 and still cannot reach the cluster. **First run (2026-09-29):** the four service probes pass; both
-BGP probes FAIL because `bgpd` never starts on a fresh router (FU-298's second defect) — with
-FRR cycled by hand on the kept VM the session went `Established` and the route landed via the
-peer, so the probes pass once the role starts `bgpd`.
+BGP probes FAILED because `bgpd` never starts on a fresh router (FU-298's second defect). The
+bgp role now reads the running FRR config and stops + starts FRR only when `router bgp` is
+missing ([`bgpd-running.yml`](../ansible/roles/opnsense-bgp/tasks/bgpd-running.yml)); the drill
+at that head (2026-09-29): all six probes pass, `bgp_session` `Established`.
 
 ### The realism score — prod's config.xml vs the from-git build
 
