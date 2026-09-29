@@ -84,6 +84,7 @@
   loop: "{{ opn_minted.results | default([]) }}"
   loop_control: { label: "{{ item.item }}" }
   when: not ansible_check_mode   # --check skips the POST, so there is no pair to assert
+  no_log: true   # a failed iteration would dump `item`, which carries the live secret
 
 - name: Write the minted pair to the controller-side sink (0600)
   ansible.builtin.copy:
