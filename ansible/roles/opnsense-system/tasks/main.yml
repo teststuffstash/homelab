@@ -1,0 +1,70 @@
+---
+# OPNsense router-wide settings that no service role owns (FU-297: the rebuild drill's realism
+# score counted them as prod config not in code). Values in group_vars/opnsense.yml
+# (opnsense_interface_settings, opnsense_netflow) — prod's CURRENT values, so a run against prod
+# changes nothing.
+#
+# Every page: read → compare (filter_plugins/opn_settings.py) → POST only the drifted keys →
+# apply. A steady-state run POSTs nothing. Check mode: raw never POSTs in check mode and never
+# reports `changed` for a skipped POST either — so the no-op proof against prod is the set/apply
+# tasks reading `skipping`, not the recap's changed=0 (the "drift:" task names list any key).
+#
+# ⚠ Interfaces > Settings is reachability-sensitive: its apply (interfaces/settings/reconfigure)
+# re-applies offloading/VLAN-filter flags on every NIC. It only runs on drift; never widen these
+# pins against prod without a --check --diff first. All tasks are `raw` — no reload-capable
+# module here, so no role-scoped module_defaults block (oxlorg 26.x, ansible/collections/requirements.yml).
+
+# --- Interfaces > Settings (offloading, VLAN hardware filter, "Allow IPv6") ---------------------
+- name: Read interface settings
+  oxlorg.opnsense.raw: { module: interfaces, controller: settings, command: get }
+  register: sys_if_get
+  when: opnsense_interface_settings | length > 0
+
+- name: Plan interface settings
+  ansible.builtin.set_fact:
+    sys_if_plan: "{{ sys_if_get.response.settings | opn_settings_plan(opnsense_interface_settings) }}"
+  when: opnsense_interface_settings | length > 0
+
+- name: "Interface settings (drift: {{ sys_if_plan.drift | default([]) | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: interfaces
+    controller: settings
+    command: set
+    action: post
+    data: { settings: "{{ sys_if_plan.data }}" }
+  when: sys_if_plan.drift | default([]) | length > 0
+  register: sys_if_set
+
+- name: Apply interface settings
+  oxlorg.opnsense.raw: { module: interfaces, controller: settings, command: reconfigure, action: post }
+  when: sys_if_set is changed
+
+# --- Reporting > NetFlow (feeds Insight, router-local — FU-205 keeps flows off the cluster) -----
+- name: Read NetFlow settings
+  oxlorg.opnsense.raw: { module: diagnostics, controller: netflow, command: getconfig }
+  register: sys_nf_get
+  when: opnsense_netflow | length > 0
+
+- name: Plan NetFlow settings
+  ansible.builtin.set_fact:
+    sys_nf_plan: "{{ sys_nf_get.response.netflow | opn_settings_plan(opnsense_netflow) }}"
+  when: opnsense_netflow | length > 0
+
+- name: NetFlow interfaces this box does not have (skipped, not posted)
+  ansible.builtin.debug:
+    msg: "{{ sys_nf_plan.unavailable }}"
+  when: sys_nf_plan.unavailable | default([]) | length > 0
+
+- name: "NetFlow settings (drift: {{ sys_nf_plan.drift | default([]) | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: diagnostics
+    controller: netflow
+    command: setconfig
+    action: post
+    data: { netflow: "{{ sys_nf_plan.data }}" }
+  when: sys_nf_plan.drift | default([]) | length > 0
+  register: sys_nf_set
+
+- name: Apply NetFlow settings
+  oxlorg.opnsense.raw: { module: diagnostics, controller: netflow, command: reconfigure, action: post }
+  when: sys_nf_set is changed
