@@ -110,10 +110,12 @@ pool_pct() { pve "lvs --noheadings -o data_percent nvme-thin/data" | tr -d ' '; 
 bootstrap() { bash "$ROOT/scripts/opnsense-test-vm-bootstrap.sh" "$@"; }
 CTID=$((VMID - 1)); CTNAME=opnsense-drill-probe
 PEER_ROUTE=192.168.40.254/32      # the fake node's "LoadBalancer" route; exists only inside the drill
-# A reservation from opnsense/dnsmasq-dhcp.py (its first), remapped onto the drill's LAN prefix.
-res_host() {
+# A value out of opnsense/dnsmasq-dhcp.py's data (HOSTS / RANGE), remapped onto the drill's LAN
+# prefix exactly as the converge applied it: `dhcp_data "HOSTS[0]['ip']"` (a python subscript of
+# the module's globals).
+dhcp_data() {
   OPN_API_KEY=x OPN_API_SECRET=x OPN_HOST="$HOST" OPN_DHCP_REMAP="192.168.2.=192.168.1." python3 -c \
-    "import runpy; h = runpy.run_path('$ROOT/opnsense/dnsmasq-dhcp.py', run_name='drill')['HOSTS'][0]; print(h['$RES_FIELD'])"
+    "import runpy; g = runpy.run_path('$ROOT/opnsense/dnsmasq-dhcp.py', run_name='drill'); print(eval(\"$1\", {}, g))"
 }
 vm_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
              -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }
@@ -126,7 +128,7 @@ vm_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHost
 probe_ct() { pve "pct exec $CTID -- $*"; }
 probe_create() {
   local res_mac tmpl=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst
-  res_mac="$(RES_FIELD=hwaddr res_host)"
+  res_mac="$(dhcp_data "HOSTS[0]['hwaddr']")"
   pve "pct create $CTID $tmpl --hostname $CTNAME --tags 'opnsense;drill' --cores 1 --memory 512 --swap 0 \
         --rootfs nvme-thin:2 --unprivileged 1 --features nesting=1 --onboot 0 \
         --net0 name=eth0,bridge=$LAN_BRIDGE,ip=192.168.1.2/24,gw=192.168.1.1 \
@@ -293,10 +295,12 @@ timeout 60 dhclient -1 -v -sf /bin/true -lf /tmp/$i.lease -pf /tmp/$i.pid $i 2>&
 dhclient -x -pf /tmp/$i.pid $i >/dev/null 2>&1 || true
 SH
 }
-want="$(RES_FIELD=ip res_host)"; got="$(lease eth1 || true)"
+want="$(dhcp_data "HOSTS[0]['ip']")"; got="$(lease eth1 || true)"
 probe dhcp_reservation "$([ -n "$got" ] && [ "$got" = "$want" ] && echo 1 || echo 0)" "reserved MAC → \`${got:-no lease}\` (want \`$want\`, dnsmasq-dhcp.py HOSTS[0] remapped)"
-got="$(lease eth2 || true)"; o="${got##*.}"
-probe dhcp_pool "$(case "$got" in 192.168.1.*) [ "$o" -ge 100 ] && [ "$o" -le 245 ] && echo 1 || echo 0 ;; *) echo 0 ;; esac)" "random MAC → \`${got:-no lease}\` (pool .100–.245)"
+got="$(lease eth2 || true)"
+lo="$(dhcp_data "RANGE['start_addr']")"; hi="$(dhcp_data "RANGE['end_addr']")"
+inpool="$(python3 -c "import ipaddress as i, sys; a = sys.argv[1:]; print(int(bool(a[0]) and i.ip_address(a[1]) <= i.ip_address(a[0]) <= i.ip_address(a[2])))" "${got:-}" "$lo" "$hi" 2>/dev/null || echo 0)"
+probe dhcp_pool "$inpool" "random MAC → \`${got:-no lease}\` (want $lo–$hi, dnsmasq-dhcp.py RANGE remapped)"
 dn="$(yq -r '.unbound_hosts[0] | .hostname + "." + .domain' "$GV")"; dv="$(yq -r '.unbound_hosts[0].value' "$GV")"
 got="$(probe_ct "dig +short +time=3 +tries=2 @192.168.1.1 $dn A" | tail -1 || true)"
 probe dns_override "$([ "$got" = "$dv" ] && echo 1 || echo 0)" "\`$dn\` → \`${got:-no answer}\` (want \`$dv\`, unbound_hosts[0])"
