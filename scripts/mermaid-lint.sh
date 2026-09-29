@@ -14,14 +14,6 @@ set -eu
 cd "$(dirname "$0")/.."
 d=scripts/mermaid-lint
 
-# homelab#1247: agent rides were given a kill-switch when `npm ci` here was a silent retry storm
-# against a denied registry. Still honoured until a ride drill proves Deno's first fetch through
-# the baseline npm mirror (NPM_CONFIG_REGISTRY) — FU-294. GitHub CI never sets it.
-if [ "${MERMAID_LINT_NO_INSTALL:-}" = "1" ]; then
-  echo "mermaid-lint SKIPPED — MERMAID_LINT_NO_INSTALL=1 (homelab#1247, FU-294); CI is the gate"
-  exit 0
-fi
-
 # newline-separated names (dash has no `read -d ''`; no tracked path contains a newline)
 git ls-files -z -- '*.md' | xargs -0 grep -l '```mermaid' -- 2>/dev/null \
   | while IFS= read -r f; do printf '%s\0' "$f"; cat "$f"; printf '\0'; done \
