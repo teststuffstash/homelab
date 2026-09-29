@@ -132,6 +132,7 @@ CURLCFG="$WORK/.curl-auth"
 WORKTREES=''
 cleanup() {
   rm -f "$CURLCFG"
+  rm -rf "${USERSINK:-}"   # step all's minted test-VM keys — on every exit path, a `die` included
   if [ "$KEEP" -eq 0 ]; then
     for wt in $WORKTREES; do git worktree remove --force "$wt" >/dev/null 2>&1 || true; done
   fi
@@ -576,18 +577,18 @@ if has all; then
   # EVERY ansible/opnsense-*.yml of the ref (a new play joins the drill by existing), the four
   # PLAYS first in their dependency order (acme before haproxy), the rest by name.
   rest="$(cd "${WT[head]}/ansible" && ls opnsense-*.yml | grep -vxF -e "$(echo $PLAYS | tr ' ' '\n')" || true)"
-  usersink="$WORK/.user-keys"; ( umask 077; mkdir -p "$usersink" ); printf 'opnsense_users_key_sink: %s\n' "$usersink" > "$WORK/users-sink.yml"
+  USERSINK="$WORK/.user-keys"; ( umask 077; mkdir -p "$USERSINK" ); printf 'opnsense_users_key_sink: %s\n' "$USERSINK" > "$WORK/users-sink.yml"
   for p in $PLAYS $rest; do
     ev=()
     case "$p" in
       opnsense-ddclient.yml) export ACME_CF_TOKEN=fu297-drill-not-a-token ;;  # its account needs one; upstream refuses it
-      opnsense-users.yml) ev=("$WORK/users-sink.yml") ;;  # the VM's minted keys: 0600, deleted with the workdir's sink below
+      opnsense-users.yml) ev=("$WORK/users-sink.yml") ;;  # the VM's minted keys: 0600, sink removed after the loop AND by cleanup()
     esac
     run_play "all-${p%.yml}" head head "$p" "${ev[@]}"
     unset ACME_CF_TOKEN
     [ "$RC" -eq 0 ] || { failstep "\`$p\` rc=$RC"; fail_tail "all-${p%.yml}"; }
   done
-  rm -rf "$usersink"
+  rm -rf "$USERSINK"
   recap_table 'all-'
   for py in $(cd "${WT[head]}/opnsense" && ls *.py | sed 's/\.py$//'); do
     set +e
