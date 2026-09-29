@@ -302,7 +302,9 @@ cmd_create() {
 cmd_destroy() {
   ephemeral_guard
   local name
-  name="$(nx "qm config $VMID 2>/dev/null" | sed -n 's/^name: //p')"
+  # "No such vm" must reach the branch below, not kill the script under pipefail (review,
+  # #2111) — so the absent case exits 0 ON nx-02, and only an ssh failure (255) stays fatal.
+  name="$(nx "if qm config $VMID >/dev/null 2>&1; then qm config $VMID | sed -n 's/^name: //p'; fi")"
   [ -n "$name" ] || { log "vmid $VMID not present — nothing to destroy"; return 0; }
   [ "$name" = "$VMNAME" ] || die "REFUSING destroy: vmid $VMID is '$name', not '$VMNAME'"
   nx "qm stop $VMID --skiplock 1 >/dev/null 2>&1 || true; qm destroy $VMID --purge 1 --destroy-unreferenced-disks 1"
