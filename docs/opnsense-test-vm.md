@@ -89,3 +89,20 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 
 **Moving the baseline** (a new prod version): roll back, update, then replace the snapshot
 (`qm delsnapshot` + `qm snapshot`) and bump `SERIES` in the bootstrap script.
+
+## The rebuild drill
+
+The test VM above answers "does this PR apply?". The drill answers the boot-from-git question for
+the router itself: **build an OPNsense from nothing, run ALL router code on it, and measure how far
+the result is from prod** — weekly, destroyed after each run. It is a second VM, not a mode of
+`9110`: `9110` is rolled back and forward by PR validations, and the drill must never touch it.
+
+| | |
+|---|---|
+| VM | `9199` `opnsense-drill` on nx-02 — created and destroyed by each run (never in tofu); same hardware shape as `9110` |
+| WAN | `vmbr0`, **`192.168.2.68/24`** — reserved in [`machines.yaml`](../machines/machines.yaml) although it is empty between runs |
+| LAN | **`vmbr2`**, a second port-less bridge ([`tofu/opnsense-test.tf`](../tofu/opnsense-test.tf)) — `192.168.1.1/24` like `9110`'s, so it gets its own segment: one bridge for both would put two `.1`s and two DHCP servers on one wire |
+| Probe container | a Debian 12 LXC on `vmbr2` (template downloaded by the same tofu file), created and destroyed per run: the fake BGP peer and the DHCP/DNS/TLS probes |
+
+The bridge and the template are the only persistent pieces; the drill's scripts land with it
+(FU-297).

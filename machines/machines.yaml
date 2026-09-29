@@ -754,6 +754,15 @@ machines:
     ip: 192.168.2.67
     notes: NOT the router — nothing routes through it. Hardware in tofu/opnsense-test.tf; guest bootstrap + baseline rollback in docs/opnsense-test-vm.md.
 
+  - name: opnsense-drill
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-drill` (VM on nx-02, EPHEMERAL)"
+    role: OPNsense REBUILD DRILL — built from nothing, converged with all router code, probed, scored against prod, destroyed; WAN = this IP, LAN = isolated `vmbr2` (FU-297)
+    hardware: OPNsense 26.1 VM on nx-02 (vmid 9199)
+    ip: 192.168.2.68
+    notes: Exists only while scripts/opnsense-drill.sh runs (weekly) — an empty ping is the normal state. Reserved so nothing else takes the address. docs/opnsense-test-vm.md §The rebuild drill.
+
   - name: droplet
     kind: device
     label: Droplet (ESP32)
