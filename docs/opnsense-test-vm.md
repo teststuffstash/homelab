@@ -168,3 +168,25 @@ scorer's self-test (synthetic documents); the drill runs it before every score.
 **Reducing the score** is the point: each (a) row is either code to write (put the setting in a
 role), residue to delete on prod (a dead ISC-DHCP block), or — only if it really is environment or
 unreachable — a reviewed map line.
+
+### On the management box — weekly, with metrics and belts
+
+The box ([`management-box.md`](management-box.md)) runs it: `mgmt-opnsense-drill.timer`, **Sundays
+03:30 UTC** (±20 min, `Persistent`), `mgmt-opnsense-drill.service` in
+[`mgmt/nixos/hosts/mgmt/default.nix`](../mgmt/nixos/hosts/mgmt/default.nix) — from a detached
+worktree of the checkout's current revision (the hourly `mgmt-pull` reset must not change a script
+mid-run), `restartIfChanged = false`, 3 h timeout. Credentials: nothing new — the env file's prod
+OPNsense pair (already provisioned for the belt's `--check`, `mgmt-provision-secrets.sh`) and the
+pve seed key at `/var/lib/mgmt/pve-ssh/`; the drill VM's own creds are minted per run.
+
+It writes `mgmt_opnsense_drill_*` to the textfile collector (job `mgmt-node`): `_success`,
+`_last_run_timestamp_seconds`, `_duration_seconds`, `_stage_seconds{stage}`,
+`_stage_failed{stage}`, `_probe_success{probe}`, `_realism_score`, `_realism_score_previous` (kept
+box-side in `/var/lib/mgmt/opnsense-drill/`, so "regressed" is run over run) and
+`_config_diff_rows{section,bucket}`. Belts in
+[`argocd/resources/mgmt-metrics/opnsense-drill.yaml`](../argocd/resources/mgmt-metrics/opnsense-drill.yaml)
+(fixture `opnsense-drill.promtool-test`): **`MgmtOpnsenseDrillFailed`** (last run failed a stage),
+**`MgmtOpnsenseDrillStale`** (no finished run in 9 days), **`MgmtOpnsenseDrillMetricsAbsent`**
+(box scraped, file never written, 9 days), **`MgmtOpnsenseDrillScoreRegressed`** (score above the
+previous run's). Run it now, by hand: `systemctl start --no-block mgmt-opnsense-drill` on the box,
+`journalctl -u mgmt-opnsense-drill -f` for the report.
