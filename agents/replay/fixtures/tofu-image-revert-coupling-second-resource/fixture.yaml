@@ -1,0 +1,19 @@
+# tofu-image-revert-coupling-second-resource — the tree read that ties the stuck Deployment to the candidate
+# (#1988's class row, 2026-09-28): a changed file must declare the alert's deployment as a
+# `resource "kubernetes_deployment"` block's OWN `metadata { name = … }` — never a pod-template
+# metadata, a container / volume name or a sibling resource's name — read from the checkout,
+# never inferred from the alert. This row: the changed file declares TWO Deployments and a Service named "unifi"; the SECOND Deployment's own metadata is "unifi" → the chain proceeds, and it is the Deployment (not the Service) that matched.
+name: tofu-image-revert-coupling-second-resource
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - PRNUM=2037
+  - NS=unifi
+  - DEP=unifi
+  - FILES=tofu/unifi.tf
+parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-coupling
+  - file:call.sh
+  - file:post.sh

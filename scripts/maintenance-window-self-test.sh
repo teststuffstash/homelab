@@ -323,7 +323,7 @@ grep -qi "NOT the known signature" <<<"$out" && ok "cp-upgrade says the signatur
 
 # ---------------------------------------------------------------------------------------------
 # 6. The UNATTENDED pair — `snapshot` + `compare`, what the management box's apply loop brackets a
-# Talos config apply with (scripts/mgmt-apply.sh). A fake curl answers as Prometheus (FAKE_ALERTS
+# Talos config apply with (mgmt/scripts/mgmt-apply.sh). A fake curl answers as Prometheus (FAKE_ALERTS
 # = the firing names, FAKE_UP = sum(up)); everything else is the stub kubectl above.
 REAL_CURL="$(PATH="${PATH#"$TMP/bin:"}" command -v curl)"
 cat > "$TMP/bin/curl" <<EOF

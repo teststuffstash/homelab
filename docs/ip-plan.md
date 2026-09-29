@@ -48,7 +48,7 @@ Cleared before assignment (the 2026-09-20 pre-assignment check), per the procedu
 | Block | CIDR | Size | Purpose |
 |---|---|---|---|
 | `192.168.0.0/24` | /24 | 254 | **Avoid** — the most common consumer-router default; guest/double-NAT gear collides here. Free in principle, use last. |
-| `192.168.1.0/24` | /24 | 254 | **Unallocated** — was the Telia-router subnet; all Telia gear removed with the fibre move (2026), so it's free (same consumer-default caveat as `0.0/24`). |
+| `192.168.1.0/24` | /24 | 254 | **Unallocated** — was the Telia-router subnet; all Telia gear removed with the fibre move (2026), so it's free (same consumer-default caveat as `0.0/24`). Carved: the **isolated test-router LAN** — `opnsense-test`'s LAN on nx-02's port-less `vmbr1` and, separately, the rebuild drill's (`opnsense-drill`) on the port-less `vmbr2` — two segments, so the two `.1`s never meet; never routed from `2.0/24` ([`opnsense-test-vm.md`](opnsense-test-vm.md), FU-297); `.1` is OPNsense's own factory LAN address, so the test box keeps the default shape. |
 | `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · **`.50` control-plane endpoint VIP** (reserved, never a real host — ADR-133, ruling above) · `.51–.99` cluster nodes & servers · `.100–.245` DHCP pool. |
 | `192.168.3.0/24` | /24 | 254 | **Router-owned service VIPs** (OPNsense HAProxy IP aliases). Never a real host, so ARP collision is impossible by construction. Convention: **last octet mirrors the backend's cluster VIP** (`.3.19` → `.40.19`). |
 | `192.168.4.0/22` | /22 | 1022 | **IoT VLAN** — the ESP32-per-radiator/valve endgame (“couple hundred, definitely < 1000”). |

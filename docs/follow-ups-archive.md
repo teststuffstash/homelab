@@ -10,6 +10,11 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-294** *(archived 2026-09-29)* — **A vulnerable transitive via Renovate, caught only by an LLM
+  reviewer (#2032, lodash-es@4.17.23 under mermaid 12): fixed structurally.** [ADR-143](adr.md): PR#2098
+  (mermaid-lint on Deno, zero permissions) + `lock-intake-lint` in `ci`; PROVEN live on Renovate's
+  #2100 (red on the lodash-es intake, no reviewer). Ride drill PR#2101: Deno cannot use an IP registry
+  → `npm-cache.teststuff.net`; kill-switch dropped. #2100 waits for mermaid-js/mermaid#8278 — no pin.
 - **FU-125** *(archived 2026-09-27)* — **Renovate's silent zero-PR regression: root cause fixed, the
   homelab acceptance MET.** Cause: the App never held `statuses` (403 on read → `integration-unauthorized`,
   on write → `repository-changed`); declared PR#1969, granted 2026-09-25 → 20 PRs on 10 repos in the first

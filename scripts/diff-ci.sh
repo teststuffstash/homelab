@@ -14,6 +14,12 @@
 # Usage: devbox run diff-ci [base-ref]
 #   Compares merge-base(base-ref, HEAD)..worktree (staged + unstaged + untracked included);
 #   base-ref defaults to origin/master.
+#        devbox run diff-ci -- --coverage-only
+#   Runs ONLY the coverage belt below (no git base needed) and exits 0/2. This is the CI
+#   form (#2072): the belt was local-only and rotted the first time a ci.yaml step landed
+#   without a MAP row (#2026's pin-only-lint-test — every worker's pre-flight went red on
+#   pristine master). With ci.yaml running it, a new step without a row reds the PR that
+#   adds the step, not the next person's pre-flight.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,7 +31,7 @@ CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
 # the gate's own script/fixtures, and the devbox closure that ships the nix provider.
 PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
 # the management box's policy + its readers (ADR-131): the stage-1 fixtures + the fail-closed reads
-MGMT_PATHS='^(policy/mgmt/|scripts/mgmt-[a-z-]*\.sh$|scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|devbox\.(json|lock)$)'
+MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|devbox\.(json|lock)$)'
 
 # task:trigger-regex (first `:` splits; task may carry args and is word-split at run time).
 # Buckets are deliberately COARSE (agents/ runs the whole agents suite, ~10 quick tasks) —
@@ -60,12 +66,19 @@ MAP=(
   "prompt-transport-lint:^(agents/|argocd/|scripts/)"
   "py-compile-lint:\.py$"
   "shim-self-test:^scripts/claude-model-shim\.py"
+  # the self-test's only inputs are scripts/pin-only-lint.sh + scripts/pin-only-lint-test.sh (#2072)
+  "pin-only-lint-test:^scripts/pin-only-lint"
+  # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
+  # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
+  # level of recursion (a belt-only run, no git base) that exits in well under a second.
+  "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^machines/"
   "maint-self-test:^scripts/maintenance-window"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"
-  "mermaid-lint:\.md$"
+  "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
+  "lock-intake-lint-test:^scripts/lock-intake-lint"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which
@@ -74,10 +87,17 @@ MAP=(
 )
 # Gates that exist in ci.yaml but are PR-context-only (base/author) — exempt from the
 # coverage belt below, with the reason on the record.
-PR_ONLY="pin-only-lint governance-lint"
+PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
+
+# --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
+# base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
+COVERAGE_ONLY=false
+if [ "${1:-}" = "--coverage-only" ]; then COVERAGE_ONLY=true; shift; fi
 
 # ── coverage belt: every `devbox run <task>` in ci.yaml must appear in MAP or PR_ONLY, so a
 # new CI step cannot silently rot this map (the unexecuted-gate class, ADR-103's lesson).
+# Runs in CI too since #2072 (`devbox run diff-ci -- --coverage-only`), so the map cannot rot
+# past the PR that adds the step.
 ci_tasks=$(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run [a-z][a-z-]*' | awk '{print $3}' | sort -u)
 for t in $ci_tasks; do
   hit=false
@@ -99,6 +119,11 @@ while IFS= read -r dd; do
 done <<EOF_DDBELT
 $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u)
 EOF_DDBELT
+belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
+if $COVERAGE_ONLY; then
+  echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption)"
+  exit 0
+fi
 
 BASE="${1:-origin/master}"
 base=$(git merge-base "$BASE" HEAD) || { echo "diff-ci: cannot find merge-base with $BASE (fetch it first?)" >&2; exit 2; }

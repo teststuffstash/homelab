@@ -166,7 +166,7 @@ GUARDED_PATHS="$(guarded_paths || true)"
 # `classify_touches()` in agents/footprint.sh is the ONE machine-readable home for the platform
 # lane path tables (docs/agents/iac-lane.md §The platform lane). It returns `codeowner-author`
 # for the ❌ operator-author set — paths where authoring takes effect BEFORE a human approves
-# (`.github/`, `.agents/`, `devbox.json|lock`, `scripts/`). A queued issue whose declared
+# (`.github/`, `.agents/`, `devbox.json|lock`, `mgmt/scripts/` + the box-executed `scripts/` verbs — ADR-142 trial). A queued issue whose declared
 # `Touches:` footprint lands on any of these paths is undeliverable by any worker PR — the
 # required `ci` check is structurally red before the worker writes a line, and the documented
 # route is an operator push to master. The scan must not dispatch into that hole.
@@ -579,6 +579,29 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# unarmed-major clause fingerprint (homelab#2066): STATE_FP_JQ, plus startedAt folded for ONE
+# rollup entry — the `management-sentinel` commit status. The fold must see a sentinel RE-JUDGE:
+# `mgmt/scripts/mgmt-lib.sh` `mgmt_post_status` is an unconditional POST, so a re-judge on the same
+# head (same FAILURE, new engine revision, fresh position lines for the lens) always moves its
+# startedAt while nothing else in the rollup changes. Every OTHER entry keeps the generic
+# name=conclusion form on purpose: folding all startedAts (STATE_FP_JQ_CIRED, the #2065 shape)
+# let third-party heartbeat re-posts re-arm the clause — `iac-sentinel` re-posts SUCCESS on every
+# open head every ~4 min (30 posts in 2 h on PR #2047) and `approve / approve` check-runs
+# re-appear too — so the hash moved every beat and the clause bought a ride per tick with nothing
+# to decide (#2047, 2026-09-28). Sibling #1939 is the same over-sensitivity direction on the
+# assembly-cr clause and is left as is here. Statuses arrive as {context,state,startedAt} and
+# check-runs as {name,conclusion,startedAt}; the fold reads both shapes.
+STATE_FP_JQ_UNARMED='[ "head=" + (.headRefOid // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "checks=" + ([ .statusCheckRollup[]?
+                   | ((.name // .context // "?") as $n
+                      | $n + "="
+                        + (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end)
+                        + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
+                 | sort | join(","))
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
 # conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
 # arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
@@ -624,8 +647,9 @@ state_fp_for_clause() {
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
-# conclusions and narrows head to the newest non-merge commit — homelab#1011); other clauses use
-# STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
+# uses STATE_FP_JQ_UNARMED (startedAt folded for the management-sentinel status only —
+# homelab#2066); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
@@ -650,11 +674,10 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
-    # unarmed-major folds each check's startedAt too (2026-09-28, #2047): the management sentinel
-    # RE-POSTS its status when its engine revision changes (a new plan on the same head, with the
-    # position lines the lens needs) — same state, new startedAt — and that re-verdict must re-open
-    # the debounce, or the lens that stood aside as checks-red-unattributed is never re-dispatched.
-    unarmed-major) fp_jq="$STATE_FP_JQ_CIRED" ;;
+    # unarmed-major folds startedAt for the management-sentinel status ONLY (homelab#2066): a
+    # sentinel re-judge (same state, new startedAt) re-opens the debounce; a third-party heartbeat
+    # re-post (iac-sentinel every ~4 min on #2047) or a re-appearing approve check-run does not.
+    unarmed-major) fp_jq="$STATE_FP_JQ_UNARMED" ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
@@ -3194,6 +3217,42 @@ EOF_GOVERNANCE
                              and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
+        # ── ADOPTED-OPEN-UNLABELLED — the silent deadlock (homelab#2052; live: #1910 under theme
+        # #1907 / Goal #1906). A member that is `adopted` on the store, OPEN, not a container, and
+        # carrying NO `agent/*` lifecycle label is COUNTED by the completion predicate above (it
+        # holds (b) and the tree-empty key) while no waker is its own: dispatch reads
+        # `agent/queued` only (ADR-122 (2)), trigger (c) sees UNDISPOSITIONED members only, and
+        # the report-only reader that would have named it was retired with the bare-tree-member
+        # walk (ADR-122 (1)) because it QUEUED from shape. Visibility only: ONE report line, no
+        # re-queue, no label write — a human queues it or rules it deferred on the store.
+        # Containers by title (the theme-candidate regex, scripts/goal-lint.sh) are excluded: a
+        # `theme:` container is adopted-open-unlabelled by construction and trigger (e) IS its
+        # waker. rule #6: only from a store that READ (`gdisp_ok`) — a blind read has no
+        # `adopted` rows to name and must not fabricate the class. Byte-stable on purpose: sorted
+        # numbers, no ages/timestamps — `kidsall` carries no createdAt (widening its --json list
+        # would re-pin every goal fixture's CALL line), and the replayed report must be
+        # deterministic. Own-repo members print bare `#n`, cross-repo ones `repo#n` (the two
+        # spellings `gopen_n_ckpt` matches against $AD).
+        # No `item_class_push` row: a new board class has three homes (this enum, agents/board.sh,
+        # the class table in docs/agents/observability-and-retro.md) and #2052 declares none of
+        # them — the ORPHANS surface is the deliverable; the class is its own issue if wanted.
+        gadopt_unl=""
+        if [ "$gdisp_ok" = 1 ]; then
+          gadopt_unl="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | ($ad | split(" ") | map(select(. != ""))) as $AD
+             | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN")
+                    | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
+                    | select(("\(.repo)#\(.number)") as $qk
+                             | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                             | ($AD | index($qk)) != null or ($bk != null and ($AD | index($bk)) != null))
+                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+             | sort_by(.repo, .number) | map(if .repo == $GREPO then "#\(.number)" else "\(.repo)#\(.number)" end) | join(" ")' 2>/dev/null || echo "")"
+        fi
+        if [ -n "$gadopt_unl" ]; then
+          orphans="${orphans}[$repo] ⏸ goal #${g}: adopted-open member(s) ${gadopt_unl} carry NO agent/* state label — counted by the completion predicate (assembly held) but with no waker of their own (dispatch reads agent/queued only, ADR-122 (2); trigger (c) sees undispositioned only). Visibility only, nothing written: a human queues (agent/queued) or rules it deferred on the store (homelab#2052).\n"
+        fi
         set -- $gdesc; gtotal_n=$#
         if [ -n "$gcomments" ]; then
           _gf_find "$slug" "$g" "$gcomments" && gf_rc=0 || gf_rc=$?

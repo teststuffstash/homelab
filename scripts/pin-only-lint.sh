@@ -46,6 +46,14 @@
 #       greens on its own) — one home, and CI is the gate for both the mechanical and the
 #       lens-reviewed lane. The repo is $PIN_ONLY_SLUG, else $GITHUB_REPOSITORY, else origin.
 # A revert of a pin is itself a pin change that passes (a)–(d), so the rollback needs no bypass.
+#   (f) 2026-09-28 (#1988's class row, ADR-141 amended): the FOURTH shape's memory. An `image = "<ref>"`
+#       line under tofu/*.tf (what Renovate's terraform manager rewrites on a kubernetes_deployment)
+#       is not a guarded file — tofu is owned and reviewed as usual — but a diff that ADDS such a
+#       line naming a ref a merged `revert-img-*` PR rolled back in the last REVERT_MEMORY_DAYS is
+#       refused (the `reverted-images:` body line, agents/coordinator/deploy-revert-argo.yaml
+#       `tofu-image-revert`). Same reason as (e): a merged-then-reverted version is re-proposed by
+#       Renovate, and without this the lane loops merge → stuck rollout → revert → re-propose.
+#       Runs only when the diff touches tofu/*.tf AND adds an image line; fail-closed on the read.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -91,16 +99,46 @@ fi
 
 changed="$(git diff --name-only "$BASE" HEAD | grep -E "$GUARDED" || true)"
 wf_changed="$(git diff --name-only "$BASE" HEAD | grep -E "$WORKFLOW_GUARDED" || true)"
-if [ -z "$changed" ] && [ -z "$wf_changed" ]; then
+# (f): tofu/*.tf files are NOT guarded (owned, reviewed as usual) — only their ADDED image lines
+# are checked against the reverted-image memory, and only when there are any.
+tofu_changed="$(git diff --name-only "$BASE" HEAD | grep -E '^tofu/.*\.tf$' || true)"
+TOFU_IMAGE_ADDED='^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"[A-Za-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?"$'
+added_images=""
+if [ -n "$tofu_changed" ]; then
+  # shellcheck disable=SC2086  # word-splitting the newline list is the point
+  added_images="$(git diff "$BASE" HEAD -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
+fi
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
 
-echo "pin-only-lint: guarded files in this diff:"
-# shellcheck disable=SC2086  # word-splitting the newline list is the point
-printf '  %s\n' $changed $wf_changed
+if [ -n "$changed" ] || [ -n "$wf_changed" ]; then
+  echo "pin-only-lint: guarded files in this diff:"
+  # shellcheck disable=SC2086  # word-splitting the newline list is the point
+  printf '  %s\n' $changed $wf_changed
+fi
 
 rc=0
+# (f) the reverted-image memory — read once, fail-closed like (e).
+if [ -n "$added_images" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_images="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-img-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-images:\")) | ltrimstr(\"reverted-images:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-img-* PRs of ${slug:-<no repo slug>} (the reverted-image memory, check (f)): ${reverted_images:-}; refusing to report success." >&2
+    rc=2; reverted_images=""
+  fi
+  while read -r ref; do
+    [ -n "$ref" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_images | grep -qxF "$ref"; then
+      echo "pin-only-lint: FAIL — tofu: image = \"$ref\" is a REVERTED image — the tofu-image-revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-img-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1
+    fi
+  done <<< "$added_images"
+fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
   offending="$(git diff -U0 "$BASE" HEAD -- "$f" \
@@ -248,4 +286,4 @@ if [ "$rc" != 0 ]; then
 EOF
   exit "$rc"
 fi
-echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA)."
+echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image not in the reverted memory)."

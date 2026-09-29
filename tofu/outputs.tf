@@ -63,7 +63,7 @@ output "node_install_targets" {
 }
 
 # Per-node DECLARED Kubernetes-facing state — the labels/taints/EPHEMERAL axes of FU-235's
-# declared-vs-live diff (scripts/mgmt-probe.sh check_nodes, docs/management-box.md §MB2). These
+# declared-vs-live diff (mgmt/scripts/mgmt-probe.sh check_nodes, docs/management-box.md §MB2). These
 # are the fields tofu cannot see drift on: Talos `machine.nodeLabels` ride the machine config
 # (state records DELIVERY, never the Node object), the ephemeral taint's resource cannot own an
 # atomic list another manager rewrote (metal.tf), and the EPHEMERAL VolumeConfig is honoured only
@@ -75,7 +75,7 @@ output "node_install_targets" {
 #                   live (an imperative `kubectl label`) both read as drift
 #   taints          "key=value:effect", same union semantics
 output "node_declared_k8s" {
-  description = "node => {labels, taints} — the declared half of the belt's registered/labels/taints axes (scripts/mgmt-probe.sh check_nodes)."
+  description = "node => {labels, taints} — the declared half of the belt's registered/labels/taints axes (mgmt/scripts/mgmt-probe.sh check_nodes)."
   value = merge(
     {
       for k, n in var.nodes : k => {

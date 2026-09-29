@@ -70,7 +70,7 @@ resource "cloudflare_api_token" "mgmt_read" {
 }
 
 output "mgmt_read_token" {
-  description = "The management box's read-only tofu/cloudflare credential. Store: wallet cloudflare-mgmt-read (scripts/cloudflare-token-store.sh), then scripts/mgmt-provision-secrets.sh --push ships it as CLOUDFLARE_API_TOKEN."
+  description = "The management box's read-only tofu/cloudflare credential. Store: wallet cloudflare-mgmt-read (scripts/cloudflare-token-store.sh), then mgmt/scripts/mgmt-provision-secrets.sh --push ships it as CLOUDFLARE_API_TOKEN."
   value       = cloudflare_api_token.mgmt_read.value
   sensitive   = true
 }

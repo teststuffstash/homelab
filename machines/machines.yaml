@@ -111,7 +111,7 @@
 #                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
 #   reconcile         auto | manual (default manual) — ADR-132 §MB4 layer 3. `auto` hands the node's
 #                     INSTALL (Talos version + schematic, from node_install_targets) to the management
-#                     box's reconciler (scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
+#                     box's reconciler (mgmt/scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
 #                     declared install differs from live it runs `node-maintenance.sh upgrade` (a
 #                     control plane: `controlplane-upgrade.sh`) — WIP 1, the verb's floors, ONE attempt
 #                     per declared target, then PARKED + an alert. A `manual` node's diff is drift on
@@ -743,6 +743,25 @@ machines:
     hardware: Debian 12 VM on nx-02
     ip: 192.168.2.66
     notes: Same labels as ci-runner-01, so a pve outage is not a CI outage. Specs in tofu/ci-runner.tf.
+
+  - name: opnsense-test
+    kind: vm
+    # No `zone:` — not a k8s node; tofu's kubernetes_labels.node_zone would try to label a
+    # Node that does not exist (same reason as nx-02 / pve above).
+    label: "`opnsense-test` (VM on nx-02)"
+    role: OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297)
+    hardware: OPNsense 26.1 VM on nx-02
+    ip: 192.168.2.67
+    notes: NOT the router — nothing routes through it. Hardware in tofu/opnsense-test.tf; guest bootstrap + baseline rollback in docs/opnsense-test-vm.md.
+
+  - name: opnsense-drill
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-drill` (VM on nx-02, EPHEMERAL)"
+    role: OPNsense REBUILD DRILL — built from nothing, converged with all router code, probed, scored against prod, destroyed; WAN = this IP, LAN = isolated `vmbr2` (FU-297)
+    hardware: OPNsense 26.1 VM on nx-02 (vmid 9199)
+    ip: 192.168.2.68
+    notes: Exists only while scripts/opnsense-drill.sh runs (weekly) — an empty ping is the normal state. Reserved so nothing else takes the address. docs/opnsense-test-vm.md §The rebuild drill.
 
   - name: droplet
     kind: device

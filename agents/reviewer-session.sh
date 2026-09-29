@@ -625,6 +625,14 @@ LENSES=""
 # headings agents/major-handoff.sh matches. BLOCKING by construction (the migration judgment IS
 # the verdict), so its posture is pinned below, not read from the claim map.
 gh pr view ${PR} --json labels -q '.labels[].name' 2>/dev/null | grep -qxE 'major|deps-review' && LENSES="migration"
+# The GATE-CHANGE lens (ADR-142, the scripts/ un-gating trial, 2026-09-28): scripts/** has no
+# human codeowner and workers may author it, so a PR editing a check gets the weakening read
+# (agents/lenses/gate-change.md). BLOCKING by construction, pinned below like migration. A repo
+# opts in by carrying the report step's script on its DEFAULT branch (read there, never from the
+# PR — a PR deleting it must not deselect the lens); no repo is named here.
+if printf '%s\n' "\$CHANGED" | grep -qE '^scripts/' && git cat-file -e origin/HEAD:scripts/gate-drift.sh 2>/dev/null; then
+  LENSES="\$LENSES gate-change"
+fi
 printf '%s\n' "\$CHANGED" | grep -qE '^charts?/' && LENSES="\$LENSES helm"
 if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manifests|deploy)/.*\.ya?ml\$' \
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
@@ -652,9 +660,9 @@ SYSFILE=/tmp/review-system.md
 if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
 # Lens posture map from the single claim read (FU-101): absent lenses → advisory
 LENS_MAP='$LENS_MAP'
-# migration is blocking by construction (agents/lenses/migration.md) — pinned here, outside the
-# claim map, so no stack can downgrade it to advisory.
-LENS_MAP=\$(printf '%s' "\$LENS_MAP" | jq -c '. + {migration: "blocking"}' 2>/dev/null || printf '{"migration":"blocking"}')
+# migration and gate-change are blocking by construction (agents/lenses/{migration,gate-change}.md)
+# — pinned here, outside the claim map, so no stack can downgrade them to advisory.
+LENS_MAP=\$(printf '%s' "\$LENS_MAP" | jq -c '. + {migration: "blocking", "gate-change": "blocking"}' 2>/dev/null || printf '{"migration":"blocking","gate-change":"blocking"}')
 # >>>REPLAY:lens-posture-handling>>>
 for l in \$LENSES; do
   _posture=\$(printf '%s' "\$LENS_MAP" | jq -r --arg l "\$l" '.[\$l] // "advisory"' 2>/dev/null || echo "advisory")
@@ -829,7 +837,7 @@ PROMPT="${PROMPT:-}
 
 TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footprint against the changed paths:
   TOUCHES-ESCAPES: $TOUCHES_ESCAPES
-Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict.
+Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. Files whose ENTIRE diff is REPLAY sentinel marker comments are already excluded (ADR-097 addendum 3, homelab#944 — a compelled edit, content-verified); do not re-derive an escape for them from the raw diff. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`mgmt/scripts/**\`, the box verbs \`scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict.
 
 ISSUE_UNREADABLE: ${ISSUE_UNREADABLE:-0}
 If set (1), the linked issue could not be read (403/NOT_FOUND) by the reviewer's own credential. Do NOT emit a content verdict from this premise. Instead, emit a TOOL_GAP line naming the issue read failure and post a standing-aside comment with pre=issue-unreadable. The exit-contract terminal handling applies (homelab#1055)."

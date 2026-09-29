@@ -32,46 +32,43 @@ never the session's arc — that is TICK-LOG's.)
   way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
   the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
   `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
-- **⚑ PICKUP (2026-09-28 — S9 #1985 OPEN; the un-armed major lane is now a MECHANISM, TICK-LOG
-  2026-09-28 has the arc).** Landed: Renovate terraform rule non-major only + the approve reflex
-  refuses `major` (31ee7482); stale-stamp repair + `kubernetes_deployment.*` on the box allowlist +
-  sentinel error positions (#2054); the un-armed major play — every state is the `unarmed-major`
-  unit, debounced, the lens reviews red heads (#2058); the sentinel verdict keyed to the engine
-  revision (#2059); ci base-sha fix for behind PRs (9eef297d, #2064); coverage outputs regenerated
-  (#2056); rubric quickfix (cc821156: ADR-128 standing, CODEOWNERS paths, FU-097 intent paragraph).
-  Also landed: #2055 (rebase tick — untouched Renovate branches only), #2065 (fingerprint folds
-  `startedAt`), #2067 (a fix round never arms an un-armed `major`), #2069 (handoff matches the
-  heading WORD), #2060 (the npm mirror, `192.168.40.35`, Opus subagent — FU-294 next: drop
-  `MERMAID_LINT_NO_INSTALL=1`; note the mirror unblocked EGRESS only: `scripts/**` lockfile edits
-  stay the seat's by the path tier). **Drill state at 11:30Z:** #2037/#2046/#2032 sit at
-  `major/awaiting-human` — the designed terminal: read + merge (#2046: the box says +0 ~5 -0 helm 3
-  in-place updates, `devbox run mgmt-human-plan -- 2046`; #2037: +0 ~2 -0 where the second address
-  is PRE-EXISTING drift `proxmox_virtual_environment_vm.ci_runner_02[0]` that makes the box refuse
-  every `main` apply until a human plans it — `MgmtApplyResidueStanding`). #2047: re-judged under
-  the new engine (`[e:92d2129]`), plan RUNS (+0 ~1 -0, human read) — the lens re-review follows on
-  its own (the fingerprint re-opened). #2033: un-latched 11:17Z, must stay un-armed through its
-  next round (#2067's drill). #1977: rebase box ticked 10:36Z, Renovate's 12:00Z run is the mover.
-  **Unproven:** #2064's ci base-sha fix — a `gh run rerun` reuses the old workflow file; the next
-  fresh event on a behind PR is the proof. The Monday weekly image rebuild did NOT fire on
-  agent-coordinator (agent-runtime rebuilt on a push instead).
-  **Operator decisions surfaced (design-shaped, not built):** (a) arm terraform majors AT HANDOFF
-  when the box is the gate (plan-empty + lens APPROVED → auto-merge instead of `major/awaiting-
-  human`) — the last human click in this lane; (b) the sentinel could post the changed ATTRIBUTE
-  PATHS per address (values-free) so a provider-schema-only diff like #2046's can be judged by
-  the lens, or count as "plan empty"; (c) the cloudflare root on the box (operator: maybe in
-  scope — needs a box-held scoped token minted by tofu/cloudflare-token, operator-run); (d) the
-  post-merge dependency-coverage regenerator (#1985 comment) instead of a PR-time `--check`;
-  (e) retro-argo.yaml's marker for the C9 re-arm (unchanged). **S9 closeout residue:** #1988
-  (base-image post-merge half — design fork), #1991 (record written; add a "terraform major via the
-  lens" row from today's #2037/#2046 and close at the sweep), #2014 (version sets — design fork).
-  **Unobserved first that did NOT fire:** the Monday 06:00Z weekly image rebuild on
-  agent-coordinator + agent-runtime (workflows `active`; no scheduled run by 10:30Z) — no detector
-  for a missed scheduled run; re-check next Monday before building one. Hygiene from the old
-  bullet still stands: `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac
-  renovate.json (inert); agent-runtime's `deps-pin-guard.sh` is the pre-#83 copy; dead
-  `update-pr-branch.reusable.yml` callers on agent-coordinator + agent-runtime; platform
-  `coordinatorModel` rides `opencode-go/deepseek-v4-flash` — revert to `opus` when the Anthropic 7d
-  window resets. `automerge` label = Renovate-only (a jail-authored PR wearing it gets no reviewer).
+- **⚑ PICKUP (2026-09-28 late night — ADR-142 trial LIVE; TICK-LOG 2026-09-28 (evening → night)).**
+  `scripts/` is un-owned + worker-authorable (except `mgmt/scripts/` + the three box verbs);
+  the gate is the BLOCKING gate-change lens + ci's gate-drift report. Drills: 2 caught, control
+  approved, 1 not run. **Re-reads (operator): 2026-10-05 and 2026-10-28** — count gate-change
+  PRs, lens verdicts, DIFFERS lines, any weakened gate found after merge; revert = `/scripts/`
+  in CODEOWNERS + `scripts/` in governance-lint GOVERNANCE. Box moved to `mgmt/` (PR#2088),
+  re-activated by hand, green. Open from tonight: FU-295 (box sentinel vs goal/** PRs),
+  FU-296 (governance-lint self-test). FU-294 CLOSED 2026-09-29 (ADR-143 — see the pickup below).
+- **⚑ PICKUP (2026-09-29 morning — ADR-143 live; TICK-LOG 2026-09-29 has the record).**
+  mermaid-lint runs on Deno with zero permissions (#2098); `lock-intake-lint` gates every PR's
+  lockfile intake in `ci` (OSV incl. `MAL-`, 7-day floor, install-time code, transitive included).
+  **#2100 (Renovate mermaid 12 on deno) is RED BY DESIGN** — waits for mermaid-js/mermaid#8278;
+  the coordinator ruled no ride (state-fp debounced) — never pin/override it. The npm mirror is
+  `npm-cache.teststuff.net` (Unbound, #2101 — Deno cannot use an IP registry). Parked on the
+  ROADMAP supply-chain section: master/prod scan (Dependabot vs Dependency-Track + SBOM + Kyverno),
+  then stacks via the consumer card — operator decision, homelab first.
+- **⚑ PICKUP (2026-09-28 night — the Forgejo chain DONE end to end; TICK-LOG 2026-09-28
+  (afternoon) + its Closing paragraph have the record).** Landed by the machine lane: #2078,
+  #2082, #2084, #2087 (the drill's findings, four review rounds), drill #2085 → revert #2086
+  (alert → merged revert 6.5 min), the box applied the revert 17:40Z, runner on `docker:27-dind`
+  2/2. Direct: c18bfe3f (ci.yaml first-parent read via `cat-file` — the #2064 fix had never
+  fired on a depth-1 checkout), the Renovate rule arming terraform docker-image majors (ADR-141
+  amended). **First reads next session:** (1) #2037 — Renovate's next run should rebase it
+  (`behind-base-branch`), the lens re-reviews at the new head, it merges on its own, the box
+  applies the docker:29 tag with no rollout wait; if it sticks, the lane reverts it — read, don't
+  click. (2) `KubeDeploymentRolloutStuck` on forgejo-runner should be RESOLVED (the drill pod
+  was terminating at 17:41Z). (3) agent-runtime#161 parked on its `unit` job (devbox-install-action
+  vs pre-installed nix, `.github/` operator-direct — a Renovate/Actions class item). (4) #1988:
+  the row is commented; close it when the base-image half has its own home. **Shelf-life finding
+  for the operator:** `major/awaiting-human` PRs (#2033/#2046/#2047 BEHIND; #2032 closed → #2100) rot
+  within hours — decision (a) of the S9 bullet is the open one. **Operator decisions still open:**
+  (a)–(e) of the S9 bullet + the retro r6 marker. **S9 closeout residue:** #1991, #2014.
+  **Hygiene still standing:** `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac;
+  agent-runtime's `deps-pin-guard.sh` pre-#83; dead `update-pr-branch.reusable.yml` callers;
+  `coordinatorModel` on `opencode-go/deepseek-v4-flash` (revert to `opus` when the Anthropic 7d
+  window resets); the Monday 06:00Z image rebuild did not fire (re-check next Monday).
+  `automerge` label = Renovate-only.
 - **⚑ PICKUP (2026-09-24 — registry2 / FU-280 CUT OVER).** `registry.teststuff.net` → `registry-fs` on
   the `registry-data` volume since 14:50Z (#1961/#1962); the S3 Deployment runs unrouted as the rollback.
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a

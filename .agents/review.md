@@ -10,7 +10,9 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
 - **A literal secret or credential value, anywhere.** References only (ExternalSecret,
   `existingSecret`, `ref:<ns>/<name>`). The repo is public; this is not a style question.
 - **A diff outside the author's declared `Touches:` footprint** that lands in a governance path —
-  `agents/**`, `.agents/**`, `scripts/**`, `policy/**`, `.github/**`, `tofu/github/**`, `tofu/cloudflare/**`.
+  `agents/**`, `.agents/**`, `mgmt/scripts/**` + the box-executed `scripts/` verbs, `policy/**`,
+  `.github/**`, `tofu/github/**`, `tofu/cloudflare/**`. (The rest of `scripts/**` left this list in
+  the ADR-142 trial — the BLOCKING gate-change lens reads it instead.)
   Those are the launcher, the scan, the reflex and the rulesets over them. A worker editing its own
   governor is ungated whatever the ruleset says. Block regardless of how good the change looks.
   ⚠ The ADR-097 compelled-counterpart classes are NEVER escapes and NEVER governance-blocking —
@@ -91,8 +93,8 @@ never a bullet the harvest would mint into a standalone inert issue that no cont
   days later, and the rule as worded ("appending") did not cover the removal.
 - **Path tier decides who merges, and the PR should say so.** Standing since ADR-128 (the
   2026-09-11 trial week, ruled standing by FU-233 — read CODEOWNERS, not this list, when they
-  disagree): only `agents/**`, `scripts/**` (except mermaid-lint's npm manifest + lockfile),
-  `policy/**`, `nixos/**`, `tofu/github/**`, `CODEOWNERS` and the governance dotdirs (`.agents/`,
+  disagree): only `agents/**`, `mgmt/**` (the box's closure + scripts), the three box-executed
+  `scripts/` verbs, `policy/**`, `tofu/github/**`, `CODEOWNERS` and the governance dotdirs (`.agents/`,
   `.claude/`, `.github/` — its `workflows/` are un-owned, but `pin-only-lint` admits only verified
   action pin bumps there) need a human; `argocd/platform/**`, `tofu/`, `ansible/`, `opnsense/`,
   `machines/` and `docs/` merge on CI + your approval like tier 1 — so your read IS the gate

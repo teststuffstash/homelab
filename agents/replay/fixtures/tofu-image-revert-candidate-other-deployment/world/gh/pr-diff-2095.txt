@@ -1,0 +1,9 @@
+diff --git a/tofu/unifi.tf b/tofu/unifi.tf
+--- a/tofu/unifi.tf
++++ b/tofu/unifi.tf
+@@ -9,7 +9,7 @@
+         container {
+           name  = "mongo"
+-          image = "mongo:7"
++          image = "mongo:8"
+         }

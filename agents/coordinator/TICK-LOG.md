@@ -11568,3 +11568,175 @@ original workflow file, so the proof waits for the next fresh event on a behind 
 ~11:30Z: five majors sit at the designed human terminals (#2037/#2046/#2032 `major/awaiting-
 human`; #2046's +0 ~5 -0 and #2037's ci_runner_02 drift want `mgmt-human-plan`), #2047 and #2033
 ride the lane on their own.
+
+**Correction (11:50Z):** the `ci_runner_02[0]` "drift" above was a sentinel artifact, not drift —
+master plans clean (`mgmt-tf plan` 11:44Z); the sentinel planned the bare PR head, so the FU-289
+unpark (#2048, merged after the three PRs forked) read as their change and put "human read" reds
+on #2037/#2047. PR#2073: stage 2 plans the head merged onto master (what would land; a head that
+does not merge gets a failure verdict). Operator direction for the next session: the Forgejo
+runner rolls with no downtime first (2 replicas + RollingUpdate + PDB, ADR-140 amendment), then
+#2037's class gets its detector + revert and arms — parked in meta-state.
+**12:10Z:** the box re-judged the three heads at 12:06–12:08Z under `[e:425b49c]` — but with the
+PRE-#2073 script (verdict text lacks "merged onto master"): #2059's engine revision hashed the
+sentinel clone's `origin/master` blobs, which the clone fetches every run, while the script
+executes from the hourly-pulled `/var/lib/homelab`. PR#2076 hashes the executing files. The
+merge-plan proof (#2047 planning EMPTY) is the ~13:10Z re-judge, next session's first read.
+
+## 2026-09-28 (afternoon) — the loop's own issues triaged by CLASS; the Forgejo chain built to merge and roll back without a human
+
+Operator: read meta-state S9, "look at the issues the loop created during these Renovate updates
+— #2036 and newer", then mid-session *"we are here to create/fix the process not fix individual
+problems"*, then *"I'm going away, continue with the Forgejo until it automerges without a human
+and rolls back if there is a problem."* Everything below is a mechanism; instances were touched
+only as the drill of one.
+
+**The nine open issues, by class.** Retired on master already: #2068 (heading WORD, PR#2069)
+and #2070 (stage 2 plans the head merged onto master, PR#2073/#2076) — both closed by hand with
+the proof: the box's 13:05Z run after its 13:03Z pull posted "merged onto master@da4b02b6" and
+`ci_runner_02` vanished from #2047/#2037 (the 12:37Z run was still pre-#2073 because the pull
+had run six seconds before that merge). Carriers whose work is on the branch: #2036/#2071 close
+at #2033's merge (strong links in the body); #2063 could not — the worker wrote only `Refs` in a
+commit, and the in-pod strong-link write had died on `GraphQL: API rate limit already exceeded`
+(the installation pool). Built by four subagents, each its own PR: **#2079** (#2066: the
+`unarmed-major` fingerprint folds `startedAt` ONLY for the `management-sentinel` status —
+`iac-sentinel` re-posted SUCCESS every ~4 min and bought a ride per tick; two fixtures), **#2077**
+(#2072: `diff-ci --coverage-only` runs in CI so the MAP cannot rot on master unseen; the ci.yaml
+step committed direct, 44b072c7), **agent-runtime#161** (#2063's class: `agent-finalize` writes
+the strong link over REST end to end, 40 tests; open, its `unit` job red on a pre-existing
+devbox-install-action/nix conflict on the ARC runner, `.github/` operator-direct), **#2080**
+(#2052: one report-only ORPHANS line for an adopted-open Goal member with no state label;
+#1910 untouched — the operator's pending decision). #2053 is the weekly scout (report-only).
+Finding for the operator, not built: **the `major/awaiting-human` terminal has a shelf life of
+hours** — all five parked majors were BEHIND and #2032 DIRTY within the day; sharpens decision (a).
+
+**wk-03 NotReady 13:10Z — a real incident mid-session** ([incident](../../docs/incidents/2026-09-28-wk-03-runner-memory-thrash.md)):
+an ARC runner job (request 1536Mi, no limit by design) thrashed the 8 GiB VM past its kubelet —
+kvm at 700 %, console full of page-fault backtraces, no OOM kill of any kind; the FU-112
+reservations did not act on a page-cache thrash. `KubeNodeNotReady` fired (the detector held).
+Window `wk-03-1790601393-193`, `qm reset 8113` at 13:16:34Z, Ready 13:17:54Z. Class: the same
+container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01) — an 8 GiB node in
+that pool is luck. Residuals on FU-218 (the envelope) and FU-155 (evidence: no kill at all).
+Probe lesson: `qm status` uptime is the qemu process age, it kept counting through the reset.
+
+**The Forgejo chain (operator's first act), as PRs:** **#2078** — 2 replicas, `RollingUpdate`
+0/1, a PDB of one, `kubernetes_pod_disruption_budget_v1.*` on the box allowlist, ADR-140
+amended (a STATELESS platform Deployment carries this shape before its bumps may arm; an RWO
+singleton never does); review round 1 added a readiness probe on the runner container keyed on
+`/data/.runner` (a probe-less container was Ready at start — the roll and the PDB gated on
+dind's health) + soft anti-affinity. **#2082** — the rollback half, #1988's class row: the
+detector already existed (`KubeDeploymentRolloutStuck`, Progressing=false 15 m); new receiver
+`deploy-rollout-revert` → EventSource `/rollout-stuck` → third `deploy-revert` trigger →
+WorkflowTemplate `tofu-image-revert` (candidate ≤180 m under tofu/, every line `image = "<ref>"`,
+a changed file's `resource "kubernetes_deployment"` OWN metadata must name the stuck Deployment
+— review round 1 found the whole-file `name =` grep matched container names; brace-depth walk +
+four coupling fixtures), `revert-img-<sha8>` + `reverted-images:`, `automerge`+`dependencies`;
+`pin-only-lint` check (f) refuses a re-added reverted image ref for 30 days (5 self-test cases);
+design doc Part 3, ADR-141 amended (blast class picks the lane for the terraform docker-image
+class), docs/renovate.md. **#2084** — found on the way and BLOCKING the whole chain: since the
+proxmox provider bump #2075 auto-merged (12:49Z) the box refused every later master with
+"stage 1: admitted on master diff — human apply" — `mgmt-apply.sh` read stage 1's `admitted`
+line as a hit while the sentinel separates it; now the loop admits the provider-pin shape on a
+master span and the plan + allowlist gate it. **Not yet:** the drill (script ready in the
+scratchpad: a bad dind tag opened AS THE APP via coordinator-git, `automerge`+`dependencies`,
+armed) and the Renovate rule arming terraform docker-image majors (`.github/`, operator-direct;
+text ready) — both after #2078/#2082/#2084 merge, the ArgoCD sync and the box's apply.
+
+**The drill (14:25–15:13Z) — PASSED as a chain, and it found three defects around the chain.**
+#2078 merged 14:06Z (bot re-review after the fix push), #2082 15:15Z→14:15Z, #2084 14:23Z — all
+by the machine lane. The box (pull + apply triggered by the seat instead of the hourly tick —
+cadence, not judgment) admitted the provider-pin span it had refused since #2075, planned
+`+1 ~1`, applied the runner shape + PDB at 14:25Z; two pods Ready = registered on wk-03 +
+wk-metal-04. **#2085** (a non-existent dind tag, opened AS THE APP via `coordinator-git`,
+`automerge`+`dependencies`, armed): reflex APPROVED 14:27Z, merged 14:40Z; box applied 14:41Z
+— the surge pod ImagePullBackOff, the two old pods served throughout (`ready=2 unavail=1`);
+`ProgressDeadlineExceeded` 14:51:12Z; `KubeDeploymentRolloutStuck` pending → **firing 15:06:27Z**;
+`tofu-image-revert-gnl5b` 15:07:16Z: candidate #2085, image-line-only, coupling "declares
+Deployment forgejo-runner in tofu/forgejo-runner.tf", **revert #2086** opened as the App with
+`reverted-images: docker:29-dind-drill-0928`, labelled + armed 15:07:17Z; reflex APPROVED 15:08Z;
+**merged 15:12:51Z**. Alert → merged revert: 6.5 minutes, no human. The three findings, all in
+**PR#2087** (armed): (1) the provider's `wait_for_rollout` default turned the stuck roll into an
+ERRORED box apply after 10 min ("half-applied? human") on an object already written →
+`wait_for_rollout = false` on the runner; (2) the chain took THE newest tofu merge as its only
+candidate, so any later unrelated tofu merge would have masked the bump → newest-first walk,
+first image-line-only `tofu/*.tf`-only merge wins (fixture); (3) the apply loop read the span's
+ENDPOINT diff — the bad tag and its revert net to zero files — and logged "touches no apply:true
+root (0 files) — stamping" at 15:13Z while the cluster still ran the bad tag → `git log
+--name-only` over the span decides. The last leg (the box applying the revert, the runner back
+on `docker:27-dind`) completes when #2087 lands: its tofu change makes the span plan.
+
+**Closing (17:40Z).** #2087 merged 17:38Z after four review rounds (each a real finding: the walk
+must couple INSIDE the loop and move on, a blind diff read ABORTS, stage 1's pattern scan reads
+the span via `git log -p`, the apply-loop span read fails closed on its own). On the way, a fifth
+class defect, fixed direct (c18bfe3f): `ci.yaml`'s #2064 base read used `git rev-list --parents`
+on a depth-1 checkout, where the merge commit is the shallow boundary and reads as PARENTLESS —
+so it had never fired, and every behind PR still went red on master's guarded-file commits (this
+PR did, on the coverage-belt step); `git cat-file -p` reads the parent line from the object. Then
+the box (pull + apply triggered): span `c18bfe3f..8ced275e` touches main → `+0 ~1` →
+`kubernetes_deployment.forgejo_runner` APPLIED in 4 s (no rollout wait) → the Deployment rolled
+back to `docker:27-dind` on the two original pods, the drill pod gone. Window closed. The Renovate
+rule arming the class committed direct (terraform docker-datasource majors: `automerge` +
+`major` + `behind-base-branch`); #1988's row commented. Operator's ask met: the Forgejo runner's
+image bumps now merge without a human and roll back on a problem — proven on a live drill.
+
+## 2026-09-28 (evening → night) — S9 #2032 read; `mgmt/` carved out; the ADR-142 trial built and drilled
+
+**Condition.** Operator picked up S9 at #2032 (mermaid 11→12) + #2068. #2032: lens APPROVED at
+`79245410`, handed off 11:26Z after #2069 — then #1977 (the "moot" 11.17.2 sibling, `automerge`)
+merged 12:21Z and made it DIRTY (both edit `scripts/mermaid-lint/package*.json`). Four human
+touches for one lint dependency; root: `scripts/**` was codeowner-AUTHOR (CI runs it from the
+branch), so neither the mirror (#2060) nor a worker could apply the lodash-es override. #2068
+closed (fixed by #2069, never linked). Operator turned it into the open `scripts/` question
+(FU-293): inventory by executor — ~26 CI gates, 16 box, 1 cluster pod (`iac-sentinel.sh`), ~45
+seat-only; 143/146 `scripts/` commits in 30 days seat-authored (the owner read = the author
+reading itself under the sole-codeowner waiver).
+
+**`mgmt/` (PR#2088, merged 20:04Z).** `nixos/` → `mgmt/nixos/`, `scripts/mgmt-*` + `mgmt-root-env/`
+→ `mgmt/scripts/` (names kept); `/mgmt/` owned (6b79eff8, 290fd520 dropped `/nixos/`). Review r1
+caught the `nixos#` form escaping the path rewrite (flake.nix's recovery commands). Box driven by
+hand as the operator ruled ("the box has a backdoor"): window seat-1790625906-697, `mgmt-pull`
+failed at activation as predicted → `nixos-rebuild test --flake …/mgmt/nixos#mgmt` (drv
+identical to the jail's pre-merge eval) → stamp → `mgmt-confirm` gate 5/0/0, promoted; pull
+idempotent, sentinel/apply/belt/reconcile green; check clean, window closed. ~4 min.
+
+**ADR-142 trial (operator: "remove codeowner from scripts and all the worker gates, I can always
+revert"; re-read 2026-10-05 + 2026-10-28).** CODEOWNERS un-owns `/scripts/` (fbeadfbd); PR#2089
+(merged 20:29Z) takes `scripts/` out of governance-lint / classify_touches / touches-check / the
+reviewer's escape list — except `mgmt/scripts/` + the three box verbs; adds the BLOCKING
+`gate-change` lens and `scripts/gate-drift.sh` (non-failing ci step from the BASE commit, 290fd520:
+(A) master's gate × PR content, (B) master's tests × PR scripts). `.agents/` wording ca20ab6d.
+
+**Drills (seat subagents, base `goal/0-scripts-upkeep`, deleted after).** D1 weakened
+follow-ups-lint (DANGLING no longer fails) + a phantom FU-990 → report A DIFFERS, lens CAUGHT
+(#2095, 7 min). D3 re-anchored governance-lint's WORKER_PATTERN so the REST `[bot]` login
+misses — report `same` on both legs (blind by design) → lens CAUGHT from its own read (#2092,
+8 min, grep repro). D4 honest control (machines-lint duplicate-ip) → APPROVED, no false positive
+(#2093). D2 (gate + test loosened together) did not run — the subagent's safety classifier
+stopped it; leg B was proven locally (27/27 master cases failing against a neutered
+pin-only-lint). Findings filed: **FU-295** (the box sentinel never reports on goal/** PRs, which
+the ruleset requires — D4 sat BLOCKED approved), **FU-296** (governance-lint's worker match has
+no self-test); FU-294 re-pointed (both #2032 blockers gone). Report noise: A's excerpt carried
+19 OVERSIZE lines when the PR's output format changed — trim to failure-shaped lines at the
+first re-read if it recurs.
+
+## 2026-09-29 (morning) — FU-294 fixed by structure, not by a pin: ADR-143
+
+**Operator:** "only structural fixes … a vulnerability analyzer should find these", no pinning;
+then: jail rules for one linter are too much — escape npm dependency management in homelab.
+Findings: Renovate's `osvVulnerabilityAlerts` is direct-deps-only on the base branch (its docs);
+its cooldown covers the bumped dep only; nothing set `--ignore-scripts`, and the seat had run
+`npm ci` in the jail next to the wallet. Web search: no npm-free mermaid linter with GitHub
+parity (merman alpha; Go rewrites no parity). Deno spike: zero-permission parse = CI's 25/14/0;
+escape probe all `NotCapable` (stdin input, since `--allow-read=.` still read tofu/kubeconfig).
+
+**Landed.** #2098 (one review round: docs claimed the gate live before ci.yaml had it — fixed as
+⚠ then flipped): mermaid-lint on Deno (`--frozen`, `minimumDependencyAge: P7D`, no permissions),
+package.json/lock/jsdom gone, Renovate npm rule + `deno` manager, `scripts/lock-intake-lint.py`
+(OSV querybatch incl. MAL-, registry publish age, install-time code; fail-closed; self-test).
+ci.yaml direct 2ac87be3+1 (PR-only step, merge-ref first parent). #2032 closed; Renovate's #2100
+went RED on `lodash-es@4.17.23` with no reviewer — the gate proven live; the coordinator ruled
+no ride (state-fp debounce). **Ride drill:** Deno + IP registry = "Could not find referrer npm
+package" (cache folder keyed by domain) → Unbound `npm-cache.teststuff.net` (window
+seat-1790671265-6906, clean), launcher default + env card by name, kill-switch
+`MERMAID_LINT_NO_INSTALL` dropped (#2101); re-drill on nx-01 25/0 rc 0. FU-294 archived.
+ROADMAP: master/prod-side scan (Dependabot vs Dependency-Track + SBOM + Kyverno) parked; stacks
+via the consumer card after homelab.

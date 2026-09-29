@@ -1,0 +1,47 @@
+{
+  "number": 30,
+  "headRefOid": "0b48984aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {
+      "context": "iac-sentinel",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-28T10:42:46Z"
+    },
+    {
+      "context": "management-sentinel",
+      "state": "FAILURE",
+      "startedAt": "2026-09-28T10:30:00Z"
+    },
+    {
+      "name": "ci",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-09-27T17:45:00Z"
+    }
+  ],
+  "reviews": [
+    {
+      "author": {
+        "login": "homelab-reviewer"
+      },
+      "state": "CHANGES_REQUESTED",
+      "submittedAt": "2026-09-27T16:42:00Z"
+    }
+  ],
+  "commits": [
+    {
+      "oid": "0b48984aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "messageHeadline": "apply every reload-capable OPNsense call explicitly",
+      "committedDate": "2026-09-27T17:41:00Z"
+    }
+  ],
+  "comments": [
+    {
+      "body": "🤖 `state-fp:unarmed-major:e027ff2163e1` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-28T10:20:00Z.",
+      "createdAt": "2026-09-28T10:20:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    }
+  ]
+}

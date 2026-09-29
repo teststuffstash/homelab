@@ -44,7 +44,8 @@ immediately. Our baseline blunts both vectors:
 |---|---|---|
 | **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. | pnpm `minimumReleaseAge` |
 | **SHA-pin Actions** — `helpers:pinGitHubActionDigests` | **Tag re-pointing** — a hijacked `@v4` can't inject if we're on the immutable commit SHA. Renovate keeps the SHA current (+ the tag in a comment). | SLSA / pinning |
-| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable deps; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). | SLSA S2C2F |
+| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable **direct** deps already on the base branch; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). It never sees a TRANSITIVE dependency, nor what a PR brings in — that is the next row. | SLSA S2C2F |
+| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock` + `package-lock.json`; any other lockfile type fails closed until it has an extractor. | the #2032 lodash-es miss |
 
 Not yet built (the strongest, aspirational leg): **verify SLSA provenance / signatures** on consumed
 artifacts (`cosign verify-attestation`) so a backdoored artifact is rejected even *inside* the cooldown.
@@ -70,9 +71,11 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
   adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
   other major stays un-armed on the human lane until its class row is complete (#1988).
-- **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
-  `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
-  2026-09-27). Majors → the catch-all.
+- **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
+  exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
+  catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
+  permissions, and `lock-intake-lint` in `ci` judges every lock change. A red intake WAITS for upstream — no
+  local pin or override (ADR-143).
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
@@ -83,10 +86,18 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
   (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
-  **Terraform MAJORS are not this lane** (2026-09-28): a provider major, or an image tag Renovate
-  extracts from a `kubernetes_deployment` in tofu, takes the major catch-all — un-armed, `major`,
-  the coordinator's lane (README §Dependency major bumps), because a major here typically needs an
-  in-PR adaptation (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046).
+  **Terraform PROVIDER majors are not this lane** (2026-09-28): a provider major takes the major
+  catch-all — un-armed, `major`, the coordinator's lane (README §Dependency major bumps), because
+  a major here typically needs an in-PR adaptation (helm 3 turned the provider's `kubernetes {}`
+  block into an attribute, #2046).
+  **Deployment IMAGE tags in tofu are their own armed lane** (ADR-141 amended 2026-09-28, #1988's
+  class row): an `image = "<ref>"` line Renovate rewrites on a `kubernetes_deployment` is armed at
+  every update type — non-majors on the terraform `automerge` rule, majors armed + `major` (the
+  lens reviews). The box applies the merge, and the `tofu-image-revert` chain
+  ([design](designs/fu-1990-workflow-pin-revert.md) Part 3) reverts an image-line-only merge whose
+  Deployment rollout sticks (`KubeDeploymentRolloutStuck`), records `reverted-images:`, and
+  `pin-only-lint` check (f) refuses the re-proposal for 30 days. Precondition per Deployment:
+  the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB — the forgejo runner first).
   The lane's marker must not leak: the terraform rule is restricted to non-major update types
   (Renovate MERGES `addLabels` across rules and nothing removes a label — three majors were born
   `automerge`+`major` on 2026-09-27, #2037/#2046/#2047), `renovate-approve` refuses any

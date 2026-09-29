@@ -1,0 +1,1 @@
+printf 'REVERTED_IMAGES=%s\n' "$REVERTED_IMAGES"

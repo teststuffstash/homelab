@@ -15,7 +15,7 @@ roots:                      # what the box plans; a PR path under the root's dir
                   # `apply_controlplane_config` — the FU-097 auto-apply TOGGLE for Talos config applies on
                   # nodes whose declared role (node_install_targets, from the plan) is controlplane. false =
                   # a CP config change stays a human `mgmt-tf apply` even when it passes every other part
-                  # of the precondition (scripts/mgmt-lib.sh mgmt_talos_gate): on 2026-09-20 a CP config
+                  # of the precondition (mgmt/scripts/mgmt-lib.sh mgmt_talos_gate): on 2026-09-20 a CP config
                   # apply took the API path down while every node read Ready. The OPERATOR flips it.
                   # FLIPPED ON 2026-09-22 (operator: "toggle the control plane to on, let it do everything" —
                   # a Talos version bump is ONE atomic commit the box applies and the reconciler rolls; the
@@ -102,6 +102,11 @@ apply_addresses:            # resource addresses (globs) the box may APPLY unatt
     # exact nondestructive residue class §The test surface names — a human apply added nothing.
     # Services and PVCs stay named: a Service change can move a VIP, a PVC change can re-create.
     - "kubernetes_deployment.*"
+    # PodDisruptionBudgets (ADR-140 as amended, 2026-09-28): a PDB changes nothing running — it is
+    # the service's own "may I lose a member now" answer that drains read — and it is the third
+    # leg of the roll-without-downtime shape (2 replicas + zero-unavailable rollout + PDB) a
+    # stateless Deployment needs before its image bumps may arm. First: forgejo-runner.
+    - "kubernetes_pod_disruption_budget_v1.*"
     - "kubernetes_service.ha"
     - "kubernetes_persistent_volume_claim.ha"
     - "kubernetes_service.unifi"

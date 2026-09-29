@@ -1,0 +1,6 @@
+CALL gh pr edit 2081 --repo teststuffstash/homelab --add-label automerge --add-label dependencies
+CALL gh pr merge --auto --squash 2081 --repo teststuffstash/homelab
+OUT → reverted images: docker:29-dind
+OUT → revert PR teststuffstash/homelab#2081 labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green; the box applies the revert on its next pull)
+OUT REVERTED_IMAGES=docker:29-dind
+RC 0

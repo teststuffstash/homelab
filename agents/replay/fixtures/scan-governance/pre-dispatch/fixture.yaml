@@ -3,16 +3,17 @@
 # WHAT IT PINS. `classify_touches()` in agents/footprint.sh is the ONE machine-readable home for
 # the platform lane path tables. It returns `codeowner-author` for the ❌ operator-author set
 # (paths that take effect BEFORE a human approves: `.github/`, `.agents/`, `devbox.json|lock`,
-# `scripts/`). A queued issue whose declared `Touches:` footprint lands on any of these paths is
+# `mgmt/scripts/` + the three box-executed `scripts/` verbs — the rest of `scripts/` left the set
+# 2026-09-28, ADR-142 trial). A queued issue whose declared `Touches:` footprint lands on any of these paths is
 # undeliverable by any worker PR — the required `ci` check is structurally red before the worker
 # writes a line, and the documented route is an operator push to master.
 #
-# THE NINE CASES, and what each one exists to stop a later edit from breaking:
+# THE TEN CASES, and what each one exists to stop a later edit from breaking:
 #   #993  `agents/coordinator-scan.sh, agents/replay/` → DISPATCHED. This very issue. `agents/`
 #         is codeowner-merge (agent may author, human merges), not codeowner-author.
 #   #1000 `.github/workflows/ci.yaml` → HELD. The canonical ❌ path: CI workflows run from the
 #         PR branch, so a worker edit here is structurally red.
-#   #1001 `scripts/governance-lint.sh` → HELD. scripts/ is in the ❌ set.
+#   #1001 `scripts/node-maintenance.sh` → HELD. A box-executed verb stays in the ❌ set.
 #   #1002 `argocd/resources/loki/` → DISPATCHED. The main lane is untouched by this check.
 #   #1003 `*` → DISPATCHED. The no-`Touches:` sentinel normalizes to empty and is dropped.
 #   #1004 `policy/` → HELD by governance. policy/ is in GOVERNANCE but NOT the ❌ set;
@@ -23,6 +24,9 @@
 #   #1007 `.agents/fix.yaml` → HELD. `.agents/` is in the ❌ set.
 #   #1008 oracle-fleet, `scripts/` → DISPATCHED. The ❌ set is THIS repo's CI's. A stack repo
 #         that happens to own a same-named path is not touching this repo's file.
+#   #1009 `scripts/governance-lint.sh` → DISPATCHED. ADR-142 trial: the repo's checks are
+#         worker-authorable; the gate-change lens + gate-drift report are the gate. A revert
+#         of the trial flips this row back to HELD.
 #
 # NO LABEL WRITE IS ASSERTED FOR FREE: the action stream carries no `gh` call at all. This clause
 # is a router, not a gate — `agent/blocked` is a human gate, and an operator-lane overlap may be

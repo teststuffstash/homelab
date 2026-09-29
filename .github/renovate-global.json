@@ -83,8 +83,8 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "npm — homelab's only npm surface is scripts/mermaid-lint (jsdom + mermaid, the docs' mermaid parser), CI-only dev tooling exercised by required `ci` (`npm ci` + a parse on every PR) → mechanical automerge for patch/minor; majors → the catch-all. Until 2026-09-27 these bumps had NO lane (#1977/#2012 — the #1988 unlabelled class) and /scripts/ CODEOWNERS parked them; the manifest + lockfile are un-owned in CODEOWNERS since the same day.",
-      "matchManagers": ["npm"],
+      "description": "npm packages via the `deno` manager — homelab's only JS surface is scripts/mermaid-lint (deno.json imports + deno.lock: mermaid + linkedom, the docs' mermaid parser; ADR-143 retired its package.json/npm lane 2026-09-29). CI-only dev tooling exercised by required `ci` on every PR (the parse, run with NO Deno permissions). `lock-intake-lint` (ADR-143, a `ci` step) fails any lockfile change bringing in an OSV-flagged, <7-day-old or install-script package version — transitive ones included, which Renovate's osvVulnerabilityAlerts (direct deps only) and minimumReleaseAge (the bumped dep only) never see. Renovate's `deno install --frozen=false` honours deno.json's minimumDependencyAge, so the regenerated lock is floored too. Patch/minor → mechanical automerge; majors → the catch-all. `npm` stays in the list for stack repos that still carry a package.json.",
+      "matchManagers": ["npm", "deno"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
       "automerge": true
@@ -140,6 +140,14 @@
       "matchUpdateTypes": ["major"],
       "matchPackageNames": ["graduated-majors/none-yet"],
       "addLabels": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
+    },
+    {
+      "description": "Deployment IMAGE tags in tofu — the docker datasource under the terraform manager (`image = \"<ref>\"` on a kubernetes_deployment) — are ARMED at every update type (ADR-141 amended 2026-09-28, #1988's class row; drilled the same day): non-majors already ride the terraform `automerge` rule above; a MAJOR keeps `major` from the catch-all (this rule only arms it, no `automerge` label) so the migration lens reviews it and its APPROVED completes the merge — the Actions pattern. The management box applies the merge (kubernetes_deployment.* is allowlisted), the tofu-image-revert chain (agents/coordinator/deploy-revert-argo.yaml) reverts a stuck rollout, and scripts/pin-only-lint.sh check (f) refuses the re-proposal for 30 days. Precondition per Deployment: the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB) — an RWO singleton never enters this lane, which is why the rule is scoped by datasource, not by file. `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["terraform"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
     }

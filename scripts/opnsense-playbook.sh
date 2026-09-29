@@ -24,7 +24,7 @@ export ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg"   # inventory + roles_path (pat
 
 _kp_db="$HOME/.claude/homelab-keepass/homelab.kdbx"
 # A pre-set pair wins: the management box carries no wallet — its units get these from
-# /var/lib/mgmt/env (scripts/mgmt-provision-secrets.sh). Otherwise the wallet is the source.
+# /var/lib/mgmt/env (mgmt/scripts/mgmt-provision-secrets.sh). Otherwise the wallet is the source.
 if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
   :
 elif [ -f "$_kp_db" ]; then

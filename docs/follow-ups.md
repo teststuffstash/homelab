@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-295** (2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-299** (2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -137,6 +137,25 @@ six OVERSIZE items pointer-ized into
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router** — boot-from-git for the
+      router fails today; prod hides both because its state predates the code (found by the FU-297
+      test VM, 2026-09-29). (1) upstream `oxlorg.opnsense` `acme_account` `register()` POSTs
+      `acmeclient/accounts/register` without the uuid → 404 (identical in 25.7.8 and 26.1.11; the
+      controller wants `register/<uuid>`) — the harness pre-registers as a workaround (#2105). (2)
+      enabling BGP writes `bgpd` into `/etc/rc.conf.d/frr` but the reload never restarts `watchfrr`,
+      so `bgpd` never runs until a stop/start. **Next:** (2) a role-side fix (restart FRR when bgpd is
+      absent) validated on the test VM; (1) an upstream issue at O-X-L (operator's call) + a pin bump.
+- [ ] **FU-297** — **OPNsense test VM on nx-02: validate router-config PRs against a real API.**
+      `--check` proves plumbing, not apply; #2033 (oxlorg.opnsense 25.7.8→26.1.11, the `reload`
+      default flip) was approved on a stub-`httpx` proof only. Build: a from-git VM (one WAN on
+      `vmbr0` with its own inventory IP = the management path, one LAN on an isolated bridge —
+      so its DHCP/VIPs/HAProxy serve nothing), baseline snapshot, rollback per run; the
+      validation = master plays converge → PR plays changed=0 → a mutation reaches the RUNNING
+      service → fresh converge + idempotent rerun. **Live 2026-09-29:** VM 9110 @ .67 (#2103/#2104),
+      harness `scripts/opnsense-test-vm.sh` (#2102) — [`opnsense-test-vm.md`](opnsense-test-vm.md).
+      **Next:** first validation posted on #2033. Later: the box runs it pre-merge (the
+      tofu-sentinel shape); firmware trials. Relates FU-097, FU-013.
 
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
@@ -311,13 +330,19 @@ six OVERSIZE items pointer-ized into
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
       3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
       creds MOVED to the R12 box 2026-09-13** (the jail applies main through `devbox run mgmt-tf`).
-      **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
+      **Next:** box-scoped credentials — the `mgmt/scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
       plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
       stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
-      doesn't DR). `tofu/homeassistant.tf`.
+      doesn't DR). `tofu/homeassistant.tf`. **Router leg (operator, 2026-09-29):** prod OPNsense has NO
+      off-box `config.xml` copy (only `/conf/backup`). Shape: an in-cluster CronJob (read-only belt —
+      the cone rule allows it; NOT the mgmt box) pulls `api/core/backup/download/this` → age →
+      private Garage bucket, and flags `backups/this` revisions by non-automation users (click
+      detector). Puller = an ansible-made user with `page-diagnostics-configurationhistory` +
+      `user-config-readonly` (the latter blocks `revertBackup`); playbooks move off root's key to their
+      own user. **Next:** role + CronJob validated on the FU-297 test VM, then the prod mint in a window.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
       completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
       rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
@@ -426,26 +451,25 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
-- [ ] **FU-293** — **`scripts/` is one flat directory of 103 files and path-based ownership cannot
-      cut it.** Box-executed `mgmt-*.sh` (16), CI-invoked lint gates, seat wrappers, one-shot audits
-      and cluster-side helpers all sit under the single `/scripts/ @RasmusSoot` row; carve-outs
-      already started (mermaid-lint's npm manifest + lockfile, 2026-09-27) and every Renovate /
-      deploy lane that touches a script will need another. Parked as structural debt in
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (operator, 2026-08-12); the operator re-raised it
-      2026-09-28 ("it will become a problem for codeowner rules anyway"). **Next:** an inventory by
-      EXECUTOR (box / CI / seat / cluster pod) — that is the tier, per iac-lane's table — then move by
-      density into `scripts/<executor>/` with `devbox.json`, `ci.yaml` and the docs following; the
-      CODEOWNERS rows then name subdirs, not files. Design-shaped: a corpus sitting, not a worker.
-- [ ] **FU-294** — **The npm Renovate lane produces work no ride can do.** Rule [7] (2026-09-27)
-      routes `scripts/mermaid-lint` bumps through Renovate, but a lens finding that needs the
-      lockfile regenerated (homelab#2032: mermaid 12 pulls a `lodash-es` with CVE-2026-4800 — the
-      fix is a two-line `overrides` + `npm install`) cannot be dispatched: homelab's fixer claim is
-      `egress.profile: none` and the baseline mirror set has docker/ghcr/mcr/pypi but **no npm
-      mirror** (`docs/agents/agentstack.md` §ecosystem profile) — so the coordinator parked it on a
-      human (TOOL_GAP on the PR). Sibling of circles-iac#108 (claim egress `none → python`). Shape
-      ruled 2026-09-28 (operator): a BASELINE npm mirror (`npm-cache`, VIP `.40.35`, every ride's
-      `NPM_CONFIG_REGISTRY`). **Status:** mirror PR #2060 in flight. **Next:** drill = re-dispatch
-      #2032 once the mirror is LIVE; after it passes, drop `MERMAID_LINT_NO_INSTALL` (homelab#1247).
+- [ ] **FU-293** — **`scripts/` is one flat directory and path-based ownership cannot cut it.**
+      Inventory by executor 2026-09-28 (~26 CI gates, 16 box, 1 cluster pod, ~45 seat-only; 143/146
+      commits in a month seat-authored). First cuts the same day: the box's closure → `mgmt/`
+      (PR#2088) and the rest of `scripts/` un-owned + worker-authorable under the
+      [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
+      re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
+      until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
+- [ ] **FU-295** — **The box's management-sentinel never reports on a homelab `goal/**` PR**, but the
+      `required-checks` ruleset (`refs/heads/goal/**` + default) requires it — an APPROVED goal-based
+      PR sits BLOCKED forever (the ADR-142 control drill #2093, 2026-09-28, 20+ min). Cause:
+      `mgmt/scripts/mgmt-sentinel.sh:89,94` judges master-bound PRs only. Why deferred: a box
+      change (mgmt/ is operator-owned, window + ssh). **Next:** for a non-master base, post the
+      no-box-surface SUCCESS in seconds (the FU-237 (b) shape) — or plan against the goal base.
+- [ ] **FU-296** — **governance-lint's worker match has no self-test**, and under the ADR-142
+      trial it is worker-authorable: drill D3 (#2092, 2026-09-28) anchored `WORKER_PATTERN` so it
+      missed the REST `homelab-agents-1234[bot]` login — every worker PR would pass — and the
+      gate-drift report read `same` on both legs (nothing pins it); only the lens's own read caught
+      it. **Next:** `scripts/governance-lint-test.sh` (REST `[bot]`, GraphQL `app/`, a sibling App,
+      renovate, a seat login) + devbox task + diff-ci MAP row + the ci.yaml step — then leg B pins it.
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
@@ -719,7 +743,12 @@ the block needs pruning, not more headings.
       week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
       **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)
       for ≥10 GB-scratch jobs — its template is a COPY of the general one, diff on every change.
-      Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
+      **2026-09-28 — the envelope is wrong, not the slot count:** a 1536Mi-request runner thrashed
+      wk-03 (8 GiB) past its kubelet — hard reset, [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md);
+      the same container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01).
+      **Next:** either the request states the heavy jobs' envelope (→ only nx-01/16 GiB nodes fit)
+      or the 8 GiB nodes leave the pool — operator call; the job→runner-size split (#1582's shape)
+      is the alternative. Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
       content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
       base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
@@ -1335,7 +1364,9 @@ the block needs pruning, not more headings.
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
       container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
-      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). **2026-09-28
+      evidence:** a page-cache thrash on wk-03 (v1.14.1, FU-112 reservations in place) produced NO kill
+      at all — kubelet starved, OOMController silent — [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
       (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past
