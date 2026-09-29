@@ -13,6 +13,12 @@
 # kind: * | value | prod-only | drill-only.  path: slash-separated tags, a list item as
 # `tag[key]` (key = name/description/address/..., '/' in a key → %2F). Glob: `*` = within one
 # path segment, `**` = across segments, everything else literal. First match wins.
+# Conditions (env/accepted only): `<line> | side:node=literal ...` — the line matches only while
+# EVERY condition holds. side: prod | drill. node: `.` = the row's own node, a path relative to
+# it (`value` = its child, `..` = its parent), or `/an/absolute/path`; a missing node reads as
+# empty. literal: exact text, no spaces, may be empty (`prod:value=`). Use them to accept residue
+# in its DEAD state only (disabled, empty, feature off), so the same path counts again once it
+# comes alive. Never put a secret field's value in a literal — this file is public.
 # Keep it SMALL and SPECIFIC: a broad line hides the click-ops this exists to count. A line that
 # matched nothing on a run is listed at the bottom of the drill report — delete it.
 
@@ -53,6 +59,9 @@ env    drill-only  OPNsense/quagga/bgp/neighbors/neighbor[192.168.1.2]
 env    value       OPNsense/quagga/bgp/routerid
 # ── (b) env: ddclient's Cloudflare token is a dummy on the drill (the harness's step `all`) ─────
 env    value       OPNsense/DynDNS/accounts/account[*]/password
+# ── (b) env: monit's seed scales the LoadAvg tests to the box's core count (2×/1.5×/1× cores:
+#    prod 4 cores → 8/6/4, the 2-vCPU drill → 4/3/2) ────────────────────────────────────────────
+env    value       OPNsense/monit/test[LoadAvg*]/condition
 # ── (b) env: WireGuard's keypair is generated ON each router (the role, by design) ─────────────
 env    value       OPNsense/wireguard/server/servers/server[*]/pubkey
 env    value       OPNsense/wireguard/server/servers/server[*]/privkey
@@ -89,3 +98,38 @@ accepted  prod-only   widgets/**
 # ── (c) accepted: fields a fresh 26.1 install writes that a years-old config never got ────────
 accepted  drill-only  system/firmware/aux
 accepted  drill-only  hasync/pfsyncdefer
+# ── (c) accepted: DEAD RESIDUE on prod, each only in its dead state (operator 2026-09-29: accept
+#    narrowly, never delete prod config to lower the score) ──────────────────────────────────────
+# Legacy seed tunables: a years-old config carries the old default list with EMPTY values (= "use
+# the kernel default"; core/tunables/search_item agrees); a fresh install never writes them. A
+# tunable with a VALUE on prod still counts.
+accepted  prod-only   sysctl/item[*] | prod:value=
+# An unset MVC boolean reads "" on the old config, "0" on a fresh one — both are false. A real
+# difference ("1" against "0") still counts.
+accepted  value       OPNsense/unboundplus/*/* | prod:.= drill:.=0
+accepted  value       system/firmware/reboot | prod:.= drill:.=0
+# Fields an older model wrote at their default, a fresh 26.1 omits.
+accepted  prod-only   system/language | prod:.=en_US
+accepted  prod-only   OPNsense/Kea/ddns/general/manual_config | prod:.=0
+# ISC DHCP: prod serves DHCP from dnsmasq (ADR-023, opnsense/dnsmasq-dhcp.py); the ISC block is
+# the migrated-from config, inert while its enable flag is empty. os-tftp: installed, disabled.
+accepted  prod-only   dhcpd/lan/** | prod:/dhcpd/lan/enable=
+accepted  prod-only   OPNsense/tftp/general/* | prod:/OPNsense/tftp/general/enabled=0
+# ...and the two plugins that carry them — exactly this list; any other plugin difference counts.
+accepted  value       system/firmware/plugins | prod:.=os-acme-client,os-ddclient,os-frr,os-haproxy,os-isc-dhcp,os-tftp drill:.=os-acme-client,os-ddclient,os-frr,os-haproxy
+# IPv6 factory defaults (LAN track6, the IPv6 allow rule, DHCPv6) — inert while prod disallows
+# IPv6 (Interfaces > Settings, `disableipv6` = 1).
+accepted  prod-only   interfaces/lan/ipaddrv6 | prod:.=track6 prod:/OPNsense/Interfaces/settings/disableipv6=1
+accepted  prod-only   interfaces/lan/track6-prefix-id | prod:/OPNsense/Interfaces/settings/disableipv6=1
+accepted  prod-only   filter/rule[Default allow LAN IPv6 to any rule] | prod:ipprotocol=inet6 prod:/OPNsense/Interfaces/settings/disableipv6=1
+accepted  prod-only   dhcpdv6/lan/enable | prod:/OPNsense/Interfaces/settings/disableipv6=1
+# DISABLED port-forwards (and their linked filter rules) from a 2025 GUI session — inert.
+accepted  prod-only   nat/rule[*] | prod:disabled=1
+accepted  prod-only   filter/rule[*] | prod:disabled=1
+# The legacy bsnmpd community of a pre-plugin config; no SNMP daemon is installed (os-net-snmp absent).
+accepted  prod-only   snmpd/rocommunity
+# ACME actions saved through the GUI got the form's defaults for fields of OTHER action types
+# (SFTP/SSH/TrueNAS upload); a configd_* action never reads them. The code-built side leaves them unset.
+accepted  value       OPNsense/AcmeClient/actions/action[*]/sftp_port | drill:.=
+accepted  value       OPNsense/AcmeClient/actions/action[*]/remote_ssh_port | drill:.=
+accepted  value       OPNsense/AcmeClient/actions/action[*]/acme_truenas_hostname | drill:.=
