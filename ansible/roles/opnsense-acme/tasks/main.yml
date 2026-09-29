@@ -42,6 +42,28 @@
         restart_timeout: 600
         haproxy_integration: false
 
+    # The client's master switch. acme_general cannot drive it: `enabled` is outside the module's
+    # change-detection set (FIELDS_CHANGE) and GeneralModule never flips it on its own, so a fresh
+    # router kept enabled=0 while prod reads 1 (the FU-297 rebuild drill's realism score). Read,
+    # POST only on drift, then apply — a steady-state run changes nothing. raw takes no `reload`.
+    - name: Read ACME client settings
+      oxlorg.opnsense.raw: { module: acmeclient, controller: settings, command: get }
+      register: acme_settings
+
+    - name: Enable the ACME client
+      oxlorg.opnsense.raw:
+        module: acmeclient
+        controller: settings
+        command: set
+        action: post
+        data: { acmeclient: { settings: { enabled: "1" } } }
+      when: (acme_settings.response.acmeclient.settings.enabled | default('') | string) != '1'
+      register: acme_enable
+
+    - name: Apply the ACME client settings
+      oxlorg.opnsense.raw: { module: acmeclient, controller: service, command: reconfigure, action: post }
+      when: acme_enable is changed
+
     # NOTE: `email` is CREATE-ONLY here — the acme_account module's change-detection set is
     # ['description','custom_ca','eab_kid','eab_hmac'], so it will NOT update the email of an
     # *existing* account. A fresh build registers with acme_account_email (boot-from-git);
