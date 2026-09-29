@@ -1,0 +1,29 @@
+# OPNsense config.xml backup + click detector (FU-013, router leg) — a daily read-only CronJob:
+# router download → age → private Garage bucket, and a flag on config revisions made outside the
+# automation identities. Raw manifests in argocd/resources/opnsense-config-backup/; operating
+# recipe + DR restore in docs/runbook.md §OPNsense config backup.
+# Wave 4: needs Crossplane + provider-terraform (the bucket Workspace), ESO (the puller key) and
+# the monitoring CRDs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opnsense-config-backup
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/opnsense-config-backup
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opnsense-config-backup
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

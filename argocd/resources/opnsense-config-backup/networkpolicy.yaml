@@ -1,0 +1,36 @@
+# The backup pod holds a router credential and a Garage writer key, so it gets exactly the five
+# destinations it needs and nothing else — enforced (default deny both ways; nothing dials it).
+# Garage/pushgateway/pypi-cache are matched on their pods (Cilium judges the post-DNAT backend,
+# not the ClusterIP); the router is a /32 outside the cluster.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: opnsense-config-backup
+  namespace: opnsense-config-backup
+spec:
+  endpointSelector:
+    matchLabels: { app: opnsense-config-backup }
+  enableDefaultDeny: { ingress: true, egress: true }
+  egress:
+    - toEndpoints:
+        - matchLabels: { k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns }
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+    # the router's API (LAN address; the name is only used for TLS verification)
+    - toCIDR: ["192.168.2.1/32"]
+      toPorts:
+        - ports: [{ port: "443", protocol: TCP }]
+    - toEndpoints:
+        - matchLabels: { k8s:io.kubernetes.pod.namespace: garage, app.kubernetes.io/name: garage }
+      toPorts:
+        - ports: [{ port: "3900", protocol: TCP }]
+    - toEndpoints:
+        - matchLabels: { k8s:io.kubernetes.pod.namespace: monitoring, app: prometheus-pushgateway }
+      toPorts:
+        - ports: [{ port: "9091", protocol: TCP }]
+    - toEndpoints:
+        - matchLabels: { k8s:io.kubernetes.pod.namespace: pypi-cache, app: pypi-cache }
+      toPorts:
+        - ports: [{ port: "8080", protocol: TCP }]

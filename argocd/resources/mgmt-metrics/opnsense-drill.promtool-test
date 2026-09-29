@@ -1,0 +1,89 @@
+# Behaviour fixture for the OPNsense rebuild drill's belts (FU-297).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/opnsense-drill.promtool-test
+#
+# promtool's clock starts at 0; time() is the test clock. Series values are what
+# scripts/opnsense-drill.sh writes (success 1/0, last-run epoch, the score + the previous run's).
+rule_files:
+  - opnsense-drill.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # A passing weekly run, score unchanged: nothing fires, for over a week.
+  - interval: 5m
+    name: "a passing run with an unchanged score trips nothing for 8 days"
+    input_series:
+      - series: 'mgmt_opnsense_drill_success{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x2400"
+      - series: 'mgmt_opnsense_drill_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x2400"
+      - series: 'mgmt_opnsense_drill_realism_score{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "40x2400"
+      - series: 'mgmt_opnsense_drill_realism_score_previous{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "40x2400"
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x2400"
+    alert_rule_test:
+      - { eval_time: 8d, alertname: MgmtOpnsenseDrillFailed, exp_alerts: [] }
+      - { eval_time: 8d, alertname: MgmtOpnsenseDrillStale, exp_alerts: [] }
+      - { eval_time: 8d, alertname: MgmtOpnsenseDrillMetricsAbsent, exp_alerts: [] }
+      - { eval_time: 8d, alertname: MgmtOpnsenseDrillScoreRegressed, exp_alerts: [] }
+
+  # A failed run: fires after its 5m, and a score that went DOWN (better) is not a regression.
+  - interval: 1m
+    name: "a failed run fires Failed after 5m; a falling score does not fire Regressed"
+    input_series:
+      - series: 'mgmt_opnsense_drill_success{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x20"
+      - series: 'mgmt_opnsense_drill_realism_score{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "35x20"
+      - series: 'mgmt_opnsense_drill_realism_score_previous{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "40x20"
+    alert_rule_test:
+      - { eval_time: 4m, alertname: MgmtOpnsenseDrillFailed, exp_alerts: [] }
+      - eval_time: 6m
+        alertname: MgmtOpnsenseDrillFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - { eval_time: 10m, alertname: MgmtOpnsenseDrillScoreRegressed, exp_alerts: [] }
+
+  # The score rose run over run (40 → 43): Regressed, with the new score as its value.
+  - interval: 1m
+    name: "a score above the previous run's fires Regressed"
+    input_series:
+      - series: 'mgmt_opnsense_drill_realism_score{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "43x20"
+      - series: 'mgmt_opnsense_drill_realism_score_previous{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "40x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtOpnsenseDrillScoreRegressed
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # The last run is frozen at t=0: 9 days + the 1h for: → Stale; before that, silent.
+  - interval: 5m   # ≤ the 5m lookback: sparser samples go stale between points and reset `for:`
+    name: "a last-run timestamp older than 9 days fires Stale after its 1h"
+    input_series:
+      - series: 'mgmt_opnsense_drill_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x3000"
+    alert_rule_test:
+      - { eval_time: 9d, alertname: MgmtOpnsenseDrillStale, exp_alerts: [] }
+      - eval_time: 9d2h
+        alertname: MgmtOpnsenseDrillStale
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # The box answers but never wrote the drill's file: Absent after 9 days, not before.
+  - interval: 5m
+    name: "a scraped box with no drill metrics fires MetricsAbsent after 9 days"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x3000"
+    alert_rule_test:
+      - { eval_time: 8d, alertname: MgmtOpnsenseDrillMetricsAbsent, exp_alerts: [] }
+      - eval_time: 9d1h
+        alertname: MgmtOpnsenseDrillMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
