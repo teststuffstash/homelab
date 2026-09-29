@@ -5,6 +5,7 @@
 # mechanism, and the recipes: docs/opnsense-test-vm.md.
 #
 #   bash scripts/opnsense-test-vm-bootstrap.sh bootstrap   # never-booted disk → snapshot `baseline`
+#   bash scripts/opnsense-test-vm-bootstrap.sh finish      # resume after the import (VM up, no snapshot)
 #   bash scripts/opnsense-test-vm-bootstrap.sh status      # power, snapshots, version, plugins
 #   bash scripts/opnsense-test-vm-bootstrap.sh render F    # the seed config.xml to F (debug; mode 600)
 #
@@ -177,23 +178,41 @@ cmd_bootstrap() {
   wait_api 600
   log "API up on $WAN_IP with the wallet key; $(api GET core/firmware/info | jq -r .product.product_version)"
 
+  cmd_finish
+}
+
+# The half after the first boot — also the RESUME verb: a bootstrap that died after the import
+# (VM up, API answering with the wallet key, no snapshot yet) continues here; every step checks
+# the outcome, not the job status, so a re-run redoes only what is missing.
+cmd_finish() {
+  [ "$(vm_status)" = running ] || die "VM $VMID is not running"
+  nx "qm listsnapshot $VMID" | grep -qw -- "$SNAP" && die "snapshot $SNAP exists — nothing to finish"
+  wait_api 300
   firmware_update
+  local p
   for p in $PLUGINS; do
+    if installed_plugin "$p"; then log "$p already installed"; continue; fi
     log "install $p"
     api POST "core/firmware/install/$p" >/dev/null
-    wait_firmware_job
+    wait_firmware_job || true
+    installed_plugin "$p" || die "$p not installed after the firmware job"
   done
 
   log "clean shutdown → drop the seed CD → snapshot $SNAP"
   nx "qm shutdown $VMID --timeout 180"
-  nx "qm set $VMID --delete ide2 && rm -f /var/lib/vz/template/iso/$SEED_ISO"
+  nx "qm config $VMID | grep -q '^ide2:' && qm set $VMID --delete ide2 >/dev/null; rm -f /var/lib/vz/template/iso/$SEED_ISO"
   nx "qm snapshot $VMID $SNAP --description 'FU-297 baseline: $SERIES + $PLUGINS, API+SSH, before any homelab playbook'"
   nx "qm start $VMID"
   wait_api 600
   cmd_status
 }
 
-wait_firmware_job() {  # poll upgradestatus until done; a reboot request is followed
+installed_plugin() { api GET core/firmware/info | jq -e --arg p "$1" '.plugin[] | select(.name==$p and .installed=="1")' >/dev/null; }
+
+# Poll upgradestatus until the job ends; a reboot request is followed. Returns 1 on a reported
+# `error` — which the 2026-09-29 build saw for an update that had in fact landed (26.1.11_10 on
+# disk), so callers judge by the OUTCOME (version / installed plugin), never by this status.
+wait_firmware_job() {
   local st deadline=$(( $(date +%s) + 1800 ))
   sleep 5
   while :; do
@@ -202,7 +221,8 @@ wait_firmware_job() {  # poll upgradestatus until done; a reboot request is foll
       done) return 0 ;;
       reboot) log "firmware job asks for a reboot"; api POST core/firmware/reboot >/dev/null || true
               sleep 60; wait_api 900; return 0 ;;
-      error) die "firmware job failed: $(api GET core/firmware/upgradestatus | jq -r .log | tail -5)" ;;
+      error) log "firmware job reports error (judged by outcome): $(api GET core/firmware/upgradestatus 2>/dev/null | jq -r .log 2>/dev/null | tail -3)"
+             return 1 ;;
       down) sleep 20; wait_api 900 ;;  # the job may reboot on its own
     esac
     [ "$(date +%s)" -lt "$deadline" ] || die "firmware job did not finish"
@@ -217,7 +237,7 @@ firmware_update() {  # minor updates within the series until the version reads $
     case "$v" in "$SERIES"|"$SERIES"_*) log "at $v"; return 0 ;; esac
     log "update pass $i from $v"
     api POST core/firmware/update >/dev/null
-    wait_firmware_job
+    wait_firmware_job || { sleep 30; wait_api 900; }
   done
   v="$(api GET core/firmware/info | jq -r .product.product_version)"
   case "$v" in "$SERIES"|"$SERIES"_*) return 0 ;; esac
@@ -236,7 +256,8 @@ cmd_status() {
 
 case "${1:-}" in
   bootstrap) cmd_bootstrap ;;
+  finish)    cmd_finish ;;
   status)    cmd_status ;;
   render)    [ -n "${2:-}" ] || die "usage: render <out-file>"; ensure_secrets; render "$2" ;;
-  *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac
