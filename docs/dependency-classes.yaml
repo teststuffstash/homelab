@@ -188,9 +188,9 @@ classes:
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["scripts/mermaid-lint/"]
     proposer: {status: ok, text: "Renovate `deno` (ADR-143, 2026-09-29 — the npm lane's #2012 jsdom 30.1.0 merged 2026-09-27 is the prior proof; jsdom left with the switch)"}
-    merge_gate: {status: gap, text: "patch/minor → `automerge`; majors → the un-armed catch-all. `lock-intake-lint` (OSV-flagged / <7 d / install-script intake, transitive included — ADR-143) is BUILT but not yet a `ci` step: the operator-direct ci.yaml wiring is FU-294's next action, and flips this cell"}
+    merge_gate: {status: ok, text: "patch/minor → `automerge`; majors → the un-armed catch-all; `lock-intake-lint` in `ci` fails any intake that is OSV-flagged, <7 d old or install-script-bearing (transitive included — ADR-143)"}
     deploy_edge: {status: ok, text: "self-deploying — `ci` fetches the lock's integrity-pinned tarballs + parses on every PR"}
-    detector: {status: ok, text: "required `ci` (`mermaid-lint`) — a broken parser reds the PR before merge"}
+    detector: {status: ok, text: "required `ci` (`mermaid-lint` + `lock-intake-lint`) — a broken parser or a bad intake reds the PR before merge"}
     revert: {status: ok, text: "`git revert` — no runtime consumer"}
     canary: {status: ok, text: "the PR's own `ci` run exercises the exact dependency that ships"}
 

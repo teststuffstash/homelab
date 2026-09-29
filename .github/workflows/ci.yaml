@@ -395,6 +395,10 @@ jobs:
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
         run: devbox run pin-only-lint-test
 
+      # ADR-143: the lockfile-intake gate's offline self-test (extractors, key parsing, fail-closed).
+      - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
+        run: devbox run lock-intake-lint-test
+
       # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
       # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local
       # pre-flight, so a new step here rotted the map on master unseen (the unexecuted-gate class).
@@ -452,6 +456,19 @@ jobs:
           # homelab#1036 — the assembly-lane arm reads these (goal/** head + Assembly-for: trailer)
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+
+      # ADR-143: what this PR's lockfile changes BRING IN (transitive included) must have no OSV
+      # record (incl. MAL-), be ≥7 days published, and carry no install-time code. Static — reads
+      # lockfiles + registry metadata, executes nothing; fails closed (exit 2) when it cannot judge.
+      # Same base rule as pin-only-lint above (#2064: the merge ref's own first parent).
+      - name: Lockfile intake — no vulnerable, too-new or install-script versions (devbox run lock-intake-lint)
+        if: github.event_name == 'pull_request'
+        run: |
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"   # #2064 + the shallow-boundary read, as above
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run lock-intake-lint "$BASE"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
       # ADR-142 trial (2026-09-28): the gate-drift REPORT — master's side of every scripts/ edit,
       # replayed on this PR: (A) master's gate × this content, (B) master's tests × these scripts.
@@ -536,10 +553,10 @@ jobs:
       - name: Docs graph lint (devbox run docs-graph-lint)
         run: devbox run docs-graph-lint
 
-      # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (jsdom,
+      # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (linkedom,
       # no browser) — a diagram GitHub refuses to render fails HERE, not on a reader
       # (docs/README.md §Conventions; the docs/agents/README.md worked-example was unrenderable
-      # for weeks). ~3s npm ci + ~1.5s parse; deps pinned in scripts/mermaid-lint/package-lock.json.
+      # for weeks). Deno with NO permissions, deps in scripts/mermaid-lint/deno.lock (ADR-143).
       - name: Mermaid parse lint (devbox run mermaid-lint)
         run: devbox run mermaid-lint
 
