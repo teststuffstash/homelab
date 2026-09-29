@@ -138,15 +138,13 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
-- [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router** — boot-from-git for the
-      router fails today; prod hides both because its state predates the code (found by the FU-297
-      test VM, 2026-09-29). (1) upstream `oxlorg.opnsense` `acme_account` `register()` POSTs
-      `acmeclient/accounts/register` without the uuid → 404 (identical in 25.7.8 and 26.1.11; the
-      controller wants `register/<uuid>`) — the harness pre-registers as a workaround (#2105). (2)
-      enabling BGP writes `bgpd` into `/etc/rc.conf.d/frr` but the reload never restarts `watchfrr`,
-      so `bgpd` never runs until a stop/start — detected by the drill's bgp probes (MgmtOpnsenseDrillFailed
-      fires until fixed). **Next:** (2) a role-side fix (restart FRR when bgpd is
-      absent) validated on the test VM; (1) an upstream issue at O-X-L (operator's call) + a pin bump.
+- [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
+      Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
+      without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
+      `register/<uuid>`); prod hides it (account already registered); the test-VM harness
+      pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
+      enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
+      (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill: POINTER.** Router-config PRs validated
       against a real API on VM 9110 (`scripts/opnsense-test-vm.sh`; #2033 PASS 2026-09-29); a weekly
       from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`, VM 9199 + probe LXC on
