@@ -32,9 +32,9 @@ variable "opnsense_test_lan_bridge" {
 }
 
 variable "opnsense_test_nano_version" {
-  description = "The upstream nano image the disk is BORN from (a birth seed, like the Talos images — ignored after create). The bootstrap updates the guest to the prod series' current patch; 26.1.6 is the newest 26.1 nano published."
+  description = "The upstream nano image the disk is BORN from (a birth seed, like the Talos images — ignored after create). The bootstrap updates the guest to the prod series' current patch (its SERIES); upstream publishes one nano per major (26.7) plus the odd point release."
   type        = string
-  default     = "26.1.6"
+  default     = "26.7"
 }
 
 # The isolated segment. A new host bridge is a host network change: Proxmox rewrites

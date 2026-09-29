@@ -19,12 +19,13 @@ A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/o
 | WAN = `vtnet1` = net1 | `vmbr0`, **`192.168.2.67/24`**, gateway `192.168.2.1` — the management path (API `:443` + SSH `:22` from `192.168.2.0/24` only) and the egress for firmware/plugins. "Block private networks" is off (WAN *is* private here) |
 | LAN = `vtnet0` = net0 | **`vmbr1`**, a bridge with **no port and no host address** — `192.168.1.1/24` ([`ip-plan.md`](ip-plan.md) carve). DHCP, HAProxy VIPs and Unbound on this side serve nobody |
 | BGP | a floating rule blocks **outbound TCP 179 on WAN**, so the box's FRR can never peer with the real Cilium nodes, whatever a playbook configures |
-| Version | 26.1.11 + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) |
+| Version | 26.7.4 + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — prod's series since 2026-09-29 |
 | Baseline | snapshot **`baseline`** (the harness's default `OPN_TEST_SNAPSHOT`) — after firmware + plugins + API/SSH, before any homelab playbook |
 | Secrets | wallet only: `opnsense-test-root-password`, `opnsense-test-api-key`, `opnsense-test-api-secret`. Root SSH = key login with the pve seed key (`~/.claude/homelab-pve-ssh/id_ed25519`); no password auth |
 
-Version caveat: the 26.1 package mirror serves only the series head (`opnsense-26.1.11_10` on
-2026-09-29) while prod reads `26.1.11_6` — same release, newer core hotfix revision. Prod's other
+Version caveat: a series' package mirror serves only its head, so a box built later can sit on a
+newer core hotfix than prod (26.1: `26.1.11_10` built vs prod's `26.1.11_6`). On 2026-09-29 both
+read `26.7.4_1`. Prod's other
 plugins (`os-ddclient`, `os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
 
 ## Why this bootstrap mechanism
@@ -75,7 +76,7 @@ ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.59 qm rollback 9110 b
    [maintenance window](../.claude/skills/maintenance-window/SKILL.md) — the bridge is a host
    network change on the hypervisor that carries `cp-02`.
 2. `bash scripts/opnsense-test-vm-bootstrap.sh bootstrap` — wallet entries (created if missing) →
-   seed ISO → first boot through the importer → firmware update to 26.1.11 → plugins → clean
+   seed ISO → first boot through the importer → firmware update to `SERIES` (26.7.4) → plugins → clean
    shutdown → seed CD removed → snapshot `baseline` → started.
 
 **Recovery — a bootstrap that died after the import** (VM up, API answering with the wallet key,
@@ -112,9 +113,10 @@ new entries in `GET core/backup/backups/this` (all written by `(root)`, none by 
   poller must strip `\x00-\x1f` before parsing, and judge by the outcome (`firmware/info`), as the bootstrap does.
 - After the minor: **26.7.4_1**, FreeBSD 15.1-RELEASE-p3, `os-frr` 1.55 (frr10 10.7.1), `os-haproxy` 5.1
   (haproxy32 3.2.23), `os-acme-client` 4.17; a following check reports no updates.
-- The resulting disk is snapshot **`trial-26-7-4`** (child of `baseline`): `OPN_TEST_SNAPSHOT=trial-26-7-4`
-  runs the harness against 26.7. `baseline` stays 26.1 — prod's series — until prod moves
-  (§Recipes, *Moving the baseline*).
+- The resulting disk was snapshot `trial-26-7-4`. Prod took the same path the same evening (26.7.4_1), so it
+  became **`baseline`** (the 26.1 one deleted, 2026-09-29 night — §Recipes, *Moving the baseline*). The drill
+  is born from the **26.7 nano** instead (`var.opnsense_test_nano_version`, the bootstrap's `NANO_VERSION`):
+  26.7 → 26.7.4_1 is one minor update, no major pass — and the importer answered the same two prompts.
 - First harness run there (2026-09-29, `--pr 2033`): **PASS** on all five steps — master's `oxlorg.opnsense`
   25.7.8 and #2033's 26.1.11 both converge, reach the running daemons and rerun at `changed=0` on 26.7.4.
 
