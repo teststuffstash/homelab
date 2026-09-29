@@ -153,8 +153,11 @@ def main():
     rebuild("Range", "range", [RANGE])
     rebuild("Option", "option", OPTIONS)
     rebuild("Host", "host", HOSTS)
-    print("set general (enable, DNS off, bind LAN):",
-          call("settings/set", {"dnsmasq": {"enable": "1", "port": "0", "interface": INTERFACE}}).get("result"))
+    # enable_ra "0": no router advertisements from dnsmasq — prod's value (IPv6 is disallowed on
+    # the router); a fresh install's default is "1" (the FU-297 rebuild drill found the drift).
+    print("set general (enable, DNS off, bind LAN, no RA):",
+          call("settings/set", {"dnsmasq": {"enable": "1", "port": "0", "interface": INTERFACE,
+                                            "dhcp": {"enable_ra": "0"}}}).get("result"))
     print("apply:", call("service/reconfigure").get("status"))
     print("\nDone. Remember: disable ISC DHCPv4 in the OPNsense UI for reboot-safety.")
 
