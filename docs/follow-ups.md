@@ -144,8 +144,10 @@ six OVERSIZE items pointer-ized into
       `vmbr0` with its own inventory IP = the management path, one LAN on an isolated bridge —
       so its DHCP/VIPs/HAProxy serve nothing), baseline snapshot, rollback per run; the
       validation = master plays converge → PR plays changed=0 → a mutation reaches the RUNNING
-      service → fresh converge + idempotent rerun. **Next:** first validation posted on #2033.
-      Later: the box runs it pre-merge (the tofu-sentinel shape); firmware trials. Relates FU-097, FU-013.
+      service → fresh converge + idempotent rerun. **Live 2026-09-29:** VM 9110 @ .67 (#2103/#2104),
+      harness `scripts/opnsense-test-vm.sh` (#2102) — [`opnsense-test-vm.md`](opnsense-test-vm.md).
+      **Next:** first validation posted on #2033. Later: the box runs it pre-merge (the
+      tofu-sentinel shape); firmware trials. Relates FU-097, FU-013.
 
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
