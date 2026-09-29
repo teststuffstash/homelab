@@ -257,3 +257,26 @@ opnsense_api_users:
       - page-wireguard-config
       - page-filter-api
       - page-services-dyndns
+
+# --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
+# Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill
+# counted each as config not in code. Keys = the `get` response's field names; select fields take
+# the stored value (disablevlanhwfilter: 0 enable / 1 disable / 2 leave default).
+opnsense_interface_settings:
+  disablechecksumoffloading: "1"
+  disablesegmentationoffloading: "1"
+  disablelargereceiveoffloading: "1"
+  disablevlanhwfilter: "1"
+  disableipv6: "1"                 # "Allow IPv6" OFF — prod's LAN track6 / IPv6 rule are inert residue
+# Reporting > NetFlow: local capture for Insight (router-local by design — FU-205). opt1..opt3 are
+# the HP box's spare NICs (igb1-3); a build without them captures what it has.
+opnsense_netflow:
+  capture:
+    interfaces: [lan, opt1, opt2, opt3, wan]
+    egress_only: [wan]
+    version: v9
+    targets: "127.0.0.1:2056"
+  collect:
+    enable: "1"
+  activeTimeout: "1800"
+  inactiveTimeout: "15"
