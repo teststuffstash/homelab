@@ -10,86 +10,102 @@
 # NOTE: the unbound_host module saves the record but does NOT apply it — Unbound keeps
 # serving the old answer until reconfigured. The handler forces that apply (raw
 # mutating commands need action:post, else they default to get and silently no-op).
+#
+# ⚠ APPLY, DON'T JUST SAVE (oxlorg.opnsense 26.x): the collection flipped its global
+# `reload` module-argument default true -> false (plugins/module_utils/defaults/main.py,
+# RELOAD_MOD_ARG). The `unbound_host` call below is reload-capable and gets an explicit
+# `reload: true` from a ROLE-SCOPED block-level module_defaults, so a task added inside
+# the block cannot silently omit the apply. The `reconfigure unbound` handler stays: it
+# is what applies the `raw` settings/DNSBL writes further down this block, which have no
+# `reload` argument at all.
+#
+# The value carries the whole `opnsense_conn` dict, not just `{reload: true}`: a
+# block-level module_defaults entry REPLACES the play's entry for the same module
+# (verified on the pinned ansible-core), so it has to restate the connection args the
+# playbook sets.
+- name: Unbound overrides (every reload-capable call applies on change)
+  module_defaults:
+    oxlorg.opnsense.unbound_host: "{{ opnsense_conn | combine({'reload': true}) }}"
+  block:
+    - name: Unbound host override per entry
+      oxlorg.opnsense.unbound_host:
+        hostname: "{{ item.hostname }}"
+        domain: "{{ item.domain }}"
+        record_type: A
+        value: "{{ item.value }}"
+        description: "{{ item.description }}"
+        match_fields: [hostname, domain, record_type]
+      loop: "{{ unbound_hosts }}"
+      loop_control: { label: "{{ item.hostname }}.{{ item.domain }} -> {{ item.value }}" }
+      notify: reconfigure unbound
 
-- name: Unbound host override per entry
-  oxlorg.opnsense.unbound_host:
-    hostname: "{{ item.hostname }}"
-    domain: "{{ item.domain }}"
-    record_type: A
-    value: "{{ item.value }}"
-    description: "{{ item.description }}"
-    match_fields: [hostname, domain, record_type]
-  loop: "{{ unbound_hosts }}"
-  loop_control: { label: "{{ item.hostname }}.{{ item.domain }} -> {{ item.value }}" }
-  notify: reconfigure unbound
+    # --- Advanced settings (unbound_advanced) ------------------------------------------------
+    # No typed module covers Unbound's Advanced tab, so: read the live settings, POST the pinned
+    # dict only when some key differs (idempotent — a steady-state run changes nothing), then the
+    # same reconfigure handler applies. `unbound/settings/set` merges: unlisted fields keep their
+    # current value, so the dict only needs the keys we pin. An unset boolean reads back as "" —
+    # it compares unequal to "1" once and reads back "1" from then on.
+    - name: Read Unbound settings
+      oxlorg.opnsense.raw: { module: unbound, controller: settings, command: get }
+      register: unbound_settings
 
-# --- Advanced settings (unbound_advanced) ------------------------------------------------
-# No typed module covers Unbound's Advanced tab, so: read the live settings, POST the pinned
-# dict only when some key differs (idempotent — a steady-state run changes nothing), then the
-# same reconfigure handler applies. `unbound/settings/set` merges: unlisted fields keep their
-# current value, so the dict only needs the keys we pin. An unset boolean reads back as "" —
-# it compares unequal to "1" once and reads back "1" from then on.
-- name: Read Unbound settings
-  oxlorg.opnsense.raw: { module: unbound, controller: settings, command: get }
-  register: unbound_settings
+    - name: Compute Unbound advanced keys that differ from the pinned values
+      ansible.builtin.set_fact:
+        unbound_advanced_drift: >-
+          {{ unbound_advanced_drift | default([])
+             + ([item.key] if (unbound_settings.response.unbound.advanced[item.key] | default('') | string)
+                              != (item.value | string) else []) }}
+      loop: "{{ unbound_advanced | dict2items }}"
+      loop_control: { label: "{{ item.key }}={{ item.value }}" }
 
-- name: Compute Unbound advanced keys that differ from the pinned values
-  ansible.builtin.set_fact:
-    unbound_advanced_drift: >-
-      {{ unbound_advanced_drift | default([])
-         + ([item.key] if (unbound_settings.response.unbound.advanced[item.key] | default('') | string)
-                          != (item.value | string) else []) }}
-  loop: "{{ unbound_advanced | dict2items }}"
-  loop_control: { label: "{{ item.key }}={{ item.value }}" }
+    - name: "Unbound advanced settings (drifted keys: {{ unbound_advanced_drift | default([]) | join(', ') }})"
+      oxlorg.opnsense.raw:
+        module: unbound
+        controller: settings
+        command: set
+        action: post
+        data: { unbound: { advanced: "{{ unbound_advanced }}" } }
+      when: unbound_advanced_drift | default([]) | length > 0
+      notify: reconfigure unbound
 
-- name: "Unbound advanced settings (drifted keys: {{ unbound_advanced_drift | default([]) | join(', ') }})"
-  oxlorg.opnsense.raw:
-    module: unbound
-    controller: settings
-    command: set
-    action: post
-    data: { unbound: { advanced: "{{ unbound_advanced }}" } }
-  when: unbound_advanced_drift | default([]) | length > 0
-  notify: reconfigure unbound
+    # --- NXDOMAIN wildcard zones (unbound_nxdomain_wildcards) ---------------------------------
+    # One DNSBL policy (OPNsense ≥ 26.1: a policy's `wildcards` blocks the domain AND every name under
+    # it; `nxdomain: 1` answers NXDOMAIN instead of 0.0.0.0). Why it exists: a resolver walking its
+    # search list must get NXDOMAIN for a name that is not ours, so it falls through to the next
+    # candidate — see group_vars/opnsense.yml unbound_nxdomain_wildcards. Matched by description;
+    # set only on drift; then `service/dnsbl` regenerates the list and the handler reconfigures.
+    - name: Find the NXDOMAIN wildcard policy
+      oxlorg.opnsense.raw: { module: unbound, controller: settings, command: search_dnsbl }
+      register: unbound_dnsbl_search
 
-# --- NXDOMAIN wildcard zones (unbound_nxdomain_wildcards) ---------------------------------
-# One DNSBL policy (OPNsense ≥ 26.1: a policy's `wildcards` blocks the domain AND every name under
-# it; `nxdomain: 1` answers NXDOMAIN instead of 0.0.0.0). Why it exists: a resolver walking its
-# search list must get NXDOMAIN for a name that is not ours, so it falls through to the next
-# candidate — see group_vars/opnsense.yml unbound_nxdomain_wildcards. Matched by description;
-# set only on drift; then `service/dnsbl` regenerates the list and the handler reconfigures.
-- name: Find the NXDOMAIN wildcard policy
-  oxlorg.opnsense.raw: { module: unbound, controller: settings, command: search_dnsbl }
-  register: unbound_dnsbl_search
+    - name: Compute the NXDOMAIN wildcard policy's state
+      ansible.builtin.set_fact:
+        unbound_nx_row: >-
+          {{ (unbound_dnsbl_search.response.rows | default([])
+              | selectattr('description', 'equalto', unbound_nxdomain_description) | list + [{}]) | first }}
+        unbound_nx_want: "{{ unbound_nxdomain_wildcards | join(',') }}"
 
-- name: Compute the NXDOMAIN wildcard policy's state
-  ansible.builtin.set_fact:
-    unbound_nx_row: >-
-      {{ (unbound_dnsbl_search.response.rows | default([])
-          | selectattr('description', 'equalto', unbound_nxdomain_description) | list + [{}]) | first }}
-    unbound_nx_want: "{{ unbound_nxdomain_wildcards | join(',') }}"
+    - name: "NXDOMAIN wildcard policy ({{ unbound_nxdomain_wildcards | join(', ') }})"
+      oxlorg.opnsense.raw:
+        module: unbound
+        controller: settings
+        command: "{{ 'set_dnsbl' if unbound_nx_row.uuid is defined else 'add_dnsbl' }}"
+        params: "{{ [unbound_nx_row.uuid] if unbound_nx_row.uuid is defined else [] }}"
+        action: post
+        data:
+          blocklist:
+            enabled: "1"
+            wildcards: "{{ unbound_nx_want }}"
+            nxdomain: "1"
+            description: "{{ unbound_nxdomain_description }}"
+      when: >-
+        unbound_nxdomain_wildcards | length > 0 and
+        (unbound_nx_row.uuid is not defined
+         or (unbound_nx_row.wildcards | default('') | replace(' ', '')) != unbound_nx_want
+         or (unbound_nx_row.enabled | default('0') | string) != '1')
+      register: unbound_nx_set
+      notify: reconfigure unbound
 
-- name: "NXDOMAIN wildcard policy ({{ unbound_nxdomain_wildcards | join(', ') }})"
-  oxlorg.opnsense.raw:
-    module: unbound
-    controller: settings
-    command: "{{ 'set_dnsbl' if unbound_nx_row.uuid is defined else 'add_dnsbl' }}"
-    params: "{{ [unbound_nx_row.uuid] if unbound_nx_row.uuid is defined else [] }}"
-    action: post
-    data:
-      blocklist:
-        enabled: "1"
-        wildcards: "{{ unbound_nx_want }}"
-        nxdomain: "1"
-        description: "{{ unbound_nxdomain_description }}"
-  when: >-
-    unbound_nxdomain_wildcards | length > 0 and
-    (unbound_nx_row.uuid is not defined
-     or (unbound_nx_row.wildcards | default('') | replace(' ', '')) != unbound_nx_want
-     or (unbound_nx_row.enabled | default('0') | string) != '1')
-  register: unbound_nx_set
-  notify: reconfigure unbound
-
-- name: Regenerate the DNSBL data
-  oxlorg.opnsense.raw: { module: unbound, controller: service, command: dnsbl, action: post }
-  when: unbound_nx_set is changed
+    - name: Regenerate the DNSBL data
+      oxlorg.opnsense.raw: { module: unbound, controller: service, command: dnsbl, action: post }
+      when: unbound_nx_set is changed
