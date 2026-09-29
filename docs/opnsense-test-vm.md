@@ -104,5 +104,45 @@ the result is from prod** — weekly, destroyed after each run. It is a second V
 | LAN | **`vmbr2`**, a second port-less bridge ([`tofu/opnsense-test.tf`](../tofu/opnsense-test.tf)) — `192.168.1.1/24` like `9110`'s, so it gets its own segment: one bridge for both would put two `.1`s and two DHCP servers on one wire |
 | Probe container | a Debian 12 LXC on `vmbr2` (template downloaded by the same tofu file), created and destroyed per run: the fake BGP peer and the DHCP/DNS/TLS probes |
 
-The bridge and the template are the only persistent pieces; the drill's scripts land with it
-(FU-297).
+The bridge and the template are the only persistent pieces.
+
+**Run it:** `bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]` — from the jail (prod creds
+from the wallet) or the box (its env file). The script's header lists the stages (preflight →
+build → converge → compare → destroy) and the environment; each stage is timed in the report.
+
+- **build** reuses the test VM's bootstrap: its `create`/`destroy` verbs make the tofu-shaped VM
+  by `qm` (and refuse vmid `9110` and the name `opnsense-test`), then `bootstrap` as above — with a
+  throwaway root password + API pair minted in memory per run instead of wallet entries.
+- **converge** is the harness's step `all` (`--ref <rev> --steps "1 all"`): every
+  `ansible/opnsense-*.yml` play plus `opnsense/dnsmasq-dhcp.py` and `opnsense/tuya-egress.py`,
+  through the same guard, inventory and isolation overrides, plus
+  [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) (the BGP neighbour is the drill's
+  fake peer). `dnsmasq-dhcp.py` runs with `OPN_DHCP_REMAP=192.168.2.=192.168.1.` — prod's pool and
+  reservations, moved onto the drill's LAN prefix (refused against the router).
+- **preflight** reads nx-02's `nvme-thin` and free memory before anything writes and refuses above
+  70 % / below 4 GiB (read the pool before writing GBs to a VM node); a leftover `opnsense-drill` from a
+  crashed run is destroyed by name.
+
+### The realism score — prod's config.xml vs the from-git build
+
+After the converge, both `config.xml`s are downloaded (prod: `GET /api/core/backup/download/this`,
+the only call the drill makes to `192.168.2.1`) into a 0600 file, compared, and deleted.
+[`opnsense/drill/config-compare.py`](../opnsense/drill/config-compare.py) aligns the trees (list
+items by natural key — name/description/address — never by the per-box uuids; uuid references by
+the item they name) and sorts every difference into:
+
+| Bucket | Meaning | Where it is decided |
+|---|---|---|
+| **(a) clickops** | on prod and not in code, or in code and not on prod | everything the map does not name — **the score is the count of these rows** |
+| (b) env | the drill's own addresses, name, keys, WAN, seed; the LAN prefix remap | [`opnsense/drill/compare-map.txt`](../opnsense/drill/compare-map.txt) `env` / `remap` lines |
+| (c) accepted | certificates, generated ids, timestamps, revision history — and ACME issuance, which the drill deliberately does not do | the same file's `accepted` lines |
+
+The map is committed and small on purpose: a broad line hides exactly the click-ops the score
+exists to count, and a line that matched nothing is listed at the bottom of each report. The
+report shows sections, counts and paths with item keys redacted (`frontend[*]`) — never a value;
+prod's config holds private keys and hashes. `bash opnsense/drill/config-compare-test.sh` is the
+scorer's self-test (synthetic documents); the drill runs it before every score.
+
+**Reducing the score** is the point: each (a) row is either code to write (put the setting in a
+role), residue to delete on prod (a dead ISC-DHCP block), or — only if it really is environment or
+unreachable — a reviewed map line.

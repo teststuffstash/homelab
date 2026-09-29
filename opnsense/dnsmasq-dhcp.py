@@ -118,6 +118,20 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "tuya-gaas", "hwaddr": "38:a5:c9:39:14:e0", "ip": "192.168.2.243"},          # Temp-5 sensor
 ]
 
+# Test boxes only (the FU-297 rebuild drill, docs/opnsense-test-vm.md): OPN_DHCP_REMAP="<from>=<to>"
+# moves every address above from one /24 prefix to another, e.g. "192.168.2.=192.168.1." for a
+# drill VM whose isolated LAN is 1.0/24 — the same reservations and pool, on the LAN it has. Unset
+# (always, for the router) = the data above, byte for byte; refused outright against the router.
+REMAP = os.environ.get("OPN_DHCP_REMAP", "")
+if REMAP:
+    if HOST == "192.168.2.1":
+        sys.exit("OPN_DHCP_REMAP is for test boxes — refusing against the router")
+    _frm, _to = REMAP.split("=", 1)
+    for _obj in [RANGE] + OPTIONS + HOSTS:
+        for _k in ("start_addr", "end_addr", "value", "ip"):
+            if _obj.get(_k, "").startswith(_frm):
+                _obj[_k] = _to + _obj[_k][len(_frm):]
+
 
 def call(path, body=None):
     req = urllib.request.Request(f"{BASE}/{path}", data=json.dumps(body or {}).encode(),
