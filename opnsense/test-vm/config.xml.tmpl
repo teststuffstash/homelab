@@ -1,0 +1,197 @@
+<?xml version="1.0"?>
+<!--
+  opnsense-test's FIRST-BOOT config (FU-297) — rendered by scripts/opnsense-test-vm-bootstrap.sh from this
+  template + the wallet, burned onto a throwaway seed ISO, and imported by OPNsense's own config
+  importer. The @PLACEHOLDERS@ are filled at render time; nothing secret is in this file.
+  Base: core's src/etc/config.xml.sample (stable/26.1) + the nano image's console lines
+  (opnsense/tools config/*/extras.conf nano_hook) + the test-box deltas marked "FU-297".
+  Mechanism + rollback: docs/opnsense-test-vm.md.
+-->
+<opnsense>
+  <theme>opnsense</theme>
+  <system>
+    <optimization>normal</optimization>
+    <hostname>opnsense-test</hostname>
+    <domain>teststuff.net</domain>
+    <dnsserver>@GATEWAY@</dnsserver>
+    <dnsallowoverride>1</dnsallowoverride>
+    <dnsallowoverride_exclude/>
+    <group>
+      <name>admins</name>
+      <description>System Administrators</description>
+      <scope>system</scope>
+      <gid>1999</gid>
+      <member>0</member>
+      <priv>page-all</priv>
+    </group>
+    <user>
+      <name>root</name>
+      <descr>System Administrator</descr>
+      <scope>system</scope>
+      <groupname>admins</groupname>
+      <password>@ROOT_PASSWORD_HASH@</password>
+      <uid>0</uid>
+      <!-- FU-297: the harness's API pair ("key|crypt(secret)", ApiKeyField) + SSH key login -->
+      <apikeys>@API_KEY_LINE@</apikeys>
+      <authorizedkeys>@AUTHORIZED_KEYS_B64@</authorizedkeys>
+      <shell>/bin/sh</shell>
+    </user>
+    <timezone>Etc/UTC</timezone>
+    <timeservers>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org 2.opnsense.pool.ntp.org 3.opnsense.pool.ntp.org</timeservers>
+    <webgui>
+      <protocol>https</protocol>
+    </webgui>
+    <disablenatreflection>yes</disablenatreflection>
+    <usevirtualterminal>1</usevirtualterminal>
+    <disableconsolemenu/>
+    <ipv6allow>1</ipv6allow>
+    <powerd_ac_mode>hadp</powerd_ac_mode>
+    <powerd_battery_mode>hadp</powerd_battery_mode>
+    <powerd_normal_mode>hadp</powerd_normal_mode>
+    <bogons>
+      <interval>monthly</interval>
+    </bogons>
+    <pf_share_forward>1</pf_share_forward>
+    <lb_use_sticky>1</lb_use_sticky>
+    <ssh>
+      <group>admins</group>
+      <!-- FU-297: key-only root SSH (no passwordauth) — the harness's shell path -->
+      <enabled>enabled</enabled>
+      <permitrootlogin>1</permitrootlogin>
+    </ssh>
+    <rrdbackup>-1</rrdbackup>
+    <netflowbackup>-1</netflowbackup>
+    <!-- the nano image's console (serial first): the bootstrap drives the importer over it -->
+    <serialspeed>115200</serialspeed>
+    <primaryconsole>serial</primaryconsole>
+    <secondaryconsole>video</secondaryconsole>
+  </system>
+  <interfaces>
+    <!-- FU-297: vtnet1 = net1 on vmbr0, the management path + egress (static, prod as gateway) -->
+    <wan>
+      <enable>1</enable>
+      <if>vtnet1</if>
+      <descr>WAN</descr>
+      <mtu/>
+      <ipaddr>@WAN_IP@</ipaddr>
+      <subnet>@WAN_BITS@</subnet>
+      <gateway>WAN_GW</gateway>
+      <!-- NO blockpriv / blockbogons element at all: WAN IS a private network here, and the
+           legacy config reads these with isset(), so even an empty <blockpriv/> turns it ON -->
+      <media/>
+      <mediaopt/>
+    </wan>
+    <!-- FU-297: vtnet0 = net0 on the isolated bridge — nothing real is on this segment -->
+    <lan>
+      <enable>1</enable>
+      <if>vtnet0</if>
+      <ipaddr>@LAN_IP@</ipaddr>
+      <subnet>@LAN_BITS@</subnet>
+      <media/>
+      <mediaopt/>
+    </lan>
+  </interfaces>
+  <gateways>
+    <gateway_item>
+      <interface>wan</interface>
+      <gateway>@GATEWAY@</gateway>
+      <name>WAN_GW</name>
+      <weight>1</weight>
+      <ipprotocol>inet</ipprotocol>
+      <defaultgw>1</defaultgw>
+      <descr>the prod router (egress for firmware + plugins)</descr>
+    </gateway_item>
+  </gateways>
+  <dnsmasq>
+    <!-- factory default, kept: DHCP on the isolated LAN serves nobody -->
+    <enable>1</enable>
+    <port>53053</port>
+    <interface>lan</interface>
+    <dhcp>
+      <enable_ra>1</enable_ra>
+    </dhcp>
+    <dhcp_ranges>
+      <interface>lan</interface>
+      <start_addr>@LAN_DHCP_START@</start_addr>
+      <end_addr>@LAN_DHCP_END@</end_addr>
+    </dhcp_ranges>
+  </dnsmasq>
+  <unbound>
+    <enable>1</enable>
+  </unbound>
+  <nat>
+    <outbound>
+      <mode>automatic</mode>
+    </outbound>
+  </nat>
+  <filter>
+    <!-- FU-297: this box's FRR must never peer with the real Cilium nodes on vmbr0 -->
+    <rule>
+      <type>block</type>
+      <floating>yes</floating>
+      <quick>1</quick>
+      <direction>out</direction>
+      <interface>wan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <descr>FU-297: no BGP out of the test box (never peer with the real cluster)</descr>
+      <source>
+        <any/>
+      </source>
+      <destination>
+        <any/>
+        <port>179</port>
+      </destination>
+    </rule>
+    <!-- FU-297: the management path — API/GUI + SSH from the home LAN only. disablereplyto:
+         a WAN pass rule otherwise gets `reply-to (vtnet1 192.168.2.1)`, so the SYN-ACK to a
+         client on the SAME subnet is sent via the prod router, whose state table has never
+         seen the SYN and drops it (measured on the first bootstrap: :443/:22 timed out). -->
+    <rule>
+      <type>pass</type>
+      <interface>wan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <disablereplyto>1</disablereplyto>
+      <descr>FU-297: HTTPS API from 192.168.2.0/24</descr>
+      <source>
+        <address>@MGMT_NET@</address>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>443</port>
+      </destination>
+    </rule>
+    <rule>
+      <type>pass</type>
+      <interface>wan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <disablereplyto>1</disablereplyto>
+      <descr>FU-297: SSH from 192.168.2.0/24</descr>
+      <source>
+        <address>@MGMT_NET@</address>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>22</port>
+      </destination>
+    </rule>
+    <rule>
+      <type>pass</type>
+      <ipprotocol>inet</ipprotocol>
+      <descr>Default allow LAN to any rule</descr>
+      <interface>lan</interface>
+      <source>
+        <network>lan</network>
+      </source>
+      <destination>
+        <any/>
+      </destination>
+    </rule>
+  </filter>
+  <ntpd>
+    <prefer>0.opnsense.pool.ntp.org</prefer>
+    <ispool>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org 2.opnsense.pool.ntp.org 3.opnsense.pool.ntp.org</ispool>
+  </ntpd>
+</opnsense>

@@ -113,10 +113,11 @@ API/module gotchas:
 `--check` proves plumbing, not apply. A PR that touches `ansible/opnsense-*`, its roles or the
 `oxlorg.opnsense` pin is applied for real to the throwaway OPNsense VM on nx-02
 ([FU-297](follow-ups.md)) — never the router: its own inventory (`ansible/test-vm/`), its own
-wallet creds, a guard play before every play:
+wallet creds, a guard play before every play. The VM itself — `opnsense-test`, vmid `9110`, WAN
+`192.168.2.67`, snapshot `baseline` — and how it is built: [`opnsense-test-vm.md`](opnsense-test-vm.md).
 
 ```bash
-export OPN_TEST_HOST=<VM WAN ip> OPN_TEST_VMID=<vmid>        # the VM's identity is an explicit input
+export OPN_TEST_HOST=192.168.2.67 OPN_TEST_VMID=9110         # the VM's identity is an explicit input
 bash scripts/opnsense-test-vm.sh --pr 2033 --steps prep      # no VM: guard + syntax-check, both refs
 bash scripts/opnsense-test-vm.sh --pr 2033 --post            # full run; report as a PR comment
 ```

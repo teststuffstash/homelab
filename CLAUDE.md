@@ -58,6 +58,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin) | 192.168.2.59 | Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04` |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | `ci-runner-02` (VM on nx-02) | 192.168.2.66 | GitHub Actions runner VM — the second, on the other hypervisor (FU-266) |
+| `opnsense-test` (VM on nx-02) | 192.168.2.67 | OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 <!-- END GENERATED hosts -->

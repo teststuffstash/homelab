@@ -744,6 +744,16 @@ machines:
     ip: 192.168.2.66
     notes: Same labels as ci-runner-01, so a pve outage is not a CI outage. Specs in tofu/ci-runner.tf.
 
+  - name: opnsense-test
+    kind: vm
+    # No `zone:` — not a k8s node; tofu's kubernetes_labels.node_zone would try to label a
+    # Node that does not exist (same reason as nx-02 / pve above).
+    label: "`opnsense-test` (VM on nx-02)"
+    role: OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297)
+    hardware: OPNsense 26.1 VM on nx-02
+    ip: 192.168.2.67
+    notes: NOT the router — nothing routes through it. Hardware in tofu/opnsense-test.tf; guest bootstrap + baseline rollback in docs/opnsense-test-vm.md.
+
   - name: droplet
     kind: device
     label: Droplet (ESP32)
