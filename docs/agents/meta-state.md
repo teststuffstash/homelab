@@ -32,6 +32,29 @@ never the session's arc — that is TICK-LOG's.)
   way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
   the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
   `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
+- **⚑ PICKUP (2026-09-29 evening — S9: #2033 merged + deployed, prod OPNsense on 26.7.4; TICK-LOG 2026-09-29).**
+  **NEXT SESSION = ONE GOAL (operator): software-side prep for the router move — rehearse the
+  from-git router VM on nx-02 IN ISOLATION** (WAN = `eno2` passed through but uncabled, LAN on a
+  portless bridge; spoofs Big Data's `em0` MAC; WireGuard server key from the wallet; ACME re-issue
+  or import) and score it vs prod ≈0 — after moving the drill's series + test-VM baseline to 26.7
+  (`trial-26-7-4` on 9110) and a confirming master drill. Also inventory + parametrize everything
+  wired for ONE static router at `192.168.2.1`/`opnsense-fw` (ansible inventory + wrapper, the
+  backup CronJob target, the box's `OPN_API_*` belts, alerts/probes, the harness's prod guard,
+  ddclient/WireGuard endpoints) so a big-bang move is a config flip + one window. **NO hardware
+  change** until the switches are in hand (TL-SG1016D ordered, hardware `purchases.md`): the later
+  visit = WAN switch (ONT → nx-02 `eno2` + Big Data `em0` powered-off fallback, its LAN cable out)
+  + the management switch; Big Data stays intact 1–2 weeks before its card moves to pve.
+  **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
+  (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
+  client configs: operator call); the 3 API pairs (wallet has them → seed renders them, so no
+  consumer flips); root password (no wallet entry yet); 17 ACME certs (import from the encrypted
+  backup for the isolated rehearsal, re-issue live); a fresh ACME account (FU-298's register-404
+  workaround must move into the real build); the WAN MAC (spoof `em0`).
+  **Open:** FU-013 next = playbooks onto the `automation` key (needs privileges for the system role's endpoints too);
+  FU-298 = the upstream ACME register 404 (O-X-L issue = operator's call); prod LAN is `.1/22`, not
+  the `/24` `ip-plan.md` states — the ADR-088 CARP ruling must settle it; the reviewer exit-contract
+  keys a merge head differently from the reviewer's standing-aside (false NO TERMINAL; not filed).
+  Firmware: official path, no Renovate (operator) — the daily-check belt is not built.
 - **⚑ PICKUP (2026-09-28 late night — ADR-142 trial LIVE; TICK-LOG 2026-09-28 (evening → night)).**
   `scripts/` is un-owned + worker-authorable (except `mgmt/scripts/` + the three box verbs);
   the gate is the BLOCKING gate-change lens + ci's gate-drift report. Drills: 2 caught, control
@@ -61,7 +84,7 @@ never the session's arc — that is TICK-LOG's.)
   was terminating at 17:41Z). (3) agent-runtime#161 parked on its `unit` job (devbox-install-action
   vs pre-installed nix, `.github/` operator-direct — a Renovate/Actions class item). (4) #1988:
   the row is commented; close it when the base-image half has its own home. **Shelf-life finding
-  for the operator:** `major/awaiting-human` PRs (#2033/#2046/#2047 BEHIND; #2032 closed → #2100) rot
+  for the operator:** `major/awaiting-human` PRs (#2046/#2047 BEHIND; #2033 merged + deployed 2026-09-29; #2032 closed → #2100) rot
   within hours — decision (a) of the S9 bullet is the open one. **Operator decisions still open:**
   (a)–(e) of the S9 bullet + the retro r6 marker. **S9 closeout residue:** #1991, #2014.
   **Hygiene still standing:** `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac;
