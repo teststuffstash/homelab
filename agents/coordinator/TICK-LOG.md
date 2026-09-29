@@ -11740,3 +11740,24 @@ seat-1790671265-6906, clean), launcher default + env card by name, kill-switch
 `MERMAID_LINT_NO_INSTALL` dropped (#2101); re-drill on nx-01 25/0 rc 0. FU-294 archived.
 ROADMAP: master/prod-side scan (Dependabot vs Dependency-Track + SBOM + Kyverno) parked; stacks
 via the consumer card after homelab.
+
+## 2026-09-29 (afternoon → evening) — S9: #2033 validated on a real OPNsense, merged, deployed
+
+**Why a test router.** #2033 (oxlorg.opnsense 25.7.8 → 26.1.11, the `reload` default flip) was
+lens-approved on a stub-`httpx` proof only; `--check` proves plumbing, not apply. Operator: a
+throwaway OPNsense VM on nx-02 (one WAN + one LAN, guaranteed on the future CARP VMs). FU-297.
+**Built by subagents:** VM 9110 @ .67 (#2103/#2104 — nano image + seeded config.xml through the
+importer over the serial socket), harness `scripts/opnsense-test-vm.sh` (#2102/#2105/#2110),
+#2107 (argo/apps duplicate overrides), #2115 (bgpd never started on a fresh router — FU-298;
+the upstream `acme_account` register-without-uuid 404 remains). #2033 PASS at c74fefb1, then at
+fd7f41b4 after the seat merged #2115 into it. Lens re-review: r1 stood aside (seat dispatched
+while CI ran), r2 APPROVED fc3e6be4. **Merged** 24c11815 (admin: BEHIND by #2121 only, disjoint).
+**Deploy** window seat-1790707812-5454, clean: acme/unbound/bgp changed=0, haproxy renamed the
+argo/apps override descriptions once (addresses unchanged), every rerun changed=0; BGP 13/13
+Established, youngest session ~29.6 h (no FRR bounce — #2115's check is a no-op on prod).
+**Also today:** FU-013 router leg live (users role #2108, backup CronJob #2109/#2117, prod mint
+in window seat-1790698493-5964); the weekly rebuild drill on the box (#2106/#2111–#2114, score 115,
+map #2118); ROADMAP §HA step 2 = CARP sequence with the score as cutover gate (#2119); skill
+`second-jail` (#2116). **Found:** prod firmware is a major behind (26.1.11_6 vs 26.7.4, update
+check stale since Aug 13) — trial of the official path on 9110 running; the reviewer exit-contract
+keys a merge head differently from the reviewer's standing-aside (false NO TERMINAL, not filed).
