@@ -1,0 +1,30 @@
+# The PrometheusRule's groups, annotations stripped — the file opnsense-config-backup.promtool-test
+# loads (the gc-mirrors.promtool-rules convention: .promtool-rules so manifest-lint skips it;
+# expr+for drift-pinned against prometheusrule.yaml by prometheus-rules-lint). Re-copy after
+# editing an alert:
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/opnsense-config-backup/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: opnsense-config-backup
+    rules:
+      - alert: OpnsenseConfigBackupStale
+        expr: |
+          (
+            (time() - max(opnsense_config_backup_last_success_timestamp_seconds) > 26 * 3600)
+            or on() absent(opnsense_config_backup_last_success_timestamp_seconds)
+          )
+          unless on()
+            (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
+        for: 1h
+        labels: { severity: warning }
+      - alert: OpnsenseConfigUnattributedRevision
+        expr: |
+          max by (username) (opnsense_config_unattributed_revisions) > 0
+        for: 0m
+        labels: { severity: warning, triage: none }
+      - alert: OpnsenseConfigBackupSuspended
+        expr: |
+          (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
+          and on()
+            (max(kube_cronjob_created{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) < time() - 7 * 86400)
+        for: 1h
+        labels: { severity: warning, triage: none }

@@ -1,0 +1,49 @@
+# The private Garage bucket + writer key for the OPNsense config.xml backups (FU-013, router leg).
+# Same CREATE pattern as garage-write-probe / tofu-state (ADR-076, docs/patterns/app-owned-resources.md):
+# provider-terraform mints bucket + key + grant together and writes the key into a connection
+# Secret in the job's namespace, so a Garage metadata restore re-declares the grant by itself.
+#
+# Private: no website, no anonymous read, and what lands in it is age ciphertext anyway (the plain
+# config.xml carries every secret the router holds — cert keys, API key hashes, WireGuard keys).
+# read+write, never owner: the job must delete for retention, it must never be able to drop the
+# bucket. Retention itself lives in the job (backup.py), keyed on the date in the object name.
+#
+# 128Mi cap (ADR-089 quota-as-contract; the tier ledger reads it live): a prod config.xml is
+# ~340 KB (2026-09-29), so 90 days of dailies plus the MIN_KEEP floor is ~31 MB — 4x headroom
+# for the config growing.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  # Cluster-scoped in provider-terraform v1 (see argocd/resources/tofu-state/garage-workspace.yaml).
+  name: opnsense-config-backup-garage
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "backup" {
+        global_alias = "opnsense-config-backup"
+        max_size     = 134217728 # 128Mi
+      }
+      resource "garage_key" "writer" { name = "opnsense-config-backup-writer" }
+      resource "garage_bucket_permission" "writer" {
+        bucket_id     = garage_bucket.backup.id
+        access_key_id = garage_key.writer.id
+        read  = true
+        write = true
+        owner = false
+      }
+      output "bucket" {
+        value = garage_bucket.backup.global_alias
+      }
+      output "access_key_id" {
+        value = garage_key.writer.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.writer.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: opnsense-config-backup
+    name: opnsense-config-backup-s3
