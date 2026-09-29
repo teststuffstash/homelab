@@ -36,7 +36,9 @@
       <authorizedkeys>@AUTHORIZED_KEYS_B64@</authorizedkeys>
       <shell>/bin/sh</shell>
     </user>
-    <timezone>Etc/UTC</timezone>
+    <!-- FU-297: prod's timezone. System > Settings > General has no API in 26.1, so the seed is
+         the only code that can set it (the rebuild drill counted Etc/UTC as drift). -->
+    <timezone>Europe/Tallinn</timezone>
     <timeservers>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org 2.opnsense.pool.ntp.org 3.opnsense.pool.ntp.org</timeservers>
     <webgui>
       <protocol>https</protocol>
