@@ -108,6 +108,27 @@ API/module gotchas:
 - ⚠️ Never iterate destructive firmware endpoints (`/firmware/reboot`, `/poweroff`) with a real
   body to "discover" them — they execute.
 
+### Validate a router-config PR on the OPNsense test VM (FU-297)
+
+`--check` proves plumbing, not apply. A PR that touches `ansible/opnsense-*`, its roles or the
+`oxlorg.opnsense` pin is applied for real to the throwaway OPNsense VM on nx-02
+([FU-297](follow-ups.md)) — never the router: its own inventory (`ansible/test-vm/`), its own
+wallet creds, a guard play before every play:
+
+```bash
+export OPN_TEST_HOST=<VM WAN ip> OPN_TEST_VMID=<vmid>        # the VM's identity is an explicit input
+bash scripts/opnsense-test-vm.sh --pr 2033 --steps prep      # no VM: guard + syntax-check, both refs
+bash scripts/opnsense-test-vm.sh --pr 2033 --post            # full run; report as a PR comment
+```
+
+The five steps (rollback → base converges → head on top → a mutation reaches the RUNNING
+daemons, with a BASE-roles negative control → fresh converge + idempotent rerun), the isolation
+overrides and what the run does NOT prove (ACME issuance, real backends, BGP sessions) are in
+the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. `--status`
+also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
+*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
+comment, which names the sha, is the record.
+
 ### Expose an in-cluster service over HTTPS (`<name>.teststuff.net`)
 
 1. Edit `group_vars/opnsense.yml`: add the hostname to **`acme_cert_specs`** (`restart_action: "reload
