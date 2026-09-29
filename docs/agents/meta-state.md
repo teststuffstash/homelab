@@ -39,8 +39,15 @@ never the session's arc — that is TICK-LOG's.)
   PRs, lens verdicts, DIFFERS lines, any weakened gate found after merge; revert = `/scripts/`
   in CODEOWNERS + `scripts/` in governance-lint GOVERNANCE. Box moved to `mgmt/` (PR#2088),
   re-activated by hand, green. Open from tonight: FU-295 (box sentinel vs goal/** PRs),
-  FU-296 (governance-lint self-test), FU-294 → #2032 rebuild (override on master, Renovate
-  rebuilds the branch).
+  FU-296 (governance-lint self-test). FU-294 CLOSED 2026-09-29 (ADR-143 — see the pickup below).
+- **⚑ PICKUP (2026-09-29 morning — ADR-143 live; TICK-LOG 2026-09-29 has the record).**
+  mermaid-lint runs on Deno with zero permissions (#2098); `lock-intake-lint` gates every PR's
+  lockfile intake in `ci` (OSV incl. `MAL-`, 7-day floor, install-time code, transitive included).
+  **#2100 (Renovate mermaid 12 on deno) is RED BY DESIGN** — waits for mermaid-js/mermaid#8278;
+  the coordinator ruled no ride (state-fp debounced) — never pin/override it. The npm mirror is
+  `npm-cache.teststuff.net` (Unbound, #2101 — Deno cannot use an IP registry). Parked on the
+  ROADMAP supply-chain section: master/prod scan (Dependabot vs Dependency-Track + SBOM + Kyverno),
+  then stacks via the consumer card — operator decision, homelab first.
 - **⚑ PICKUP (2026-09-28 night — the Forgejo chain DONE end to end; TICK-LOG 2026-09-28
   (afternoon) + its Closing paragraph have the record).** Landed by the machine lane: #2078,
   #2082, #2084, #2087 (the drill's findings, four review rounds), drill #2085 → revert #2086
@@ -54,7 +61,7 @@ never the session's arc — that is TICK-LOG's.)
   was terminating at 17:41Z). (3) agent-runtime#161 parked on its `unit` job (devbox-install-action
   vs pre-installed nix, `.github/` operator-direct — a Renovate/Actions class item). (4) #1988:
   the row is commented; close it when the base-image half has its own home. **Shelf-life finding
-  for the operator:** `major/awaiting-human` PRs (#2032 DIRTY, #2033/#2046/#2047 BEHIND) rot
+  for the operator:** `major/awaiting-human` PRs (#2033/#2046/#2047 BEHIND; #2032 closed → #2100) rot
   within hours — decision (a) of the S9 bullet is the open one. **Operator decisions still open:**
   (a)–(e) of the S9 bullet + the retro r6 marker. **S9 closeout residue:** #1991, #2014.
   **Hygiene still standing:** `:dependencyDashboard` in sleep-tracking / sleep-iac / oracle-iac;

@@ -11717,3 +11717,26 @@ the ruleset requires — D4 sat BLOCKED approved), **FU-296** (governance-lint's
 no self-test); FU-294 re-pointed (both #2032 blockers gone). Report noise: A's excerpt carried
 19 OVERSIZE lines when the PR's output format changed — trim to failure-shaped lines at the
 first re-read if it recurs.
+
+## 2026-09-29 (morning) — FU-294 fixed by structure, not by a pin: ADR-143
+
+**Operator:** "only structural fixes … a vulnerability analyzer should find these", no pinning;
+then: jail rules for one linter are too much — escape npm dependency management in homelab.
+Findings: Renovate's `osvVulnerabilityAlerts` is direct-deps-only on the base branch (its docs);
+its cooldown covers the bumped dep only; nothing set `--ignore-scripts`, and the seat had run
+`npm ci` in the jail next to the wallet. Web search: no npm-free mermaid linter with GitHub
+parity (merman alpha; Go rewrites no parity). Deno spike: zero-permission parse = CI's 25/14/0;
+escape probe all `NotCapable` (stdin input, since `--allow-read=.` still read tofu/kubeconfig).
+
+**Landed.** #2098 (one review round: docs claimed the gate live before ci.yaml had it — fixed as
+⚠ then flipped): mermaid-lint on Deno (`--frozen`, `minimumDependencyAge: P7D`, no permissions),
+package.json/lock/jsdom gone, Renovate npm rule + `deno` manager, `scripts/lock-intake-lint.py`
+(OSV querybatch incl. MAL-, registry publish age, install-time code; fail-closed; self-test).
+ci.yaml direct 2ac87be3+1 (PR-only step, merge-ref first parent). #2032 closed; Renovate's #2100
+went RED on `lodash-es@4.17.23` with no reviewer — the gate proven live; the coordinator ruled
+no ride (state-fp debounce). **Ride drill:** Deno + IP registry = "Could not find referrer npm
+package" (cache folder keyed by domain) → Unbound `npm-cache.teststuff.net` (window
+seat-1790671265-6906, clean), launcher default + env card by name, kill-switch
+`MERMAID_LINT_NO_INSTALL` dropped (#2101); re-drill on nx-01 25/0 rc 0. FU-294 archived.
+ROADMAP: master/prod-side scan (Dependabot vs Dependency-Track + SBOM + Kyverno) parked; stacks
+via the consumer card after homelab.
