@@ -219,6 +219,7 @@ K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
 $K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
 ```
 
+The mint is itself a root-key write, so the first backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`), and so does every playbook run until the wrapper uses the `automation` key.
 Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
 by hand so the first backup does not wait for 04:23 UTC:
 `$K create job --from=cronjob/opnsense-config-backup first-run && $K logs -f job/first-run`.

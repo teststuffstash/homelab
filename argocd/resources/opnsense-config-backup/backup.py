@@ -71,11 +71,20 @@ FIRST_RUN_WINDOW_S = int(ENV("FIRST_RUN_WINDOW_SECONDS", str(26 * 3600)))
 
 # Allowed authors. API writes are recorded as "<user>@<client ip>"; system scripts as "(root)".
 ALLOWED_USERS = [u for u in ENV("ALLOWED_USERS", "automation,backup-puller").split(",") if u]
-# "(root)" is allowed only with a description matching this — today exactly the ACME client's
-# renewal hook (every renewal writes the cert into config.xml). Any other "(root)" revision is
-# unexplained and is flagged, which is how a new system writer gets noticed and added here.
+# "(root)" is allowed only with a description matching this. Two system writers are known:
+#  - the ACME client's renewal hook (every renewal writes the cert into config.xml; 28 of prod's
+#    100 revisions on 2026-09-29);
+#  - "Updated plugin interface configuration": the system re-registering plugin interfaces after a
+#    plugin reconfigure — the wireguard play produced it on the test VM (2026-09-29). It is a
+#    derived revision: the write that caused it is recorded separately under its own author.
+# Any other "(root)" revision is unexplained and is flagged, which is how a new system writer
+# gets noticed and added here.
 SYSTEM_ALLOWED_RE = re.compile(
-    ENV("SYSTEM_ALLOWED_RE", r"^/usr/local/opnsense/scripts/OPNsense/AcmeClient/lecert\.php made changes$")
+    ENV(
+        "SYSTEM_ALLOWED_RE",
+        r"^(/usr/local/opnsense/scripts/OPNsense/AcmeClient/lecert\.php made changes"
+        r"|Updated plugin interface configuration)$",
+    )
 )
 
 PUSHGATEWAY_URL = ENV("PUSHGATEWAY_URL", "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091")
