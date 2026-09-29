@@ -119,6 +119,11 @@ accepted  prod-only   OPNsense/tftp/general/* | prod:/OPNsense/tftp/general/enab
 accepted  value       system/firmware/plugins | prod:.=os-acme-client,os-ddclient,os-frr,os-haproxy,os-isc-dhcp,os-tftp drill:.=os-acme-client,os-ddclient,os-frr,os-haproxy
 # IPv6 factory defaults (LAN track6, the IPv6 allow rule, DHCPv6) — inert while prod disallows
 # IPv6 (Interfaces > Settings, `disableipv6` = 1).
+# The HP box's spare NICs opt1..opt3 (igb1-3): assigned, no address, no carrier — reserved for a
+# home-vs-platform split that is not planned now (operator, 2026-09-29). Accepted only while
+# unaddressed: configured for real, they count again.
+accepted  prod-only   interfaces/opt* | prod:ipaddr=
+accepted  prod-only   interfaces/opt*/* | prod:../ipaddr=
 accepted  prod-only   interfaces/lan/ipaddrv6 | prod:.=track6 prod:/OPNsense/Interfaces/settings/disableipv6=1
 accepted  prod-only   interfaces/lan/track6-prefix-id | prod:/OPNsense/Interfaces/settings/disableipv6=1
 accepted  prod-only   filter/rule[Default allow LAN IPv6 to any rule] | prod:ipprotocol=inet6 prod:/OPNsense/Interfaces/settings/disableipv6=1
