@@ -24,9 +24,10 @@
 #                 mutation is saved but should NOT reach the daemon
 #   5  fresh      rollback again, HEAD plays twice: run 1 succeeds, run 2 changed=0 everywhere
 #   all           (the rebuild drill, scripts/opnsense-drill.sh) converge ALL router code at HEAD
-#                 once: every ansible/opnsense-*.yml play, then opnsense/dnsmasq-dhcp.py and
-#                 opnsense/tuya-egress.py (OPN_HOST pinned to the VM). ddclient gets a dummy
-#                 Cloudflare token (its account needs one; the VM's update is refused upstream)
+#                 once: every ansible/opnsense-*.yml play (globbed), then every opnsense/*.py
+#                 (OPN_HOST pinned to the VM). ddclient gets a dummy Cloudflare token (its
+#                 account needs one; the VM's update is refused upstream); opnsense-users mints
+#                 the VM's keys into a 0700 sink under the workdir, deleted right after
 #
 # The production router is unreachable to this script BY CONSTRUCTION:
 #   - it never calls scripts/opnsense-playbook.sh and never loads ansible/inventory.yml as an
@@ -131,6 +132,7 @@ CURLCFG="$WORK/.curl-auth"
 WORKTREES=''
 cleanup() {
   rm -f "$CURLCFG"
+  rm -rf "${USERSINK:-}"   # step all's minted test-VM keys — on every exit path, a `die` included
   if [ "$KEEP" -eq 0 ]; then
     for wt in $WORKTREES; do git worktree remove --force "$wt" >/dev/null 2>&1 || true; done
   fi
@@ -572,14 +574,23 @@ fi
 if has all; then
   echo "step all: converge every router-code unit at HEAD" >&2
   rep ''; rep '### all. Converge ALL router code at HEAD'; rep ''
-  for p in $PLAYS opnsense-ddclient.yml opnsense-wireguard.yml; do
-    if [ "$p" = opnsense-ddclient.yml ]; then export ACME_CF_TOKEN=fu297-drill-not-a-token; fi
-    run_play "all-${p%.yml}" head head "$p"
+  # EVERY ansible/opnsense-*.yml of the ref (a new play joins the drill by existing), the four
+  # PLAYS first in their dependency order (acme before haproxy), the rest by name.
+  rest="$(cd "${WT[head]}/ansible" && ls opnsense-*.yml | grep -vxF -e "$(echo $PLAYS | tr ' ' '\n')" || true)"
+  USERSINK="$WORK/.user-keys"; ( umask 077; mkdir -p "$USERSINK" ); printf 'opnsense_users_key_sink: %s\n' "$USERSINK" > "$WORK/users-sink.yml"
+  for p in $PLAYS $rest; do
+    ev=()
+    case "$p" in
+      opnsense-ddclient.yml) export ACME_CF_TOKEN=fu297-drill-not-a-token ;;  # its account needs one; upstream refuses it
+      opnsense-users.yml) ev=("$WORK/users-sink.yml") ;;  # the VM's minted keys: 0600, sink removed after the loop AND by cleanup()
+    esac
+    run_play "all-${p%.yml}" head head "$p" "${ev[@]}"
     unset ACME_CF_TOKEN
     [ "$RC" -eq 0 ] || { failstep "\`$p\` rc=$RC"; fail_tail "all-${p%.yml}"; }
   done
+  rm -rf "$USERSINK"
   recap_table 'all-'
-  for py in dnsmasq-dhcp tuya-egress; do
+  for py in $(cd "${WT[head]}/opnsense" && ls *.py | sed 's/\.py$//'); do
     set +e
     OPN_HOST="$OPN_TEST_HOST" python3 "${WT[head]}/opnsense/$py.py" > "$LOG/all-$py.log" 2>&1; RC=$?
     set -e
