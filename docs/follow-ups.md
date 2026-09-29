@@ -331,11 +331,11 @@ six OVERSIZE items pointer-ized into
       stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
-      doesn't DR). `tofu/homeassistant.tf`. **Router leg (operator, 2026-09-29):** users role #2108 +
-      suspended backup CronJob #2109 merged, validated on the FU-297 VM (read-only denial, click
-      drill, restore round-trip). **Next:** prod window — `scripts/opnsense-api-users.sh`, ESO sync,
-      homelab-browse grant, un-suspend + first run (runbook §OPNsense config backup); then the
-      playbooks move to the `automation` key (ddclient install → assert; dnsmasq-dhcp.py off root).
+      doesn't DR). `tofu/homeassistant.tf`. **Router leg LIVE 2026-09-29:** prod users + keys
+      minted (#2108), un-suspended (#2117), first run proven (object decrypts to a valid config,
+      metrics in Prometheus); `OpnsenseConfigUnattributedRevision` fired on the root-key mint as
+      designed. **Next:** the playbooks move to the `automation` key (ddclient install → assert;
+      dnsmasq-dhcp.py off root) — then the click detector is quiet; the HA `/config` leg stays open.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
       completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
       rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
