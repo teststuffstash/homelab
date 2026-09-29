@@ -415,6 +415,16 @@ self-hosted Fulcio/Rekor) is doable in software; **confidential "L4" is hardware
 **used EPYC Milan quiet tower** when/if it becomes a real project. Hermetic/reproducible via
 **melange/apko/Wolfi** + Nix is the early win.
 
+**Vulnerability management past the PR gate (parked 2026-09-29, operator).** The PR-time leg is
+live: `lock-intake-lint` judges what a lockfile change brings in ([ADR-143](docs/adr.md)). Open is
+what is ALREADY merged or deployed when a new advisory lands: GitHub **Dependabot** alerts vs a
+self-hosted **Dependency-Track** fed SBOMs (`cosign attach sbom` on every image, the FU-016 leg),
+with **Kyverno** checking what actually runs — prod kept in check even when master is not what is
+deployed. Weigh the options before rolling anything; one store for all repos, not per-repo CI jobs
+plus an LLM. Then the **stacks**: no npm there, so not a port of the gate — their dependency
+upgrades ride the consumer card (what the platform provides, what is good practice, what a stack
+copies from the platform — the shape of [`docs/postgres.md`](docs/postgres.md)); homelab first.
+
 ### Bare-metal node suspend/resume — an "autoscaler" without IPMI (parked 2026-06-11)
 Power idle ephemeral nodes off and wake them on demand to cut idle draw. **Parked** until there's
 enough to scale — more services + the home↔Civo multi-cloud (see *Service tiers*) — so the burst
