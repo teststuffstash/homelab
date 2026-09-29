@@ -118,9 +118,10 @@ when a decision trades one of them away:
 - **No IPMI** on the cheap x86 boxes → remote control via vPro/AMT + WoL + Home Assistant
   smart plugs (see `ROADMAP.md`).
 - Mixed, non-uniform hardware. The Proxmox host is an AliExpress **X99 / Xeon E5-2680 v4**;
-  it has **no iGPU** but now has a **weak discrete GPU fitted so it POSTs/boots** — fine as a
-  fixed hypervisor, still not a GPU-less plug-in. The general fleet rule stands: GPU-less
-  plug-in nodes need iGPU or BMC video.
+  it has **no iGPU** and, since 2026-09-21, **no GPU at all — it POSTs and boots headless**
+  (the 9600 GT is out; its x16 is earmarked for the router-pair NIC). The general fleet rule
+  stands: GPU-less plug-in nodes need iGPU or BMC video — pve is a verified exception, not a
+  precedent.
 - Single-operator lab: optimize for low day-2 toil and easy rebuild over high availability.
 - **Vocabulary is pinned in [`docs/glossary.md`](docs/glossary.md)** (term → one meaning →
   owning doc; a NEW name clears it first). E.g. *webservice* = the delivery contract only —
