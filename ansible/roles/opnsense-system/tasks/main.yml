@@ -1,7 +1,7 @@
 ---
 # OPNsense router-wide settings that no service role owns (FU-297: the rebuild drill's realism
 # score counted them as prod config not in code). Values in group_vars/opnsense.yml
-# (opnsense_interface_settings, opnsense_netflow) — prod's CURRENT values, so a run against prod
+# (opnsense_interface_settings, opnsense_netflow, opnsense_system_health) — prod's CURRENT values, so a run against prod
 # changes nothing.
 #
 # Every page: read → compare (filter_plugins/opn_settings.py) → POST only the drifted keys →
@@ -68,3 +68,28 @@
 - name: Apply NetFlow settings
   oxlorg.opnsense.raw: { module: diagnostics, controller: netflow, command: reconfigure, action: post }
   when: sys_nf_set is changed
+
+# --- Reporting > Settings: the RRD system-health graphs (26.7's SystemHealth model) -----------
+- name: Read system-health settings
+  oxlorg.opnsense.raw: { module: diagnostics, controller: systemhealth, command: get }
+  register: sys_sh_get
+  when: opnsense_system_health | length > 0
+
+- name: Plan system-health settings
+  ansible.builtin.set_fact:
+    sys_sh_plan: "{{ sys_sh_get.response.systemhealth | opn_settings_plan(opnsense_system_health) }}"
+  when: opnsense_system_health | length > 0
+
+- name: "System-health settings (drift: {{ sys_sh_plan.drift | default([]) | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: diagnostics
+    controller: systemhealth
+    command: set
+    action: post
+    data: { systemhealth: "{{ sys_sh_plan.data }}" }
+  when: sys_sh_plan.drift | default([]) | length > 0
+  register: sys_sh_set
+
+- name: Apply system-health settings
+  oxlorg.opnsense.raw: { module: diagnostics, controller: systemhealth, command: reconfigure, action: post }
+  when: sys_sh_set is changed
