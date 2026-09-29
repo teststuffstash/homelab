@@ -14,7 +14,8 @@
 # Same env names as the harness: OPN_TEST_VMID (9110), OPN_TEST_HOST (192.168.2.67),
 # OPN_TEST_SNAPSHOT (baseline), OPN_TEST_VM_NAME (opnsense-test), OPN_TEST_PVE (nx-02),
 # OPN_TEST_PVE_KEY — the harness's own defaults/expectations, so what this builds is what it
-# rolls back to. OPN_TEST_LAN_BRIDGE (vmbr1) matters to `create` only.
+# rolls back to. OPN_TEST_LAN_BRIDGE (vmbr1) and OPN_TEST_NANO_IMG (the tofu-downloaded nano) matter
+# to `create` only.
 #
 # Secrets live in the wallet (created on first bootstrap if missing):
 #   opnsense-test-root-password  opnsense-test-api-key  opnsense-test-api-secret
@@ -38,7 +39,8 @@ LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, is
 LAN_BITS=24
 LAN_DHCP_START=192.168.1.100
 LAN_DHCP_END=192.168.1.199
-SERIES=26.1.11                                     # prod's version (GET /api/core/firmware/info)
+SERIES=26.7.4                                      # prod's version (GET /api/core/firmware/info)
+NANO_VERSION=26.7                                  # = tofu var.opnsense_test_nano_version (the birth image)
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
 
@@ -263,7 +265,7 @@ firmware_update() {  # minor updates within the series until the version reads $
   done
   v="$(api GET core/firmware/info | jq -r .product.product_version)"
   case "$v" in "$SERIES"|"$SERIES"_*) return 0 ;; esac
-  die "still at $v after 3 update passes — the mirror's 26.1 head moved past $SERIES? (doc §Version)"
+  die "still at $v after 3 update passes — the mirror's ${SERIES%.*} head moved past $SERIES? (doc §Version)"
 }
 
 cmd_status() {
@@ -281,7 +283,7 @@ cmd_status() {
 # nano image, net0 = LAN on the isolated bridge, net1 = WAN on vmbr0, serial console), created
 # STOPPED — `bootstrap` owns the first boot. Both verbs refuse the tofu-owned vmid and any VM
 # whose name is not OPN_TEST_VM_NAME, and that name may not be the tofu VM's.
-NANO_IMG="/var/lib/vz/template/iso/OPNsense-26.1.6-nano-amd64.img"   # = tofu proxmox_download_file.opnsense_nano_nx02 (local:iso — import-from wants the path)
+NANO_IMG="${OPN_TEST_NANO_IMG:-/var/lib/vz/template/iso/OPNsense-$NANO_VERSION-nano-amd64.img}"   # = tofu proxmox_download_file.opnsense_nano_nx02 (local:iso — import-from wants the path)
 ephemeral_guard() {
   [ "$VMID" != "$TOFU_VMID" ] || die "REFUSING: vmid $VMID is the tofu-owned test VM"
   [ "$VMNAME" != opnsense-test ] || die "REFUSING: '$VMNAME' is the tofu-owned test VM's name — set OPN_TEST_VM_NAME"
@@ -290,7 +292,7 @@ cmd_create() {
   ephemeral_guard
   nx "qm config $VMID" >/dev/null 2>&1 && die "vmid $VMID already exists on nx-02 — destroy it first"
   nx "grep -q '^iface $LAN_BRIDGE ' /etc/network/interfaces" || die "bridge $LAN_BRIDGE not on nx-02 (tofu/opnsense-test.tf)"
-  nx "pvesm list local --content iso | grep -q 'OPNsense-26.1.6-nano-amd64.img'" || die "$NANO_IMG not on nx-02 (tofu)"
+  nx "test -f $NANO_IMG" || die "$NANO_IMG not on nx-02 (tofu)"
   log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, WAN vmbr0"
   nx "qm create $VMID --name $VMNAME --tags 'opnsense;drill' --cores 2 --cpu host --memory 2048 --balloon 0 \
         --ostype other --scsihw virtio-scsi-pci --serial0 socket --onboot 0 \
