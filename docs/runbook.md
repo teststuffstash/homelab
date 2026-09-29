@@ -198,6 +198,53 @@ and the ACME cert (`acmeclient/certificates/removeCertificate/<uuid>`). Then rec
 (`oracle-specs.teststuff.net` / 3.20) is deliberately KEPT LIVE until the oracle stack migrates
 it — `ansible/group_vars/opnsense.yml` says so, and both names serve 200 as of 2026-08-11.)
 
+### OPNsense config backup + click detector (FU-013)
+
+The router's only off-box `config.xml` copy. A daily read-only CronJob downloads the running config
+with the `backup-puller` API user, age-encrypts it and keeps 90 days (never fewer than 30 objects) in
+the private Garage bucket `opnsense-config-backup`; the same run flags config revisions made by
+anyone but `automation`, `backup-puller` or the ACME renewal script. Mechanism, retention and the
+reasons: [`backup.py`](../argocd/resources/opnsense-config-backup/backup.py) and
+[`cronjob.yaml`](../argocd/resources/opnsense-config-backup/cronjob.yaml); alerts
+`OpnsenseConfigBackupStale`, `OpnsenseConfigUnattributedRevision`, `OpnsenseConfigBackupSuspended`.
+The API users and their privileges: `opnsense_api_users` in `ansible/group_vars/opnsense.yml`.
+
+**Create the users / mint their keys** (a router write — maintenance window). Keys land in the
+wallet (`opnsense-<user>-api-{key,secret}`) and, for the puller, Infisical:
+
+```bash
+bash scripts/opnsense-api-users.sh --check --diff   # GETs only: what would change
+bash scripts/opnsense-api-users.sh                  # users + one key each (idempotent)
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
+$K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
+```
+
+Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
+by hand so the first backup does not wait for 04:23 UTC:
+`$K create job --from=cronjob/opnsense-config-backup first-run && $K logs -f job/first-run`.
+
+**Restore (DR).** Fetch the newest object with the workspace's own key (the router may be the thing
+that is down, so no VIP: port-forward Garage through the API server), decrypt with the wallet
+identity, and load it:
+
+```bash
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
+$K -n garage port-forward svc/garage 3900:3900 &
+export AWS_ACCESS_KEY_ID=$($K -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.access_key_id}' | base64 -d)
+export AWS_SECRET_ACCESS_KEY=$($K -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.secret_access_key}' | base64 -d)
+S3="devbox run -- aws --region garage --endpoint-url http://127.0.0.1:3900 s3"
+$S3 ls s3://opnsense-config-backup/opnsense-fw/ | tail -3            # names carry the run date
+$S3 cp s3://opnsense-config-backup/opnsense-fw/<object>.xml.age /tmp/
+keepassxc-cli show -q --no-password -k ~/.claude/homelab-keepass/homelab.keyx -a Password \
+  ~/.claude/homelab-keepass/homelab.kdbx opnsense-config-backup-age-identity > /tmp/id.txt
+devbox run -- age -d -i /tmp/id.txt -o /tmp/config.xml /tmp/<object>.xml.age; shred -u /tmp/id.txt
+```
+
+A running box takes it as `/conf/config.xml` (`scp` it in, then reboot). A fresh install takes it
+at first boot through OPNsense's own importer from a CD/USB carrying `/conf/config.xml` — the
+mechanism the test VM is built with ([`opnsense-test-vm.md`](opnsense-test-vm.md) §Why this
+bootstrap mechanism). `/tmp/config.xml` holds every router secret in clear: shred it afterwards.
+
 ### LAN DHCP / DNS
 
 LAN DHCP was migrated **ISC dhcpd → dnsmasq** (ISC has no settings API). `opnsense/dnsmasq-dhcp.py`

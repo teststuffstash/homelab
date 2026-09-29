@@ -1,0 +1,72 @@
+# OPNsense config backup belts (FU-013, router leg). The job pushes opnsense_config_* to the
+# pushgateway (backup.py); the generic CronJobNotSucceeding (argocd/resources/job-health/) is the
+# schedule-level symptom, these say what is actually wrong.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: opnsense-config-backup
+  namespace: monitoring
+  labels:
+    app: opnsense-config-backup
+spec:
+  groups:
+    - name: opnsense-config-backup
+      rules:
+        # No complete run (download + encrypted upload + retention + history read) for >26 h —
+        # one daily run missed plus slack. `absent()` is the other half: a pushgateway series is
+        # fail-open both ways (garage-write-probe's 2026-09-08 lesson), so "never pushed" must fire
+        # too. Quiet while the CronJob is SUSPENDED (pre-mint, see cronjob.yaml) — the Suspended
+        # rule below owns that state. `for: 1h` covers the gap between un-suspending and the first
+        # run, which the recipe triggers by hand (docs/runbook.md §OPNsense config backup).
+        - alert: OpnsenseConfigBackupStale
+          expr: |
+            (
+              (time() - max(opnsense_config_backup_last_success_timestamp_seconds) > 26 * 3600)
+              or on() absent(opnsense_config_backup_last_success_timestamp_seconds)
+            )
+            unless on()
+              (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "No OPNsense config.xml backup has landed in >26 h"
+            description: >-
+              The router's only off-box config copy is this job's output (s3://opnsense-config-backup,
+              age-encrypted). Read the newest run: `kubectl -n opnsense-config-backup logs
+              job/<newest> ` (list with `kubectl -n opnsense-config-backup get jobs`). HTTP 401/403 from
+              the router = the backup-puller key (wallet opnsense-backup-puller-api-*; ESO
+              ExternalSecret opnsense-backup-puller); a TLS error = the router's
+              opnsense.teststuff.net cert; an S3 error = Garage or the Workspace key; "wheel sha256" =
+              the pypi-cache served something other than the pinned pyrage wheel.
+        # The detector: config revisions since the previous run whose author is neither the
+        # automation user, the backup puller, nor the ACME renewal script. Self-clearing — the next
+        # daily run replaces the gauge. triage: none — the only remedy is the operator deciding
+        # whether the change was theirs (and codifying it); an in-cluster session cannot know.
+        - alert: OpnsenseConfigUnattributedRevision
+          expr: |
+            max by (username) (opnsense_config_unattributed_revisions) > 0
+          for: 0m
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "OPNsense config changed {{ $value }}x by {{ $labels.username }} (not the automation)"
+            description: >-
+              The router's revision history shows config writes outside the as-code identities
+              since the previous backup run. `root@<ip>` = root's API key (the playbooks still use
+              it until the wrapper switch) or the web UI. The job log lists each revision's time and
+              description; the diff is on the router under Diagnostics: Configuration History.
+              Codify the change (ansible/opnsense-*) or revert it; the alert clears at the next run.
+        # Still suspended a week after the CronJob was created: the post-mint flip (FU-013) was
+        # forgotten and the router has no off-box backup while every other belt stays quiet.
+        - alert: OpnsenseConfigBackupSuspended
+          expr: |
+            (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
+            and on()
+              (max(kube_cronjob_created{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) < time() - 7 * 86400)
+          for: 1h
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The OPNsense config backup CronJob has been suspended for over a week"
+            description: >-
+              cronjob.yaml lands suspended until the backup-puller user exists on the router. Run the
+              prod mint (bash scripts/opnsense-api-users.sh), then set `suspend: false` — recipe in
+              docs/runbook.md §OPNsense config backup.
