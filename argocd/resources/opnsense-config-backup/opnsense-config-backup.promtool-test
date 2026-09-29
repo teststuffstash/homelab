@@ -1,0 +1,97 @@
+# Behaviour fixtures for the OPNsense config backup belts (FU-013). Every expected value below is
+# derived from the rule text in prometheusrule.yaml (26 h threshold, for: 1h; 7 d suspended
+# floor, for: 1h), not from running the rules.
+rule_files:
+  - opnsense-config-backup.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # STALE: last success at t=0, never again. 26 h = 1560 min; the expr turns true after 1560m
+  # and needs 60 min more (for: 1h) → silent at 1600m (true for 40m), firing at 1625m (65m).
+  - interval: 5m
+    name: "no success for 26h+1h fires Stale; unsuspended CronJob"
+    input_series:
+      - series: 'opnsense_config_backup_last_success_timestamp_seconds{job="opnsense_config_backup",router="opnsense-fw"}'
+        values: "0+0x400"
+      - series: 'kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}'
+        values: "0+0x400"
+    alert_rule_test:
+      - eval_time: 1600m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts: []
+      - eval_time: 1625m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts:
+          - exp_labels: { severity: warning }
+
+  # FRESH: success pushed every 24 h (1440 min) → never older than 26 h → never fires.
+  - interval: 5m
+    name: "daily success keeps Stale quiet"
+    input_series:
+      - series: 'opnsense_config_backup_last_success_timestamp_seconds'
+        values: "0+0x287 86400+0x288"
+      - series: 'kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}'
+        values: "0+0x575"
+    alert_rule_test:
+      - eval_time: 1625m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts: []
+      - eval_time: 2800m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts: []
+
+  # NEVER PUSHED + unsuspended → absent() branch fires after for: 1h.
+  - interval: 5m
+    name: "no success series at all fires Stale via absent()"
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts:
+          - exp_labels: { severity: warning }
+
+  # SUSPENDED (pre-mint): no success series, suspend=1 → Stale silent. Created at t=0 (series
+  # value 0), so Suspended needs time() > 7 d = 10080 min, then for: 1h → firing at 10145m, not
+  # at 10130m (true for 50 min).
+  - interval: 5m
+    name: "suspended CronJob silences Stale, and Suspended fires after a week"
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}'
+        values: "1+0x2100"
+      - series: 'kube_cronjob_created{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}'
+        values: "0+0x2100"
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: OpnsenseConfigBackupStale
+        exp_alerts: []
+      - eval_time: 10130m
+        alertname: OpnsenseConfigBackupSuspended
+        exp_alerts: []
+      - eval_time: 10145m
+        alertname: OpnsenseConfigBackupSuspended
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none }
+
+  # CLICK: a run pushes one unattributed revision by root@… → fires at once (for: 0m) with the
+  # username; the next run's PUT drops the series (staleness) → cleared.
+  - interval: 1m
+    name: "an unattributed revision fires with its username and clears when the series goes"
+    input_series:
+      - series: 'opnsense_config_unattributed_revisions{job="opnsense_config_backup",router="opnsense-fw",username="root@192.168.2.165"}'
+        values: "2+0x10 stale"
+      - series: 'opnsense_config_unattributed_revisions{job="opnsense_config_backup",router="opnsense-fw",username="(root)"}'
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OpnsenseConfigUnattributedRevision
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, username: "root@192.168.2.165" }
+      - eval_time: 15m
+        alertname: OpnsenseConfigUnattributedRevision
+        exp_alerts: []
