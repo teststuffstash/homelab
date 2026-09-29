@@ -39,3 +39,7 @@
     # module would append a duplicate neighbor on every run.
     match_fields: ['ip']
   loop: "{{ bgp_node_ips }}"
+
+# A FRESH router needs FRR cycled once for bgpd to run at all — see bgpd-running.yml (FU-298).
+- name: Start bgpd if FRR is running without it
+  ansible.builtin.import_tasks: bgpd-running.yml

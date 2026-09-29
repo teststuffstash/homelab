@@ -14,7 +14,7 @@
 #                 (os-frr / os-haproxy / os-acme-client present) + the fixture (below)
 #   2  base       master's collection pin + roles: acme, bgp, unbound, haproxy -> must succeed;
 #                 then a base RERUN (what is already non-idempotent on master: steps 3/5 label
-#                 those tasks pre-existing, never a regression). FU-298: bgpd started if absent
+#                 those tasks pre-existing, never a regression)
 #   3  head       the PR's collection + roles on top -> must succeed; changed= per play and the
 #                 changed task names are recorded (classified after step 5, see the report)
 #   4  mutation   with HEAD: one new value per service (BGP neighbour, Unbound override,
@@ -382,24 +382,6 @@ preflight() {
   done
 }
 
-# FU-298 (fresh-router defect #2): enabling BGP writes `bgpd` into /etc/rc.conf.d/frr, but the
-# reload the plays trigger does not restart watchfrr, so on a FRESH box bgpd never starts and the
-# running config holds no neighbours at all — on base and head alike (master reproduces it).
-# Prod never meets it (bgpd has run for years). Called after the first bgp converge of a fresh
-# box, so the step-4 FRR check tests the reload flag, not daemon startup. A REAL cycle, stop then
-# start (docs/runbook.md: the quagga `restart` endpoint is a no-op).
-FRR_CYCLED=0
-frr_start_bgpd_if_absent() {
-  local i
-  vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 && return 0
-  api POST quagga/service/stop '{}' >/dev/null; sleep 3
-  api POST quagga/service/start '{}' >/dev/null
-  for i in $(seq 1 20); do vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 && break; sleep 3; done
-  vm_ssh 'pgrep -x bgpd' >/dev/null 2>&1 || die "FU-298: bgpd still not running after an FRR stop/start"
-  FRR_CYCLED=$((FRR_CYCLED + 1))
-  echo "  FU-298: bgpd was not running after the fresh bgp converge — FRR stopped + started" >&2
-}
-
 # A task in a tag's changed list? (for the base-rerun comparisons)
 changed_in() { grep -qF -- "$1" "$LOG/$2.changed" 2>/dev/null; }
 
@@ -475,7 +457,6 @@ if has 2; then
   for p in $PLAYS; do
     run_play "2-base-${p%.yml}" base base "$p"
     [ "$RC" -eq 0 ] || { failstep "base \`$p\` rc=$RC"; fail_tail "2-base-${p%.yml}"; }
-    if [ "$p" = opnsense-bgp.yml ] && [ "$RC" -eq 0 ]; then frr_start_bgpd_if_absent; fi
   done
   recap_table '2-base-'
   # Base rerun = what is ALREADY non-idempotent on master. Later steps compare against it, so a
@@ -549,7 +530,6 @@ if has 5; then
   for p in $PLAYS; do
     run_play "5-run1-${p%.yml}" head head "$p"
     [ "$RC" -eq 0 ] || { failstep "fresh HEAD \`$p\` rc=$RC"; fail_tail "5-run1-${p%.yml}"; }
-    if [ "$p" = opnsense-bgp.yml ] && [ "$RC" -eq 0 ]; then frr_start_bgpd_if_absent; fi
   done
   for p in $PLAYS; do
     run_play "5-run2-${p%.yml}" head head "$p"
@@ -625,9 +605,6 @@ fi
 rep ''
 rep '### Notes'
 rep '- **FU-298, fresh-router defect 1, both refs** (not the change under test): `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register` without the account uuid; os-acme-client only routes `register/<uuid>` → HTTP 404 on any unregistered account. Prod never reaches it (its account is registered, the module returns early); a fresh box cannot converge the acme play. The fixture pre-registers the account via `register/<uuid>` so the VM matches prod.'
-if [ "$FRR_CYCLED" -gt 0 ]; then
-  rep "- **FU-298, fresh-router defect 2, both refs**: after the first bgp converge bgpd was not running (the reload does not restart watchfrr, so the \`bgpd\` just written into rc.conf.d/frr never starts); the harness stopped + started FRR ($FRR_CYCLED×) so the step-4 FRR check tests the reload flag, not daemon startup."
-fi
 rep ''
 rep '### Not validated here'
 rep '- ACME issuance/signing, the Cloudflare DNS-01 validation repoint and the certs'"'"' restart actions (no specs, no `ACME_CF_TOKEN` on the VM). The acme play does converge general settings, the account and the actions; the fixture registers that account with Let'"'"'s Encrypt from the VM each run (account only — no order, no DNS write; LE allows 10 new accounts per IP per 3 h, a run uses 2).'
