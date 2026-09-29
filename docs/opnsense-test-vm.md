@@ -102,13 +102,13 @@ the result is from prod** — weekly, destroyed after each run. It is a second V
 | VM | `9199` `opnsense-drill` on nx-02 — created and destroyed by each run (never in tofu); same hardware shape as `9110` |
 | WAN | `vmbr0`, **`192.168.2.68/24`** — reserved in [`machines.yaml`](../machines/machines.yaml) although it is empty between runs |
 | LAN | **`vmbr2`**, a second port-less bridge ([`tofu/opnsense-test.tf`](../tofu/opnsense-test.tf)) — `192.168.1.1/24` like `9110`'s, so it gets its own segment: one bridge for both would put two `.1`s and two DHCP servers on one wire |
-| Probe container | a Debian 12 LXC on `vmbr2` (template downloaded by the same tofu file), created and destroyed per run: the fake BGP peer and the DHCP/DNS/TLS probes |
+| Probe container | `9198` `opnsense-drill-probe`, a Debian 12 LXC on `vmbr2` (template downloaded by the same tofu file), created and destroyed per run: the fake BGP peer and the DHCP/DNS/TLS probes |
 
 The bridge and the template are the only persistent pieces.
 
 **Run it:** `bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]` — from the jail (prod creds
 from the wallet) or the box (its env file). The script's header lists the stages (preflight →
-build → converge → compare → destroy) and the environment; each stage is timed in the report.
+build → probe-setup → converge → probe → compare → destroy) and the environment; each stage is timed in the report.
 
 - **build** reuses the test VM's bootstrap: its `create`/`destroy` verbs make the tofu-shaped VM
   by `qm` (and refuse vmid `9110` and the name `opnsense-test`), then `bootstrap` as above — with a
@@ -122,6 +122,28 @@ build → converge → compare → destroy) and the environment; each stage is t
 - **preflight** reads nx-02's `nvme-thin` and free memory before anything writes and refuses above
   70 % / below 4 GiB (read the pool before writing GBs to a VM node); a leftover `opnsense-drill` from a
   crashed run is destroyed by name.
+
+### The behaviour probes — proven by what it does, not what it saved
+
+After the build and **before** any router code runs, the drill creates the probe container
+(`9198` `opnsense-drill-probe`, Debian 12, unprivileged) on `vmbr2` and installs FRR, a DHCP
+client and `dig` through the fresh router's own NAT — so a converge that breaks egress cannot
+fail the setup. After the converge it asserts, each with its own metric/row:
+
+| Probe | Passes when | Expected value comes from |
+|---|---|---|
+| `dhcp_reservation` | a NIC with a reserved MAC is leased its pinned address | `opnsense/dnsmasq-dhcp.py` `HOSTS[0]`, remapped to `1.0/24` |
+| `dhcp_pool` | a NIC with a random MAC is leased an address in `.100–.245` | the script's `RANGE` |
+| `dns_override` | `dig @192.168.1.1` answers an Unbound override | `group_vars` `unbound_hosts[0]` |
+| `haproxy_tls` | a TLS handshake completes on a HAProxy VIP with the frontend's SNI | `haproxy_proxied_services[0]` (the cert is the harness fixture's) |
+| `bgp_session` | the fake peer (FRR, **AS 64513**, `192.168.1.2`) reaches `Established` with the router's FRR | [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) makes it the router's neighbour |
+| `bgp_route` | the router's kernel routes the peer's `192.168.40.254/32` via `192.168.1.2` | the peer announces it; prod's `CILIUM-ALLOW-ALL` route map admits it |
+
+The VM's WAN-side block on TCP 179 stays: the peer is on the LAN side, so the session is real
+and still cannot reach the cluster. **First run (2026-09-29):** the four service probes pass; both
+BGP probes FAIL because `bgpd` never starts on a fresh router (FU-298's second defect) — with
+FRR cycled by hand on the kept VM the session went `Established` and the route landed via the
+peer, so the probes pass once the role starts `bgpd`.
 
 ### The realism score — prod's config.xml vs the from-git build
 
