@@ -1,0 +1,84 @@
+# The rebuild drill's comparison map (FU-297) — what a prod-vs-drill config.xml difference is
+# ALLOWED to be. Read by opnsense/drill/config-compare.py; the method is in its header and in
+# docs/opnsense-test-vm.md §The rebuild drill. Every difference NOT named here is bucket (a):
+# on prod and not in code (or in code and not on prod) — the realism score counts those.
+#
+#   env       <kind> <path-glob>                  (b) environment-parametrized: the drill's own
+#                                                     addresses, name, keys, WAN, seed
+#   accepted  <kind> <path-glob>                  (c) certs, generated ids, timestamps, history —
+#                                                     and what the drill deliberately cannot do
+#   remap     <path-glob> <drill-prefix> <prod-prefix>   (b) a value that differs ONLY by the
+#                                                     drill's LAN prefix (compared after rewrite)
+#
+# kind: * | value | prod-only | drill-only.  path: slash-separated tags, a list item as
+# `tag[key]` (key = name/description/address/..., '/' in a key → %2F). Glob: `*` = within one
+# path segment, `**` = across segments, everything else literal. First match wins.
+# Keep it SMALL and SPECIFIC: a broad line hides the click-ops this exists to count. A line that
+# matched nothing on a run is listed at the bottom of the drill report — delete it.
+
+# ── (b) env: the drill's LAN is 192.168.1.0/24 (vmbr2), prod's 192.168.2.0/24 ───────────────
+remap  dnsmasq/**                               192.168.1.  192.168.2.
+env    value       interfaces/lan/ipaddr
+env    value       interfaces/lan/if
+env    value       interfaces/lan/subnet
+# ── (b) env: the WAN — prod's is the ISP link (DHCP, public), the drill's a static .68 on vmbr0 ─
+env    *           interfaces/wan/**
+env    *           OPNsense/Gateways/gateway_item[WAN_GW]/**
+env    *           system/dnsserver[*]
+env    *           system/dns*gw
+env    drill-only  system/dnsallowoverride
+# ── (b) env: the drill's identity + its seed (opnsense/test-vm/config.xml.tmpl) ────────────────
+env    value       system/hostname
+env    value       system/user[root]/password
+env    value       system/user[root]/apikeys
+env    value       system/user[root]/authorizedkeys
+env    value       system/user[root]/shell
+env    value       system/user[root]/pwd_changed_at
+env    *           system/ssh/**
+env    value       system/primaryconsole
+env    drill-only  system/secondaryconsole
+env    value       system/disableconsolemenu
+env    drill-only  ntpd/ispool
+env    drill-only  filter/rule[FU-297: *]
+# ── (b) env: BGP peers — prod's are the cluster nodes, the drill's is its fake peer (drill-overrides.yml)
+env    prod-only   OPNsense/quagga/bgp/neighbors/neighbor[192.168.2.*]
+env    drill-only  OPNsense/quagga/bgp/neighbors/neighbor[192.168.1.2]
+env    value       OPNsense/quagga/bgp/routerid
+# ── (b) env: ddclient's Cloudflare token is a dummy on the drill (the harness's step `all`) ─────
+env    value       OPNsense/DynDNS/accounts/account[*]/password
+# ── (b) env: WireGuard's keypair is generated ON each router (the role, by design) ─────────────
+env    value       OPNsense/wireguard/server/servers/server[*]/pubkey
+env    value       OPNsense/wireguard/server/servers/server[*]/privkey
+
+# ── (c) accepted: certificates and their CAs (issued on prod; the drill cannot issue) ─────────
+accepted  *           cert[*]
+accepted  *           cert[*]/**
+accepted  prod-only   ca[*]
+accepted  value       system/webgui/ssl-certref
+accepted  value       OPNsense/HAProxy/frontends/frontend[*]/ssl_certificates
+# ACME: the drill runs the acme play with NO cert specs and no Cloudflare token (a spec'd cert
+# is a real Let's Encrypt order + a DNS write — ansible/test-vm/overrides.yml). The harness
+# fixture stands in DISABLED rows bound to a self-signed cert, so every row field that issuance
+# or the spec sets differs; the rows themselves (by name) are still compared.
+accepted  value       OPNsense/AcmeClient/certificates/certificate[*]/*
+accepted  prod-only   OPNsense/AcmeClient/certificates/certificate[opnsense.teststuff.net]
+accepted  drill-only  OPNsense/AcmeClient/certificates/certificate[fu297-*]
+accepted  prod-only   OPNsense/AcmeClient/validations/validation[aws-acme]
+accepted  drill-only  OPNsense/AcmeClient/validations/validation[fu297-fixture]
+accepted  drill-only  OPNsense/AcmeClient/accounts/account[fu297-fixture]
+accepted  value       OPNsense/AcmeClient/settings/UpdateCron
+accepted  prod-only   OPNsense/cron/jobs/job[AcmeClient Cronjob for Certificate AutoRenewal]
+accepted  value       OPNsense/AcmeClient/accounts/account[*]/key
+accepted  value       OPNsense/AcmeClient/accounts/account[*]/statusLastUpdate
+# ── (c) accepted: generated ids, counters, timestamps, history, UI layout ──────────────────────
+accepted  value       OPNsense/HAProxy/*/*[*]/id
+accepted  value       OPNsense/AcmeClient/*/*[*]/id
+accepted  *           revision/**
+accepted  value       nat/rule[*]/created/time
+accepted  value       nat/rule[*]/updated/time
+accepted  prod-only   system/nextuid
+accepted  prod-only   system/nextgid
+accepted  prod-only   widgets/**
+# ── (c) accepted: fields a fresh 26.1 install writes that a years-old config never got ────────
+accepted  drill-only  system/firmware/aux
+accepted  drill-only  hasync/pfsyncdefer

@@ -7,6 +7,7 @@
 #   bash scripts/opnsense-test-vm.sh --pr 2033 [--post] [--status] [--keep] [--steps "1 2 3 4 5"]
 #   bash scripts/opnsense-test-vm.sh --pr 2033 --steps prep     # no VM: guard + syntax-check, both refs
 #   bash scripts/opnsense-test-vm.sh --base <ref> --head <ref> [...]
+#   bash scripts/opnsense-test-vm.sh --ref <rev> --steps "1 all"   # the rebuild drill: no fetch
 #
 # Steps (the flow in docs/runbook.md §OPNsense test VM):
 #   1  rollback   qm rollback <vmid> <snapshot> on nx-02, start, wait for the API; preflight
@@ -22,6 +23,10 @@
 #                 BASE roles + HEAD collection (the #2033 regression shape) — the same kind of
 #                 mutation is saved but should NOT reach the daemon
 #   5  fresh      rollback again, HEAD plays twice: run 1 succeeds, run 2 changed=0 everywhere
+#   all           (the rebuild drill, scripts/opnsense-drill.sh) converge ALL router code at HEAD
+#                 once: every ansible/opnsense-*.yml play, then opnsense/dnsmasq-dhcp.py and
+#                 opnsense/tuya-egress.py (OPN_HOST pinned to the VM). ddclient gets a dummy
+#                 Cloudflare token (its account needs one; the VM's update is refused upstream)
 #
 # The production router is unreachable to this script BY CONSTRUCTION:
 #   - it never calls scripts/opnsense-playbook.sh and never loads ansible/inventory.yml as an
@@ -58,6 +63,9 @@
 #   OPN_TEST_KEY_ENTRY / OPN_TEST_SECRET_ENTRY  wallet entries   (default opnsense-test-api-key / -secret)
 #   OPN_TEST_API_KEY / OPN_TEST_API_SECRET      pre-set creds win over the wallet
 #   OPN_TEST_WORKDIR     worktrees, collections, logs, report    (default: mktemp -d)
+#   OPN_TEST_EXTRA_VARS  one more `-e @file` after overrides.yml on every play (the drill's
+#                        BGP neighbour = its fake peer)                (default: none)
+#   OPN_DHCP_REMAP       passed to opnsense/dnsmasq-dhcp.py by step `all` (its header)
 #
 # Exit: 0 PASS, 1 FAIL (a step assertion), 2 usage / guard / environment.
 set -euo pipefail
@@ -65,12 +73,13 @@ set -euo pipefail
 usage() { sed -n '2,24p' "$0" >&2; exit 2; }
 die() { echo "opnsense-test-vm: $*" >&2; exit 2; }
 
-PR=''; BASE_REF=''; HEAD_REF=''; STEPS='1 2 3 4 5'; POST=0; STATUS=0; KEEP=0
+PR=''; BASE_REF=''; HEAD_REF=''; STEPS='1 2 3 4 5'; POST=0; STATUS=0; KEEP=0; NOFETCH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr) PR="$2"; shift 2 ;;
     --base) BASE_REF="$2"; shift 2 ;;
     --head) HEAD_REF="$2"; shift 2 ;;
+    --ref) BASE_REF="$2"; HEAD_REF="$2"; NOFETCH=1; shift 2 ;;
     --steps) STEPS="$2"; shift 2 ;;
     --post) POST=1; shift ;;
     --status) STATUS=1; shift ;;
@@ -178,7 +187,9 @@ if [ -n "$PR" ]; then
   BASE_SHA="$(git rev-parse "origin/$BASE_BRANCH")"
   git cat-file -e "$HEAD_SHA^{commit}" || die "PR head $HEAD_SHA not fetched"
 else
-  git fetch -q origin
+  # --ref: a revision already here (the box's checkout — whose fetches are authenticated by its
+  # own loop, never an anonymous one from this script).
+  [ "$NOFETCH" -eq 1 ] || git fetch -q origin
   BASE_SHA="$(git rev-parse --verify "$BASE_REF^{commit}")"
   HEAD_SHA="$(git rev-parse --verify "$HEAD_REF^{commit}")"
 fi
@@ -211,7 +222,7 @@ ansible_on() {
   env ANSIBLE_CONFIG="$wt/ansible/ansible.cfg" ANSIBLE_COLLECTIONS_PATH="${COL[$cref]}" \
       ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_RETRY_FILES_ENABLED=0 \
     ansible-playbook -i "$INV" --limit opnsense-test-vm "$wt/ansible/$play" \
-      -e "@$OVR" "$@" -e "opnsense_prod_host=$PROD_HOST" \
+      -e "@$OVR" ${OPN_TEST_EXTRA_VARS:+-e "@$OPN_TEST_EXTRA_VARS"} "$@" -e "opnsense_prod_host=$PROD_HOST" \
       -e "ansible_python_interpreter=${PY[$cref]}"
 }
 
@@ -554,6 +565,27 @@ if has 5; then
   rep ''; recap_table '5-run2-'
   rep ''
   for p in $PLAYS; do changed_list "5-run2-${p%.yml}"; done
+fi
+
+# Step all (the rebuild drill): every piece of router code once, at HEAD, onto the VM. The two
+# python scripts dial OPN_HOST — pinned here to the guarded test address, never their default.
+if has all; then
+  echo "step all: converge every router-code unit at HEAD" >&2
+  rep ''; rep '### all. Converge ALL router code at HEAD'; rep ''
+  for p in $PLAYS opnsense-ddclient.yml opnsense-wireguard.yml; do
+    if [ "$p" = opnsense-ddclient.yml ]; then export ACME_CF_TOKEN=fu297-drill-not-a-token; fi
+    run_play "all-${p%.yml}" head head "$p"
+    unset ACME_CF_TOKEN
+    [ "$RC" -eq 0 ] || { failstep "\`$p\` rc=$RC"; fail_tail "all-${p%.yml}"; }
+  done
+  recap_table 'all-'
+  for py in dnsmasq-dhcp tuya-egress; do
+    set +e
+    OPN_HOST="$OPN_TEST_HOST" python3 "${WT[head]}/opnsense/$py.py" > "$LOG/all-$py.log" 2>&1; RC=$?
+    set -e
+    rep "- \`opnsense/$py.py\`: rc=$RC"
+    [ "$RC" -eq 0 ] || { failstep "\`opnsense/$py.py\` rc=$RC"; fail_tail "all-$py"; }
+  done
 fi
 
 # Step 3 classification: a task that changed on HEAD-over-base AND again on the idempotent
