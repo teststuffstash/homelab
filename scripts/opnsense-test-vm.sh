@@ -280,12 +280,45 @@ fixture_names() { # every cert_domain the HAProxy role will look up, over both r
   echo fu297-pos.teststuff.net; echo fu297-neg.teststuff.net
 }
 
+# The role's Let's Encrypt account, pre-created AND registered, so the VM matches prod's state.
+# Why: oxlorg.opnsense's acme_account register() (identical in 25.7.8 and 26.1.11,
+# plugins/module_utils/main/acme_account.py) POSTs `acmeclient/accounts/register` with NO uuid,
+# while os-acme-client's AccountsController::registerAction($uuid) only routes register/<uuid>
+# -> HTTP 404 on any account whose statusCode is not 200. Prod never reaches that call (its
+# account registered long ago -> early return); a fresh box always does. A pre-existing upstream
+# defect on BOTH refs, not a property of the change under test — so the fixture registers via
+# the right route, and the report says so. This contacts Let's Encrypt (account only: no order,
+# no DNS write). Per run, not baked into the snapshot: the baseline stays "fresh OPNsense + API
+# key", and every piece of state the plays rely on is in git, here.
+fixture_account() {
+  local gv="${WT[base]}/ansible/group_vars/opnsense.yml" name email uuid out i st=''
+  name="$(yq -r '.acme_account_name' "$gv")"; email="$(yq -r '.acme_account_email' "$gv")"
+  uuid="$(api GET acmeclient/accounts/search | jq -r --arg n "$name" '.rows[]? | select(.name == $n) | .uuid' | head -1)"
+  if [ -z "$uuid" ]; then  # the shape the role's acme_account task creates
+    out="$(api POST acmeclient/accounts/add "$(jq -n --arg n "$name" --arg e "$email" \
+      '{account: {enabled: "1", name: $n, email: $e, ca: "letsencrypt"}}')")"
+    uuid="$(echo "$out" | jq -r '.uuid // empty')"; [ -n "$uuid" ] || die "fixture: accounts/add ($name) said: $out"
+  fi
+  st="$(api GET acmeclient/accounts/search | jq -r --arg u "$uuid" '.rows[]? | select(.uuid == $u) | .statusCode')"
+  if [ "$st" != 200 ]; then
+    out="$(api POST "acmeclient/accounts/register/$uuid" '{}')"
+    echo "$out" | jq -e '.response != null' >/dev/null || die "fixture: accounts/register/$uuid said: $out"
+    for i in $(seq 1 24); do
+      st="$(api GET acmeclient/accounts/search | jq -r --arg u "$uuid" '.rows[]? | select(.uuid == $u) | .statusCode')"
+      [ "$st" = 200 ] && break; sleep 5
+    done
+    [ "$st" = 200 ] || die "fixture: account '$name' not registered after 2 min (statusCode '$st')"
+  fi
+  echo "  fixture: account '$name' registered (statusCode 200)" >&2
+}
+
 fixture() {
   local refid acct val row n added=0 key crt out
   key="$WORK/fixture.key"; crt="$WORK/fixture.crt"
   # Pinned openssl, every algorithm explicit (no defaults to drift). Throwaway, never committed.
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 -sha384 -nodes -days 30 \
     -subj "/CN=fu297-fixture.invalid" -keyout "$key" -out "$crt" >/dev/null 2>&1
+  fixture_account
   refid="$(api GET trust/cert/search | jq -r '.rows[]? | select(.descr == "fu297-fixture") | .refid' | head -1)"
   if [ -z "$refid" ]; then
     out="$(api POST trust/cert/add "$(jq -n --rawfile c "$crt" --rawfile k "$key" \
@@ -506,8 +539,11 @@ if has 3 && has 5; then
 fi
 
 rep ''
+rep '### Notes'
+rep '- **Pre-existing upstream defect, both refs** (not the change under test): `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register` without the account uuid; os-acme-client only routes `register/<uuid>` → HTTP 404 on any unregistered account. Prod never reaches it (its account is registered, the module returns early); a fresh box cannot converge the acme play. The fixture pre-registers the account via `register/<uuid>` so the VM matches prod.'
+rep ''
 rep '### Not validated here'
-rep '- ACME issuance/signing, the Cloudflare DNS-01 validation repoint and the certs'"'"' restart actions (no specs, no `ACME_CF_TOKEN` on the VM). The acme play does converge general settings, the account (registration against Let'"'"'s Encrypt — no order, no DNS write) and the actions.'
+rep '- ACME issuance/signing, the Cloudflare DNS-01 validation repoint and the certs'"'"' restart actions (no specs, no `ACME_CF_TOKEN` on the VM). The acme play does converge general settings, the account and the actions; the fixture registers that account with Let'"'"'s Encrypt from the VM each run (account only — no order, no DNS write; LE allows 10 new accounts per IP per 3 h, a run uses 2).'
 rep '- HAProxy against a real certificate or backend: the frontends bind a self-signed fixture cert; backends are unreachable addresses.'
 rep '- BGP sessions: neighbours are RFC 5737 addresses, so FRR config is proven, not peering.'
 rep '- ddclient / WireGuard plays and `opnsense/dnsmasq-dhcp.py` (out of scope for this harness).'
