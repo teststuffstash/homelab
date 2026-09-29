@@ -17,6 +17,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [opnsense-as-code](opnsense-as-code/SKILL.md) | Router changes as code (Unbound/HAProxy/ACME/BGP/DHCP) |
 | [tofu-apply](tofu-apply/SKILL.md) | Run tofu correctly (secrets, `-chdir`, plan-first) |
 | [skill-retro](skill-retro/SKILL.md) | Batched retro over jail transcripts → the GAPS ledger |
+| [second-jail](second-jail/SKILL.md) | A SECONDARY mono jail beside the primary: clone-only, no shared records, PR lane; **operator-typed only** |
 
 ## Improvement contract
 
