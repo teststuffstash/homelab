@@ -190,8 +190,10 @@
     },
     {
       "complete": false,
-      "gap_cells": [],
-      "gap_rows": 0,
+      "gap_cells": [
+        "merge_gate"
+      ],
+      "gap_rows": 2,
       "human_cells": [],
       "human_rows": 0,
       "id": 12,
@@ -1877,7 +1879,9 @@
     },
     {
       "class": 12,
-      "gap_columns": [],
+      "gap_columns": [
+        "merge_gate"
+      ],
       "key": "12:linkedom",
       "last_proven": null,
       "name": "linkedom",
@@ -1888,7 +1892,9 @@
     },
     {
       "class": 12,
-      "gap_columns": [],
+      "gap_columns": [
+        "merge_gate"
+      ],
       "key": "12:mermaid",
       "last_proven": null,
       "name": "mermaid",
