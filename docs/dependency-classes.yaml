@@ -181,16 +181,16 @@ classes:
     canary: {status: gap, text: "none"}
 
   - id: 12
-    name: npm CI tooling
-    extract: npm
-    where: "`scripts/mermaid-lint/package.json` (+ lockfile) — the docs' mermaid parser, CI-only"
-    manager: npm
+    name: JS CI tooling (Deno)
+    extract: deno
+    where: "`scripts/mermaid-lint/deno.json` (+ `deno.lock`) — the docs' mermaid parser, CI-only, run with NO Deno permissions (ADR-143)"
+    manager: deno
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["scripts/mermaid-lint/"]
-    proposer: {status: ok, text: "Renovate `npm` — #2012 (jsdom 30.1.0) merged 2026-09-27; #1977 (mermaid) open"}
-    merge_gate: {status: ok, text: "patch/minor → `automerge` (rule added 2026-09-27, S9 #1988 (c)); majors → the un-armed catch-all; manifest + lockfile un-owned in CODEOWNERS"}
-    deploy_edge: {status: ok, text: "self-deploying — `ci` runs `npm ci` + a parse on every PR"}
-    detector: {status: ok, text: "required `ci` (`mermaid-lint`) is the detector — a broken parser reds the PR before merge"}
+    proposer: {status: ok, text: "Renovate `deno` (ADR-143, 2026-09-29 — the npm lane's #2012 jsdom 30.1.0 merged 2026-09-27 is the prior proof; jsdom left with the switch)"}
+    merge_gate: {status: gap, text: "patch/minor → `automerge`; majors → the un-armed catch-all. `lock-intake-lint` (OSV-flagged / <7 d / install-script intake, transitive included — ADR-143) is BUILT but not yet a `ci` step: the operator-direct ci.yaml wiring is FU-294's next action, and flips this cell"}
+    deploy_edge: {status: ok, text: "self-deploying — `ci` fetches the lock's integrity-pinned tarballs + parses on every PR"}
+    detector: {status: ok, text: "required `ci` (`mermaid-lint`) — a broken parser reds the PR before merge"}
     revert: {status: ok, text: "`git revert` — no runtime consumer"}
     canary: {status: ok, text: "the PR's own `ci` run exercises the exact dependency that ships"}
 

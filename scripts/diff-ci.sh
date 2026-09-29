@@ -77,7 +77,8 @@ MAP=(
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"
-  "mermaid-lint:\.md$"
+  "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
+  "lock-intake-lint-test:^scripts/lock-intake-lint"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which
@@ -86,7 +87,7 @@ MAP=(
 )
 # Gates that exist in ci.yaml but are PR-context-only (base/author) — exempt from the
 # coverage belt below, with the reason on the record.
-PR_ONLY="pin-only-lint governance-lint"
+PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.

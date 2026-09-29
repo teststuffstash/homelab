@@ -28,7 +28,6 @@ __pycache__/
 # Local Garage backups (scripts/garage-backup.sh) — bulk object data, never a git artifact.
 /backups/
 .opencode-go.env
-scripts/mermaid-lint/node_modules/
 CLAUDE.local.md
 
 # Transient PXE flags / per-node procedure state (FU-244) — never committed

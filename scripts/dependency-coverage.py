@@ -378,13 +378,14 @@ def extract_arc_runner():
     return rows
 
 
-def extract_npm():
+def extract_deno():
     rows = []
-    for path in repo_files("scripts/*/package.json"):
-        pkg = json.loads(read(path))
-        for section in ("dependencies", "devDependencies"):
-            for name, ver in sorted((pkg.get(section) or {}).items()):
-                rows.append({"name": name, "version": ver, "where": [rel(path)], "match": [f'"{name}"']})
+    for path in repo_files("scripts/*/deno.json"):
+        for alias, spec in sorted((json.loads(read(path)).get("imports") or {}).items()):
+            m = re.match(r"^npm:(@?[^@]+)@(.+)$", spec)
+            if m:
+                rows.append({"name": m.group(1), "version": m.group(2), "where": [rel(path)],
+                             "match": [f"npm:{m.group(1)}@"]})
     return rows
 
 
@@ -401,7 +402,7 @@ def extract_all(registry):
         "github_actions": extract_github_actions,
         "ansible": extract_ansible,
         "arc_runner": extract_arc_runner,
-        "npm": extract_npm,
+        "deno": extract_deno,
         "none": lambda: [],
     }
     rows = []

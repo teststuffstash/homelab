@@ -83,8 +83,8 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "npm — homelab's only npm surface is scripts/mermaid-lint (jsdom + mermaid, the docs' mermaid parser), CI-only dev tooling exercised by required `ci` (`npm ci` + a parse on every PR) → mechanical automerge for patch/minor; majors → the catch-all. Until 2026-09-27 these bumps had NO lane (#1977/#2012 — the #1988 unlabelled class) and /scripts/ CODEOWNERS parked them; the manifest + lockfile are un-owned in CODEOWNERS since the same day.",
-      "matchManagers": ["npm"],
+      "description": "npm packages via the `deno` manager — homelab's only JS surface is scripts/mermaid-lint (deno.json imports + deno.lock: mermaid + linkedom, the docs' mermaid parser; ADR-143 retired its package.json/npm lane 2026-09-29). CI-only dev tooling exercised by required `ci` on every PR (the parse, run with NO Deno permissions). `lock-intake-lint` — built with ADR-143, wired into `ci` by the operator-direct step FU-294 tracks — fails any lockfile change bringing in an OSV-flagged, <7-day-old or install-script package version — transitive ones included, which Renovate's osvVulnerabilityAlerts (direct deps only) and minimumReleaseAge (the bumped dep only) never see. Renovate's `deno install --frozen=false` honours deno.json's minimumDependencyAge, so the regenerated lock is floored too. Patch/minor → mechanical automerge; majors → the catch-all. `npm` stays in the list for stack repos that still carry a package.json.",
+      "matchManagers": ["npm", "deno"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
       "automerge": true
