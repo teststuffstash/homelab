@@ -78,6 +78,11 @@ ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.59 qm rollback 9110 b
    seed ISO → first boot through the importer → firmware update to 26.1.11 → plugins → clean
    shutdown → seed CD removed → snapshot `baseline` → started.
 
+**Recovery — a bootstrap that died after the import** (VM up, API answering with the wallet key,
+no snapshot yet): `bash scripts/opnsense-test-vm-bootstrap.sh finish` redoes only what is missing.
+Every step is judged by its outcome (version, installed plugin), not by the firmware job's
+status: on the 2026-09-29 build `upgradestatus` read `error` for an update that had landed.
+
 **Recovery — the disk booted without the seed** (e.g. someone ran `qm start` first): the factory
 config was written and the importer never offers itself again; `bootstrap` refuses. Destroy the
 VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate it, then bootstrap.
