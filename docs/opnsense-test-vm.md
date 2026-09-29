@@ -195,8 +195,11 @@ prod's config holds private keys and hashes. `bash opnsense/drill/config-compare
 scorer's self-test (synthetic documents); the drill runs it before every score.
 
 **Reducing the score** is the point: each (a) row is either code to write (put the setting in a
-role), residue to delete on prod (a dead ISC-DHCP block), or — only if it really is environment or
-unreachable — a reviewed map line.
+role), or — only if it really is environment, unreachable or dead residue — a reviewed map line.
+Prod config is never deleted to lower the score (operator, 2026-09-29): dead residue (the ISC-DHCP
+block, the empty-valued legacy tunables, disabled port-forwards) is accepted **in its dead state
+only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
+header) — the same path counts again the day it comes alive.
 
 ### On the management box — weekly, with metrics and belts
 
