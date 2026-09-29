@@ -125,7 +125,9 @@ The five steps (rollback → base converges → head on top → a mutation reach
 daemons, with a BASE-roles negative control → fresh converge + idempotent rerun), the isolation
 overrides and what the run does NOT prove (ACME issuance, real backends, BGP sessions) are in
 the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. `--status`
-also sets an `opnsense-test-vm` commit status on the validated head sha.
+also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
+*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
+comment, which names the sha, is the record.
 
 ### Expose an in-cluster service over HTTPS (`<name>.teststuff.net`)
 

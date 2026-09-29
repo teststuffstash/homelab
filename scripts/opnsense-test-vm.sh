@@ -519,6 +519,7 @@ if [ "$POST" -eq 1 ]; then gh pr comment "$PR" --body-file "$REPORT" >&2; fi
 if [ "$STATUS" -eq 1 ]; then
   st=success; [ "$VERDICT" = PASS ] || st=failure
   gh api -X POST "repos/{owner}/{repo}/statuses/$HEAD_SHA" -f state="$st" -f context=opnsense-test-vm \
-    -f description="OPNsense test VM (FU-297): $VERDICT at ${HEAD_SHA:0:12}" >/dev/null
+    -f description="OPNsense test VM (FU-297): $VERDICT at ${HEAD_SHA:0:12}" >/dev/null \
+    || echo "commit status NOT written — the token needs Commit statuses: write (the jail PAT gets 403, probed 2026-09-29); the PR comment names the sha" >&2
 fi
 [ "$VERDICT" = PASS ]
