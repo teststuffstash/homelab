@@ -90,6 +90,34 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 **Moving the baseline** (a new prod version): roll back, update, then replace the snapshot
 (`qm delsnapshot` + `qm snapshot`) and bump `SERIES` in the bootstrap script.
 
+## The official update path — observed on this VM (2026-09-29)
+
+The firmware path the GUI drives ([upstream: major upgrades](https://docs.opnsense.org/manual/updates.html#major-upgrades)),
+run through the API against `9110` from `baseline` (26.1.11_10). Each row is what one call did; "revisions" are
+new entries in `GET core/backup/backups/this` (all written by `(root)`, none by the API user).
+
+| Step | Call | Took | Reboots | Revisions written |
+|---|---|---|---|---|
+| check | `POST core/firmware/check`, poll `upgradestatus` | ~3 s | 0 | **none** (count and newest id unchanged, `/conf/config.xml` mtime unchanged — twice: at 26.1 and at 26.7) |
+| hotfix | `POST core/firmware/update` | < 1 min | 0 | none — "Nothing to do": the 26.1 mirror serves only 26.1.11_10, which `baseline` already is. The bootstrap's 26.1.6 → 26.1.11_10 pass (one reboot) plus the plugin installs left pairs of `run_migrations.php made changes` + `firmware/register.php made changes` |
+| major | `POST core/firmware/upgrade` (offered once 26.1 is fully updated: `status` = `upgrade`, `upgrade_major_version` `26.7`, 26.1 declared end of life) | 5 min 06 s to API-up | 3, all automatic | one: `run_migrations.php made changes` (SystemHealth 0.0.0→1.0.0, Trust General 1.0.1→1.0.2) |
+| minor | `POST core/firmware/check`, then `POST core/firmware/update` | 2 min 42 s to API-up | 1, automatic (the job ends `***REBOOT***`) | two: `run_migrations.php made changes` |
+
+- **The major runs offline.** ~2 min 20 s online (download + kernel), then reboot → `>>> Invoking early script 'upgrade'`
+  installs `base-26.7`, reboot → installs `packages-26.7` (337 packages, FreeBSD 14.3 → 15.1), reboot → up at
+  **26.7.1_1**. API and SSH are down for ~3 min; the only view is the serial console (`qm terminal 9110`, or a
+  reader on `/var/run/qemu-server/9110.serial0` like the bootstrap's importer driver). No prompt at any stage.
+  The loader keeps the previous kernel as `kernel (1 of 2)`.
+- During the download `upgradestatus` returns **invalid JSON** (raw progress control characters in `log`) — a
+  poller must strip `\x00-\x1f` before parsing, and judge by the outcome (`firmware/info`), as the bootstrap does.
+- After the minor: **26.7.4_1**, FreeBSD 15.1-RELEASE-p3, `os-frr` 1.55 (frr10 10.7.1), `os-haproxy` 5.1
+  (haproxy32 3.2.23), `os-acme-client` 4.17; a following check reports no updates.
+- The resulting disk is snapshot **`trial-26-7-4`** (child of `baseline`): `OPN_TEST_SNAPSHOT=trial-26-7-4`
+  runs the harness against 26.7. `baseline` stays 26.1 — prod's series — until prod moves
+  (§Recipes, *Moving the baseline*).
+- First harness run there (2026-09-29, `--pr 2033`): **PASS** on all five steps — master's `oxlorg.opnsense`
+  25.7.8 and #2033's 26.1.11 both converge, reach the running daemons and rerun at `changed=0` on 26.7.4.
+
 ## The rebuild drill
 
 The test VM above answers "does this PR apply?". The drill answers the boot-from-git question for
