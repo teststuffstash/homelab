@@ -173,10 +173,11 @@ ddclient_hostname: wg.teststuff.net
 ddclient_account_description: "wg endpoint (ansible)"
 
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
+# argo/apps are NOT listed: their overrides belong to opnsense-haproxy (haproxy_proxied_services),
+# which creates the VIP they point at. Listing a name in both made the two roles rewrite the same
+# record's description on every run (neither ever idempotent) — found by the FU-297 test VM.
 unbound_hosts:
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
-  - { hostname: argo, domain: teststuff.net, value: 192.168.3.24, description: "Argo Workflows UI (HAProxy VIP; backend LB 40.24)" }
-  - { hostname: apps, domain: teststuff.net, value: 192.168.3.25, description: "GitHub Apps declared-vs-live page (HAProxy VIP; backend LB 40.25, github-exporter)" }
   - { hostname: npm-cache, domain: teststuff.net, value: 192.168.40.35, description: "npm pull-through cache (BGP VIP) — Deno needs a hostname registry, an IP URL breaks its cache (ADR-143, FU-294)" }
 
 # Zones Unbound answers NXDOMAIN for, the zone AND every name under it (one DNSBL policy).
