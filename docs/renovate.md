@@ -44,7 +44,8 @@ immediately. Our baseline blunts both vectors:
 |---|---|---|
 | **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. | pnpm `minimumReleaseAge` |
 | **SHA-pin Actions** — `helpers:pinGitHubActionDigests` | **Tag re-pointing** — a hijacked `@v4` can't inject if we're on the immutable commit SHA. Renovate keeps the SHA current (+ the tag in a comment). | SLSA / pinning |
-| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable deps; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). | SLSA S2C2F |
+| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable **direct** deps already on the base branch; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). It never sees a TRANSITIVE dependency, nor what a PR brings in — that is the next row. | SLSA S2C2F |
+| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock` + `package-lock.json`; any other lockfile type fails closed until it has an extractor. | the #2032 lodash-es miss |
 
 Not yet built (the strongest, aspirational leg): **verify SLSA provenance / signatures** on consumed
 artifacts (`cosign verify-attestation`) so a backdoored artifact is rejected even *inside* the cooldown.
@@ -70,9 +71,11 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
   adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
   other major stays un-armed on the human lane until its class row is complete (#1988).
-- **npm (`scripts/mermaid-lint`, CI-only dev tooling exercised by required `ci`)** rides the mechanical
-  `automerge` lane for patch/minor; its manifest + lockfile are un-owned in CODEOWNERS (S9 #1988 (c),
-  2026-09-27). Majors → the catch-all.
+- **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
+  exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
+  catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
+  permissions, and `lock-intake-lint` judges every lock change. A red intake WAITS for upstream — no
+  local pin or override (ADR-143).
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider

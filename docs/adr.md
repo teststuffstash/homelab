@@ -2543,3 +2543,24 @@ subagents, issue says one thing, PR does another) against a throwaway `goal/**` 
 it; the re-reads count gate-change PRs, lens verdicts, DIFFERS lines and any weakened gate found
 after merge. Revert = restore `/scripts/` in CODEOWNERS + `scripts/` in GOVERNANCE (the ❌ table rows
 follow). Tracker: FU-293; lane table: [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.
+
+### ADR-143 — Third-party JS runs with no permissions; a lockfile's intake is judged statically before anything runs (2026-09-29)
+**Status:** Accepted (operator, 2026-09-29: "only structural fixes … a vulnerability analyzer should find these").
+**Decision:** (1) `scripts/mermaid-lint` leaves npm: the parser runs under **Deno with zero
+permissions** (`deno run --frozen`, markdown piped on stdin by the shell wrapper — no env, fs, net,
+subprocess, FFI), deps in `deno.json` + `deno.lock` with `minimumDependencyAge: P7D`; Renovate's
+`deno` manager proposes. (2) **`lock-intake-lint`** (`scripts/lock-intake-lint.py`, `ci`, PR-only):
+the (package, version) pairs a PR's lockfile diff adds — transitive included — fail on an OSV
+record (incl. `MAL-`), a publish time under 7 days, or install-time code; fail-closed on unknown
+lockfile types and unreachable sources. (3) A red intake **waits for upstream** — never a local
+pin/override. **Considered:** keep npm + an `overrides` pin (#2032's fix — rots, and the finding
+depended on an LLM reviewer noticing); pnpm (install-script allowlist + resolver age, but runtime
+code still sees everything); a compose sidecar for the jail (sub-agent clones, no socket-free
+trigger); nixpkgs `mermaid-cli` (Chromium, full access); Rust/Go reimplementations (no GitHub
+parity; merman is alpha); a scheduled master scan (deferred: Dependabot / Dependency-Track + SBOM
+are the org-wide candidates). **Why:** Renovate's `osvVulnerabilityAlerts` is direct-deps-only on the
+base branch and its cooldown covers the bumped dep only — the lodash-es@4.17.23 intake under mermaid
+12 was invisible to both; a Shai-Hulud-class package executes where credentials live (the jail,
+CI's dind), so the defence must decide before execution and the executor must hold nothing.
+**Consequences:** the linter runs anywhere (jail, CI, sub-agent clones) with no placement rules;
+Renovate's mermaid 12 PR re-proposes on `deno.json` and stays red until upstream clears it (FU-294).
