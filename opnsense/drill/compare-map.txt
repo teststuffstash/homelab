@@ -90,8 +90,13 @@ accepted  value       OPNsense/AcmeClient/accounts/account[*]/statusLastUpdate
 accepted  value       OPNsense/HAProxy/*/*[*]/id
 accepted  value       OPNsense/AcmeClient/*/*[*]/id
 accepted  *           revision/**
-accepted  value       nat/rule[*]/created/time
-accepted  value       nat/rule[*]/updated/time
+# Rule change history. 26.1 wrote a created/updated triplet (username, time, description); 26.7
+# writes one `audit` field, filled on rules the API makes and empty on the ones a 26.1 config
+# carried over. It is history, not config: the drill's rules are made by 26.7, prod's under 26.1.
+accepted  *           nat/rule[*]/created/**
+accepted  *           nat/rule[*]/updated/**
+accepted  drill-only  nat/rule[*]/audit
+accepted  value       OPNsense/Firewall/Filter/rules/rule[*]/audit
 accepted  prod-only   system/nextuid
 accepted  prod-only   system/nextgid
 accepted  prod-only   widgets/**
@@ -108,9 +113,10 @@ accepted  prod-only   sysctl/item[*] | prod:value=
 # difference ("1" against "0") still counts.
 accepted  value       OPNsense/unboundplus/*/* | prod:.= drill:.=0
 accepted  value       system/firmware/reboot | prod:.= drill:.=0
-# Fields an older model wrote at their default, a fresh 26.1 omits.
+# Fields an older model wrote at their default, a fresh 26.1 omits — and one a fresh 26.7 writes
+# at its default where a migrated config has none (a `1` on the drill still counts).
 accepted  prod-only   system/language | prod:.=en_US
-accepted  prod-only   OPNsense/Kea/ddns/general/manual_config | prod:.=0
+accepted  drill-only  dnsmasq/expand_hosts | drill:.=0
 # ISC DHCP: prod serves DHCP from dnsmasq (ADR-023, opnsense/dnsmasq-dhcp.py); the ISC block is
 # the migrated-from config, inert while its enable flag is empty. os-tftp: installed, disabled.
 accepted  prod-only   dhcpd/lan/** | prod:/dhcpd/lan/enable=
