@@ -642,9 +642,32 @@ any sync of the reinstall class.
    human for hypervisor reinstalls and recovery (ISO over virtual media, BIOS over SOL) — a runbook, never a
    loop. `machines.yaml` gains `bmc:` beside `plug:`; `node-maintenance.sh` is the first caller.
 7. **Two networks.** The box's second NIC is the management-network leg; the BMCs (today the Nutanix twin's
-   two IPMI ports sit on the LAN) move behind it, so nothing but the box can speak to BMC firmware. Static
-   addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
-   BMC network through the node's routing.
+   two IPMI ports sit on the LAN as DHCP reservations, `opnsense/dnsmasq-dhcp.py` `nx-0{1,2}-bmc`) move
+   behind it, so nothing but the box can speak to BMC firmware (it is unpatchable). The segment is
+   `192.168.15.0/24` ([`ip-plan.md`](ip-plan.md)) on its own 5-port switch, **installed in the same visit as
+   the WAN switch** ([`router-move.md`](router-move.md), operator 2026-09-30). Static addressing set in each BMC
+   (`ipmitool lan set 1 ipsrc static` + address, no gateway), the addresses in `machines.yaml` `bmc:` (item
+   6) and rendered into the box's hosts file; no DHCP server on the segment, no route to it from the LAN.
+   The move is the moment to rotate the factory credentials (FU-288): every BMC setting is re-touched
+   anyway, and the wallet entries (`<node>-bmc-password`) are what the verbs below read.
+
+   **Access from the operator's workstation (design, 2026-09-30).** SSH forwards TCP only and IPMI-over-LAN
+   is UDP 623, so the two kinds of access take two paths, both through the box, as one `mgmt/scripts`
+   verb behind `devbox run` tasks:
+
+   | Need | Path | Command shape |
+   |---|---|---|
+   | ipmitool — power, sensors, `chassis bootdev`, SOL | ipmitool runs ON the box (`ssh -t` for SOL); the password travels over stdin into `ipmitool -E`, never argv | `devbox run bmc -- nx-02 power status` / `-- nx-02 sol` |
+   | web GUI (443), HTML5 iKVM, virtual-media upload | `ssh -L <local>:<bmc>:443` through the box; the task picks a free local port and prints `https://localhost:<port>` | `devbox run bmc-web -- nx-02` |
+
+   Considered and not taken as the default: a WireGuard peer for the workstation on the box (routes UDP
+   too, so raw ipmitool/Java iKVM work unchanged — but the workstation then reaches BMC firmware directly,
+   which is the thing the segment removes; the fallback if the wrappers prove clumsy); `sshuttle` (TCP-only,
+   so no gain over `-L`); a socat UDP relay (fragile for RMCP+ sessions). The jail uses the same two
+   tasks — it already has ipmitool in its image, but after the move only the box can reach a BMC.
+
+   The k3s API (if the spike says yes) binds to loopback; pods reach the BMC network through the node's
+   routing.
 
 **The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
 no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
@@ -954,7 +977,7 @@ this section.
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
-| The management network | recovery path 2, after phase C — the topology work, not the box work |
+| The management network | designed (§MB4 item 7: range, static addressing, the two access verbs); built in the WAN-switch visit — the box's second NIC stanza, the BMC re-address, the verbs, FU-288's rotation |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 
 ## Prior art worth knowing before trusting NixOS here
