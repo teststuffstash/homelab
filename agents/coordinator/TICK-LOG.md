@@ -11872,3 +11872,16 @@ trip test (injected `.1` ARP claim on tap9170i0 → <1 s, onboot 0, VM stopped),
 (`qm set --onboot 1` by hand = the PR's tofu), booted armed without a trip, `check nx02` 11/11.
 Closed --force over an unrelated CPUThrottlingHigh→InfoInhibitor in agent-coordinator. Mine: first
 window open ran outside devbox (kubectl not on PATH → unreadable baseline, refused).
+
+### 2026-09-30 night — pve router node + the CARP trial (FU-297, #2143 #2144)
+
+Window seat-1790789286-5042 (closed clean). #2143: tofu vmbr3/enp6s0 + VM 9171 applied through the box
+from the branch (plan = 3 creates; then the on_boot flip), `router-node.sh build pve` → `check pve`
+11/11. Kill switch v2: `tcpdump -Q in` (v1's `ether src <nic>` would miss CARP's virtual MAC —
+confirmed: adverts leave from 00:00:5e:00:01:fa), exemptions = router-nodes `router_carp_vips`,
+stop-before-latch (1.7 s, tested by a BPF-written ARP for unused 3.249 from INSIDE nx-02's node).
+#2144: `opnsense-carp.yml`, wallet `opnsense-carp-password` minted; 3.250/22 vhid 250, pve skew 0
+MASTER, nx-02 100 BACKUP. 10 Hz ping from nx-02 host: maintenance 0/193, preempt back 0/193, hard
+`qm stop` 2.6 s, re-take after boot 0; both checks 12/12. pve RAM booked ~63.5/62.7 GiB (resident
+~26) — flagged in #2143, FU-289's class. Mine: first build died on a worktree without
+tofu/kubeconfig (symlinked); mgmt-tf apply needs MGMT_YES=1 non-interactively.
