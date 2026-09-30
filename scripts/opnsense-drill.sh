@@ -558,7 +558,7 @@ fi
 
 # The BRIDGED WAN's own probes, LAST (the fake ISP's lease must not exist while the others run).
 if [ "$WAN_MODE" = bridged ]; then
-  isp_create > "$WORK/isp-setup.log" 2>&1 || { tail -15 "$WORK/isp-setup.log" >&2; fail "the fake-ISP container did not come up"; }
+  isp_create > "$WORK/isp-setup.log" 2>&1 || { tail -15 "$WORK/isp-setup.log" >&2; fail "the fake-ISP container did not come up"; exit 1; }
   vm_ssh 'configctl interface reconfigure wan' >/dev/null 2>&1 || true
   wip=''
   for _ in $(seq 1 24); do
