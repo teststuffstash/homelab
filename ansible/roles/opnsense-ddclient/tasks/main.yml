@@ -71,7 +71,7 @@
 - name: Read ddclient general settings
   oxlorg.opnsense.raw: { module: dyndns, controller: settings, command: get }
   register: dd_general
-- name: Enable ddclient (native backend)
+- name: Enable ddclient (native backend) — disabled on a standby node (router-move.md)
   oxlorg.opnsense.raw:
     module: dyndns
     controller: settings
@@ -80,9 +80,11 @@
     data:
       ddclient:
         general:
-          enabled: "1"
+          enabled: "{{ dd_enabled }}"
           backend: opnsense
+  vars:
+    dd_enabled: "{{ '0' if (opnsense_standby | default(false) | bool) else '1' }}"
   when: >
-    dd_general.response.ddclient.general.enabled != "1"
+    dd_general.response.ddclient.general.enabled != dd_enabled
     or (dd_general.response.ddclient.general.backend | dict2items | selectattr('value.selected', 'equalto', 1) | map(attribute='key') | first) != "opnsense"
   notify: reconfigure dyndns

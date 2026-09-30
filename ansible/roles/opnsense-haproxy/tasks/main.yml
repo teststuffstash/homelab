@@ -49,8 +49,18 @@
       oxlorg.opnsense.interface_vip:
         address: "{{ item.vip }}/24"
         mode: ipalias
-        interface: lan
+        interface: "{{ haproxy_vip_interface }}"
         description: "haproxy-{{ item.name }}"
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
+
+    # The module matches on address+interface, so flipping haproxy_vip_interface (standby lo0
+    # ↔ lan at the cutover) would leave the old alias behind: two holders of one address.
+    - name: No service VIP on the other interface
+      oxlorg.opnsense.interface_vip:
+        address: "{{ item.vip }}/24"
+        interface: "{{ 'lan' if haproxy_vip_interface == 'lo0' else 'lo0' }}"
+        state: absent
       loop: "{{ haproxy_all_services }}"
       loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
 

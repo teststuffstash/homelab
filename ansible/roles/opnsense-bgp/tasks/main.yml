@@ -51,7 +51,8 @@
         peer_ip: "{{ item }}"
         remote_as: "{{ cluster_asn }}"
         route_map_in: CILIUM-ALLOW-ALL
-        enabled: true
+        # Standby: configured but disabled — no session to the cluster (router-move.md).
+        enabled: "{{ not (opnsense_standby | default(false) | bool) }}"
         # Match existing neighbors on peer IP alone. The default ['ip','description']
         # never matches here (we set no description -> desired None vs stored '') so the
         # module would append a duplicate neighbor on every run.

@@ -36,7 +36,9 @@
   block:
     - name: ACME general settings
       oxlorg.opnsense.acme_general:
-        auto_renewal: true
+        # Standby: no renewal FROM the node — its carried certs would race prod's own (a real
+        # LE order + a Cloudflare TXT write with prod's token; router-move.md).
+        auto_renewal: "{{ not (opnsense_standby | default(false) | bool) }}"
         challenge_port: 43580
         tls_challenge_port: 43581
         restart_timeout: 600
