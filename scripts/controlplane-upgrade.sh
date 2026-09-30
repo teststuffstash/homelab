@@ -150,16 +150,19 @@ else
   # etcd leadership off the target before it goes dark (an upgrade reboots through the same
   # step): a leader loss costs an election; a forfeit is a clean handover. Read by member id.
   if [ "$VERB" = down ] && [ "$LAB" != 1 ] && [ "${DRY:-0}" != 1 ]; then
-    # A pipeline's status is awk's, so an unreadable status is caught by the value, not by `||`.
+    # Leader = the row's MEMBER id appears again later in the row (the LEADER column). Matched by
+    # value, not position: the column index moves with talosctl's layout ("287 MB" and
+    # "86 MB (29.94%)" are several fields live; the self-test fixture's layout differs).
+    # Under pipefail a failed talosctl fails the pipeline, so `|| tid=""` hands it to the die below.
     role_of() { talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd status 2>/dev/null \
-                  | awk 'NR==2 {print $2 == $8 ? "leader" : "follower"}'; }
-    tid="$(role_of)"
+                  | awk 'NR==2 { l = 0; for (i = 3; i <= NF; i++) if ($i == $2) l = 1; print l ? "leader" : "follower" }'; }
+    tid="$(role_of)" || tid=""
     case "$tid" in leader|follower) ;; *) die "cannot read the target's etcd leadership — refusing" ;; esac
     if [ "$tid" = leader ]; then
       echo "$NODE is the etcd leader — forfeiting leadership"
       talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd forfeit-leadership || die "etcd forfeit-leadership failed — nothing touched"
       sleep 5
-      tid="$(role_of)"
+      tid="$(role_of)" || tid=""
       [ "$tid" = follower ] || die "$NODE still leads etcd after the forfeit ($tid) — refusing"
     fi
   fi
