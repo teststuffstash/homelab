@@ -32,7 +32,7 @@ VMNAME="${OPN_TEST_VM_NAME:-opnsense-test}"         # what `qm config` must say 
 LAN_BRIDGE="${OPN_TEST_LAN_BRIDGE:-vmbr1}"          # create only; tofu wires 9110's
 TOFU_VMID=9110                                      # the tofu-owned VM: create/destroy never touch it
 WAN_IP="${OPN_TEST_HOST:-192.168.2.67}"           # = tofu var.opnsense_test_wan_ip_cidr
-WAN_BITS="${OPN_TEST_WAN_BITS:-24}"               # standing: the node's LAN mask (prod's /22)
+WAN_BITS="${OPN_TEST_WAN_BITS:-24}"               # standing: the node's LAN mask (/24 — ADR-088 as amended)
 GATEWAY=192.168.2.1
 MGMT_NET=192.168.2.0/24
 LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, isolated-bridge carve
@@ -206,8 +206,10 @@ n=0
 for p in /sys/class/net/$br/brif/*; do
   [ -e "$p" ] || continue; i=$(basename $p)
   case $i in tap*|fwpr*|fwln*|veth*) continue ;; esac
-  n=$((n+1)); up=$(cat /sys/class/net/$i/operstate); [ "$up" != down ] || { ip link set $i up; sleep 4; }
-  c=$(cat /sys/class/net/$i/carrier 2>/dev/null || echo unreadable); [ "$up" != down ] || ip link set $i down
+  # ADMIN state (IFF_UP), not operstate: operstate reads `down` on an admin-UP port with no carrier,
+  # and restoring from it left the standing nodes' WAN ports admin-down (found 2026-09-30).
+  n=$((n+1)); adm=$(( $(cat /sys/class/net/$i/flags) & 1 )); [ $adm = 1 ] || { ip link set $i up; sleep 4; }
+  c=$(cat /sys/class/net/$i/carrier 2>/dev/null || echo unreadable); [ $adm = 1 ] || ip link set $i down
   [ "$c" = 0 ] || { echo "$i on $br carrier=$c - cabled? never boot the spoofed MAC onto a live WAN"; exit 1; }
 done
 [ $n -ge 1 ] || { echo "$br has no physical port"; exit 1; }
@@ -342,8 +344,8 @@ ls $d/net/* >/dev/null 2>&1 || { echo "$1 has no host netdev (driver: $(basename
 for n in $d/net/*; do
   i=$(basename $n)
   # carrier is unreadable on an admin-down port: raise it (no address), read, restore
-  up=$(cat $n/operstate); [ "$up" != down ] || { ip link set $i up; sleep 4; }
-  c=$(cat $n/carrier 2>/dev/null || echo unreadable); [ "$up" != down ] || ip link set $i down
+  adm=$(( $(cat $n/flags) & 1 )); [ $adm = 1 ] || { ip link set $i up; sleep 4; }   # admin state, not operstate
+  c=$(cat $n/carrier 2>/dev/null || echo unreadable); [ $adm = 1 ] || ip link set $i down
   [ "$c" = 0 ] || { echo "$i ($1) carrier=$c - cabled?; never spoof the live router's MAC onto it"; exit 1; }
   [ ! -e $n/master ] || { echo "$i ($1) is enslaved to $(basename $(readlink $n/master))"; exit 1; }
   [ -z "$(ip -br addr show dev $i | awk '{print $3}')" ] || { echo "$i ($1) has a host address"; exit 1; }

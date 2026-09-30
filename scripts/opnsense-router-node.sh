@@ -135,7 +135,7 @@ build() {
   log "fetching the identity carry (newest FU-013 backup)"
   bash scripts/opnsense-backup-fetch.sh "$WORK/carry.xml"
   log "seed + first boot ($VMNAME, standing shape)"
-  OPN_TEST_SHAPE=standing OPN_TEST_VMID=$VMID OPN_TEST_VM_NAME=$VMNAME OPN_TEST_HOST=$HOST OPN_TEST_WAN_BITS=22 \
+  OPN_TEST_SHAPE=standing OPN_TEST_VMID=$VMID OPN_TEST_VM_NAME=$VMNAME OPN_TEST_HOST=$HOST OPN_TEST_WAN_BITS=24 \
   OPN_TEST_PVE=$PVE OPN_TEST_WAN_MAC="$wan_mac" OPN_TEST_WAN_BRIDGE=$WAN_BRIDGE \
   OPN_TEST_CARRY_FROM="$WORK/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard \
   OPN_TEST_ROOT_PASSWORD="$(kp opnsense-root-password)" OPN_TEST_API_KEY="$(kp opnsense-api-key)" \

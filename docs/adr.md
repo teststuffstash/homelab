@@ -716,6 +716,12 @@ VIP on the Docker host — 2026-07-13); physical scale is bounded (~10³, ARP/L2
 is not (routed), so they get differently-sized homes. **Consequences:** legacy `2.0/24` VIPs
 migrate to `3.0/24` opportunistically (FU-071); new exposures land in `3.0/24`/`32.0/19` from day
 one; the wifi-password→VLAN plan slots into the reserved VLAN blocks without touching the table.
+**Amended 2026-09-30 (operator — the CARP pair, ADR-144):** the router LAN is a **`/24`**, as every
+host and DHCP lease already is — Big Data's `.1/22` (click-ops residue, found 2026-09-29) is not
+carried to the pair. So `3.0/24` stays router-local: HAProxy VIPs on the router's `lo0`, reached via
+`.1`; under CARP only `.1` moves (considered: keep `/22` and make every HAProxy VIP a CARP VIP —
+16 more failover addresses for nothing a `/24` client uses). `192.168.2.72` is reserved as the
+pair's CARP trial VIP ([`ip-plan.md`](ip-plan.md)).
 
 ### ADR-089 — Storage tiers with quota-as-contract: consumers get caps, the platform keeps promises
 **Status:** Accepted (2026-07-13, operator-directed). **Decision:** Longhorn splits into three

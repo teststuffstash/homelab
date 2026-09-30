@@ -7,6 +7,10 @@
 # Each node's `ansible_host` is its own LAN address for good (ADR-144 (3)); `.1` is never one.
 # `opnsense_standby: true` keeps a node inert on the LAN until the cutover window converges it
 # false (the standby profile — router-move.md); the verb refuses a node without it.
+# `haproxy_vip_interface: lo0` is PERMANENT on a node (ADR-088 as amended 2026-09-30: the LAN is a
+# /24, 192.168.3.0/24 is router-local and reached via .1 — the VIPs never go on `lan`, standby or
+# not). A host var, because prod's group_vars derive it from opnsense_standby and win over this
+# inventory's group_vars.
 all:
   children:
     opnsense:
@@ -16,8 +20,10 @@ all:
           ansible_connection: local
           opnsense_standby: true
           router_carp_advskew: 100   # BACKUP (ROADMAP §HA step 2: pve master, nx-02 backup)
+          haproxy_vip_interface: lo0
         opnsense-pve:
           ansible_host: 192.168.2.71
           ansible_connection: local
           opnsense_standby: true
           router_carp_advskew: 0     # MASTER
+          haproxy_vip_interface: lo0

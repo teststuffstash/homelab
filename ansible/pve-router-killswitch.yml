@@ -8,8 +8,5 @@
 - name: Proxmox host kill switches for the standing router nodes
   hosts: pve
   gather_facts: false
-  # The CARP trial VIPs the switch exempts — one home, the router nodes' own group_vars.
-  vars_files:
-    - router-nodes/group_vars/opnsense.yml
   roles:
     - pve-router-killswitch
