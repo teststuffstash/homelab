@@ -14,7 +14,8 @@ from cryptography.hazmat.primitives import serialization
 import base64
 
 HOST, PORT = sys.argv[1], int(sys.argv[2])
-CLIENT_PRIV = base64.b64decode(sys.argv[3])
+# "-" reads the peer private key from stdin (keeps it out of argv / the process list)
+CLIENT_PRIV = base64.b64decode(sys.stdin.readline().strip() if sys.argv[3] == "-" else sys.argv[3])
 SERVER_PUB = base64.b64decode(sys.argv[4])
 
 CONSTRUCTION = b"Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s"

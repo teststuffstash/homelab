@@ -233,12 +233,15 @@ splices identity into the seed:
 - `acme`: `OPNsense/AcmeClient` whole — the registered account and the certificate rows bound to
   those refids;
 - `api-users`: the FU-013 users with their hashed keys, plus root's prod key line appended to the
-  seed's throwaway one.
+  seed's throwaway one;
+- `wireguard`: `OPNsense/wireguard` whole — the server keypair and its peers, so the laptop and
+  phone configs survive the move unchanged (operator, 2026-09-30: option (a) of
+  [`router-move.md`](router-move.md) §The identity).
 
 The decrypted file is deleted right after the build, and the seed ISO follows the bootstrap's
-usual path: a 0600 file on nx-02 for the first boot only. Never carried: anything a play owns.
-`wireguard` exists in the script but is off by default, because it is the operator's call
-([`router-move.md`](router-move.md) §The identity). A carried cert that falls due for renewal
+usual path: a 0600 file on nx-02 for the first boot only. Never carried: anything a play owns
+(the WireGuard role finds the carried instance and keeps its keypair — it generates one only
+when the instance is absent). A carried cert that falls due for renewal
 during the run would renew FROM the rehearsal, which means a real LE order and a Cloudflare write
 with prod's token. So the drill refuses while any carried cert is ≥ 58 days old (os-acme-client
 renews at 60).
@@ -247,7 +250,10 @@ renews at 60).
 key probe calls an endpoint the user's privileges allow, using prod's wallet pair against the
 rehearsal VM, and wants HTTP 200: no consumer re-keys on the move. `real_cert` wants HAProxy's
 first VIP to serve the carried Let's Encrypt certificate for its SNI, where the plain drill
-serves the harness's self-signed fixture.
+serves the harness's self-signed fixture. `wg_handshake` runs
+[`scripts/wireguard-handshake-probe.py`](../scripts/wireguard-handshake-probe.py) in the probe
+container as the laptop peer (its wallet key over stdin) against the LAN address, with PROD's
+server pubkey: a reply proves the carried server key, since the WAN is dark.
 
 Under `--router` the base map's "matched nothing" list is long by construction: the carried users
 and certificates now equal prod's, so their env/accepted lines have nothing left to explain. Read
@@ -259,6 +265,11 @@ users role minted nothing. The rows were the WAN's own shape (prod's `WAN_GW` dy
 gateway, `gateway` on the interface, a `descr`, an inert IPv6 field), the users' `nextuid`
 counter, and SystemHealth (#2129). The seed now writes prod's WAN gateway, and the maps take
 the rest.
+
+**2026-09-30: score 0, thirteen probes.** #2129 took SystemHealth; the WireGuard carry added
+`wg_handshake` (green); the last six rows were prod's pre-26.7 `WAN_GW` storage (three flags
+empty where 26.7 writes `0`, three newer flags absent), accepted by the router overlay in that
+dead state only.
 
 ### On the management box — weekly, with metrics and belts
 
