@@ -47,6 +47,9 @@ SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPS
 SHAPE="${OPN_TEST_SHAPE:-test}"                    # test | router
 WAN_PCI="${OPN_TEST_WAN_PCI:-}"                    # router: the host NIC passed through as the WAN
 WAN_MAC="${OPN_TEST_WAN_MAC:-}"                    # router: the MAC the WAN spoofs (the ISP lease follows it)
+WAN_MODE="${OPN_TEST_WAN_MODE:-passthrough}"       # router: passthrough (igb0) | bridged (vtnet2 on WAN_BRIDGE)
+WAN_BRIDGE="${OPN_TEST_WAN_BRIDGE:-vmbr9}"         # bridged: a RUNTIME host bridge, WAN_PCI's netdev its only port
+case "$WAN_MODE" in passthrough|bridged) ;; *) echo "OPN_TEST_WAN_MODE must be passthrough|bridged" >&2; exit 2 ;; esac
 CARRY_FROM="${OPN_TEST_CARRY_FROM:-}"              # a decrypted prod config.xml (0600) to carry identity from
 CARRY="${OPN_TEST_CARRY:-trust,acme,api-users}"    # opnsense/test-vm/seed-shape.py --carry
 
@@ -144,7 +147,7 @@ PY
   )
   # The router rehearsal (docs/opnsense-test-vm.md §The router rehearsal): reshape + carry.
   local shape_args=()
-  [ "$SHAPE" != router ] || shape_args+=(--router --wan-mac "$WAN_MAC")
+  [ "$SHAPE" != router ] || shape_args+=(--router --wan-mac "$WAN_MAC" --wan-if "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0)")
   [ -z "$CARRY_FROM" ] || shape_args+=(--carry-from "$CARRY_FROM" --carry "$CARRY")
   [ ${#shape_args[@]} -eq 0 ] || python3 opnsense/test-vm/seed-shape.py "$out" "${shape_args[@]}"
 }
@@ -339,13 +342,39 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do ls $d/net/* >/dev/null 2>&1 && break; sleep 1;
 sleep 3   # link detection settles before anyone reads carrier
 SH
 }
+# The BRIDGED shape: WAN_PCI's netdev (dark, guarded above) becomes the only port of a runtime
+# bridge with no host address; the VM's third virtio NIC sits on it. Never a bridge the host's
+# /etc/network/interfaces defines — this one is created here and deleted by destroy.
+wan_bridge_up() {
+  nx "sh -s $WAN_PCI $WAN_BRIDGE" >&2 <<'SH' || die "could not build the WAN bridge (above)"
+d=/sys/bus/pci/devices/$1; br=$2
+grep -q "^iface $br " /etc/network/interfaces && { echo "$br is a configured host bridge - refusing"; exit 1; }
+[ -e /sys/class/net/$br ] && { echo "$br already exists (a stale run?) - refusing"; exit 1; }
+i=$(basename $(ls -d $d/net/* | head -1))
+ip link add $br type bridge && ip link set $i master $br && ip link set $i up && ip link set $br up
+[ -z "$(ip -br addr show dev $br | awk '{print $3}')" ] || { echo "$br has an address"; exit 1; }
+echo "$br: port $i ($1), no address"
+SH
+}
+wan_bridge_down() {
+  nx "sh -s $WAN_PCI $WAN_BRIDGE" >&2 <<'SH'
+d=/sys/bus/pci/devices/$1; br=$2
+grep -q "^iface $br " /etc/network/interfaces && { echo "$br is a configured host bridge - leaving it"; exit 0; }
+for n in $d/net/*; do [ -e $n ] || continue; i=$(basename $n); ip link set $i nomaster 2>/dev/null; ip link set $i down; done
+[ -e /sys/class/net/$br ] && ip link del $br && echo "$br removed"
+exit 0
+SH
+}
 cmd_create() {
   ephemeral_guard
   nx "qm config $VMID" >/dev/null 2>&1 && die "vmid $VMID already exists on nx-02 — destroy it first"
   nx "grep -q '^iface $LAN_BRIDGE ' /etc/network/interfaces" || die "bridge $LAN_BRIDGE not on nx-02 (tofu/opnsense-test.tf)"
   nx "test -f $NANO_IMG" || die "$NANO_IMG not on nx-02 (tofu)"
   local pci=''
-  if [ "$SHAPE" = router ]; then pci="--hostpci0 $(wan_nic_guard)"
+  if [ "$SHAPE" = router ] && [ "$WAN_MODE" = bridged ]; then
+    wan_nic_guard >/dev/null; wan_bridge_up; pci="--net2 virtio,bridge=$WAN_BRIDGE,firewall=0,queues=2"
+    log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, MGMT vmbr0, WAN = vtnet2 on $WAN_BRIDGE over host NIC $WAN_PCI (bridged)"
+  elif [ "$SHAPE" = router ]; then pci="--hostpci0 $(wan_nic_guard)"
     log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, MGMT vmbr0, WAN = host NIC $WAN_PCI (passthrough)"
   else log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, WAN vmbr0"; fi
   nx "qm create $VMID --name $VMNAME --tags 'opnsense;drill' --cores 2 --cpu host --memory 2048 --balloon 0 \
@@ -361,11 +390,15 @@ cmd_destroy() {
   # "No such vm" must reach the branch below, not kill the script under pipefail (review,
   # #2111) — so the absent case exits 0 ON nx-02, and only an ssh failure (255) stays fatal.
   name="$(nx "if qm config $VMID >/dev/null 2>&1; then qm config $VMID | sed -n 's/^name: //p'; fi")"
-  [ -n "$name" ] || { log "vmid $VMID not present — nothing to destroy"; return 0; }
+  if [ -z "$name" ]; then
+    [ "$SHAPE" != router ] || [ "$WAN_MODE" != bridged ] || wan_bridge_down
+    log "vmid $VMID not present — nothing to destroy"; return 0
+  fi
   [ "$name" = "$VMNAME" ] || die "REFUSING destroy: vmid $VMID is '$name', not '$VMNAME'"
   nx "qm stop $VMID --skiplock 1 >/dev/null 2>&1 || true; qm destroy $VMID --purge 1 --destroy-unreferenced-disks 1"
   nx "rm -f /var/lib/vz/template/iso/$SEED_ISO"
-  [ "$SHAPE" != router ] || wan_nic_release
+  if [ "$SHAPE" = router ] && [ "$WAN_MODE" = bridged ]; then wan_bridge_down
+  elif [ "$SHAPE" = router ]; then wan_nic_release; fi
   log "destroyed $VMNAME ($VMID)"
 }
 

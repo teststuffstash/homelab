@@ -5,6 +5,7 @@
 #   bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]     # jail: wallet creds; box: env file
 #   bash scripts/opnsense-drill.sh --router [--ref <rev>]     # the ROUTER REHEARSAL (jail only)
 #   bash scripts/opnsense-drill.sh --router --standby         # ...converged with the STANDBY profile
+#   bash scripts/opnsense-drill.sh --router --wan bridged     # ...WAN = virtio on a host bridge + THROUGHPUT
 #
 # --router: the same drill in the future router's shape (docs/opnsense-test-vm.md §The router
 # rehearsal): WAN = nx-02's dark eno2 by PCI passthrough (machines.yaml router_wan_pci), DHCP,
@@ -22,6 +23,14 @@
 # session, no HAProxy VIP on the LAN interface (they sit on lo0 — HAProxy still serves TLS through
 # the router), ddclient off, ACME auto-renewal off. Its score is reported, not comparable: the
 # standby deltas are the point.
+#
+# --wan bridged (with --router): the WAN is `vtnet2`, virtio on a runtime host bridge whose only
+# port is the same dark eno2 (docs/router-move.md — operator 2026-09-30: bridged "if there is no
+# performance penalty"). After the other probes, a fake-ISP LXC joins that bridge (dnsmasq DHCP +
+# iperf3 on 11.255.0.1/24 — not bogon/private space, so the WAN's blockpriv/blockbogons stay
+# prod's), the router must lease on the SPOOFED MAC through the bridge (`wan_lease`), and iperf3
+# runs from the LAN probe through the router's NAT, 1 and 4 streams, both directions
+# (`wan_throughput`: every run ≥ OPN_DRILL_WAN_MIN_MBPS, default 900 = 1 GbE line rate).
 #
 # Stages (each timed; the report + metrics say which one failed):
 #   preflight  nx-02 thin pool + free memory read, BEFORE anything writes (a stale drill VM from a
@@ -57,17 +66,20 @@
 # Exit: 0 drill passed, 1 a stage failed (report says which), 2 refused / environment.
 set -euo pipefail
 
-REF=HEAD; KEEP=0; ROUTER=0; STANDBY=0
+REF=HEAD; KEEP=0; ROUTER=0; STANDBY=0; WAN_MODE=passthrough
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
     --router) ROUTER=1; shift ;;
     --standby) STANDBY=1; shift ;;
+    --wan) WAN_MODE="$2"; shift 2 ;;
     *) sed -n '2,57p' "$0" >&2; exit 2 ;;
   esac
 done
 [ "$STANDBY" -eq 0 ] || [ "$ROUTER" -eq 1 ] || { echo "--standby needs --router" >&2; exit 2; }
+case "$WAN_MODE" in passthrough) ;; bridged) [ "$ROUTER" -eq 1 ] || { echo "--wan bridged needs --router" >&2; exit 2; } ;;
+  *) echo "--wan passthrough|bridged" >&2; exit 2 ;; esac
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -177,9 +189,11 @@ PY
     -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" opnsense-root-password 2>/dev/null || true)"
   [ -n "$OPN_TEST_ROOT_PASSWORD" ] || die "no wallet entry opnsense-root-password"
   export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
-         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard
+         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard \
+         OPN_TEST_WAN_MODE="$WAN_MODE" OPN_TEST_WAN_BRIDGE="${OPN_DRILL_WAN_BRIDGE:-vmbr9}"
   TEXTFILE_FORCE_OFF=1
   PROBE_EXTRA_PKGS=python3-cryptography   # scripts/wireguard-handshake-probe.py, the wg_handshake probe
+  [ "$WAN_MODE" != bridged ] || PROBE_EXTRA_PKGS="$PROBE_EXTRA_PKGS iperf3"
   # The router overlay first (first match wins), then the base map minus its two WAN wildcards
   # (the interface + its gateway): in this shape the WAN IS comparable (DHCP on a real NIC, like prod's).
   MAP="$WORK/compare-map.txt"
@@ -253,6 +267,43 @@ probe_destroy() {
   pve "pct stop $CTID >/dev/null 2>&1 || true; pct destroy $CTID --purge 1"
 }
 
+# ================================================================ fake ISP (--wan bridged) ======
+# A Debian LXC on the WAN bridge: dnsmasq hands the router's WAN a lease, iperf3 serves the
+# throughput runs. Packages come in over a TEMPORARY vmbr0 leg (a DHCP client on the home LAN),
+# with every service start blocked (policy-rc.d) — the leg is deleted BEFORE dnsmasq runs, and
+# dnsmasq binds eth0 (the WAN bridge) only. Made after the other probes, so the router's WAN has
+# no lease while they run.
+ISP_ID=$((VMID - 2)); ISP_NAME=opnsense-drill-isp; ISP_NET=11.255.0; WAN_MIN_MBPS="${OPN_DRILL_WAN_MIN_MBPS:-900}"
+isp_ct() { pve "pct exec $ISP_ID -- $*"; }
+isp_create() {
+  local tmpl=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst br="${OPN_DRILL_WAN_BRIDGE:-vmbr9}"
+  pve "pct create $ISP_ID $tmpl --hostname $ISP_NAME --tags 'opnsense;drill' --cores 2 --memory 512 --swap 0 \
+        --rootfs nvme-thin:2 --unprivileged 1 --features nesting=1 --onboot 0 \
+        --net0 name=eth0,bridge=$br,ip=$ISP_NET.1/24,firewall=0 \
+        --net1 name=eth1,bridge=vmbr0,ip=dhcp,firewall=0 --start 1 >/dev/null"
+  isp_ct "bash -c 'for i in \$(seq 1 30); do getent hosts deb.debian.org >/dev/null && break; sleep 2; done'"
+  isp_ct "bash -c 'printf \"#!/bin/sh\nexit 101\n\" > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d'"
+  isp_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends dnsmasq iperf3 >/dev/null'"
+  pve "pct set $ISP_ID --delete net1"
+  isp_ct "bash -c '! ip -br link show eth1 2>/dev/null'" || { log "ISP container still has its home-LAN leg"; return 1; }
+  isp_ct "bash -c 'cat > /etc/dnsmasq.d/isp.conf'" <<DNSMASQ
+port=0
+interface=eth0
+bind-interfaces
+dhcp-range=$ISP_NET.100,$ISP_NET.199,255.255.255.0,1h
+dhcp-option=option:router,$ISP_NET.1
+dhcp-leasefile=/var/lib/misc/dnsmasq.leases
+DNSMASQ
+  isp_ct "bash -c 'rm -f /usr/sbin/policy-rc.d; systemctl restart dnsmasq && (iperf3 -s -D)'"
+}
+isp_destroy() {
+  local h
+  h="$(pve "if pct config $ISP_ID >/dev/null 2>&1; then pct config $ISP_ID | sed -n 's/^hostname: //p'; fi")"
+  [ -n "$h" ] || return 0
+  [ "$h" = "$ISP_NAME" ] || { log "REFUSING to destroy ct $ISP_ID: hostname '$h'"; return 1; }
+  pve "pct stop $ISP_ID >/dev/null 2>&1 || true; pct destroy $ISP_ID --purge 1"
+}
+
 POOL_BEFORE=''; POOL_AFTER=''; SCORE=''
 TEXTFILE="${OPN_DRILL_TEXTFILE:-}"; STATE="${OPN_DRILL_STATE:-}"
 [ -z "${TEXTFILE_FORCE_OFF:-}" ] || { TEXTFILE=''; STATE=''; }   # --router: never the weekly metrics
@@ -296,6 +347,7 @@ finish() {
   if [ "$KEEP" -eq 0 ]; then
     STAGE=destroy; STAGE_T=$(date +%s); log "stage: destroy"
     probe_destroy >&2 || fail "destroy of probe container $CTID failed — clean up by hand (pct destroy $CTID)"
+    isp_destroy >&2 || fail "destroy of ISP container $ISP_ID failed — clean up by hand (pct destroy $ISP_ID)"
     bootstrap destroy >&2 || fail "destroy of vm $VMID failed — clean up by hand (qm destroy $VMID)"
     POOL_AFTER="$(pool_pct 2>/dev/null || echo '?')"
     STAGE_S[destroy]=$(( $(date +%s) - STAGE_T ))
@@ -335,7 +387,7 @@ awk -v p="$POOL_BEFORE" -v m="$POOL_MAX" 'BEGIN { exit !(p + 0 < m + 0) }' \
   || { trap - EXIT; rm -rf "$SEC"; die "nx-02 MemAvailable ${mem_mb} MiB < ${MEM_MIN_MB} (FU-289's NUMA pressure)"; }
 if pve "qm config $VMID" >/dev/null 2>&1 || pve "pct config $CTID" >/dev/null 2>&1; then
   log "vm $VMID / ct $CTID exists (a crashed run?) — destroying by name first"
-  bootstrap destroy >&2; probe_destroy >&2
+  bootstrap destroy >&2; probe_destroy >&2; isp_destroy >&2
   POOL_BEFORE="$(pool_pct)"
 fi
 
@@ -435,11 +487,23 @@ fi
 # router's MAC; every carried consumer key authenticates (so no consumer flips on the move); and
 # HAProxy serves the REAL carried certificate, not the harness fixture.
 if [ "$ROUTER" -eq 1 ]; then
+  if [ "$WAN_MODE" = bridged ]; then
+    # virtio always has carrier: dark = the HOST port has none, and the bridge holds no address.
+    igb="$(vm_ssh 'ifconfig vtnet2' 2>/dev/null || true)"
+    hd="$(pve "sh -s $WAN_PCI ${OPN_DRILL_WAN_BRIDGE:-vmbr9}" 2>/dev/null <<'SH' || true
+n=$(basename $(ls -d /sys/bus/pci/devices/$1/net/* | head -1))
+echo "$n carrier=$(cat /sys/class/net/$n/carrier) master=$(basename $(readlink /sys/class/net/$n/master)) br_addr=$(ip -br -4 addr show dev $2 | awk '{print $3}')"
+SH
+)"
+    probe wan_dark "$(echo "$hd" | grep -q 'carrier=0 master=vmbr' && echo "$hd" | grep -q 'br_addr=$' && echo 1 || echo 0)" \
+      "host port (nx-02 $WAN_PCI): \`${hd:-unread}\` (want carrier=0, enslaved to the WAN bridge, bridge without an address)"
+  else
   igb="$(vm_ssh 'ifconfig igb0' 2>/dev/null || true)"
   probe wan_dark "$(echo "$igb" | grep -q 'status: no carrier' && echo 1 || echo 0)" \
     "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | head -1)\` (want no carrier)"
+  fi
   probe wan_mac "$(echo "$igb" | grep -qi "ether $WAN_MAC" && echo 1 || echo 0)" \
-    "igb0 ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
+    "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0) ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
   _kpw() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
              "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
   for u in root:opnsense-api:core/firmware/info backup-puller:opnsense-backup-puller-api:core/backup/backups/this \
@@ -490,6 +554,29 @@ if [ "$STANDBY" -eq 1 ]; then
   probe standby_ddclient_off "$([ "$dd" = 0 ] && echo 1 || echo 0)" "dyndns general.enabled = \`${dd:-unread}\` (want 0)"
   ar="$(curl -sk -K "$SEC/drill.curl" --max-time 20 "https://$HOST/api/acmeclient/settings/get" | jq -r '.acmeclient.settings.autoRenewal' 2>/dev/null || true)"
   probe standby_acme_no_renewal "$([ "$ar" = 0 ] && echo 1 || echo 0)" "acmeclient settings.autoRenewal = \`${ar:-unread}\` (want 0)"
+fi
+
+# The BRIDGED WAN's own probes, LAST (the fake ISP's lease must not exist while the others run).
+if [ "$WAN_MODE" = bridged ]; then
+  isp_create > "$WORK/isp-setup.log" 2>&1 || { tail -15 "$WORK/isp-setup.log" >&2; fail "the fake-ISP container did not come up"; }
+  vm_ssh 'configctl interface reconfigure wan' >/dev/null 2>&1 || true
+  wip=''
+  for _ in $(seq 1 24); do
+    wip="$(vm_ssh "ifconfig vtnet2 | awk '/inet $ISP_NET\\./ {print \$2}'" 2>/dev/null || true)"; [ -n "$wip" ] && break; sleep 5
+  done
+  lmac="$(isp_ct "awk -v ip=$wip '\$3 == ip {print \$2}' /var/lib/misc/dnsmasq.leases" 2>/dev/null || true)"
+  probe wan_lease "$([ -n "$wip" ] && [ "$lmac" = "$WAN_MAC" ] && echo 1 || echo 0)" \
+    "router WAN (vtnet2 behind the host bridge) leased \`${wip:-nothing}\` for MAC \`${lmac:-none}\` (want a lease on the spoofed \`$WAN_MAC\`)"
+  tp=''; tmin=''
+  for args in "-P 1" "-P 4" "-P 1 -R" "-P 4 -R"; do
+    bps="$(probe_ct "iperf3 -c $ISP_NET.1 -t 15 -O 2 $args -J" 2>/dev/null | jq -r '.end.sum_received.bits_per_second // empty' 2>/dev/null || true)"
+    m="$(awk -v b="${bps:-0}" 'BEGIN { printf "%d", b / 1e6 }')"
+    tp="$tp$([ -n "$tp" ] && echo ' · ')$(echo "$args" | sed 's/-P /×/; s/ -R/ down/; s/^×\([0-9]\)$/×\1 up/')=${m}"
+    [ -z "$tmin" ] || [ "$m" -lt "$tmin" ] && tmin=$m
+  done
+  probe wan_throughput "$([ -n "$wip" ] && [ "${tmin:-0}" -ge "$WAN_MIN_MBPS" ] && echo 1 || echo 0)" \
+    "LAN → NAT → vtnet2 → host bridge → ISP, Mbit/s: $tp (want every run ≥ $WAN_MIN_MBPS)"
+  rep ''; rep "- WAN throughput (bridged, Mbit/s): $tp"
 fi
 
 # ================================================================ compare =======================
