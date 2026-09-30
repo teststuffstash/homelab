@@ -64,12 +64,15 @@ never the session's arc — that is TICK-LOG's.)
   **2026-09-30 evening — nx-02 NODE STANDING + INERT at `.70`** (#2140 bridged WAN
   ~3 Gbit/s; #2141 `tofu/opnsense-router.tf` vmbr3 + VM 9170 applied in window
   seat-1790782366-5635; `bash scripts/opnsense-router-node.sh check nx02` = the read-only
-  health read). **2026-09-30 night:** reboot-proof (#2142: on_boot + `router-killswitch@<vmid>`
-  systemd units); **pve's node STANDS at `.71`** (#2143, VM 9171; kill switch v2 = inbound capture +
-  trial-VIP exemptions); **CARP trial PASSED** (#2144: vhid 250
-  `192.168.3.250`, pve MASTER / nx-02 BACKUP; maintenance failover + preempt 0 loss at 10 Hz, hard
-  stop 2.6 s; router-move.md **The CARP trial**). **NEXT:** pfsync, then the window prep list
-  (HAProxy VIPs as CARP, dnsmasq active/passive, per-node Cilium peers + router-ids, `/22`). Open beside it:
+  health read). **2026-09-30 night (goal session, #2142–#2150):** both nodes standing + reboot-proof,
+  `/24` ruling (ADR-088 amended; trial VIP `.72`, HAProxy VIPs `lo0` for good), pfsync, the
+  hypervisor WAN gate (`router-wangate@<vmid>`, QMP `set_link` keyed on CARP adverts), the belt
+  (`RouterPairMasterCount`/`RouterWanGateSilent`); drills PASSED: failover/preempt, hard stop,
+  rolling update (3 reboots, flows kept), split-brain (belt fired), cold start — numbers in
+  router-move.md. The operator's cable nx-02 `eno2` ↔ pve `enp6s0` stays in (fake ISP:
+  `router-node.sh fakeisp up`; a node REBUILD is refused while it gives carrier — correct).
+  **NEXT (operator calls):** DHCP active/passive (Kea HA vs a gate toggle), per-node Cilium peers
+  + router-ids; an attended nx-02 host reboot. Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
   (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.

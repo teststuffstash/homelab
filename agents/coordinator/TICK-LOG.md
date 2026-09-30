@@ -11885,3 +11885,18 @@ MASTER, nx-02 100 BACKUP. 10 Hz ping from nx-02 host: maintenance 0/193, preempt
 `qm stop` 2.6 s, re-take after boot 0; both checks 12/12. pve RAM booked ~63.5/62.7 GiB (resident
 ~26) — flagged in #2143, FU-289's class. Mine: first build died on a worktree without
 tofu/kubeconfig (symlinked); mgmt-tf apply needs MGMT_YES=1 non-interactively.
+
+### 2026-09-30 night — the CARP pair's drill sequence (goal session; FU-297, #2145–#2150)
+
+Operator: /24, reserve a 2.x trial slot, cable attached (nx-02 eno2 ↔ pve enp6s0), /goal set.
+#2145 /24 ruling (ADR-088 amended, .72 reserved, lo0 permanent; dark-WAN guard read operstate and
+left WAN ports admin-down — fixed). #2146 pfsync (v1400 pinned; states replicate). #2148 WAN gate on
+the hypervisor after a guest CARP hook failed the boot case (BACKUP took the lease; hook reconfigure
+never ran dhclient) — QMP set_link keyed on adverts; fake ISP netns + flowprobe. #2149 belt from the
+gates' textfile. #2150 write-up. Drills (held NAT'd flow / fresh): planned failover 6.4 s/2.5 s,
+preempt 6.4/2.3, hard stop 13.5/3.5, rolling update (3 reboots) 0.62 s + 3.1 s, BACKUP reboot 0,
+split-brain → RouterPairMasterCount firing +1m47s value 2, cleared on heal; cold start green.
+Mine: the /24 lo0 proof (3.11 via .71) TRIPPED pve's kill switch (correct) and the hard stop lost
+~1 min of unflushed nano-UFS config (→ sync after converge); a gate hold of 1.5 s flapped nx-02
+(advskew 100 → 1.39 s interval); QMP success matched on capabilities alone hid a set_link that never
+ran; pkill -f matched its own ssh. Prod .1 untouched throughout (Big Data MAC, Unbound, grafana 200).
