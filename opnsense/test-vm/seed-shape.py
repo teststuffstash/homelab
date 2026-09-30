@@ -35,6 +35,9 @@ ap = argparse.ArgumentParser()
 ap.add_argument("seed")
 ap.add_argument("--router", action="store_true")
 ap.add_argument("--wan-mac", default="")
+# The WAN's FreeBSD interface: igb0 = the passed-through I350 port; vtnet2 = the bridged shape
+# (virtio on a host bridge over the same port — docs/router-move.md, operator 2026-09-30).
+ap.add_argument("--wan-if", default="igb0", choices=["igb0", "vtnet2"])
 ap.add_argument("--carry-from")
 ap.add_argument("--carry", default="")
 ap.add_argument("--api-users", default="backup-puller,automation")
@@ -58,7 +61,7 @@ if a.router:
     wan.tag = "opt9"
     wan.find("descr").text = "MGMT"
     new = ET.Element("wan")
-    for tag, text in (("enable", "1"), ("if", "igb0"), ("spoofmac", a.wan_mac), ("ipaddr", "dhcp"),
+    for tag, text in (("enable", "1"), ("if", a.wan_if), ("spoofmac", a.wan_mac), ("ipaddr", "dhcp"),
                       ("gateway", "WAN_GW"), ("blockpriv", "1"), ("blockbogons", "1")):
         ET.SubElement(new, tag).text = text
     ifs.insert(0, new)

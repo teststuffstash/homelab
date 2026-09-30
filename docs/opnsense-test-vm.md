@@ -251,6 +251,19 @@ during the run would renew FROM the rehearsal, which means a real LE order and a
 with prod's token. So the drill refuses while any carried cert is ≥ 58 days old (os-acme-client
 renews at 60).
 
+**`--wan bridged`** (docs/router-move.md): the WAN is `vtnet2`, virtio (`queues=2`, `firewall=0`)
+on a runtime host bridge `vmbr9` whose only port is the same dark `eno2` — built and deleted by the
+bootstrap, refused if a configured bridge has the name. After the other probes a fake-ISP LXC joins
+`vmbr9` (dnsmasq + iperf3 on `11.255.0.1/24`, outside prod's `blockpriv`/`blockbogons`; its packages
+arrive over a temporary `vmbr0` leg deleted before dnsmasq starts). `wan_lease` wants the router's
+lease on the spoofed MAC; `wan_throughput` runs iperf3 from the LAN probe through NAT, 1 and 4
+streams both ways, each ≥ `OPN_DRILL_WAN_MIN_MBPS` (900). First run, 2026-09-30: 2988–3256 Mbit/s,
+PASS, score 0. Expected per the literature: 1 Gbit/s over virtio is routine on Broadwell-class
+Xeons with offloads off; the multi-Gbit ceilings people hit need multiqueue + RSS tuning
+([Proxmox forum](https://forum.proxmox.com/threads/opnsense-10gbit-performance-and-throughput-limitation.142737/),
+[Netgate](https://forum.netgate.com/topic/177372/limit-of-virtio-performance),
+[OPNsense virtual setup](https://docs.opnsense.org/manual/virtuals.html)).
+
 **Extra probes:** `wan_dark`, `wan_mac`, and `carried_key_{root,backup_puller,automation}`. Each
 key probe calls an endpoint the user's privileges allow, using prod's wallet pair against the
 rehearsal VM, and wants HTTP 200: no consumer re-keys on the move. `real_cert` wants HAProxy's
