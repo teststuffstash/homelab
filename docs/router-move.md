@@ -87,13 +87,24 @@ be **inert** — every address and every outbound act prod owns stays prod's:
   for the same reason; a standing node lives past that);
 - its WAN uncabled (it wears `em0`'s MAC — the bootstrap refuses carrier).
 
-The converge of a standing node therefore needs a standby profile of the plays (group_vars
-overrides, like the drill's), and a probe per bullet before it joins the LAN. CARP is learned on
-the pair meanwhile with a trial VIP from `192.168.3.0/24` that prod does not hold. The WAN: pve's is a Realtek x1 card — Linux drives it, bridged on the
-host (virtio into the VM, never passthrough: FreeBSD's Realtek driver and the X99 chipset slot's
-IOMMU grouping both argue against it). Proposed (seat, 2026-09-30 — not yet ruled): nx-02's `eno2`
-moves to the same bridged shape so the two nodes are identical; the rehearsal proves passthrough
-today. The dark-WAN guard would gain the bridged variant (carrier, no host address).
+**The standby profile** is one knob, `opnsense_standby` (`ansible/group_vars/opnsense.yml`,
+default false; a standing node's host_vars set it true, the cutover converges it false), plus
+`OPN_DHCP_ENABLE=0` for `opnsense/dnsmasq-dhcp.py`. Per rule: the BGP neighbours stay configured
+but **disabled**; the ACME client's global **auto-renewal off**; ddclient **disabled**; dnsmasq
+converged but **off**; the HAProxy service VIPs on **`lo0`** instead of `lan`
+(`haproxy_vip_interface`), so HAProxy binds and serves but no LAN ARP answers for them (the real
+LAN is a `/22`, so `192.168.3.0/24` is on-link). The role clears each address from the other
+interface, so the flip never leaves two holders. `.1` is the node's seed (its own LAN address), not
+the plays. Proof: `scripts/opnsense-drill.sh --router --standby` has one probe per rule (`standby_*`
+in the report). CARP is learned on the pair meanwhile with a trial VIP from `192.168.3.0/24` that
+prod does not hold. The WAN: pve's is a Realtek x1 card (TP-LINK TG-3468, in hand 2026-09-30) —
+Linux drives it, bridged on the host (virtio into the VM, never passthrough: FreeBSD's Realtek
+driver and the X99 chipset slot's IOMMU grouping both argue against it). **nx-02's `eno2` moves to
+the same bridged shape** (operator, 2026-09-30: *"bridged if there is no performance penalty"*), so
+the two nodes are identical. Both WANs are 1 GbE (I350, RTL8168), so the bar is NAT'd line rate
+through virtio. The rehearsal proves passthrough today; the switch waits on that throughput read
+through the rehearsal's bridged WAN. The dark-WAN guard gains the bridged variant (carrier, no host
+address).
 
 The window (Big Data still cabled, powered off at its start):
 
