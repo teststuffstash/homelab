@@ -61,8 +61,16 @@ never the session's arc — that is TICK-LOG's.)
   seat-1790772187-4679): `06:00.0` `enp6s0` `ac:a7:f1:b3:25:95`, x1 2.5 GT/s, own IOMMU group,
   unconfigured; the onboard RTL8168 moved to `07:00.0` and is PINNED `nic0`
   (`pve-network-interface-pinning`; vmbr0 = nic0 — unpinned, pve would have booted offline).
-  **NEXT:** #2138 merges → the standing nx-02 node on vmbr0 at `.70` (attended) → the bridged-WAN
-  throughput read → pve's node.
+  **2026-09-30 evening — nx-02 NODE STANDING + INERT at `.70`** (#2140 bridged WAN
+  ~3 Gbit/s; #2141 `tofu/opnsense-router.tf` vmbr3 + VM 9170 applied in window
+  seat-1790782366-5635; `bash scripts/opnsense-router-node.sh check nx02` = the read-only
+  health read). ⚠ The kill switch is a nohup process on nx-02 and the VM is `on_boot=false`: an
+  nx-02 reboot leaves the node DOWN (safe) — re-arm + start by hand, or build the persistence.
+  **NEXT:** `on_boot` + a systemd kill switch on nx-02 (one PR), then pve's node (`.71`, same
+  verb — needs a `pve` row, its vmbr over `enp6s0`), then the CARP trial VIP. Open beside it:
+  `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
+  8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class, not acted on. #2130
+  (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
   client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →

@@ -11834,3 +11834,21 @@ CiliumUnreachableNodes = stale cilium-health results frozen mid-boot, self-clear
 maintenance-window-G5 resight). Closed --force over NodeRebooted + PodSigkilled (G5's class).
 #2137 review: pipefail fail-open (fixed); the column claim came from the fixture (the live layout
 differs; the leader is now read by value). BIOS AC-loss unreadable headless — operator item 4.
+
+## 2026-09-30 ~13:40–16:10Z — seat: bridged WAN measured, MB4 access design, nx-02 node STANDING
+Operator: bridged WAN test + web research; the management network's BMC/access answer → MB4 now
+(WAN + management switches go in together); then "go ahead unattended … wind down when done and
+all in-flight PRs are merged". **#2140** `--wan bridged` (runtime vmbr9 over eno2, fake-ISP LXC,
+wan_lease + wan_throughput): ×1/×4 up/down 2988–3256 Mbit/s NAT'd, lease on the spoofed MAC, score
+0 → nx-02 bridged (review: missing `exit 1`, fixed). Web research: 1 Gbit/s over virtio routine on
+Broadwell with offloads off; firewall=0 (macfilter), 26.7 SYN-cookie vtnet bug, r8169 on pve.
+**#2139** MB4 item 7: 192.168.15.0/24 reserved, static BMCs (today DHCP reservations .123/.173),
+ipmitool on the box + ssh -L for the web GUI (review: `-E` reads IPMI_PASSWORD, fixed).
+**#2141** the nx-02 node: tofu vmbr3 (eno2) + VM 9170 (LAN MAC 02:00:C0:A8:02:46), seed-shape
+`--standing` (.70/22, no LAN interface gateway → no reply-to, DHCP off, ACME renewal off, root keys
+= prod's), bootstrap `standing` + WAN guard, `scripts/opnsense-router-node.sh` (kill switch on the
+LAN tap → qm stop — trip-tested with an injected .1 ARP claim, ~1 s), `opnsense-backup-fetch.sh`
+shared with the drill. Window seat-1790782366-5635: plan 2 to add → applied; build PASS (26.7.5,
+every play standby, check green, switch never tripped; .1 still Big Data's MAC). PveNumaNodeMemoryLow
+(nx-02 node 0) went pending before the window — router VM on node 1; closed --force naming it.
+Mine: a hand-typed PR watch piped JSON through zsh echo and sat blind 30 min (GAPS G2 resight).
