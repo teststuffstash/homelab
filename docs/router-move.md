@@ -180,6 +180,43 @@ two TCP sessions to the trial VIP on the MASTER appear on the BACKUP as `ESTABLI
 `check` reads the setting. Whether a *routed* flow survives a failover is the fake-ISP drill's
 question (only NAT'd flows through the pair make it meaningful).
 
+**WAN follows the master** (2026-09-30). The ISP gives ONE lease to ONE MAC and both nodes wear
+Big Data's `em0` MAC, so only the CARP MASTER may be on the WAN — two holders flap the MAC on the
+ISP side and split return traffic. The authority is the hypervisor's **WAN gate**,
+`router-wangate@<vmid>` (`ansible/pve-router-killswitch.yml`, beside the kill switch): the VM's WAN
+NIC (`net1`) has link iff the guest emitted a CARP advert (IP proto 112) on its LAN tap within 3 s
+— only a MASTER advertises. The lever is QEMU `set_link` over the VM's QMP socket (ms): to the guest
+it is a cable pulled and replugged, and OPNsense's stock link-down/link-up handling does the DHCP.
+The WAN tap follows too, and both are forced down the instant a VM's taps appear, so a booting
+node has no WAN until it proves MASTER. `check` reads it (gate active, WAN tap up iff MASTER).
+A guest-side CARP hook (`rc.syshook.d/carp`) was built first and rejected by the drill: a node
+booting as BACKUP re-raised its WAN in boot's later interface setup and took the lease beside the
+master, and a hook-driven reconfigure never started dhclient. The gate's hold must exceed the
+node's advert interval (`advbase + advskew/256` — nx-02's 1.39 s flapped a 1.5 s hold).
+
+The drill: the operator's cable joins nx-02 `eno2` ↔ pve `enp6s0`, so both `vmbr3`s are one
+segment; `router-node.sh fakeisp up` starts a fake ISP in a netns on nx-02 (`opnsense/router-node/
+fakeisp.py`: one reserved lease `100.64.0.10` for the shared MAC, a router option — OPNsense's
+automatic outbound NAT covers only interfaces with a gateway — and a counter-streaming TCP server
+on `100.64.0.1:9000`); `router-node.sh probe <secs>` runs `flowprobe.py` on the pve host with
+`100.64.0.1` routed via the trial VIP: one held NAT'd flow + a fresh connect every 0.1 s. The
+nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP). Measured:
+
+| Drill | Held NAT'd flow | Fresh connects |
+|---|---|---|
+| W1 MASTER → maintenance (planned failover) | survived, 6.4 s stall | 2.5 s out |
+| W2 leave maintenance (preempt back) | survived, 6.4 s stall | 2.3 s out |
+| W3 MASTER `qm stop` (host death) | survived, 13.5 s stall (TCP backoff on ~4 s CARP + link-up + DHCP) | 3.5 s out |
+| W3 the stopped MASTER boots + re-takes | survived, 6.4 s stall | 2.8 s out |
+| W4 BACKUP reboots | untouched (≤ 0.1 s blips) | — |
+
+In every run the fake ISP saw DHCP only from the node that had just become MASTER (and its
+renewals) — never from a booting or standing BACKUP. pfsync carried the NAT state each time (the
+held flow never reset). The planned case's ~6 s is OPNsense's ~3 s link-up handling plus the
+DHCP exchange; the guest hook's 1.45 s was faster only because it skipped the link cycle — and it
+was the design that double-held the lease. A planned move pays it twice (over, and back on
+preempt).
+
 **Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
 of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
 LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
@@ -249,3 +286,7 @@ The window (Big Data still cabled, powered off at its start):
   findings on the way: the `lo0` proof above TRIPPED pve's kill switch (its HAProxy answered from
   `3.11` — correct; such a proof runs with the switch disarmed), and the hard stop lost ~1 min of
   unflushed config (→ `sync` at the end of `converge`). pve restored, re-applied, both checks green.
+- 2026-09-30 late: **WAN follows the master** — the fake-ISP drill over the operator's cable
+  (nx-02 `eno2` ↔ pve `enp6s0`): a hypervisor-side WAN gate (QMP `set_link` keyed on the guest's
+  own CARP adverts) after a guest hook failed the boot case; W1–W4 measured (§above), NAT'd flows
+  survive every failover, no DHCP ever from a BACKUP.
