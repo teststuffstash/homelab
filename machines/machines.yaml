@@ -778,6 +778,15 @@ machines:
     ip: 192.168.2.70
     notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.
 
+  - name: opnsense-pve
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-pve` (VM on pve)"
+    role: CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled enp6s0 (TG-3468)
+    hardware: OPNsense 26.7 VM on pve (vmid 9171)
+    ip: 192.168.2.71
+    notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.
+
   - name: droplet
     kind: device
     label: Droplet (ESP32)

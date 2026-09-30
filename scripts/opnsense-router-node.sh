@@ -8,7 +8,7 @@
 #   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: the inert rules + prod unharmed
 #   bash scripts/opnsense-router-node.sh killswitch-arm|killswitch-disarm|killswitch-status <node>
 #
-# <node>: nx02 (pve follows the same shape). The hardware is tofu's (tofu/opnsense-router.tf), the
+# <node>: nx02 | pve. The hardware is tofu's (tofu/opnsense-router.tf), the
 # host + standby flag ansible/router-nodes/inventory.yml's.
 #
 # THE KILL SWITCH. Armed before the first boot, on the hypervisor itself (it keeps working when
@@ -30,6 +30,7 @@ cmd="${1:-}"; NODE="${2:-}"
 
 case "$NODE" in
   nx02) VMID=9170 VMNAME=opnsense-nx02 PVE=192.168.2.59 WAN_BRIDGE=vmbr3 LAN_MAC=02:00:c0:a8:02:46 INV_HOST=opnsense-nx02 ;;
+  pve)  VMID=9171 VMNAME=opnsense-pve  PVE=192.168.2.3  WAN_BRIDGE=vmbr3 LAN_MAC=02:00:c0:a8:02:47 INV_HOST=opnsense-pve ;;
   *) sed -n '5,11p' "$0" >&2; exit 2 ;;
 esac
 INV=ansible/router-nodes/inventory.yml

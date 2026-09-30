@@ -25,6 +25,13 @@
     mode: "0755"
   register: pve_rks_script
 
+- name: Install the exemptions (the CARP trial VIPs)
+  ansible.builtin.template:
+    src: router-killswitch.default.j2
+    dest: /etc/default/router-killswitch
+    mode: "0644"
+  register: pve_rks_default
+
 - name: Install the template unit
   ansible.builtin.template:
     src: router-killswitch@.service.j2
@@ -48,7 +55,7 @@
     systemctl is-active -q "router-killswitch@{{ item }}.service" || exit 0
     systemctl restart "router-killswitch@{{ item }}.service" && echo restarted
   loop: "{{ pve_router_killswitch_vmids }}"
-  when: pve_rks_script.changed or pve_rks_unit.changed
+  when: pve_rks_script.changed or pve_rks_unit.changed or pve_rks_default.changed
   register: pve_rks_restart
   changed_when: "'restarted' in pve_rks_restart.stdout"
 

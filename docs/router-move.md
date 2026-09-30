@@ -118,10 +118,12 @@ guard has the bridged variant (host port carrier 0, enslaved, bridge without an 
 `vmbr0` LAN with a fixed MAC, net1 = `vmbr3` WAN, created stopped) — applied through the box in a
 window, since a bridge is a host network change. Then `bash scripts/opnsense-router-node.sh build nx02`:
 
-1. **kill switch** armed on the hypervisor before anything boots — tcpdump on the node's LAN tap
-   waits for one frame that would mean it is not inert (an ARP claiming `.1` or a `3.0/24` VIP,
-   a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6 RA) and
-   `qm stop`s the VM, latching `onboot 0` first so a host reboot does not bring it back (drift
+1. **kill switch** armed on the hypervisor before anything boots — tcpdump on the node's LAN tap,
+   inbound only (every frame the VM emits, whatever the source MAC — a CARP address speaks from
+   its virtual MAC), waits for one frame that would mean it is not inert (an ARP claiming `.1` or
+   a `3.0/24` VIP, a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6
+   RA; the CARP trial VIPs exempt — `ansible/router-nodes/group_vars/opnsense.yml`) and
+   `qm stop`s the VM, then latches `onboot 0` so a host reboot does not bring it back (drift
    against tofu's `on_boot = true` — re-enabling is a reviewed apply); proven by injecting an ARP
    claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
    `router-killswitch@<vmid>` unit (`ansible/pve-router-killswitch.yml`, the vmid in the host's
@@ -181,3 +183,10 @@ The window (Big Data still cabled, powered off at its start):
   instead of a nohup process. Trip-tested live: an injected `.1` ARP claim on the tap → tripped
   in <1 s, `onboot` latched 0, VM stopped; restored, re-booted armed without a trip, `check` 11/11
   (a new line reads the reboot survival). **Next:** pve's node (`.71`), then the CARP trial.
+- 2026-09-30 night: **pve's node STANDS + inert at `.71`** — the same shape (`tofu/opnsense-router.tf`: `vmbr3` over
+  `enp6s0`, VM 9171 at `.71`, MAC `02:00:C0:A8:02:47`; `router-node.sh … pve`); pve is booked
+  ~61 of 62.7 GiB with balloon off (resident ~26 GiB) — 2 GiB more is FU-289's class, accepted for
+  a 2 GiB router. Applied through the box, `router-node.sh build pve` (seeded, converged standby),
+  on_boot flipped, `check pve` 11/11. The kill switch now captures inbound on the tap (CARP's
+  virtual MAC), stops before it latches (1.7 s, a gratuitous ARP from INSIDE the node), and exempts
+  the trial VIPs. **Next:** the CARP trial.
