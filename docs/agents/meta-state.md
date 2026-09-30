@@ -64,10 +64,11 @@ never the session's arc — that is TICK-LOG's.)
   **2026-09-30 evening — nx-02 NODE STANDING + INERT at `.70`** (#2140 bridged WAN
   ~3 Gbit/s; #2141 `tofu/opnsense-router.tf` vmbr3 + VM 9170 applied in window
   seat-1790782366-5635; `bash scripts/opnsense-router-node.sh check nx02` = the read-only
-  health read). ⚠ The kill switch is a nohup process on nx-02 and the VM is `on_boot=false`: an
-  nx-02 reboot leaves the node DOWN (safe) — re-arm + start by hand, or build the persistence.
-  **NEXT:** `on_boot` + a systemd kill switch on nx-02 (one PR), then pve's node (`.71`, same
-  verb — needs a `pve` row, its vmbr over `enp6s0`), then the CARP trial VIP. Open beside it:
+  health read). **2026-09-30 night — reboot-proof** (#2142): tofu `on_boot = true` + the kill
+  switch is `router-killswitch@9170` on nx-02 (`ansible/pve-router-killswitch.yml`, Before=pve-guests;
+  a trip latches onboot 0), trip-tested live, `check` 11/11. **NEXT:** pve's node (`.71` — a `pve`
+  row in the verb, its vmbr over `enp6s0`, `pve_router_killswitch_vmids` in `host_vars/pve-host.yml`
+  with the tofu on_boot flip after build), then the CARP trial VIP. Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
   (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.

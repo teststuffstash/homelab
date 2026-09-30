@@ -11862,3 +11862,13 @@ supplied eBay/AliExpress prices → hardware `market/2026-09-30-rdimm-price-guid
 C1/D1/G1/H1 first, watch for a bulk lot ≤ €48/16 GB). FU-289 extended (item 3). Mine: first answer
 suggested mixing pve's 2133 Micron with the 2400 Samsungs in one channel; the Supermicro manual forbids
 mixed speeds and Nutanix wants one maker per channel — corrected before any buy.
+
+### 2026-09-30 night — nx-02 router node reboot-proof (FU-297, #2142)
+
+Kill switch moved from a nohup process to `router-killswitch@9170` on nx-02 (new
+`ansible/pve-router-killswitch.yml`, Before=pve-guests, MAC read from net0; a trip latches onboot 0
+then qm stop); tofu `on_boot = true`. Window seat-1790788269-2350: play applied, nohup retired, live
+trip test (injected `.1` ARP claim on tap9170i0 → <1 s, onboot 0, VM stopped), restored
+(`qm set --onboot 1` by hand = the PR's tofu), booted armed without a trip, `check nx02` 11/11.
+Closed --force over an unrelated CPUThrottlingHigh→InfoInhibitor in agent-coordinator. Mine: first
+window open ran outside devbox (kubectl not on PATH → unreadable baseline, refused).
