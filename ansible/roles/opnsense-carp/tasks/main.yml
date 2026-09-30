@@ -1,0 +1,44 @@
+---
+# OPNsense CARP — one `carp` VIP per `router_carp_vips` entry on LAN, the node's advskew from its
+# inventory host vars (`router_carp_advskew`: lowest wins MASTER). No XMLRPC config sync (ROADMAP
+# §HA step 2): every node gets the same list from git. The password is the VHID group's shared
+# key (wallet `opnsense-carp-password`, env OPN_CARP_PASSWORD) — it keeps groups apart, it is not
+# security: CARP rides the LAN unauthenticated (ADR-144, accepted).
+#
+# While prod serves, the list holds TRIAL VIPs only — addresses prod never holds (never `.1`, never
+# a HAProxy VIP): with no other speaker a node makes itself MASTER and answers ARP. The kill switch
+# exempts exactly this list (ansible/pve-router-killswitch.yml reads the same file) — so adding an
+# address here without re-running that play trips the node, by design.
+- name: CARP VIPs (every call applies — reload)
+  when: router_carp_vips | default([]) | length > 0
+  module_defaults:
+    oxlorg.opnsense.interface_vip: "{{ opnsense_conn | combine({'reload': true}) }}"
+  block:
+    - name: The password is in the env
+      ansible.builtin.assert:
+        that: lookup('env', 'OPN_CARP_PASSWORD') | length > 0
+        fail_msg: "OPN_CARP_PASSWORD is empty — export it from the wallet (opnsense-carp-password)"
+        quiet: true
+
+    - name: Never `.1`, never outside the trial range (prod's addresses stay prod's)
+      ansible.builtin.assert:
+        that:
+          - item.address is match('^192\.168\.3\.')
+          - item.address.split('/')[0] not in (haproxy_proxied_services + (stack_gateways | default([]))) | map(attribute='vip') | list
+        fail_msg: "{{ item.address }}: a CARP VIP here must be an unused 192.168.3.x while prod serves"
+        quiet: true
+      loop: "{{ router_carp_vips }}"
+      loop_control: { label: "{{ item.address }}" }
+
+    - name: CARP VIP on LAN
+      oxlorg.opnsense.interface_vip:
+        address: "{{ item.address }}"
+        interface: lan
+        mode: carp
+        vhid: "{{ item.vhid | string }}"
+        password: "{{ lookup('env', 'OPN_CARP_PASSWORD') }}"
+        advertising_base: 1
+        advertising_skew: "{{ router_carp_advskew }}"
+        description: "{{ item.description }}"
+      loop: "{{ router_carp_vips }}"
+      loop_control: { label: "{{ item.address }} vhid {{ item.vhid }} skew {{ router_carp_advskew }}" }
