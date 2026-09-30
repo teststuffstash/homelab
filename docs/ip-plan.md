@@ -54,7 +54,8 @@ Cleared before assignment (the 2026-09-20 pre-assignment check), per the procedu
 | `192.168.4.0/22` | /22 | 1022 | **IoT VLAN** — the ESP32-per-radiator/valve endgame (“couple hundred, definitely < 1000”). |
 | `192.168.8.0/24` | /24 | 254 | **Guest VLAN** (wifi-password → VLAN steering; firewalled off `2.0/24`, `3.0/24`, `32.0/19`). |
 | `192.168.9.0/24` | /24 | 254 | **Lab / DMZ VLAN.** |
-| `192.168.10.0/24`–`15.0/24` | 6×/24 | — | Future VLANs (one subnet per SSID/segment as the wifi-VLAN plan lands). |
+| `192.168.10.0/24`–`14.0/24` | 5×/24 | — | Future VLANs (one subnet per SSID/segment as the wifi-VLAN plan lands). |
+| `192.168.15.0/24` | /24 | 254 | **Management segment (reserved 2026-09-30)** — the BMCs behind the management box's second NIC, on their own switch; static only, no DHCP, never routed from `2.0/24` ([`management-box.md`](management-box.md) §MB4 item 7). Per-host addresses live in `machines.yaml` (`bmc:`), not here. |
 | `192.168.16.0/20` | /20 | 4094 | **Physical expansion** — new machine subnets when `2.0/24` fills; carve /24s from the bottom. |
 | `192.168.32.0/19` | /19 | 8190 | **Cluster BGP service VIPs** (Cilium LBIPAM, routed — this is where “no upper bound” growth belongs). Contains the live `192.168.40.0/24` pool. Per-stack isolation later = one /24 pool per stack carved from here (composable via the agentstack claim); **not yet** — the single shared `40.0/24` stays until a stack actually needs its own pool/policy. |
 | `192.168.64.0/18` | /18 | 16382 | **Routed-virtual overflow** — more BGP pools, VPN client ranges, whatever routes rather than ARPs. Carved: `64.0/24` = WireGuard road-warrior clients (ADR-090; router `.64.1`, peers `.64.10+`). |
