@@ -97,7 +97,7 @@ accepted  *           nat/rule[*]/created/**
 accepted  *           nat/rule[*]/updated/**
 accepted  drill-only  nat/rule[*]/audit
 accepted  value       OPNsense/Firewall/Filter/rules/rule[*]/audit
-accepted  prod-only   system/nextuid
+accepted  *           system/nextuid
 accepted  prod-only   system/nextgid
 accepted  prod-only   widgets/**
 # ── (c) accepted: fields a fresh 26.1 install writes that a years-old config never got ────────

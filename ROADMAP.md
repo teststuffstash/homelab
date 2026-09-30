@@ -123,7 +123,8 @@ work survivable.
    prod's residue (rows not in code). **The cutover gate is that score:** every row coded, deleted
    on prod, or knowingly dropped — a from-git node silently loses whatever the score still counts.
    Sequence (Big Data's Intel 4-port card is its LAN, so moving it takes Big Data off the air):
-   1. score → ≈0; the nx-02 node (WAN = `eno2` passed through) built from git and drill-proven;
+   1. score → ≈0; the nx-02 node (WAN = `eno2` passed through) built from git and drill-proven
+      (the move's design — inventory, carried identity, window: [`docs/router-move.md`](docs/router-move.md));
    2. **nx-02 becomes the only router** in a window, Big Data still cabled as the fallback — the
       same window carries the WAN switch (the ONT has one port) and the single-lease trial (shared
       MAC, only the master's WAN up);

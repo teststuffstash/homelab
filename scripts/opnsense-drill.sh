@@ -3,6 +3,17 @@
 # score its config.xml against prod's, destroy it. docs/opnsense-test-vm.md §The rebuild drill.
 #
 #   bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]     # jail: wallet creds; box: env file
+#   bash scripts/opnsense-drill.sh --router [--ref <rev>]     # the ROUTER REHEARSAL (jail only)
+#
+# --router: the same drill in the future router's shape (docs/opnsense-test-vm.md §The router
+# rehearsal): WAN = nx-02's dark eno2 by PCI passthrough (machines.yaml router_wan_pci), DHCP,
+# spoofing the old router's WAN MAC (machines.yaml wan_mac); the vmbr0 NIC becomes an `opt9`
+# MGMT interface; and router IDENTITY — certs + CAs, the registered ACME account + its
+# certificate rows, the FU-013 API users + root's prod key — is CARRIED from the newest FU-013
+# encrypted backup (decrypted with the wallet's age identity into the 0700 secret dir, deleted
+# after the build). Extra probes: the WAN is dark and wears the MAC, every carried API key
+# authenticates, and HAProxy serves the REAL certificate. Scored with the router overlay of the
+# map; never writes the box's metrics (the weekly score stays the plain drill's).
 #
 # Stages (each timed; the report + metrics say which one failed):
 #   preflight  nx-02 thin pool + free memory read, BEFORE anything writes (a stale drill VM from a
@@ -38,12 +49,13 @@
 # Exit: 0 drill passed, 1 a stage failed (report says which), 2 refused / environment.
 set -euo pipefail
 
-REF=HEAD; KEEP=0
+REF=HEAD; KEEP=0; ROUTER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
-    *) sed -n '2,30p' "$0" >&2; exit 2 ;;
+    --router) ROUTER=1; shift ;;
+    *) sed -n '2,41p' "$0" >&2; exit 2 ;;
   esac
 done
 
@@ -65,6 +77,29 @@ PROD=192.168.2.1
 log() { printf '[opnsense-drill] %s\n' "$*" >&2; }
 die() { log "REFUSED: $*"; exit 2; }
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+# fetch_backup <out> — the newest FU-013 object, decrypted with the wallet identity (docs/runbook.md
+# §OPNsense config backup, Restore). Garage by port-forward: no dependency on the router's VIPs.
+fetch_backup() {
+  local out="$1" k="kubectl --kubeconfig $KUBECONFIG_DRILL" pf obj port=$((20000 + RANDOM % 20000)) rc=0
+  AWS_ACCESS_KEY_ID="$($k -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.access_key_id}' | base64 -d)" || return 1
+  AWS_SECRET_ACCESS_KEY="$($k -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.secret_access_key}' | base64 -d)" || return 1
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+  $k -n garage port-forward svc/garage "$port:3900" >/dev/null 2>&1 & pf=$!
+  for _ in $(seq 1 40); do timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null && break; sleep 0.5; done
+  local s3="aws --region garage --endpoint-url http://127.0.0.1:$port s3"
+  obj="$($s3 ls s3://opnsense-config-backup/opnsense-fw/ | awk '{print $4}' | grep '\.xml\.age$' | sort | tail -1)"
+  if [ -n "$obj" ]; then
+    log "carry source: opnsense-fw/$obj"
+    ( umask 077
+      $s3 cp --quiet "s3://opnsense-config-backup/opnsense-fw/$obj" "$out.age" \
+      && keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
+           "$HOME/.claude/homelab-keepass/homelab.kdbx" opnsense-config-backup-age-identity \
+         | age -d -i - -o "$out" "$out.age" ) || rc=1
+  else rc=1; fi
+  rm -f "$out.age"; kill "$pf" 2>/dev/null || true
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+  [ "$rc" -eq 0 ] && [ -s "$out" ] && chmod 600 "$out"
+}
 
 [ "$VMID" != 9110 ] || die "vmid 9110 is the PR-validation VM"
 [ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"
@@ -96,6 +131,41 @@ export OPN_TEST_ROOT_PASSWORD OPN_TEST_API_KEY OPN_TEST_API_SECRET
 export OPN_TEST_VMID="$VMID" OPN_TEST_HOST="$HOST" OPN_TEST_VM_NAME="$VMNAME" \
        OPN_TEST_LAN_BRIDGE="$LAN_BRIDGE" OPN_TEST_PVE="$PVE" OPN_TEST_PVE_KEY="$PVE_KEY" \
        OPN_TEST_SNAPSHOT=baseline
+
+# ---- --router: the future router's shape + identity carried from the FU-013 backup -------------
+MAP="$ROOT/opnsense/drill/compare-map.txt"
+if [ "$ROUTER" -eq 1 ]; then
+  M="$ROOT/machines/machines.yaml"
+  WAN_MAC="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' "$M")"
+  WAN_PCI="$(yq -r '.machines[] | select(.name == "nx-02") | .router_wan_pci' "$M")"
+  case "$WAN_MAC$WAN_PCI" in *null*|'') die "machines.yaml lacks opnsense.wan_mac / nx-02.router_wan_pci" ;; esac
+  KUBECONFIG_DRILL="${OPN_DRILL_KUBECONFIG:-$ROOT/tofu/kubeconfig}"
+  [ -f "$KUBECONFIG_DRILL" ] && [ -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ] \
+    || die "--router reads the FU-013 backup (kubeconfig $KUBECONFIG_DRILL + the wallet): jail only"
+  log "router rehearsal: fetching the newest FU-013 backup (Garage via port-forward)"
+  fetch_backup "$SEC/carry.xml" || die "could not fetch + decrypt the newest FU-013 backup"
+  # An imported cert that falls due during the run would renew FROM THE REHEARSAL (a real LE order
+  # + a Cloudflare TXT write with prod's token). os-acme-client renews at 60 days; refuse at 58.
+  stale="$(python3 - "$SEC/carry.xml" <<'PY'
+import sys, time, xml.etree.ElementTree as ET
+r = ET.parse(sys.argv[1]).getroot()
+for c in r.findall("OPNsense/AcmeClient/certificates/certificate"):
+    if c.findtext("enabled") == "1" and c.findtext("autoRenewal") == "1" \
+       and time.time() - int(c.findtext("lastUpdate") or 0) > 58 * 86400:
+        print(c.findtext("name"))
+PY
+)"
+  [ -z "$stale" ] || die "carried cert(s) within 2 days of renewal — let prod renew first: $(echo $stale)"
+  export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
+         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users
+  TEXTFILE_FORCE_OFF=1
+  # The router overlay first (first match wins), then the base map minus its two WAN wildcards
+  # (the interface + its gateway): in this shape the WAN IS comparable (DHCP on a real NIC, like prod's).
+  MAP="$WORK/compare-map.txt"
+  { cat "$ROOT/opnsense/drill/compare-map-router.txt"
+    grep -Ev '^env +\* +(interfaces/wan/\*\*|OPNsense/Gateways/gateway_item\[WAN_GW\]/\*\*)$' \
+      "$ROOT/opnsense/drill/compare-map.txt"; } > "$MAP"
+fi
 
 # ---- stage bookkeeping -------------------------------------------------------------------------
 declare -A STAGE_S STAGE_OK
@@ -164,6 +234,7 @@ probe_destroy() {
 
 POOL_BEFORE=''; POOL_AFTER=''; SCORE=''
 TEXTFILE="${OPN_DRILL_TEXTFILE:-}"; STATE="${OPN_DRILL_STATE:-}"
+[ -z "${TEXTFILE_FORCE_OFF:-}" ] || { TEXTFILE=''; STATE=''; }   # --router: never the weekly metrics
 
 # The metrics (the box's textfile; argocd/resources/mgmt-metrics/opnsense-drill.yaml reads them).
 # Written atomically on EVERY finished run, pass or fail; a preflight refusal writes nothing (the
@@ -218,7 +289,7 @@ finish() {
   fi
   emit_metrics "$([ -z "$FAILED" ] && [ "$rc" -eq 0 ] && echo 1 || echo 0)"
   {
-    echo "## OPNsense rebuild drill (FU-297) — $(date -u +%FT%TZ)"
+    echo "## OPNsense $([ "$ROUTER" -eq 1 ] && echo 'ROUTER REHEARSAL' || echo 'rebuild drill') (FU-297) — $(date -u +%FT%TZ)"
     echo
     echo "- rev \`$SHA\`, vm $VMID on $PVE, WAN $HOST, LAN $LAN_BRIDGE; duration **${DURATION}s**"
     echo "- stages: $(for s in preflight build probe-setup converge probe compare destroy; do [ -n "${STAGE_S[$s]:-}" ] && printf '%s %ss · ' "$s" "${STAGE_S[$s]}"; done)"
@@ -251,10 +322,13 @@ fi
 stage build
 if bootstrap create >&2 && bootstrap bootstrap > "$WORK/bootstrap.log" 2>&1; then
   rep "- build: $(grep -E '^(version|plugin):' "$WORK/bootstrap.log" | tr '\n' ' ')"
+  [ "$ROUTER" -eq 0 ] || rep "- router shape: $(grep -E '^seed-shape:' "$WORK/bootstrap.log" | sed 's/^seed-shape: //' | tr '\n' ' ')"
 else
   tail -30 "$WORK/bootstrap.log" >&2 || true
+  rm -f "$SEC/carry.xml"
   fail "the VM did not build (bootstrap log tail above)"; exit 1
 fi
+rm -f "$SEC/carry.xml"   # --router: the seed is on the VM now; the decrypted backup goes
 
 # ================================================================ probe setup ===================
 stage probe-setup
@@ -320,16 +394,47 @@ bgpd="$(vm_ssh 'pgrep -x bgpd >/dev/null && echo running || echo "NOT running (F
 probe bgp_session "$([ "$st" = Established ] && echo 1 || echo 0)" "fake peer AS64513 @192.168.1.2 ↔ router AS64512: \`${st:-no state}\` (router bgpd: $bgpd)"
 probe bgp_route "$([ "$rt" = 192.168.1.2 ] && echo 1 || echo 0)" "router kernel route \`$PEER_ROUTE\` → \`${rt:-none}\` (want the peer, 192.168.1.2)"
 
+# The router rehearsal's own probes: the WAN is the passed-through NIC, dark, wearing the old
+# router's MAC; every carried consumer key authenticates (so no consumer flips on the move); and
+# HAProxy serves the REAL carried certificate, not the harness fixture.
+if [ "$ROUTER" -eq 1 ]; then
+  igb="$(vm_ssh 'ifconfig igb0' 2>/dev/null || true)"
+  probe wan_dark "$(echo "$igb" | grep -q 'status: no carrier' && echo 1 || echo 0)" \
+    "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | head -1)\` (want no carrier)"
+  probe wan_mac "$(echo "$igb" | grep -qi "ether $WAN_MAC" && echo 1 || echo 0)" \
+    "igb0 ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
+  _kpw() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
+             "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+  for u in root:opnsense-api:core/firmware/info backup-puller:opnsense-backup-puller-api:core/backup/backups/this \
+           automation:opnsense-automation-api:quagga/general/get; do
+    IFS=: read -r who ent path <<<"$u"
+    ( umask 077; printf 'user = "%s:%s"\n' "$(_kpw "$ent-key")" "$(_kpw "$ent-secret")" > "$SEC/k.curl" )
+    code="$(curl -sk -K "$SEC/k.curl" --max-time 20 -o /dev/null -w '%{http_code}' "https://$HOST/api/$path" || true)"
+    rm -f "$SEC/k.curl"
+    probe "carried_key_${who//-/_}" "$([ "$code" = 200 ] && echo 1 || echo 0)" \
+      "prod's \`$ent-*\` wallet pair on \`GET /api/$path\` → HTTP $code (want 200)"
+  done
+  iss="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | openssl x509 -noout -issuer -subject'" 2>/dev/null | tr '\n' ' ' || true)"
+  probe real_cert "$(echo "$iss" | grep -q "Let's Encrypt" && echo "$iss" | grep -q "$hn" && echo 1 || echo 0)" \
+    "VIP \`$hv:443\` SNI \`$hn\` serves \`$(echo "${iss:-nothing}" | cut -c1-110)\` (want the carried LE cert)"
+fi
+
 # ================================================================ compare =======================
 stage compare
 bash "$ROOT/opnsense/drill/config-compare-test.sh" > "$WORK/compare-test.log" 2>&1 \
   || { cat "$WORK/compare-test.log" >&2; fail "the scorer's self-test failed — not scoring with it"; exit 1; }
 curl -sfk -K "$SEC/drill.curl" --max-time 60 -o "$SEC/drill.xml" "https://$HOST/api/core/backup/download/this" \
   || { fail "could not download the drill VM's config.xml"; exit 1; }
-curl -sfk -K "$SEC/prod.curl" --max-time 60 -o "$SEC/prod.xml" "https://$PROD/api/core/backup/download/this" \
-  || { fail "could not GET prod's config.xml"; exit 1; }
+# Retried: a rehearsal run once lost this one GET with prod healthy and the request absent from
+# its audit log (2026-09-29 night). The curl error now lands in the report either way.
+perr=''
+for _ in 1 2 3; do
+  perr="$(curl -sSfk -K "$SEC/prod.curl" --max-time 60 -o "$SEC/prod.xml" "https://$PROD/api/core/backup/download/this" 2>&1)" && break
+  log "prod config GET failed ($perr) — retrying in 15 s"; sleep 15
+done
+[ -s "$SEC/prod.xml" ] || { fail "could not GET prod's config.xml: $perr"; exit 1; }
 chmod 600 "$SEC"/*.xml
-python3 "$ROOT/opnsense/drill/config-compare.py" "$SEC/prod.xml" "$SEC/drill.xml" \
+python3 "$ROOT/opnsense/drill/config-compare.py" "$SEC/prod.xml" "$SEC/drill.xml" --map "$MAP" \
   --report "$WORK/compare.md" --prom "$WORK/compare.prom" --json "$WORK/compare.json" \
   --detail "$SEC/detail.tsv" || { fail "config-compare failed"; exit 1; }
 rm -f "$SEC"/*.xml

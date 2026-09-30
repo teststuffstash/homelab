@@ -157,6 +157,9 @@ machines:
     cpu_cores: 4         # i5-2500
     memory_gb: 8
     ip: 192.168.2.1
+    # The WAN NIC's (em0) hardware MAC — the ISP lease follows it, so the router's successor
+    # spoofs it (the router rehearsal, docs/opnsense-test-vm.md; read from the API 2026-09-29).
+    wan_mac: "00:22:4d:4f:ab:2e"
     plug: sensor.plug_opnsense_power
     idle_w: 57
     load_w: null
@@ -707,6 +710,9 @@ machines:
     cpu_cores: 40        # 2 sockets × 10C/20T
     memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
     ip: 192.168.2.59
+    # eno2 = the I350's second port, alone in IOMMU group 104: the future router VM's WAN by
+    # PCI passthrough (ROADMAP §HA step 2). Never bridged, never addressed on the host.
+    router_wan_pci: "0000:03:00.1"
     plug: null
     idle_w: null         # BMC/DCMI reads only; this column holds WALL-METER numbers. Method +
                          # the per-node ladder: private hardware register docs/nx-6035-g5.md.
