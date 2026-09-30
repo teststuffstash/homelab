@@ -110,6 +110,26 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(out['source_revision'], 'abc')
         self.assertEqual(len(out['bundle_id']), 64)
 
+    def test_closed_pr_pending_checks_are_revisited(self):
+        row = dict(item(), state='closed', pull_request={})
+        prior = {'repo':'o/r', 'item':1, 'updated_at':row['updated_at'],
+                 'pending_check_shas':['abc']}
+        state = {'items':{'o/r#1':prior}, 'events':[],
+                 'collected_until':'2026-09-29T00:00:00Z'}
+        def read(endpoint):
+            if '/pulls/' in endpoint:
+                return {'head':{'sha':'abc'}, 'merged_at':None}
+            return row
+        def paged(endpoint, field=None):
+            if '/check-runs' in endpoint:
+                return iter([{'id':5, 'name':'ci', 'completed_at':'2026-09-29T12:00:00Z',
+                              'conclusion':'failure'}])
+            return iter([])
+        with patch.object(a, 'api', side_effect=read), patch.object(a, 'pages', side_effect=paged):
+            result = a.collect(state, ['o/r'], state['collected_until'], '2026-09-30T00:00:00Z')
+        self.assertEqual(len([e for e in result['events'] if e['kind']=='check']), 1)
+        self.assertEqual(result['items']['o/r#1']['pending_check_shas'], [])
+
     def test_pages_retrieves_second_page(self):
         with patch.object(a, 'api', side_effect=[list(range(100)), [100]]) as api:
             self.assertEqual(len(list(a.pages('repos/o/r/issues'))), 101)

@@ -83,6 +83,11 @@ def collect(state, repos, since, until, observed=None):
         # Open items are mandatory even without activity: silence can be a stall.
         open_items = list(pages(endpoint + '/issues?state=open'))
         selected = {row['number']: row for row in changed + open_items}
+        # A closed PR can finish CI without bumping issue updated_at. Keep polling
+        # its recorded pending commits until they finish, even outside the issue feed.
+        for old in list(items.values()):
+            if old['repo'] == repo and old.get('pending_check_shas') and old['item'] not in selected:
+                selected[old['item']] = api(f"{endpoint}/issues/{old['item']}")
         for number, row in selected.items():
             key = f'{repo}#{number}'
             url = row['html_url']
