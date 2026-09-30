@@ -219,6 +219,12 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       pve NIC window) found `down`'s Longhorn read aborting on a CP (no nodes.longhorn.io) — fixed
       in the PR; the review found the forfeit read's pipefail fail-open. The watch verb is still
       unbuilt (fourth hand-written copy — bash + seen-set — worked).
+      **RESIGHT 2026-09-30 (same session, a PR watch — fifth hand-written loop):** it piped
+      `gh pr view --json reviews` through zsh `echo`, which expanded the escapes inside review
+      bodies; every `jq` read failed, the loop could never see a terminal, and it ran its full
+      30 min blind while both PRs had merged in minute 1. Replaced by a script file reading each
+      field with `gh --jq` (no JSON through echo), dry-run before arming. Same argument: the
+      watch belongs in a verb, not re-typed.
       **RESIGHT 2026-09-23 (seat, wk-metal-04 drive swap) — THIRD hand-written copy, THREE more
       defects, and the first was a new class: the PROBE, not the loop.** The watch exec'd
       `wget` inside the prometheus container; that container has no `wget`, so the command produced
