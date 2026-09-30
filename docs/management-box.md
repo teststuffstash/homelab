@@ -657,7 +657,7 @@ any sync of the reinstall class.
 
    | Need | Path | Command shape |
    |---|---|---|
-   | ipmitool — power, sensors, `chassis bootdev`, SOL | ipmitool runs ON the box (`ssh -t` for SOL); the password travels over stdin into `ipmitool -E`, never argv | `devbox run bmc -- nx-02 power status` / `-- nx-02 sol` |
+   | ipmitool — power, sensors, `chassis bootdev`, SOL | ipmitool runs ON the box (`ssh -t` for SOL); the wrapper sends the password over the ssh session's stdin, the box side exports it as `IPMI_PASSWORD` and runs `ipmitool -E` (which reads that variable) — never argv | `devbox run bmc -- nx-02 power status` / `-- nx-02 sol` |
    | web GUI (443), HTML5 iKVM, virtual-media upload | `ssh -L <local>:<bmc>:443` through the box; the task picks a free local port and prints `https://localhost:<port>` | `devbox run bmc-web -- nx-02` |
 
    Considered and not taken as the default: a WireGuard peer for the workstation on the box (routes UDP
