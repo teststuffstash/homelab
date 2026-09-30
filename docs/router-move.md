@@ -1,6 +1,6 @@
 # The router move — Big Data → a from-git VM on nx-02
 
-_Sub-steps 1–2 of [ROADMAP](../ROADMAP.md) §HA model step 2 (the CARP sequence); tracked on
+_Sub-steps 1–3 of [ROADMAP](../ROADMAP.md) §HA model step 2 (the CARP sequence); tracked on
 FU-297 ([`follow-ups.md`](follow-ups.md)) — part of that item, not a new one. The proving ground
 is the test VM + rebuild drill, [`opnsense-test-vm.md`](opnsense-test-vm.md); the rehearsal of THIS
 move is that drill's router shape (§The router rehearsal there). Addresses: [`ip-plan.md`](ip-plan.md)._
@@ -44,8 +44,9 @@ so a wrong inventory cannot aim a harness at prod. While the router is one box a
 them stay right. CARP gives each node its own address and makes `.1` a VIP: then these must
 become per-node (the inventory grows a host per node; everything else derives from it), the
 Cilium peer list gets one entry per node (BGP to a VIP breaks on failover), each node gets its
-own router-id, and `CiliumBGPAllSessionsDown` changes meaning with two peers. That is the CARP
-design's work (sub-step 4), not this move's.
+own router-id, and `CiliumBGPAllSessionsDown` changes meaning with two peers. Since ADR-144 the
+inventory half starts at sub-step 2 (each standing node is its own host from day one); the Cilium
+peers, router-ids and the alert's meaning land with the CARP trial and the window (sub-steps 2–3).
 
 **(C) identity — must come across, or a consumer breaks.** The next section.
 
