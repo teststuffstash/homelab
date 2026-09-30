@@ -159,3 +159,9 @@ The window (Big Data still cabled, powered off at its start):
 - 2026-09-30: ADR-144 — the CARP pair built beside Big Data, each node standing at its own LAN IP
   (`.70` nx-02, `.71` pve), which closes the management-path fork. **Next:** the standing nx-02
   node, then pve's NIC + node, then the CARP trial.
+- 2026-09-30 afternoon: the standby profile, rehearsal-proven (`--router --standby`, every inert
+  rule probed). pve's WAN card FITTED: TG-3468 at `06:00.0` (`enp6s0`, `ac:a7:f1:b3:25:95`, x1
+  2.5 GT/s, its own IOMMU group), unconfigured. It is the onboard port's chip too, and it took the
+  onboard's bus slot; the onboard is pinned `nic0` by MAC (`pve-network-interface-pinning`), so
+  `vmbr0` never follows a renumber. **Next:** the standing nx-02 node, the bridged-WAN throughput
+  read, then pve's node.
