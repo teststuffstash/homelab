@@ -113,6 +113,28 @@ MAC), and OPNsense 26.7's pf SYN cookies must not be `always` on vtnet (opnsense
 RTL8168 is the part to watch (the r8169 "transmit queue timed out" class on PVE 8). The dark-WAN
 guard has the bridged variant (host port carrier 0, enslaved, bridge without an address).
 
+**Building a standing node** (nx-02's first, pve's the same shape). tofu owns the hardware
+(`tofu/opnsense-router.tf`: the WAN bridge `vmbr3` = `eno2` alone with no address, and the VM, net0 =
+`vmbr0` LAN with a fixed MAC, net1 = `vmbr3` WAN, created stopped) — applied through the box in a
+window, since a bridge is a host network change. Then `bash scripts/opnsense-router-node.sh build nx02`:
+
+1. **kill switch** armed on the hypervisor before anything boots — tcpdump on the node's LAN tap
+   waits for one frame that would mean it is not inert (an ARP claiming `.1` or a `3.0/24` VIP,
+   a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6 RA) and
+   `qm stop`s the VM; proven by injecting an ARP claim for `.1` from the node's MAC (tripped in
+   ~1 s). It keeps working when the LAN does not, and stays armed while the node stands;
+2. **seed + first boot** — the config importer with the `standing` seed shape (LAN `.70/22`, WAN
+   DHCP on `em0`'s MAC, DHCP off, ACME auto-renewal off, a LAN gateway to prod's `.1` for its own
+   egress, no interface gateway on LAN so pf adds no `reply-to`) and the identity carried from the
+   newest FU-013 backup (`scripts/opnsense-backup-fetch.sh`); root's API keys are exactly prod's;
+3. **converge** every router play against `ansible/router-nodes/inventory.yml` with
+   `opnsense_standby: true` from the first write (not `opnsense-users`: the users are carried),
+   then `dnsmasq-dhcp.py` with `OPN_DHCP_ENABLE=0` and `tuya-egress.py`;
+4. **check** (also its own read-only verb) — the inert rules read back over the API (LAN address,
+   every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP/ddclient/ACME renewal off, the switch
+   armed and never tripped) and prod unharmed (`.1` at Big Data's MAC, Unbound answering, a
+   HAProxy name serving).
+
 The window (Big Data still cabled, powered off at its start):
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).

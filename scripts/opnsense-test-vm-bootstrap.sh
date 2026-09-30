@@ -32,7 +32,7 @@ VMNAME="${OPN_TEST_VM_NAME:-opnsense-test}"         # what `qm config` must say 
 LAN_BRIDGE="${OPN_TEST_LAN_BRIDGE:-vmbr1}"          # create only; tofu wires 9110's
 TOFU_VMID=9110                                      # the tofu-owned VM: create/destroy never touch it
 WAN_IP="${OPN_TEST_HOST:-192.168.2.67}"           # = tofu var.opnsense_test_wan_ip_cidr
-WAN_BITS=24
+WAN_BITS="${OPN_TEST_WAN_BITS:-24}"               # standing: the node's LAN mask (prod's /22)
 GATEWAY=192.168.2.1
 MGMT_NET=192.168.2.0/24
 LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, isolated-bridge carve
@@ -44,7 +44,7 @@ NANO_VERSION=26.7                                  # = tofu var.opnsense_test_na
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
 # The ROUTER REHEARSAL shape (docs/opnsense-test-vm.md §The router rehearsal; ephemeral VMs only):
-SHAPE="${OPN_TEST_SHAPE:-test}"                    # test | router
+SHAPE="${OPN_TEST_SHAPE:-test}"                    # test | router | standing (ADR-144: the node's LAN = vmbr0 at WAN_IP, WAN = WAN_BRIDGE)
 WAN_PCI="${OPN_TEST_WAN_PCI:-}"                    # router: the host NIC passed through as the WAN
 WAN_MAC="${OPN_TEST_WAN_MAC:-}"                    # router: the MAC the WAN spoofs (the ISP lease follows it)
 WAN_MODE="${OPN_TEST_WAN_MODE:-passthrough}"       # router: passthrough (igb0) | bridged (vtnet2 on WAN_BRIDGE)
@@ -148,6 +148,7 @@ PY
   # The router rehearsal (docs/opnsense-test-vm.md §The router rehearsal): reshape + carry.
   local shape_args=()
   [ "$SHAPE" != router ] || shape_args+=(--router --wan-mac "$WAN_MAC" --wan-if "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0)")
+  [ "$SHAPE" != standing ] || shape_args+=(--standing --wan-mac "$WAN_MAC" --lan-ip "$WAN_IP/$WAN_BITS" --lan-gw "$GATEWAY")
   [ -z "$CARRY_FROM" ] || shape_args+=(--carry-from "$CARRY_FROM" --carry "$CARRY")
   [ ${#shape_args[@]} -eq 0 ] || python3 opnsense/test-vm/seed-shape.py "$out" "${shape_args[@]}"
 }
@@ -192,6 +193,28 @@ PY
 
 vm_status() { nx "qm status $VMID" | awk '{print $2}'; }
 
+# The STANDING shape's WAN must be dark before the node first boots wearing the old router's MAC:
+# every physical port of WAN_BRIDGE without carrier (an admin-down port is raised to read it, then
+# restored), and the bridge without a host address. The bridge is tofu's (tofu/opnsense-router.tf).
+standing_wan_guard() {
+  [ -n "$WAN_MAC" ] || die "standing shape needs OPN_TEST_WAN_MAC"
+  nx "sh -s $WAN_BRIDGE" >&2 <<'SH' || die "WAN bridge refused (above)"
+br=$1
+[ -d /sys/class/net/$br/brif ] || { echo "$br is not a bridge on this host"; exit 1; }
+[ -z "$(ip -br -4 addr show dev $br | awk '{print $3}')" ] || { echo "$br has a host address"; exit 1; }
+n=0
+for p in /sys/class/net/$br/brif/*; do
+  [ -e "$p" ] || continue; i=$(basename $p)
+  case $i in tap*|fwpr*|fwln*|veth*) continue ;; esac
+  n=$((n+1)); up=$(cat /sys/class/net/$i/operstate); [ "$up" != down ] || { ip link set $i up; sleep 4; }
+  c=$(cat /sys/class/net/$i/carrier 2>/dev/null || echo unreadable); [ "$up" != down ] || ip link set $i down
+  [ "$c" = 0 ] || { echo "$i on $br carrier=$c - cabled? never boot the spoofed MAC onto a live WAN"; exit 1; }
+done
+[ $n -ge 1 ] || { echo "$br has no physical port"; exit 1; }
+echo "$br: $n physical port(s), all dark, no address"
+SH
+}
+
 cmd_bootstrap() {
   nx "qm config $VMID" >/dev/null 2>&1 || die "VM $VMID not on nx-02 — apply tofu/opnsense-test.tf first"
   [ "$(vm_status)" = stopped ] || die "VM $VMID is running — bootstrap needs the never-booted disk (doc §Recovery)"
@@ -207,6 +230,7 @@ cmd_bootstrap() {
   nx "genisoimage -quiet -R -J -V OPNSEED -o /var/lib/vz/template/iso/$SEED_ISO /root/opnsense-seed-$VMID && rm -rf /root/opnsense-seed-$VMID && chmod 600 /var/lib/vz/template/iso/$SEED_ISO"
   nx "qm set $VMID --ide2 local:iso/$SEED_ISO,media=cdrom >/dev/null"
 
+  [ "$SHAPE" != standing ] || standing_wan_guard
   log "first boot, answering the config importer over the serial socket"
   nx "qm start $VMID"
   printf '%s\n' "$SERIAL_DRIVER" | nx "cat > /root/opnsense-importer-driver-$VMID.py"

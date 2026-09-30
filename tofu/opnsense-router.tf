@@ -1,0 +1,94 @@
+# The CARP pair's router nodes (ADR-144, docs/router-move.md §The standing nodes): symmetric
+# OPNsense VMs, WAN + LAN only, each managed at its own LAN address (its `ansible_host` for good,
+# ansible/router-nodes/inventory.yml). Built BESIDE Big Data, which keeps `.1` until the cutover
+# window — until then a node stands INERT on the LAN (the standby profile, group_vars
+# `opnsense_standby`). This file: nx-02's node. pve's follows the same shape.
+#
+# ⚠ TOFU OWNS THE HARDWARE, NOT THE GUEST — exactly as tofu/opnsense-test.tf: the disk is born from
+# the nano image, `scripts/opnsense-router-node.sh build <node>` seeds config.xml through the
+# config importer on the FIRST boot (identity carried from the newest FU-013 backup, never in git
+# or this state). So the VM is created STOPPED, `started` is ignored, and on_boot stays false
+# until the node is built (a host reboot must not boot an unseeded disk — flipped in a later PR).
+#
+# The WAN: `eno2` (the I350's second port) is the only port of `vmbr3`, a bridge with NO host
+# address; the VM's WAN is virtio on it (bridged, not passthrough — measured ~3× line rate, the
+# operator's condition, router-move.md). The node spoofs Big Data's WAN MAC, so eno2 stays
+# UNCABLED until the window: the build refuses carrier.
+
+variable "opnsense_router_nx02_vm_id" {
+  type    = number
+  default = 9170
+}
+
+variable "opnsense_router_wan_bridge" {
+  description = "nx-02's WAN bridge — eno2 its only port, no host address (ADR-144). The rehearsal's runtime vmbr9 is a different, throwaway bridge."
+  type        = string
+  default     = "vmbr3"
+}
+
+# A host bridge is a host network change (ifreload -a applies the diff; vmbr0 untouched) — apply
+# inside a maintenance window: nx-02 carries cp-02 and wk-04.
+resource "proxmox_network_linux_bridge" "opnsense_router_wan" {
+  provider  = proxmox.nx02
+  node_name = var.nx02_node
+  name      = var.opnsense_router_wan_bridge
+  ports     = ["eno2"]
+  comment   = "router node WAN - eno2 only, no address, UNCABLED until the cutover (ADR-144)"
+}
+
+resource "proxmox_virtual_environment_vm" "opnsense_router_nx02" {
+  provider  = proxmox.nx02
+  name      = "opnsense-nx02"
+  vm_id     = var.opnsense_router_nx02_vm_id
+  node_name = var.nx02_node
+  tags      = sort(["opnsense", "router"])
+
+  started = false
+  on_boot = false
+
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  disk {
+    datastore_id = var.nx02_datastore_vms
+    file_id      = proxmox_download_file.opnsense_nano_nx02.id
+    interface    = "scsi0"
+    size         = 8
+    file_format  = "raw"
+    discard      = "on"
+    ssd          = true
+  }
+
+  # ORDER IS THE INTERFACE ASSIGNMENT: net0 → vtnet0 = LAN, net1 → vtnet1 = WAN (the seed's
+  # standing shape names them so, opnsense/test-vm/seed-shape.py --standing).
+  network_device {
+    bridge = var.network_bridge
+    # Fixed + locally administered (02:…), = 192.168.2.70 in hex: the build's kill switch
+    # (scripts/opnsense-router-node.sh) watches frames from this MAC before the VM ever boots.
+    mac_address = "02:00:C0:A8:02:46"
+    queues      = 2
+  }
+
+  network_device {
+    bridge = proxmox_network_linux_bridge.opnsense_router_wan.name
+    # firewall stays OFF: Proxmox's macfilter would drop the spoofed source MAC (router-move.md).
+    firewall = false
+    queues   = 2
+  }
+
+  serial_device {}
+
+  operating_system {
+    type = "other"
+  }
+
+  lifecycle {
+    ignore_changes = [disk[0].file_id, started]
+  }
+}
