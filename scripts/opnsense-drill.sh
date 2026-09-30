@@ -72,10 +72,12 @@ PVE="${OPN_TEST_PVE:-192.168.2.59}"
 PVE_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 POOL_MAX="${OPN_DRILL_POOL_MAX:-70}"
 MEM_MIN_MB="${OPN_DRILL_MEM_MIN_MB:-4096}"
-PROD=192.168.2.1
 
 log() { printf '[opnsense-drill] %s\n' "$*" >&2; }
 die() { log "REFUSED: $*"; exit 2; }
+# The prod router's API address: the ansible inventory is its one home (docs/router-move.md (B)).
+PROD="$(yq -r '.all.children.opnsense.hosts[].ansible_host' "$ROOT/ansible/inventory.yml")"
+echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read one prod router address from ansible/inventory.yml"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
 # fetch_backup <out> — the newest FU-013 object, decrypted with the wallet identity (docs/runbook.md
 # §OPNsense config backup, Restore). Garage by port-forward: no dependency on the router's VIPs.
@@ -102,7 +104,7 @@ fetch_backup() {
 }
 
 [ "$VMID" != 9110 ] || die "vmid 9110 is the PR-validation VM"
-[ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"
+[ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.1 ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"
 
 SHA="$(git rev-parse --verify "$REF^{commit}")"
 WORK="${OPN_DRILL_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/opnsense-drill.XXXXXX")}"
