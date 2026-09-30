@@ -161,6 +161,11 @@ for c in r.findall("OPNsense/AcmeClient/certificates/certificate"):
 PY
 )"
   [ -z "$stale" ] || die "carried cert(s) within 2 days of renewal — let prod renew first: $(echo $stale)"
+  # Root: the router's own wallet password (operator 2026-09-30 — router-move.md §The identity),
+  # not the drill's throwaway: the rehearsal proves the credential the cutover build will carry.
+  OPN_TEST_ROOT_PASSWORD="$(keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" \
+    -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" opnsense-root-password 2>/dev/null || true)"
+  [ -n "$OPN_TEST_ROOT_PASSWORD" ] || die "no wallet entry opnsense-root-password"
   export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
          OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard
   TEXTFILE_FORCE_OFF=1
@@ -423,6 +428,15 @@ if [ "$ROUTER" -eq 1 ]; then
   iss="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | openssl x509 -noout -issuer -subject'" 2>/dev/null | tr '\n' ' ' || true)"
   probe real_cert "$(echo "$iss" | grep -q "Let's Encrypt" && echo "$iss" | grep -q "$hn" && echo 1 || echo 0)" \
     "VIP \`$hv:443\` SNI \`$hn\` serves \`$(echo "${iss:-nothing}" | cut -c1-110)\` (want the carried LE cert)"
+  # Root: the live config's root hash must verify against the wallet's opnsense-root-password
+  # (recomputed with the hash's own salt; the password never leaves this process's stdin pipes).
+  curl -sfk -K "$SEC/drill.curl" --max-time 60 -o "$SEC/root.xml" "https://$HOST/api/core/backup/download/this" || true
+  rh="$(python3 -c 'import sys, xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); print(next((u.findtext("password") or "" for u in r.findall("system/user") if u.findtext("name") == "root"), ""))' "$SEC/root.xml" 2>/dev/null || true)"
+  rm -f "$SEC/root.xml"
+  salt="$(echo "$rh" | awk -F'$' '$2 == "6" { print $3 }')"
+  got="$([ -n "$salt" ] && printf '%s\n' "$OPN_TEST_ROOT_PASSWORD" | openssl passwd -6 -salt "$salt" -stdin || true)"
+  probe root_password "$([ -n "$rh" ] && [ "$got" = "$rh" ] && echo 1 || echo 0)" \
+    "root's hash in the live config.xml (\`\$$(echo "$rh" | cut -d'$' -f2)\$\` crypt) verifies against the wallet's \`opnsense-root-password\`: $([ -n "$rh" ] && [ "$got" = "$rh" ] && echo match || echo MISMATCH) (want match)"
   # The carried WireGuard server key: a real Noise handshake from the LAN side (the WAN is dark),
   # as the laptop peer, against PROD's server pubkey — so the road-warrior clients keep working
   # across the move with no re-issue. The peer's private key goes over stdin, never argv.

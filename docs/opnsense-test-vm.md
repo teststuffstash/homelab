@@ -240,6 +240,9 @@ splices identity into the seed:
   phone configs survive the move unchanged (operator, 2026-09-30: option (a) of
   [`router-move.md`](router-move.md) §The identity).
 
+Not carried but the router's own: **root's password** is the wallet's `opnsense-root-password`
+(operator, 2026-09-30), not the plain drill's per-run throwaway.
+
 The decrypted file is deleted right after the build, and the seed ISO follows the bootstrap's
 usual path: a 0600 file on nx-02 for the first boot only. Never carried: anything a play owns
 (the WireGuard role finds the carried instance and keeps its keypair — it generates one only
@@ -255,7 +258,8 @@ first VIP to serve the carried Let's Encrypt certificate for its SNI, where the 
 serves the harness's self-signed fixture. `wg_handshake` runs
 [`scripts/wireguard-handshake-probe.py`](../scripts/wireguard-handshake-probe.py) in the probe
 container as the laptop peer (its wallet key over stdin) against the LAN address, with PROD's
-server pubkey: a reply proves the carried server key, since the WAN is dark.
+server pubkey: a reply proves the carried server key, since the WAN is dark. `root_password`
+recomputes root's crypt hash from the live `config.xml` with the wallet password and its own salt.
 
 Under `--router` the base map's "matched nothing" list is long by construction: the carried users
 and certificates now equal prod's, so their env/accepted lines have nothing left to explain. Read
