@@ -1303,7 +1303,7 @@ the block needs pruning, not more headings.
       disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
       boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
       maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
-      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. Relates FU-266, FU-280.
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. (3) 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60/62.5 GiB booked after the two OPNsense VMs; no swap). The structural fix is RAM: 4 × 16 GB into the empty C1/D1/G1/H1 channels. Operator is watching for a bulk lot (hardware `market/2026-09-30-rdimm-price-guide.md`). Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
