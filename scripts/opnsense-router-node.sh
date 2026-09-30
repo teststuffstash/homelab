@@ -7,6 +7,8 @@
 #   bash scripts/opnsense-router-node.sh converge <node>   # every router play + the two API scripts, standby
 #   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: the inert rules + prod unharmed
 #   bash scripts/opnsense-router-node.sh killswitch-arm|killswitch-disarm|killswitch-status <node>
+#   bash scripts/opnsense-router-node.sh fakeisp up|down|log     # PAIR: the WAN drills' fake ISP (nx-02 netns)
+#   bash scripts/opnsense-router-node.sh probe <secs>            # PAIR: held flow + fresh connects via the trial VIP
 #
 # <node>: nx02 | pve. The hardware is tofu's (tofu/opnsense-router.tf), the
 # host + standby flag ansible/router-nodes/inventory.yml's.
@@ -28,10 +30,47 @@ log() { echo "[router-node] $*" >&2; }
 die() { log "FAIL: $*"; exit 1; }
 cmd="${1:-}"; NODE="${2:-}"
 
+# ---- PAIR verbs (no <node>): the WAN drills' fake ISP + probe (docs/router-move.md, **WAN follows
+# the master**). The fake ISP lives in a netns on nx-02 joined to vmbr3 — the operator's cable
+# (nx-02 eno2 <-> pve enp6s0) makes both nodes' WANs one segment. Runtime-only: `down` removes all.
+if [ "$cmd" = fakeisp ] || [ "$cmd" = probe ]; then
+  K="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
+  hyp() { ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=10 "root@$1" "${@:2}"; }
+  WANMAC="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' machines/machines.yaml)"
+  case "$cmd:$NODE" in
+    fakeisp:up)
+      hyp 192.168.2.59 "cat > /root/fakeisp.py" < opnsense/router-node/fakeisp.py
+      hyp 192.168.2.59 "sh -s $WANMAC" <<'SH'
+set -e
+pgrep -f "[p]ython3 /root/fakeisp.py" >/dev/null && { echo "fakeisp already up"; exit 0; }
+ip link del fisp-h 2>/dev/null || true; ip netns del fakeisp 2>/dev/null || true   # a half-torn-down run
+ip netns add fakeisp
+ip link add fisp-h type veth peer name fisp-n
+ip link set fisp-n netns fakeisp
+ip link set fisp-h master vmbr3 up
+ip netns exec fakeisp ip link set lo up
+ip netns exec fakeisp ip addr add 100.64.0.1/24 dev fisp-n
+ip netns exec fakeisp ip link set fisp-n up
+setsid nohup ip netns exec fakeisp python3 /root/fakeisp.py --mac "$1" > /root/fakeisp.log 2>&1 < /dev/null &
+sleep 1; tail -1 /root/fakeisp.log
+SH
+      ;;
+    fakeisp:down)
+      hyp 192.168.2.59 'pkill -f "[p]ython3 /root/fakeisp.py"; ip link del fisp-h 2>/dev/null; ip netns del fakeisp 2>/dev/null; echo "fakeisp down (log kept: /root/fakeisp.log)"' ;;
+    fakeisp:log) hyp 192.168.2.59 "tail -n ${3:-30} /root/fakeisp.log" ;;
+    probe:*)   # probe <secs> — from the pve HOST, 100.64.0.1 routed via the trial VIP for the run
+      VIP="$(yq -r '.router_carp_vips[0].address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+      hyp 192.168.2.3 "cat > /root/flowprobe.py" < opnsense/router-node/flowprobe.py
+      hyp 192.168.2.3 "ip route replace 100.64.0.1/32 via $VIP; python3 /root/flowprobe.py 100.64.0.1 ${NODE:-30}; ip route del 100.64.0.1/32" ;;
+    *) sed -n '5,13p' "$0" >&2; exit 2 ;;
+  esac
+  exit 0
+fi
+
 case "$NODE" in
   nx02) VMID=9170 VMNAME=opnsense-nx02 PVE=192.168.2.59 WAN_BRIDGE=vmbr3 LAN_MAC=02:00:c0:a8:02:46 INV_HOST=opnsense-nx02 ;;
   pve)  VMID=9171 VMNAME=opnsense-pve  PVE=192.168.2.3  WAN_BRIDGE=vmbr3 LAN_MAC=02:00:c0:a8:02:47 INV_HOST=opnsense-pve ;;
-  *) sed -n '5,11p' "$0" >&2; exit 2 ;;
+  *) sed -n '5,13p' "$0" >&2; exit 2 ;;
 esac
 INV=ansible/router-nodes/inventory.yml
 HOST="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].ansible_host" "$INV")"
@@ -39,6 +78,8 @@ STANDBY="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].opnsense_standby" 
 case "$HOST" in 192.168.2.1|''|null) die "$INV_HOST's ansible_host is '$HOST' — a node never holds .1" ;; esac
 PVE_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+node_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }   # the seed's root key = the pve key
 KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"
 kp() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$KDB" "$1" 2>/dev/null; }
 TAP="tap${VMID}i0"
@@ -86,8 +127,7 @@ converge() {
   # Flush to disk: the nano image's UFS (soft-updates) lost ~1 min of config writes to a hard stop
   # (the kill switch's qm stop, 2026-09-30) — a node that dies right after a converge must not
   # come back without it.
-  ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR "root@$HOST" sync || die "sync on $HOST failed"
+  node_ssh sync || die "sync on $HOST failed"
 }
 
 # READ-ONLY. One line per rule; exit 1 if any fails or cannot be read.
@@ -120,6 +160,13 @@ check() {
     local peer; peer="$(yq -r "[.all.children.opnsense.hosts | to_entries[] | select(.key != \"$INV_HOST\") | .value.ansible_host][0]" "$INV")"
     v="$(api core/hasync/get 2>/dev/null | jq -r '.hasync | [(.pfsyncinterface | to_entries[] | select(.value.selected==1) | .key), .pfsyncpeerip, (.pfsyncversion | to_entries[] | select(.value.selected==1) | .key)] | join(" ")' || true)"
     [ "$v" = "lan $peer 1400" ] && ok "pfsync lan → $peer (v1400)" || no "pfsync: '${v:-unread}' (want 'lan $peer 1400')"
+    # the WAN gate (router-wangate@<vmid>, hypervisor): running, and the WAN tap UP iff CARP MASTER
+    local role; role="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[] | select(.mode=="carp") | .status] | first // "none"' || true)"
+    v="$(pve "systemctl is-active router-wangate@$VMID; ip -br link show tap${VMID}i1 | awk '{print \$2}'" | tr '\n' ' ' || true)"
+    case "$role:$v" in
+      "MASTER:active UP "|"MASTER:active UNKNOWN "|"BACKUP:active DOWN ") ok "WAN gate: $role → WAN tap ${v#active }";;
+      *) no "WAN gate: CARP $role, gate/tap '$v' (want active, UP iff MASTER)";;
+    esac
   fi
   echo "== prod unharmed"
   v="$(pve "ping -c1 -W1 192.168.2.1 >/dev/null; ip neigh show 192.168.2.1 | awk '{print \$5}'" || true)"
@@ -163,5 +210,5 @@ case "$cmd" in
   killswitch-arm) killswitch_arm ;;
   killswitch-disarm) killswitch_disarm ;;
   killswitch-status) killswitch_status ;;
-  *) sed -n '5,11p' "$0" >&2; exit 2 ;;
+  *) sed -n '5,13p' "$0" >&2; exit 2 ;;
 esac
