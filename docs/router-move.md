@@ -75,9 +75,20 @@ built in its final shape and **stands on the real LAN at its own address before 
 nx-02's at `192.168.2.70`, pve's at `192.168.2.71` (`/22`, prod's LAN mask — the `/22`-vs-ADR-088
 question stays the CARP ruling's). That address is the node's `ansible_host` for good, so the jail
 manages it like any host and nothing is re-addressed later. Until the window a standing node must
-be **inert**: no `.1` on it, DHCP off, its WAN uncabled (it wears `em0`'s MAC — the bootstrap
-refuses carrier), and its BGP neighbours silent. CARP is learned on the pair meanwhile with a trial
-VIP from `192.168.3.0/24`. The WAN: pve's is a Realtek x1 card — Linux drives it, bridged on the
+be **inert** — every address and every outbound act prod owns stays prod's:
+
+- no `.1`, and **none of prod's HAProxy VIP aliases** (`192.168.3.0/24`): a second holder on the
+  same LAN is an ARP collision that breaks prod's services. Not even as CARP VIPs — with no other
+  CARP speaker a node promotes itself to master and answers ARP;
+- DHCP off (dnsmasq), BGP neighbours silent (FRR off or no neighbours), ddclient off;
+- **ACME renewal off**: the carried certs would otherwise renew FROM the node — a real LE order and
+  a Cloudflare TXT write with prod's token, racing prod's own renewal (the drill refuses at 58 days
+  for the same reason; a standing node lives past that);
+- its WAN uncabled (it wears `em0`'s MAC — the bootstrap refuses carrier).
+
+The converge of a standing node therefore needs a standby profile of the plays (group_vars
+overrides, like the drill's), and a probe per bullet before it joins the LAN. CARP is learned on
+the pair meanwhile with a trial VIP from `192.168.3.0/24` that prod does not hold. The WAN: pve's is a Realtek x1 card — Linux drives it, bridged on the
 host (virtio into the VM, never passthrough: FreeBSD's Realtek driver and the X99 chipset slot's
 IOMMU grouping both argue against it). Proposed (seat, 2026-09-30 — not yet ruled): nx-02's `eno2`
 moves to the same bridged shape so the two nodes are identical; the rehearsal proves passthrough
