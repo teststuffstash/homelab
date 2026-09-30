@@ -42,3 +42,18 @@
         description: "{{ item.description }}"
       loop: "{{ router_carp_vips }}"
       loop_control: { label: "{{ item.address }} vhid {{ item.vhid }} skew {{ router_carp_advskew }}" }
+
+# pfsync — state sync to the OTHER node (unicast peer = its inventory address; the pair is two
+# hosts, so "the other" is unique). On LAN: no third port (ADR-144 — accepted, unauthenticated).
+# No XMLRPC config sync (synchronize_to_ip empty): both nodes converge from git. Preempt stays ON:
+# the master (lowest skew) takes back over when it returns. pfsync version pinned so a rolling
+# major cannot leave the pair on two formats silently — both nodes read this line.
+- name: pfsync to the peer node (router nodes only)
+  when: router_carp_vips | default([]) | length > 0
+  oxlorg.opnsense.hasync_general:
+    pfsync_interface: lan
+    pfsync_peer_ip: "{{ groups['opnsense'] | difference([inventory_hostname]) | map('extract', hostvars, 'ansible_host') | first }}"
+    pfsync_version: "1400"
+    preempt: true
+    synchronize_to_ip: ""
+    reload: true
