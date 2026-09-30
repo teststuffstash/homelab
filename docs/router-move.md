@@ -121,8 +121,13 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
 1. **kill switch** armed on the hypervisor before anything boots — tcpdump on the node's LAN tap
    waits for one frame that would mean it is not inert (an ARP claiming `.1` or a `3.0/24` VIP,
    a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6 RA) and
-   `qm stop`s the VM; proven by injecting an ARP claim for `.1` from the node's MAC (tripped in
-   ~1 s). It keeps working when the LAN does not, and stays armed while the node stands;
+   `qm stop`s the VM, latching `onboot 0` first so a host reboot does not bring it back (drift
+   against tofu's `on_boot = true` — re-enabling is a reviewed apply); proven by injecting an ARP
+   claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
+   `router-killswitch@<vmid>` unit (`ansible/pve-router-killswitch.yml`, the vmid in the host's
+   `host_vars`), enabled at every host boot and ordered before `pve-guests`, so it keeps working
+   when the LAN does not and stays armed while the node stands; tofu's `on_boot = true` lands in
+   the change that lists the vmid;
 2. **seed + first boot** — the config importer with the `standing` seed shape (LAN `.70/22`, WAN
    DHCP on `em0`'s MAC, DHCP off, ACME auto-renewal off, a LAN gateway to prod's `.1` for its own
    egress, no interface gateway on LAN so pf adds no `reply-to`) and the identity carried from the
@@ -171,3 +176,8 @@ The window (Big Data still cabled, powered off at its start):
   kill switch armed and never tripped. **Next:** `on_boot` + a kill switch that survives an nx-02
   reboot (today: a nohup process, and the VM does not autostart — consistent, but manual after a
   host reboot), then pve's node the same way, then the CARP trial.
+- 2026-09-30 night: **the nx-02 node survives a host reboot** — tofu `on_boot = true`, and the kill
+  switch is a systemd unit on nx-02 (`router-killswitch@9170`, `ansible/pve-router-killswitch.yml`)
+  instead of a nohup process. Trip-tested live: an injected `.1` ARP claim on the tap → tripped
+  in <1 s, `onboot` latched 0, VM stopped; restored, re-booted armed without a trip, `check` 11/11
+  (a new line reads the reboot survival). **Next:** pve's node (`.71`), then the CARP trial.

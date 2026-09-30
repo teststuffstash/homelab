@@ -1,0 +1,17 @@
+# Managed by ansible/roles/pve-router-killswitch — edit there. Instance = the router node's vmid.
+# Before=pve-guests: armed before an onboot VM starts after a host reboot. A trip exits 0 — the
+# unit stays down (Restart=on-failure) and `router-node.sh check` reads NOT-ARMED + the trip.
+[Unit]
+Description=Router node kill switch for VM %i (ADR-144)
+After=pve-cluster.service
+Before=pve-guests.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/router-killswitch %i
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

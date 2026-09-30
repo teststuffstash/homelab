@@ -1,0 +1,64 @@
+# pve-router-killswitch — one `router-killswitch@<vmid>` unit per standing router node on this
+# hypervisor (docs/router-move.md §Building a standing node, step 1). The logic is
+# files/router-killswitch.sh; the vmids are host_vars `pve_router_killswitch_vmids`. The role
+# INSTALLS and ENABLES the units but does not start them: arming is the build's first act
+# (`scripts/opnsense-router-node.sh killswitch-arm <node>`, before the first boot) and every host
+# boot's (WantedBy + Before=pve-guests). Instances for vmids dropped from the list are retired.
+---
+- name: tcpdump present (Debian main)
+  ansible.builtin.apt:
+    name: tcpdump
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Log directory exists
+  ansible.builtin.file:
+    path: /var/log/router-killswitch
+    state: directory
+    mode: "0750"
+
+- name: Install the kill switch
+  ansible.builtin.copy:
+    src: router-killswitch.sh
+    dest: /usr/local/sbin/router-killswitch
+    mode: "0755"
+  register: pve_rks_script
+
+- name: Install the template unit
+  ansible.builtin.template:
+    src: router-killswitch@.service.j2
+    dest: /etc/systemd/system/router-killswitch@.service
+    mode: "0644"
+  register: pve_rks_unit
+
+- name: Reload systemd when the unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: pve_rks_unit.changed
+
+- name: Instances enabled (armed at every host boot)
+  ansible.builtin.systemd:
+    name: "router-killswitch@{{ item }}.service"
+    enabled: true
+  loop: "{{ pve_router_killswitch_vmids }}"
+
+- name: Running instances restarted when the script or unit changed (a stopped one stays stopped)
+  ansible.builtin.shell: |
+    systemctl is-active -q "router-killswitch@{{ item }}.service" || exit 0
+    systemctl restart "router-killswitch@{{ item }}.service" && echo restarted
+  loop: "{{ pve_router_killswitch_vmids }}"
+  when: pve_rks_script.changed or pve_rks_unit.changed
+  register: pve_rks_restart
+  changed_when: "'restarted' in pve_rks_restart.stdout"
+
+- name: Instances for vmids no longer listed are stopped + disabled
+  ansible.builtin.shell: |
+    set -eu
+    for u in $( { ls /etc/systemd/system/multi-user.target.wants/ 2>/dev/null | grep '^router-killswitch@.*\.service$'
+                  systemctl list-units --all --plain --no-legend 'router-killswitch@*.service' | awk '{print $1}'; } | sort -u); do
+      id="${u#router-killswitch@}"; id="${id%.service}"
+      case " {{ pve_router_killswitch_vmids | join(' ') }} " in *" $id "*) ;; *) systemctl disable --now "$u"; echo "retired $u";; esac
+    done
+  register: pve_rks_retired
+  changed_when: "'retired' in pve_rks_retired.stdout"

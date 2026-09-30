@@ -7,8 +7,11 @@
 # ⚠ TOFU OWNS THE HARDWARE, NOT THE GUEST — exactly as tofu/opnsense-test.tf: the disk is born from
 # the nano image, `scripts/opnsense-router-node.sh build <node>` seeds config.xml through the
 # config importer on the FIRST boot (identity carried from the newest FU-013 backup, never in git
-# or this state). So the VM is created STOPPED, `started` is ignored, and on_boot stays false
-# until the node is built (a host reboot must not boot an unseeded disk — flipped in a later PR).
+# or this state). So the VM is created STOPPED and `started` is ignored. on_boot is false for a
+# NEW node — a host reboot must not boot an unseeded disk — and flips true once the node is built,
+# in the same change that lists its vmid for the hypervisor's kill switch
+# (ansible/pve-router-killswitch.yml, armed before pve-guests starts anything). A trip sets
+# onboot 0 on the host: that shows here as drift, and re-enabling is this apply, never automatic.
 #
 # The WAN: `eno2` (the I350's second port) is the only port of `vmbr3`, a bridge with NO host
 # address; the VM's WAN is virtio on it (bridged, not passthrough — measured ~3× line rate, the
@@ -44,7 +47,7 @@ resource "proxmox_virtual_environment_vm" "opnsense_router_nx02" {
   tags      = sort(["opnsense", "router"])
 
   started = false
-  on_boot = false
+  on_boot = true # built + standing 2026-09-30 (#2141); kill switch host_vars nx-02-host.yml
 
   cpu {
     cores = 2

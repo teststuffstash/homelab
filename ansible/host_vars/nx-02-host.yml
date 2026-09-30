@@ -1,8 +1,7 @@
 # Per-host values for the nx-02 hypervisor (group `pve`; shared values in ../group_vars/pve.yml).
 #
-# Nothing to override yet: nx-02 runs one VM (wk-04, vmid 8114) and it is not `serial = true` —
-# the pve-serial-log role only tails what tofu gave a serial device. This file exists so the
-# next per-host value has an obvious home rather than leaking into group_vars.
+# No pve-serial-log vmids: wk-04 (vmid 8114) is not `serial = true` — the role only tails what tofu
+# gave a serial device.
 
 # --- pve-serial-console (FU-289) ---
 # nx-02's BMC (Supermicro X10DRT-P, 192.168.2.173) redirects the BIOS to serial-over-LAN on COM2 —
@@ -11,3 +10,7 @@
 # activate` shows POST → GRUB menu → kernel → login. 115200 matches the BMC's SOL bit rate.
 pve_serial_console_unit: 1
 pve_serial_console_baud: 115200
+
+# --- pve-router-killswitch (ADR-144) ---
+# opnsense-nx02 (tofu/opnsense-router.tf, vmid 9170) — the standing router node.
+pve_router_killswitch_vmids: [9170]

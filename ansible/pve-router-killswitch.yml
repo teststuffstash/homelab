@@ -1,0 +1,12 @@
+# The standing router nodes' kill switch on their hypervisor (ADR-144, docs/router-move.md §Building
+# a standing node, step 1) — persistent, so it is armed before pve-guests autostarts the node after
+# a host reboot. Thin role-caller — logic in roles/pve-router-killswitch, the vmid list per host in
+# host_vars/. Idempotent; re-run after a hypervisor reinstall or whenever the vmid list changes.
+# `scripts/opnsense-router-node.sh killswitch-arm|disarm|status <node>` drive the installed units.
+# Run: devbox run -- ansible-playbook ansible/pve-router-killswitch.yml
+#      (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local, no creds env)
+- name: Proxmox host kill switches for the standing router nodes
+  hosts: pve
+  gather_facts: false
+  roles:
+    - pve-router-killswitch
