@@ -44,6 +44,12 @@ never the session's arc — that is TICK-LOG's.)
   change** until the switches are in hand (TL-SG1016D ordered, hardware `purchases.md`): the later
   visit = WAN switch (ONT → nx-02 `eno2` + Big Data `em0` powered-off fallback, its LAN cable out)
   + the management switch; Big Data stays intact 1–2 weeks before its card moves to pve.
+  **Progress 2026-09-30:** the isolated rehearsal is BUILT + merged (#2131, `opnsense-drill.sh --router`;
+  [`router-move.md`](../router-move.md)): PASS, 12/12 probes, score **6** — all six = prod's WAN
+  `gateway_item` (`fargw`/`monitor_noroute`/`force_down` + three drill-only keys), the next residue.
+  Still open from this goal: WireGuard carry (off by default — operator call), the static-router
+  parametrization inventory. Rehearsals 2–4 "network blips" were the jail HOST's new cable + wifi
+  (ARP flux, fixed host-side with arp_ignore/arp_announce) — not the rehearsal VM.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
   client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →

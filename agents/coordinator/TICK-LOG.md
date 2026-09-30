@@ -11761,3 +11761,17 @@ map #2118); ROADMAP §HA step 2 = CARP sequence with the score as cutover gate (
 `second-jail` (#2116). **Found:** prod firmware is a major behind (26.1.11_6 vs 26.7.4, update
 check stale since Aug 13) — trial of the official path on 9110 running; the reviewer exit-contract
 keys a merge head differently from the reviewer's standing-aside (false NO TERMINAL, not filed).
+
+## 2026-09-30 (morning) — S9: the router rehearsal merged (#2131); the jail blackouts were ARP flux
+
+Resumed a cut-off session mid-diagnosis: rehearsals 2–4 failed on jail network loss, suspected the
+rehearsal VM. **Not it.** Prod's `arp: … moved from` log: pop-os went dual-homed 09-29 (new cable
+.187 + wifi .165), prod's entry for .165 flipped MACs every ~1 min; all 152 probe failures fell in
+the wired-MAC windows (78% of time), LAN-local targets unaffected, prod healthy (no sshguard). Operator
+set `arp_ignore=1`/`arp_announce=2` (`/etc/sysctl.d/60-arp-flux.conf`); no flaps since. Kept VM
+9199/CT 9198 destroyed, stray decrypted prod XMLs in the old scratchpad shredded. Rehearsal 5
+(wip) PASS score 7; squashed onto master in a clone (+ glossary row "router rehearsal"),
+rehearsal 6 PASS 12/12 probes, **score 6** (prod's WAN gateway_item rows). #2131: review r1
+CHANGES_REQUESTED — early `die` paths left the decrypted carry on disk (fixed: secrets-only EXIT
+trap, proven by a forced fetch failure) + nextuid moved to the router overlay; r2 APPROVED,
+**merged** 85b68477. Old worktrees wt-router/wt-master removed.
