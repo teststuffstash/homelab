@@ -4,6 +4,7 @@
 #
 #   bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]     # jail: wallet creds; box: env file
 #   bash scripts/opnsense-drill.sh --router [--ref <rev>]     # the ROUTER REHEARSAL (jail only)
+#   bash scripts/opnsense-drill.sh --router --standby         # ...converged with the STANDBY profile
 #
 # --router: the same drill in the future router's shape (docs/opnsense-test-vm.md §The router
 # rehearsal): WAN = nx-02's dark eno2 by PCI passthrough (machines.yaml router_wan_pci), DHCP,
@@ -14,6 +15,13 @@
 # after the build). Extra probes: the WAN is dark and wears the MAC, every carried API key
 # authenticates, and HAProxy serves the REAL certificate. Scored with the router overlay of the
 # map; never writes the box's metrics (the weekly score stays the plain drill's).
+#
+# --standby (with --router): converge with `opnsense_standby: true` + OPN_DHCP_ENABLE=0 — the
+# profile a node standing on the real LAN wears until the cutover (docs/router-move.md §The
+# standing nodes). The serving probes flip to one probe per inert rule: no DHCP lease, no BGP
+# session, no HAProxy VIP on the LAN interface (they sit on lo0 — HAProxy still serves TLS through
+# the router), ddclient off, ACME auto-renewal off. Its score is reported, not comparable: the
+# standby deltas are the point.
 #
 # Stages (each timed; the report + metrics say which one failed):
 #   preflight  nx-02 thin pool + free memory read, BEFORE anything writes (a stale drill VM from a
@@ -49,15 +57,17 @@
 # Exit: 0 drill passed, 1 a stage failed (report says which), 2 refused / environment.
 set -euo pipefail
 
-REF=HEAD; KEEP=0; ROUTER=0
+REF=HEAD; KEEP=0; ROUTER=0; STANDBY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
     --router) ROUTER=1; shift ;;
-    *) sed -n '2,41p' "$0" >&2; exit 2 ;;
+    --standby) STANDBY=1; shift ;;
+    *) sed -n '2,57p' "$0" >&2; exit 2 ;;
   esac
 done
+[ "$STANDBY" -eq 0 ] || [ "$ROUTER" -eq 1 ] || { echo "--standby needs --router" >&2; exit 2; }
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -300,7 +310,7 @@ finish() {
   fi
   emit_metrics "$([ -z "$FAILED" ] && [ "$rc" -eq 0 ] && echo 1 || echo 0)"
   {
-    echo "## OPNsense $([ "$ROUTER" -eq 1 ] && echo 'ROUTER REHEARSAL' || echo 'rebuild drill') (FU-297) — $(date -u +%FT%TZ)"
+    echo "## OPNsense $([ "$ROUTER" -eq 1 ] && echo 'ROUTER REHEARSAL' || echo 'rebuild drill')$([ "$STANDBY" -eq 1 ] && echo ' — STANDBY profile') (FU-297) — $(date -u +%FT%TZ)"
     echo
     echo "- rev \`$SHA\`, vm $VMID on $PVE, WAN $HOST, LAN $LAN_BRIDGE; duration **${DURATION}s**"
     echo "- stages: $(for s in preflight build probe-setup converge probe compare destroy; do [ -n "${STAGE_S[$s]:-}" ] && printf '%s %ss · ' "$s" "${STAGE_S[$s]}"; done)"
@@ -349,8 +359,13 @@ rep "- probe container $CTID on $LAN_BRIDGE: $(probe_ct "sh -c '. /etc/os-releas
 # ================================================================ converge ======================
 stage converge
 set +e
-OPN_TEST_WORKDIR="$WORK/harness" OPN_TEST_EXTRA_VARS="$ROOT/ansible/test-vm/drill-overrides.yml" \
-OPN_DHCP_REMAP="192.168.2.=192.168.1." \
+EV="$ROOT/ansible/test-vm/drill-overrides.yml"
+if [ "$STANDBY" -eq 1 ]; then
+  EV="$WORK/standby-overrides.yml"
+  { cat "$ROOT/ansible/test-vm/drill-overrides.yml"; echo 'opnsense_standby: true'; } > "$EV"
+fi
+OPN_TEST_WORKDIR="$WORK/harness" OPN_TEST_EXTRA_VARS="$EV" \
+OPN_DHCP_REMAP="192.168.2.=192.168.1." OPN_DHCP_ENABLE="$((1 - STANDBY))" \
   bash "$ROOT/scripts/opnsense-test-vm.sh" --ref "$SHA" --steps "1 all" > "$WORK/converge.log" 2>&1
 hrc=$?
 set -e
@@ -380,12 +395,17 @@ timeout 60 dhclient -1 -v -sf /bin/true -lf /tmp/$i.lease -pf /tmp/$i.pid $i 2>&
 dhclient -x -pf /tmp/$i.pid $i >/dev/null 2>&1 || true
 SH
 }
+if [ "$STANDBY" -eq 1 ]; then
+  got="$(lease eth2 || true)"
+  probe standby_dhcp_off "$([ -z "$got" ] && echo 1 || echo 0)" "random MAC → \`${got:-no lease}\` (want no lease: OPN_DHCP_ENABLE=0)"
+else
 want="$(dhcp_data "HOSTS[0]['ip']")"; got="$(lease eth1 || true)"
 probe dhcp_reservation "$([ -n "$got" ] && [ "$got" = "$want" ] && echo 1 || echo 0)" "reserved MAC → \`${got:-no lease}\` (want \`$want\`, dnsmasq-dhcp.py HOSTS[0] remapped)"
 got="$(lease eth2 || true)"
 lo="$(dhcp_data "RANGE['start_addr']")"; hi="$(dhcp_data "RANGE['end_addr']")"
 inpool="$(python3 -c "import ipaddress as i, sys; a = sys.argv[1:]; print(int(bool(a[0]) and i.ip_address(a[1]) <= i.ip_address(a[0]) <= i.ip_address(a[2])))" "${got:-}" "$lo" "$hi" 2>/dev/null || echo 0)"
 probe dhcp_pool "$inpool" "random MAC → \`${got:-no lease}\` (want $lo–$hi, dnsmasq-dhcp.py RANGE remapped)"
+fi
 dn="$(yq -r '.unbound_hosts[0] | .hostname + "." + .domain' "$GV")"; dv="$(yq -r '.unbound_hosts[0].value' "$GV")"
 got="$(probe_ct "dig +short +time=3 +tries=2 @192.168.1.1 $dn A" | tail -1 || true)"
 probe dns_override "$([ "$got" = "$dv" ] && echo 1 || echo 0)" "\`$dn\` → \`${got:-no answer}\` (want \`$dv\`, unbound_hosts[0])"
@@ -395,15 +415,21 @@ probe haproxy_tls "$([ -n "$got" ] && echo 1 || echo 0)" "TLS handshake on VIP \
 # BGP: the session from the PEER's side, and the route in the ROUTER's kernel table (what FRR
 # installs is what the LAN would forward by). Poll: the router's FRR reloads late in the converge.
 st=''; rt=''
-for i in $(seq 1 36); do
+# Standby: the neighbour is configured but disabled — poll the same window, want it NEVER up.
+for i in $(seq 1 $([ "$STANDBY" -eq 1 ] && echo 12 || echo 36)); do
   st="$(probe_ct "vtysh -c 'show bgp neighbors 192.168.1.1 json'" 2>/dev/null | jq -r '.["192.168.1.1"].bgpState // empty' 2>/dev/null || true)"
   rt="$(vm_ssh "route -n get ${PEER_ROUTE%/32} 2>/dev/null | awk '/gateway:/ {print \$2}'" 2>/dev/null || true)"
   [ "$st" = Established ] && [ "$rt" = 192.168.1.2 ] && break
   sleep 5
 done
 bgpd="$(vm_ssh 'pgrep -x bgpd >/dev/null && echo running || echo "NOT running (FU-298)"' 2>/dev/null || echo '?')"
+if [ "$STANDBY" -eq 1 ]; then
+  probe standby_bgp_silent "$([ "$st" != Established ] && [ "$rt" != 192.168.1.2 ] && echo 1 || echo 0)" \
+    "fake peer @192.168.1.2 after 60 s: \`${st:-no state}\`, route \`$PEER_ROUTE\` → \`${rt:-none}\` (want no session, no route; router bgpd: $bgpd)"
+else
 probe bgp_session "$([ "$st" = Established ] && echo 1 || echo 0)" "fake peer AS64513 @192.168.1.2 ↔ router AS64512: \`${st:-no state}\` (router bgpd: $bgpd)"
 probe bgp_route "$([ "$rt" = 192.168.1.2 ] && echo 1 || echo 0)" "router kernel route \`$PEER_ROUTE\` → \`${rt:-none}\` (want the peer, 192.168.1.2)"
+fi
 
 # The router rehearsal's own probes: the WAN is the passed-through NIC, dark, wearing the old
 # router's MAC; every carried consumer key authenticates (so no consumer flips on the move); and
@@ -446,6 +472,24 @@ if [ "$ROUTER" -eq 1 ]; then
   hs="$(_kpw wireguard-laptop-privkey | pve "pct exec $CTID -- timeout 30 python3 /root/wg-probe.py 192.168.1.1 51820 - $wgpub" 2>&1 | tail -1 || true)"
   probe wg_handshake "$([ -n "$wgpub" ] && [ "${hs%% *}" = HANDSHAKE_OK ] && echo 1 || echo 0)" \
     "laptop peer → \`192.168.1.1:51820\` against prod's server pubkey \`${wgpub:0:8}…\`: \`$(echo "${hs:-no output}" | cut -c1-80)\` (want HANDSHAKE_OK)"
+fi
+
+# The STANDBY profile's remaining inert rules (DHCP + BGP are probed above, by behaviour).
+# VIPs: on the real LAN (/22) the 3.0/24 aliases are ON-LINK, so a LAN-interface holder answers
+# ARP beside prod — read where each address lives on the VM itself (haproxy_tls above already
+# proved HAProxy serves through the router with them on lo0).
+if [ "$STANDBY" -eq 1 ]; then
+  vips="$(yq -r '(.haproxy_proxied_services + (.stack_gateways // []))[].vip' "$GV" | sort -u)"
+  ifs="$(vm_ssh 'ifconfig -a' 2>/dev/null || true)"
+  onlo="$(echo "$ifs" | awk '/^[a-z]/ { i = $1 } /inet / { print i, $2 }' | grep -c '^lo0: 192\.168\.3\.' || true)"
+  offlo="$(echo "$ifs" | awk '/^[a-z]/ { i = $1 } /inet / { print i, $2 }' | grep '192\.168\.3\.' | grep -v '^lo0:' | tr '\n' ' ' || true)"
+  nv="$(echo "$vips" | wc -l)"
+  probe standby_vips_off_lan "$([ -z "$offlo" ] && [ "$onlo" -ge "$nv" ] && echo 1 || echo 0)" \
+    "$onlo of $nv service VIPs on lo0; elsewhere: \`${offlo:-none}\` (want all on lo0, none elsewhere)"
+  dd="$(curl -sk -K "$SEC/drill.curl" --max-time 20 "https://$HOST/api/dyndns/settings/get" | jq -r '.ddclient.general.enabled' 2>/dev/null || true)"
+  probe standby_ddclient_off "$([ "$dd" = 0 ] && echo 1 || echo 0)" "dyndns general.enabled = \`${dd:-unread}\` (want 0)"
+  ar="$(curl -sk -K "$SEC/drill.curl" --max-time 20 "https://$HOST/api/acmeclient/settings/get" | jq -r '.acmeclient.settings.autoRenewal' 2>/dev/null || true)"
+  probe standby_acme_no_renewal "$([ "$ar" = 0 ] && echo 1 || echo 0)" "acmeclient settings.autoRenewal = \`${ar:-unread}\` (want 0)"
 fi
 
 # ================================================================ compare =======================
