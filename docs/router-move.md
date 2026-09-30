@@ -169,9 +169,22 @@ are the address-independent part — the drills re-measure on `.72`):
 
 So a planned move (firmware, a hypervisor reboot) is hitless by entering maintenance first, and an
 unplanned one costs ~3 s. The window's first step can be the CARP VIP itself — the trial found no
-reason to shrink it to a plain address. **Not yet exercised:** pfsync (state sync over the LAN —
-nothing is routed through the pair yet), dnsmasq active/passive, and one Cilium peer + one
-router-id per node. (The HAProxy VIPs need no CARP at all under the `/24` ruling.)
+reason to shrink it to a plain address. **Not yet exercised:** dnsmasq active/passive, and one Cilium peer + one router-id per node
+(pfsync: below). (The HAProxy VIPs need no CARP at all under the `/24` ruling.)
+
+**pfsync** (2026-09-30): the same play sets it on each node — `lan`, unicast to the OTHER node's
+inventory address, version **pinned `1400`**, preempt on, no XMLRPC (`synchronize_to_ip` empty).
+The pin is deliberate: 26.7 offers a `1500` format the collection cannot select yet, and a pinned
+format is what keeps a rolling major on one wire format (both nodes read the same line). Proven:
+two TCP sessions to the trial VIP on the MASTER appear on the BACKUP as `ESTABLISHED:ESTABLISHED`;
+`check` reads the setting. Whether a *routed* flow survives a failover is the fake-ISP drill's
+question (only NAT'd flows through the pair make it meaningful).
+
+**Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
+of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
+LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
+comes back without it, so `router-node.sh converge` ends with `sync` on the node. The hard-stop
+drills must allow for it too.
 
 The window (Big Data still cabled, powered off at its start):
 
@@ -232,3 +245,7 @@ The window (Big Data still cabled, powered off at its start):
   fake-ISP cable gives the WANs carrier — correct); both `check`s green. The dark-WAN guard read
   `operstate` and left the WAN ports admin-down — now reads the admin flag. The operator cabled
   nx-02 `eno2` ↔ pve `enp6s0` (1 Gb full) for the fake-ISP drill.
+- 2026-09-30 late: **pfsync** on the pair (states replicate MASTER → BACKUP, `check` reads it). Two
+  findings on the way: the `lo0` proof above TRIPPED pve's kill switch (its HAProxy answered from
+  `3.11` — correct; such a proof runs with the switch disarmed), and the hard stop lost ~1 min of
+  unflushed config (→ `sync` at the end of `converge`). pve restored, re-applied, both checks green.
