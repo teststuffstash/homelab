@@ -29,13 +29,16 @@ dead `:53` leg. Cilium's BGP peer (`tofu/cilium-bgp.tf` `opnsense_ip`) and the r
 (`group_vars` `bgp_router_id`, duplicated in the bgp role's defaults) are `.1` too — same
 address, same ASN, so the sessions re-form against the new box with no config change.
 
-**(B) the management/API address — nothing to do for this move; everything for CARP.** Six
-literals dial `.1` for the API, independently: `ansible/inventory.yml` (the one the plays, the
-FU-013 user mint and the test-VM guard derive from), `scripts/opnsense-drill.sh` `PROD=`,
-`scripts/wireguard-client.sh`, the `OPN_HOST` defaults of `opnsense/dnsmasq-dhcp.py` +
-`opnsense/tuya-egress.py`, the backup CronJob's `OPNSENSE_ADDR` + its NetworkPolicy `toCIDR`
-(`argocd/resources/opnsense-config-backup/`), and the second guards (`guard.yml`,
-`opnsense-test-vm.sh`, dnsmasq-dhcp's remap refusal). While the router is one box at `.1` all of
+**(B) the management/API address — nothing to do for this move; everything for CARP.** Its one
+home is `ansible/inventory.yml` (`opnsense-fw`'s `ansible_host`): the plays, the FU-013 user
+mint, the test VM, the drill's `PROD` and `scripts/wireguard-client.sh` all read it (the last
+two since 2026-09-30). Literals that stay, each for a reason: the `OPN_HOST` defaults of
+`opnsense/dnsmasq-dhcp.py` + `opnsense/tuya-egress.py` (stdlib-only scripts — the toolchain's
+python has no YAML; `OPN_HOST` overrides them); the backup CronJob's `OPNSENSE_ADDR` + its
+NetworkPolicy `toCIDR` (`argocd/resources/opnsense-config-backup/` — cluster manifests cannot
+read the inventory); and the second guards (`guard.yml`, `opnsense-test-vm.sh`, the drill's own
+host check, dnsmasq-dhcp's remap refusal), which are deliberately independent of the inventory
+so a wrong inventory cannot aim a harness at prod. While the router is one box at `.1` all of
 them stay right. CARP gives each node its own address and makes `.1` a VIP: then these must
 become per-node (the inventory grows a host per node; everything else derives from it), the
 Cilium peer list gets one entry per node (BGP to a VIP breaks on failover), each node gets its
