@@ -59,7 +59,7 @@ Also physical, not code: `sensor.plug_opnsense_power` (HA `power.yaml`, the dash
 | API users `backup-puller`, `automation` + their keys; root's API key | the backup CronJob's ESO secret, the box's `OPN_API_*` belts, every playbook | carried (`api-users`: the users with their hashed keys; root's prod key lines appended to the seed's own) — no key is re-minted, so nothing in the wallet/Infisical flips | rehearsal-proven (below); the users role then finds each user WITH a key and mints nothing |
 | WAN MAC (`em0`, `machines.yaml` `opnsense.wan_mac`) | the ISP lease (and the public IP ddclient publishes) | `spoofmac` on `igb0` | rehearsal-proven (below) |
 | WireGuard server keypair | the two client configs | **carried** (`wireguard`: the whole section — operator 2026-09-30 chose (a) over (b) export to the wallet + an import path and (c) re-issue both clients: the key already rides every encrypted backup, and no client is touched; (c) stays the lost-everything fallback, (b) returns with CARP's shared-key question) | rehearsal-proven (below): `wg_handshake` |
-| root password | the console / GUI login | no wallet entry; the backup has its hash — carrying it is one more `api-users`-shaped line | open (operator) |
+| root password | the console / GUI login (the VM's break-glass: nx-02's console) | **the router's own wallet entry `opnsense-root-password`** (operator 2026-09-30 chose it over carrying prod's hash: root becomes rebuildable from the wallet like every other secret) — the seed renders its hash; Big Data keeps its own, so the fallback's login is unchanged | rehearsal-proven (below): `root_password` |
 | hostname | the GUI title, syslog | prod reads `OPNsense`; the seed writes one — the cutover seed must write prod's | trivial, at the cutover build |
 
 The carry takes **only identity** — never anything a play owns: the plays converge the rest from
@@ -100,5 +100,6 @@ The window (Big Data still cabled, powered off at its start):
 - 2026-09-30: the WireGuard key carried (`wg_handshake` green), the (B) address read from the
   inventory by every jail-side shell consumer, and the rehearsal's **score 0** — the cutover
   gate's number for this shape.
-- **Operator calls still open:** the root password (§The identity), the
+- 2026-09-30: root = the wallet's `opnsense-root-password` (operator), rehearsal-proven.
+- **Operator calls still open:** the
   cutover build's management path (§The cutover).
