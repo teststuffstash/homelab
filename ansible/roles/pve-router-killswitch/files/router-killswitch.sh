@@ -11,21 +11,14 @@
 # against tofu's on_boot = true: re-enabling the node is a reviewed `mgmt-tf apply`, never
 # automatic. The tap is net0's, the LAN NIC tofu gives the VM.
 #
-# EXEMPT (/etc/default/router-killswitch, ALLOW_IPS): the addresses the pair may hold while prod
-# serves — the CARP trial VIP (ansible/router-nodes/group_vars/opnsense.yml `router_carp_vips`),
-# which prod never holds. Only 192.168.3.x can be exempted: `.1` never is.
+# No exemptions (ADR-088 as amended 2026-09-30): the nodes' LAN is a /24, so no 192.168.3.x address
+# is ever legitimate on the LAN from a node — the HAProxy VIPs live on lo0 and are reached via .1.
+# The CARP trial VIP is the reserved 192.168.2.72, which no rule here matches.
 set -u
 vmid="$1"; logf="/var/log/router-killswitch/$vmid.log"; tap="tap${vmid}i0"
-ALLOW_IPS=""; [ ! -r /etc/default/router-killswitch ] || . /etc/default/router-killswitch
 qm config "$vmid" | grep -q '^net0: virtio=' || { echo "vm $vmid: no virtio net0 — refusing to arm" >&2; exit 1; }
-arp3="arp[14:2] = 0xc0a8 and arp[16] = 3"; ip3="ip src net 192.168.3.0/24"
-for a in $ALLOW_IPS; do
-  case "$a" in 192.168.3.*) ;; *) echo "ALLOW_IPS: $a is not a 192.168.3.x address — refusing to arm" >&2; exit 1 ;; esac
-  hex="$(printf '0x%02x%02x%02x%02x' $(echo "$a" | tr . ' '))"
-  arp3="$arp3 and arp[14:4] != $hex"; ip3="$ip3 and not ip src host $a"
-done
-filt="(arp and (arp[14:4] = 0xc0a80201 or ($arp3))) or (udp src port 67) or (tcp dst port 179 and tcp[13] & 2 != 0) or (ip src host 192.168.2.1) or ($ip3) or (icmp6 and ip6[40] = 134)"
-echo "$(date -u +%FT%TZ) armed for vm $vmid on $tap (inbound; exempt: ${ALLOW_IPS:-none})" >> "$logf"
+filt="(arp and (arp[14:4] = 0xc0a80201 or (arp[14:2] = 0xc0a8 and arp[16] = 3))) or (udp src port 67) or (tcp dst port 179 and tcp[13] & 2 != 0) or (ip src host 192.168.2.1) or (ip src net 192.168.3.0/24) or (icmp6 and ip6[40] = 134)"
+echo "$(date -u +%FT%TZ) armed for vm $vmid on $tap (inbound)" >> "$logf"
 while :; do
   while [ ! -e "/sys/class/net/$tap" ]; do sleep 0.2; done
   if tcpdump -Q in -l -n -e -c 1 -i "$tap" "$filt" >> "$logf" 2>/dev/null; then

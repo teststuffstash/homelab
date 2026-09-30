@@ -1,4 +1,0 @@
-# Managed by ansible/roles/pve-router-killswitch — edit there. Read by /usr/local/sbin/router-killswitch.
-# The addresses a standing router node may emit/claim while prod serves: the CARP trial VIPs
-# (ansible/router-nodes/group_vars/opnsense.yml `router_carp_vips`).
-ALLOW_IPS="{{ router_carp_vips | default([]) | map(attribute='address') | map('regex_replace', '/.*$', '') | join(' ') }}"

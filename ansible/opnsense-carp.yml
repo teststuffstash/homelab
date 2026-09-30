@@ -1,4 +1,4 @@
-# OPNsense CARP — the router pair's shared VIPs (ADR-144; docs/router-move.md, **The CARP trial**).
+# OPNsense CARP + pfsync — the router pair's shared VIPs and state sync (ADR-144; docs/router-move.md, **The CARP trial**).
 # Thin role-caller — logic in roles/opnsense-carp. The VIPs live in the ROUTER NODES' own
 # group_vars (ansible/router-nodes/group_vars/opnsense.yml `router_carp_vips`), each node's skew in
 # its inventory host vars: for prod (ansible/inventory.yml) the list is undefined and this play is
@@ -9,5 +9,7 @@
 - name: OPNsense CARP VIPs (router nodes only)
   hosts: opnsense
   gather_facts: false
+  module_defaults:
+    oxlorg.opnsense.hasync_general: "{{ opnsense_conn }}"
   roles:
     - opnsense-carp

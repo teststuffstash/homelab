@@ -73,8 +73,8 @@ git, and the drill's score says how much of prod that is.
 **The standing nodes** (ADR-144 — this replaces the management-path fork: a temporary
 management NIC, a tunnel into an isolated bridge, a permanent management segment). Each node is
 built in its final shape and **stands on the real LAN at its own address before the window**:
-nx-02's at `192.168.2.70`, pve's at `192.168.2.71` (`/22`, prod's LAN mask — the `/22`-vs-ADR-088
-question stays the CARP ruling's). That address is the node's `ansible_host` for good, so the jail
+nx-02's at `192.168.2.70`, pve's at `192.168.2.71` (`/24` — ADR-088 as amended 2026-09-30; Big Data's own
+`/22` is click-ops residue it keeps as the fallback). That address is the node's `ansible_host` for good, so the jail
 manages it like any host and nothing is re-addressed later. Until the window a standing node must
 be **inert** — every address and every outbound act prod owns stays prod's:
 
@@ -92,9 +92,12 @@ default false; a standing node's host_vars set it true, the cutover converges it
 `OPN_DHCP_ENABLE=0` for `opnsense/dnsmasq-dhcp.py`. Per rule: the BGP neighbours stay configured
 but **disabled**; the ACME client's global **auto-renewal off**; ddclient **disabled**; dnsmasq
 converged but **off**; the HAProxy service VIPs on **`lo0`** instead of `lan`
-(`haproxy_vip_interface`), so HAProxy binds and serves but no LAN ARP answers for them (the real
-LAN is a `/22`, so `192.168.3.0/24` is on-link). The role clears each address from the other
-interface, so the flip never leaves two holders. `.1` is the node's seed (its own LAN address), not
+(`haproxy_vip_interface`), so HAProxy binds and serves but no LAN ARP answers for them. **On a
+node `lo0` is permanent, not a standby rule** (ADR-088 as amended: the nodes' LAN is a `/24`, so
+`192.168.3.0/24` is router-local — every client reaches it via `.1`, and only `.1` needs CARP;
+the inventory pins `haproxy_vip_interface: lo0` per node). Proven 2026-09-30: a `/32` route on the
+pve host sending grafana's `3.11` via `.71` → HTTP 200 from the node's HAProxy. The role clears
+each address from the other interface, so a flip never leaves two holders. `.1` is the node's seed (its own LAN address), not
 the plays. Proof: `scripts/opnsense-drill.sh --router --standby` has one probe per rule (`standby_*`
 in the report). CARP is learned on the pair meanwhile with a trial VIP from `192.168.3.0/24` that
 prod does not hold (**The CARP trial**, below). The WAN: pve's is a Realtek x1 card (TP-LINK TG-3468, in hand 2026-09-30) —
@@ -122,7 +125,7 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    inbound only (every frame the VM emits, whatever the source MAC — a CARP address speaks from
    its virtual MAC), waits for one frame that would mean it is not inert (an ARP claiming `.1` or
    a `3.0/24` VIP, a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6
-   RA; the CARP trial VIPs exempt — `ansible/router-nodes/group_vars/opnsense.yml`) and
+   RA — no exemptions: under the `/24` no `3.x` is ever legitimate from a node) and
    `qm stop`s the VM, then latches `onboot 0` so a host reboot does not bring it back (drift
    against tofu's `on_boot = true` — re-enabling is a reviewed apply); proven by injecting an ARP
    claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
@@ -130,7 +133,7 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    `host_vars`), enabled at every host boot and ordered before `pve-guests`, so it keeps working
    when the LAN does not and stays armed while the node stands; tofu's `on_boot = true` lands in
    the change that lists the vmid;
-2. **seed + first boot** — the config importer with the `standing` seed shape (LAN `.70/22`, WAN
+2. **seed + first boot** — the config importer with the `standing` seed shape (LAN `.70/24`, WAN
    DHCP on `em0`'s MAC, DHCP off, ACME auto-renewal off, a LAN gateway to prod's `.1` for its own
    egress, no interface gateway on LAN so pf adds no `reply-to`) and the identity carried from the
    newest FU-013 backup (`scripts/opnsense-backup-fetch.sh`); root's API keys are exactly prod's;
@@ -148,12 +151,14 @@ only, so prod, the test VM and the drill run it as a no-op) on each node's LAN, 
 `router_carp_advskew` from the inventory: **pve 0 = MASTER, nx-02 100 = BACKUP** (ROADMAP §HA
 step 2). No XMLRPC sync — both get the list from git; the VHID password is the wallet's
 `opnsense-carp-password` (env `OPN_CARP_PASSWORD`, exported by `router-node.sh converge`). The trial
-VIP is **`192.168.3.250/22`, vhid 250** (virtual MAC `00:00:5e:00:01:fa`); the role refuses
-anything but an unused `3.x`. The kill switch exempts exactly that list, and captures inbound on
-the tap: CARP advertises FROM the virtual MAC, which a source-MAC filter never sees. `check` reads
+VIP is the reserved **`192.168.2.72/24`, vhid 72** (virtual MAC `00:00:5e:00:01:48`; `ip-plan.md`),
+the only address the role accepts while a node stands — the first run used `192.168.3.250/22`
+until the `/24` ruling made `3.x` router-local. The kill switch captures inbound on the tap: CARP
+advertises FROM the virtual MAC, which a source-MAC filter never sees. `check` reads
 each VIP's state (MASTER/BACKUP pass; INIT/absent fail).
 
-Measured (10 Hz ping to the VIP from the nx-02 host, via prod's `.1` as any LAN client's path):
+Measured on the first run (`3.250`, 10 Hz ping from the nx-02 host via prod's `.1`; the mechanics
+are the address-independent part — the drills re-measure on `.72`):
 
 | Event | Loss |
 |---|---|
@@ -164,9 +169,22 @@ Measured (10 Hz ping to the VIP from the nx-02 host, via prod's `.1` as any LAN 
 
 So a planned move (firmware, a hypervisor reboot) is hitless by entering maintenance first, and an
 unplanned one costs ~3 s. The window's first step can be the CARP VIP itself — the trial found no
-reason to shrink it to a plain address. **Not yet exercised:** pfsync (state sync over the LAN —
-nothing is routed through the pair yet), the HAProxy VIPs as CARP VIPs, dnsmasq active/passive,
-one Cilium peer + one router-id per node, and the `/22`-vs-ADR-088 LAN mask question.
+reason to shrink it to a plain address. **Not yet exercised:** dnsmasq active/passive, and one Cilium peer + one router-id per node
+(pfsync: below). (The HAProxy VIPs need no CARP at all under the `/24` ruling.)
+
+**pfsync** (2026-09-30): the same play sets it on each node — `lan`, unicast to the OTHER node's
+inventory address, version **pinned `1400`**, preempt on, no XMLRPC (`synchronize_to_ip` empty).
+The pin is deliberate: 26.7 offers a `1500` format the collection cannot select yet, and a pinned
+format is what keeps a rolling major on one wire format (both nodes read the same line). Proven:
+two TCP sessions to the trial VIP on the MASTER appear on the BACKUP as `ESTABLISHED:ESTABLISHED`;
+`check` reads the setting. Whether a *routed* flow survives a failover is the fake-ISP drill's
+question (only NAT'd flows through the pair make it meaningful).
+
+**Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
+of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
+LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
+comes back without it, so `router-node.sh converge` ends with `sync` on the node. The hard-stop
+drills must allow for it too.
 
 The window (Big Data still cabled, powered off at its start):
 
@@ -220,3 +238,14 @@ The window (Big Data still cabled, powered off at its start):
   pve MASTER / nx-02 BACKUP; maintenance-mode failover and preempt back 0 loss at 10 Hz, a hard
   MASTER stop 2.6 s, re-take after boot 0; both `check`s 12/12, no switch tripped. **Next:** pfsync,
   then the window's prep list (HAProxy VIPs as CARP, dnsmasq active/passive, Cilium peers).
+- 2026-09-30 late: **`/24` ruling** (operator; ADR-088 amended): the nodes' LAN is a `/24`, the
+  HAProxy VIPs stay on `lo0` for good (the "HAProxy VIPs as CARP" prep item is gone), the trial VIP
+  moved to the reserved `192.168.2.72` (vhid 72; pve MASTER / nx-02 BACKUP again), the kill switch's
+  exemptions removed. Live nodes' LAN mask edited to `/24` in place (a rebuild is refused while the
+  fake-ISP cable gives the WANs carrier — correct); both `check`s green. The dark-WAN guard read
+  `operstate` and left the WAN ports admin-down — now reads the admin flag. The operator cabled
+  nx-02 `eno2` ↔ pve `enp6s0` (1 Gb full) for the fake-ISP drill.
+- 2026-09-30 late: **pfsync** on the pair (states replicate MASTER → BACKUP, `check` reads it). Two
+  findings on the way: the `lo0` proof above TRIPPED pve's kill switch (its HAProxy answered from
+  `3.11` — correct; such a proof runs with the switch disarmed), and the hard stop lost ~1 min of
+  unflushed config (→ `sync` at the end of `converge`). pve restored, re-applied, both checks green.

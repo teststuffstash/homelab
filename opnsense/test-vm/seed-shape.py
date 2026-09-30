@@ -16,7 +16,7 @@ rehearsal has the why.
            have. `opt9`, not `opt1`: prod's opt1..3 are its spare card ports, and the score
            aligns interfaces by key. Every rule/gateway that named `wan` follows to `opt9`.
 --standing a STANDING router node (ADR-144, docs/router-move.md §The standing nodes): vtnet0 on
-           vmbr0 is the node's LAN at its own address (--lan-ip, prod's /22) and its management
+           vmbr0 is the node's LAN at its own address (--lan-ip, a /24 — ADR-088 as amended) and its management
            path; vtnet1 on the host WAN bridge is the WAN (DHCP, spoofed MAC, prod's blockpriv/
            bogons). Its own egress while standing: a LAN gateway to prod's .1 (priority 1, beats
            the dark WAN's dynamic gateway). INERT AT BIRTH: dnsmasq (DHCP) off, the test

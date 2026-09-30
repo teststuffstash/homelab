@@ -83,6 +83,11 @@ converge() {
     OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-api-key)" OPN_API_SECRET="$(kp opnsense-api-secret)" OPN_DHCP_ENABLE=0 \
       python3 "opnsense/$py.py" > "$WORK/$py.log" 2>&1 || { tail -15 "$WORK/$py.log" >&2; die "$py.py failed"; }
   done
+  # Flush to disk: the nano image's UFS (soft-updates) lost ~1 min of config writes to a hard stop
+  # (the kill switch's qm stop, 2026-09-30) — a node that dies right after a converge must not
+  # come back without it.
+  ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR "root@$HOST" sync || die "sync on $HOST failed"
 }
 
 # READ-ONLY. One line per rule; exit 1 if any fails or cannot be read.
@@ -111,6 +116,11 @@ check() {
     v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a and .mode=="carp") | "\(.interface | ascii_downcase)/\(.status)"] | join(",")' || true)"
     case "$v" in lan/MASTER|lan/BACKUP) ok "CARP $a $v";; *) no "CARP $a: '${v:-absent}' (want lan/MASTER or lan/BACKUP)";; esac
   done
+  if [ -n "$want" ]; then   # pfsync rides with CARP: LAN, unicast to the OTHER node, the pinned version
+    local peer; peer="$(yq -r "[.all.children.opnsense.hosts | to_entries[] | select(.key != \"$INV_HOST\") | .value.ansible_host][0]" "$INV")"
+    v="$(api core/hasync/get 2>/dev/null | jq -r '.hasync | [(.pfsyncinterface | to_entries[] | select(.value.selected==1) | .key), .pfsyncpeerip, (.pfsyncversion | to_entries[] | select(.value.selected==1) | .key)] | join(" ")' || true)"
+    [ "$v" = "lan $peer 1400" ] && ok "pfsync lan → $peer (v1400)" || no "pfsync: '${v:-unread}' (want 'lan $peer 1400')"
+  fi
   echo "== prod unharmed"
   v="$(pve "ping -c1 -W1 192.168.2.1 >/dev/null; ip neigh show 192.168.2.1 | awk '{print \$5}'" || true)"
   [ -n "$v" ] && [ "$v" != "$LAN_MAC" ] && ok ".1 is at $v (not the node)" || no ".1 resolves to '${v:-nothing}'"
@@ -135,7 +145,7 @@ build() {
   log "fetching the identity carry (newest FU-013 backup)"
   bash scripts/opnsense-backup-fetch.sh "$WORK/carry.xml"
   log "seed + first boot ($VMNAME, standing shape)"
-  OPN_TEST_SHAPE=standing OPN_TEST_VMID=$VMID OPN_TEST_VM_NAME=$VMNAME OPN_TEST_HOST=$HOST OPN_TEST_WAN_BITS=22 \
+  OPN_TEST_SHAPE=standing OPN_TEST_VMID=$VMID OPN_TEST_VM_NAME=$VMNAME OPN_TEST_HOST=$HOST OPN_TEST_WAN_BITS=24 \
   OPN_TEST_PVE=$PVE OPN_TEST_WAN_MAC="$wan_mac" OPN_TEST_WAN_BRIDGE=$WAN_BRIDGE \
   OPN_TEST_CARRY_FROM="$WORK/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard \
   OPN_TEST_ROOT_PASSWORD="$(kp opnsense-root-password)" OPN_TEST_API_KEY="$(kp opnsense-api-key)" \

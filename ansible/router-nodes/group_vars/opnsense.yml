@@ -1,15 +1,13 @@
 # Router-NODE-only values (ADR-144) — loaded beside ansible/group_vars/opnsense.yml (prod's, which
 # the plays read too) whenever a play runs with `-i ansible/router-nodes/inventory.yml`, and never
-# for prod (whose inventory sits one directory up). ansible/pve-router-killswitch.yml reads this
-# file too, for the kill switch's exemptions.
+# for prod (whose inventory sits one directory up). ⚠ The playbook-side group_vars WIN over this file
+# for any key both define — override a prod key per host in inventory.yml instead.
 
 # --- CARP (docs/router-move.md, **The CARP trial**) ---
-# ansible/opnsense-carp.yml. While prod serves: TRIAL VIPs only — an unused 192.168.3.x (ip-plan's
-# router-owned range; never .1, never a HAProxy VIP). The mask is the LAN's /22 (the VIP sits in
-# the interface's subnet). vhid = the last octet (the virtual MAC 00:00:5e:00:01:<vhid> then names
-# its address). The kill switch exempts exactly these addresses — re-run
-# ansible/pve-router-killswitch.yml BEFORE converging a new one.
+# ansible/opnsense-carp.yml. While prod serves: the reserved TRIAL slot only — 192.168.2.72
+# (ip-plan.md, ADR-088 as amended: never a real host). The mask is the nodes' LAN /24. vhid = the
+# last octet (the virtual MAC 00:00:5e:00:01:<vhid> then names its address).
 router_carp_vips:
-  - address: 192.168.3.250/22
-    vhid: 250
+  - address: 192.168.2.72/24
+    vhid: 72
     description: carp-trial

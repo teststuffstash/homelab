@@ -25,11 +25,10 @@
     mode: "0755"
   register: pve_rks_script
 
-- name: Install the exemptions (the CARP trial VIPs)
-  ansible.builtin.template:
-    src: router-killswitch.default.j2
-    dest: /etc/default/router-killswitch
-    mode: "0644"
+- name: No exemptions file (retired with the /24 ruling, ADR-088 as amended)
+  ansible.builtin.file:
+    path: /etc/default/router-killswitch
+    state: absent
   register: pve_rks_default
 
 - name: Install the template unit

@@ -5,10 +5,9 @@
 # key (wallet `opnsense-carp-password`, env OPN_CARP_PASSWORD) — it keeps groups apart, it is not
 # security: CARP rides the LAN unauthenticated (ADR-144, accepted).
 #
-# While prod serves, the list holds TRIAL VIPs only — addresses prod never holds (never `.1`, never
-# a HAProxy VIP): with no other speaker a node makes itself MASTER and answers ARP. The kill switch
-# exempts exactly this list (ansible/pve-router-killswitch.yml reads the same file) — so adding an
-# address here without re-running that play trips the node, by design.
+# While prod serves, the list holds the reserved TRIAL slot only (192.168.2.72, ip-plan.md) — never
+# `.1`, never 192.168.3.x (router-local since the /24 ruling, ADR-088 as amended): with no other
+# speaker a node makes itself MASTER and answers ARP. The kill switch trips on a .1 or 3.x claim.
 - name: CARP VIPs (every call applies — reload)
   when: router_carp_vips | default([]) | length > 0
   module_defaults:
@@ -20,12 +19,13 @@
         fail_msg: "OPN_CARP_PASSWORD is empty — export it from the wallet (opnsense-carp-password)"
         quiet: true
 
-    - name: Never `.1`, never outside the trial range (prod's addresses stay prod's)
+    - name: Only the reserved trial slot while prod serves (never .1, never 3.x)
       ansible.builtin.assert:
         that:
-          - item.address is match('^192\.168\.3\.')
-          - item.address.split('/')[0] not in (haproxy_proxied_services + (stack_gateways | default([]))) | map(attribute='vip') | list
-        fail_msg: "{{ item.address }}: a CARP VIP here must be an unused 192.168.3.x while prod serves"
+          - item.address.split('/')[0] == '192.168.2.72' or not opnsense_standby
+          - item.address.split('/')[0] != '192.168.2.1' or not opnsense_standby
+          - item.address is not match('^192\.168\.3\.')
+        fail_msg: "{{ item.address }}: while standing, a CARP VIP is the reserved trial slot 192.168.2.72 only"
         quiet: true
       loop: "{{ router_carp_vips }}"
       loop_control: { label: "{{ item.address }}" }
@@ -42,3 +42,18 @@
         description: "{{ item.description }}"
       loop: "{{ router_carp_vips }}"
       loop_control: { label: "{{ item.address }} vhid {{ item.vhid }} skew {{ router_carp_advskew }}" }
+
+# pfsync — state sync to the OTHER node (unicast peer = its inventory address; the pair is two
+# hosts, so "the other" is unique). On LAN: no third port (ADR-144 — accepted, unauthenticated).
+# No XMLRPC config sync (synchronize_to_ip empty): both nodes converge from git. Preempt stays ON:
+# the master (lowest skew) takes back over when it returns. pfsync version pinned so a rolling
+# major cannot leave the pair on two formats silently — both nodes read this line.
+- name: pfsync to the peer node (router nodes only)
+  when: router_carp_vips | default([]) | length > 0
+  oxlorg.opnsense.hasync_general:
+    pfsync_interface: lan
+    pfsync_peer_ip: "{{ groups['opnsense'] | difference([inventory_hostname]) | map('extract', hostvars, 'ansible_host') | first }}"
+    pfsync_version: "1400"
+    preempt: true
+    synchronize_to_ip: ""
+    reload: true
