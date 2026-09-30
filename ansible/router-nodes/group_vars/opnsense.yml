@@ -1,0 +1,8 @@
+# Router-NODE-only values (ADR-144) — loaded beside ansible/group_vars/opnsense.yml (prod's, which
+# the plays read too) whenever a play runs with `-i ansible/router-nodes/inventory.yml`, and never
+# for prod (whose inventory sits one directory up). ansible/pve-router-killswitch.yml reads this
+# file too, for the kill switch's exemptions.
+
+# --- CARP (the trial — docs/router-move.md) ---
+# Filled by the CARP trial; empty ⇒ the opnsense-carp role is a no-op.
+router_carp_vips: []
