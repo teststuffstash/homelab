@@ -420,8 +420,12 @@ NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-d
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
 healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
 elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
-re-sync when the node returns. Control planes are out of scope: this script refuses them, and they go through
-`scripts/controlplane-upgrade.sh`.
+re-sync when the node returns. **Control planes take the same verbs** (`down`/`up`/`upgrade <cp>`):
+the script hands them to `scripts/controlplane-upgrade.sh <cp> <verb>`, which adds the CP gates —
+three Ready CPs, odd healthy etcd, another API endpoint, clean Cilium, an etcd snapshot, and on
+`down` an etcd leadership forfeit when the target leads — then re-enters the shared verb; `up`
+ends with the etcd-membership and Cilium post-checks (the one sanctioned ds/cilium roll). The
+Talos API VIP moves on the graceful shutdown by itself (a few seconds of API blip).
 
 **The window also declares itself to the alert path, in two halves that cover different label
 shapes** (FU-230; `SILENCE=0` opts out of both). `settle`/`down` open Alertmanager silences keyed on
