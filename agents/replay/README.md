@@ -494,10 +494,14 @@ is stale, so it cannot drift the way the prose register did.
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
 | `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/files-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/heartbeat-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/rebase-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/rejudge-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |

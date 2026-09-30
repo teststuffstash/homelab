@@ -1,0 +1,4 @@
+CALL gh pr view 31 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT ORPHAN [homelab] ⏳ unarmed-major SETTLING — PR #31: 1 check(s) still pending on the head (<1800s) — the ride reads a settled rollup, next tick (#2100)
+OUT REACHED: end
+RC 0

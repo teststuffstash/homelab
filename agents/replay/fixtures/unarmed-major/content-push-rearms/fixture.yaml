@@ -1,0 +1,16 @@
+# unarmed-major/content-push-rearms (2026-09-30, homelab#2100): the content id is not a blind spot —
+# the same world as rebase-debounced, but the recorded state carried a different deno.lock blob (a
+# Renovate re-proposal that actually moved the lock). Expected: the unit is emitted.
+name: unarmed-major-content-push-rearms
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-09-30T17:35:00Z

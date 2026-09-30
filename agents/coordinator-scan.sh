@@ -579,24 +579,32 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
-# unarmed-major clause fingerprint (homelab#2066): STATE_FP_JQ, plus startedAt folded for ONE
-# rollup entry — the `management-sentinel` commit status. The fold must see a sentinel RE-JUDGE:
-# `mgmt/scripts/mgmt-lib.sh` `mgmt_post_status` is an unconditional POST, so a re-judge on the same
-# head (same FAILURE, new engine revision, fresh position lines for the lens) always moves its
-# startedAt while nothing else in the rollup changes. Every OTHER entry keeps the generic
-# name=conclusion form on purpose: folding all startedAts (STATE_FP_JQ_CIRED, the #2065 shape)
-# let third-party heartbeat re-posts re-arm the clause — `iac-sentinel` re-posts SUCCESS on every
-# open head every ~4 min (30 posts in 2 h on PR #2047) and `approve / approve` check-runs
-# re-appear too — so the hash moved every beat and the clause bought a ride per tick with nothing
-# to decide (#2047, 2026-09-28). Sibling #1939 is the same over-sensitivity direction on the
-# assembly-cr clause and is left as is here. Statuses arrive as {context,state,startedAt} and
-# check-runs as {name,conclusion,startedAt}; the fold reads both shapes.
-STATE_FP_JQ_UNARMED='[ "head=" + (.headRefOid // "")
+# unarmed-major clause fingerprint (homelab#2066, narrowed after #2100): what a ride would DECIDE on,
+# never what merely moved. Three differences from STATE_FP_JQ:
+#   content= replaces head=. An un-armed major waiting on upstream is rebased by Renovate onto
+#     every moved master (#2100: five force-pushes in ~30 h, four with byte-identical deno.json +
+#     deno.lock), and every new head oid bought a ride that re-ruled the same ADR-143 red — seven
+#     rides, one decision. `contentId` is the changed files' blob ids at head (the clause's
+#     `pulls/<n>/files` probe); a push that changes what the PR changes moves it, a rebase does not.
+#     No contentId (probe unreadable) → falls back to head=, the pre-#2100 behaviour.
+#   checks= folds only the entries that are NOT passing (SUCCESS/SKIPPED/NEUTRAL dropped). A
+#     flip either way still moves the hash (the entry appears or leaves); a green sentinel posting
+#     on a fresh head does not — #2100's 7th ride was `management-sentinel` arriving SUCCESS
+#     minutes after the 6th ride's dispatch, with nothing to decide.
+#   `@startedAt` rides only on a non-passing `management-sentinel`: `mgmt_post_status` is an
+#     unconditional POST, so a re-judge on the same head (same FAILURE, new engine revision, fresh
+#     position lines for the lens) moves only its startedAt. Every other entry keeps name=state —
+#     third-party heartbeat re-posts must not re-arm (`iac-sentinel` re-posts on every open head
+#     every ~4 min, 30 posts in 2 h on PR #2047; the #2065 all-startedAt fold bought a ride per beat).
+# Statuses arrive as {context,state,startedAt} and check-runs as {name,conclusion,startedAt}; the
+# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) is left as is here.
+STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .contentId else "head=" + (.headRefOid // "") end)
   , "review=" + (.reviewDecision // "NONE")
   , "checks=" + ([ .statusCheckRollup[]?
                    | ((.name // .context // "?") as $n
-                      | $n + "="
-                        + (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end)
+                      | (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end) as $s
+                      | select(($s == "SUCCESS" or $s == "SKIPPED" or $s == "NEUTRAL") | not)
+                      | $n + "=" + $s
                         + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
                  | sort | join(","))
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
@@ -648,14 +656,14 @@ state_fp_for_clause() {
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
 # conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
-# uses STATE_FP_JQ_UNARMED (startedAt folded for the management-sentinel status only —
-# homelab#2066); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
+# non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json clause
+  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json clause fp_files fp_cid
   # Use pre-fetched JSON if provided and valid. When the 4th argument IS provided (even if
   # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
   # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
@@ -674,10 +682,19 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
-    # unarmed-major folds startedAt for the management-sentinel status ONLY (homelab#2066): a
-    # sentinel re-judge (same state, new startedAt) re-opens the debounce; a third-party heartbeat
-    # re-post (iac-sentinel every ~4 min on #2047) or a re-appearing approve check-run does not.
-    unarmed-major) fp_jq="$STATE_FP_JQ_UNARMED" ;;
+    # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
+    # rebase with unchanged content, a heartbeat re-post or a green check arriving does not.
+    unarmed-major)
+      fp_jq="$STATE_FP_JQ_UNARMED"
+      # the content id (#2100) — probed HERE, so the clause and the dispatch-marker site (which
+      # calls this without a pre-fetched probe) hash the same thing. Changed files' blob ids at
+      # head; unreadable or any blob id missing → no contentId → head= (the old behaviour).
+      fp_files="$(gh api "repos/${1}/pulls/${2}/files" --paginate 2>/dev/null)" || fp_files=''
+      fp_cid="$(printf '%s' "$fp_files" | jq -rs 'add // [] | if length == 0 or any(.[]; (.sha // "") == "") then "" else ([ .[] | .filename + "@" + .sha + "@" + (.status // "") ] | sort | join(",")) end' 2>/dev/null)" || fp_cid=''
+      if [ -n "$fp_cid" ]; then
+        fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg c "$fp_cid" '. + {contentId: $c}' 2>/dev/null)" && fp_probe="$fp_raw"
+      fi
+      ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
@@ -3885,6 +3902,7 @@ EOF_GTHEMES_OPEN
       fi
     done
     # <<<REPLAY:stale-stamp-repair<<<
+    um_now() { date -u +%s; }   # replay seam: the wall clock (the SETTLING hold below)
     # unarmed-major (the brief's §Dependency major bumps play) — EVERY state of an un-armed `major`
     # is this unit's (2026-09-28, homelab#2051 + the #2046/#2047 drill): red at birth (the lens
     # investigates the red — reviewer STEP 0's un-armed-major exception), CHANGES_REQUESTED (the
@@ -3897,6 +3915,14 @@ EOF_GTHEMES_OPEN
     # buys a second ride; a verdict, a push, a check flip or a dismissal re-opens it) and the
     # blocked-on predicate (a ride that parks on a human/issue/PR is honoured, homelab#1188).
     # >>>REPLAY:unarmed-major>>>
+    # Two guards against #2100's churn (seven rides on one Renovate major, one decision): the
+    # fingerprint keys on the diff's content, not the head oid (STATE_FP_JQ_UNARMED + the
+    # pr_state_fp_pair probe — a rebase onto a moved master re-creates the head with identical
+    # content), and here, before the debounce, a SETTLING hold — a ride dispatched while
+    # the fresh head's rollup is still filling in records a marker the next posted check moves,
+    # which buys a second ride on the same state. Held only while a pending entry is younger than
+    # UM_SETTLE_S, so a wedged check still reaches a ride. Both fail open to the old behaviour.
+    UM_SETTLE_S="${UM_SETTLE_S:-1800}"
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
       um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
@@ -3907,9 +3933,21 @@ EOF_GTHEMES_OPEN
           continue
           ;;
       esac
+      um_pending="$(printf '%s' "$pr_json_um" | jq -r --argjson now "$(um_now)" --argjson win "$UM_SETTLE_S" '
+          ([ .commits[]? | .committedDate // empty ] | max // "") as $hc
+          | [ .statusCheckRollup[]?
+              | select((((.conclusion // .state) // "") | . == "" or . == "PENDING" or . == "EXPECTED"))
+              | ((.startedAt // "") | if . == "" or startswith("0001-") then $hc else . end)
+              | (try fromdateiso8601 catch empty)
+              | select($now - . < $win) ] | length' 2>/dev/null)" || um_pending=0
+      case "$um_pending" in ''|*[!0-9]*) um_pending=0 ;; esac
+      if [ "$um_pending" -gt 0 ]; then
+        orphans="${orphans}[$repo] ⏳ unarmed-major SETTLING — PR #${u}: ${um_pending} check(s) still pending on the head (<${UM_SETTLE_S}s) — the ride reads a settled rollup, next tick (#2100)\n"
+        continue
+      fi
       umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
       if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
-        orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push, a check flip or a dismissal re-opens it.\n"
+        orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: content, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push that changes the diff, a check flip or a dismissal re-opens it (a rebase does not, #2100).\n"
         continue
       fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
@@ -5760,7 +5798,7 @@ EOF
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
               "🤖 \`state-fp:${uclause}:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
-              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. For unarmed-major clauses (#2100) head sha becomes the diff's content and only non-passing checks count, so a Renovate rebase or a green check arriving does not re-arm it. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
         fi
         ;;
