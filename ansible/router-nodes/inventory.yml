@@ -1,0 +1,17 @@
+# Inventory for the CARP pair's router NODES (ADR-144, docs/router-move.md §The standing nodes) —
+# used by scripts/opnsense-router-node.sh, always passed with `-i` (which replaces ansible.cfg's
+# `inventory = inventory.yml`, so the production router is never loaded beside them).
+#
+# The group is `opnsense` because the plays hard-code `hosts: opnsense`; values come from
+# ansible/group_vars/opnsense.yml (next to the playbooks) — prod's own — plus the host vars here.
+# Each node's `ansible_host` is its own LAN address for good (ADR-144 (3)); `.1` is never one.
+# `opnsense_standby: true` keeps a node inert on the LAN until the cutover window converges it
+# false (the standby profile — router-move.md); the verb refuses a node without it.
+all:
+  children:
+    opnsense:
+      hosts:
+        opnsense-nx02:
+          ansible_host: 192.168.2.70
+          ansible_connection: local
+          opnsense_standby: true

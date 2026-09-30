@@ -101,29 +101,8 @@ die() { log "REFUSED: $*"; exit 2; }
 PROD="$(yq -r '.all.children.opnsense.hosts[].ansible_host' "$ROOT/ansible/inventory.yml")"
 echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read one prod router address from ansible/inventory.yml"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
-# fetch_backup <out> — the newest FU-013 object, decrypted with the wallet identity (docs/runbook.md
-# §OPNsense config backup, Restore). Garage by port-forward: no dependency on the router's VIPs.
-fetch_backup() {
-  local out="$1" k="kubectl --kubeconfig $KUBECONFIG_DRILL" pf obj port=$((20000 + RANDOM % 20000)) rc=0
-  AWS_ACCESS_KEY_ID="$($k -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.access_key_id}' | base64 -d)" || return 1
-  AWS_SECRET_ACCESS_KEY="$($k -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.secret_access_key}' | base64 -d)" || return 1
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-  $k -n garage port-forward svc/garage "$port:3900" >/dev/null 2>&1 & pf=$!
-  for _ in $(seq 1 40); do timeout 1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null && break; sleep 0.5; done
-  local s3="aws --region garage --endpoint-url http://127.0.0.1:$port s3"
-  obj="$($s3 ls s3://opnsense-config-backup/opnsense-fw/ | awk '{print $4}' | grep '\.xml\.age$' | sort | tail -1)"
-  if [ -n "$obj" ]; then
-    log "carry source: opnsense-fw/$obj"
-    ( umask 077
-      $s3 cp --quiet "s3://opnsense-config-backup/opnsense-fw/$obj" "$out.age" \
-      && keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
-           "$HOME/.claude/homelab-keepass/homelab.kdbx" opnsense-config-backup-age-identity \
-         | age -d -i - -o "$out" "$out.age" ) || rc=1
-  else rc=1; fi
-  rm -f "$out.age"; kill "$pf" 2>/dev/null || true
-  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-  [ "$rc" -eq 0 ] && [ -s "$out" ] && chmod 600 "$out"
-}
+# fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
+fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
 
 [ "$VMID" != 9110 ] || die "vmid 9110 is the PR-validation VM"
 [ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.1 ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"

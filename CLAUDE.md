@@ -60,6 +60,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `ci-runner-02` (VM on nx-02) | 192.168.2.66 | GitHub Actions runner VM — the second, on the other hypervisor (FU-266) |
 | `opnsense-test` (VM on nx-02) | 192.168.2.67 | OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297) |
 | `opnsense-drill` (VM on nx-02, EPHEMERAL) | 192.168.2.68 | OPNsense REBUILD DRILL — built from nothing, converged with all router code, probed, scored against prod, destroyed; WAN = this IP, LAN = isolated `vmbr2` (FU-297) |
+| `opnsense-nx02` (VM on nx-02) | 192.168.2.70 | CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled eno2 |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 <!-- END GENERATED hosts -->
