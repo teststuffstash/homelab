@@ -2564,3 +2564,25 @@ base branch and its cooldown covers the bumped dep only — the lodash-es@4.17.2
 CI's dind), so the defence must decide before execution and the executor must hold nothing.
 **Consequences:** the linter runs anywhere (jail, CI, sub-agent clones) with no placement rules;
 Renovate's mermaid 12 PR re-proposes on `deno.json` and stays red until upstream clears it (FU-294).
+
+### ADR-144 — The CARP pair is built beside Big Data: two symmetric router VMs, each managed at its own LAN IP (2026-09-30)
+**Status:** Accepted (operator, 2026-09-30: "bring forward CARP + pve box opnsense … temporarily 3
+opnsense boxes — big data + 2 fallbacks"; "go with 4"; a 1 GbE x1 card for pve instead of Big Data's
+4-port). **Decision:** (1) both router VMs — on nx-02 and on pve — are built NOW, beside the live
+Big Data, which keeps `.1` until the cutover window; CARP is learned on the pair with a trial VIP from
+`192.168.3.0/24` (ADR-088) while nothing depends on it. (2) The nodes are symmetric: WAN + LAN only.
+pve gains a single-port x1 NIC; Big Data's Intel card never moves. (3) Each node is managed at its
+own LAN IP — **`192.168.2.70` (nx-02) and `192.168.2.71` (pve)**, ip-plan's servers band — which is
+its `ansible_host` (one inventory host per node); `.1` is only ever a client address (the CARP VIP
+from the cutover on). (4) Root is the routers' own wallet entry `opnsense-root-password`.
+**Considered:** ROADMAP's sequence (nx-02 alone → Big Data dark → its card to pve → CARP: a
+no-fallback gap, and CARP learned inside live windows); a temporary management NIC + LAN re-address
+in the window; a tunnel into an isolated bridge (tooling, and every tool one typo from `.1` = prod);
+a permanent management segment (nx-02 has no third port; the new switches are unmanaged); carrying
+prod's root hash. **Why:** while Big Data serves, both nodes are experiments — the riskiest step
+(every VIP and both BGP peers move) gets rehearsed without windows, and the move gains two fallbacks
+instead of none; the per-node address is the end state's own, so nothing is re-addressed later.
+**Consequences:** only the router holding `.1` may have a cabled WAN (every node spoofs `em0`'s MAC;
+the bootstrap refuses carrier); an idle node must be inert on the LAN (no `.1`, DHCP off); pfsync
+rides the LAN, unauthenticated (no third port) — accepted; nx-02 carries a standing VM beside the
+drills. Design: [`router-move.md`](router-move.md); ROADMAP §HA step 2 amended.
