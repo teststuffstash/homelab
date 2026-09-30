@@ -1,6 +1,9 @@
-# unarmed-major/content-push-rearms (2026-09-30, homelab#2100): the content id is not a blind spot —
-# the same world as rebase-debounced, but the recorded state carried a different deno.lock blob (a
-# Renovate re-proposal that actually moved the lock). Expected: the unit is emitted.
+# unarmed-major/content-push-rearms (2026-09-30, homelab#2100): the content id is sensitive to CONTENT.
+# A PAIR with rebase-debounced: the SAME marker (the old head, deno.lock blob afb05f7d…) and the same
+# head, rollup and filenames — the ONLY difference is this world's deno.lock blob, 312c6a27… (the
+# 09-30 17:27 re-proposal did exactly this). Same marker, one sha apart, opposite outcomes: debounce
+# there, emit here. (A static marker cannot catch a formula mutant alone — a sha-blind content id
+# reds the pair at rebase-debounced, checked by hand on this PR.) Expected: the unit is emitted.
 name: unarmed-major-content-push-rearms
 mode: actions
 source: agents/coordinator-scan.sh

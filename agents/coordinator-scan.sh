@@ -3921,7 +3921,9 @@ EOF_GTHEMES_OPEN
     # content), and here, before the debounce, a SETTLING hold — a ride dispatched while
     # the fresh head's rollup is still filling in records a marker the next posted check moves,
     # which buys a second ride on the same state. Held only while a pending entry is younger than
-    # UM_SETTLE_S, so a wedged check still reaches a ride. Both fail open to the old behaviour.
+    # UM_SETTLE_S, so a wedged check still reaches a ride; a pending entry whose age cannot be read
+    # counts as settling (this file's `fromdateiso8601? // null` → recent idiom — holding is the safe
+    # side of this guard). The content probe fails open to the old behaviour.
     UM_SETTLE_S="${UM_SETTLE_S:-1800}"
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
@@ -3938,8 +3940,8 @@ EOF_GTHEMES_OPEN
           | [ .statusCheckRollup[]?
               | select((((.conclusion // .state) // "") | . == "" or . == "PENDING" or . == "EXPECTED"))
               | ((.startedAt // "") | if . == "" or startswith("0001-") then $hc else . end)
-              | (try fromdateiso8601 catch empty)
-              | select($now - . < $win) ] | length' 2>/dev/null)" || um_pending=0
+              | (fromdateiso8601? // null)
+              | select(. == null or $now - . < $win) ] | length' 2>/dev/null)" || um_pending=0
       case "$um_pending" in ''|*[!0-9]*) um_pending=0 ;; esac
       if [ "$um_pending" -gt 0 ]; then
         orphans="${orphans}[$repo] ⏳ unarmed-major SETTLING — PR #${u}: ${um_pending} check(s) still pending on the head (<${UM_SETTLE_S}s) — the ride reads a settled rollup, next tick (#2100)\n"
