@@ -564,7 +564,12 @@ down() {
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
   # Longhorn's own view: scheduling off on a cordoned node is automatic; confirm before power-off.
-  kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}{"\n"}' >&2
+  # A control plane has no nodes.longhorn.io object (wait_storage_back's rule): absent = not a
+  # storage node; a query that FAILED stops before the shutdown (first CP `down`, 2026-09-30).
+  local lh
+  if lh="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" --ignore-not-found -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}')"; then
+    log "${lh:-no Longhorn node object — not a storage node}"
+  else fail "cannot read the Longhorn node object — refusing the shutdown"; return 1; fi
   log "talosctl shutdown $NODE ($ip)"
   talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" shutdown || log "shutdown returned non-zero (the API often drops mid-call) — verifying"
   local i=0
