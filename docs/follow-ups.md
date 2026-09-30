@@ -153,8 +153,10 @@ six OVERSIZE items pointer-ized into
       (`--router` rehearsal, carried identity, window): [`router-move.md`](router-move.md). The router
       rehearsal reads **score 0** with 13/13 probes (2026-09-30, #2133 — WireGuard key carried).
       Root = wallet `opnsense-root-password` (#2136); ADR-144 (#2135): the CARP pair built beside
-      Big Data, nodes standing at `.70`/`.71`. **Next:** the standby profile + the standing nx-02
-      node (router-move.md §The cutover, the inert rules). Relates FU-097, FU-013, FU-298.
+      Big Data, nodes standing at `.70`/`.71`. 2026-09-30: standby profile (#2138), bridged WAN
+      measured ~3 Gbit/s (#2140), **nx-02 node STANDING + inert at `.70`** (#2141, `router-node.sh
+      check nx02` green). **Next:** node `on_boot` + kill-switch persistence, then pve's node
+      (`.71`, TG-3468 fitted). Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
