@@ -183,8 +183,10 @@ The window (Big Data still cabled, powered off at its start):
   instead of a nohup process. Trip-tested live: an injected `.1` ARP claim on the tap → tripped
   in <1 s, `onboot` latched 0, VM stopped; restored, re-booted armed without a trip, `check` 11/11
   (a new line reads the reboot survival). **Next:** pve's node (`.71`), then the CARP trial.
-- 2026-09-30 night: **pve's node** coded the same shape (`tofu/opnsense-router.tf`: `vmbr3` over
+- 2026-09-30 night: **pve's node STANDS + inert at `.71`** — the same shape (`tofu/opnsense-router.tf`: `vmbr3` over
   `enp6s0`, VM 9171 at `.71`, MAC `02:00:C0:A8:02:47`; `router-node.sh … pve`); pve is booked
   ~61 of 62.7 GiB with balloon off (resident ~26 GiB) — 2 GiB more is FU-289's class, accepted for
-  a 2 GiB router. The kill switch now captures inbound on the tap (CARP's virtual MAC) with the
-  trial VIPs exempt.
+  a 2 GiB router. Applied through the box, `router-node.sh build pve` (seeded, converged standby),
+  on_boot flipped, `check pve` 11/11. The kill switch now captures inbound on the tap (CARP's
+  virtual MAC), stops before it latches (1.7 s, a gratuitous ARP from INSIDE the node), and exempts
+  the trial VIPs. **Next:** the CARP trial.

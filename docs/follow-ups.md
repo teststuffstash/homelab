@@ -151,9 +151,8 @@ six OVERSIZE items pointer-ized into
       residue. Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md); the router
       move it gates (rehearsal score 0, carried identity, ADR-144 CARP pair, standby profile, the
       window): [`router-move.md`](router-move.md) — its §Status is the history. State 2026-09-30:
-      **nx-02 node STANDING + inert at `.70`, reboot-proof** (on_boot + systemd kill switch).
-      **Next:** pve's node (`.71`, TG-3468 fitted), then the CARP trial VIP. Relates FU-097,
-      FU-013, FU-298.
+      **both nodes STANDING + inert, reboot-proof** (nx-02 `.70`, pve `.71`; on_boot + systemd kill
+      switch). **Next:** the CARP trial VIP. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
