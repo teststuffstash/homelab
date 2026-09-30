@@ -142,6 +142,9 @@ if [ "$ROUTER" -eq 1 ]; then
   KUBECONFIG_DRILL="${OPN_DRILL_KUBECONFIG:-$ROOT/tofu/kubeconfig}"
   [ -f "$KUBECONFIG_DRILL" ] && [ -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ] \
     || die "--router reads the FU-013 backup (kubeconfig $KUBECONFIG_DRILL + the wallet): jail only"
+  # The carry is prod's decrypted config: until `trap finish EXIT` takes over below, any exit
+  # (a failed fetch, the renewal refusal) must still delete it.
+  trap 'rm -rf "$SEC"' EXIT
   log "router rehearsal: fetching the newest FU-013 backup (Garage via port-forward)"
   fetch_backup "$SEC/carry.xml" || die "could not fetch + decrypt the newest FU-013 backup"
   # An imported cert that falls due during the run would renew FROM THE REHEARSAL (a real LE order

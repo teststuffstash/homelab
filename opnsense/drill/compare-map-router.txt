@@ -14,3 +14,5 @@ env    drill-only  OPNsense/Gateways/gateway_item[MGMT_GW]
 env    drill-only  OPNsense/Gateways/gateway_item[MGMT_GW]/**
 # ── (c) accepted: an IPv6 GUI-save default on prod's WAN, inert while IPv6 is disallowed ───────
 accepted  prod-only  interfaces/wan/dhcp6-ia-pd-len | prod:.=0 prod:/OPNsense/Interfaces/settings/disableipv6=1
+# ── (c) accepted: the carried API users advance the uid counter — bookkeeping, not config ─────
+accepted  *          system/nextuid
