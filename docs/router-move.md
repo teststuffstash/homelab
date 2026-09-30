@@ -165,3 +165,9 @@ The window (Big Data still cabled, powered off at its start):
   onboard's bus slot; the onboard is pinned `nic0` by MAC (`pve-network-interface-pinning`), so
   `vmbr0` never follows a renumber. **Next:** the standing nx-02 node, the bridged-WAN throughput
   read, then pve's node.
+- 2026-09-30 evening: bridged WAN measured (~3 Gbit/s NAT'd, #2140) → nx-02 bridged. **The nx-02
+  node STANDS** (#2141): `vmbr3` + VM 9170 applied through the box in a window, `router-node.sh build
+  nx02` — seeded, 26.7.5, every play converged standby, `check` green (inert rules + prod unharmed),
+  kill switch armed and never tripped. **Next:** `on_boot` + a kill switch that survives an nx-02
+  reboot (today: a nohup process, and the VM does not autostart — consistent, but manual after a
+  host reboot), then pve's node the same way, then the CARP trial.
