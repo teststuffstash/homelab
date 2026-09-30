@@ -11852,3 +11852,13 @@ shared with the drill. Window seat-1790782366-5635: plan 2 to add → applied; b
 every play standby, check green, switch never tripped; .1 still Big Data's MAC). PveNumaNodeMemoryLow
 (nx-02 node 0) went pending before the window — router VM on node 1; closed --force naming it.
 Mine: a hand-typed PR watch piped JSON through zsh echo and sat blind 30 min (GAPS G2 resight).
+
+### 2026-09-30 late — nx-02 RAM (operator question, no live change)
+
+`PveNumaNodeMemoryLow` read live on nx-02: node 0 0.4 GiB free + 0.1 inactive-file, node 1 5.7 + 2.8,
+swap 250 MB with si/so ≈ 0 → the alert is the early warning, not an event; host ~60/62.5 GiB booked.
+DIMMs read on pve/nx-01/nx-02: nx nodes use 2 of 4 channels per socket (A/B/E/F only). Operator
+supplied eBay/AliExpress prices → hardware `market/2026-09-30-rdimm-price-guide.md` (16 GB sticks, nx-02
+C1/D1/G1/H1 first, watch for a bulk lot ≤ €48/16 GB). FU-289 extended (item 3). Mine: first answer
+suggested mixing pve's 2133 Micron with the 2400 Samsungs in one channel; the Supermicro manual forbids
+mixed speeds and Nutanix wants one maker per channel — corrected before any buy.

@@ -69,7 +69,7 @@ never the session's arc — that is TICK-LOG's.)
   **NEXT:** `on_boot` + a systemd kill switch on nx-02 (one PR), then pve's node (`.71`, same
   verb — needs a `pve` row, its vmbr over `enp6s0`), then the CARP trial VIP. Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
-  8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class, not acted on. #2130
+  8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
   (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
