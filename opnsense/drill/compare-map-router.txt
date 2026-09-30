@@ -1,0 +1,18 @@
+# The ROUTER REHEARSAL's overlay of compare-map.txt (FU-297; `scripts/opnsense-drill.sh --router`,
+# docs/opnsense-test-vm.md §The router rehearsal). Read FIRST (first match wins); the base map's
+# `interfaces/wan/**` wildcard is dropped in this shape, because here the WAN is comparable: a
+# real NIC on DHCP, like prod's. Same syntax as the base map's header.
+
+# ── (b) env: the WAN NIC's name is hardware (prod em0, the rehearsal's passed-through igb0); the
+#    MAC is the same one — prod wears it natively, the rehearsal spoofs it ──────────────────────
+env    value       interfaces/wan/if
+env    drill-only  interfaces/wan/spoofmac
+# ── (b) env: the rehearsal's management path + egress (vmbr0, static) — the real router has none
+env    drill-only  interfaces/opt9
+env    drill-only  interfaces/opt9/**
+env    drill-only  OPNsense/Gateways/gateway_item[MGMT_GW]
+env    drill-only  OPNsense/Gateways/gateway_item[MGMT_GW]/**
+# ── (c) accepted: an IPv6 GUI-save default on prod's WAN, inert while IPv6 is disallowed ───────
+accepted  prod-only  interfaces/wan/dhcp6-ia-pd-len | prod:.=0 prod:/OPNsense/Interfaces/settings/disableipv6=1
+# ── (c) accepted: the carried API users advance the uid counter — bookkeeping, not config ─────
+accepted  *          system/nextuid

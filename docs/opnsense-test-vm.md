@@ -203,6 +203,63 @@ block, the empty-valued legacy tunables, disabled port-forwards) is accepted **i
 only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
 header) — the same path counts again the day it comes alive.
 
+### The router rehearsal — the drill in the future router's shape
+
+`bash scripts/opnsense-drill.sh --router` (jail only: it reads the FU-013 backup) builds the same
+throwaway VM `9199`, but shaped like the router that replaces Big Data
+([`router-move.md`](router-move.md)), and carrying its identity:
+
+| | the drill | `--router` |
+|---|---|---|
+| WAN | `vtnet1` on `vmbr0`, static `.68` | **`igb0` = nx-02's `eno2` by PCI passthrough** (`machines.yaml` `nx-02.router_wan_pci`), DHCP, `spoofmac` = Big Data's `em0` (`opnsense.wan_mac`) — uncabled |
+| management + egress | the WAN | `opt9` "MGMT" = `vtnet1` on `vmbr0`, static `.68` (`opt9`: prod's `opt1..3` are its spare card ports, and the score aligns interfaces by key) — the real router has none |
+| identity | minted per run | **carried from the newest FU-013 backup** (below) |
+| score map | `compare-map.txt` | `compare-map-router.txt` first, then the base map minus its `interfaces/wan/**` wildcard — here the WAN is comparable |
+| metrics | the box's textfile | none (the weekly score stays the plain drill's) |
+
+**The WAN must be dark.** With Big Data's MAC spoofed, a cabled `eno2` would take the ISP lease
+from the live router. The bootstrap's `create` refuses a WAN NIC with carrier (it raises an
+admin-down port to read it, then lowers it again), one enslaved to a bridge, one that holds a
+host address, and one that shares its IOMMU group. A NIC left on `vfio-pci` by a previous run
+is first handed back to its host driver, because without a host netdev there is no carrier to
+read. The rehearsal then asserts `no carrier` from inside the VM (`wan_dark`).
+
+**The carry** ([`opnsense/test-vm/seed-shape.py`](../opnsense/test-vm/seed-shape.py)). The drill
+fetches the newest object by port-forward to Garage, which needs none of the router's VIPs. It
+decrypts it with the wallet's age identity into the 0700 secret dir, and the bootstrap's `render`
+splices identity into the seed:
+
+- `trust`: every `<cert>` + `<ca>` with its refids, plus the GUI's `ssl-certref`;
+- `acme`: `OPNsense/AcmeClient` whole — the registered account and the certificate rows bound to
+  those refids;
+- `api-users`: the FU-013 users with their hashed keys, plus root's prod key line appended to the
+  seed's throwaway one.
+
+The decrypted file is deleted right after the build, and the seed ISO follows the bootstrap's
+usual path: a 0600 file on nx-02 for the first boot only. Never carried: anything a play owns.
+`wireguard` exists in the script but is off by default, because it is the operator's call
+([`router-move.md`](router-move.md) §The identity). A carried cert that falls due for renewal
+during the run would renew FROM the rehearsal, which means a real LE order and a Cloudflare write
+with prod's token. So the drill refuses while any carried cert is ≥ 58 days old (os-acme-client
+renews at 60).
+
+**Extra probes:** `wan_dark`, `wan_mac`, and `carried_key_{root,backup_puller,automation}`. Each
+key probe calls an endpoint the user's privileges allow, using prod's wallet pair against the
+rehearsal VM, and wants HTTP 200: no consumer re-keys on the move. `real_cert` wants HAProxy's
+first VIP to serve the carried Let's Encrypt certificate for its SNI, where the plain drill
+serves the harness's self-signed fixture.
+
+Under `--router` the base map's "matched nothing" list is long by construction: the carried users
+and certificates now equal prod's, so their env/accepted lines have nothing left to explain. Read
+that list on the plain drill only.
+
+**First run (2026-09-29 night): PASS, score 7, all twelve probes green.** The WAN was dark and
+wore `em0`'s MAC; prod's three API pairs answered 200; HAProxy served the carried LE cert; the
+users role minted nothing. The rows were the WAN's own shape (prod's `WAN_GW` dynamic default
+gateway, `gateway` on the interface, a `descr`, an inert IPv6 field), the users' `nextuid`
+counter, and SystemHealth (#2129). The seed now writes prod's WAN gateway, and the maps take
+the rest.
+
 ### On the management box — weekly, with metrics and belts
 
 The box ([`management-box.md`](management-box.md)) runs it: `mgmt-opnsense-drill.timer`, **Sundays
