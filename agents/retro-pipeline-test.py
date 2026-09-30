@@ -92,6 +92,36 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             p.run('bash', '-ec', source, env=env)
 
+    def test_harvest_retry_restores_report_after_checkout(self):
+        import os
+        repo = self.root / 'repo'
+        repo.mkdir()
+        env = dict(os.environ, GIT_AUTHOR_NAME='Test', GIT_AUTHOR_EMAIL='test@example.invalid',
+                   GIT_COMMITTER_NAME='Test', GIT_COMMITTER_EMAIL='test@example.invalid')
+        def git(*args):
+            return p.run('git', *args, cwd=repo, env=env)
+        git('init', '-b', 'master')
+        git('commit', '--allow-empty', '-m', 'base')
+        git('remote', 'add', 'origin', str(repo))
+        git('checkout', '-b', 'retro/retry')
+        reports = repo / 'docs/agents/retros'
+        reports.mkdir(parents=True)
+        report = reports / '2026-09-28-platform-r6-opus.md'
+        report.write_text('previous report')
+        git('add', '.'); git('commit', '-m', 'published report')
+        git('update-ref', 'refs/pull/123/head', 'HEAD')
+        git('checkout', 'master')
+        git('branch', '-D', 'retro/retry')
+        reports.mkdir(parents=True, exist_ok=True)
+        report.write_text('retry report')
+        source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
+        block = source.split('              mkdir -p /tmp/retro-reports', 1)[1].split('              git add docs/agents/retros/', 1)[0]
+        block = 'mkdir -p /tmp/retro-reports' + block
+        block = block.replace('/tmp/retro-reports', str(self.root / 'saved'))
+        prefix = 'DATE=2026-09-28; STACK=platform; RUN=r6; BR=retro/retry; gh() { echo https://github.com/o/r/pull/123; }; '
+        p.run('bash', '-ec', prefix + block, cwd=repo, env=env)
+        self.assertEqual(report.read_text(), 'retry report')
+
     def test_workflow_shares_guard_artifact(self):
         # Read shipped manifest via the pinned yq tool; do not copy its DAG into the test.
         path = Path(__file__).parent / 'coordinator/retro-argo.yaml'

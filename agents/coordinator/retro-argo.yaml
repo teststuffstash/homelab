@@ -345,7 +345,6 @@ spec:
               cd /work/homelab
               STACK="{{workflow.parameters.stack}}"
               DATE=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["prepared_at"][:10])')
-              RUN=$(ls docs/agents/retros/ | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
               RUN=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["run_id"])')
               # The cell→log pairing, threaded from the workflow's OWN parameters (homelab#248).
               LOG_A=/work/log-a; CELL_A="{{workflow.parameters.cellA}}"
@@ -429,7 +428,9 @@ spec:
               cp docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md /tmp/retro-reports/
               EXISTING_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state all --json url --jq '.[0].url // empty')
               if [ -n "$EXISTING_PR" ]; then
-                git fetch -q origin "$BR"
+                # Remove newly harvested untracked paths before checking out the retry branch.
+                rm docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md
+                git fetch -q origin "refs/pull/${EXISTING_PR##*/}/head"
                 git checkout -B "$BR" FETCH_HEAD
                 cp /tmp/retro-reports/*.md docs/agents/retros/
               else
