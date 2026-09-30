@@ -12,12 +12,11 @@
 # host + standby flag ansible/router-nodes/inventory.yml's.
 #
 # THE KILL SWITCH. Armed before the first boot, on the hypervisor itself (it keeps working when
-# the LAN does not): tcpdump on the node's LAN tap (every frame its LAN NIC emits — a capture on
-# vmbr0 would miss unicast ARP replies between other ports) waits for ONE frame that would mean
-# the node is not inert — an ARP claiming 192.168.2.1 or any 192.168.3.x (prod's HAProxy VIPs), a
-# DHCP server reply (udp sport 67), a BGP SYN (tcp dport 179), anything sourced from .1 or
-# 3.0/24, an IPv6 router advertisement — and `qm stop`s the VM. It re-attaches across VM
-# restarts (the tap is re-created) and stays armed until disarmed; its log says what tripped it.
+# the LAN does not): the `router-killswitch@<vmid>` unit (ansible/pve-router-killswitch.yml — the
+# watch itself, its filter and the trip latch are documented in that role's router-killswitch.sh)
+# stops the VM on ONE frame that would mean the node is not inert, and sets onboot 0 so a host
+# reboot does not bring it back. Enabled at every host boot, ordered before pve-guests. These
+# verbs start/stop/read the unit; the play installs it.
 #
 # Inert BY CONSTRUCTION, the switch is the belt: the seed's standing shape (DHCP off, ACME
 # auto-renewal off, no WAN rules — opnsense/test-vm/seed-shape.py --standing) and every play run
@@ -42,31 +41,19 @@ pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"
 KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"
 kp() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$KDB" "$1" 2>/dev/null; }
 TAP="tap${VMID}i0"
-KS_LOG="/root/router-killswitch-$VMID.log"; KS_PID="/root/router-killswitch-$VMID.pid"
+KS_UNIT="router-killswitch@$VMID.service"; KS_LOG="/var/log/router-killswitch/$VMID.log"
 
 killswitch_arm() {
-  pve "sh -s $VMID $TAP $LAN_MAC $KS_LOG $KS_PID" <<'SH'
-vmid=$1 tap=$2 mac=$3 logf=$4 pidf=$5
-if [ -f $pidf ] && kill -0 $(cat $pidf) 2>/dev/null; then echo "kill switch already armed (pid $(cat $pidf))"; exit 0; fi
-[ ! -f $logf ] || mv $logf $logf.prev   # a fresh log per arming: `check` counts THIS arming's trips
-filt="ether src $mac and ( (arp and (arp[14:4] = 0xc0a80201 or (arp[14:2] = 0xc0a8 and arp[16] = 3))) or (udp src port 67) or (tcp dst port 179 and tcp[13] & 2 != 0) or (ip src 192.168.2.1) or (ip src net 192.168.3.0/24) or (icmp6 and ip6[40] = 134) )"
-nohup setsid sh -c "
-  echo \"\$(date -u +%FT%TZ) armed for vm $vmid on $tap ($mac)\" >> $logf
-  while :; do
-    while [ ! -e /sys/class/net/$tap ]; do sleep 0.2; done
-    if tcpdump -l -n -e -c 1 -i $tap '$filt' >> $logf 2>/dev/null; then
-      echo \"\$(date -u +%FT%TZ) TRIPPED - qm stop $vmid\" >> $logf
-      qm stop $vmid --skiplock 1 >> $logf 2>&1
-      rm -f $pidf; exit 0
-    fi
-    sleep 0.2
-  done" >/dev/null 2>&1 &
-echo $! > $pidf
-sleep 1; kill -0 $(cat $pidf) && echo "kill switch armed (pid $(cat $pidf)), log $logf"
-SH
+  pve "systemctl cat $KS_UNIT >/dev/null 2>&1" \
+    || die "$KS_UNIT is not installed on $PVE — run: devbox run -- ansible-playbook ansible/pve-router-killswitch.yml"
+  pve "systemctl is-enabled -q $KS_UNIT" || die "$KS_UNIT is not enabled — is $VMID in $PVE's host_vars pve_router_killswitch_vmids?"
+  if pve "systemctl is-active -q $KS_UNIT"; then log "kill switch already armed"; return 0; fi
+  # a fresh log per arming: `check` counts THIS arming's trips
+  pve "[ ! -f $KS_LOG ] || mv $KS_LOG $KS_LOG.prev; systemctl start $KS_UNIT; sleep 1; systemctl is-active -q $KS_UNIT" \
+    && log "kill switch armed ($KS_UNIT), log $KS_LOG" || die "$KS_UNIT did not start"
 }
-killswitch_disarm() { pve "[ -f $KS_PID ] && { pkill -P \$(cat $KS_PID) tcpdump; kill \$(cat $KS_PID); rm -f $KS_PID; echo disarmed; } || echo 'not armed'; echo \"\$(date -u +%FT%TZ) disarmed\" >> $KS_LOG"; }
-killswitch_status() { pve "if [ -f $KS_PID ] && kill -0 \$(cat $KS_PID) 2>/dev/null; then echo armed; else echo NOT-ARMED; fi; c=\$(grep -c TRIPPED $KS_LOG 2>/dev/null); echo \${c:-0}"; }
+killswitch_disarm() { pve "systemctl stop $KS_UNIT; echo \"\$(date -u +%FT%TZ) disarmed\" >> $KS_LOG; echo 'disarmed (still enabled: re-arms at the next host boot)'"; }
+killswitch_status() { pve "systemctl is-active -q $KS_UNIT && echo armed || echo NOT-ARMED; c=\$(grep -c TRIPPED $KS_LOG 2>/dev/null); echo \${c:-0}"; }
 
 API_CURL=''
 api_setup() {  # prod's wallet pair — carried to the node, so it authenticates there too
@@ -112,6 +99,9 @@ check() {
   v="$(api dyndns/settings/get 2>/dev/null | jq -r '.ddclient.general.enabled' || true)"; [ "$v" = 0 ] && ok "ddclient off" || no "ddclient enabled='${v:-unread}'"
   v="$(api acmeclient/settings/get 2>/dev/null | jq -r '.acmeclient.settings.autoRenewal' || true)"; [ "$v" = 0 ] && ok "ACME auto-renewal off" || no "ACME autoRenewal='${v:-unread}'"
   v="$(killswitch_status | tr '\n' ' ')"; case "$v" in "armed 0 ") ok "kill switch armed, never tripped";; *) no "kill switch: $v";; esac
+  v="$(pve "systemctl is-enabled $KS_UNIT; qm config $VMID | sed -n 's/^onboot: //p'" | tr '\n' ' ' || true)"
+  [ "$v" = "enabled 1 " ] && ok "survives a host reboot (switch enabled, onboot 1)" \
+    || no "host reboot: switch/onboot '$v' (want 'enabled 1' — the play + tofu on_boot; onboot 0 after a trip is the latch)"
   echo "== prod unharmed"
   v="$(pve "ping -c1 -W1 192.168.2.1 >/dev/null; ip neigh show 192.168.2.1 | awk '{print \$5}'" || true)"
   [ -n "$v" ] && [ "$v" != "$LAN_MAC" ] && ok ".1 is at $v (not the node)" || no ".1 resolves to '${v:-nothing}'"

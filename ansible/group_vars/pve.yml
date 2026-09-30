@@ -31,3 +31,9 @@ pve_textfile_dir: /var/lib/prometheus/node-exporter
 # that is not there. Default empty ⇒ a hypervisor with no flagged VM is a clean no-op.
 pve_serial_log_dir: /var/log/qemu-serial
 pve_serial_log_vmids: []
+
+# --- pve-router-killswitch (ADR-144, the standing router nodes' kill switch) ---
+# The vmids whose LAN tap a router-killswitch@<vmid> unit watches (docs/router-move.md §Building a
+# standing node). PER HOST, like the serial-log list: a vmid only exists on its hypervisor. A
+# vmid belongs here iff it is a standing router node in tofu/opnsense-router.tf. Default empty.
+pve_router_killswitch_vmids: []
