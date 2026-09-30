@@ -232,6 +232,21 @@ a heartbeat — so the pair is watched from OUTSIDE the guests. `RouterPairMaste
 1 m): masters ≠ 1 — 2 is split-brain, 0 is nobody routing (a failover's ~4 s dip rides under the
 `for:`). `RouterWanGateSilent`: a stale heartbeat or fewer than two gates — the count unreadable.
 
+**The split-brain drill** (2026-09-30, detector first): an ebtables rule on nx-02
+(`ebtables -I FORWARD -o tap9170i0 -p IPv4 --ip-proto 112 -j DROP`) cut the adverts into nx-02's
+node; it promoted itself within seconds — both gates read MASTER, both WAN links went up, and the
+second node took the fake ISP's one lease too: exactly the hazard. `RouterPairMasterCount` went
+pending at +38 s and **fired at +1 m 47 s with value 2**; deleting the rule healed it (nx-02 back to
+BACKUP, a held flow through the pair untouched) and the alert cleared within 35 s. The belt reaches
+the failure on its own — the fix order it names (find the advert path, then maintenance-mode one
+node) is the recipe.
+
+**Cold start** (2026-09-30, the host-reboot stand-in): nx-02's node shut down with both its units
+stopped, the units started as boot would (`Before=pve-guests`, verified declaratively), then
+Proxmox's own `startall` brought up the onboot VM — the gate forced the fresh taps' WAN down
+before any advert, the node rejoined as BACKUP, `check` green. A real nx-02 reboot (drain wk-04,
+cp-02 down, etcd 2/3) stays an attended window, not an overnight drill.
+
 **Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
 of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
 LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
@@ -308,3 +323,9 @@ The window (Big Data still cabled, powered off at its start):
 - 2026-09-30 late: **rolling-update drill R1** (maintenance + 3 reboots, flows kept, seconds of
   disruption) and the pair's **belt** (`RouterPairMasterCount`, `RouterWanGateSilent` from the WAN
   gates' textfile metrics, promtool-fixtured). **Next:** the split-brain drill fires it.
+- 2026-09-30 night: **split-brain drill** — `RouterPairMasterCount` fired on the real condition
+  (value 2, +1 m 47 s) and cleared on heal; **cold-start drill** (units + `startall`) green. The
+  drill list from the operator's 2026-09-30 question is done except the attended host reboot.
+  **Left for the window, each an operator call:** DHCP active/passive (dnsmasq has no CARP
+  awareness — Kea's HA mode, or a gate-style toggle, is a fork), and Cilium's per-node peers +
+  router-ids (a live cluster BGP change that redefines `CiliumBGPAllSessionsDown`).
