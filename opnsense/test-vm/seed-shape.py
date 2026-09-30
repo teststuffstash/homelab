@@ -23,7 +23,8 @@ rehearsal has the why.
              api-users  the non-root users of group_vars opnsense_api_users (backup-puller,
                         automation) with their API keys (hashed), and root's prod API key lines
                         appended to the seed's own — so every consumer's key authenticates
-             wireguard  OPNsense/wireguard (the server keypair; OPERATOR CALL, not a default)
+             wireguard  OPNsense/wireguard whole: the server keypair (so the road-warrior
+                        clients need no re-issue — operator ruling 2026-09-30) + its peers
 The input holds every router secret: never print a value. Output = the seed, which the bootstrap
 burns onto a 0600 ISO on nx-02 and deletes after the first boot.
 """

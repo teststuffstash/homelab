@@ -162,8 +162,9 @@ PY
 )"
   [ -z "$stale" ] || die "carried cert(s) within 2 days of renewal — let prod renew first: $(echo $stale)"
   export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
-         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users
+         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard
   TEXTFILE_FORCE_OFF=1
+  PROBE_EXTRA_PKGS=python3-cryptography   # scripts/wireguard-handshake-probe.py, the wg_handshake probe
   # The router overlay first (first match wins), then the base map minus its two WAN wildcards
   # (the interface + its gateway): in this shape the WAN IS comparable (DHCP on a real NIC, like prod's).
   MAP="$WORK/compare-map.txt"
@@ -211,7 +212,7 @@ probe_create() {
         --net2 name=eth2,bridge=$LAN_BRIDGE,ip=manual \
         --nameserver 192.168.1.1 --start 1 >/dev/null"
   probe_ct "bash -c 'for i in \$(seq 1 30); do getent hosts deb.debian.org >/dev/null && break; sleep 2; done'"
-  probe_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends frr isc-dhcp-client dnsutils curl openssl ca-certificates >/dev/null'"
+  probe_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends frr isc-dhcp-client dnsutils curl openssl ca-certificates ${PROBE_EXTRA_PKGS:-} >/dev/null'"
   # The fake peer: cluster ASN, the router as its neighbour, one LB-shaped /32 announced.
   # `no bgp network import-check`: announce without a RIB route; `no bgp ebgp-requires-policy`:
   # the peer side needs no route-map (the ROUTER's side keeps prod's CILIUM-ALLOW-ALL).
@@ -422,6 +423,15 @@ if [ "$ROUTER" -eq 1 ]; then
   iss="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | openssl x509 -noout -issuer -subject'" 2>/dev/null | tr '\n' ' ' || true)"
   probe real_cert "$(echo "$iss" | grep -q "Let's Encrypt" && echo "$iss" | grep -q "$hn" && echo 1 || echo 0)" \
     "VIP \`$hv:443\` SNI \`$hn\` serves \`$(echo "${iss:-nothing}" | cut -c1-110)\` (want the carried LE cert)"
+  # The carried WireGuard server key: a real Noise handshake from the LAN side (the WAN is dark),
+  # as the laptop peer, against PROD's server pubkey — so the road-warrior clients keep working
+  # across the move with no re-issue. The peer's private key goes over stdin, never argv.
+  wgpub="$(curl -sk -K "$SEC/prod.curl" --max-time 20 "https://$PROD/api/wireguard/server/search_server" \
+             | jq -r '.rows[] | select(.name == "roadwarrior") | .pubkey' 2>/dev/null || true)"
+  pve "pct exec $CTID -- sh -c 'cat > /root/wg-probe.py'" < "$ROOT/scripts/wireguard-handshake-probe.py"
+  hs="$(_kpw wireguard-laptop-privkey | pve "pct exec $CTID -- timeout 30 python3 /root/wg-probe.py 192.168.1.1 51820 - $wgpub" 2>&1 | tail -1 || true)"
+  probe wg_handshake "$([ -n "$wgpub" ] && [ "${hs%% *}" = HANDSHAKE_OK ] && echo 1 || echo 0)" \
+    "laptop peer → \`192.168.1.1:51820\` against prod's server pubkey \`${wgpub:0:8}…\`: \`$(echo "${hs:-no output}" | cut -c1-80)\` (want HANDSHAKE_OK)"
 fi
 
 # ================================================================ compare =======================

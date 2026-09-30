@@ -16,3 +16,13 @@ env    drill-only  OPNsense/Gateways/gateway_item[MGMT_GW]/**
 accepted  prod-only  interfaces/wan/dhcp6-ia-pd-len | prod:.=0 prod:/OPNsense/Interfaces/settings/disableipv6=1
 # ── (c) accepted: the carried API users advance the uid counter — bookkeeping, not config ─────
 accepted  *          system/nextuid
+# ── (c) accepted: prod's WAN_GW predates 26.7's gateway model — three flags stored EMPTY where a
+#    26.7 build writes 0, and three newer flags absent. Accepted in that dead state only (prod
+#    empty / drill 0): a flag switched on either side counts again; the next save of prod's item
+#    writes the defaults and these lines then match nothing (delete them).
+accepted  value       OPNsense/Gateways/gateway_item[WAN_GW]/fargw | prod:.= drill:.=0
+accepted  value       OPNsense/Gateways/gateway_item[WAN_GW]/monitor_noroute | prod:.= drill:.=0
+accepted  value       OPNsense/Gateways/gateway_item[WAN_GW]/force_down | prod:.= drill:.=0
+accepted  drill-only  OPNsense/Gateways/gateway_item[WAN_GW]/monitor_killstates | drill:.=0
+accepted  drill-only  OPNsense/Gateways/gateway_item[WAN_GW]/monitor_killstates_priority | drill:.=0
+accepted  drill-only  OPNsense/Gateways/gateway_item[WAN_GW]/nosync | drill:.=0

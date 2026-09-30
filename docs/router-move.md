@@ -58,7 +58,7 @@ Also physical, not code: `sensor.plug_opnsense_power` (HA `power.yaml`, the dash
 | The registered ACME account + its certificate rows | renewal; a fresh account would re-register (FU-298's 404) and re-issue 17 certs against LE's weekly limit | carried (`acme`) — acme.sh renews on its 60-day clock from there | same |
 | API users `backup-puller`, `automation` + their keys; root's API key | the backup CronJob's ESO secret, the box's `OPN_API_*` belts, every playbook | carried (`api-users`: the users with their hashed keys; root's prod key lines appended to the seed's own) — no key is re-minted, so nothing in the wallet/Infisical flips | rehearsal-proven (below); the users role then finds each user WITH a key and mints nothing |
 | WAN MAC (`em0`, `machines.yaml` `opnsense.wan_mac`) | the ISP lease (and the public IP ddclient publishes) | `spoofmac` on `igb0` | rehearsal-proven (below) |
-| WireGuard server keypair | the two client configs | **operator call** — (a) carry from the backup (`seed-shape.py` has the `wireguard` item, off by default), (b) export to the wallet + an import path, (c) re-issue both clients | open |
+| WireGuard server keypair | the two client configs | **carried** (`wireguard`: the whole section — operator 2026-09-30 chose (a) over (b) export to the wallet + an import path and (c) re-issue both clients: the key already rides every encrypted backup, and no client is touched; (c) stays the lost-everything fallback, (b) returns with CARP's shared-key question) | rehearsal-proven (below): `wg_handshake` |
 | root password | the console / GUI login | no wallet entry; the backup has its hash — carrying it is one more `api-users`-shaped line | open (operator) |
 | hostname | the GUI title, syslog | prod reads `OPNsense`; the seed writes one — the cutover seed must write prod's | trivial, at the cutover build |
 
@@ -97,5 +97,8 @@ The window (Big Data still cabled, powered off at its start):
   (#2128), plain drill score 12 → SystemHealth pinned (#2129). The rehearsal
   (`scripts/opnsense-drill.sh --router`) PASSES with every identity probe green; the numbers are in
   [`opnsense-test-vm.md`](opnsense-test-vm.md) §The router rehearsal.
-- **Operator calls still open:** the WireGuard key (§The identity), the root password, the
+- 2026-09-30: the WireGuard key carried (`wg_handshake` green), the (B) address read from the
+  inventory by every jail-side shell consumer, and the rehearsal's **score 0** — the cutover
+  gate's number for this shape.
+- **Operator calls still open:** the root password (§The identity), the
   cutover build's management path (§The cutover).
