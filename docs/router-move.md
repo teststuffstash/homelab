@@ -9,8 +9,10 @@ move is that drill's router shape (§The router rehearsal there). Addresses: [`i
 as LAN) and becomes a VM on `nx-02`, built from git: WAN = nx-02's `eno2` by PCI passthrough,
 LAN = a virtio NIC on `vmbr0`. It keeps **`192.168.2.1`** — so the move changes no consumer's
 address, and the only things that must come across are the router's **identity**. Big Data stays
-cabled and powered off as the fallback for 1–2 weeks, then its card goes to `pve` (sub-step 3).
-No hardware changes until the switches arrive (TL-SG1016D, hardware `purchases.md`).
+cabled and powered off as the fallback for 1–2 weeks, then retires. **Since ADR-144 (2026-09-30)
+the move is to a CARP PAIR built beside Big Data** — the nx-02 VM and a `pve` VM (which gets a
+single-port x1 NIC for its WAN; Big Data's card never moves), each standing at its own LAN IP
+before the window; the identity below is carried onto both.
 
 ## What the consumers need — the single-router inventory (2026-09-29)
 
@@ -67,29 +69,30 @@ git, and the drill's score says how much of prod that is.
 
 ## The cutover — a config flip plus one window
 
-Built BEFORE the window, in isolation: the VM exactly as the rehearsal builds it, but in the
-cutover shape — prod's LAN addressing (`192.168.2.1/22` — the `/22`-vs-ADR-088 question is still
-the CARP ruling's, the move copies prod as it is) on the port-less bridge, no `opt9`, prod's
-hostname. **Open fork — the management path of that build:** a vmbr0 management NIC cannot sit
-beside a LAN that is `/22` over the same addresses (the rehearsal remaps its LAN to `1.0/24` for
-exactly this reason). Options: (1) build in the rehearsal shape and change the LAN address +
-drop `opt9` as the window's first act, through the API over `opt9` (one more changed thing
-inside the window); (2) reach the isolated LAN through a transport on nx-02 (a veth into the
-bridge in a network namespace, `socat` over ssh) and never give the VM a management NIC;
-(3) give the router a permanent management interface on its own segment — the management
-network ROADMAP §HA step 2 already lists (NX BMCs + the box's second NIC). **Recommendation: (3)
-if the management switch lands with the WAN switch** (it is the CARP pair's need anyway, and it
-removes the special case); (1) otherwise.
+**The standing nodes** (ADR-144 — this replaces the management-path fork: a temporary
+management NIC, a tunnel into an isolated bridge, a permanent management segment). Each node is
+built in its final shape and **stands on the real LAN at its own address before the window**:
+nx-02's at `192.168.2.70`, pve's at `192.168.2.71` (`/22`, prod's LAN mask — the `/22`-vs-ADR-088
+question stays the CARP ruling's). That address is the node's `ansible_host` for good, so the jail
+manages it like any host and nothing is re-addressed later. Until the window a standing node must
+be **inert**: no `.1` on it, DHCP off, its WAN uncabled (it wears `em0`'s MAC — the bootstrap
+refuses carrier), and its BGP neighbours silent. CARP is learned on the pair meanwhile with a trial
+VIP from `192.168.3.0/24`. The WAN: pve's is a Realtek x1 card — Linux drives it, bridged on the
+host (virtio into the VM, never passthrough: FreeBSD's Realtek driver and the X99 chipset slot's
+IOMMU grouping both argue against it). Proposed (seat, 2026-09-30 — not yet ruled): nx-02's `eno2`
+moves to the same bridged shape so the two nodes are identical; the rehearsal proves passthrough
+today. The dark-WAN guard would gain the bridged variant (carrier, no host address).
 
 The window (Big Data still cabled, powered off at its start):
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).
-2. `qm set <vmid> --net0 virtio,bridge=vmbr0` — the VM's LAN onto the real LAN; ONT → the WAN
-   switch → `eno2`.
+2. `.1` onto the pair (the CARP VIP, or a plain address on one node if the trial says the first
+   step should be smaller), DHCP on; ONT → the WAN switch → the `.1` holder's WAN (only that one
+   cabled — the single-lease rule).
 3. Checks: WAN lease on the spoofed MAC (same public IP → ddclient no-op), BGP 13/13
    Established, a LAN DHCP lease, Unbound answering, every HAProxy name over TLS, the
    WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
-4. Fallback at any failed check: VM off, Big Data on — it never lost its config.
+4. Fallback at any failed check: `.1` off the pair, Big Data on — it never lost its config.
 
 ## Status
 
@@ -100,6 +103,7 @@ The window (Big Data still cabled, powered off at its start):
 - 2026-09-30: the WireGuard key carried (`wg_handshake` green), the (B) address read from the
   inventory by every jail-side shell consumer, and the rehearsal's **score 0** — the cutover
   gate's number for this shape.
-- 2026-09-30: root = the wallet's `opnsense-root-password` (operator), rehearsal-proven.
-- **Operator calls still open:** the
-  cutover build's management path (§The cutover).
+- 2026-09-30: root = the wallet's `opnsense-root-password` (operator), rehearsal-proven (#2136).
+- 2026-09-30: ADR-144 — the CARP pair built beside Big Data, each node standing at its own LAN IP
+  (`.70` nx-02, `.71` pve), which closes the management-path fork. **Next:** the standing nx-02
+  node, then pve's NIC + node, then the CARP trial.
