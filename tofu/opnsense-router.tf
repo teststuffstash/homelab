@@ -130,7 +130,7 @@ resource "proxmox_virtual_environment_vm" "opnsense_router_pve" {
   tags      = sort(["opnsense", "router"])
 
   started = false
-  on_boot = false # NEW node: flips true once built (header)
+  on_boot = true # built + standing 2026-09-30; kill switch host_vars pve-host.yml
 
   cpu {
     cores = 2
