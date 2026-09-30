@@ -39,7 +39,7 @@ LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, is
 LAN_BITS=24
 LAN_DHCP_START=192.168.1.100
 LAN_DHCP_END=192.168.1.199
-SERIES=26.7.4                                      # prod's version (GET /api/core/firmware/info)
+SERIES=26.7.5                                      # prod's version = the series head the mirror serves (= 9110's baseline)
 NANO_VERSION=26.7                                  # = tofu var.opnsense_test_nano_version (the birth image)
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
