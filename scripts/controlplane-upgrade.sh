@@ -5,6 +5,15 @@
 # side of it. Run from the management box checkout:
 #
 #   devbox run cp-upgrade -- cp-01
+#   bash scripts/controlplane-upgrade.sh cp-01 down|up   # a CP maintenance window (hardware on its
+#                                                        host): what `node-maintenance.sh down|up
+#                                                        <cp>` hands off to
+#
+# `down` runs the SAME pre-gates as an upgrade (three Ready CPs, odd healthy etcd, another API
+# endpoint, clean Cilium, a snapshot), moves etcd leadership off the target if it holds it, then
+# the shared `down`. `up` runs the shared `up`, then the post-checks (etcd membership whole again,
+# the Cilium backend read + the one sanctioned ds/cilium roll). A CP window is otherwise the
+# shared verb's: drain, silences, declared window, shutdown.
 #
 # THE CILIUM GATE. Upgrading a control plane restarts an apiserver, and on this fleet every
 # apiserver restart leaves Cilium with NO backend for 10.96.0.1:443 on most or all nodes, with
@@ -27,8 +36,9 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-NODE="${1:-}"
-[ -n "$NODE" ] || { echo "usage: $0 <control-plane-node>" >&2; exit 64; }
+NODE="${1:-}"; VERB="${2:-upgrade}"
+[ -n "$NODE" ] || { echo "usage: $0 <control-plane-node> [upgrade|down|up]" >&2; exit 64; }
+case "$VERB" in upgrade|down|up) ;; *) echo "usage: $0 <control-plane-node> [upgrade|down|up]" >&2; exit 64 ;; esac
 
 export KUBECONFIG="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
 export TALOSCONFIG="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
@@ -96,7 +106,9 @@ if [ "$LAB" = 1 ]; then
   [ "$KUBECONFIG" != "$REPO/tofu/kubeconfig" ] || die "LAB=1 refuses homelab's kubeconfig"
   [ -n "${INSTALL_TARGETS:-}" ] && [ -n "${ENDPOINT:-}" ] || die "LAB=1 requires INSTALL_TARGETS and ENDPOINT"
 else
-  [ "$(ready_cps)" -ge 3 ] || die "need at least three Ready, schedulable control planes before a CP upgrade"
+  if [ "$VERB" != up ]; then
+    [ "$(ready_cps)" -ge 3 ] || die "need at least three Ready, schedulable control planes before a CP $VERB"
+  fi
   [ -n "${ENDPOINT:-}" ] || ENDPOINT="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o json | jq -r --arg n "$NODE" '.items[] | select(.metadata.name != $n) | select(.spec.unschedulable != true) | select(any(.status.conditions[]; .type=="Ready" and .status=="True")) | .status.addresses[] | select(.type=="InternalIP") | .address' | head -1)" \
     || die "cannot list the control planes"
   [ -n "$ENDPOINT" ] || die "no other healthy control plane endpoint"
@@ -104,31 +116,54 @@ else
 fi
 export ENDPOINT
 
-members="$(etcd_members "$ip" "$ENDPOINT")" || die "cannot read etcd membership"
-member_count="$(printf '%s\n' "$members" | awk 'NR>1 && NF {n++} END{print n+0}')"
-if [ "$LAB" = 1 ]; then
-  [ "$member_count" -eq 1 ] || die "lab cluster must have exactly one etcd member (got $member_count)"
+if [ "$VERB" = up ]; then
+  # The target is down: read membership through the other endpoint (the member list keeps it).
+  members="$(etcd_members "$ENDPOINT" "$ENDPOINT")" || die "cannot read etcd membership"
+  member_count="$(printf '%s\n' "$members" | awk 'NR>1 && NF {n++} END{print n+0}')"
 else
-  [ "$member_count" -ge 3 ] && [ $((member_count % 2)) -eq 1 ] || die "etcd membership must be odd and >=3 (got $member_count)"
-fi
-assert_etcd_status "$members" "$member_count"
+  members="$(etcd_members "$ip" "$ENDPOINT")" || die "cannot read etcd membership"
+  member_count="$(printf '%s\n' "$members" | awk 'NR>1 && NF {n++} END{print n+0}')"
+  if [ "$LAB" = 1 ]; then
+    [ "$member_count" -eq 1 ] || die "lab cluster must have exactly one etcd member (got $member_count)"
+  else
+    [ "$member_count" -ge 3 ] && [ $((member_count % 2)) -eq 1 ] || die "etcd membership must be odd and >=3 (got $member_count)"
+  fi
+  assert_etcd_status "$members" "$member_count"
 
-# BEFORE: a fleet that already cannot reach the API through the ClusterIP is not a fleet to
-# reboot a control plane on — and it would also make the post-rejoin reading unattributable.
-if [ "$LAB" = 1 ]; then
-  echo "LAB=1: skipping the cilium backend gate (the rehearsal cluster is not this fleet)"
-else
-  crc=0; cilium_check || crc=$?
-  [ "$crc" -eq 0 ] || die "cilium apiserver backend is not clean BEFORE the upgrade (verdict $crc) — fix it first (kubectl -n kube-system rollout restart ds/cilium), re-run 'devbox run maint cilium-check', then start the window"
-fi
+  # BEFORE: a fleet that already cannot reach the API through the ClusterIP is not a fleet to
+  # reboot a control plane on — and it would also make the post-rejoin reading unattributable.
+  if [ "$LAB" = 1 ]; then
+    echo "LAB=1: skipping the cilium backend gate (the rehearsal cluster is not this fleet)"
+  else
+    crc=0; cilium_check || crc=$?
+    [ "$crc" -eq 0 ] || die "cilium apiserver backend is not clean BEFORE the upgrade (verdict $crc) — fix it first (kubectl -n kube-system rollout restart ds/cilium), re-run 'devbox run maint cilium-check', then start the window"
+  fi
 
-mkdir -p "$SNAPSHOT_DIR" || die "cannot create $SNAPSHOT_DIR"
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-snapshot="$SNAPSHOT_DIR/${NODE}-${stamp}.snapshot"
-echo "Snapshotting etcd to $snapshot"
-talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd snapshot "$snapshot" \
-  || die "etcd snapshot failed — nothing touched"
-[ -s "$snapshot" ] || die "snapshot was not created"
+  mkdir -p "$SNAPSHOT_DIR" || die "cannot create $SNAPSHOT_DIR"
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  snapshot="$SNAPSHOT_DIR/${NODE}-${stamp}.snapshot"
+  echo "Snapshotting etcd to $snapshot"
+  talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd snapshot "$snapshot" \
+    || die "etcd snapshot failed — nothing touched"
+  [ -s "$snapshot" ] || die "snapshot was not created"
+
+  # etcd leadership off the target before it goes dark (an upgrade reboots through the same
+  # step): a leader loss costs an election; a forfeit is a clean handover. Read by member id.
+  if [ "$VERB" = down ] && [ "$LAB" != 1 ] && [ "${DRY:-0}" != 1 ]; then
+    # A pipeline's status is awk's, so an unreadable status is caught by the value, not by `||`.
+    role_of() { talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd status 2>/dev/null \
+                  | awk 'NR==2 {print $2 == $8 ? "leader" : "follower"}'; }
+    tid="$(role_of)"
+    case "$tid" in leader|follower) ;; *) die "cannot read the target's etcd leadership — refusing" ;; esac
+    if [ "$tid" = leader ]; then
+      echo "$NODE is the etcd leader — forfeiting leadership"
+      talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ENDPOINT" etcd forfeit-leadership || die "etcd forfeit-leadership failed — nothing touched"
+      sleep 5
+      tid="$(role_of)"
+      [ "$tid" = follower ] || die "$NODE still leads etcd after the forfeit ($tid) — refusing"
+    fi
+  fi
+fi
 
 if [ "$LAB" = 1 ]; then
   export FORCE=1 SILENCE=0
@@ -136,17 +171,23 @@ fi
 # This is deliberately set only after the CP-specific endpoint, quorum, health, and snapshot
 # gates above have all passed. The shared maintenance preflight otherwise refuses CP nodes.
 export CONTROLPLANE_GUARDED=1
-bash "$REPO/scripts/node-maintenance.sh" upgrade "$NODE"   # its 2/4/1 pass through (set -e)
+bash "$REPO/scripts/node-maintenance.sh" "$VERB" "$NODE"   # its 2/4/1 pass through (set -e)
 PHASE=after   # from here every failure is on an upgraded node: exit 1, never a retryable 2
 if [ "${DRY:-0}" = 1 ]; then
-  echo "OK: dry run complete; no control-plane upgrade was attempted"
+  echo "OK: dry run complete; no control-plane $VERB was attempted"
   exit 0
 fi
+if [ "$VERB" = down ]; then
+  # The node is dark: no membership re-read (its member is down by design); the Cilium read
+  # below still runs — an apiserver just left the endpoint set.
+  post_count="$member_count"
+else
 
-post="$(etcd_members "$ip" "$ENDPOINT")" || die "post-upgrade etcd membership unreadable"
+post="$(etcd_members "$ip" "$ENDPOINT")" || die "post-$VERB etcd membership unreadable"
 post_count="$(printf '%s\n' "$post" | awk 'NR>1 && NF {n++} END{print n+0}')"
 [ "$post_count" -eq "$member_count" ] || die "etcd member count changed: $member_count -> $post_count"
 assert_etcd_status "$post" "$post_count"
+fi
 
 # AFTER: the apiserver restarted, so assume the backend is gone until the agents say otherwise.
 # Roll ONCE, on verdict 2 only, and re-read — a second empty reading is not this bug and must
@@ -167,4 +208,4 @@ else
   fi
 fi
 
-echo "OK: $NODE upgraded; etcd membership is whole ($post_count members); cilium holds the apiserver backend; snapshot: $snapshot"
+echo "OK: $NODE $VERB done; etcd membership $([ "$VERB" = down ] && echo "$post_count (this one dark)" || echo "whole ($post_count members)"); cilium holds the apiserver backend${snapshot:+; snapshot: $snapshot}"

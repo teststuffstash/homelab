@@ -376,7 +376,7 @@ preflight() {
     if [ "${CONTROLPLANE_GUARDED:-0}" = 1 ]; then
       ok "control-plane node admitted by controlplane-upgrade.sh after CP-specific gates"
     else
-      fail "control-plane node — use controlplane-upgrade.sh, not this script"
+      fail "control-plane node — \`down\`/\`up\`/\`upgrade\` hand it to controlplane-upgrade.sh; the other verbs refuse"
     fi
   fi
 
@@ -1548,6 +1548,14 @@ upgrade_behind() {
   ok "upgrade-behind ($scope): all ${total} node(s) at their declared version"
 }
 
+# A control plane's down/up/upgrade run through controlplane-upgrade.sh (the etcd quorum, snapshot,
+# leadership and Cilium gates), which re-enters here with CONTROLPLANE_GUARDED=1.
+case "$cmd" in down|up|upgrade)
+  if [ "${CONTROLPLANE_GUARDED:-0}" != 1 ] && [ -n "$NODE" ] && \
+     kubectl get node "$NODE" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+    exec bash "$REPO/scripts/controlplane-upgrade.sh" "$NODE" "$cmd"
+  fi ;;
+esac
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;
