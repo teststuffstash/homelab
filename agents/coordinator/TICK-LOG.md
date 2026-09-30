@@ -11775,3 +11775,18 @@ rehearsal 6 PASS 12/12 probes, **score 6** (prod's WAN gateway_item rows). #2131
 CHANGES_REQUESTED — early `die` paths left the decrypted carry on disk (fixed: secrets-only EXIT
 trap, proven by a forced fetch failure) + nextuid moved to the router overlay; r2 APPROVED,
 **merged** 85b68477. Old worktrees wt-router/wt-master removed.
+
+## 2026-09-30 (late morning) — S9: router rehearsal score 0 (#2133), router address from the inventory (#2132)
+
+Operator: all three — the gateway rows, WireGuard option (a), the single-router references.
+**#2132** (merged 6963982e, first review): the drill's `PROD` + `wireguard-client.sh` read
+`ansible/inventory.yml`; the drill's host check gains a literal `.1` belt; router-move.md (B)
+records the literals that stay (guards, the backup CronJob, the stdlib python defaults). Proof:
+`wireguard-client.sh laptop` re-rendered byte-identical. **#2133** (merged 82c03fce): the
+`--router` seed carries `OPNsense/wireguard`; new probe `wg_handshake` (probe CT as the laptop
+peer, key over stdin, vs prod's live pubkey) — HANDSHAKE_OK; prod's pre-26.7 WAN_GW flags (empty
+vs the 26.7 build's 0, three newer flags absent — read from both live configs off a kept run)
+accepted in that dead state only; negative test force_down=1 → score 1. Rehearsal 8 at the merged
+content: PASS 13/13, **score 0**. Review r1 flagged `search_server` as unverifiable from its
+sandbox — both spellings return the same pubkey on prod; switched to `searchServer` for
+consistency; r2 APPROVED. No jail net failures across rehearsals 5–8 (ARP-flux fix holds).

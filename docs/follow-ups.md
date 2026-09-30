@@ -150,9 +150,10 @@ six OVERSIZE items pointer-ized into
       from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`, VM 9199 + probe LXC on
       `vmbr2`, `MgmtOpnsenseDrill*`) scores prod's click-ops residue — first score 115 (a) rows.
       Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md); the router move it gates
-      (`--router` rehearsal, carried identity, window): [`router-move.md`](router-move.md). **Next:** the score
-      → ≈0 = the CARP cutover gate (ROADMAP §HA step 2): sysctl ruling, unbound settings into the
-      role, prod's dead ISC `dhcpd` block, the ACME `enabled` flag. Relates FU-097, FU-013, FU-298.
+      (`--router` rehearsal, carried identity, window): [`router-move.md`](router-move.md). The router
+      rehearsal reads **score 0** with 13/13 probes (2026-09-30, #2133 — WireGuard key carried).
+      **Next:** the operator calls in router-move.md §Status (root password, the cutover build's
+      management path), then the window. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
