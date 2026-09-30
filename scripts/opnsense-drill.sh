@@ -426,7 +426,7 @@ if [ "$ROUTER" -eq 1 ]; then
   # The carried WireGuard server key: a real Noise handshake from the LAN side (the WAN is dark),
   # as the laptop peer, against PROD's server pubkey — so the road-warrior clients keep working
   # across the move with no re-issue. The peer's private key goes over stdin, never argv.
-  wgpub="$(curl -sk -K "$SEC/prod.curl" --max-time 20 "https://$PROD/api/wireguard/server/search_server" \
+  wgpub="$(curl -sk -K "$SEC/prod.curl" --max-time 20 "https://$PROD/api/wireguard/server/searchServer" \
              | jq -r '.rows[] | select(.name == "roadwarrior") | .pubkey' 2>/dev/null || true)"
   pve "pct exec $CTID -- sh -c 'cat > /root/wg-probe.py'" < "$ROOT/scripts/wireguard-handshake-probe.py"
   hs="$(_kpw wireguard-laptop-privkey | pve "pct exec $CTID -- timeout 30 python3 /root/wg-probe.py 192.168.1.1 51820 - $wgpub" 2>&1 | tail -1 || true)"
