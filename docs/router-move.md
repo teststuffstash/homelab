@@ -102,9 +102,16 @@ Linux drives it, bridged on the host (virtio into the VM, never passthrough: Fre
 driver and the X99 chipset slot's IOMMU grouping both argue against it). **nx-02's `eno2` moves to
 the same bridged shape** (operator, 2026-09-30: *"bridged if there is no performance penalty"*), so
 the two nodes are identical. Both WANs are 1 GbE (I350, RTL8168), so the bar is NAT'd line rate
-through virtio. The rehearsal proves passthrough today; the switch waits on that throughput read
-through the rehearsal's bridged WAN. The dark-WAN guard gains the bridged variant (carrier, no host
-address).
+through virtio. **Measured 2026-09-30 — no penalty, so nx-02 is bridged:**
+`opnsense-drill.sh --router --wan bridged` (2 vCPU, `queues=2`, offloads off as converged) pushed
+2988–3256 Mbit/s through NAT → `vtnet2` → the host bridge, 1 and 4 streams both ways — about 3× line
+rate — and leased on the spoofed MAC through the bridge (`wan_lease`). Score 0. Web reports agree:
+1 Gbit/s over virtio is routine on this CPU class, and passthrough buys CPU headroom, not throughput
+(the numbers + sources: [`opnsense-test-vm.md`](opnsense-test-vm.md) §The router rehearsal). Two knobs
+that matter: the WAN NIC stays `firewall=0` (Proxmox's `macfilter` would drop the spoofed source
+MAC), and OPNsense 26.7's pf SYN cookies must not be `always` on vtnet (opnsense/src#326). pve's
+RTL8168 is the part to watch (the r8169 "transmit queue timed out" class on PVE 8). The dark-WAN
+guard has the bridged variant (host port carrier 0, enslaved, bridge without an address).
 
 The window (Big Data still cabled, powered off at its start):
 
