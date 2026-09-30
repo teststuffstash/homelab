@@ -11809,3 +11809,28 @@ rebase with an explicit lease). Pre-existing, not ours: MgmtOpnsenseDrillScoreRe
 09-29 run, 117 — next weekly run replaces it); OpnsenseConfigUnattributedRevision (root@.165 =
 pop-os, 04:23Z). Stopped before the standing nx-02 node: its standby profile (no VIP aliases, no
 ACME renewal, …) is design only — not a thing to put on the live LAN unattended.
+
+## 2026-09-30 ~12:20–13:30Z — seat: standby profile (#2138), CP verbs (#2137), pve NIC window
+Operator back with 2 × 5-port switches + TP-LINK TG-3468 (hardware purchases.md, 0fdf4a1).
+Rulings: nx-02 WAN bridged "if no performance penalty"; work the standby profile first.
+**#2138:** `opnsense_standby` (BGP neighbours disabled, ACME auto-renewal off, ddclient off,
+dnsmasq off via OPN_DHCP_ENABLE=0, HAProxy VIPs on lo0 + cleared from the other interface);
+`opnsense-drill.sh --router --standby` PASS — standby_{dhcp_off,bgp_silent,vips_off_lan (16/16),
+ddclient_off,acme_no_renewal} + haproxy_tls/real_cert through lo0, WG, keys, root; score 19 =
+the standby deltas. **Correction to the entry above:** OpnsenseConfigUnattributedRevision was NOT
+the operator in the web GUI (operator: "did not configure anything") — the backup job's detail:
+`/api/diagnostics/netflow/setconfig` by root@.165 at 2026-09-29T20:06Z = the seat's own
+opnsense-system play on the root key (FU-013 next: playbooks onto `automation`); 04:23Z is the
+backup run, not the change. **pve window** seat-1790772187-4679: wk-03/wk-01/wk-02 via
+`node-maintenance down` (FORCE for the attached-volume/single-replica WARNs; eventbus PDB
+minAvailable 2 held — the manual js-1 wait was redundant, operator asked), cp-01 via the NEW CP
+path (operator: "node maintenance should take control plane as argument" → #2137): gates +
+snapshot + etcd forfeit (leader → cp-02) + drain + shutdown; the first run died at down's Longhorn
+read on a CP (fixed in-PR, rerun after an uncordon). ci-runner-01 idle, matchbox, then — BEFORE
+poweroff — the onboard RTL8168 pinned `nic0` (the new card is the same chip; it took 06:00.0 and
+the name enp6s0, the onboard moved to 07:00.0: unpinned, vmbr0 would have bridged the uncabled
+card and pve booted offline). Up: all four via `up` (cp-01: etcd 3 whole, cilium 13/13).
+CiliumUnreachableNodes = stale cilium-health results frozen mid-boot, self-cleared (GAPS
+maintenance-window-G5 resight). Closed --force over NodeRebooted + PodSigkilled (G5's class).
+#2137 review: pipefail fail-open (fixed); the column claim came from the fixture (the live layout
+differs; the leader is now read by value). BIOS AC-loss unreadable headless — operator item 4.

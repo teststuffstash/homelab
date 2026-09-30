@@ -54,10 +54,15 @@ never the session's arc — that is TICK-LOG's.)
   SERIES bumped + 9110 baseline moved (#2134) and PROD updated in window seat-1790760478-4482
   (operator-approved; 16 s, no reboot, all checks baseline); **ADR-144** (#2135): the CARP pair is
   built beside Big Data — nx-02 node `.70`, pve node `.71` (operator buying a 1 GbE x1 card for
-  pve: Realtek → host-bridged WAN, not passthrough), each managed at its own IP. **NEXT:** the
-  standby profile of the plays (router-move.md's inert rules: no `.1`, no 3.0/24 VIP aliases,
-  DHCP/FRR/ddclient/ACME-renewal off) + a probe per rule, THEN the standing nx-02 node on vmbr0 —
-  attended, not unattended. Proposed, unruled: nx-02's `eno2` bridged too, for symmetry.
+  pve: Realtek → host-bridged WAN, not passthrough), each managed at its own IP. **2026-09-30 afternoon:** the standby profile = **#2138**
+  (`opnsense_standby`; rehearsal `--router --standby` PASS, 5 inert probes + real cert/WG green) —
+  in review. nx-02 WAN **bridged** (operator: if no performance penalty) — the throughput read
+  through a bridged rehearsal WAN is unbuilt. **pve's TG-3468 FITTED** (window
+  seat-1790772187-4679): `06:00.0` `enp6s0` `ac:a7:f1:b3:25:95`, x1 2.5 GT/s, own IOMMU group,
+  unconfigured; the onboard RTL8168 moved to `07:00.0` and is PINNED `nic0`
+  (`pve-network-interface-pinning`; vmbr0 = nic0 — unpinned, pve would have booted offline).
+  **NEXT:** #2138 merges → the standing nx-02 node on vmbr0 at `.70` (attended) → the bridged-WAN
+  throughput read → pve's node.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
   client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →
@@ -149,8 +154,9 @@ never the session's arc — that is TICK-LOG's.)
   It needs your push + a jail rebuild, and the host profile wants the same export.
   (3) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
-  (4) pve's CMOS clear reset "Restore on AC Power Loss". Read it next time a card is fitted, or pve stays
-  dark after a power cut.
+  (4) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless (no GPU; the 09-30 card
+  fit could not check it): a monitor/GPU visit or a deliberate plug-pull test. Until then pve may
+  stay dark after a power cut.
   (5) Human-next-mover PRs: **circles-iac#108** (claim egress `none → python`, un-armed; flipping enforce
   under `none` hangs every uv call), sleep-iac#80, sleep-tracking#143.
   (6) Operator/seat sittings, open: #1237 (E1), #1238 (E2), #1224 (parts-coverage), #1280 (held for
