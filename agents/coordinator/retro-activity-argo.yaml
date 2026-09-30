@@ -1,0 +1,75 @@
+# FU-058: collection and reconciliation are deterministic; the weekly LLM run stays separate.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: retro-activity
+  namespace: agent-coordinator
+spec:
+  serviceAccountName: agent-coordinator
+  entrypoint: run
+  arguments:
+    parameters:
+      - { name: action, value: collect }
+  activeDeadlineSeconds: 7200
+  templates:
+    - name: run
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            auth="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -q -c "$auth" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            python3 agents/retro_pipeline.py "{{workflow.parameters.action}}"
+        env:
+          - { name: HOME, value: /home/node }
+          - { name: AWS_REGION, value: garage }
+          - { name: AGENT_TS_ENDPOINT, value: 'http://garage.garage.svc.cluster.local:3900' }
+          - { name: AGENT_TS_BUCKET, value: agent-transcripts }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: retro-git, key: GH_TOKEN } }
+          - name: AGENT_TS_READER_ID
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id } }
+          - name: AGENT_TS_READER_SECRET
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key } }
+          - name: AGENT_TS_WRITER_ID
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id } }
+          - name: AGENT_TS_WRITER_SECRET
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key } }
+        resources:
+          requests: { cpu: 100m, memory: 256Mi }
+          limits: { memory: 1Gi }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: retro-activity-collect
+  namespace: agent-coordinator
+spec:
+  schedules: ['*/30 * * * *']
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    workflowTemplateRef: { name: retro-activity }
+    arguments:
+      parameters:
+        - { name: action, value: collect }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: retro-findings-reconcile
+  namespace: agent-coordinator
+spec:
+  schedules: ['30 7 * * *']
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    workflowTemplateRef: { name: retro-activity }
+    arguments:
+      parameters:
+        - { name: action, value: reconcile }

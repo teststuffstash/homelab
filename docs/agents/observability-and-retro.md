@@ -391,10 +391,15 @@ count (one old-shape comment + two new-shape markers → `attempts=3`, not 1).
 
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
-### B1. retro-facts reflex (deterministic, per terminal task — P2)
+### B1. retro-facts reflex (deterministic, every 30 minutes — P2)
 
-No LLM turn. When a task reaches a terminal label (`agent/done`/`agent/blocked`), compute from
-manifests + stats and append one line to a durable ledger (`agent-transcripts/_ledger.jsonl`):
+No LLM turn. Collect new activity every 30 minutes, including ongoing issues and their linked
+PRs, reviews, check runs and dated machine-summary entries (`agents/retro_activity.py`). Issue creation or closure is not the selection
+boundary: an issue can contribute new activity to multiple periods. Preserve stable event IDs,
+event time and collection time so retries deduplicate and late observations remain visible.
+The activity state lives at `agent-transcripts/_retro/activity.json`. The legacy task ledger
+(`agent-transcripts/_ledger.jsonl`, still emitted by `agents/ledger.py`) remains historical context
+and is **not the weekly selector**. Its intended statistics include:
 cost vs estimator band (**calibration error**), rounds used, retry storms (the 812×-403 class),
 CI red/green sequence, review flip-flops, wall time, cache-hit %, requests, tokens/request.
 Grafana dashboard over the ledger = the long-promised stats v2 (**FU-057**). These numbers are also
@@ -406,8 +411,11 @@ error.
 `models` / `worker_exit_statuses` / `ci_sequence` fields are DERIVED from it order-preservingly
 (older rows carried `models` as a de-duplicated set, which made `zip(models, exit_statuses)`
 unsound — do not re-derive a set from the array). A row stamped while the issue was still OPEN
-carries `snapshot: true`; the retro's pain-rank excludes those rows and counts the exclusion
-(`agents/retro-rank.py`). Historical rows lack both fields.
+carries `snapshot: true`; this describes its observation time, not a reason to exclude ongoing
+work. Neither snapshot status nor a later merge excludes activity within the coverage window.
+The legacy ranker still excludes snapshots for its historical callers; the new activity selector
+does not use that ranker. Historical rows lack both fields; never silently treat undated
+historical rounds as new events.
 
 **Two additions from the 2026-07-09 runs (extend the AGENT_RUN_STATS schema, feed FU-057):**
 - **`exit_status` + `error_class`** per run — clean / ci-failed / **harness-death** (goose
@@ -424,11 +432,15 @@ carries `snapshot: true`; the retro's pain-rank excludes those rows and counts t
 
 ### B2. retro session (LLM, batched async — P3; NOT per-tick)
 
-A budget-capped scheduled session (weekly, or every N terminal tasks) with a seeded brief:
+A budget-capped full session runs Monday at **05:00 UTC**, with a seeded brief:
 
-1. Read the ledger; pick the worst-K tasks by cost-over-estimate / blocked / max-rounds (and one
-   *good* run as contrast).
-2. Pull transcript slices via the MCP tools; root-cause each: where did the agent loop, misread,
+1. Freeze one evidence bundle for both model cells. Its half-open activity window is
+   `[previous covered cutoff, Monday 00:00 UTC)`. Advance coverage only after successful report
+   publication; a missed run therefore extends the next window. Compute population KPIs over
+   all eligible activity, then select bounded worst-K deep dives by cost/harm incurred within
+   the window (and one *good* run as contrast). Historical trails explain the selected events;
+   their older rounds never enter the period totals.
+2. Read the selected GitHub trails (transcript MCP remains unbuilt, §A2); root-cause each: where did the agent loop, misread,
    lack a fact the issue should have carried, fight a tool, retry into a wall?
 3. Emit ONLY through existing seams:
    - a dated **retro report in git** (`docs/agents/retros/<date>.md`) — durable, reviewable;
@@ -438,12 +450,77 @@ A budget-capped scheduled session (weekly, or every N terminal tasks) with a see
      grown" principle applied to the process itself;
    - follow-up issues for platform gaps.
 4. **Score the previous retro first**: each report opens by checking the ledger KPIs across its
-   predecessor's merged changes (did rounds/issue actually drop?). Self-improvement that measures
-   itself; no vibes.
+   predecessor's deployed changes (did rounds/issue actually drop?). Score post-deployment
+   opportunities; a merge alone is not evidence of effectiveness. Say "insufficient evidence"
+   when no suitable opportunities occurred.
 5. **Distill wins, not just failures (the Devin-playbook move).** When a run lands notably under
    estimate / first-round-approved, the retro may extract the reusable procedure into the recipe
    or a skill file — same PR gate. Codifying what worked compounds faster than only patching what
    broke.
+
+**Coverage and freshness.** Persist the cutoff and source revision with the immutable bundle;
+issue numbers, report merge dates and “eight new tasks” are not time filters. An inbound
+reference to an old issue is new reference activity, not a replay of that issue's worker rounds.
+Late-collected events appear as labelled corrections to their original period and are not
+counted twice. Carry standing stalls separately, accruing only their overlap with this window;
+quiet waiting must not disappear merely because nobody commented. Missing timestamps or
+incomplete sources reduce confidence explicitly instead of manufacturing weekly totals.
+
+**Findings disposition (FU-058).** Each report emits structured candidate findings using the
+[brief's output contract](retros/BRIEF.md); [cross-review](retros/CROSS-REVIEW.md) checks their
+evidence and combines duplicates across cells by mechanism and affected surface. Preserve the
+historical occurrence separately from current action status. Reconcile at human acceptance,
+immediately before queueing, and in a lightweight daily pass: a Tuesday fix can satisfy a
+Monday recommendation without erasing last week's failure. Compare the substance of linked
+fixes, not just issue titles or closure labels. Dispositions distinguish new work needed,
+existing work, implemented, disproved and insufficient evidence. A recurrence after deployment
+extends the existing finding and reassesses that fix.
+
+Report publication does not approve a finding or authorize queueing. Human acceptance remains
+explicit under [issue-authoring's launch policy](issue-authoring.md); separate authorized
+execution queues accepted work through the existing lanes. Daily reconciliation updates
+pending findings without dispatching another full-model retro or silently accepting them.
+The round container remains a `retro-batch` stint (below), never an automatically launched Goal.
+Report publication, findings disposition and execution are separate completion signals.
+
+**Operating the cadence.** `agents/retro_pipeline.py` owns bucket persistence and the cutoff.
+`agents/coordinator/retro-activity-argo.yaml` collects at `*/30` and reconciles daily at
+07:30 UTC; `retro-argo.yaml` prepares one artifact at 05:00 Monday, passes it to both cells,
+and advances the checkpoint after publishing the report PR. A retry reuses the same bundle.
+State and reports persist below `_retro/<series>/`; the shared activity state is `_retro/activity.json`.
+The new collector reads live claims over the committed mirror and reports when that read failed.
+
+The initial bootstrap covers the preceding complete week. Subsequent windows start at the
+published checkpoint, even after missed runs. Collection failures leave state unchanged and
+prevent a new bundle claiming incomplete coverage. The bundle exposes all-population counts,
+its sampled event/task counts, and late-arrival counts. The current collector does not join S3
+session manifests or legacy commit statuses: unknown run/cost coverage stays unknown, and
+machine stats records on an issue and PR are not assumed to be distinct worker attempts.
+Ranking uses observed CI/review failures, direct activity and standing idle exposure; total
+role-cost ranking awaits the existing FU-058 emitter work. Old undated ledger totals are never
+substituted for missing weekly measurements.
+
+**Accepting work.** After cross-review, supply a separate JSON decisions file keyed by finding
+ID. A decision carries `disposition`, evidence URLs and `matched_work` URLs for substantively
+matched fixes. `accepted_by` and `accepted_at` explicitly record the seat's acceptance;
+model candidate JSON cannot carry these fields. Use `canonical_issue` for existing work, or an
+`issue` object with `repo`, `title`, a machine-block `body` (`Touches`, `Base: master`) and
+`labels` (a `task/*` classification) for new work. New standalone work needs an existing open
+`retro-batch` passed as `--batch`; origin-derived findings use `origin_issue` instead.
+
+```bash
+# Bucket credentials as for the collector; default only reads and prints the action plan.
+python3 agents/retro_pipeline.py accept --decisions /tmp/accepted.json --batch https://github.com/OWNER/REPO/issues/N
+# Explicit acceptance act: persist decisions, recheck current work, file/bind, then queue.
+python3 agents/retro_pipeline.py accept --decisions /tmp/accepted.json --batch https://github.com/OWNER/REPO/issues/N --apply
+```
+
+The standalone `agents/retro_queue.py` takes `--state`, `--decisions`, `--receipts` and the
+same `--batch`/`--apply` options for a local rehearsal. Scheduled reconciliation performs
+GETs only against GitHub and never calls acceptance. A related PR merged after acceptance
+requires renewed substance checking; a closed issue does not prove a fix. Receipts and exact
+finding markers prevent retry duplicates. Existing lifecycle holds are preserved.
+
 
 Guardrails: own budget-capped OpenRouterKey; read-only everywhere + PR-only writes; max-K
 transcripts per run; may touch **process files only** — never product repos' `specs/` (spec
