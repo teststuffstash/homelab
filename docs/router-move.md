@@ -97,7 +97,7 @@ LAN is a `/22`, so `192.168.3.0/24` is on-link). The role clears each address fr
 interface, so the flip never leaves two holders. `.1` is the node's seed (its own LAN address), not
 the plays. Proof: `scripts/opnsense-drill.sh --router --standby` has one probe per rule (`standby_*`
 in the report). CARP is learned on the pair meanwhile with a trial VIP from `192.168.3.0/24` that
-prod does not hold. The WAN: pve's is a Realtek x1 card (TP-LINK TG-3468, in hand 2026-09-30) —
+prod does not hold (**The CARP trial**, below). The WAN: pve's is a Realtek x1 card (TP-LINK TG-3468, in hand 2026-09-30) —
 Linux drives it, bridged on the host (virtio into the VM, never passthrough: FreeBSD's Realtek
 driver and the X99 chipset slot's IOMMU grouping both argue against it). **nx-02's `eno2` moves to
 the same bridged shape** (operator, 2026-09-30: *"bridged if there is no performance penalty"*), so
@@ -141,6 +141,32 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP/ddclient/ACME renewal off, the switch
    armed and never tripped) and prod unharmed (`.1` at Big Data's MAC, Unbound answering, a
    HAProxy name serving).
+
+**The CARP trial** (2026-09-30, both nodes standing). `ansible/opnsense-carp.yml` puts one `carp`
+VIP per `router_carp_vips` entry (`ansible/router-nodes/group_vars/opnsense.yml` — router nodes
+only, so prod, the test VM and the drill run it as a no-op) on each node's LAN, with the node's
+`router_carp_advskew` from the inventory: **pve 0 = MASTER, nx-02 100 = BACKUP** (ROADMAP §HA
+step 2). No XMLRPC sync — both get the list from git; the VHID password is the wallet's
+`opnsense-carp-password` (env `OPN_CARP_PASSWORD`, exported by `router-node.sh converge`). The trial
+VIP is **`192.168.3.250/22`, vhid 250** (virtual MAC `00:00:5e:00:01:fa`); the role refuses
+anything but an unused `3.x`. The kill switch exempts exactly that list, and captures inbound on
+the tap: CARP advertises FROM the virtual MAC, which a source-MAC filter never sees. `check` reads
+each VIP's state (MASTER/BACKUP pass; INIT/absent fail).
+
+Measured (10 Hz ping to the VIP from the nx-02 host, via prod's `.1` as any LAN client's path):
+
+| Event | Loss |
+|---|---|
+| MASTER enters CARP maintenance mode (API `diagnostics/interface/carp_status/maintenance`; demotion 240) | **0 / 193** |
+| it leaves maintenance — preempts back | **0 / 193** |
+| MASTER VM hard-stopped (`qm stop`, the host-death stand-in) | **2.6 s** (26 probes) — 3 × advbase 1 s |
+| the stopped MASTER boots and re-takes | **0** |
+
+So a planned move (firmware, a hypervisor reboot) is hitless by entering maintenance first, and an
+unplanned one costs ~3 s. The window's first step can be the CARP VIP itself — the trial found no
+reason to shrink it to a plain address. **Not yet exercised:** pfsync (state sync over the LAN —
+nothing is routed through the pair yet), the HAProxy VIPs as CARP VIPs, dnsmasq active/passive,
+one Cilium peer + one router-id per node, and the `/22`-vs-ADR-088 LAN mask question.
 
 The window (Big Data still cabled, powered off at its start):
 
@@ -190,3 +216,7 @@ The window (Big Data still cabled, powered off at its start):
   on_boot flipped, `check pve` 11/11. The kill switch now captures inbound on the tap (CARP's
   virtual MAC), stops before it latches (1.7 s, a gratuitous ARP from INSIDE the node), and exempts
   the trial VIPs. **Next:** the CARP trial.
+- 2026-09-30 night: **the CARP trial PASSES** (§The CARP trial above): `3.250` vhid 250 on the pair,
+  pve MASTER / nx-02 BACKUP; maintenance-mode failover and preempt back 0 loss at 10 Hz, a hard
+  MASTER stop 2.6 s, re-take after boot 0; both `check`s 12/12, no switch tripped. **Next:** pfsync,
+  then the window's prep list (HAProxy VIPs as CARP, dnsmasq active/passive, Cilium peers).

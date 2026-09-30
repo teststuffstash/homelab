@@ -152,7 +152,9 @@ six OVERSIZE items pointer-ized into
       move it gates (rehearsal score 0, carried identity, ADR-144 CARP pair, standby profile, the
       window): [`router-move.md`](router-move.md) — its §Status is the history. State 2026-09-30:
       **both nodes STANDING + inert, reboot-proof** (nx-02 `.70`, pve `.71`; on_boot + systemd kill
-      switch). **Next:** the CARP trial VIP. Relates FU-097, FU-013, FU-298.
+      switch); **CARP trial PASSED** (vhid 250, 3 s hard failover, hitless planned). **Next:** pfsync,
+      then the window prep (HAProxy VIPs as CARP, DHCP active/passive, Cilium peers). Relates FU-097,
+      FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on

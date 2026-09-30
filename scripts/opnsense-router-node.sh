@@ -72,9 +72,10 @@ converge() {
   for p in $plays $rest; do
     log "play $p → $INV_HOST ($HOST), standby"
     if [ "$p" = opnsense-ddclient.yml ]; then ACME_CF_TOKEN="$(kp cloudflare-acme-token)"; export ACME_CF_TOKEN; fi
+    if [ "$p" = opnsense-carp.yml ]; then OPN_CARP_PASSWORD="$(kp opnsense-carp-password)"; export OPN_CARP_PASSWORD; fi
     bash scripts/opnsense-playbook.sh "ansible/$p" -i "$INV" --limit "$INV_HOST" >"$WORK/play-${p%.yml}.log" 2>&1 \
-      || { tail -25 "$WORK/play-${p%.yml}.log" >&2; unset ACME_CF_TOKEN; die "play $p failed"; }
-    unset ACME_CF_TOKEN
+      || { tail -25 "$WORK/play-${p%.yml}.log" >&2; unset ACME_CF_TOKEN OPN_CARP_PASSWORD; die "play $p failed"; }
+    unset ACME_CF_TOKEN OPN_CARP_PASSWORD
     grep -E '^(opnsense-nx02|PLAY RECAP)|ok=' "$WORK/play-${p%.yml}.log" | tail -1 >&2
   done
   for py in dnsmasq-dhcp tuya-egress; do
@@ -103,6 +104,13 @@ check() {
   v="$(pve "systemctl is-enabled $KS_UNIT; qm config $VMID | sed -n 's/^onboot: //p'" | tr '\n' ' ' || true)"
   [ "$v" = "enabled 1 " ] && ok "survives a host reboot (switch enabled, onboot 1)" \
     || no "host reboot: switch/onboot '$v' (want 'enabled 1' — the play + tofu on_boot; onboot 0 after a trip is the latch)"
+  # CARP (router-nodes group_vars `router_carp_vips`): each trial VIP present on LAN, and in a live
+  # state — MASTER or BACKUP; INIT/DISABLED/absent is a fail. Which node is MASTER is `carp-status`'s.
+  local want; want="$(yq -r '.router_carp_vips[]?.address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+  for a in $want; do
+    v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a and .mode=="carp") | "\(.interface | ascii_downcase)/\(.status)"] | join(",")' || true)"
+    case "$v" in lan/MASTER|lan/BACKUP) ok "CARP $a $v";; *) no "CARP $a: '${v:-absent}' (want lan/MASTER or lan/BACKUP)";; esac
+  done
   echo "== prod unharmed"
   v="$(pve "ping -c1 -W1 192.168.2.1 >/dev/null; ip neigh show 192.168.2.1 | awk '{print \$5}'" || true)"
   [ -n "$v" ] && [ "$v" != "$LAN_MAC" ] && ok ".1 is at $v (not the node)" || no ".1 resolves to '${v:-nothing}'"

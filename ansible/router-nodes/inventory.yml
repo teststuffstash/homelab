@@ -15,7 +15,9 @@ all:
           ansible_host: 192.168.2.70
           ansible_connection: local
           opnsense_standby: true
+          router_carp_advskew: 100   # BACKUP (ROADMAP §HA step 2: pve master, nx-02 backup)
         opnsense-pve:
           ansible_host: 192.168.2.71
           ansible_connection: local
           opnsense_standby: true
+          router_carp_advskew: 0     # MASTER

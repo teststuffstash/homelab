@@ -3,6 +3,13 @@
 # for prod (whose inventory sits one directory up). ansible/pve-router-killswitch.yml reads this
 # file too, for the kill switch's exemptions.
 
-# --- CARP (the trial — docs/router-move.md) ---
-# Filled by the CARP trial; empty ⇒ the opnsense-carp role is a no-op.
-router_carp_vips: []
+# --- CARP (docs/router-move.md, **The CARP trial**) ---
+# ansible/opnsense-carp.yml. While prod serves: TRIAL VIPs only — an unused 192.168.3.x (ip-plan's
+# router-owned range; never .1, never a HAProxy VIP). The mask is the LAN's /22 (the VIP sits in
+# the interface's subnet). vhid = the last octet (the virtual MAC 00:00:5e:00:01:<vhid> then names
+# its address). The kill switch exempts exactly these addresses — re-run
+# ansible/pve-router-killswitch.yml BEFORE converging a new one.
+router_carp_vips:
+  - address: 192.168.3.250/22
+    vhid: 250
+    description: carp-trial
