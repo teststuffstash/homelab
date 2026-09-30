@@ -11790,3 +11790,22 @@ accepted in that dead state only; negative test force_down=1 → score 1. Rehear
 content: PASS 13/13, **score 0**. Review r1 flagged `search_server` as unverifiable from its
 sandbox — both spellings return the same pubkey on prod; switched to `searchServer` for
 consistency; r2 APPROVED. No jail net failures across rehearsals 5–8 (ARP-flux fix holds).
+
+## 2026-09-30 (midday) — S9: 26.7.5 (9110 + prod), root from the wallet, ADR-144 (CARP beside Big Data)
+
+Operator: root password option (b); management path option (4) — each node at its own LAN IP;
+bring CARP + the pve router forward (three routers for a while); buying two 5-port switches + a
+1 GbE x1 card for pve (Realtek TG-3468 — fine host-bridged; the box's second NIC is Realtek too).
+Rehearsal 9 failed at build: upstream shipped **26.7.5**, the mirror serves the head only. 9110:
+rollback → check (12) → update (no reboot) → 26.7.5, baseline moved. Rehearsal 10 (SERIES + root):
+PASS 14/14, `root_password` match, score 0. **Prod** (operator: "ok, set a durable guard"): window
+seat-1790760478-4482 + a bash alert watch (dedupe + liveness line — GAPS maintenance-window-G2's
+shape), 14 updates, job 16 s, no reboot; services up (radvd idle as before), DNS, HAProxy LE cert,
+BGP 13/13, `maint check` baseline twice; ⚠ closed ~75 s after the update (said "a few minutes") —
+the watch ran 30 min on and saw nothing new. Merged: #2134 SERIES (first review), #2136 root
+(wallet entry minted in the jail, first review), #2135 ADR-144 (r1: a dangling "sub-step 4" — all
+three sub-step refs enumerated and fixed; the merge bot's master-merge pre-#2136 overwritten by a
+rebase with an explicit lease). Pre-existing, not ours: MgmtOpnsenseDrillScoreRegressed (the box's
+09-29 run, 117 — next weekly run replaces it); OpnsenseConfigUnattributedRevision (root@.165 =
+pop-os, 04:23Z). Stopped before the standing nx-02 node: its standby profile (no VIP aliases, no
+ACME renewal, …) is design only — not a thing to put on the live LAN unattended.

@@ -152,8 +152,9 @@ six OVERSIZE items pointer-ized into
       Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md); the router move it gates
       (`--router` rehearsal, carried identity, window): [`router-move.md`](router-move.md). The router
       rehearsal reads **score 0** with 13/13 probes (2026-09-30, #2133 — WireGuard key carried).
-      **Next:** the operator calls in router-move.md §Status (root password, the cutover build's
-      management path), then the window. Relates FU-097, FU-013, FU-298.
+      Root = wallet `opnsense-root-password` (#2136); ADR-144 (#2135): the CARP pair built beside
+      Big Data, nodes standing at `.70`/`.71`. **Next:** the standby profile + the standing nx-02
+      node (router-move.md §The cutover, the inert rules). Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on

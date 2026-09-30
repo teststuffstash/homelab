@@ -47,9 +47,17 @@ never the session's arc — that is TICK-LOG's.)
   **Progress 2026-09-30:** the isolated rehearsal is BUILT + merged (#2131, `opnsense-drill.sh --router`;
   [`router-move.md`](../router-move.md)): PASS, 12/12 probes, score 6 at that point.
   Later 2026-09-30: WireGuard key carried (#2133, `wg_handshake` green), the WAN_GW rows accepted
-  in their dead state → **score 0**; the (B) API address read from the inventory (#2132). Open:
-  root password + the cutover management path (operator calls, router-move.md §Status). Rehearsals 2–4 "network blips" were the jail HOST's new cable + wifi
-  (ARP flux, fixed host-side with arp_ignore/arp_announce) — not the rehearsal VM.
+  in their dead state → **score 0**; the (B) API address read from the inventory (#2132). Rehearsals
+  2–4 "network blips" were the jail HOST's new cable + wifi (ARP flux, fixed host-side with
+  arp_ignore/arp_announce) — not the rehearsal VM.
+  Then (2026-09-30 midday): root = wallet `opnsense-root-password` (#2136); OPNsense 26.7.5 —
+  SERIES bumped + 9110 baseline moved (#2134) and PROD updated in window seat-1790760478-4482
+  (operator-approved; 16 s, no reboot, all checks baseline); **ADR-144** (#2135): the CARP pair is
+  built beside Big Data — nx-02 node `.70`, pve node `.71` (operator buying a 1 GbE x1 card for
+  pve: Realtek → host-bridged WAN, not passthrough), each managed at its own IP. **NEXT:** the
+  standby profile of the plays (router-move.md's inert rules: no `.1`, no 3.0/24 VIP aliases,
+  DHCP/FRR/ddclient/ACME-renewal off) + a probe per rule, THEN the standing nx-02 node on vmbr0 —
+  attended, not unattended. Proposed, unruled: nx-02's `eno2` bridged too, for symmetry.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
   client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →
