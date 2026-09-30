@@ -217,6 +217,21 @@ DHCP exchange; the guest hook's 1.45 s was faster only because it skipped the li
 was the design that double-held the lease. A planned move pays it twice (over, and back on
 preempt).
 
+**The rolling update** (drill R1, 2026-09-30 — the shape of the 26.7 major: three reboots, ~5 min
+on Big Data). pve (MASTER) enters CARP maintenance, is rebooted three times (`qm reboot`, each
+waited out), leaves maintenance; the probe held one NAT'd flow throughout. Maintenance mode
+**persists across reboots** (the demoted node boots as BACKUP, demotion 240 — once its config is on
+disk; the earlier "lost" flag was the durability finding below). Result: failover 0.62 s held-flow
+stall / 0.7 s fresh connects out; the three reboots **zero**; failback 3.1 s / 1.5 s. So an update
+that costs Big Data minutes of full outage costs the pair a few seconds, twice, with flows kept:
+update the BACKUP first, then maintenance → update → leave on the MASTER.
+
+**The belt** (`argocd/resources/pve-metrics/`, group `router-pair`): each WAN gate writes what it
+sees to its hypervisor's node_exporter textfile — `router_node_carp_master`, `router_node_wan_link`,
+a heartbeat — so the pair is watched from OUTSIDE the guests. `RouterPairMasterCount` (critical,
+1 m): masters ≠ 1 — 2 is split-brain, 0 is nobody routing (a failover's ~4 s dip rides under the
+`for:`). `RouterWanGateSilent`: a stale heartbeat or fewer than two gates — the count unreadable.
+
 **Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
 of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
 LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
@@ -290,3 +305,6 @@ The window (Big Data still cabled, powered off at its start):
   (nx-02 `eno2` ↔ pve `enp6s0`): a hypervisor-side WAN gate (QMP `set_link` keyed on the guest's
   own CARP adverts) after a guest hook failed the boot case; W1–W4 measured (§above), NAT'd flows
   survive every failover, no DHCP ever from a BACKUP.
+- 2026-09-30 late: **rolling-update drill R1** (maintenance + 3 reboots, flows kept, seconds of
+  disruption) and the pair's **belt** (`RouterPairMasterCount`, `RouterWanGateSilent` from the WAN
+  gates' textfile metrics, promtool-fixtured). **Next:** the split-brain drill fires it.

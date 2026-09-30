@@ -1,0 +1,83 @@
+# Behaviour fixture for router-pair.promtool-rules (FU-158 shape): `devbox run prometheus-rules-lint`
+# runs it. Two gates, one per hypervisor (host="pve" vmid 9171, host="nx-02" vmid 9170); heartbeats
+# are written as `0+60xN` so they track time() (fresh) unless a test freezes one.
+rule_files:
+  - router-pair.promtool-rules
+evaluation_interval: 1m
+
+tests:
+  # Steady state: pve MASTER, nx-02 BACKUP, both gates fresh — nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '1x15'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0x15'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
+        values: '0+60x15'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0+60x15'
+    alert_rule_test:
+      - { eval_time: 10m, alertname: RouterPairMasterCount, exp_alerts: [] }
+      - { eval_time: 10m, alertname: RouterWanGateSilent, exp_alerts: [] }
+
+  # Split-brain from minute 3 (nx-02 stops hearing pve's adverts and promotes itself): pending at
+  # 3m, firing at 4m with value 2; a failover's single-sample dip to 0 masters (minute 8) stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '1x7 0 1x6'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0 0 0 1 1 0 0 0 0x6'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
+        values: '0+60x15'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0+60x15'
+    alert_rule_test:
+      - { eval_time: 2m, alertname: RouterPairMasterCount, exp_alerts: [] }
+      - eval_time: 4m
+        alertname: RouterPairMasterCount
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: "Router pair has 2 CARP masters (want exactly 1)"
+              description: >-
+                The router nodes' WAN gates see 2 VMs advertising CARP. 2 = SPLIT-BRAIN:
+                the nodes cannot hear each other's adverts (the LAN between them — vmbr0, the switch,
+                multicast/IGMP snooping — or a pf rule), both hold every CARP VIP and both have
+                their WAN up with the one leased MAC. 0 = no router is master: nothing answers the
+                VIPs. Per node: `bash scripts/opnsense-router-node.sh check nx02|pve` (the CARP and
+                WAN-gate lines), `router_node_carp_master` by host/vmid, and the gate log
+                /var/log/router-killswitch/<vmid>-wangate.log on the hypervisor. Split-brain fix
+                order: find the advert path (tcpdump `ip proto 112` on each hypervisor's vmbr0),
+                then put one node in CARP maintenance.
+      - { eval_time: 9m, alertname: RouterPairMasterCount, exp_alerts: [] }
+      - { eval_time: 12m, alertname: RouterPairMasterCount, exp_alerts: [] }
+
+  # nx-02's gate dies at minute 5 (heartbeat frozen at 300): stale from 8m (> 120 s), firing 5m later.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '1x20'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0x20'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
+        values: '0+60x20'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0+60x5 300x15'
+    alert_rule_test:
+      - { eval_time: 10m, alertname: RouterWanGateSilent, exp_alerts: [] }
+      - eval_time: 14m
+        alertname: RouterWanGateSilent
+        exp_alerts:
+          - exp_labels: { severity: warning, host: nx-02, vmid: "9170" }
+            exp_annotations:
+              summary: "Router WAN gate silent on nx-02 — the pair's master count is unreadable"
+              description: >-
+                A router node's WAN gate has not written its heartbeat for 2+ minutes, or fewer than
+                the pair's two gates report at all. The gate is what holds a non-master's WAN down
+                and what RouterPairMasterCount reads, so both are blind. On the hypervisor:
+                `systemctl status router-wangate@<vmid>` and the gate log in /var/log/router-killswitch/;
+                node_exporter's textfile dir /var/lib/prometheus/node-exporter/router-wangate-*.prom.
+                Re-run ansible/pve-router-killswitch.yml to reassert the units.
+      - { eval_time: 14m, alertname: RouterPairMasterCount, exp_alerts: [] }

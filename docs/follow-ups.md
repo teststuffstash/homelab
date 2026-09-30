@@ -153,8 +153,8 @@ six OVERSIZE items pointer-ized into
       window): [`router-move.md`](router-move.md) — its §Status is the history. State 2026-09-30:
       **both nodes STANDING + inert, reboot-proof** (nx-02 `.70`, pve `.71`; on_boot + systemd kill
       switch); **CARP trial PASSED**; `/24` ruling (ADR-088 amended; trial VIP `.72`). pfsync + WAN gate
-      drilled (fake ISP, W1–W4 in router-move.md). **Next:** rolling-update drill, CARP-state alert +
-      split-brain; then DHCP active/passive + Cilium peers. Relates FU-097, FU-013, FU-298.
+      drilled (fake ISP, W1–W4 in router-move.md). rolling-update drill
+      PASSED; belt `RouterPairMasterCount`. **Next:** split-brain drill; DHCP active/passive + Cilium peers. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
