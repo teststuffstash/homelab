@@ -1,0 +1,37 @@
+# HAND COPY of the router-pair group in prometheusrule.yaml (this dir) — the drift pin in
+# scripts/prometheus-rules-lint.sh asserts expr+for equality per alert name against the CR.
+# Re-render with:  devbox run -- yq '.spec.groups[] | select(.name == "router-pair")' prometheusrule.yaml
+# Loaded by router-pair.promtool-test.
+groups:
+  - name: router-pair
+    # The CARP router pair (ADR-144, docs/router-move.md — **WAN follows the master**). Seen from
+    # the HYPERVISORS, not the guests: each node's WAN gate (router-wangate@<vmid>, ansible/
+    # pve-router-killswitch.yml) watches its VM's LAN tap for CARP adverts — only a MASTER sends
+    # them — and writes router_node_carp_master / router_node_wan_link / a heartbeat to this
+    # host's textfile. The gate is also what holds a non-master's WAN link down, so a master
+    # COUNT != 1 is the pair's defining failure: 2 = split-brain (both answer the VIPs, and with
+    # the gate both WANs are up wearing the ONE leased MAC), 0 = nobody routes. A failover passes
+    # through 0 for ~4 s (3 x advbase + the gate's hold) — `for: 1m` rides that out.
+    # The pair is exactly two nodes: fewer than two heartbeats is a gate (or a node's
+    # hypervisor) gone dark, which leaves the count unreadable.
+    # INTERIM (ADR-145 window-1 prep, 2026-10-01): no CARP VIP exists between the trial `.72`'s
+    # retirement and window 1 (which adds `.1`), so 0 masters is the intended state — only a
+    # split-brain (> 1) fires. Window 1 restores `!= 1` (docs/router-move.md §The two windows).
+    rules:
+      - alert: RouterPairMasterCount
+        expr: sum(router_node_carp_master{job="pve-node"}) > 1
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Router pair has {{ $value }} CARP masters (want exactly 1)"
+          description: >-
+            The router nodes' WAN gates see {{ $value }} VMs advertising CARP. 2 = SPLIT-BRAIN: the nodes cannot hear each other's adverts (the LAN between them — vmbr0, the switch, multicast/IGMP snooping — or a pf rule), both hold every CARP VIP and both have their WAN up with the one leased MAC. 0 = no router is master: nothing answers the VIPs. Per node: `bash scripts/opnsense-router-node.sh check nx02|pve` (the CARP and WAN-gate lines), `router_node_carp_master` by host/vmid, and the gate log /var/log/router-killswitch/<vmid>-wangate.log on the hypervisor. Split-brain fix order: find the advert path (tcpdump `ip proto 112` on each hypervisor's vmbr0), then put one node in CARP maintenance.
+      - alert: RouterWanGateSilent
+        expr: >-
+          (time() - max by (host, vmid) (router_node_wangate_heartbeat_seconds{job="pve-node"})) > 120 or on() (count(router_node_wangate_heartbeat_seconds{job="pve-node"}) < 2) or on() absent(router_node_wangate_heartbeat_seconds{job="pve-node"})
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Router WAN gate silent{{ with $labels.host }} on {{ . }}{{ end }} — the pair's master count is unreadable"
+          description: >-
+            A router node's WAN gate has not written its heartbeat for 2+ minutes, or fewer than the pair's two gates report at all. The gate is what holds a non-master's WAN down and what RouterPairMasterCount reads, so both are blind. On the hypervisor: `systemctl status router-wangate@<vmid>` and the gate log in /var/log/router-killswitch/; node_exporter's textfile dir /var/lib/prometheus/node-exporter/router-wangate-*.prom. Re-run ansible/pve-router-killswitch.yml to reassert the units.

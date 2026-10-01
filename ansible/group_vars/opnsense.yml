@@ -13,6 +13,13 @@ opnsense_conn:
   ssl_verify: false                          # default self-signed cert
 
 # --- opnsense-bgp : FRR/BGP peering with Cilium ---
+# STANDBY profile (docs/router-move.md §The standing nodes, ADR-144): a router node standing on
+# the real LAN beside prod must be INERT — no BGP sessions, no DHCP, no ddclient, no ACME
+# renewal, and none of prod's HAProxy VIPs on the LAN (they sit on lo0: HAProxy binds, nothing
+# answers ARP). A standing node's host_vars set it true; the cutover converges it false.
+opnsense_standby: false
+haproxy_vip_interface: "{{ 'lo0' if opnsense_standby else 'lan' }}"
+
 opnsense_asn: 64512
 cluster_asn: 64513
 bgp_router_id: "192.168.2.1"

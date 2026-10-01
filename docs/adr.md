@@ -208,7 +208,7 @@ modern standard (principle #5). **Consequences:** Cilium owns LB IPAM + BGP.
 `bgp=advertise` are advertised. **Considered:** MetalLB (L2/ARP), Calico-BGP.
 **Why:** the router actually learns the routes (natively routable from LAN/VPN, no ARP tricks/speaker
 pods); both ends as code (CiliumBGP* CRDs + O-X-L `frr_bgp_*` Ansible). **Consequences:** L2
-auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity).
+auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity). Mechanism: [`bgp.md`](bgp.md).
 
 ### ADR-022 — Router as code: OPNsense via the `oxlorg.opnsense` Ansible collection
 **Status:** Accepted (2026-05). **Decision:** manage OPNsense (BGP, ACME, HAProxy, Unbound) as code
@@ -223,7 +223,7 @@ reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.x
 `opnsense/dnsmasq-dhcp.py`; dnsmasq is DHCP-only (`port=0`) so Unbound keeps `:53`.
 **Considered:** keep ISC dhcpd. **Why:** ISC has no settings API → can't be driven as code.
 **Consequences:** PXE proxy-DHCP is separate (on the Matchbox LXC); ISC must be disabled in the UI
-once (no API) for reboot-safety.
+once (no API) for reboot-safety. **Superseded at the router cutover by ADR-145** (Kea on the router pair).
 
 ---
 
@@ -716,6 +716,12 @@ VIP on the Docker host — 2026-07-13); physical scale is bounded (~10³, ARP/L2
 is not (routed), so they get differently-sized homes. **Consequences:** legacy `2.0/24` VIPs
 migrate to `3.0/24` opportunistically (FU-071); new exposures land in `3.0/24`/`32.0/19` from day
 one; the wifi-password→VLAN plan slots into the reserved VLAN blocks without touching the table.
+**Amended 2026-09-30 (operator — the CARP pair, ADR-144):** the router LAN is a **`/24`**, as every
+host and DHCP lease already is — Big Data's `.1/22` (click-ops residue, found 2026-09-29) is not
+carried to the pair. So `3.0/24` stays router-local: HAProxy VIPs on the router's `lo0`, reached via
+`.1`; under CARP only `.1` moves (considered: keep `/22` and make every HAProxy VIP a CARP VIP —
+16 more failover addresses for nothing a `/24` client uses). `192.168.2.72` is reserved as the
+pair's CARP trial VIP ([`ip-plan.md`](ip-plan.md)).
 
 ### ADR-089 — Storage tiers with quota-as-contract: consumers get caps, the platform keeps promises
 **Status:** Accepted (2026-07-13, operator-directed). **Decision:** Longhorn splits into three
@@ -2564,3 +2570,46 @@ base branch and its cooldown covers the bumped dep only — the lodash-es@4.17.2
 CI's dind), so the defence must decide before execution and the executor must hold nothing.
 **Consequences:** the linter runs anywhere (jail, CI, sub-agent clones) with no placement rules;
 Renovate's mermaid 12 PR re-proposes on `deno.json` and stays red until upstream clears it (FU-294).
+
+### ADR-144 — The CARP pair is built beside Big Data: two symmetric router VMs, each managed at its own LAN IP (2026-09-30)
+**Status:** Accepted (operator, 2026-09-30: "bring forward CARP + pve box opnsense … temporarily 3
+opnsense boxes — big data + 2 fallbacks"; "go with 4"; a 1 GbE x1 card for pve instead of Big Data's
+4-port). **Decision:** (1) both router VMs — on nx-02 and on pve — are built NOW, beside the live
+Big Data, which keeps `.1` until the cutover window; CARP is learned on the pair with a trial VIP from
+`192.168.3.0/24` (ADR-088) while nothing depends on it. (2) The nodes are symmetric: WAN + LAN only.
+pve gains a single-port x1 NIC; Big Data's Intel card never moves. (3) Each node is managed at its
+own LAN IP — **`192.168.2.70` (nx-02) and `192.168.2.71` (pve)**, ip-plan's servers band — which is
+its `ansible_host` (one inventory host per node); `.1` is only ever a client address (the CARP VIP
+from the cutover on). (4) Root is the routers' own wallet entry `opnsense-root-password`.
+**Considered:** ROADMAP's sequence (nx-02 alone → Big Data dark → its card to pve → CARP: a
+no-fallback gap, and CARP learned inside live windows); a temporary management NIC + LAN re-address
+in the window; a tunnel into an isolated bridge (tooling, and every tool one typo from `.1` = prod);
+a permanent management segment (nx-02 has no third port; the new switches are unmanaged); carrying
+prod's root hash. **Why:** while Big Data serves, both nodes are experiments — the riskiest step
+(every VIP and both BGP peers move) gets rehearsed without windows, and the move gains two fallbacks
+instead of none; the per-node address is the end state's own, so nothing is re-addressed later.
+**Consequences:** only the router holding `.1` may have a cabled WAN (every node spoofs `em0`'s MAC;
+the bootstrap refuses carrier); an idle node must be inert on the LAN (no `.1`, DHCP off); pfsync
+rides the LAN, unauthenticated (no third port) — accepted; nx-02 carries a standing VM beside the
+drills. Design: [`router-move.md`](router-move.md); ROADMAP §HA step 2 amended.
+
+### ADR-145 — The router cutover is two windows, and the first one already runs the pair's mechanisms: Kea DHCP, per-node BGP, `.1` as a CARP VIP (2026-10-01)
+**Status:** Accepted (operator, 2026-10-01: "bite the bullet and try a switchover to nx-02"; "we do Kea
+anyway on single node? So that once the single node is up I can then add the secondary and shut off
+primary without anyone noticing"). **Decision:** (1) window 1 moves `.1` to the **nx-02 node alone** —
+as a CARP VIP with one speaker, not a plain address; (2) that node serves DHCP from **Kea** (OPNsense
+core, `memfile` leases — no database), HA off; dnsmasq DHCP retires (supersedes ADR-023's server);
+(3) BGP is **per-node from window 1**: Cilium peers `.70`, FRR's router-id is the node's own address —
+never the VIP; (4) window 2 adds pve as the BACKUP (Kea hot-standby HA on, Cilium peer `.71`), with
+no client-visible change, and a primary stop then proves it. **Considered:** both nodes at once (Kea
+HA + per-node BGP first exercised with real clients in the same window); dnsmasq on one node first,
+Kea at the pair (a DHCP migration in the second window); a dnsmasq on/off toggle driven by CARP
+state (the guest-side CARP hook was already rejected by the WAN-follows-master drill); peering the
+standing nodes ahead of the window (contradicts the inert profile — the kill switch trips on a
+BGP SYN-ACK). **Why:** the inert drills proved the pair's machinery but cannot prove the service
+layer; a single-node switchover is the next real evidence, and doing it in the end-state shape
+makes the second node purely additive. Kea HA is API-complete (verified 2026-10-01 against core
+26.7.5: peers, `this_server_name`, control agent, subnets, reservations). **Consequences:** nx-02 is
+MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
+on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
+becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.

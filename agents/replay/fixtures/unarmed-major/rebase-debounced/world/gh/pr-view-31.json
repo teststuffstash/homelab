@@ -1,0 +1,49 @@
+{
+  "number": 31,
+  "headRefOid": "76d5a0f3bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "ci",
+      "conclusion": "FAILURE",
+      "startedAt": "2026-09-30T17:27:22Z"
+    },
+    {
+      "name": "approve / approve",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-09-30T17:27:18Z"
+    },
+    {
+      "context": "renovate/stability-days",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-30T17:27:21Z"
+    },
+    {
+      "context": "management-sentinel",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-30T17:30:33Z"
+    },
+    {
+      "context": "iac-sentinel",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-30T17:30:55Z"
+    }
+  ],
+  "reviews": [],
+  "commits": [
+    {
+      "oid": "76d5a0f3bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "messageHeadline": "Update dependency mermaid to v12",
+      "committedDate": "2026-09-30T17:27:11Z"
+    }
+  ],
+  "comments": [
+    {
+      "body": "🤖 `state-fp:unarmed-major:054a9ba034fd` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-30T12:04:10Z.",
+      "createdAt": "2026-09-30T12:04:10Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    }
+  ]
+}

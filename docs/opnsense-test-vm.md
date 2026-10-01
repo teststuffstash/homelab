@@ -19,13 +19,15 @@ A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/o
 | WAN = `vtnet1` = net1 | `vmbr0`, **`192.168.2.67/24`**, gateway `192.168.2.1` — the management path (API `:443` + SSH `:22` from `192.168.2.0/24` only) and the egress for firmware/plugins. "Block private networks" is off (WAN *is* private here) |
 | LAN = `vtnet0` = net0 | **`vmbr1`**, a bridge with **no port and no host address** — `192.168.1.1/24` ([`ip-plan.md`](ip-plan.md) carve). DHCP, HAProxy VIPs and Unbound on this side serve nobody |
 | BGP | a floating rule blocks **outbound TCP 179 on WAN**, so the box's FRR can never peer with the real Cilium nodes, whatever a playbook configures |
-| Version | 26.7.4 + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — prod's series since 2026-09-29 |
+| Version | 26.7.5 + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — the 26.7 series (prod's since 2026-09-29) |
 | Baseline | snapshot **`baseline`** (the harness's default `OPN_TEST_SNAPSHOT`) — after firmware + plugins + API/SSH, before any homelab playbook |
 | Secrets | wallet only: `opnsense-test-root-password`, `opnsense-test-api-key`, `opnsense-test-api-secret`. Root SSH = key login with the pve seed key (`~/.claude/homelab-pve-ssh/id_ed25519`); no password auth |
 
 Version caveat: a series' package mirror serves only its head, so a box built later can sit on a
 newer core hotfix than prod (26.1: `26.1.11_10` built vs prod's `26.1.11_6`). On 2026-09-29 both
-read `26.7.4_1`. Prod's other
+read `26.7.4_1`; on 2026-09-30 the mirror moved to `26.7.5` (every build failed at the old `SERIES`),
+so `baseline` took the official check → update (12 packages, no reboot), and prod followed the same
+path the same morning in window seat-1790760478-4482 (14 packages, 16 s, no reboot). Prod's other
 plugins (`os-ddclient`, `os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
 
 ## Why this bootstrap mechanism
@@ -76,7 +78,7 @@ ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.59 qm rollback 9110 b
    [maintenance window](../.claude/skills/maintenance-window/SKILL.md) — the bridge is a host
    network change on the hypervisor that carries `cp-02`.
 2. `bash scripts/opnsense-test-vm-bootstrap.sh bootstrap` — wallet entries (created if missing) →
-   seed ISO → first boot through the importer → firmware update to `SERIES` (26.7.4) → plugins → clean
+   seed ISO → first boot through the importer → firmware update to `SERIES` (26.7.5) → plugins → clean
    shutdown → seed CD removed → snapshot `baseline` → started.
 
 **Recovery — a bootstrap that died after the import** (VM up, API answering with the wallet key,
@@ -144,10 +146,11 @@ build → probe-setup → converge → probe → compare → destroy) and the en
   by `qm` (and refuse vmid `9110` and the name `opnsense-test`), then `bootstrap` as above — with a
   throwaway root password + API pair minted in memory per run instead of wallet entries.
 - **converge** is the harness's step `all` (`--ref <rev> --steps "1 all"`): every
-  `ansible/opnsense-*.yml` play plus `opnsense/dnsmasq-dhcp.py` and `opnsense/tuya-egress.py`,
+  `ansible/opnsense-*.yml` play plus every `opnsense/*.py` (the two DHCP scripts — `OPN_DHCP_SERVER`
+  picks dnsmasq or Kea, the other converges off, ADR-145 — and `tuya-egress.py`),
   through the same guard, inventory and isolation overrides, plus
   [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) (the BGP neighbour is the drill's
-  fake peer). `dnsmasq-dhcp.py` runs with `OPN_DHCP_REMAP=192.168.2.=192.168.1.` — prod's pool and
+  fake peer). The DHCP scripts run with `OPN_DHCP_REMAP=192.168.2.=192.168.1.` — prod's pool and
   reservations, moved onto the drill's LAN prefix (refused against the router).
 - **preflight** reads nx-02's `nvme-thin` and free memory before anything writes and refuses above
   70 % / below 4 GiB (read the pool before writing GBs to a VM node); a leftover `opnsense-drill` from a
@@ -202,6 +205,91 @@ Prod config is never deleted to lower the score (operator, 2026-09-29): dead res
 block, the empty-valued legacy tunables, disabled port-forwards) is accepted **in its dead state
 only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
 header) — the same path counts again the day it comes alive.
+
+### The router rehearsal — the drill in the future router's shape
+
+`bash scripts/opnsense-drill.sh --router` (jail only: it reads the FU-013 backup) builds the same
+throwaway VM `9199`, but shaped like the router that replaces Big Data
+([`router-move.md`](router-move.md)), and carrying its identity:
+
+| | the drill | `--router` |
+|---|---|---|
+| WAN | `vtnet1` on `vmbr0`, static `.68` | **`igb0` = nx-02's `eno2` by PCI passthrough** (`machines.yaml` `nx-02.router_wan_pci`), DHCP, `spoofmac` = Big Data's `em0` (`opnsense.wan_mac`) — uncabled |
+| management + egress | the WAN | `opt9` "MGMT" = `vtnet1` on `vmbr0`, static `.68` (`opt9`: prod's `opt1..3` are its spare card ports, and the score aligns interfaces by key) — the real router has none |
+| identity | minted per run | **carried from the newest FU-013 backup** (below) |
+| score map | `compare-map.txt` | `compare-map-router.txt` first, then the base map minus its `interfaces/wan/**` wildcard — here the WAN is comparable |
+| metrics | the box's textfile | none (the weekly score stays the plain drill's) |
+
+**The WAN must be dark.** With Big Data's MAC spoofed, a cabled `eno2` would take the ISP lease
+from the live router. The bootstrap's `create` refuses a WAN NIC with carrier (it raises an
+admin-down port to read it, then lowers it again), one enslaved to a bridge, one that holds a
+host address, and one that shares its IOMMU group. A NIC left on `vfio-pci` by a previous run
+is first handed back to its host driver, because without a host netdev there is no carrier to
+read. The rehearsal then asserts `no carrier` from inside the VM (`wan_dark`).
+
+**The carry** ([`opnsense/test-vm/seed-shape.py`](../opnsense/test-vm/seed-shape.py)). The drill
+fetches the newest object by port-forward to Garage, which needs none of the router's VIPs. It
+decrypts it with the wallet's age identity into the 0700 secret dir, and the bootstrap's `render`
+splices identity into the seed:
+
+- `trust`: every `<cert>` + `<ca>` with its refids, plus the GUI's `ssl-certref`;
+- `acme`: `OPNsense/AcmeClient` whole — the registered account and the certificate rows bound to
+  those refids;
+- `api-users`: the FU-013 users with their hashed keys, plus root's prod key line appended to the
+  seed's throwaway one;
+- `wireguard`: `OPNsense/wireguard` whole — the server keypair and its peers, so the laptop and
+  phone configs survive the move unchanged (operator, 2026-09-30: option (a) of
+  [`router-move.md`](router-move.md) §The identity).
+
+Not carried but the router's own: **root's password** is the wallet's `opnsense-root-password`
+(operator, 2026-09-30), not the plain drill's per-run throwaway.
+
+The decrypted file is deleted right after the build, and the seed ISO follows the bootstrap's
+usual path: a 0600 file on nx-02 for the first boot only. Never carried: anything a play owns
+(the WireGuard role finds the carried instance and keeps its keypair — it generates one only
+when the instance is absent). A carried cert that falls due for renewal
+during the run would renew FROM the rehearsal, which means a real LE order and a Cloudflare write
+with prod's token. So the drill refuses while any carried cert is ≥ 58 days old (os-acme-client
+renews at 60).
+
+**`--wan bridged`** (docs/router-move.md): the WAN is `vtnet2`, virtio (`queues=2`, `firewall=0`)
+on a runtime host bridge `vmbr9` whose only port is the same dark `eno2` — built and deleted by the
+bootstrap, refused if a configured bridge has the name. After the other probes a fake-ISP LXC joins
+`vmbr9` (dnsmasq + iperf3 on `11.255.0.1/24`, outside prod's `blockpriv`/`blockbogons`; its packages
+arrive over a temporary `vmbr0` leg deleted before dnsmasq starts). `wan_lease` wants the router's
+lease on the spoofed MAC; `wan_throughput` runs iperf3 from the LAN probe through NAT, 1 and 4
+streams both ways, each ≥ `OPN_DRILL_WAN_MIN_MBPS` (900). First run, 2026-09-30: 2988–3256 Mbit/s,
+PASS, score 0. Expected per the literature: 1 Gbit/s over virtio is routine on Broadwell-class
+Xeons with offloads off; the multi-Gbit ceilings people hit need multiqueue + RSS tuning
+([Proxmox forum](https://forum.proxmox.com/threads/opnsense-10gbit-performance-and-throughput-limitation.142737/),
+[Netgate](https://forum.netgate.com/topic/177372/limit-of-virtio-performance),
+[OPNsense virtual setup](https://docs.opnsense.org/manual/virtuals.html)).
+
+**Extra probes:** `wan_dark`, `wan_mac`, and `carried_key_{root,backup_puller,automation}`. Each
+key probe calls an endpoint the user's privileges allow, using prod's wallet pair against the
+rehearsal VM, and wants HTTP 200: no consumer re-keys on the move. `real_cert` wants HAProxy's
+first VIP to serve the carried Let's Encrypt certificate for its SNI, where the plain drill
+serves the harness's self-signed fixture. `wg_handshake` runs
+[`scripts/wireguard-handshake-probe.py`](../scripts/wireguard-handshake-probe.py) in the probe
+container as the laptop peer (its wallet key over stdin) against the LAN address, with PROD's
+server pubkey: a reply proves the carried server key, since the WAN is dark. `root_password`
+recomputes root's crypt hash from the live `config.xml` with the wallet password and its own salt.
+
+Under `--router` the base map's "matched nothing" list is long by construction: the carried users
+and certificates now equal prod's, so their env/accepted lines have nothing left to explain. Read
+that list on the plain drill only.
+
+**First run (2026-09-29 night): PASS, score 7, all twelve probes green.** The WAN was dark and
+wore `em0`'s MAC; prod's three API pairs answered 200; HAProxy served the carried LE cert; the
+users role minted nothing. The rows were the WAN's own shape (prod's `WAN_GW` dynamic default
+gateway, `gateway` on the interface, a `descr`, an inert IPv6 field), the users' `nextuid`
+counter, and SystemHealth (#2129). The seed now writes prod's WAN gateway, and the maps take
+the rest.
+
+**2026-09-30: score 0, thirteen probes.** #2129 took SystemHealth; the WireGuard carry added
+`wg_handshake` (green); the last six rows were prod's pre-26.7 `WAN_GW` storage (three flags
+empty where 26.7 writes `0`, three newer flags absent), accepted by the router overlay in that
+dead state only.
 
 ### On the management box — weekly, with metrics and belts
 

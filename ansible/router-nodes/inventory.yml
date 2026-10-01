@@ -1,0 +1,31 @@
+# Inventory for the CARP pair's router NODES (ADR-144, docs/router-move.md §The standing nodes) —
+# used by scripts/opnsense-router-node.sh, always passed with `-i` (which replaces ansible.cfg's
+# `inventory = inventory.yml`, so the production router is never loaded beside them).
+#
+# The group is `opnsense` because the plays hard-code `hosts: opnsense`; values come from
+# ansible/group_vars/opnsense.yml (next to the playbooks) — prod's own — plus the host vars here.
+# Each node's `ansible_host` is its own LAN address for good (ADR-144 (3)); `.1` is never one.
+# `opnsense_standby: true` keeps a node inert on the LAN until the cutover window converges it
+# false (the standby profile — router-move.md); the verb refuses a node without it.
+# `haproxy_vip_interface: lo0` is PERMANENT on a node (ADR-088 as amended 2026-09-30: the LAN is a
+# /24, 192.168.3.0/24 is router-local and reached via .1 — the VIPs never go on `lan`, standby or
+# not). A host var, because prod's group_vars derive it from opnsense_standby and win over this
+# inventory's group_vars.
+all:
+  children:
+    opnsense:
+      hosts:
+        opnsense-nx02:
+          ansible_host: 192.168.2.70
+          bgp_router_id: 192.168.2.70   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
+          ansible_connection: local
+          opnsense_standby: true
+          router_carp_advskew: 0     # MASTER (ADR-145: nx-02 takes .1 alone in window 1; pve joins as BACKUP)
+          haproxy_vip_interface: lo0
+        opnsense-pve:
+          ansible_host: 192.168.2.71
+          bgp_router_id: 192.168.2.71   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
+          ansible_connection: local
+          opnsense_standby: true
+          router_carp_advskew: 100   # BACKUP (ADR-145)
+          haproxy_vip_interface: lo0

@@ -11761,3 +11761,166 @@ map #2118); ROADMAP §HA step 2 = CARP sequence with the score as cutover gate (
 `second-jail` (#2116). **Found:** prod firmware is a major behind (26.1.11_6 vs 26.7.4, update
 check stale since Aug 13) — trial of the official path on 9110 running; the reviewer exit-contract
 keys a merge head differently from the reviewer's standing-aside (false NO TERMINAL, not filed).
+
+## 2026-09-30 (morning) — S9: the router rehearsal merged (#2131); the jail blackouts were ARP flux
+
+Resumed a cut-off session mid-diagnosis: rehearsals 2–4 failed on jail network loss, suspected the
+rehearsal VM. **Not it.** Prod's `arp: … moved from` log: pop-os went dual-homed 09-29 (new cable
+.187 + wifi .165), prod's entry for .165 flipped MACs every ~1 min; all 152 probe failures fell in
+the wired-MAC windows (78% of time), LAN-local targets unaffected, prod healthy (no sshguard). Operator
+set `arp_ignore=1`/`arp_announce=2` (`/etc/sysctl.d/60-arp-flux.conf`); no flaps since. Kept VM
+9199/CT 9198 destroyed, stray decrypted prod XMLs in the old scratchpad shredded. Rehearsal 5
+(wip) PASS score 7; squashed onto master in a clone (+ glossary row "router rehearsal"),
+rehearsal 6 PASS 12/12 probes, **score 6** (prod's WAN gateway_item rows). #2131: review r1
+CHANGES_REQUESTED — early `die` paths left the decrypted carry on disk (fixed: secrets-only EXIT
+trap, proven by a forced fetch failure) + nextuid moved to the router overlay; r2 APPROVED,
+**merged** 85b68477. Old worktrees wt-router/wt-master removed.
+
+## 2026-09-30 (late morning) — S9: router rehearsal score 0 (#2133), router address from the inventory (#2132)
+
+Operator: all three — the gateway rows, WireGuard option (a), the single-router references.
+**#2132** (merged 6963982e, first review): the drill's `PROD` + `wireguard-client.sh` read
+`ansible/inventory.yml`; the drill's host check gains a literal `.1` belt; router-move.md (B)
+records the literals that stay (guards, the backup CronJob, the stdlib python defaults). Proof:
+`wireguard-client.sh laptop` re-rendered byte-identical. **#2133** (merged 82c03fce): the
+`--router` seed carries `OPNsense/wireguard`; new probe `wg_handshake` (probe CT as the laptop
+peer, key over stdin, vs prod's live pubkey) — HANDSHAKE_OK; prod's pre-26.7 WAN_GW flags (empty
+vs the 26.7 build's 0, three newer flags absent — read from both live configs off a kept run)
+accepted in that dead state only; negative test force_down=1 → score 1. Rehearsal 8 at the merged
+content: PASS 13/13, **score 0**. Review r1 flagged `search_server` as unverifiable from its
+sandbox — both spellings return the same pubkey on prod; switched to `searchServer` for
+consistency; r2 APPROVED. No jail net failures across rehearsals 5–8 (ARP-flux fix holds).
+
+## 2026-09-30 (midday) — S9: 26.7.5 (9110 + prod), root from the wallet, ADR-144 (CARP beside Big Data)
+
+Operator: root password option (b); management path option (4) — each node at its own LAN IP;
+bring CARP + the pve router forward (three routers for a while); buying two 5-port switches + a
+1 GbE x1 card for pve (Realtek TG-3468 — fine host-bridged; the box's second NIC is Realtek too).
+Rehearsal 9 failed at build: upstream shipped **26.7.5**, the mirror serves the head only. 9110:
+rollback → check (12) → update (no reboot) → 26.7.5, baseline moved. Rehearsal 10 (SERIES + root):
+PASS 14/14, `root_password` match, score 0. **Prod** (operator: "ok, set a durable guard"): window
+seat-1790760478-4482 + a bash alert watch (dedupe + liveness line — GAPS maintenance-window-G2's
+shape), 14 updates, job 16 s, no reboot; services up (radvd idle as before), DNS, HAProxy LE cert,
+BGP 13/13, `maint check` baseline twice; ⚠ closed ~75 s after the update (said "a few minutes") —
+the watch ran 30 min on and saw nothing new. Merged: #2134 SERIES (first review), #2136 root
+(wallet entry minted in the jail, first review), #2135 ADR-144 (r1: a dangling "sub-step 4" — all
+three sub-step refs enumerated and fixed; the merge bot's master-merge pre-#2136 overwritten by a
+rebase with an explicit lease). Pre-existing, not ours: MgmtOpnsenseDrillScoreRegressed (the box's
+09-29 run, 117 — next weekly run replaces it); OpnsenseConfigUnattributedRevision (root@.165 =
+pop-os, 04:23Z). Stopped before the standing nx-02 node: its standby profile (no VIP aliases, no
+ACME renewal, …) is design only — not a thing to put on the live LAN unattended.
+
+## 2026-09-30 ~12:20–13:30Z — seat: standby profile (#2138), CP verbs (#2137), pve NIC window
+Operator back with 2 × 5-port switches + TP-LINK TG-3468 (hardware purchases.md, 0fdf4a1).
+Rulings: nx-02 WAN bridged "if no performance penalty"; work the standby profile first.
+**#2138:** `opnsense_standby` (BGP neighbours disabled, ACME auto-renewal off, ddclient off,
+dnsmasq off via OPN_DHCP_ENABLE=0, HAProxy VIPs on lo0 + cleared from the other interface);
+`opnsense-drill.sh --router --standby` PASS — standby_{dhcp_off,bgp_silent,vips_off_lan (16/16),
+ddclient_off,acme_no_renewal} + haproxy_tls/real_cert through lo0, WG, keys, root; score 19 =
+the standby deltas. **Correction to the entry above:** OpnsenseConfigUnattributedRevision was NOT
+the operator in the web GUI (operator: "did not configure anything") — the backup job's detail:
+`/api/diagnostics/netflow/setconfig` by root@.165 at 2026-09-29T20:06Z = the seat's own
+opnsense-system play on the root key (FU-013 next: playbooks onto `automation`); 04:23Z is the
+backup run, not the change. **pve window** seat-1790772187-4679: wk-03/wk-01/wk-02 via
+`node-maintenance down` (FORCE for the attached-volume/single-replica WARNs; eventbus PDB
+minAvailable 2 held — the manual js-1 wait was redundant, operator asked), cp-01 via the NEW CP
+path (operator: "node maintenance should take control plane as argument" → #2137): gates +
+snapshot + etcd forfeit (leader → cp-02) + drain + shutdown; the first run died at down's Longhorn
+read on a CP (fixed in-PR, rerun after an uncordon). ci-runner-01 idle, matchbox, then — BEFORE
+poweroff — the onboard RTL8168 pinned `nic0` (the new card is the same chip; it took 06:00.0 and
+the name enp6s0, the onboard moved to 07:00.0: unpinned, vmbr0 would have bridged the uncabled
+card and pve booted offline). Up: all four via `up` (cp-01: etcd 3 whole, cilium 13/13).
+CiliumUnreachableNodes = stale cilium-health results frozen mid-boot, self-cleared (GAPS
+maintenance-window-G5 resight). Closed --force over NodeRebooted + PodSigkilled (G5's class).
+#2137 review: pipefail fail-open (fixed); the column claim came from the fixture (the live layout
+differs; the leader is now read by value). BIOS AC-loss unreadable headless — operator item 4.
+
+## 2026-09-30 ~13:40–16:10Z — seat: bridged WAN measured, MB4 access design, nx-02 node STANDING
+Operator: bridged WAN test + web research; the management network's BMC/access answer → MB4 now
+(WAN + management switches go in together); then "go ahead unattended … wind down when done and
+all in-flight PRs are merged". **#2140** `--wan bridged` (runtime vmbr9 over eno2, fake-ISP LXC,
+wan_lease + wan_throughput): ×1/×4 up/down 2988–3256 Mbit/s NAT'd, lease on the spoofed MAC, score
+0 → nx-02 bridged (review: missing `exit 1`, fixed). Web research: 1 Gbit/s over virtio routine on
+Broadwell with offloads off; firewall=0 (macfilter), 26.7 SYN-cookie vtnet bug, r8169 on pve.
+**#2139** MB4 item 7: 192.168.15.0/24 reserved, static BMCs (today DHCP reservations .123/.173),
+ipmitool on the box + ssh -L for the web GUI (review: `-E` reads IPMI_PASSWORD, fixed).
+**#2141** the nx-02 node: tofu vmbr3 (eno2) + VM 9170 (LAN MAC 02:00:C0:A8:02:46), seed-shape
+`--standing` (.70/22, no LAN interface gateway → no reply-to, DHCP off, ACME renewal off, root keys
+= prod's), bootstrap `standing` + WAN guard, `scripts/opnsense-router-node.sh` (kill switch on the
+LAN tap → qm stop — trip-tested with an injected .1 ARP claim, ~1 s), `opnsense-backup-fetch.sh`
+shared with the drill. Window seat-1790782366-5635: plan 2 to add → applied; build PASS (26.7.5,
+every play standby, check green, switch never tripped; .1 still Big Data's MAC). PveNumaNodeMemoryLow
+(nx-02 node 0) went pending before the window — router VM on node 1; closed --force naming it.
+Mine: a hand-typed PR watch piped JSON through zsh echo and sat blind 30 min (GAPS G2 resight).
+
+### 2026-09-30 late — nx-02 RAM (operator question, no live change)
+
+`PveNumaNodeMemoryLow` read live on nx-02: node 0 0.4 GiB free + 0.1 inactive-file, node 1 5.7 + 2.8,
+swap 250 MB with si/so ≈ 0 → the alert is the early warning, not an event; host ~60/62.5 GiB booked.
+DIMMs read on pve/nx-01/nx-02: nx nodes use 2 of 4 channels per socket (A/B/E/F only). Operator
+supplied eBay/AliExpress prices → hardware `market/2026-09-30-rdimm-price-guide.md` (16 GB sticks, nx-02
+C1/D1/G1/H1 first, watch for a bulk lot ≤ €48/16 GB). FU-289 extended (item 3). Mine: first answer
+suggested mixing pve's 2133 Micron with the 2400 Samsungs in one channel; the Supermicro manual forbids
+mixed speeds and Nutanix wants one maker per channel — corrected before any buy.
+
+### 2026-09-30 night — nx-02 router node reboot-proof (FU-297, #2142)
+
+Kill switch moved from a nohup process to `router-killswitch@9170` on nx-02 (new
+`ansible/pve-router-killswitch.yml`, Before=pve-guests, MAC read from net0; a trip latches onboot 0
+then qm stop); tofu `on_boot = true`. Window seat-1790788269-2350: play applied, nohup retired, live
+trip test (injected `.1` ARP claim on tap9170i0 → <1 s, onboot 0, VM stopped), restored
+(`qm set --onboot 1` by hand = the PR's tofu), booted armed without a trip, `check nx02` 11/11.
+Closed --force over an unrelated CPUThrottlingHigh→InfoInhibitor in agent-coordinator. Mine: first
+window open ran outside devbox (kubectl not on PATH → unreadable baseline, refused).
+
+### 2026-09-30 night — pve router node + the CARP trial (FU-297, #2143 #2144)
+
+Window seat-1790789286-5042 (closed clean). #2143: tofu vmbr3/enp6s0 + VM 9171 applied through the box
+from the branch (plan = 3 creates; then the on_boot flip), `router-node.sh build pve` → `check pve`
+11/11. Kill switch v2: `tcpdump -Q in` (v1's `ether src <nic>` would miss CARP's virtual MAC —
+confirmed: adverts leave from 00:00:5e:00:01:fa), exemptions = router-nodes `router_carp_vips`,
+stop-before-latch (1.7 s, tested by a BPF-written ARP for unused 3.249 from INSIDE nx-02's node).
+#2144: `opnsense-carp.yml`, wallet `opnsense-carp-password` minted; 3.250/22 vhid 250, pve skew 0
+MASTER, nx-02 100 BACKUP. 10 Hz ping from nx-02 host: maintenance 0/193, preempt back 0/193, hard
+`qm stop` 2.6 s, re-take after boot 0; both checks 12/12. pve RAM booked ~63.5/62.7 GiB (resident
+~26) — flagged in #2143, FU-289's class. Mine: first build died on a worktree without
+tofu/kubeconfig (symlinked); mgmt-tf apply needs MGMT_YES=1 non-interactively.
+
+### 2026-09-30 night — the CARP pair's drill sequence (goal session; FU-297, #2145–#2150)
+
+Operator: /24, reserve a 2.x trial slot, cable attached (nx-02 eno2 ↔ pve enp6s0), /goal set.
+#2145 /24 ruling (ADR-088 amended, .72 reserved, lo0 permanent; dark-WAN guard read operstate and
+left WAN ports admin-down — fixed). #2146 pfsync (v1400 pinned; states replicate). #2148 WAN gate on
+the hypervisor after a guest CARP hook failed the boot case (BACKUP took the lease; hook reconfigure
+never ran dhclient) — QMP set_link keyed on adverts; fake ISP netns + flowprobe. #2149 belt from the
+gates' textfile. #2150 write-up. Drills (held NAT'd flow / fresh): planned failover 6.4 s/2.5 s,
+preempt 6.4/2.3, hard stop 13.5/3.5, rolling update (3 reboots) 0.62 s + 3.1 s, BACKUP reboot 0,
+split-brain → RouterPairMasterCount firing +1m47s value 2, cleared on heal; cold start green.
+Mine: the /24 lo0 proof (3.11 via .71) TRIPPED pve's kill switch (correct) and the hard stop lost
+~1 min of unflushed nano-UFS config (→ sync after converge); a gate hold of 1.5 s flapped nx-02
+(advskew 100 → 1.39 s interval); QMP success matched on capabilities alone hid a set_link that never
+ran; pkill -f matched its own ssh. Prod .1 untouched throughout (Big Data MAC, Unbound, grafana 200).
+
+### 2026-10-01 — #2100 ride churn: the reviewer false breaker + the Renovate deno rebase cause (S9 #1985)
+#2147 (unarmed-major content-keyed debounce) latched agent/error on a FALSE pile: /code-review posts
+inline findings one by one, GitHub wraps each in its own empty COMMENTED review (#2139:1, #2130:6,
+#2147:4). #2151 (STEP 0 NOTE: carriers are not the pile; Class B replay entry) merged 05:14; label
+cleared → re-review stood aside on checks-pending, then APPROVED with the same 4 carriers present —
+drill passed; #2147 merged 05:23 (a7ead57f). Renovate debug dry run 36818823497 (44.126.1 = latest):
+the deno manager's updateDependency returns null on an already-bumped deno.json → "Rebasing branch
+after error updating content" → every deno branch regenerates from master each run (conflicted ==
+behind-base-branch for deno; no config reaches it). Finding on #1985; upstream report = operator call.
+
+## 2026-10-01 evening — router move: ADR-145 + window-1 prep (seat)
+- Kea HA verified API-complete (subagent, read-only probes + core 26.7.5 source; leases = local
+  memfile, no DB) → operator: two windows, nx-02 alone in the end shape (ADR-145, #2154); bgp.md (#2153).
+- `opnsense/kea-dhcp.py` + `OPN_DHCP_SERVER` (#2155): drill PASS with Kea serving. Kea HA drill on
+  test VM + kept drill VM (#2156): join/sync, replication, takeover ~70–80 s, recovery, lone start ~60 s;
+  peer rules need `disablereplyto`. nx-02 real host reboot in a window (#2157): units 9 s, guests 30 s,
+  router VM self-started dark, window closed clean.
+- #2158 converged both standing nodes (.72 retired, skews nx-02 0/pve 100, router-ids .70/.71) —
+  retiring on pve (MASTER) first promoted nx-02 to .72 MASTER 18:45:52–18:47:57Z, its gate raised
+  the WAN (cable then went only to pve's dark port). RouterPairMasterCount fired on 0 masters 18:50Z →
+  silenced 3 h, #2159 interim `> 1`. #2160 BGP alert per peer; #2161 draft Cilium peer (window 1).
+- Operator cabled the WAN switch: with nx-02 + pve ports on it, 7–20 % WAN loss (connect 1.3–2.9 s);
+  both pulled → 0 %. Big Data em0 clean, taps dark. Hunt next session (meta-state).

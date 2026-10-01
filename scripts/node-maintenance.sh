@@ -376,7 +376,7 @@ preflight() {
     if [ "${CONTROLPLANE_GUARDED:-0}" = 1 ]; then
       ok "control-plane node admitted by controlplane-upgrade.sh after CP-specific gates"
     else
-      fail "control-plane node — use controlplane-upgrade.sh, not this script"
+      fail "control-plane node — \`down\`/\`up\`/\`upgrade\` hand it to controlplane-upgrade.sh; the other verbs refuse"
     fi
   fi
 
@@ -564,7 +564,12 @@ down() {
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
   # Longhorn's own view: scheduling off on a cordoned node is automatic; confirm before power-off.
-  kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}{"\n"}' >&2
+  # A control plane has no nodes.longhorn.io object (wait_storage_back's rule): absent = not a
+  # storage node; a query that FAILED stops before the shutdown (first CP `down`, 2026-09-30).
+  local lh
+  if lh="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" --ignore-not-found -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}')"; then
+    log "${lh:-no Longhorn node object — not a storage node}"
+  else fail "cannot read the Longhorn node object — refusing the shutdown"; return 1; fi
   log "talosctl shutdown $NODE ($ip)"
   talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" shutdown || log "shutdown returned non-zero (the API often drops mid-call) — verifying"
   local i=0
@@ -1548,6 +1553,14 @@ upgrade_behind() {
   ok "upgrade-behind ($scope): all ${total} node(s) at their declared version"
 }
 
+# A control plane's down/up/upgrade run through controlplane-upgrade.sh (the etcd quorum, snapshot,
+# leadership and Cilium gates), which re-enters here with CONTROLPLANE_GUARDED=1.
+case "$cmd" in down|up|upgrade)
+  if [ "${CONTROLPLANE_GUARDED:-0}" != 1 ] && [ -n "$NODE" ] && \
+     kubectl get node "$NODE" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+    exec bash "$REPO/scripts/controlplane-upgrade.sh" "$NODE" "$cmd"
+  fi ;;
+esac
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;

@@ -1,0 +1,16 @@
+# Managed by ansible/roles/pve-router-killswitch — edit there. Instance = the router node's vmid.
+# Before=pve-guests: running before an onboot VM starts, so its WAN tap is down from the start.
+[Unit]
+Description=Router node WAN gate for VM %i (only the CARP master reaches the WAN)
+After=pve-cluster.service
+Before=pve-guests.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/router-wangate %i
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

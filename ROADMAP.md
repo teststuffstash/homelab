@@ -113,8 +113,8 @@ work survivable.
    the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
    back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
    [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
-2. **Router HA — OPNsense CARP pair: two VMs built from git, `pve` (master) + `nx-02` (backup)**
-   (operator, 2026-09-29; one per chassis — never both NX nodes, one backplane). `pfsync` = stateful
+2. **Router HA — OPNsense CARP pair: two VMs built from git, `nx-02` (master) + `pve` (backup)**
+   (operator, 2026-09-29; roles swapped by ADR-145, 2026-10-01; one per chassis — never both NX nodes, one backplane). `pfsync` = stateful
    failover; **no XMLRPC config sync** — ansible configures each node from git
    ([`spikes/no-human-in-the-loop.md`](docs/spikes/no-human-in-the-loop.md) path 1), which is also
    what keeps prod's leftovers from copying over. Bonus: rolling firmware updates. It rewrites every
@@ -122,18 +122,22 @@ work survivable.
    the test VM validates router PRs; the weekly rebuild drill builds a router from nothing and scores
    prod's residue (rows not in code). **The cutover gate is that score:** every row coded, deleted
    on prod, or knowingly dropped — a from-git node silently loses whatever the score still counts.
-   Sequence (Big Data's Intel 4-port card is its LAN, so moving it takes Big Data off the air):
-   1. score → ≈0; the nx-02 node (WAN = `eno2` passed through) built from git and drill-proven;
-   2. **nx-02 becomes the only router** in a window, Big Data still cabled as the fallback — the
-      same window carries the WAN switch (the ONT has one port) and the single-lease trial (shared
-      MAC, only the master's WAN up);
-   3. Big Data goes dark; its card moves to pve's free x16; the pve VM is built from git;
-   4. the pve VM joins as CARP master (lower advskew), nx-02 drops to backup.
-   Between 2 and 4 the LAN runs on one router with no fallback — a spare NIC in pve's x16 removes
-   that gap. Also needed: per-node inventory for the playbooks, an ADR-088 ruling (each node's own
-   LAN IP, `.1` becomes the CARP VIP), HAProxy VIPs from IP aliases to CARP VIPs, dnsmasq DHCP
-   active/passive, Cilium peering with both nodes, and the management network (the NX BMCs + the
-   box's second NIC).
+   Sequence (**ADR-144**, 2026-09-30 — the pair is built BESIDE Big Data, not after it):
+   1. score → ≈0 (**done** 2026-09-30: the `--router` rehearsal scores 0, identity carried —
+      [`docs/router-move.md`](docs/router-move.md)); root from the wallet;
+   2. the two nodes stand beside Big Data, each at its own LAN IP (nx-02 `.70`, pve `.71` — pve
+      gets a single-port x1 NIC for its WAN), inert on the LAN (no `.1`, DHCP off, WAN uncabled);
+      CARP is learned on the pair with a trial VIP from `3.0/24` while nothing depends on it;
+   3. **two windows (ADR-145): `.1` moves from Big Data to nx-02 alone**, already in the pair's
+      end shape (`.1` a one-speaker CARP VIP, Kea DHCP, per-node BGP), the WAN switch in (the ONT
+      has one port; only the router holding `.1` has its WAN up — the single-lease rule); **then pve
+      joins as BACKUP**, invisible to clients. Big Data stays cabled and powered off as the fallback
+      for 1–2 weeks, then retires. Its Intel card is not needed. Plan: `docs/router-move.md` §The two windows.
+   Also needed: per-node inventory for the playbooks (`host_vars/` per node), HAProxy VIPs from IP
+   aliases to CARP VIPs (dropped by the `/24` ruling — only `.1` is CARP), DHCP active/passive (Kea
+   hot-standby HA — ADR-145), Cilium peering with both nodes, pfsync over
+   the LAN (no third port — accepted), and the management network (the NX BMCs + the box's second
+   NIC; the routers are not on it — each is managed at its own LAN IP).
 3. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).
    A node dies → its VMs restart/migrate to a survivor.
 4. **Public-service HA — Cloudflare LB** → home primary, Civo (scale-to-zero) failover.

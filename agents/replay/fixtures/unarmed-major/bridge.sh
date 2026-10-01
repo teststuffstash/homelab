@@ -12,3 +12,5 @@ pr_blocked_on_check() {
   if [ "${m:-0}" -gt 0 ]; then printf 'blocked|human (a blocked-on: human marker with no later human comment)\n'; else printf 'clear\n'; fi
 }
 # state_fp_for_clause comes from block:state-fp-jq (the real reader) — never stub it here
+# the SETTLING hold's clock (#2100): pinned so a fixture's "pending for N minutes" is deterministic
+um_now() { date -u -d "${IN_NOW:-2026-09-28T12:00:00Z}" +%s; }

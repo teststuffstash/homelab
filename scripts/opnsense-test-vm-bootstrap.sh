@@ -32,17 +32,26 @@ VMNAME="${OPN_TEST_VM_NAME:-opnsense-test}"         # what `qm config` must say 
 LAN_BRIDGE="${OPN_TEST_LAN_BRIDGE:-vmbr1}"          # create only; tofu wires 9110's
 TOFU_VMID=9110                                      # the tofu-owned VM: create/destroy never touch it
 WAN_IP="${OPN_TEST_HOST:-192.168.2.67}"           # = tofu var.opnsense_test_wan_ip_cidr
-WAN_BITS=24
+WAN_BITS="${OPN_TEST_WAN_BITS:-24}"               # standing: the node's LAN mask (/24 — ADR-088 as amended)
 GATEWAY=192.168.2.1
 MGMT_NET=192.168.2.0/24
 LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, isolated-bridge carve
 LAN_BITS=24
 LAN_DHCP_START=192.168.1.100
 LAN_DHCP_END=192.168.1.199
-SERIES=26.7.4                                      # prod's version (GET /api/core/firmware/info)
+SERIES=26.7.5                                      # prod's version = the series head the mirror serves (= 9110's baseline)
 NANO_VERSION=26.7                                  # = tofu var.opnsense_test_nano_version (the birth image)
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
+# The ROUTER REHEARSAL shape (docs/opnsense-test-vm.md §The router rehearsal; ephemeral VMs only):
+SHAPE="${OPN_TEST_SHAPE:-test}"                    # test | router | standing (ADR-144: the node's LAN = vmbr0 at WAN_IP, WAN = WAN_BRIDGE)
+WAN_PCI="${OPN_TEST_WAN_PCI:-}"                    # router: the host NIC passed through as the WAN
+WAN_MAC="${OPN_TEST_WAN_MAC:-}"                    # router: the MAC the WAN spoofs (the ISP lease follows it)
+WAN_MODE="${OPN_TEST_WAN_MODE:-passthrough}"       # router: passthrough (igb0) | bridged (vtnet2 on WAN_BRIDGE)
+WAN_BRIDGE="${OPN_TEST_WAN_BRIDGE:-vmbr9}"         # bridged: a RUNTIME host bridge, WAN_PCI's netdev its only port
+case "$WAN_MODE" in passthrough|bridged) ;; *) echo "OPN_TEST_WAN_MODE must be passthrough|bridged" >&2; exit 2 ;; esac
+CARRY_FROM="${OPN_TEST_CARRY_FROM:-}"              # a decrypted prod config.xml (0600) to carry identity from
+CARRY="${OPN_TEST_CARRY:-trust,acme,api-users}"    # opnsense/test-vm/seed-shape.py --carry
 
 NX02="root@${OPN_TEST_PVE:-192.168.2.59}"
 SSH_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
@@ -136,6 +145,12 @@ assert not re.search(r"@[A-Z_]+@", s.split("-->", 1)[1]), "unfilled placeholder"
 open(os.environ["OUT"], "w").write(s)
 PY
   )
+  # The router rehearsal (docs/opnsense-test-vm.md §The router rehearsal): reshape + carry.
+  local shape_args=()
+  [ "$SHAPE" != router ] || shape_args+=(--router --wan-mac "$WAN_MAC" --wan-if "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0)")
+  [ "$SHAPE" != standing ] || shape_args+=(--standing --wan-mac "$WAN_MAC" --lan-ip "$WAN_IP/$WAN_BITS" --lan-gw "$GATEWAY")
+  [ -z "$CARRY_FROM" ] || shape_args+=(--carry-from "$CARRY_FROM" --carry "$CARRY")
+  [ ${#shape_args[@]} -eq 0 ] || python3 opnsense/test-vm/seed-shape.py "$out" "${shape_args[@]}"
 }
 
 # The serial-console driver, run ON nx-02 against QEMU's serial socket. It answers exactly two
@@ -178,6 +193,30 @@ PY
 
 vm_status() { nx "qm status $VMID" | awk '{print $2}'; }
 
+# The STANDING shape's WAN must be dark before the node first boots wearing the old router's MAC:
+# every physical port of WAN_BRIDGE without carrier (an admin-down port is raised to read it, then
+# restored), and the bridge without a host address. The bridge is tofu's (tofu/opnsense-router.tf).
+standing_wan_guard() {
+  [ -n "$WAN_MAC" ] || die "standing shape needs OPN_TEST_WAN_MAC"
+  nx "sh -s $WAN_BRIDGE" >&2 <<'SH' || die "WAN bridge refused (above)"
+br=$1
+[ -d /sys/class/net/$br/brif ] || { echo "$br is not a bridge on this host"; exit 1; }
+[ -z "$(ip -br -4 addr show dev $br | awk '{print $3}')" ] || { echo "$br has a host address"; exit 1; }
+n=0
+for p in /sys/class/net/$br/brif/*; do
+  [ -e "$p" ] || continue; i=$(basename $p)
+  case $i in tap*|fwpr*|fwln*|veth*) continue ;; esac
+  # ADMIN state (IFF_UP), not operstate: operstate reads `down` on an admin-UP port with no carrier,
+  # and restoring from it left the standing nodes' WAN ports admin-down (found 2026-09-30).
+  n=$((n+1)); adm=$(( $(cat /sys/class/net/$i/flags) & 1 )); [ $adm = 1 ] || { ip link set $i up; sleep 4; }
+  c=$(cat /sys/class/net/$i/carrier 2>/dev/null || echo unreadable); [ $adm = 1 ] || ip link set $i down
+  [ "$c" = 0 ] || { echo "$i on $br carrier=$c - cabled? never boot the spoofed MAC onto a live WAN"; exit 1; }
+done
+[ $n -ge 1 ] || { echo "$br has no physical port"; exit 1; }
+echo "$br: $n physical port(s), all dark, no address"
+SH
+}
+
 cmd_bootstrap() {
   nx "qm config $VMID" >/dev/null 2>&1 || die "VM $VMID not on nx-02 — apply tofu/opnsense-test.tf first"
   [ "$(vm_status)" = stopped ] || die "VM $VMID is running — bootstrap needs the never-booted disk (doc §Recovery)"
@@ -193,6 +232,7 @@ cmd_bootstrap() {
   nx "genisoimage -quiet -R -J -V OPNSEED -o /var/lib/vz/template/iso/$SEED_ISO /root/opnsense-seed-$VMID && rm -rf /root/opnsense-seed-$VMID && chmod 600 /var/lib/vz/template/iso/$SEED_ISO"
   nx "qm set $VMID --ide2 local:iso/$SEED_ISO,media=cdrom >/dev/null"
 
+  [ "$SHAPE" != standing ] || standing_wan_guard
   log "first boot, answering the config importer over the serial socket"
   nx "qm start $VMID"
   printf '%s\n' "$SERIAL_DRIVER" | nx "cat > /root/opnsense-importer-driver-$VMID.py"
@@ -288,15 +328,84 @@ ephemeral_guard() {
   [ "$VMID" != "$TOFU_VMID" ] || die "REFUSING: vmid $VMID is the tofu-owned test VM"
   [ "$VMNAME" != opnsense-test ] || die "REFUSING: '$VMNAME' is the tofu-owned test VM's name — set OPN_TEST_VM_NAME"
 }
+# The router shape's WAN NIC must be DARK: with the old router's MAC spoofed, a cabled port would
+# take the ISP lease from the live router. Refuses a NIC with carrier, one enslaved to a bridge,
+# one sharing its IOMMU group, or one the host holds an address on. Prints the PCI address.
+# A NIC a previous run left on vfio-pci is handed back to its host driver first (wan_nic_release):
+# with no host netdev there is no carrier to read, and "could not look" must never pass.
+wan_nic_guard() {
+  [ -n "$WAN_PCI" ] && [ -n "$WAN_MAC" ] || die "router shape needs OPN_TEST_WAN_PCI + OPN_TEST_WAN_MAC"
+  wan_nic_release
+  nx "sh -s $WAN_PCI" >&2 <<'SH' || die "WAN NIC $WAN_PCI refused (above)"
+d=/sys/bus/pci/devices/$1
+[ -d "$d" ] || { echo "no PCI device $1"; exit 1; }
+[ "$(ls /sys/kernel/iommu_groups/$(basename $(readlink $d/iommu_group))/devices | wc -l)" = 1 ] || { echo "$1 shares its IOMMU group"; exit 1; }
+ls $d/net/* >/dev/null 2>&1 || { echo "$1 has no host netdev (driver: $(basename $(readlink $d/driver 2>/dev/null) 2>/dev/null)) - cannot read its carrier"; exit 1; }
+for n in $d/net/*; do
+  i=$(basename $n)
+  # carrier is unreadable on an admin-down port: raise it (no address), read, restore
+  adm=$(( $(cat $n/flags) & 1 )); [ $adm = 1 ] || { ip link set $i up; sleep 4; }   # admin state, not operstate
+  c=$(cat $n/carrier 2>/dev/null || echo unreadable); [ $adm = 1 ] || ip link set $i down
+  [ "$c" = 0 ] || { echo "$i ($1) carrier=$c - cabled?; never spoof the live router's MAC onto it"; exit 1; }
+  [ ! -e $n/master ] || { echo "$i ($1) is enslaved to $(basename $(readlink $n/master))"; exit 1; }
+  [ -z "$(ip -br addr show dev $i | awk '{print $3}')" ] || { echo "$i ($1) has a host address"; exit 1; }
+done
+SH
+  printf '%s' "$WAN_PCI"
+}
+# Hand a passed-through NIC back to its host driver (Proxmox leaves it on vfio-pci after the VM
+# stops), so the host sees its link again — the guard's carrier read depends on it.
+wan_nic_release() {
+  [ -n "$WAN_PCI" ] || return 0
+  nx "sh -s $WAN_PCI" >&2 <<'SH'
+d=/sys/bus/pci/devices/$1
+[ "$(basename $(readlink $d/driver 2>/dev/null) 2>/dev/null)" = vfio-pci ] || exit 0
+echo "$1: vfio-pci -> host driver"
+echo "$1" > /sys/bus/pci/drivers/vfio-pci/unbind
+echo > $d/driver_override
+echo "$1" > /sys/bus/pci/drivers_probe
+for _ in 1 2 3 4 5 6 7 8 9 10; do ls $d/net/* >/dev/null 2>&1 && break; sleep 1; done
+sleep 3   # link detection settles before anyone reads carrier
+SH
+}
+# The BRIDGED shape: WAN_PCI's netdev (dark, guarded above) becomes the only port of a runtime
+# bridge with no host address; the VM's third virtio NIC sits on it. Never a bridge the host's
+# /etc/network/interfaces defines — this one is created here and deleted by destroy.
+wan_bridge_up() {
+  nx "sh -s $WAN_PCI $WAN_BRIDGE" >&2 <<'SH' || die "could not build the WAN bridge (above)"
+d=/sys/bus/pci/devices/$1; br=$2
+grep -q "^iface $br " /etc/network/interfaces && { echo "$br is a configured host bridge - refusing"; exit 1; }
+[ -e /sys/class/net/$br ] && { echo "$br already exists (a stale run?) - refusing"; exit 1; }
+i=$(basename $(ls -d $d/net/* | head -1))
+ip link add $br type bridge && ip link set $i master $br && ip link set $i up && ip link set $br up
+[ -z "$(ip -br addr show dev $br | awk '{print $3}')" ] || { echo "$br has an address"; exit 1; }
+echo "$br: port $i ($1), no address"
+SH
+}
+wan_bridge_down() {
+  nx "sh -s $WAN_PCI $WAN_BRIDGE" >&2 <<'SH'
+d=/sys/bus/pci/devices/$1; br=$2
+grep -q "^iface $br " /etc/network/interfaces && { echo "$br is a configured host bridge - leaving it"; exit 0; }
+for n in $d/net/*; do [ -e $n ] || continue; i=$(basename $n); ip link set $i nomaster 2>/dev/null; ip link set $i down; done
+[ -e /sys/class/net/$br ] && ip link del $br && echo "$br removed"
+exit 0
+SH
+}
 cmd_create() {
   ephemeral_guard
   nx "qm config $VMID" >/dev/null 2>&1 && die "vmid $VMID already exists on nx-02 — destroy it first"
   nx "grep -q '^iface $LAN_BRIDGE ' /etc/network/interfaces" || die "bridge $LAN_BRIDGE not on nx-02 (tofu/opnsense-test.tf)"
   nx "test -f $NANO_IMG" || die "$NANO_IMG not on nx-02 (tofu)"
-  log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, WAN vmbr0"
+  local pci=''
+  if [ "$SHAPE" = router ] && [ "$WAN_MODE" = bridged ]; then
+    wan_nic_guard >/dev/null; wan_bridge_up; pci="--net2 virtio,bridge=$WAN_BRIDGE,firewall=0,queues=2"
+    log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, MGMT vmbr0, WAN = vtnet2 on $WAN_BRIDGE over host NIC $WAN_PCI (bridged)"
+  elif [ "$SHAPE" = router ]; then pci="--hostpci0 $(wan_nic_guard)"
+    log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, MGMT vmbr0, WAN = host NIC $WAN_PCI (passthrough)"
+  else log "create $VMNAME ($VMID): LAN $LAN_BRIDGE, WAN vmbr0"; fi
   nx "qm create $VMID --name $VMNAME --tags 'opnsense;drill' --cores 2 --cpu host --memory 2048 --balloon 0 \
         --ostype other --scsihw virtio-scsi-pci --serial0 socket --onboot 0 \
-        --net0 virtio,bridge=$LAN_BRIDGE,firewall=0 --net1 virtio,bridge=vmbr0,firewall=0 \
+        --net0 virtio,bridge=$LAN_BRIDGE,firewall=0 --net1 virtio,bridge=vmbr0,firewall=0 $pci \
         --scsi0 nvme-thin:0,import-from=$NANO_IMG,discard=on,ssd=1 --boot order=scsi0 >/dev/null"
   nx "qm disk resize $VMID scsi0 8G >/dev/null"
   nx "qm config $VMID | grep -E '^(name|net0|net1|scsi0):'"
@@ -307,10 +416,15 @@ cmd_destroy() {
   # "No such vm" must reach the branch below, not kill the script under pipefail (review,
   # #2111) — so the absent case exits 0 ON nx-02, and only an ssh failure (255) stays fatal.
   name="$(nx "if qm config $VMID >/dev/null 2>&1; then qm config $VMID | sed -n 's/^name: //p'; fi")"
-  [ -n "$name" ] || { log "vmid $VMID not present — nothing to destroy"; return 0; }
+  if [ -z "$name" ]; then
+    [ "$SHAPE" != router ] || [ "$WAN_MODE" != bridged ] || wan_bridge_down
+    log "vmid $VMID not present — nothing to destroy"; return 0
+  fi
   [ "$name" = "$VMNAME" ] || die "REFUSING destroy: vmid $VMID is '$name', not '$VMNAME'"
   nx "qm stop $VMID --skiplock 1 >/dev/null 2>&1 || true; qm destroy $VMID --purge 1 --destroy-unreferenced-disks 1"
   nx "rm -f /var/lib/vz/template/iso/$SEED_ISO"
+  if [ "$SHAPE" = router ] && [ "$WAN_MODE" = bridged ]; then wan_bridge_down
+  elif [ "$SHAPE" = router ]; then wan_nic_release; fi
   log "destroyed $VMNAME ($VMID)"
 }
 

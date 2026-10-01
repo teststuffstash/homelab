@@ -145,13 +145,15 @@ six OVERSIZE items pointer-ized into
       pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
-- [ ] **FU-297** — **OPNsense test VM + rebuild drill: POINTER.** Router-config PRs validated
-      against a real API on VM 9110 (`scripts/opnsense-test-vm.sh`; #2033 PASS 2026-09-29); a weekly
-      from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`, VM 9199 + probe LXC on
-      `vmbr2`, `MgmtOpnsenseDrill*`) scores prod's click-ops residue — first score 115 (a) rows.
-      Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md). **Next:** the score
-      → ≈0 = the CARP cutover gate (ROADMAP §HA step 2): sysctl ruling, unbound settings into the
-      role, prod's dead ISC `dhcpd` block, the ACME `enabled` flag. Relates FU-097, FU-013, FU-298.
+- [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs
+      validated on VM 9110 (`scripts/opnsense-test-vm.sh`); a weekly from-nothing rebuild drill on
+      the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops residue. Design + recipes:
+      [`opnsense-test-vm.md`](opnsense-test-vm.md); the move it gates: [`router-move.md`](router-move.md)
+      (its §Status is the history). State 2026-09-30: both nodes STANDING (nx-02 `.70`, pve `.71`, `/24`),
+      CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
+      PASSED. 2026-10-01 ADR-145: two windows; window-1 prep DONE (Kea, HA drill, nx-02 reboot).
+      **Next:** the WAN-switch packet-loss hunt (nodes on the switch = loss; meta-state), then the
+      window-1 change set. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
@@ -1298,7 +1300,7 @@ the block needs pruning, not more headings.
       disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
       boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
       maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
-      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. Relates FU-266, FU-280.
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. (3) 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60/62.5 GiB booked after the two OPNsense VMs; no swap). The structural fix is RAM: 4 × 16 GB into the empty C1/D1/G1/H1 channels. Operator is watching for a bulk lot (hardware `market/2026-09-30-rdimm-price-guide.md`). Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`

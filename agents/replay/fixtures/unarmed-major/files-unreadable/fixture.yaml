@@ -1,0 +1,17 @@
+# unarmed-major/files-unreadable (2026-09-30, homelab#2100): the content probe FAILS OPEN — an
+# unreadable pulls/<n>/files falls back to head=, which cannot equal a content= marker, so the clause
+# behaves as it did before #2100 (one ride on the new state) rather than going silent.
+name: unarmed-major-files-unreadable
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-09-30T17:35:00Z
+  - STUB_GH_api_repos_teststuffstash_homelab_pulls_31_files=fail

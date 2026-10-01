@@ -20,6 +20,7 @@ export DEVBOX_QUIET=1
 export NIX_CONFIG="${NIX_CONFIG:-experimental-features = nix-command flakes}"
 
 GV=ansible/group_vars/opnsense.yml
+INV=ansible/inventory.yml   # the router's API address (docs/router-move.md (B))
 # Wallet default = the jail path; on the HOST the same files are the .claude-data/
 # bind-mount → override: KP_DIR=~/Projects/.claude-data/homelab-keepass bash scripts/...
 KP_DIR="${KP_DIR:-$HOME/.claude/homelab-keepass}"
@@ -50,7 +51,8 @@ PRIVKEY="$(kp show -q --no-password -k "$KEYX" -a Password "$DB" "$ENTRY")"
 # --- server pubkey, live from the OPNsense API -----------------------------------
 OPN_API_KEY="$(kp show -q --no-password -k "$KEYX" -a Password "$DB" opnsense-api-key)"
 OPN_API_SECRET="$(kp show -q --no-password -k "$KEYX" -a Password "$DB" opnsense-api-secret)"
-SERVER_PUB="$(curl -sk -u "$OPN_API_KEY:$OPN_API_SECRET" https://192.168.2.1/api/wireguard/server/searchServer \
+OPN="$(dvb yq -r '.all.children.opnsense.hosts[].ansible_host' "$INV")"
+SERVER_PUB="$(curl -sk -u "$OPN_API_KEY:$OPN_API_SECRET" "https://$OPN/api/wireguard/server/searchServer" \
   | dvb jq -r '.rows[] | select(.name == "roadwarrior") | .pubkey')"
 [ -n "$SERVER_PUB" ] || { echo "no 'roadwarrior' WireGuard instance on OPNsense — run the playbook first" >&2; exit 1; }
 

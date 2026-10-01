@@ -44,6 +44,55 @@ never the session's arc — that is TICK-LOG's.)
   change** until the switches are in hand (TL-SG1016D ordered, hardware `purchases.md`): the later
   visit = WAN switch (ONT → nx-02 `eno2` + Big Data `em0` powered-off fallback, its LAN cable out)
   + the management switch; Big Data stays intact 1–2 weeks before its card moves to pve.
+  **Progress 2026-09-30:** the isolated rehearsal is BUILT + merged (#2131, `opnsense-drill.sh --router`;
+  [`router-move.md`](../router-move.md)): PASS, 12/12 probes, score 6 at that point.
+  Later 2026-09-30: WireGuard key carried (#2133, `wg_handshake` green), the WAN_GW rows accepted
+  in their dead state → **score 0**; the (B) API address read from the inventory (#2132). Rehearsals
+  2–4 "network blips" were the jail HOST's new cable + wifi (ARP flux, fixed host-side with
+  arp_ignore/arp_announce) — not the rehearsal VM.
+  Then (2026-09-30 midday): root = wallet `opnsense-root-password` (#2136); OPNsense 26.7.5 —
+  SERIES bumped + 9110 baseline moved (#2134) and PROD updated in window seat-1790760478-4482
+  (operator-approved; 16 s, no reboot, all checks baseline); **ADR-144** (#2135): the CARP pair is
+  built beside Big Data — nx-02 node `.70`, pve node `.71` (operator buying a 1 GbE x1 card for
+  pve: Realtek → host-bridged WAN, not passthrough), each managed at its own IP. **2026-09-30 afternoon:** the standby profile = **#2138**
+  (`opnsense_standby`; rehearsal `--router --standby` PASS, 5 inert probes + real cert/WG green) —
+  in review. nx-02 WAN **bridged** (operator: if no performance penalty) — the throughput read
+  through a bridged rehearsal WAN is unbuilt. **pve's TG-3468 FITTED** (window
+  seat-1790772187-4679): `06:00.0` `enp6s0` `ac:a7:f1:b3:25:95`, x1 2.5 GT/s, own IOMMU group,
+  unconfigured; the onboard RTL8168 moved to `07:00.0` and is PINNED `nic0`
+  (`pve-network-interface-pinning`; vmbr0 = nic0 — unpinned, pve would have booted offline).
+  **2026-09-30 evening — nx-02 NODE STANDING + INERT at `.70`** (#2140 bridged WAN
+  ~3 Gbit/s; #2141 `tofu/opnsense-router.tf` vmbr3 + VM 9170 applied in window
+  seat-1790782366-5635; `bash scripts/opnsense-router-node.sh check nx02` = the read-only
+  health read). **2026-09-30 night (goal session, #2142–#2150):** both nodes standing + reboot-proof,
+  `/24` ruling (ADR-088 amended; trial VIP `.72`, HAProxy VIPs `lo0` for good), pfsync, the
+  hypervisor WAN gate (`router-wangate@<vmid>`, QMP `set_link` keyed on CARP adverts), the belt
+  (`RouterPairMasterCount`/`RouterWanGateSilent`); drills PASSED: failover/preempt, hard stop,
+  rolling update (3 reboots, flows kept), split-brain (belt fired), cold start — numbers in
+  router-move.md. The operator's cable nx-02 `eno2` ↔ pve `enp6s0` stays in (fake ISP:
+  `router-node.sh fakeisp up`; a node REBUILD is refused while it gives carrier — correct).
+  **2026-10-01 (ADR-145):** window-1 PREP LIST DONE (#2155 Kea-as-code, #2156 Kea HA drill,
+  #2157 nx-02 host reboot, #2158 .72 retired + skews + router-ids, #2159 RouterPairMasterCount
+  interim `> 1`, #2160 BGP alert per peer — auto-merge pending re-review; #2161 DRAFT = the
+  Cilium peer .1→.70, apply IN window 1, plan id 20261001T190057Z-f06b997d, re-plan if stale).
+  **⚠ BLOCKER — WAN-switch packet loss:** cabling now ONT → WAN switch → Big Data, node cables
+  OUT. With nx-02 `eno2` + pve `enp6s0` on the switch: 7–20 % loss past Big Data at every packet
+  size, TCP connect 1.3–2.9 s; both pulled → 0 % / 6–19 ms. LAN clean; Big Data `em0` 0 errors;
+  hypervisor WAN taps DOWN, gates dark. Suspects: a frame with em0's MAC leaking from a node
+  (switch MAC flap), PAUSE frames (both NICs flow-control RX/TX on), other bridge chatter.
+  **Next session (operator in the basement with a laptop):** ONT → Big Data DIRECT, nodes alone
+  on the switch → `tcpdump -e -Q out` on eno2/enp6s0 (src = Big Data's em0 MAC?) + `ethtool -S`
+  pause counters + flow control off; operator replaces the WAN cable regardless.
+  **Window-1 change set still to write:** `.1` VIP (nx-02 host vars only), nx-02 out of standby +
+  `OPN_DHCP_SERVER=kea`, **disarm nx-02's kill switch first** (missing from the doc), prod's
+  management address → the node (router-move §B), RouterPairMasterCount back to `!= 1`.
+  **Lesson to write into router-move:** retiring a CARP VIP on the MASTER first promotes the
+  BACKUP — the 18:45–18:48Z .72 retirement raised nx-02's WAN for 2 min (harmless only because
+  its cable went to pve's dark port); remove from the BACKUP first / both in maintenance.
+  Open beside it:
+  `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
+  8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
+  (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.
   **Identity the new router must carry** (prod config read 2026-09-29): WireGuard server privkey
   (router-only by the role's design — export to the wallet + an import path, OR re-issue the two
   client configs, OR carry it from the backup: operator call); the 3 API pairs (wallet has them →
@@ -135,8 +184,9 @@ never the session's arc — that is TICK-LOG's.)
   It needs your push + a jail rebuild, and the host profile wants the same export.
   (3) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
-  (4) pve's CMOS clear reset "Restore on AC Power Loss". Read it next time a card is fitted, or pve stays
-  dark after a power cut.
+  (4) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless (no GPU; the 09-30 card
+  fit could not check it): a monitor/GPU visit or a deliberate plug-pull test. Until then pve may
+  stay dark after a power cut.
   (5) Human-next-mover PRs: **circles-iac#108** (claim egress `none → python`, un-armed; flipping enforce
   under `none` hangs every uv call), sleep-iac#80, sleep-tracking#143.
   (6) Operator/seat sittings, open: #1237 (E1), #1238 (E2), #1224 (parts-coverage), #1280 (held for

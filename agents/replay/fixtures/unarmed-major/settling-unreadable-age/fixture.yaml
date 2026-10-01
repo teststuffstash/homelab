@@ -1,0 +1,17 @@
+# unarmed-major/settling-unreadable-age (2026-09-30, homelab#2100 review): a pending entry whose age
+# cannot be read (no startedAt, no commit date to fall back on — a partial probe) counts as SETTLING,
+# never as settled: holding is the safe side of this guard (the file's `fromdateiso8601? // null`
+# idiom). Expected: the SETTLING line, no unit.
+name: unarmed-major-settling-unreadable-age
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-09-30T17:30:00Z

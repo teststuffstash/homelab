@@ -213,6 +213,18 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       verb, not for a bigger snippet in the skill. Next: ship the watch as a verb (`maint watch`,
       emits one line per new alert name ONCE — baseline-diff plus a seen-set — exits never) so it is
       run, not re-typed; and a `cp-down`/`cp-up` pair beside cp-upgrade with the same gates.
+      **cp-down/cp-up HALF BUILT 2026-09-30 (operator: "node maintenance should take control plane
+      as argument")** — homelab#2137: `node-maintenance.sh down|up <cp>` hands off to
+      `controlplane-upgrade.sh <cp> <verb>` (+ etcd leadership forfeit). First live run (cp-01, the
+      pve NIC window) found `down`'s Longhorn read aborting on a CP (no nodes.longhorn.io) — fixed
+      in the PR; the review found the forfeit read's pipefail fail-open. The watch verb is still
+      unbuilt (fourth hand-written copy — bash + seen-set — worked).
+      **RESIGHT 2026-09-30 (same session, a PR watch — fifth hand-written loop):** it piped
+      `gh pr view --json reviews` through zsh `echo`, which expanded the escapes inside review
+      bodies; every `jq` read failed, the loop could never see a terminal, and it ran its full
+      30 min blind while both PRs had merged in minute 1. Replaced by a script file reading each
+      field with `gh --jq` (no JSON through echo), dry-run before arming. Same argument: the
+      watch belongs in a verb, not re-typed.
       **RESIGHT 2026-09-23 (seat, wk-metal-04 drive swap) — THIRD hand-written copy, THREE more
       defects, and the first was a new class: the PROBE, not the loop.** The watch exec'd
       `wget` inside the prometheus container; that container has no `wget`, so the command produced
@@ -319,3 +331,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the pods of that node's DaemonSets) AND whose class is the declared act's known consequence
       (NodeRebooted, PodSigkilled, KubeNodeNotReady …) as EXPECTED, printed but not blocking
       `close`; the baseline-diff stays strict for everything else.
+      **RESIGHT 2026-09-30 (seat, pve NIC window — 3rd date):** `NodeRebooted` (pve + cp-01) and
+      `PodSigkilled` again blocked `close` after a clean return (nodes 13/13, targets 186/186, cilium
+      13/13); `--force`, named. Plus a MECHANISM for the lagging `CiliumUnreachableNodes` the
+      09-24 resight only called "lagging": `cilium-health status --verbose` on the reporting agents
+      showed results frozen at the rebooting node's mid-boot probe (`Last probed` 15 min old,
+      `connection refused` on :4240) — a stale prober, not a network fault; cp-01's own agent saw
+      all 13. It cleared by itself (past episodes 5–50 min). The alert reads the gauge, so it
+      cannot tell stale from real — read `Last probed` before acting.
