@@ -223,7 +223,7 @@ reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.x
 `opnsense/dnsmasq-dhcp.py`; dnsmasq is DHCP-only (`port=0`) so Unbound keeps `:53`.
 **Considered:** keep ISC dhcpd. **Why:** ISC has no settings API → can't be driven as code.
 **Consequences:** PXE proxy-DHCP is separate (on the Matchbox LXC); ISC must be disabled in the UI
-once (no API) for reboot-safety.
+once (no API) for reboot-safety. **Superseded at the router cutover by ADR-145** (Kea on the router pair).
 
 ---
 
@@ -2592,3 +2592,24 @@ instead of none; the per-node address is the end state's own, so nothing is re-a
 the bootstrap refuses carrier); an idle node must be inert on the LAN (no `.1`, DHCP off); pfsync
 rides the LAN, unauthenticated (no third port) — accepted; nx-02 carries a standing VM beside the
 drills. Design: [`router-move.md`](router-move.md); ROADMAP §HA step 2 amended.
+
+### ADR-145 — The router cutover is two windows, and the first one already runs the pair's mechanisms: Kea DHCP, per-node BGP, `.1` as a CARP VIP (2026-10-01)
+**Status:** Accepted (operator, 2026-10-01: "bite the bullet and try a switchover to nx-02"; "we do Kea
+anyway on single node? So that once the single node is up I can then add the secondary and shut off
+primary without anyone noticing"). **Decision:** (1) window 1 moves `.1` to the **nx-02 node alone** —
+as a CARP VIP with one speaker, not a plain address; (2) that node serves DHCP from **Kea** (OPNsense
+core, `memfile` leases — no database), HA off; dnsmasq DHCP retires (supersedes ADR-023's server);
+(3) BGP is **per-node from window 1**: Cilium peers `.70`, FRR's router-id is the node's own address —
+never the VIP; (4) window 2 adds pve as the BACKUP (Kea hot-standby HA on, Cilium peer `.71`), with
+no client-visible change, and a primary stop then proves it. **Considered:** both nodes at once (Kea
+HA + per-node BGP first exercised with real clients in the same window); dnsmasq on one node first,
+Kea at the pair (a DHCP migration in the second window); a dnsmasq on/off toggle driven by CARP
+state (the guest-side CARP hook was already rejected by the WAN-follows-master drill); peering the
+standing nodes ahead of the window (contradicts the inert profile — the kill switch trips on a
+BGP SYN-ACK). **Why:** the inert drills proved the pair's machinery but cannot prove the service
+layer; a single-node switchover is the next real evidence, and doing it in the end-state shape
+makes the second node purely additive. Kea HA is API-complete (verified 2026-10-01 against core
+26.7.5: peers, `this_server_name`, control agent, subnets, reservations). **Consequences:** nx-02 is
+MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
+on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
+becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows.
