@@ -23,7 +23,7 @@ installs a route.
 | Peers | one: `192.168.2.1` (`opnsense_ip`) | one neighbour per node, listed by hand in `bgp_node_ips` |
 | Sends | the LB IPs of Services labelled **`bgp=advertise`** only (`CiliumBGPAdvertisement`) | nothing — it originates no routes |
 | Receives | nothing it uses (Cilium installs no received routes) | every advertised `/32`, accepted by the permit-all inbound route-map `CILIUM-ALLOW-ALL` (FRR's `ebgp-requires-policy` drops everything without one) |
-| Code | [`tofu/cilium-bgp.tf`](../tofu/cilium-bgp.tf) (main root, applied via the management box); `bgpControlPlane.enabled` in [`tofu/cilium.tf`](../tofu/cilium.tf) | [`ansible/roles/opnsense-bgp/`](../ansible/roles/opnsense-bgp/), values in [`group_vars/opnsense.yml`](../ansible/group_vars/opnsense.yml); `bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml` |
+| Code | [`tofu/cilium-bgp.tf`](../tofu/cilium-bgp.tf) (main root, applied via [the management box](management-box.md)); `bgpControlPlane.enabled` in [`tofu/cilium.tf`](../tofu/cilium.tf) | [`ansible/roles/opnsense-bgp/`](../ansible/roles/opnsense-bgp/), values in [`group_vars/opnsense.yml`](../ansible/group_vars/opnsense.yml); `bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml` |
 
 The packet path: a LAN (or WireGuard) client sends to `192.168.40.16` → its default gateway
 `.1` → the router's kernel route (installed by FRR's `zebra`) forwards to an announcing node →
