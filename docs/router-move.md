@@ -295,8 +295,12 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
 - **Per-node BGP, staged** — router-id per node (the node's LAN address; `bgp_router_id` moves to
   host vars), the Cilium peer change `.1` → `.70` on a branch with its plan read, and the
   per-peer rework of `CiliumBGPAllSessionsDown` ([`bgp.md`](bgp.md) §With the router pair).
-- **The attended nx-02 host reboot** — advisable before nx-02 is the only router (Big Data is
-  the fallback either way).
+- **The attended nx-02 host reboot** — **PASSED 2026-10-01** (window, runbook §Proxmox host
+  maintenance: wk-04 + ci-runner-02 + the test VM shut down, cp-02 last — the API stayed ready —
+  then a real host reboot, ~3 min to SSH). On the boot: the kill switch at 9.04 s and the WAN gate
+  at 9.05 s, `pve-guests` at 29.9 s; the router VM self-started with its WAN tap DOWN (BACKUP) and
+  `onboot` still 1; `router-node.sh check nx02` all green, prod unharmed; cp-02 + wk-04 Ready, 13/13,
+  targets back to baseline. The cold-start drill's declarative ordering is now observed.
 - **The WAN gate counts ANY CARP advert** (`router-wangate.sh`: `ip proto 112`, every vhid): the
   trial VIP `.72` comes off both nodes, and the fake-ISP cable (nx-02 `eno2` ↔ pve `enp6s0`) comes
   out — else pve, `.72`'s MASTER, raises its WAN beside nx-02 on the shared MAC.
