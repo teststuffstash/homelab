@@ -113,8 +113,8 @@ work survivable.
    the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
    back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
    [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
-2. **Router HA — OPNsense CARP pair: two VMs built from git, `pve` (master) + `nx-02` (backup)**
-   (operator, 2026-09-29; one per chassis — never both NX nodes, one backplane). `pfsync` = stateful
+2. **Router HA — OPNsense CARP pair: two VMs built from git, `nx-02` (master) + `pve` (backup)**
+   (operator, 2026-09-29; roles swapped by ADR-145, 2026-10-01; one per chassis — never both NX nodes, one backplane). `pfsync` = stateful
    failover; **no XMLRPC config sync** — ansible configures each node from git
    ([`spikes/no-human-in-the-loop.md`](docs/spikes/no-human-in-the-loop.md) path 1), which is also
    what keeps prod's leftovers from copying over. Bonus: rolling firmware updates. It rewrites every
@@ -128,12 +128,14 @@ work survivable.
    2. the two nodes stand beside Big Data, each at its own LAN IP (nx-02 `.70`, pve `.71` — pve
       gets a single-port x1 NIC for its WAN), inert on the LAN (no `.1`, DHCP off, WAN uncabled);
       CARP is learned on the pair with a trial VIP from `3.0/24` while nothing depends on it;
-   3. **the window: `.1` moves from Big Data to the pair** (the CARP VIP — or a plain address on
-      one node, if the trial says the first step should be smaller), the WAN switch in (the ONT has
-      one port; only the router holding `.1` has its WAN up — the single-lease rule); Big Data stays
-      cabled and powered off as the fallback for 1–2 weeks, then retires. Its Intel card is not needed.
+   3. **two windows (ADR-145): `.1` moves from Big Data to nx-02 alone**, already in the pair's
+      end shape (`.1` a one-speaker CARP VIP, Kea DHCP, per-node BGP), the WAN switch in (the ONT
+      has one port; only the router holding `.1` has its WAN up — the single-lease rule); **then pve
+      joins as BACKUP**, invisible to clients. Big Data stays cabled and powered off as the fallback
+      for 1–2 weeks, then retires. Its Intel card is not needed. Plan: `docs/router-move.md` §The two windows.
    Also needed: per-node inventory for the playbooks (`host_vars/` per node), HAProxy VIPs from IP
-   aliases to CARP VIPs, dnsmasq DHCP active/passive, Cilium peering with both nodes, pfsync over
+   aliases to CARP VIPs (dropped by the `/24` ruling — only `.1` is CARP), DHCP active/passive (Kea
+   hot-standby HA — ADR-145), Cilium peering with both nodes, pfsync over
    the LAN (no third port — accepted), and the management network (the NX BMCs + the box's second
    NIC; the routers are not on it — each is managed at its own LAN IP).
 3. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).

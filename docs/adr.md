@@ -2612,4 +2612,4 @@ makes the second node purely additive. Kea HA is API-complete (verified 2026-10-
 26.7.5: peers, `this_server_name`, control agent, subnets, reservations). **Consequences:** nx-02 is
 MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
-becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows.
+becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
