@@ -71,9 +71,25 @@ never the session's arc — that is TICK-LOG's.)
   rolling update (3 reboots, flows kept), split-brain (belt fired), cold start — numbers in
   router-move.md. The operator's cable nx-02 `eno2` ↔ pve `enp6s0` stays in (fake ISP:
   `router-node.sh fakeisp up`; a node REBUILD is refused while it gives carrier — correct).
-  **NEXT (2026-10-01, ADR-145):** two windows — nx-02 alone in the end shape (Kea, per-node BGP,
-  `.1` as CARP VIP), then pve joins invisibly; prep list in router-move §The two windows
-  (PRs #2153 bgp.md + the ADR-145 PR). Open beside it:
+  **2026-10-01 (ADR-145):** window-1 PREP LIST DONE (#2155 Kea-as-code, #2156 Kea HA drill,
+  #2157 nx-02 host reboot, #2158 .72 retired + skews + router-ids, #2159 RouterPairMasterCount
+  interim `> 1`, #2160 BGP alert per peer — auto-merge pending re-review; #2161 DRAFT = the
+  Cilium peer .1→.70, apply IN window 1, plan id 20261001T190057Z-f06b997d, re-plan if stale).
+  **⚠ BLOCKER — WAN-switch packet loss:** cabling now ONT → WAN switch → Big Data, node cables
+  OUT. With nx-02 `eno2` + pve `enp6s0` on the switch: 7–20 % loss past Big Data at every packet
+  size, TCP connect 1.3–2.9 s; both pulled → 0 % / 6–19 ms. LAN clean; Big Data `em0` 0 errors;
+  hypervisor WAN taps DOWN, gates dark. Suspects: a frame with em0's MAC leaking from a node
+  (switch MAC flap), PAUSE frames (both NICs flow-control RX/TX on), other bridge chatter.
+  **Next session (operator in the basement with a laptop):** ONT → Big Data DIRECT, nodes alone
+  on the switch → `tcpdump -e -Q out` on eno2/enp6s0 (src = Big Data's em0 MAC?) + `ethtool -S`
+  pause counters + flow control off; operator replaces the WAN cable regardless.
+  **Window-1 change set still to write:** `.1` VIP (nx-02 host vars only), nx-02 out of standby +
+  `OPN_DHCP_SERVER=kea`, **disarm nx-02's kill switch first** (missing from the doc), prod's
+  management address → the node (router-move §B), RouterPairMasterCount back to `!= 1`.
+  **Lesson to write into router-move:** retiring a CARP VIP on the MASTER first promotes the
+  BACKUP — the 18:45–18:48Z .72 retirement raised nx-02's WAN for 2 min (harmless only because
+  its cable went to pve's dark port); remove from the BACKUP first / both in maintenance.
+  Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
   (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.

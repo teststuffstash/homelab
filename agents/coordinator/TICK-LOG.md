@@ -11910,3 +11910,17 @@ drill passed; #2147 merged 05:23 (a7ead57f). Renovate debug dry run 36818823497 
 the deno manager's updateDependency returns null on an already-bumped deno.json → "Rebasing branch
 after error updating content" → every deno branch regenerates from master each run (conflicted ==
 behind-base-branch for deno; no config reaches it). Finding on #1985; upstream report = operator call.
+
+## 2026-10-01 evening — router move: ADR-145 + window-1 prep (seat)
+- Kea HA verified API-complete (subagent, read-only probes + core 26.7.5 source; leases = local
+  memfile, no DB) → operator: two windows, nx-02 alone in the end shape (ADR-145, #2154); bgp.md (#2153).
+- `opnsense/kea-dhcp.py` + `OPN_DHCP_SERVER` (#2155): drill PASS with Kea serving. Kea HA drill on
+  test VM + kept drill VM (#2156): join/sync, replication, takeover ~70–80 s, recovery, lone start ~60 s;
+  peer rules need `disablereplyto`. nx-02 real host reboot in a window (#2157): units 9 s, guests 30 s,
+  router VM self-started dark, window closed clean.
+- #2158 converged both standing nodes (.72 retired, skews nx-02 0/pve 100, router-ids .70/.71) —
+  retiring on pve (MASTER) first promoted nx-02 to .72 MASTER 18:45:52–18:47:57Z, its gate raised
+  the WAN (cable then went only to pve's dark port). RouterPairMasterCount fired on 0 masters 18:50Z →
+  silenced 3 h, #2159 interim `> 1`. #2160 BGP alert per peer; #2161 draft Cilium peer (window 1).
+- Operator cabled the WAN switch: with nx-02 + pve ports on it, 7–20 % WAN loss (connect 1.3–2.9 s);
+  both pulled → 0 %. Big Data em0 clean, taps dark. Hunt next session (meta-state).
