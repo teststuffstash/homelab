@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 from urllib.parse import urlencode
 
 
@@ -36,11 +37,21 @@ def atomic(path, data):
     os.replace(name, target)
 
 
-def api(endpoint):
-    result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
-    if result.returncode:
+TRANSIENT = re.compile(r'HTTP 5\d\d|timed? ?out|connection reset', re.I)
+
+
+def api(endpoint, attempts=3, pause=5):
+    # A transient 5xx is retried in place: the pass is transactional, so one GitHub 504 would
+    # otherwise discard every repo read before it (seen in the 2026-10-01 rehearsal). Anything
+    # else — and a 5xx that persists — still fails the whole run before state is replaced.
+    for attempt in range(attempts):
+        result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+        if not result.returncode:
+            return json.loads(result.stdout)
+        if attempt + 1 < attempts and TRANSIENT.search(result.stderr):
+            time.sleep(pause * (attempt + 1))
+            continue
         raise RuntimeError('GitHub read failed: ' + endpoint + ': ' + result.stderr[:300])
-    return json.loads(result.stdout)
 
 
 def pages(endpoint, field=None):
@@ -175,6 +186,20 @@ def collect(state, repos, since, until, observed=None):
 REFERENCES = {'cross-referenced', 'referenced'}
 
 
+def compact(event):
+    """One prompt-sized line of an event: when, what, a ≤160-char detail, and its link."""
+    p = event.get('payload', {})
+    detail = ' '.join(str(p[k]['name'] if isinstance(p[k], dict) else p[k])
+                      for k in ('name', 'state', 'conclusion', 'label') if p.get(k))
+    body = p.get('body') or p.get('title') or ''
+    if body:
+        detail = (detail + ' ' if detail else '') + ' '.join(str(body).split())[:160]
+    out = {'at': event['occurred_at'], 'kind': event['kind'], 'url': event['url']}
+    if detail:
+        out['detail'] = detail
+    return out
+
+
 def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     start, end = timestamp(since), timestamp(until)
     if start >= end:
@@ -246,14 +271,19 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     result['late_arrival_count'] = len(late)
     # Preserve the complete evidence in the collector state; prompts get a declared,
     # deterministic bounded sample with original event ids and links for retrieval.
+    # Prompt-side events are COMPACT: the task already names repo/item, the collector state keeps
+    # ids and observation times, the url is the retrieval handle. The verbose form cost ~7 KB a
+    # task and left 5 of 118 tasks in the 60 KB budget (2026-10-01 oracle-fleet rehearsal).
     for task in result['tasks']:
         task['event_count'] = len(task['events'])
-        task['events'] = task['events'][-12:]
-        task['events'] = [dict(e, payload={k: (v[:300] if isinstance(v, str) else v)
-                                         for k, v in e['payload'].items() if k != 'source'}) for e in task['events']]
-    result['late_arrivals'] = [dict(id=e['id'], occurred_at=e['occurred_at'], observed_at=e['observed_at'],
-                                  repo=e['repo'], item=e['item'], kind=e['kind'], url=e['url']) for e in late[:40]]
-    result['sampling'] = {'max_tasks': keep, 'max_events_per_task': 12, 'max_late_events': 40,
+        task['events'] = [compact(e) for e in task['events'][-8:]]
+        task['context'] = {k: v for k, v in task['context'].items()
+                           if k in ('title', 'state', 'is_pr', 'labels', 'created_at', 'closed_at', 'merged_at')}
+        for k in ('project', 'repo', 'issue'):
+            task.pop(k)
+    result['late_arrivals'] = [dict(compact(e), key=f"{e['repo']}#{e['item']}", observed_at=e['observed_at'])
+                               for e in late[:20]]
+    result['sampling'] = {'max_tasks': keep, 'max_events_per_task': 8, 'max_late_events': 20,
                           'max_serialized_bytes': 60000, 'full_evidence': 'collector state artifact'}
     while len(json.dumps(result).encode()) > 59000 and result['tasks']:
         result['tasks'].pop()

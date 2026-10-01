@@ -152,6 +152,16 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(len(checks), 1)
         self.assertEqual(checks[0]['payload']['conclusion'], 'failure')
 
+    def test_api_retries_transient_but_not_permanent(self):
+        from types import SimpleNamespace as R
+        replies = [R(returncode=1, stderr='(HTTP 504)', stdout=''), R(returncode=0, stderr='', stdout='{"ok":1}')]
+        with patch.object(a.subprocess, 'run', side_effect=replies), patch.object(a.time, 'sleep'):
+            self.assertEqual(a.api('x'), {'ok': 1})
+        with patch.object(a.subprocess, 'run', return_value=R(returncode=1, stderr='(HTTP 403)', stdout='')) as run:
+            with self.assertRaises(RuntimeError):
+                a.api('x')
+            self.assertEqual(run.call_count, 1)
+
     def test_pages_retrieves_second_page(self):
         with patch.object(a, 'api', side_effect=[list(range(100)), [100]]) as api:
             self.assertEqual(len(list(a.pages('repos/o/r/issues'))), 101)
