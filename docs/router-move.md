@@ -271,10 +271,25 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   off. Test VM: every field written and read back, in-pool reservations accepted; the plain drill
   with `OPN_DHCP_SERVER=kea` PASSED — Kea leased the reserved MAC its pin and a random MAC from
   the pool, score 31 = exactly the Kea + `dnsmasq/enable` rows. At window 1 the default flips.
-- **The Kea HA join drill** — two non-prod nodes (the test VM + the drill VM): one serving alone
-  with HA off, then HA on for both → the joiner syncs the lease DB while the first keeps serving;
-  then stop the primary → the standby serves; and a lone node's cold start with HA on. This is
-  window 2 rehearsed; it also settles the `:8001` firewall question on the nodes' LAN rules.
+- **The Kea HA join drill** — **PASSED 2026-10-01** on two non-prod nodes (a kept drill VM
+  `.68` as primary, its probe container leasing; the test VM `.67` joining as standby, extra
+  probe NICs on its LAN; both on 26.7.5, `kea-dhcp.py` with `OPN_KEA_HA`):
+
+  | Step | Result |
+  |---|---|
+  | primary serving alone (HA off) → HA on for both | the joiner synced the primary's leases; both `hot-standby`, the primary owns the scope |
+  | a new lease while paired | on the standby within seconds |
+  | a client on the standby's LAN, primary alive | no answer — the standby stays silent |
+  | primary's Kea stopped | standby serving after **~70–80 s** (heartbeat failure, then the 3rd unacked client — `max-unacked-clients` 2) — new clients wait; leased clients renew long before expiry |
+  | primary back | `ready` → `hot-standby` in ~30 s, the leases the standby gave out synced back |
+  | lone cold start (partner down, primary restarted) | serving after **~60 s** (`max-response-delay`, hardcoded by OPNsense) |
+
+  Gotchas: the HA peer URL is each node's own address and the listener binds it (`:8001`);
+  traffic between the peers must pass **without `reply-to`** — the test boxes' WAN rules needed
+  `disablereplyto` (pf otherwise routes the replies via `.1`; on the pair it is the LAN, which has
+  no gateway — confirm at window 2); a server still bound to `:67` (dnsmasq) leaves Kea's socket
+  failing silently (`DHCPSRV_OPEN_SOCKET_FAIL`, retried) — `OPN_DHCP_SERVER` exists for this. A
+  planned window-2 primary stop costs the same ~70–80 s for new clients only.
 - **Skews swap** — nx-02 advskew 0 (MASTER), pve 100 (`ansible/router-nodes/inventory.yml`),
   so pve joins as BACKUP instead of preempting.
 - **Per-node BGP, staged** — router-id per node (the node's LAN address; `bgp_router_id` moves to
