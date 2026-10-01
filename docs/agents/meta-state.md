@@ -71,8 +71,9 @@ never the session's arc — that is TICK-LOG's.)
   rolling update (3 reboots, flows kept), split-brain (belt fired), cold start — numbers in
   router-move.md. The operator's cable nx-02 `eno2` ↔ pve `enp6s0` stays in (fake ISP:
   `router-node.sh fakeisp up`; a node REBUILD is refused while it gives carrier — correct).
-  **NEXT (operator calls):** DHCP active/passive (Kea HA vs a gate toggle), per-node Cilium peers
-  + router-ids; an attended nx-02 host reboot. Open beside it:
+  **NEXT (2026-10-01, ADR-145):** two windows — nx-02 alone in the end shape (Kea, per-node BGP,
+  `.1` as CARP VIP), then pve joins invisibly; prep list in router-move §The two windows
+  (PRs #2153 bgp.md + the ADR-145 PR). Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
   (`experiment/retro-activity-window`, 06:49Z, not this seat's) sits CHANGES_REQUESTED + BEHIND.
