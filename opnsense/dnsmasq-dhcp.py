@@ -22,6 +22,12 @@ HOST = os.environ.get("OPN_HOST", "192.168.2.1")
 # OPN_DHCP_ENABLE=0: the STANDBY profile (docs/router-move.md) — the config converges, the
 # server stays off, so a node standing on the real LAN never answers prod's clients.
 ENABLE = os.environ.get("OPN_DHCP_ENABLE", "1")
+# OPN_DHCP_SERVER: which server answers on this box — dnsmasq (prod until the cutover) or kea
+# (ADR-145, opnsense/kea-dhcp.py). The one home of the choice: kea-dhcp.py reads it from here.
+# The other server converges OFF, so two never bind :67 (the drill runs every opnsense/*.py).
+SERVER = os.environ.get("OPN_DHCP_SERVER", "dnsmasq")
+if SERVER not in ("dnsmasq", "kea"):
+    sys.exit("OPN_DHCP_SERVER must be dnsmasq or kea")
 KEY = os.environ["OPN_API_KEY"]
 SEC = os.environ["OPN_API_SECRET"]
 BASE = f"https://{HOST}/api/dnsmasq"
@@ -158,8 +164,9 @@ def main():
     rebuild("Host", "host", HOSTS)
     # enable_ra "0": no router advertisements from dnsmasq — prod's value (IPv6 is disallowed on
     # the router); a fresh install's default is "1" (the FU-297 rebuild drill found the drift).
-    print(f"set general (enable={ENABLE}, DNS off, bind LAN, no RA):",
-          call("settings/set", {"dnsmasq": {"enable": ENABLE, "port": "0", "interface": INTERFACE,
+    enable = ENABLE if SERVER == "dnsmasq" else "0"
+    print(f"set general (enable={enable}, server={SERVER}, DNS off, bind LAN, no RA):",
+          call("settings/set", {"dnsmasq": {"enable": enable, "port": "0", "interface": INTERFACE,
                                             "dhcp": {"enable_ra": "0"}}}).get("result"))
     print("apply:", call("service/reconfigure").get("status"))
     print("\nDone. Remember: disable ISC DHCPv4 in the OPNsense UI for reboot-safety.")
