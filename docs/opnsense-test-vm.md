@@ -146,10 +146,11 @@ build → probe-setup → converge → probe → compare → destroy) and the en
   by `qm` (and refuse vmid `9110` and the name `opnsense-test`), then `bootstrap` as above — with a
   throwaway root password + API pair minted in memory per run instead of wallet entries.
 - **converge** is the harness's step `all` (`--ref <rev> --steps "1 all"`): every
-  `ansible/opnsense-*.yml` play plus `opnsense/dnsmasq-dhcp.py` and `opnsense/tuya-egress.py`,
+  `ansible/opnsense-*.yml` play plus every `opnsense/*.py` (the two DHCP scripts — `OPN_DHCP_SERVER`
+  picks dnsmasq or Kea, the other converges off, ADR-145 — and `tuya-egress.py`),
   through the same guard, inventory and isolation overrides, plus
   [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) (the BGP neighbour is the drill's
-  fake peer). `dnsmasq-dhcp.py` runs with `OPN_DHCP_REMAP=192.168.2.=192.168.1.` — prod's pool and
+  fake peer). The DHCP scripts run with `OPN_DHCP_REMAP=192.168.2.=192.168.1.` — prod's pool and
   reservations, moved onto the drill's LAN prefix (refused against the router).
 - **preflight** reads nx-02's `nvme-thin` and free memory before anything writes and refuses above
   70 % / below 4 GiB (read the pool before writing GBs to a VM node); a leftover `opnsense-drill` from a
