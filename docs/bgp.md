@@ -33,8 +33,9 @@ HAProxy VIP on `192.168.3.0/24` proxies to the `40.x` backend ([`runbook.md`](ru
 ## Failure modes worth knowing
 
 - **A node missing from `bgp_node_ips`.** The cluster side is all-nodes, the router side is an
-  explicit list, so a new node peers with nobody until it is added and the play run. Missed four
-  times (wk-03, wk-metal-04, nx-01, cp-02); `CiliumBGPNodeSessionDown` is what catches it. A
+  explicit list, so a new node peers with nobody until it is added and the play run. Missed
+  repeatedly at onboarding (each miss is annotated in the list itself);
+  `CiliumBGPNodeSessionDown` is what catches it. A
   retired node's neighbour must be deleted live too — the role is create-if-absent
   ([`runbook.md`](runbook.md) §Retire a node from cluster duty, step 5).
 - **A VIP-alias reconfigure on OPNsense flushes the FRR routes from the kernel** while `bgpd`
