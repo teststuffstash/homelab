@@ -11900,3 +11900,13 @@ Mine: the /24 lo0 proof (3.11 via .71) TRIPPED pve's kill switch (correct) and t
 ~1 min of unflushed nano-UFS config (→ sync after converge); a gate hold of 1.5 s flapped nx-02
 (advskew 100 → 1.39 s interval); QMP success matched on capabilities alone hid a set_link that never
 ran; pkill -f matched its own ssh. Prod .1 untouched throughout (Big Data MAC, Unbound, grafana 200).
+
+### 2026-10-01 — #2100 ride churn: the reviewer false breaker + the Renovate deno rebase cause (S9 #1985)
+#2147 (unarmed-major content-keyed debounce) latched agent/error on a FALSE pile: /code-review posts
+inline findings one by one, GitHub wraps each in its own empty COMMENTED review (#2139:1, #2130:6,
+#2147:4). #2151 (STEP 0 NOTE: carriers are not the pile; Class B replay entry) merged 05:14; label
+cleared → re-review stood aside on checks-pending, then APPROVED with the same 4 carriers present —
+drill passed; #2147 merged 05:23 (a7ead57f). Renovate debug dry run 36818823497 (44.126.1 = latest):
+the deno manager's updateDependency returns null on an already-bumped deno.json → "Rebasing branch
+after error updating content" → every deno branch regenerates from master each run (conflicted ==
+behind-base-branch for deno; no config reaches it). Finding on #1985; upstream report = operator call.
