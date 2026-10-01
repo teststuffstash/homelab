@@ -1,0 +1,21 @@
+# unarmed-major/rebase-debounced (2026-09-30, homelab#2100): a Renovate REBASE does not re-arm the clause.
+# #2100 (mermaid 12, waiting on upstream under ADR-143) bought seven rides in ~33 h, one decision:
+# Renovate re-created the branch on every moved master (four of five force-pushes carried
+# byte-identical deno.json + deno.lock), and the 7th ride was bought by management-sentinel posting
+# SUCCESS on the fresh head minutes after the 6th ride's dispatch. Here the marker was recorded on the
+# PREVIOUS head, before either sentinel had posted; the world is the rebased head with the same blobs,
+# the same red ci and both sentinels now green. Expected: DEBOUNCED — content, not head oid, and
+# only non-passing checks count.
+name: unarmed-major-rebase-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-09-30T17:35:00Z

@@ -37,7 +37,7 @@
   ],
   "comments": [
     {
-      "body": "🤖 `state-fp:unarmed-major:e027ff2163e1` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-28T10:20:00Z.",
+      "body": "🤖 `state-fp:unarmed-major:ea09e97d34e7` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-28T10:20:00Z.",
       "createdAt": "2026-09-28T10:20:00Z",
       "author": {
         "login": "homelab-agents-1234"
