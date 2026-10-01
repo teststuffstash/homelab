@@ -45,6 +45,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [controlplane-ha.md](controlplane-ha.md) | **Control-plane HA mechanism** (ADR-133/-136) — what `cluster_endpoint` decides, why the ServiceAccount issuer is frozen, the pin → join → flip order, and the lab-CP rehearsal |
 | [router-move.md](router-move.md) | **The router move** Big Data → a from-git VM on nx-02 (ROADMAP §HA step 2, FU-297) — the single-router inventory, the identity it carries, the cutover window |
 | [opnsense-test-vm.md](opnsense-test-vm.md) | The OPNsense **test VM** on nx-02 (FU-297) — shape, why the importer-over-serial bootstrap, rollback to the baseline snapshot |
+| [bgp.md](bgp.md) | **How LoadBalancer VIPs reach the LAN** (ADR-021) — Cilium ↔ OPNsense FRR peering, its failure modes and alerts, what the router pair changes |
 | [ip-plan.md](ip-plan.md) | **The address-plan authority** (ADR-088) — which range a new IP/VIP comes from |
 | [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
 | [power-measurements.md](power-measurements.md) | Node max-power (stress) + perf/watt benchmarks |
