@@ -40,7 +40,7 @@
 #              config plugins, snapshot `baseline` — with a THROWAWAY root password + API pair
 #              minted here, in memory, dying with the VM
 #   converge   scripts/opnsense-test-vm.sh --ref <rev> --steps "1 all": every ansible/opnsense-*
-#              play + opnsense/dnsmasq-dhcp.py + opnsense/tuya-egress.py, at <rev>, through the
+#              play + every opnsense/*.py (OPN_DHCP_SERVER picks dnsmasq or kea), at <rev>, through the
 #              harness's guard/inventory/overrides (+ ansible/test-vm/drill-overrides.yml)
 #   probe      BEHAVIOUR, from a throwaway Debian LXC on the drill's LAN (made after the build, so
 #              its packages come through the fresh router's NAT before any router code runs):

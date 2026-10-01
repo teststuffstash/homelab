@@ -265,8 +265,12 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
 - **Kea as code** — the successor of `opnsense/dnsmasq-dhcp.py` (same search-then-rebuild shape;
   the Kea API has no upsert): subnet, pool, lease 7200, `option_data_autocollect` **off** with
   routers + DNS = `.1` explicitly (autocollect would hand out the node's own `.70`), domain, the
-  static reservations; Kea off under the standby profile. Proven on the test VM, including the
-  in-pool reservations.
+  static reservations; Kea off under the standby profile. **Done 2026-10-01:**
+  [`opnsense/kea-dhcp.py`](../opnsense/kea-dhcp.py) — `OPN_DHCP_SERVER` (default `dnsmasq`,
+  defined in `dnsmasq-dhcp.py`, which keeps the LAN data) picks the server, the other converges
+  off. Test VM: every field written and read back, in-pool reservations accepted; the plain drill
+  with `OPN_DHCP_SERVER=kea` PASSED — Kea leased the reserved MAC its pin and a random MAC from
+  the pool, score 31 = exactly the Kea + `dnsmasq/enable` rows. At window 1 the default flips.
 - **The Kea HA join drill** — two non-prod nodes (the test VM + the drill VM): one serving alone
   with HA off, then HA on for both → the joiner syncs the lease DB while the first keeps serving;
   then stop the primary → the standby serves; and a lone node's cold start with HA on. This is
