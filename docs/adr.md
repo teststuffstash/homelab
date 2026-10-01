@@ -208,7 +208,7 @@ modern standard (principle #5). **Consequences:** Cilium owns LB IPAM + BGP.
 `bgp=advertise` are advertised. **Considered:** MetalLB (L2/ARP), Calico-BGP.
 **Why:** the router actually learns the routes (natively routable from LAN/VPN, no ARP tricks/speaker
 pods); both ends as code (CiliumBGP* CRDs + O-X-L `frr_bgp_*` Ansible). **Consequences:** L2
-auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity).
+auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity). Mechanism: [`bgp.md`](bgp.md).
 
 ### ADR-022 — Router as code: OPNsense via the `oxlorg.opnsense` Ansible collection
 **Status:** Accepted (2026-05). **Decision:** manage OPNsense (BGP, ACME, HAProxy, Unbound) as code

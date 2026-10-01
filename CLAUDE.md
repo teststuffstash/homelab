@@ -80,7 +80,7 @@ defaults, rendered by `machines/generate.py`. Edit the source, re-run the genera
 > current when you deploy/remove a service. The table below is the BGP/HAProxy mechanics.
 
 In-cluster Services get **LoadBalancer VIPs from `192.168.40.0/24`** via Cilium BGP peering
-OPNsense FRR (cluster ASN 64513 ↔ OPNsense 64512). Only Services labelled `bgp=advertise` are
+OPNsense FRR (cluster ASN 64513 ↔ OPNsense 64512). How the peering works: `docs/bgp.md`. Only Services labelled `bgp=advertise` are
 advertised. L2 auto-discovery does NOT cross this L3/BGP boundary. LAN HTTPS names
 (`<name>.teststuff.net`) ride OPNsense HAProxy IP-alias VIPs + Unbound overrides — recipe in
 `docs/runbook.md`. **The per-service VIP/hostname assignments live in `SERVICES.md`** (don't
