@@ -148,7 +148,7 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
 **The CARP trial** (2026-09-30, both nodes standing). `ansible/opnsense-carp.yml` puts one `carp`
 VIP per `router_carp_vips` entry (`ansible/router-nodes/group_vars/opnsense.yml` — router nodes
 only, so prod, the test VM and the drill run it as a no-op) on each node's LAN, with the node's
-`router_carp_advskew` from the inventory: **pve 0 = MASTER, nx-02 100 = BACKUP** (ROADMAP §HA
+`router_carp_advskew` from the inventory: **nx-02 0 = MASTER, pve 100 = BACKUP** (swapped by ADR-145; ROADMAP §HA
 step 2). No XMLRPC sync — both get the list from git; the VHID password is the wallet's
 `opnsense-carp-password` (env `OPN_CARP_PASSWORD`, exported by `router-node.sh converge`). The trial
 VIP is the reserved **`192.168.2.72/24`, vhid 72** (virtual MAC `00:00:5e:00:01:48`; `ip-plan.md`),
@@ -291,7 +291,10 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   failing silently (`DHCPSRV_OPEN_SOCKET_FAIL`, retried) — `OPN_DHCP_SERVER` exists for this. A
   planned window-2 primary stop costs the same ~70–80 s for new clients only.
 - **Skews swap** — nx-02 advskew 0 (MASTER), pve 100 (`ansible/router-nodes/inventory.yml`),
-  so pve joins as BACKUP instead of preempting.
+  so pve joins as BACKUP instead of preempting. **Done 2026-10-01**, with the per-node router-ids
+  (`bgp_router_id` per inventory host) and `.72` retired (`state: absent` in `router_carp_vips` —
+  the carp role deletes it; `check` reads it gone); both nodes converged, `check` green, both WAN
+  gates dark.
 - **Per-node BGP, staged** — router-id per node (the node's LAN address; `bgp_router_id` moves to
   host vars), the Cilium peer change `.1` → `.70` on a branch with its plan read, and the
   per-peer rework of `CiliumBGPAllSessionsDown` ([`bgp.md`](bgp.md) §With the router pair).
