@@ -278,18 +278,23 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   per-peer rework of `CiliumBGPAllSessionsDown` ([`bgp.md`](bgp.md) §With the router pair).
 - **The attended nx-02 host reboot** — advisable before nx-02 is the only router (Big Data is
   the fallback either way).
+- **The WAN gate counts ANY CARP advert** (`router-wangate.sh`: `ip proto 112`, every vhid): the
+  trial VIP `.72` comes off both nodes, and the fake-ISP cable (nx-02 `eno2` ↔ pve `enp6s0`) comes
+  out — else pve, `.72`'s MASTER, raises its WAN beside nx-02 on the shared MAC.
 
 **Window 1 — nx-02 takes `.1`** (Big Data still cabled, powered off at its start):
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).
 2. nx-02 converged out of standby: `.1` as its CARP VIP, Kea on, BGP neighbours on, ACME renewal
    and ddclient on; the Cilium peer change applied (`mgmt-tf apply <plan-id>`); ONT → the WAN
-   switch → nx-02's WAN (the gate gives it link as the sole advertiser). pve's node stays inert.
+   switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link as the sole
+   advertiser; a powered-off Big Data emits nothing). pve's node stays inert, its WAN uncabled.
 3. Checks: WAN lease on the spoofed MAC (same public IP → ddclient no-op), BGP 13/13
    Established to `.70`, a LAN DHCP lease from Kea, Unbound answering, every HAProxy name over
    TLS, the WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
-4. Fallback at any failed check: `.1` off nx-02, the Cilium peer back to `.1`, Big Data on — it
-   never lost its config.
+4. Fallback at any failed check, **in this order** (one MAC, one live WAN): stop nx-02's VM (the
+   gate drops its WAN; the kill switch's latch keeps it down), the Cilium peer back to `.1`, then
+   Big Data on — no recabling, it never lost its config.
 
 **Window 2 — pve joins as BACKUP** (no client-visible change):
 
