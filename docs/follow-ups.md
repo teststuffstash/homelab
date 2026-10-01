@@ -145,16 +145,14 @@ six OVERSIZE items pointer-ized into
       pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
-- [ ] **FU-297** — **OPNsense test VM + rebuild drill: POINTER.** Router-config PRs validated
-      against a real API on VM 9110 (`scripts/opnsense-test-vm.sh`); a weekly from-nothing rebuild
-      drill on the box (`mgmt-opnsense-drill.timer`, `MgmtOpnsenseDrill*`) scores prod's click-ops
-      residue. Design, recipes, buckets: [`opnsense-test-vm.md`](opnsense-test-vm.md); the router
-      move it gates (rehearsal score 0, carried identity, ADR-144 CARP pair, standby profile, the
-      window): [`router-move.md`](router-move.md) — its §Status is the history. State 2026-09-30:
-      **both nodes STANDING + inert, reboot-proof** (nx-02 `.70`, pve `.71`; on_boot + systemd kill
-      switch); **CARP trial PASSED**; `/24` ruling (ADR-088 amended; trial VIP `.72`). **Next:** the
-      drill sequence — pfsync, WAN-follows-master vs the fake ISP (cable in), rolling-update drill,
-      CARP-state alert + split-brain; then DHCP active/passive + Cilium peers. Relates FU-097, FU-013, FU-298.
+- [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs
+      validated on VM 9110 (`scripts/opnsense-test-vm.sh`); a weekly from-nothing rebuild drill on
+      the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops residue. Design + recipes:
+      [`opnsense-test-vm.md`](opnsense-test-vm.md); the move it gates: [`router-move.md`](router-move.md)
+      (its §Status is the history). State 2026-09-30: both nodes STANDING (nx-02 `.70`, pve `.71`, `/24`),
+      CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
+      PASSED. **Next (operator calls):** DHCP active/passive (Kea HA vs a gate toggle), per-node Cilium
+      peers; an attended nx-02 host reboot. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on

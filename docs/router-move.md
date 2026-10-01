@@ -180,6 +180,73 @@ two TCP sessions to the trial VIP on the MASTER appear on the BACKUP as `ESTABLI
 `check` reads the setting. Whether a *routed* flow survives a failover is the fake-ISP drill's
 question (only NAT'd flows through the pair make it meaningful).
 
+**WAN follows the master** (2026-09-30). The ISP gives ONE lease to ONE MAC and both nodes wear
+Big Data's `em0` MAC, so only the CARP MASTER may be on the WAN — two holders flap the MAC on the
+ISP side and split return traffic. The authority is the hypervisor's **WAN gate**,
+`router-wangate@<vmid>` (`ansible/pve-router-killswitch.yml`, beside the kill switch): the VM's WAN
+NIC (`net1`) has link iff the guest emitted a CARP advert (IP proto 112) on its LAN tap within 3 s
+— only a MASTER advertises. The lever is QEMU `set_link` over the VM's QMP socket (ms): to the guest
+it is a cable pulled and replugged, and OPNsense's stock link-down/link-up handling does the DHCP.
+The WAN tap follows too, and both are forced down the instant a VM's taps appear, so a booting
+node has no WAN until it proves MASTER. `check` reads it (gate active, WAN tap up iff MASTER).
+A guest-side CARP hook (`rc.syshook.d/carp`) was built first and rejected by the drill: a node
+booting as BACKUP re-raised its WAN in boot's later interface setup and took the lease beside the
+master, and a hook-driven reconfigure never started dhclient. The gate's hold must exceed the
+node's advert interval (`advbase + advskew/256` — nx-02's 1.39 s flapped a 1.5 s hold).
+
+The drill: the operator's cable joins nx-02 `eno2` ↔ pve `enp6s0`, so both `vmbr3`s are one
+segment; `router-node.sh fakeisp up` starts a fake ISP in a netns on nx-02 (`opnsense/router-node/
+fakeisp.py`: one reserved lease `100.64.0.10` for the shared MAC, a router option — OPNsense's
+automatic outbound NAT covers only interfaces with a gateway — and a counter-streaming TCP server
+on `100.64.0.1:9000`); `router-node.sh probe <secs>` runs `flowprobe.py` on the pve host with
+`100.64.0.1` routed via the trial VIP: one held NAT'd flow + a fresh connect every 0.1 s. The
+nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP). Measured:
+
+| Drill | Held NAT'd flow | Fresh connects |
+|---|---|---|
+| W1 MASTER → maintenance (planned failover) | survived, 6.4 s stall | 2.5 s out |
+| W2 leave maintenance (preempt back) | survived, 6.4 s stall | 2.3 s out |
+| W3 MASTER `qm stop` (host death) | survived, 13.5 s stall (TCP backoff on ~4 s CARP + link-up + DHCP) | 3.5 s out |
+| W3 the stopped MASTER boots + re-takes | survived, 6.4 s stall | 2.8 s out |
+| W4 BACKUP reboots | untouched (≤ 0.1 s blips) | — |
+
+In every run the fake ISP saw DHCP only from the node that had just become MASTER (and its
+renewals) — never from a booting or standing BACKUP. pfsync carried the NAT state each time (the
+held flow never reset). The planned case's ~6 s is OPNsense's ~3 s link-up handling plus the
+DHCP exchange; the guest hook's 1.45 s was faster only because it skipped the link cycle — and it
+was the design that double-held the lease. A planned move pays it twice (over, and back on
+preempt).
+
+**The rolling update** (drill R1, 2026-09-30 — the shape of the 26.7 major: three reboots, ~5 min
+on Big Data). pve (MASTER) enters CARP maintenance, is rebooted three times (`qm reboot`, each
+waited out), leaves maintenance; the probe held one NAT'd flow throughout. Maintenance mode
+**persists across reboots** (the demoted node boots as BACKUP, demotion 240 — once its config is on
+disk; the earlier "lost" flag was the durability finding below). Result: failover 0.62 s held-flow
+stall / 0.7 s fresh connects out; the three reboots **zero**; failback 3.1 s / 1.5 s. So an update
+that costs Big Data minutes of full outage costs the pair a few seconds, twice, with flows kept:
+update the BACKUP first, then maintenance → update → leave on the MASTER.
+
+**The belt** (`argocd/resources/pve-metrics/`, group `router-pair`): each WAN gate writes what it
+sees to its hypervisor's node_exporter textfile — `router_node_carp_master`, `router_node_wan_link`,
+a heartbeat — so the pair is watched from OUTSIDE the guests. `RouterPairMasterCount` (critical,
+1 m): masters ≠ 1 — 2 is split-brain, 0 is nobody routing (a failover's ~4 s dip rides under the
+`for:`). `RouterWanGateSilent`: a stale heartbeat or fewer than two gates — the count unreadable.
+
+**The split-brain drill** (2026-09-30, detector first): an ebtables rule on nx-02
+(`ebtables -I FORWARD -o tap9170i0 -p IPv4 --ip-proto 112 -j DROP`) cut the adverts into nx-02's
+node; it promoted itself within seconds — both gates read MASTER, both WAN links went up, and the
+second node took the fake ISP's one lease too: exactly the hazard. `RouterPairMasterCount` went
+pending at +38 s and **fired at +1 m 47 s with value 2**; deleting the rule healed it (nx-02 back to
+BACKUP, a held flow through the pair untouched) and the alert cleared within 35 s. The belt reaches
+the failure on its own — the fix order it names (find the advert path, then maintenance-mode one
+node) is the recipe.
+
+**Cold start** (2026-09-30, the host-reboot stand-in): nx-02's node shut down with both its units
+stopped, the units started as boot would (`Before=pve-guests`, verified declaratively), then
+Proxmox's own `startall` brought up the onboot VM — the gate forced the fresh taps' WAN down
+before any advert, the node rejoined as BACKUP, `check` green. A real nx-02 reboot (drain wk-04,
+cp-02 down, etcd 2/3) stays an attended window, not an overnight drill.
+
 **Config durability — `sync` after every converge.** The nano image's UFS (soft-updates) lost ~1 min
 of config writes to a hard stop (2026-09-30: the kill switch stopped pve's node ~40 s after a
 LAN-mask edit and a CARP add; it booted without both). A router that dies right after a change
@@ -249,3 +316,16 @@ The window (Big Data still cabled, powered off at its start):
   findings on the way: the `lo0` proof above TRIPPED pve's kill switch (its HAProxy answered from
   `3.11` — correct; such a proof runs with the switch disarmed), and the hard stop lost ~1 min of
   unflushed config (→ `sync` at the end of `converge`). pve restored, re-applied, both checks green.
+- 2026-09-30 late: **WAN follows the master** — the fake-ISP drill over the operator's cable
+  (nx-02 `eno2` ↔ pve `enp6s0`): a hypervisor-side WAN gate (QMP `set_link` keyed on the guest's
+  own CARP adverts) after a guest hook failed the boot case; W1–W4 measured (§above), NAT'd flows
+  survive every failover, no DHCP ever from a BACKUP.
+- 2026-09-30 late: **rolling-update drill R1** (maintenance + 3 reboots, flows kept, seconds of
+  disruption) and the pair's **belt** (`RouterPairMasterCount`, `RouterWanGateSilent` from the WAN
+  gates' textfile metrics, promtool-fixtured). **Next:** the split-brain drill fires it.
+- 2026-09-30 night: **split-brain drill** — `RouterPairMasterCount` fired on the real condition
+  (value 2, +1 m 47 s) and cleared on heal; **cold-start drill** (units + `startall`) green. The
+  drill list from the operator's 2026-09-30 question is done except the attended host reboot.
+  **Left for the window, each an operator call:** DHCP active/passive (dnsmasq has no CARP
+  awareness — Kea's HA mode, or a gate-style toggle, is a fork), and Cilium's per-node peers +
+  router-ids (a live cluster BGP change that redefines `CiliumBGPAllSessionsDown`).
