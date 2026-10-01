@@ -56,9 +56,9 @@ additionalPrometheusRulesMap:
         rules:
           - alert: CiliumBGPAllSessionsDown
             annotations:
-              description: 'Not one node is peering with OPNsense — all LoadBalancer VIPs (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...) are no longer advertised and are unreachable from the LAN.'
-              summary: No Cilium BGP sessions established
-            expr: sum(cilium_bgp_control_plane_session_state == bool 1) == 0
+              description: 'Router peer {{ $labels.neighbor }} has not one established session from the cluster — it holds no LoadBalancer routes (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...); if it is the router clients use (the CARP MASTER behind .1), every VIP is unreachable from the LAN. Per peer since the router pair (ADR-145, docs/bgp.md §With the router pair): a sum over all peers stays silent while one router has none.'
+              summary: No Cilium BGP session established to {{ $labels.neighbor }}
+            expr: (sum by (neighbor) (cilium_bgp_control_plane_session_state == bool 1) == 0) or on() absent(cilium_bgp_control_plane_session_state)
             for: 5m
             labels:
               severity: critical
