@@ -311,7 +311,8 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
 **Window 1 — nx-02 takes `.1`** (Big Data still cabled, powered off at its start):
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).
-2. nx-02 converged out of standby: `.1` as its CARP VIP, Kea on, BGP neighbours on, ACME renewal
+2. nx-02 converged out of standby (and `RouterPairMasterCount` back to `!= 1` — interim `> 1`
+   while no CARP VIP exists): `.1` as its CARP VIP, Kea on, BGP neighbours on, ACME renewal
    and ddclient on; the Cilium peer change applied (`mgmt-tf apply <plan-id>`); ONT → the WAN
    switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link as the sole
    advertiser; a powered-off Big Data emits nothing). pve's node stays inert, its WAN uncabled.
