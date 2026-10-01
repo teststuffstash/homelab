@@ -53,8 +53,10 @@ unreliable and say so ONCE, not per-finding:
 ## Activity-window discipline
 
 The bundle has `schema_version: 1`, `window: {since, until}`, whole-population statistics,
-ranked `tasks` (key, project, issue, events, context, standing_stall_seconds), and separate
-`late_arrivals`. Use its explicit coverage window and population statistics. Both model
+ranked `tasks` (key, project, issue, events, context, standing_stall_seconds), separate
+`late_arrivals`, and a `ledger` section: the task-ledger rows EMITTED inside the window (one per
+task, worst first; `rounds` = `[model, exit_status, error_class, ci]` per round) with its own
+whole-window `population` counters. The blind spots above apply to those rows. Use its explicit coverage window and population statistics. Both model
 cells must analyse that same bundle. The normal window is the previous covered cutoff through
 Monday 00:00 UTC, exclusive; the full run starts Monday 05:00 UTC. Failed runs retain the old
 cutoff. State actual coverage and source completeness in the report; do not infer dates from

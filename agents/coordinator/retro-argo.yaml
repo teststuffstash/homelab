@@ -70,6 +70,10 @@ spec:
         # cell its OWN ephemeral xs/$0.50 key (the xs ENFORCED cap since PR#1650) and refuses the ride if it can't. Set this only to
         # override that (e.g. a hand-minted key with a different cap).
         - { name: retroKeySecret, value: "" }
+        # Level-trigger per WINDOW (was a ledger-growth count since the newest report FILE): the
+        # guard refuses a window whose ledger holds fewer tasks than this; refused windows are not
+        # published, so their evidence rolls into the next Monday's window.
+        - { name: minWindowTasks, value: "8" }
     templates:
       - name: main
         dag:
@@ -185,11 +189,14 @@ spec:
               [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
               # FU-058: one immutable activity bundle, shared by both cells and harvest.
               # Preparation checks collection coverage; only successful publication advances it.
-              python3 agents/retro_pipeline.py prepare --series "$STACK" --output /work/bundle.json
+              python3 agents/retro_pipeline.py prepare --series "$STACK" --output /work/bundle.json \
+                --min-tasks "{{workflow.parameters.minWindowTasks}}"
           env: &tsenv
             - { name: HOME, value: "/home/node" }
+            # optional like its siblings: an absent mirror degrades (anonymous clone, unset env),
+            # never a new CreateContainerConfigError for guard/retro-cell/harvest.
             - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: retro-git, key: GH_TOKEN } }
+              valueFrom: { secretKeyRef: { name: retro-git, key: GH_TOKEN, optional: true } }
             - name: AGENT_TS_WRITER_ID
               valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id } }
             - name: AGENT_TS_WRITER_SECRET
@@ -426,11 +433,15 @@ spec:
               BR="retro/${DATE}-${STACK}-${RUN}"
               mkdir -p /tmp/retro-reports
               cp docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md /tmp/retro-reports/
-              EXISTING_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state all --json url --jq '.[0].url // empty')
-              if [ -n "$EXISTING_PR" ]; then
+              # A retry reuses only an OPEN report PR (never a merged/closed one — new commits on a
+              # recreated branch under a dead PR would never reach a human). A MERGED one whose
+              # reports already match master is the same publication: reuse its URL, push nothing.
+              OPEN_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state open --json url --jq '.[0].url // empty')
+              MERGED_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state merged --json url --jq '.[0].url // empty')
+              if [ -n "$OPEN_PR" ]; then
                 # Remove newly harvested untracked paths before checking out the retry branch.
                 rm docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md
-                git fetch -q origin "refs/pull/${EXISTING_PR##*/}/head"
+                git fetch -q origin "refs/pull/${OPEN_PR##*/}/head"
                 git checkout -B "$BR" FETCH_HEAD
                 cp /tmp/retro-reports/*.md docs/agents/retros/
               else
@@ -438,12 +449,14 @@ spec:
               fi
               git add docs/agents/retros/
               git diff --cached --quiet || git commit -m "retros: ${STACK} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
-              git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')" push https://github.com/teststuffstash/homelab "HEAD:$BR"
-              REPORT_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state all --json url --jq '.[0].url // empty')
-              if [ -z "$REPORT_PR" ]; then
-                REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
-                  --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" \
-                  --body "FU-058 scheduled retro output — HUMAN-GATED. Window and population are frozen in the attached evidence bundle. Findings require explicit acceptance before queueing.${DEAD_NOTE}")
+              PR_BODY="FU-058 scheduled retro output — HUMAN-GATED, read before merging. Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
+              if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
+                REPORT_PR="$MERGED_PR"
+              else
+                git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')" push https://github.com/teststuffstash/homelab "HEAD:$BR"
+                REPORT_PR="$OPEN_PR"
+                [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
+                  --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" --body "$PR_BODY")
               fi
               REPORT_ARGS=()
               for report in docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md; do
@@ -484,7 +497,7 @@ spec:
                 # breaks the manifest. The escapes belong to printf; the YAML never sees a newline.
                 PUSH_WARN=$(printf '\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.')
                 gh pr edit "$BR" --repo teststuffstash/homelab \
-                  --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}${PUSH_WARN}"
+                  --body "${PR_BODY}${PUSH_WARN}"
               fi
               # <<<REPLAY:retro-push-belt<<<
           env: *tsenv

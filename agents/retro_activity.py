@@ -161,7 +161,9 @@ def collect(state, repos, since, until, observed=None):
                         if not check.get('completed_at') or timestamp(check['completed_at']) >= timestamp(until):
                             pending.add(sha)
                         when = check.get('completed_at') or check.get('started_at')
-                        add(repo, number, 'check', str(check['id']) + ':' + str(check.get('conclusion')),
+                        # Identity is the check run alone: a pending→completed re-read CORRECTS
+                        # the record (conclusion lives in the payload), never adds a second event.
+                        add(repo, number, 'check', str(check['id']),
                             when, check.get('html_url') or url,
                             {'name': check['name'], 'conclusion': check.get('conclusion'), 'sha': sha})
                 items[key]['pending_check_shas'] = sorted(pending)

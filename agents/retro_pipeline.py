@@ -81,8 +81,83 @@ class Store:
             if 'no object found' in exc.stderr.lower() or 'NoSuchKey' in exc.stderr:
                 return []
             raise
-        keys = [line.split()[-1] for line in listing.splitlines() if line.strip()]
-        return [self.get(k.removeprefix(self.prefix)) for k in sorted(keys)]
+        # s5cmd prints each key RELATIVE to the listed path's wildcard-free prefix
+        # (`<stamp>/publication.json`; agents/ledger.py has the same contract) — rebuild it.
+        runs = series + '/runs/'
+        keys = [runs + line.split()[-1] for line in listing.splitlines() if line.strip()]
+        return [self.get(k) for k in sorted(keys)]
+
+    def ledger(self):
+        """The FU-057 task ledger (bucket root, beside `_retro/`): one JSON row per line."""
+        if self.local:
+            p = self.local / '_ledger.jsonl'
+            text = p.read_text() if p.exists() else ''
+        else:
+            bucket = 's3://' + os.environ.get('AGENT_TS_BUCKET', 'agent-transcripts') + '/'
+            try:
+                text = self.command('cat', bucket + '_ledger.jsonl')
+            except subprocess.CalledProcessError as exc:
+                if 'NoSuchKey' in exc.stderr or 'specified key does not exist' in exc.stderr:
+                    text = ''
+                else:
+                    raise
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _rounds(row):
+    v = row.get('rounds')
+    return len(v) if isinstance(v, list) else (v or 0)
+
+
+def ledger_window(rows, since, until, keep=25):
+    """The ledger rows EMITTED inside the window — the per-round model/exit/error/CI facts the
+    activity feed cannot see. One row per task (the latest emit supersedes a mid-flight
+    snapshot), population counters before the worst-K sample, pain order as retro-rank.py
+    (blocked first, then rounds, then cost)."""
+    start, end = utc(since), utc(until)
+    latest = {}
+    emitted = 0
+    for row in rows:
+        ts = row.get('ts')
+        if not ts or not start <= utc(ts) < end:
+            continue
+        emitted += 1
+        key = row.get('key') or '%s#%s' % (row.get('project'), row.get('issue'))
+        if key not in latest or row['ts'] >= latest[key]['ts']:
+            latest[key] = row
+    tasks = list(latest.values())
+    exits, errors, first = {}, {}, {}
+    for row in tasks:
+        rounds = row.get('rounds') if isinstance(row.get('rounds'), list) else []
+        for r in rounds:
+            exits[r.get('exit_status') or 'unknown'] = exits.get(r.get('exit_status') or 'unknown', 0) + 1
+            if r.get('error_class'):
+                errors[r['error_class']] = errors.get(r['error_class'], 0) + 1
+        if rounds:
+            m = first.setdefault(rounds[0].get('model') or 'unknown', {'tasks': 0, 'non_clean': 0})
+            m['tasks'] += 1
+            m['non_clean'] += rounds[0].get('exit_status') != 'clean'
+    labels = {}
+    for row in tasks:
+        labels[row.get('terminal_label') or 'none'] = labels.get(row.get('terminal_label') or 'none', 0) + 1
+    tasks.sort(key=lambda r: (r.get('terminal_label') != 'agent/blocked', -_rounds(r),
+                              -(r.get('total_cost_usd') or 0), -(r.get('wall_time_s') or 0), r['ts']))
+    compact = []
+    for row in tasks[:keep]:
+        c = {k: row[k] for k in ('key', 'stack', 'ts', 'terminal_label', 'issue_state', 'snapshot',
+                                 'budget_tier', 'budget_cap_usd', 'total_cost_usd', 'wall_time_s', 'pr_url')
+             if row.get(k) not in (None, '')}
+        r = row.get('rounds')
+        # [model, exit_status, error_class, ci] per round — the fields the KPIs read.
+        c['rounds'] = ([[x.get('model'), x.get('exit_status'), x.get('error_class') or None, x.get('ci')]
+                        for x in r] if isinstance(r, list) else r)
+        compact.append(c)
+    return {'population': {'rows_emitted': emitted, 'task_count': len(tasks),
+                           'snapshot_tasks': sum(bool(r.get('snapshot')) for r in tasks),
+                           'by_terminal_label': labels, 'round_entries': sum(exits.values()),
+                           'by_exit_status': exits, 'by_error_class': errors,
+                           'first_touch_by_model': first},
+            'rows': compact, 'row_fields': 'rounds = [model, exit_status, error_class, ci] per round'}
 
 
 def collect(args, store, temp):
@@ -130,14 +205,22 @@ def prepare(args, store, temp):
             {k: f[k] for k in ('id', 'mechanism', 'surface', 'summary', 'related_work') if k in f}
             for f in previous_findings[-30:]]
         bundle['previous_findings_total'] = len(previous_findings)
+        bundle['ledger'] = ledger_window(store.ledger(), start, end)
+        # The floor the old `minNewTasks` guard held, now per window: a refused week is NOT
+        # published, so its evidence rolls into the next window instead of being skipped.
+        if bundle['ledger']['population']['task_count'] < args.min_tasks:
+            raise ValueError('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
+                             % (bundle['ledger']['population']['task_count'], start, end, args.min_tasks))
         bundle['series'] = args.series
         bundle['storage_key'] = key
         bundle.pop('bundle_id', None)
         # Budget the COMPLETE bundle, including prior findings, before argv transport.
         while len(json.dumps(bundle).encode()) > 60000 and bundle['previous_findings']:
             bundle['previous_findings'].pop(0)
-        while len(json.dumps(bundle).encode()) > 60000 and bundle['tasks']:
-            bundle['tasks'].pop()
+        while len(json.dumps(bundle).encode()) > 60000 and (bundle['tasks'] or bundle['ledger']['rows']):
+            # Trim the longer worst-K sample first; population counters are already final.
+            longer = 'tasks' if len(bundle['tasks']) >= len(bundle['ledger']['rows']) else 'ledger'
+            (bundle['tasks'] if longer == 'tasks' else bundle['ledger']['rows']).pop()
         bundle['selected_task_count'] = len(bundle['tasks'])
         bundle['bundle_id'] = hashlib.sha256(json.dumps(bundle, sort_keys=True).encode()).hexdigest()
         store.put(key + '/bundle.json', bundle)
@@ -247,6 +330,8 @@ def main():
     parser.add_argument('--decisions')
     parser.add_argument('--batch')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--min-tasks', type=int, default=8,
+                        help='prepare: refuse a window with fewer ledger tasks than this')
     args = parser.parse_args()
     if not re.fullmatch('[a-z0-9-]+', args.series):
         parser.error('invalid series')

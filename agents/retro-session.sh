@@ -73,6 +73,7 @@ RUN_ID="r$(( ${LAST:-0} + 1 ))"
 # >>>REPLAY:retro-window-run-id>>>
 # Published coverage advances independently of report-PR merge; the frozen run id wins.
 if [ -n "${LEDGER:-}" ]; then
+  [ -f "$LEDGER" ] || { echo "FATAL: --ledger $LEDGER: no such file (the frozen evidence bundle)" >&2; exit 2; }
   FROZEN_RUN=$(python3 - "$LEDGER" <<'PYRUN'
 import json, re, sys
 value = json.load(open(sys.argv[1]))

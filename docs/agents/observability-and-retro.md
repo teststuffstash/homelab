@@ -397,9 +397,15 @@ No LLM turn. Collect new activity every 30 minutes, including ongoing issues and
 PRs, reviews, check runs and dated machine-summary entries (`agents/retro_activity.py`). Issue creation or closure is not the selection
 boundary: an issue can contribute new activity to multiple periods. Preserve stable event IDs,
 event time and collection time so retries deduplicate and late observations remain visible.
-The activity state lives at `agent-transcripts/_retro/activity.json`. The legacy task ledger
-(`agent-transcripts/_ledger.jsonl`, still emitted by `agents/ledger.py`) remains historical context
-and is **not the weekly selector**. Its intended statistics include:
+The activity state lives at `agent-transcripts/_retro/activity.json`. The task ledger
+(`agent-transcripts/_ledger.jsonl`, emitted by `agents/ledger.py`) is **windowed, never ranked
+all-time**: the bundle's `ledger` section carries only the rows *emitted* inside the window (the
+latest emit per task supersedes a mid-flight snapshot), population counters (exit statuses, error
+classes, first-touch model) computed before its worst-K sample — the per-round facts the activity
+feed cannot see. The all-time pain rank was the r4–r6 failure: the same August tasks (#913,
+#625, #778…) filled every deep-dive set while a 9-round task emitted that week never ranked. The
+guard's `minWindowTasks` floor counts these window tasks; a refused window is not published, so it
+rolls into the next. Its intended statistics include:
 cost vs estimator band (**calibration error**), rounds used, retry storms (the 812×-403 class),
 CI red/green sequence, review flip-flops, wall time, cache-hit %, requests, tokens/request.
 Grafana dashboard over the ledger = the long-promised stats v2 (**FU-057**). These numbers are also

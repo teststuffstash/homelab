@@ -27,7 +27,8 @@ class PipelineTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.store = p.Store(str(self.root / 'store'))
-        self.args = argparse.Namespace(series='platform', now=NOW, output=str(self.root / 'bundle.json'))
+        self.args = argparse.Namespace(series='platform', now=NOW, output=str(self.root / 'bundle.json'),
+                                       min_tasks=0)
         self.store.put('activity.json', {'version':1, 'events':[], 'items':{},
                                        'collected_until':NOW, 'observed_at':NOW})
 
@@ -65,6 +66,46 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len(self.store.publications('platform')), 1)
         with self.assertRaisesRegex(ValueError, 'already published'):
             p.prepare(self.args, self.store, self.root)
+
+    def write_ledger(self, rows):
+        path = self.root / 'store' / '_ledger.jsonl'
+        path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+
+    def test_ledger_rows_are_windowed_not_all_time(self):
+        # The r6 misbehaviour: an all-time pain rank re-surfaced August's blocked tasks every
+        # Monday while a 9-round task emitted inside the window never ranked.
+        old = {'ts':'2026-08-25T10:00:00Z', 'key':'homelab#913', 'terminal_label':'agent/blocked',
+               'rounds':[{'model':'m','exit_status':'clean'}] * 8}
+        now = {'ts':'2026-09-27T18:30:34Z', 'key':'oracle-fleet#753', 'terminal_label':'agent/blocked',
+               'snapshot':True, 'rounds':[{'model':'m','exit_status':'ci-failed','error_class':'ci-red','ci':False}]}
+        done = dict(now, ts='2026-09-27T20:00:00Z', snapshot=None, terminal_label='agent/done',
+                    rounds=[{'model':'haiku','exit_status':'clean','ci':True}] * 2)
+        late = dict(old, ts='2026-09-28T00:00:00Z', key='homelab#2000')  # at the cutoff: next window
+        self.write_ledger([old, now, done, late])
+        p.prepare(self.args, self.store, self.root)
+        ledger = json.loads(Path(self.args.output).read_text())['ledger']
+        self.assertEqual([r['key'] for r in ledger['rows']], ['oracle-fleet#753'])
+        self.assertEqual(ledger['rows'][0]['terminal_label'], 'agent/done')  # latest emit wins
+        self.assertEqual(ledger['population']['rows_emitted'], 2)
+        self.assertEqual(ledger['population']['first_touch_by_model'], {'haiku': {'tasks':1, 'non_clean':0}})
+
+    def test_quiet_window_refuses_and_rolls_forward(self):
+        self.args.min_tasks = 1
+        with self.assertRaisesRegex(ValueError, 'GUARD REFUSED'):
+            p.prepare(self.args, self.store, self.root)
+        self.assertIsNone(self.store.get('platform/runs/20260928T000000Z/bundle.json'))
+        self.assertIsNone(self.store.get('platform/checkpoint.json'))
+
+    def test_remote_publications_rebuild_relative_keys(self):
+        remote = p.Store()
+        listing = '2026/09/28 07:00:00   812  20260928T000000Z/publication.json\n'
+        calls = []
+        def command(verb, *args, write=False):
+            calls.append((verb,) + args)
+            return listing if verb == 'ls' else json.dumps({'reports': {}})
+        with patch.object(remote, 'command', side_effect=command):
+            self.assertEqual(remote.publications('platform'), [{'reports': {}}])
+        self.assertEqual(calls[-1], ('cat', 's3://agent-transcripts/_retro/platform/runs/20260928T000000Z/publication.json'))
 
     def test_incomplete_collection_refuses(self):
         self.store.put('activity.json', {'collected_until':'2026-09-27T23:30:00Z'})
@@ -122,6 +163,59 @@ class PipelineTests(unittest.TestCase):
         p.run('bash', '-ec', prefix + block, cwd=repo, env=env)
         self.assertEqual(report.read_text(), 'retry report')
 
+    def harvest_publish(self, open_pr, merged_pr, same_as_master):
+        """Run the harvest's branch→PR selection with stubbed gh and push."""
+        import os
+        repo = self.root / 'h'
+        repo.mkdir()
+        env = dict(os.environ, GIT_AUTHOR_NAME='T', GIT_AUTHOR_EMAIL='t@example.invalid',
+                   GIT_COMMITTER_NAME='T', GIT_COMMITTER_EMAIL='t@example.invalid')
+        def git(*args):
+            return p.run('git', *args, cwd=repo, env=env)
+        reports = repo / 'docs/agents/retros'
+        reports.mkdir(parents=True)
+        report = reports / '2026-09-28-platform-r6-opus.md'
+        git('init', '-b', 'master')
+        if same_as_master:
+            report.write_text('report'); git('add', '.')
+        git('commit', '--allow-empty', '-m', 'base')
+        git('update-ref', 'refs/remotes/origin/master', 'HEAD')
+        report.write_text('report')
+        source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
+        block = source.split('              mkdir -p /tmp/retro-reports', 1)[1].split('              REPORT_ARGS=()', 1)[0]
+        block = ('mkdir -p /tmp/retro-reports' + block).replace('/tmp/retro-reports', str(self.root / 'saved'))
+        log = self.root / 'calls'
+        prefix = ('DATE=2026-09-28; STACK=platform; RUN=r6; BR=retro/r6; N=1; DEAD_NOTE=; GH_TOKEN=t; '
+                  'gh() { echo "gh $*" >> %s; case "$*" in *"pr create"*) echo https://new/pull/9;; '
+                  '*"--state open"*) echo "%s";; *"--state merged"*) echo "%s";; esac; }; '
+                  'git() { if [ "$1" = -c ]; then echo "push" >> %s; else command git "$@"; fi; }; '
+                  % (log, open_pr, merged_pr, log))
+        out = p.run('bash', '-ec', prefix + block + '\nprintf "%s" "$REPORT_PR"', cwd=repo, env=env)
+        calls = log.read_text() if log.exists() else ''
+        self.assertNotIn('--state all', calls)
+        return out.splitlines()[-1], calls
+
+    def test_harvest_never_reuses_a_dead_pr_for_new_reports(self):
+        out, calls = self.harvest_publish('', 'https://old/pull/1', same_as_master=False)
+        self.assertEqual(out, 'https://new/pull/9')
+        self.assertIn('push', calls)
+
+    def test_harvest_reuses_merged_pr_only_when_already_on_master(self):
+        out, calls = self.harvest_publish('', 'https://old/pull/1', same_as_master=True)
+        self.assertEqual(out, 'https://old/pull/1')
+        self.assertNotIn('push', calls)
+        self.assertNotIn('pr create', calls)
+
+    def test_retro_session_missing_bundle_is_a_clean_fatal(self):
+        import os
+        path = Path(__file__).parent / 'retro-session.sh'
+        source = path.read_text().split('# >>>REPLAY:retro-window-run-id>>>', 1)[1].split('# <<<REPLAY:retro-window-run-id<<<', 1)[0]
+        env = dict(os.environ, LEDGER=str(self.root / 'typo.json'), RUN_ID='r6')
+        result = subprocess.run(['bash', '-ec', source], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('FATAL', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
     def test_workflow_shares_guard_artifact(self):
         # Read shipped manifest via the pinned yq tool; do not copy its DAG into the test.
         path = Path(__file__).parent / 'coordinator/retro-argo.yaml'
@@ -136,6 +230,10 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(artifact['from'], '{{tasks.guard.outputs.artifacts.evidence}}')
         self.assertNotIn('retro-rank.py', path.read_text())
         self.assertNotIn('minNewTasks', path.read_text())
+        guard = next(t for t in spec['workflowSpec']['templates'] if t['name'] == 'guard')
+        self.assertIn('--min-tasks "{{workflow.parameters.minWindowTasks}}"', guard['container']['args'][0])
+        env = {e['name']: e for e in guard['container']['env']}
+        self.assertTrue(env['GH_TOKEN']['valueFrom']['secretKeyRef'].get('optional'))
 
 
 class QueueTests(unittest.TestCase):
