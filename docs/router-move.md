@@ -68,7 +68,7 @@ Also physical, not code: `sensor.plug_opnsense_power` (HA `power.yaml`, the dash
 The carry takes **only identity** — never anything a play owns: the plays converge the rest from
 git, and the drill's score says how much of prod that is.
 
-## The cutover — a config flip plus one window
+## The cutover — a config flip plus two windows
 
 **The standing nodes** (ADR-144 — this replaces the management-path fork: a temporary
 management NIC, a tunnel into an isolated bridge, a permanent management segment). Each node is
@@ -253,16 +253,57 @@ LAN-mask edit and a CARP add; it booted without both). A router that dies right 
 comes back without it, so `router-node.sh converge` ends with `sync` on the node. The hard-stop
 drills must allow for it too.
 
-The window (Big Data still cabled, powered off at its start):
+### The two windows (ADR-145)
+
+The cutover is two windows. The first moves `.1` to **nx-02 alone** but already in the pair's end
+shape — `.1` a CARP VIP with one speaker, Kea instead of dnsmasq, BGP peered at the node's own
+address — so the second adds pve without any client noticing, and a primary stop proves it.
+Mechanism of the BGP half: [`bgp.md`](bgp.md).
+
+**Prep (before window 1, none of it touches prod):**
+
+- **Kea as code** — the successor of `opnsense/dnsmasq-dhcp.py` (same search-then-rebuild shape;
+  the Kea API has no upsert): subnet, pool, lease 7200, `option_data_autocollect` **off** with
+  routers + DNS = `.1` explicitly (autocollect would hand out the node's own `.70`), domain, the
+  static reservations; Kea off under the standby profile. Proven on the test VM, including the
+  in-pool reservations.
+- **The Kea HA join drill** — two non-prod nodes (the test VM + the drill VM): one serving alone
+  with HA off, then HA on for both → the joiner syncs the lease DB while the first keeps serving;
+  then stop the primary → the standby serves; and a lone node's cold start with HA on. This is
+  window 2 rehearsed; it also settles the `:8001` firewall question on the nodes' LAN rules.
+- **Skews swap** — nx-02 advskew 0 (MASTER), pve 100 (`ansible/router-nodes/inventory.yml`),
+  so pve joins as BACKUP instead of preempting.
+- **Per-node BGP, staged** — router-id per node (the node's LAN address; `bgp_router_id` moves to
+  host vars), the Cilium peer change `.1` → `.70` on a branch with its plan read, and the
+  per-peer rework of `CiliumBGPAllSessionsDown` ([`bgp.md`](bgp.md) §With the router pair).
+- **The attended nx-02 host reboot** — advisable before nx-02 is the only router (Big Data is
+  the fallback either way).
+- **The WAN gate counts ANY CARP advert** (`router-wangate.sh`: `ip proto 112`, every vhid): the
+  trial VIP `.72` comes off both nodes, and the fake-ISP cable (nx-02 `eno2` ↔ pve `enp6s0`) comes
+  out — else pve, `.72`'s MASTER, raises its WAN beside nx-02 on the shared MAC.
+
+**Window 1 — nx-02 takes `.1`** (Big Data still cabled, powered off at its start):
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).
-2. `.1` onto the pair (the CARP VIP, or a plain address on one node if the trial says the first
-   step should be smaller), DHCP on; ONT → the WAN switch → the `.1` holder's WAN (only that one
-   cabled — the single-lease rule).
+2. nx-02 converged out of standby: `.1` as its CARP VIP, Kea on, BGP neighbours on, ACME renewal
+   and ddclient on; the Cilium peer change applied (`mgmt-tf apply <plan-id>`); ONT → the WAN
+   switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link as the sole
+   advertiser; a powered-off Big Data emits nothing). pve's node stays inert, its WAN uncabled.
 3. Checks: WAN lease on the spoofed MAC (same public IP → ddclient no-op), BGP 13/13
-   Established, a LAN DHCP lease, Unbound answering, every HAProxy name over TLS, the
-   WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
-4. Fallback at any failed check: `.1` off the pair, Big Data on — it never lost its config.
+   Established to `.70`, a LAN DHCP lease from Kea, Unbound answering, every HAProxy name over
+   TLS, the WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
+4. Fallback at any failed check, **in this order** (one MAC, one live WAN): stop nx-02's VM (`qm stop` +
+   `onboot 0` — the gate drops its WAN, a host reboot cannot revive it), the Cilium peer back to `.1`, then
+   Big Data on — no recabling, it never lost its config.
+
+**Window 2 — pve joins as BACKUP** (no client-visible change):
+
+1. pve's node converged out of standby at advskew 100 — its kill switch disarmed first (a live
+   node emits exactly what the switch trips on); its WAN cabled to the WAN switch (the gate keeps
+   it dark while BACKUP).
+2. Kea HA on, both nodes (nx-02 primary); the Cilium peer `.71` added.
+3. Checks: CARP MASTER/BACKUP as expected, the lease DB synced, BGP 26/26, the belts green.
+4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out.
 
 ## Status
 
@@ -329,3 +370,7 @@ The window (Big Data still cabled, powered off at its start):
   **Left for the window, each an operator call:** DHCP active/passive (dnsmasq has no CARP
   awareness — Kea's HA mode, or a gate-style toggle, is a fork), and Cilium's per-node peers +
   router-ids (a live cluster BGP change that redefines `CiliumBGPAllSessionsDown`).
+- 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
+  checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
+  database). The inert drills proved the machinery, not the service layer — the next evidence is
+  a real switchover. **Next:** §The two windows' prep list.
