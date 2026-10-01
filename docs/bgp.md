@@ -53,7 +53,8 @@ Rule group `cilium-bgp` in
 [`kube-prometheus-stack.yaml`](../argocd/platform/values/kube-prometheus-stack.yaml), on
 `cilium_bgp_control_plane_session_state` (1 = established, one series per node × peer):
 
-- `CiliumBGPAllSessionsDown` (critical, 5 m) — no session anywhere: every VIP unreachable.
+- `CiliumBGPAllSessionsDown` (critical, 5 m) — a router peer with no established session from any
+  node (per `neighbor`, plus the metric vanishing altogether): that router holds no VIP routes.
 - `CiliumBGPNodeSessionDown` (15 m) — one node × peer down: that node advertises nothing.
 
 ## With the router pair
@@ -68,9 +69,8 @@ The pair shape instead:
   all the time and whichever is MASTER forwards from a warm table.
 - **Each node has its own router-id** (its LAN address) — today's single `bgp_router_id` moves
   per node.
-- **The alerts change meaning**: with two peers, "sum of sessions = 0" stays silent while one
-  router has none — and if that router is MASTER every VIP is down. The all-down condition
-  becomes per peer.
+- **The alerts are per peer** (done 2026-10-01): with two peers a "sum of sessions = 0" would
+  stay silent while one router has none — and if that router is MASTER every VIP is down.
 - **Standing nodes are inert until the window** (router-move §The standing nodes): neighbours
   configured but disabled, and the hypervisor kill switch stops a node that sends a BGP SYN or
   SYN-ACK. Peering the standing nodes ahead of the window therefore needs that rule settled
