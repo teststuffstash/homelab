@@ -11924,3 +11924,11 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   silenced 3 h, #2159 interim `> 1`. #2160 BGP alert per peer; #2161 draft Cilium peer (window 1).
 - Operator cabled the WAN switch: with nx-02 + pve ports on it, 7–20 % WAN loss (connect 1.3–2.9 s);
   both pulled → 0 %. Big Data em0 clean, taps dark. Hunt next session (meta-state).
+- 2026-10-01 ~19:19Z CI flake: master + #2160 CI red — two ARC runners on nx-01 (nm47c, 7shlb) sat
+  14 min in devbox "Ensuring packages" then `promtool: command not found` (prom-lint + scan-wedge
+  replay). Same image digest everywhere; nx-01 ran 27 runners/24h clean. Rerun green, #2160 merged
+  20:03Z. One sighting — no FU; a second one on nx-01 → probe that node's runner store/containerd.
+- #2130 (retro activity windows, FU-058): misbehaviour re-validated on the live ledger (all-time
+  rank == r6's Jul/Aug deep-dive set; 42 in-window rows incl. oracle-fleet#753 never ranked); the
+  seven review blockers fixed + ledger window restored + compact events + 5xx retry (fb849d93,
+  84e5c0c9). Awaits the codeowner read (new machinery). Open in PR: collector state ~8 MB/repo-week.
