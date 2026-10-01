@@ -27,7 +27,7 @@
           - item.address is not match('^192\.168\.3\.')
         fail_msg: "{{ item.address }}: while standing, a CARP VIP is the reserved trial slot 192.168.2.72 only"
         quiet: true
-      loop: "{{ router_carp_vips }}"
+      loop: "{{ router_carp_vips | rejectattr('state', 'defined') | list }}"
       loop_control: { label: "{{ item.address }}" }
 
     - name: CARP VIP on LAN
@@ -40,8 +40,16 @@
         advertising_base: 1
         advertising_skew: "{{ router_carp_advskew }}"
         description: "{{ item.description }}"
-      loop: "{{ router_carp_vips }}"
+      loop: "{{ router_carp_vips | rejectattr('state', 'defined') | list }}"
       loop_control: { label: "{{ item.address }} vhid {{ item.vhid }} skew {{ router_carp_advskew }}" }
+
+    - name: Retired CARP VIPs removed (state absent)
+      oxlorg.opnsense.interface_vip:
+        address: "{{ item.address }}"
+        interface: lan
+        state: absent
+      loop: "{{ router_carp_vips | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
+      loop_control: { label: "{{ item.address }} (absent)" }
 
 # pfsync — state sync to the OTHER node (unicast peer = its inventory address; the pair is two
 # hosts, so "the other" is unique). On LAN: no third port (ADR-144 — accepted, unauthenticated).

@@ -153,12 +153,17 @@ check() {
     || no "host reboot: switch/onboot '$v' (want 'enabled 1' — the play + tofu on_boot; onboot 0 after a trip is the latch)"
   # CARP (router-nodes group_vars `router_carp_vips`): each trial VIP present on LAN, and in a live
   # state — MASTER or BACKUP; INIT/DISABLED/absent is a fail. Which node is MASTER is `carp-status`'s.
-  local want; want="$(yq -r '.router_carp_vips[]?.address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+  local want gone; want="$(yq -r '.router_carp_vips[]? | select(.state == null) | .address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+  gone="$(yq -r '.router_carp_vips[]? | select(.state == "absent") | .address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+  for a in $gone; do
+    v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a)] | length' || true)"
+    [ "$v" = 0 ] && ok "CARP $a retired (absent)" || no "CARP $a: still configured ('${v:-unread}' rows; want absent)"
+  done
   for a in $want; do
     v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a and .mode=="carp") | "\(.interface | ascii_downcase)/\(.status)"] | join(",")' || true)"
     case "$v" in lan/MASTER|lan/BACKUP) ok "CARP $a $v";; *) no "CARP $a: '${v:-absent}' (want lan/MASTER or lan/BACKUP)";; esac
   done
-  if [ -n "$want" ]; then   # pfsync rides with CARP: LAN, unicast to the OTHER node, the pinned version
+  if [ -n "$want$gone" ]; then   # pfsync rides with CARP: LAN, unicast to the OTHER node, the pinned version
     local peer; peer="$(yq -r "[.all.children.opnsense.hosts | to_entries[] | select(.key != \"$INV_HOST\") | .value.ansible_host][0]" "$INV")"
     v="$(api core/hasync/get 2>/dev/null | jq -r '.hasync | [(.pfsyncinterface | to_entries[] | select(.value.selected==1) | .key), .pfsyncpeerip, (.pfsyncversion | to_entries[] | select(.value.selected==1) | .key)] | join(" ")' || true)"
     [ "$v" = "lan $peer 1400" ] && ok "pfsync lan → $peer (v1400)" || no "pfsync: '${v:-unread}' (want 'lan $peer 1400')"
@@ -166,7 +171,7 @@ check() {
     local role; role="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[] | select(.mode=="carp") | .status] | first // "none"' || true)"
     v="$(pve "systemctl is-active router-wangate@$VMID; ip -br link show tap${VMID}i1 | awk '{print \$2}'" | tr '\n' ' ' || true)"
     case "$role:$v" in
-      "MASTER:active UP "|"MASTER:active UNKNOWN "|"BACKUP:active DOWN ") ok "WAN gate: $role → WAN tap ${v#active }";;
+      "MASTER:active UP "|"MASTER:active UNKNOWN "|"BACKUP:active DOWN "|"none:active DOWN ") ok "WAN gate: $role → WAN tap ${v#active }";;
       *) no "WAN gate: CARP $role, gate/tap '$v' (want active, UP iff MASTER)";;
     esac
   fi

@@ -17,13 +17,15 @@ all:
       hosts:
         opnsense-nx02:
           ansible_host: 192.168.2.70
+          bgp_router_id: 192.168.2.70   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
           ansible_connection: local
           opnsense_standby: true
-          router_carp_advskew: 100   # BACKUP (ROADMAP §HA step 2: pve master, nx-02 backup)
+          router_carp_advskew: 0     # MASTER (ADR-145: nx-02 takes .1 alone in window 1; pve joins as BACKUP)
           haproxy_vip_interface: lo0
         opnsense-pve:
           ansible_host: 192.168.2.71
+          bgp_router_id: 192.168.2.71   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
           ansible_connection: local
           opnsense_standby: true
-          router_carp_advskew: 0     # MASTER
+          router_carp_advskew: 100   # BACKUP (ADR-145)
           haproxy_vip_interface: lo0
