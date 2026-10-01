@@ -292,8 +292,8 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
 3. Checks: WAN lease on the spoofed MAC (same public IP → ddclient no-op), BGP 13/13
    Established to `.70`, a LAN DHCP lease from Kea, Unbound answering, every HAProxy name over
    TLS, the WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
-4. Fallback at any failed check, **in this order** (one MAC, one live WAN): stop nx-02's VM (the
-   gate drops its WAN; the kill switch's latch keeps it down), the Cilium peer back to `.1`, then
+4. Fallback at any failed check, **in this order** (one MAC, one live WAN): stop nx-02's VM (`qm stop` +
+   `onboot 0` — the gate drops its WAN, a host reboot cannot revive it), the Cilium peer back to `.1`, then
    Big Data on — no recabling, it never lost its config.
 
 **Window 2 — pve joins as BACKUP** (no client-visible change):
