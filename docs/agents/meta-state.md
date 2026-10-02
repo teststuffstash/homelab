@@ -80,16 +80,17 @@ never the session's arc — that is TICK-LOG's.)
   #2157 nx-02 host reboot, #2158 .72 retired + skews + router-ids, #2159 RouterPairMasterCount
   interim `> 1`, #2160 BGP alert per peer — auto-merge pending re-review; #2161 DRAFT = the
   Cilium peer .1→.70, apply IN window 1, plan id 20261001T190057Z-f06b997d, re-plan if stale).
-  **WAN-switch loss — likely the CABLE (2026-10-02, second jail):** nodes on the switch measured
-  clean (0.17 % / 120 s, no frames out of the node ports) after the WAN cable swap. Was: 7–20 % loss
-  with nx-02 `eno2` + pve `enp6s0` on the switch. **Next:** a later re-probe confirms, then window 1.
-  pve/nx-02 host keys the second jail took accept-new: checked against the box's pins 2026-10-02 — match.
-  **Window-1 change set still to write:** `.1` VIP (nx-02 host vars only), nx-02 out of standby +
-  `OPN_DHCP_SERVER=kea`, **disarm nx-02's kill switch first** (missing from the doc), prod's
-  management address → the node (router-move §B), RouterPairMasterCount back to `!= 1`.
-  **Lesson to write into router-move:** retiring a CARP VIP on the MASTER first promotes the
-  BACKUP — the 18:45–18:48Z .72 retirement raised nx-02's WAN for 2 min (harmless only because
-  its cable went to pve's dark port); remove from the BACKUP first / both in maintenance.
+  **⚑ WINDOW 1 DONE 2026-10-02 (window seat-1790960221-62) — nx-02 IS THE ROUTER.** #2166 (change set
+  + LAN_GW drop) merged, #2161 (Cilium peer `.70`) applied; `.1` = CARP MASTER on nx-02, WAN
+  `176.46.101.184`, BGP 13/13, Kea leasing, WG handshake, backup, HAProxy names, `check nx02/pve` green.
+  The WAN loss was the old cable. **Big Data: RUNNING with BOTH cables OUT** — the API `core/system/halt`
+  did NOT keep it down (it answered `.1` again within ~4 min → double `.1` until the operator pulled
+  its cables). Fallback = router-move §Window 1 step 4 (stop nx-02's VM FIRST, then replug Big Data).
+  **Next:** soak 1–2 weeks → window 2 (pve joins as BACKUP; its WAN already on the switch, gate dark);
+  write the window's lessons into router-move §Status (halt ≠ off; the ddclient play hung on a
+  `pkg update` stuck from the double-`.1` minutes; `mgmt-tf apply` prompts `y`; Kea served only
+  after a re-run; `opnsense.teststuff.net` came from Big Data's hostname → static override 3cf5bd16).
+  `OpnsenseConfigUnattributedRevision` fires on every jail converge (root key) — FU-013's class.
   Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
