@@ -223,7 +223,12 @@ cmd_run() { # <plan-id> [--label <slug>]
   echo "evidence → $dir"
   # `open` takes the health baseline (refusing to bank one built from unread probes) and declares
   # the window to the responder; its baseline is this record's health-before.
-  bash "$W" open --reason "helm_release apply $plan ($label) — scripts/helm-release-evidence.sh" --hours 1 \
+  # The window must outlive the whole run: the apply (helm's own waits — argocd's 900 s timeout the
+  # longest) + the settle + the snapshot/check. Sized from WATCH_SECS, never a constant: a fixed
+  # hour expired mid-settle for any WATCH_SECS past ~40 min, and an expired window reads to the
+  # responder as an unattended cluster (review finding on PR#2179).
+  local hours=$(( (${WATCH_SECS:-900} + 1800 + 3599) / 3600 ))
+  bash "$W" open --reason "helm_release apply $plan ($label) — scripts/helm-release-evidence.sh" --hours "$hours" \
     2>&1 | tee "$dir/window-open.log" || { echo "run: window did not open — not applying" >&2; exit 3; }
   local wid; wid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' "$dir/window-open.log" | head -1)"
   [ -n "$wid" ] || { echo "run: could not read the window id from 'open' — not applying (check 'devbox run maint -- list')" >&2; exit 3; }
