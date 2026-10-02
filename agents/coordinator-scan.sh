@@ -2443,6 +2443,7 @@ EOF
         dnum="${dep##*#}"; dslug="$slug"
         case "$dep" in *"/"*"#"*) dslug="${dep%#*}";; esac
         case "$dnum" in ''|*[!0-9]*) continue;; esac  # not a #N token — ignore, don't guess
+        # >>>REPLAY:deps-resolve>>>
         if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,blockedBy 2>/dev/null </dev/null)"; then
           if [ "$(jq -r .state <<<"$depjson")" = "OPEN" ]; then
             blocked="${blocked} ${dslug}#${dnum}"
@@ -2483,6 +2484,7 @@ EOF
         else
           blocked="${blocked} ${dslug}#${dnum}(PROBE-FAILED)"
         fi
+        # <<<REPLAY:deps-resolve<<<
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"

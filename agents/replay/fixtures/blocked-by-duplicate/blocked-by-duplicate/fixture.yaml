@@ -1,0 +1,22 @@
+# homelab#2167 — a blocker closed as DUPLICATE must not release the parked issue.
+#
+# CONDITION UNDER REPLAY. A queued issue S has a dependency E that is CLOSED with
+# stateReason=DUPLICATE. E's canonical issue C is OPEN. The contract is that the clause
+# follows the canonical issue and gates on its state — S stays parked (blocked) because
+# C is still open.
+#
+# ACCEPTANCE:
+#   1. E closed as DUPLICATE of OPEN C → S stays parked (blocked = " homelab#42(→other#99)")
+#   2. orphans is empty (canonical was readable)
+#   3. No stale entries (NOT_PLANNED is a different branch)
+#
+name: blocked-by-duplicate
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:deps-resolve
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
