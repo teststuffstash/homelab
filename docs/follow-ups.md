@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-299** (2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-303** (2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -138,6 +138,33 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-299** — **Longhorn volumes have no backup at all.** Live 2026-10-02: BackupTarget `default`
+      URL empty (`available: false`), 0 RecurringJobs, 0 Backups — ADR-031's "Longhorn/HA backups
+      currently sent to external S3/B2" is stale. A bad Longhorn upgrade has no revert (downgrades refused),
+      so restore IS the rollback. Direction (operator, 2026-10-02): the target sits OUTSIDE Longhorn (the
+      in-cluster Garage rides `longhorn-local-xfs`) — a single-node Garage in an LXC on nx-02's `local-lvm`
+      (700 G SA400 thin pool, 0 % used; a VM won't fit: 60.5/62 GiB committed, NUMA node0 625 MB free) +
+      an off-site second copy; per-volume classes in `storage-ledger.md`. **Next:** LXC + Garage in tofu,
+      `backupTarget`, then a backup/restore drill of a throwaway volume before any RecurringJob.
+- [ ] **FU-300** — **The box's apply loop is window-blind.** `mgmt-apply.sh` applies an allowlisted master
+      change whenever it lands and never reads the seat-window registry — it can apply mid-way through
+      another session's maintenance (the router move). Operator 2026-10-02: the check is right for every
+      class. **Next:** while a live window exists, defer (no plan, no stamp, no refusal) with a metric so a
+      forgotten window cannot freeze applies silently; the box's own Talos-apply bracket excluded. Relates FU-273.
+- [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
+      action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
+      Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
+      provider 3.x: 4 revisions, manifests unchanged, 0 restarts, 0 BGP resets). Unattended scope OPEN —
+      candidates: a no-chart/version/values-change gate, a declared-vs-live settings check, Cilium
+      `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. ⚠ `dependency-upgrades.md`'s
+      Cilium canary cell is inherited from class 6 — Cilium never had one. **Next:** evidence storage the box can
+      reach (it lives in the jail's `~/.claude/helm-evidence/`), then the box brackets helm applies with it.
+- [ ] **FU-302** — **The box has no view of the cluster that bypasses Prometheus** (its alert reads ride a
+      Cilium BGP VIP). Ruling 2026-10-02 reframes `management-box.md` "The second alert path": no
+      out-of-band notification wanted ("otherwise it burns until I get home") — the box needs its OWN
+      verdict for its gates: Talos API, kube API via the CP VIP, `kubectl exec` into cilium (BGP), LAN HTTP
+      to BGP VIPs, Prometheus/Alertmanager `/-/ready`. Most reads exist (maintenance-window probes 3–4, the
+      belt's node diff). **Next:** that doc row, then one verdict function `mgmt-apply` + `mgmt-reconcile` call.
 - [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants

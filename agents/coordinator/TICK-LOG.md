@@ -12005,3 +12005,31 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
 - 17:14:43Z pve's STANDBY router node (9171) emitted a DHCP reply sourced `192.168.2.1` to the mower
   (.150) → its kill switch TRIPPED: VM stopped, onboot 0. Found ~18:00Z answering "any drill VM left?"
   (none — 9199/.68 gone; 9110 test VM stays). Cause not investigated (operator: log it) → meta-state.
+
+## 2026-10-02 evening — S9 residue read (#2037/#2046), helm provider 3.x applied under evidence (seat; started as a second jail, took over)
+
+Operator: explain #2037 / #2046 in the S9 frame → the box-autonomy design thread → rulings → build.
+- **#2037 closed** (operator): the agents App's merge commit had made Renovate treat it as edited, so
+  it could never ride the ADR-141-amended armed lane; retitled + branch deleted so Renovate re-proposed.
+  **#2176** (the fresh docker v29 PR) merged on the lens alone 17:57Z — the lane works from scratch.
+- **The box refused every master since 6fd4ee62** on `opnsense_router_pve on_boot false→true` (the
+  17:14Z kill-switch latch). docker v29 applied by a scoped plan excluding the router VM (19:30Z,
+  runner 2/2 on 29-dind); #2180 (operator's other session) declared `on_boot=false`; the box then
+  planned `no changes` and stamped adfa17b0. Class → `router-move.md` §kill switch (FU-297).
+- **Rulings (operator):** no box action / revert / agent autonomy on a Cilium/Longhorn/ArgoCD failure
+  until breakage data exists — data gathering first (FU-301); the second alert path is the BOX seeing
+  the cluster without Prometheus, not a human notification (FU-302); the box's apply loop should respect
+  maintenance windows (FU-300). Found: Longhorn has NO backup (target URL empty, 0 jobs) → FU-299
+  (target outside Longhorn: Garage LXC on nx-02's 700 G SA400 pool; a VM won't fit, 60.5/62 GiB).
+- **PR#2179** `scripts/helm-release-evidence.sh` (`devbox run helm-evidence`): per-release snapshot /
+  timeline / diff + `run <plan-id>` that opens its OWN window (refuses inside another), applies via
+  mgmt-tf, settles, checks, closes only clean. Review round 1 found the fixed 1 h window; the round-2
+  verdict raced my push and attached to the fixed head (dismissed by hand → APPROVED) → **#2182**.
+- **#2046** brought current by two seat `Merge remote-tracking branch` commits — `major-handoff.sh`
+  counts those as content while the lens does not → wedged handoff, coordinator filed **#2181**; merged
+  directly (route 1) e7627b89 after the operator read the `+0 ~4` plan. Applied 19:56Z through
+  `helm-evidence run` (window seat-1790970971-5257): 4 new revisions (argocd 8, apps 6, cilium 14,
+  longhorn 12), manifests UNCHANGED, 0 pods replaced, 0 restarts, 13/13 BGP no resets, no Secret
+  rotated, Longhorn/ArgoCD unchanged; applies parallel, longest 29 s. Window closed `--force` on one
+  unrelated item: `AgentWorkerEgressDropped{oracle-fleet}` from 20:05Z = ride issue-774-r14's browser
+  egress (google/segment) denied by policy. Box stamped e7627b89 (full apply), loop clean.
