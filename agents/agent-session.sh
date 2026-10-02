@@ -871,6 +871,8 @@ render_env_card() {
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
+  # oracle-fleet PR#780 r4 (2026-10-02): the bundle carried a line-numbered arbitration.md, the ride
+  # read issue.md only, ran local CI (no e2e leg) green and exited no-op. Name the optional items.
   # WHY: homelab#1175 — the launcher pre-fetches the issue + comments via REST and materializes
   # them as /work/issue.md before the harness starts. The env card tells the worker to read the
   # file first instead of making a live `gh issue view` call (which costs tokens and can 403 on
@@ -882,7 +884,7 @@ render_env_card() {
   case "${TASK:-}" in
     issue-[0-9]*)
       if [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
-        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/context/index.txt\` for the bundle index, then \`/work/context/issue.md\` FIRST; a live \`gh issue view\` is optional."
+        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/context/index.txt\` for the bundle index, then \`/work/context/issue.md\` FIRST; a live \`gh issue view\` is optional. On a fix round, read every item the index marks OK BEFORE you inspect the repo: \`arbitration.md\` (an ARBITRATE directive) IS this round's task, and \`ci-failure.md\` is the red that a local \`devbox run ci\` may not reproduce. Your own green local run is not evidence that the PR is green."
       fi
       ;;
   esac
