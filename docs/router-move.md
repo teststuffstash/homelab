@@ -207,7 +207,8 @@ fakeisp.py`: one reserved lease `100.64.0.10` for the shared MAC, a router optio
 automatic outbound NAT covers only interfaces with a gateway — and a counter-streaming TCP server
 on `100.64.0.1:9000`); `router-node.sh probe <secs>` runs `flowprobe.py` on the pve host with
 `100.64.0.1` routed via the trial VIP: one held NAT'd flow + a fresh connect every 0.1 s. The
-nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP). Measured:
+nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP) — which is why a
+node going LIVE drops its `LAN_GW` (the carp role, window 1): holding `.1`, that route is itself. Measured:
 
 | Drill | Held NAT'd flow | Fresh connects |
 |---|---|---|
@@ -330,7 +331,8 @@ above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back 
       live node emits exactly what the switch trips on, and the trip latches `onboot 0`.
       `router-node.sh converge` refuses a live node whose switch is armed or enabled;
    2. `bash scripts/opnsense-router-node.sh converge nx02` — `.1` as its CARP VIP, Kea on (dnsmasq
-      off), BGP neighbours on, ACME renewal and ddclient on;
+      off), BGP neighbours on, ACME renewal and ddclient on, the standing `LAN_GW` deleted (its
+      default route would be its own `.1`; WAN_GW takes over once the gate gives it link);
    3. the Cilium peer change applied (`mgmt-tf apply <plan-id>`, re-planned if stale).
 
    Cabling: ONT → the WAN switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link

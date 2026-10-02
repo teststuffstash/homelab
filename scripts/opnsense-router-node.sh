@@ -165,6 +165,10 @@ check() {
   expect_on "$v" "BGP neighbours (all)"
   v="$(api dnsmasq/settings/get 2>/dev/null | jq -r '.dnsmasq.enable' || true)"; [ "$v" = 0 ] && ok "dnsmasq (DHCP) off" || no "dnsmasq enable='${v:-unread}'"
   if [ $live = 1 ]; then v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.general.enabled' || true)"; expect_on "$v" "Kea DHCPv4"; fi
+  if [ $live = 1 ]; then   # egress via its own WAN: the standing LAN_GW (default route to .1) is gone
+    v="$(api routing/settings/search_gateway 2>/dev/null | jq -r '[.rows[] | select(.name=="LAN_GW")] | length' || true)"
+    [ "$v" = 0 ] && ok "no LAN_GW (default route = WAN_GW)" || no "LAN_GW still present ('${v:-unread}') — its default route is its own .1"
+  fi
   v="$(api dyndns/settings/get 2>/dev/null | jq -r '.ddclient.general.enabled' || true)"; expect_on "$v" "ddclient"
   v="$(api acmeclient/settings/get 2>/dev/null | jq -r '.acmeclient.settings.autoRenewal' || true)"; expect_on "$v" "ACME auto-renewal"
   if [ $live = 1 ]; then   # the kill switch is RETIRED on a live node (pve_router_live_vmids)
