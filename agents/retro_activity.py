@@ -44,8 +44,12 @@ def api(endpoint, attempts=3, pause=5):
     # A transient 5xx is retried in place: the pass is transactional, so one GitHub 504 would
     # otherwise discard every repo read before it (seen in the 2026-10-01 rehearsal). Anything
     # else — and a 5xx that persists — still fails the whole run before state is replaced.
+    # A stalled connection that hits the local timeout is the same transient class as a 504.
     for attempt in range(attempts):
-        result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+        try:
+            result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            result = subprocess.CompletedProcess(['gh', 'api', endpoint], 1, '', 'local timeout after 120s')
         if not result.returncode:
             return json.loads(result.stdout)
         if attempt + 1 < attempts and TRANSIENT.search(result.stderr):
@@ -272,13 +276,14 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     # Preserve the complete evidence in the collector state; prompts get a declared,
     # deterministic bounded sample with original event ids and links for retrieval.
     # Prompt-side events are COMPACT: the task already names repo/item, the collector state keeps
-    # ids and observation times, the url is the retrieval handle. The verbose form cost ~7 KB a
+    # ids and observation times, the url is the retrieval handle (kept on the task context too:
+    # an idle-only task has no events to carry one). The verbose form cost ~7 KB a
     # task and left 5 of 118 tasks in the 60 KB budget (2026-10-01 oracle-fleet rehearsal).
     for task in result['tasks']:
         task['event_count'] = len(task['events'])
         task['events'] = [compact(e) for e in task['events'][-8:]]
         task['context'] = {k: v for k, v in task['context'].items()
-                           if k in ('title', 'state', 'is_pr', 'labels', 'created_at', 'closed_at', 'merged_at')}
+                           if k in ('title', 'url', 'state', 'is_pr', 'labels', 'created_at', 'closed_at', 'merged_at')}
         for k in ('project', 'repo', 'issue'):
             task.pop(k)
     result['late_arrivals'] = [dict(compact(e), key=f"{e['repo']}#{e['item']}", observed_at=e['observed_at'])

@@ -100,6 +100,9 @@ class ActivityTests(unittest.TestCase):
         # Prior week's idle interval remains visible even though item is now closed.
         before = a.bundle(state, '2026-09-14T00:00:00Z', '2026-09-21T00:00:00Z')
         self.assertEqual(before['tasks'][0]['standing_stall_seconds'], 7 * 86400)
+        # Idle-only task: no events in the window, so the context must still carry the link.
+        self.assertEqual(before['tasks'][0]['events'], [])
+        self.assertEqual(before['tasks'][0]['context']['url'], 'https://example/issues/1')
 
     def test_population_before_sampling_and_hash(self):
         state = self.collect([summary(marker('22'))])
@@ -157,6 +160,14 @@ class ActivityTests(unittest.TestCase):
         replies = [R(returncode=1, stderr='(HTTP 504)', stdout=''), R(returncode=0, stderr='', stdout='{"ok":1}')]
         with patch.object(a.subprocess, 'run', side_effect=replies), patch.object(a.time, 'sleep'):
             self.assertEqual(a.api('x'), {'ok': 1})
+        stalled = [a.subprocess.TimeoutExpired(['gh'], 120), R(returncode=0, stderr='', stdout='{"ok":2}')]
+        with patch.object(a.subprocess, 'run', side_effect=stalled), patch.object(a.time, 'sleep'):
+            self.assertEqual(a.api('x'), {'ok': 2})
+        with patch.object(a.subprocess, 'run', side_effect=a.subprocess.TimeoutExpired(['gh'], 120)) as run, \
+                patch.object(a.time, 'sleep'):
+            with self.assertRaises(RuntimeError):
+                a.api('x')
+            self.assertEqual(run.call_count, 3)
         with patch.object(a.subprocess, 'run', return_value=R(returncode=1, stderr='(HTTP 403)', stdout='')) as run:
             with self.assertRaises(RuntimeError):
                 a.api('x')
