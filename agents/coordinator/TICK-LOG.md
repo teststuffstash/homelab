@@ -11946,3 +11946,8 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   `deepseek-v4.1-flash:exacto` (key oracle-fleet-issue-774-round-6). r6 applied the fix (18801a04),
   page-overflow 68 → 0. Residue: `clipped article.walk`, caused by L208 `@media (max-width:900px)
   .beat{grid-template-columns:1fr}`, which reintroduces the min-content blowout → r7 directive.
+- r7 (v4.1-flash, one-line L208 `minmax(0,1fr)`, b8ba91d5): layout findings 180 → 4, all at the
+  390px@200%-text run: `clipped div.essentials` + `crushed strong` (2 lines for 1 word). Probable next
+  edit, same class: L213 `.clients,.trust,.essentials{grid-template-columns:1fr}` → `minmax(0,1fr)`.
+  Not dispatched: goal #773 cap-sum was $5.0/$6 at r7 preflight (ledger unreachable from the jail),
+  so an r8 $2 reservation likely refuses → operator call (budget / hand-fix / let arbitrate rule).
