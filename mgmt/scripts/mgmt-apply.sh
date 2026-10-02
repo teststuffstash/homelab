@@ -13,6 +13,11 @@
 #               in-place, worker unless apply_controlplane_config) and is bracketed by the health
 #               gate: baseline before, bounded post-check after — a regression = status failure +
 #               mgmt_apply_post_check_failed, never a revert. Clear by hand: rm $ADIR/post-check-failed
+#   windows    a span that would PLAN waits while any live declared window holds it (FU-300,
+#               mgmt_apply_window_gate): no plan, no apply, no stamp, no status — one DEFERRED line,
+#               exit 0, mgmt_apply_deferred_window 1. A window opened with --admit-apply does not hold
+#               it. An unreadable registry defers too, as a PROBE-FAIL (exit 1). A span touching no
+#               apply root still stamps: it changes nothing a window could be watching.
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
@@ -35,6 +40,7 @@ exec 9>"$LOCK"; flock -w 600 9 || { log "PROBE-FAIL: lock busy for 10 min"; exit
 
 mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch failed"; exit 1; }
 sha="$(git -C "$REPO" rev-parse origin/master)" || exit 1
+deferred=0; deferred_n=0; deferred_unreadable=0   # FU-300: set by the window gate, read by emit_metrics
 trap 'emit_metrics $?' EXIT
 last=""; [ -f "$ADIR/applied-rev" ] && last="$(cat "$ADIR/applied-rev")"
 refused=""; [ -f "$ADIR/refused-rev" ] && refused="$(cat "$ADIR/refused-rev")"
@@ -89,6 +95,15 @@ mgmt_apply_unapplied_oldest_timestamp_seconds ${oldest:-0}
 # HELP mgmt_apply_post_check_failed 1 while the last Talos config apply's post-apply health check regressed (cleared by the next clean one, or by hand).
 # TYPE mgmt_apply_post_check_failed gauge
 mgmt_apply_post_check_failed $pcf
+# HELP mgmt_apply_deferred_window 1 while the last tick DEFERRED a plan because a declared window held it (or the window registry was unreadable).
+# TYPE mgmt_apply_deferred_window gauge
+mgmt_apply_deferred_window $deferred
+# HELP mgmt_apply_deferred_windows Live declared windows holding the apply loop at the last tick (0 when unreadable — see the next series).
+# TYPE mgmt_apply_deferred_windows gauge
+mgmt_apply_deferred_windows $deferred_n
+# HELP mgmt_apply_deferred_window_unreadable 1 while the last tick deferred because the declared-window registry could not be read.
+# TYPE mgmt_apply_deferred_window_unreadable gauge
+mgmt_apply_deferred_window_unreadable $deferred_unreadable
 PROM
   chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
@@ -129,6 +144,21 @@ if [ ${#apply_roots[@]} -eq 0 ]; then
   log "${last:0:8}..${sha:0:8} touches no apply:true root (${#files[@]} files) — stamping"; stamp "$sha"; exit 0
 fi
 log "${last:0:8}..${sha:0:8} touches: ${apply_roots[*]}"
+
+# FU-300 — WIP 1 across windows this loop did not open (it opens none), BEFORE anything plans or
+# posts: a deferral is not a verdict, so no refusal, no status, no stamp — the next tick re-reads.
+# Here, not earlier: a span that touches no apply root stamped above and changes nothing a window
+# could be watching. docs/management-box.md §MB3 "Declared windows hold the apply loop".
+held="$(mgmt_apply_window_gate)"; wrc=$?
+if [ "$wrc" = 2 ]; then
+  deferred=1; deferred_n="$(grep -c . <<<"$held")"
+  log "DEFERRED ${sha:0:8}: $deferred_n declared window(s) open — $(tr '\n' ';' <<<"$held" | sed 's/;$//; s/;/; /g') — no plan, no apply, no stamp; next tick re-reads"
+  exit 0
+elif [ "$wrc" != 0 ]; then
+  deferred=1; deferred_unreadable=1
+  log "PROBE-FAIL: declared-window registry (agent-coordinator/responder-window) unreadable — DEFERRING ${sha:0:8} (an unreadable gate is a no): no plan, no stamp; next run retries"
+  exit 1
+fi
 
 hits="$(mgmt_stage1 "$POL" "$REPO" "$last" "$sha")" || { log "PROBE-FAIL: stage 1 could not run (policy unreadable) — not applying, not stamping; next run retries"; exit 1; }
 # The provider-pin shape (ADR-131 amended 2026-09-27) is ADMITTED on a master span exactly as on a

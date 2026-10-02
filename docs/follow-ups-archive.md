@@ -10,6 +10,11 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-300** *(archived 2026-10-02)* — **The box's apply loop is window-blind: fixed.** PR#2183 (built by a
+  background subagent the same day): `mgmt-apply.sh` defers (no plan/apply/stamp/refusal) while a live
+  declared window holds it; `--admit-apply` lets the box through; an unreadable registry defers as a
+  PROBE-FAIL; gauges `mgmt_apply_deferred_window*` + `MgmtApplyDeferredByWindow` (6 h). Gotcha: the
+  reconciler's node windows hold the apply loop by design. [`management-box.md`](management-box.md) §MB3.
 - **FU-294** *(archived 2026-09-29)* — **A vulnerable transitive via Renovate, caught only by an LLM
   reviewer (#2032, lodash-es@4.17.23 under mermaid 12): fixed structurally.** [ADR-143](adr.md): PR#2098
   (mermaid-lint on Deno, zero permissions) + `lock-intake-lint` in `ci`; PROVEN live on Renovate's

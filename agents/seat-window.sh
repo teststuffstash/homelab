@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # seat-window — the DECLARED change window (FU-230 leg b).
 #
-#   bash agents/seat-window.sh open  --reason "<what you are doing>" --alerts A,B,C [--node <n>] [--hours N] [--note "<s>"] [--admit-reconciler]
+#   bash agents/seat-window.sh open  --reason "<what you are doing>" --alerts A,B,C [--node <n>] [--hours N] [--note "<s>"] [--admit-reconciler] [--admit-apply]
 #   bash agents/seat-window.sh close [--id <id>] [--node <n> [--by <who>]] [--all]
 #   bash agents/seat-window.sh has --node <n> --by <who>     # exit 0 iff such a live window exists
 #   bash agents/seat-window.sh list
@@ -12,6 +12,9 @@
 # another node, seat-wide, or on its target. `--admit-reconciler` (needs `--node`) is the one
 # exception: "I am watching this node, the reconciler may act on it inside my window" — the
 # attended canary. Without it, a seat's hands-on work on a node is never interrupted by a sync.
+# A THIRD reader, the box's apply loop (mgmt/scripts/mgmt-apply.sh, FU-300), defers every plan while
+# ANY live window is declared; `--admit-apply` (no `--node`: an apply acts on a whole root) is its
+# one exception — "the box may apply master inside my window". The two admits are independent.
 #
 # WHY THIS EXISTS, and why it is not a silence. FU-230 leg (a) — `node-maintenance.sh` opening
 # Alertmanager silences — removed most of the maintenance-storm noise by matching on `node`,
@@ -74,10 +77,11 @@ live_windows() {
 }
 
 cmd_open() {
-  local reason="" alerts="" node="" note="" hours="$HOURS" admit=false
+  local reason="" alerts="" node="" note="" hours="$HOURS" admit=false admit_apply=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=true; shift ;;
+      --admit-apply) admit_apply=true; shift ;;
       --reason) reason="${2:-}"; shift 2 ;;
       --alerts) alerts="${2:-}"; shift 2 ;;
       --node)   node="${2:-}";   shift 2 ;;
@@ -96,15 +100,17 @@ cmd_open() {
   until_="$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)"
   body="$(jq -cn --arg id "$id" --arg by "$BY" --arg opened "$(now_iso)" --arg until "$until_" \
                  --arg reason "$reason" --arg node "$node" --arg note "$note" --arg alerts "$alerts" \
-                 --argjson admit "$admit" \
+                 --argjson admit "$admit" --argjson admit_apply "$admit_apply" \
     '{id:$id, by:$by, opened_at:$opened, until:$until, reason:$reason, node:$node, note:$note,
-      admit_reconciler:$admit,
+      admit_reconciler:$admit, admit_apply:$admit_apply,
       alerts:($alerts | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0)))}')"
   kubectl -n "$NS" get cm "$CM" >/dev/null 2>&1 || kubectl -n "$NS" create cm "$CM" >/dev/null
   kubectl -n "$NS" patch cm "$CM" --type merge -p "$(jq -cn --arg k "w-$id" --arg v "$body" '{data:{($k):$v}}')" >/dev/null
   printf '✓ window %s open until %s — %s\n' "$id" "$until_" "$reason"
   printf '  alerts: %s%s\n' "$(printf '%s' "$body" | jq -r '.alerts | join(", ")')" "${node:+  (node $node)}"
   [ "$admit" = true ] && printf '  the box reconciler MAY sync %s inside this window (--admit-reconciler)\n' "$node"
+  if [ "$admit_apply" = true ]; then printf '  the box apply loop MAY apply master inside this window (--admit-apply)\n'
+  else printf '  the box apply loop DEFERS every plan while this window is open (--admit-apply lets it through)\n'; fi
   printf '  the responder skips a triage for those names while it is open; everything else still triages, with the window named in its brief.\n'
 }
 
@@ -158,7 +164,7 @@ cmd_list() {
   local live
   live="$(live_windows)"
   [ "$(printf '%s' "$live" | jq 'length')" -gt 0 ] || { printf 'no live seat window\n'; return 0; }
-  printf '%s' "$live" | jq -r '.[] | "\(.id)  until \(.until)  by \(.by)\n  reason: \(.reason)\n  alerts: \(.alerts | join(", "))\(if .node != "" then "\n  node:   " + .node else "" end)\(if .note != "" then "\n  note:   " + .note else "" end)"'
+  printf '%s' "$live" | jq -r '.[] | "\(.id)  until \(.until)  by \(.by)\n  reason: \(.reason)\n  alerts: \(.alerts | join(", "))\(if .node != "" then "\n  node:   " + .node else "" end)\(if .note != "" then "\n  note:   " + .note else "" end)\([if .admit_reconciler == true then "reconciler" else empty end, if .admit_apply == true then "apply" else empty end] | if length > 0 then "\n  admits: " + join(", ") else "" end)"'
 }
 
 case "${1:-}" in
