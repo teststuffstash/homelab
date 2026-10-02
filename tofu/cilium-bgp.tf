@@ -6,7 +6,12 @@
 locals {
   cluster_asn  = 64513
   opnsense_asn = 64512
-  opnsense_ip  = "192.168.2.1"
+  # The router nodes' OWN addresses, never the .1 CARP VIP: a BGP session is TCP to one bgpd and
+  # pfsync does not carry it, so peering the VIP loses every route on each failover (ADR-145,
+  # docs/bgp.md §With the router pair). Window 1: nx-02 alone; window 2 adds pve's .71.
+  opnsense_peers = {
+    "opnsense-nx02" = "192.168.2.70"
+  }
   lb_pool_cidr = "192.168.40.0/24" # dedicated subnet so LAN clients route via OPNsense (L3), not ARP (L2)
 }
 
@@ -74,10 +79,10 @@ resource "kubernetes_manifest" "bgp_cluster_config" {
       bgpInstances = [{
         name     = "instance-${local.cluster_asn}"
         localASN = local.cluster_asn
-        peers = [{
-          name          = "opnsense"
+        peers = [for name, ip in local.opnsense_peers : {
+          name          = name
           peerASN       = local.opnsense_asn
-          peerAddress   = local.opnsense_ip
+          peerAddress   = ip
           peerConfigRef = { name = "opnsense" }
         }]
       }]
