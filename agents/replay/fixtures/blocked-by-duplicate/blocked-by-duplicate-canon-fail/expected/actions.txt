@@ -1,7 +1,6 @@
 CALL gh issue view 42 --repo teststuffstash/homelab --json state,stateReason,blockedBy
 CALL gh api /repos/teststuffstash/homelab/issues/42/timeline --jq [.[] | select(.event == "marked_as_duplicate")] | last | .canonical
 CALL gh issue view 99 --repo teststuffstash/other --json state --jq .state
-ERR gh: Not Found (HTTP 404)
 OUT BLOCKED  teststuffstash/homelab#42(→CANONICAL-UNREADABLE)
 OUT ORPHAN [homelab] ⚠ DUPLICATE blocker #42 — canonical state unreadable, holding conservatively (rule #6)
 OUT REACHED: end
