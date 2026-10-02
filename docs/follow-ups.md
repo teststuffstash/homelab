@@ -1064,10 +1064,9 @@ the block needs pruning, not more headings.
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
       2026-10-02: activity windows LIVE (#2130 + #2165; collector 51 min cold, ~2 min warm).
-      **Next:** the bundle RANK — the 09-21 week no longer recycles Jul/Aug, but blocked
-      oracle-fleet#753 ranks 174/635 (27 fit): issue pain (agent-block/strike/arbitrate, its
-      PRs' red checks) isn't counted, stall is a last tiebreak; fix before the 10-05 05:00 fire.
-      Then STACK retros first (operator 2026-09-01; §B2 The split).
+      **Next:** the rank fix #2170 (queued; cancellations classified, issues credited) before the
+      Mon 10-05 05:00Z fire; ride token #2171; then the stack-retro split — ADR-146 PR#2172
+      (Proposed, operator read; fork = platform intake container).
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

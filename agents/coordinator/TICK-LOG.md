@@ -11963,3 +11963,14 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   the 60 KB cap → rank fix tracked on FU-058, before the Mon 10-05 fire.
 - Second jail input recorded: WAN loss likely the cable (meta-state, FU-297); its accept-new
   pve/nx-02 keys checked against the box pins — every pinned key matches the live host.
+- Retro rank anatomy (09-21 bundle, top 27 all PRs): cancelled 94 / failed 53 / CR 36 points; of
+  242 cancels, 142 superseded by a newer sha, 100 same-sha reruns (sampled: `approve` concurrency
+  group). Operator: superseded/master cancels = wasted-CI metric, never item pain; Renovate no
+  special rule yet. Filed + queued #2170 (rank fix, deadline Mon 05:00Z).
+- "No oracle access" in r4–r6: the ride-ns `retro-git` covers all 12 repos (probe pod read
+  oracle-fleet REST+GraphQL) → the failure is in the ride → #2171 (inert, transcript read next).
+- Retro split (slice-grounded): stack retros attribute + file platform faults as ADR-119
+  escalations; dedup-first stays the filer's, best effort (operator ruling); ADR-146 PR#2172
+  Proposed, NOT armed (operator read). From oracle-fleet#780's stack analysis: #2167 (queued —
+  DUPLICATE-closed blocker releases the parked issue), #2168 (body-only fix never re-reviewed),
+  #2169 ("line N, nothing else" directives) — the latter two inert.
