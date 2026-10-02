@@ -11,5 +11,6 @@
   gather_facts: false
   module_defaults:
     oxlorg.opnsense.hasync_general: "{{ opnsense_conn }}"
+    oxlorg.opnsense.gateway: "{{ opnsense_conn }}"
   roles:
     - opnsense-carp
