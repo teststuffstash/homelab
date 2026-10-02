@@ -11,6 +11,17 @@
             "statusMessage": "design-agents gate"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/fu-mint-gate.sh",
+            "timeout": 5,
+            "statusMessage": "fu-mint gate"
+          }
+        ]
       }
     ]
   }
