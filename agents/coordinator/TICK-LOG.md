@@ -12033,3 +12033,9 @@ Operator: explain #2037 / #2046 in the S9 frame → the box-autonomy design thre
   rotated, Longhorn/ArgoCD unchanged; applies parallel, longest 29 s. Window closed `--force` on one
   unrelated item: `AgentWorkerEgressDropped{oracle-fleet}` from 20:05Z = ride issue-774-r14's browser
   egress (google/segment) denied by policy. Box stamped e7627b89 (full apply), loop clean.
+- **Close (21:15Z).** FU-300 built by a background subagent → **PR#2183 merged 21:08Z** (defer while a
+  declared window holds the apply loop; `--admit-apply`; 97/97 policy tests; archived). Operator on the
+  four mints: the bar lived in the tracker + memory and fired at no moment of filing → **`fu-mint-gate`**
+  (`.claude/hooks/`, trial): a new FU id is denied once per session with the tracker's three tests, the
+  retry passes; no clicks, no tracker text (both rejected). FU-301/302 stay ("700 ids to go"). Bookkeeping
+  pushed early (1df91cf3) because #2183's CI read FU-300 as dangling. `mgmt-state-pull` done.
