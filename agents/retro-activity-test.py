@@ -384,7 +384,7 @@ class BundleClassificationTests(unittest.TestCase):
         self.assertGreater(issue_task['failure_events'], 0)
 
 
-def test_issue_crediting_dedup_same_pr_issue_pair(self):
+    def test_issue_crediting_dedup_same_pr_issue_pair(self):
         """Duplicate cross-references for the same PR/issue pair credit only once."""
         issue_state = {
             'o/r#1': {'repo': 'o/r', 'item': 1, 'title': 'Linked issue',
