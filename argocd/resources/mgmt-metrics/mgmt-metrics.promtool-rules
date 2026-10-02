@@ -26,6 +26,12 @@ groups:
         for: 5m
         labels:
           severity: warning
+      - alert: MgmtApplyDeferredByWindow
+        expr: |
+          mgmt_apply_deferred_window == 1
+        for: 6h
+        labels:
+          severity: warning
   - name: mgmt-node
     rules:
       - alert: MgmtBoxDown

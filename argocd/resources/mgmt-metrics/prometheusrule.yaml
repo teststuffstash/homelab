@@ -66,6 +66,27 @@ spec:
               cilium signature's fix: `kubectl -n kube-system rollout restart ds/cilium`. Clears on
               the next Talos config apply whose post-check is clean, or by hand once the cluster is
               whole: `rm /var/lib/mgmt/apply/post-check-failed` on the box.
+        # FU-300 — the apply loop DEFERS while a declared window holds it (docs/management-box.md §MB3
+        # "Declared windows hold the apply loop"). A deferral posts no status and completes its tick,
+        # so neither MgmtApplyResidueStanding (reads a failure status) nor MgmtApplyLoopStale (reads
+        # the tick) sees it; a window's `until` bounds it, but `--hours` is the opener's to choose.
+        # 6 h = twice the longest default window (seat-window 3 h): a forgotten or over-long window.
+        # An unreadable registry also exits PROBE-FAIL, so MgmtApplyLoopStale covers that after 1 h.
+        - alert: MgmtApplyDeferredByWindow
+          expr: |
+            mgmt_apply_deferred_window == 1
+          for: 6h
+          labels: { severity: warning }
+          annotations:
+            summary: "The management box has deferred master's apply behind a declared window for 6h"
+            description: >-
+              mgmt-apply has a master change to plan and has deferred it for 6 hours because a
+              declared window (agents/seat-window.sh, ConfigMap agent-coordinator/responder-window)
+              is open — or, when mgmt_apply_deferred_window_unreadable is 1, because the record could
+              not be read. Nothing plans, applies or posts a status meanwhile. Find the window:
+              `bash agents/seat-window.sh list` (the DEFERRED line in `journalctl -u mgmt-apply -n 20`
+              on 192.168.2.53 names it). Close it if the work is done (`seat-window.sh close --id <id>`);
+              re-open with `--admit-apply` if the box may apply during it.
     - name: mgmt-node
       rules:
         - alert: MgmtBoxDown

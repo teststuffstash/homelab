@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]]
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply]
 #   bash scripts/maintenance-window.sh check [--id <window-id>]
 #   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]
 #   bash scripts/maintenance-window.sh list              # the windows this tool has open (its state slots)
@@ -279,10 +279,11 @@ baseline_readable() { # <snapshot-file>
 }
 
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit="" admit_apply=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=1; shift ;;
+      --admit-apply) admit_apply=1; shift ;;   # the box's apply loop may apply inside it (FU-300)
       --reason) reason="$2"; shift 2 ;;
       --alerts) alerts="$2"; shift 2 ;;
       --hours)  hours="$2";  shift 2 ;;
@@ -311,6 +312,7 @@ cmd_open() {
               --note "opened by scripts/maintenance-window.sh; baseline in $STATE_DIR/<this id>/")
   [ -n "$node" ] && args+=(--node "$node")
   [ -n "$admit" ] && args+=(--admit-reconciler)
+  [ -n "$admit_apply" ] && args+=(--admit-apply)
   local out id
   out="$(bash "$ROOT/agents/seat-window.sh" "${args[@]}")" || { rm -rf "$pend"; exit 1; }
   printf '%s\n' "$out"
@@ -535,5 +537,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] | check [--id <id>] | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] | check [--id <id>] | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
 esac

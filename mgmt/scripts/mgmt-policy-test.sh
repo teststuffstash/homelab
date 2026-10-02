@@ -223,5 +223,43 @@ left="$(grep -c . "$T/hseq")"
 if [ "$left" = 2 ]; then pass=$((pass+1)); echo "PASS post:deadline-poll-count (4 readings)"
 else fail=$((fail+1)); echo "FAIL post:deadline-poll-count — $((6-left)) readings, want 4"; fi
 
+# FU-300 — the apply loop's declared-window gate (mgmt_apply_window_gate) over a stubbed ConfigMap
+# read. WCM = the raw `kubectl get cm responder-window -o json` the stub prints; WGET = ok | notfound
+# | fail. rc 0 = proceed, 2 = deferred (the holding windows on stdout), 1 = unreadable (defer too).
+FUT="$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)"; PAST="$(date -u -d '-2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+wrec() {  # <id> <until> [extra jq object fields] → one ConfigMap data entry
+  jq -cn --arg id "$1" --arg u "$2" --argjson x "${3:-{\}}" \
+    '{("w-" + $id): ({id:$id, by:"seat", until:$u, reason:("doing " + $id), node:"", alerts:["X"]} + $x | tojson)}'
+}
+wcm() { jq -cs '{data: (add // {})}'; }   # entries on stdin → a ConfigMap
+win_case() {  # <name> <want-rc> <WGET> <cm-json> [grep -x pattern for the output | !pattern = must NOT appear]
+  local name="$1" want="$2" how="$3" cm="$4" pat="${5:-}" out rc ok=1
+  printf '%s' "$cm" >"$T/wcm.json"
+  out="$( _mgmt_windows_get() { case "$how" in
+            ok) cat "$T/wcm.json" ;;
+            notfound) echo 'Error from server (NotFound): configmaps "responder-window" not found' >&2; return 1 ;;
+            *) echo 'The connection to the server 192.168.2.51:6443 was refused' >&2; return 1 ;; esac; }
+          mgmt_apply_window_gate )"; rc=$?
+  [ "$rc" = "$want" ] || ok=0
+  case "$pat" in '') ;; '!'*) grep -q -- "${pat#!}" <<<"$out" && ok=0 ;; *) grep -qx -- "$pat" <<<"$out" || ok=0 ;; esac
+  if [ $ok = 1 ]; then pass=$((pass+1)); echo "PASS window:$name (rc=$rc)"
+  else fail=$((fail+1)); echo "FAIL window:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
+}
+win_case no-configmap       0 notfound ''
+win_case no-window          0 ok '{"data":{}}'
+win_case no-data            0 ok '{}'
+win_case expired-only       0 ok "$(wrec old "$PAST" | wcm)"
+win_case live-window        2 ok "$(wrec router-move "$FUT" | wcm)" 'router-move (seat): doing router-move'
+win_case live-node-window   2 ok "$(wrec nx-01 "$FUT" '{"node":"nx-01","by":"node-maintenance.sh"}' | wcm)" 'nx-01 (node-maintenance.sh): doing nx-01'
+win_case admit-apply        0 ok "$(wrec watched "$FUT" '{"admit_apply":true}' | wcm)"
+# --admit-reconciler admits ONE node's sync, never the root-wide apply
+win_case admit-reconciler-only 2 ok "$(wrec canary "$FUT" '{"node":"wk-03","admit_reconciler":true}' | wcm)" 'canary (seat): doing canary'
+win_case admit-plus-other   2 ok "$( { wrec watched "$FUT" '{"admit_apply":true}'; wrec other "$FUT"; } | wcm)" '!watched'
+win_case expired-plus-admit 0 ok "$( { wrec old "$PAST"; wrec watched "$FUT" '{"admit_apply":true}'; } | wcm)"
+win_case garbage-entry-skipped 0 ok '{"data":{"w-x":"not json"}}'
+win_case unreadable-kubectl 1 fail ''
+win_case unreadable-json    1 ok 'Warning: something devbox printed{'
+win_case unreadable-empty   1 ok ''
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

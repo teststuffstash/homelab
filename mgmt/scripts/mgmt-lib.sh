@@ -556,6 +556,47 @@ mgmt_talos_gate() {
   return 0
 }
 
+# ── the declared-window gate (FU-300) ──────────────────────────────────────────────────────────
+# The apply loop's WIP 1 across windows it did not open — the reconciler's rule (mgmt-reconcile.sh
+# §6, docs/management-box.md §MB4) applied to the root instead of a node: ANY live declared window
+# (agents/seat-window.sh's `responder-window` ConfigMap) holds the apply, unless it was opened with
+# `--admit-apply` ("I am watching, the box may apply inside my window"). Not node-scoped: an apply
+# acts on the whole root. `--admit-reconciler` does NOT admit it — that flag admits a sync of ONE
+# node, and the apply loop is a different actor with a wider reach. The loop opens no window of its
+# own (its Talos bracket is `maintenance-window.sh snapshot`/`compare`, which declare nothing), so it
+# can never hold itself; the reconciler's sync windows DO hold it — a post-check read mid-upgrade
+# would see the reboot as a regression.
+#
+# mgmt_windows_live → the LIVE windows (`until` in the future) as a JSON array. rc 1 = unreadable —
+# never `[]`: "we could not look" is not "nothing is open". A missing ConfigMap IS empty (nobody has
+# declared one yet), the reconciler's reading too.
+_mgmt_windows_get() {  # raw ConfigMap JSON on stdout; the fixture test stubs this
+  local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
+  ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json )
+}
+mgmt_windows_live() {
+  local cm err rc
+  err="$(mktemp)" || return 1
+  cm="$(_mgmt_windows_get 2>"$err")"; rc=$?
+  if [ "$rc" != 0 ]; then
+    if grep -q NotFound "$err"; then rm -f "$err"; printf '[]\n'; return 0; fi
+    rm -f "$err"; return 1
+  fi
+  rm -f "$err"
+  jq -ce --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '[(.data // {}) | to_entries[] | (.value | fromjson?) // empty | select((.until // "") > $now)]' <<<"$cm"
+}
+# mgmt_apply_window_gate → rc 0 = nothing holds the apply; rc 2 = held, one `<id> (<by>): <reason>`
+# line per holding window on stdout; rc 1 = the registry is unreadable (the caller defers on it too).
+mgmt_apply_window_gate() {
+  local live held
+  live="$(mgmt_windows_live)" || return 1
+  held="$(jq -r '.[] | select((.admit_apply // false) != true)
+                 | "\(.id // "?") (\(.by // "?")): \(.reason // "")"' <<<"$live")" || return 1
+  [ -z "$held" ] && return 0
+  printf '%s\n' "$held"; return 2
+}
+
 # ── the post-apply health gate (the unattended /maintenance-window check) ───────────────────────
 # mgmt_health <snapshot|compare <file>> — scripts/maintenance-window.sh's probes (firing alert
 # names, sum(up), cilium's kubernetes-apiserver backend on every node, hard-failed pods, node
