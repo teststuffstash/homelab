@@ -37,3 +37,7 @@ pve_serial_log_vmids: []
 # standing node). PER HOST, like the serial-log list: a vmid only exists on its hypervisor. A
 # vmid belongs here iff it is a standing router node in tofu/opnsense-router.tf. Default empty.
 pve_router_killswitch_vmids: []
+# The LIVE subset (ADR-145 window 1): a node out of standby emits exactly what its kill switch
+# trips on (it ARPs `.1`, serves DHCP, opens BGP), so its kill switch is RETIRED (stopped +
+# disabled — a host reboot must not re-arm it) while its WAN gate keeps running. Default empty.
+pve_router_live_vmids: []
