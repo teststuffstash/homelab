@@ -2461,16 +2461,24 @@ EOF
             # issue (MarkedAsDuplicateEvent.canonical on its timeline) and gate on that
             # issue's state instead. If the canonical issue can't be read, hold and print
             # a loud line; never release (rule #6).
-            canonical="$(gh api "/repos/${dslug}/issues/${dnum}/timeline" \
+            if canonical="$(gh api "/repos/${dslug}/issues/${dnum}/timeline" \
               --jq '[.[] | select(.event == "marked_as_duplicate")] | last | .canonical' \
-              2>/dev/null </dev/null)"
-            if [ -n "$canonical" ] && [ "$canonical" != "null" ]; then
-              c_repo="$(jq -r '.repository.full_name // ""' <<<"$canonical")"
-              c_num="$(jq -r '.number // ""' <<<"$canonical")"
-              if [ -n "$c_repo" ] && [ -n "$c_num" ]; then
-                c_state="$(gh issue view "$c_num" --repo "$c_repo" --json state --jq '.state' 2>/dev/null)"
-                if [ "$c_state" = "OPEN" ]; then
-                  blocked="${blocked} ${dslug}#${dnum}(→${c_repo}#${c_num})"
+              2>/dev/null </dev/null)"; then
+              if [ -n "$canonical" ] && [ "$canonical" != "null" ]; then
+                c_repo="$(jq -r '.repository.full_name // ""' <<<"$canonical")"
+                c_num="$(jq -r '.number // ""' <<<"$canonical")"
+                if [ -n "$c_repo" ] && [ -n "$c_num" ]; then
+                  if c_state="$(gh issue view "$c_num" --repo "$c_repo" --json state --jq '.state' 2>/dev/null)"; then
+                    if [ "$c_state" = "OPEN" ]; then
+                      blocked="${blocked} ${dslug}#${dnum}(→${c_repo}#${c_num})"
+                    fi
+                  else
+                    blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+                    orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical state unreadable, holding conservatively (rule #6)\n"
+                  fi
+                else
+                  blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+                  orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical issue unreadable, holding conservatively (rule #6)\n"
                 fi
               else
                 blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
@@ -2478,7 +2486,7 @@ EOF
               fi
             else
               blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
-              orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical issue unreadable, holding conservatively (rule #6)\n"
+              orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical timeline unreadable, holding conservatively (rule #6)\n"
             fi
           fi
         else
