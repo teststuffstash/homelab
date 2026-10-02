@@ -21,19 +21,49 @@ tests:
       - { eval_time: 10m, alertname: RouterPairMasterCount, exp_alerts: [] }
       - { eval_time: 10m, alertname: RouterWanGateSilent, exp_alerts: [] }
 
-  # INTERIM (no CARP VIP until window 1, ADR-145): both gates fresh, 0 masters — nothing fires.
+  # Window 1's shape (ADR-145): nx-02 MASTER of `.1` alone, pve's node standing — nothing fires.
   - interval: 1m
     input_series:
       - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
         values: '0x15'
       - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
-        values: '0x15'
+        values: '1x15'
       - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
         values: '0+60x15'
       - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
         values: '0+60x15'
     alert_rule_test:
       - { eval_time: 10m, alertname: RouterPairMasterCount, exp_alerts: [] }
+
+  # Nobody is master from minute 3 (the MASTER died and nothing took over): firing at 4m with value 0.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '0x15'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '1 1 1 0x12'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
+        values: '0+60x15'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0+60x15'
+    alert_rule_test:
+      - { eval_time: 2m, alertname: RouterPairMasterCount, exp_alerts: [] }
+      - eval_time: 5m
+        alertname: RouterPairMasterCount
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: "Router pair has 0 CARP masters (want exactly 1)"
+              description: >-
+                The router nodes' WAN gates see 0 VMs advertising CARP. 2 = SPLIT-BRAIN:
+                the nodes cannot hear each other's adverts (the LAN between them — vmbr0, the switch,
+                multicast/IGMP snooping — or a pf rule), both hold every CARP VIP and both have
+                their WAN up with the one leased MAC. 0 = no router is master: nothing answers the
+                VIPs. Per node: `bash scripts/opnsense-router-node.sh check nx02|pve` (the CARP and
+                WAN-gate lines), `router_node_carp_master` by host/vmid, and the gate log
+                /var/log/router-killswitch/<vmid>-wangate.log on the hypervisor. Split-brain fix
+                order: find the advert path (tcpdump `ip proto 112` on each hypervisor's vmbr0),
+                then put one node in CARP maintenance.
 
   # Split-brain from minute 3 (nx-02 stops hearing pve's adverts and promotes itself): pending at
   # 3m, firing at 4m with value 2; a failover's single-sample dip to 0 masters (minute 8) stays quiet.

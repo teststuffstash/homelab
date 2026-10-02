@@ -4,14 +4,17 @@
 # cutover window. Jail only (the wallet + the FU-013 backup).
 #
 #   bash scripts/opnsense-router-node.sh build    <node>   # killswitch → seed+first boot → converge → check
-#   bash scripts/opnsense-router-node.sh converge <node>   # every router play + the two API scripts, standby
-#   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: the inert rules + prod unharmed
+#   bash scripts/opnsense-router-node.sh converge <node>   # every router play + the API scripts (standby or LIVE)
+#   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: standby = the inert rules + prod unharmed;
+#                                                          #            LIVE = the serving rules (ADR-145 window 1)
 #   bash scripts/opnsense-router-node.sh killswitch-arm|killswitch-disarm|killswitch-status <node>
 #   bash scripts/opnsense-router-node.sh fakeisp up|down|log     # PAIR: the WAN drills' fake ISP (nx-02 netns)
 #   bash scripts/opnsense-router-node.sh probe <secs>            # PAIR: held flow + fresh connects via the trial VIP
 #
 # <node>: nx02 | pve. The hardware is tofu's (tofu/opnsense-router.tf), the
-# host + standby flag ansible/router-nodes/inventory.yml's.
+# host + standby flag ansible/router-nodes/inventory.yml's. A node with `opnsense_standby: false` is
+# LIVE (ADR-145): `converge` refuses it while its kill switch is armed or enabled (retire it first:
+# `pve_router_live_vmids` + ansible/pve-router-killswitch.yml), then serves DHCP from Kea.
 #
 # THE KILL SWITCH. Armed before the first boot, on the hypervisor itself (it keeps working when
 # the LAN does not): the `router-killswitch@<vmid>` unit (ansible/pve-router-killswitch.yml — the
@@ -84,6 +87,12 @@ KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"
 kp() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$KDB" "$1" 2>/dev/null; }
 TAP="tap${VMID}i0"
 KS_UNIT="router-killswitch@$VMID.service"; KS_LOG="/var/log/router-killswitch/$VMID.log"
+# The node's CARP VIP list: its host var (window 1 puts `.1` on nx-02 alone) wins over the group's.
+carp_vips() {
+  local v; v="$(yq -o=json ".all.children.opnsense.hosts[\"$INV_HOST\"].router_carp_vips" "$INV")"
+  [ "$v" != null ] || v="$(yq -o=json '.router_carp_vips' ansible/router-nodes/group_vars/opnsense.yml)"
+  printf '%s' "$v"
+}
 
 killswitch_arm() {
   pve "systemctl cat $KS_UNIT >/dev/null 2>&1" \
@@ -105,13 +114,18 @@ api_setup() {  # prod's wallet pair — carried to the node, so it authenticates
 api() { curl -sfk -K "$API_CURL" --max-time 30 "https://$HOST/api/$1"; }
 
 converge() {
-  [ "$STANDBY" = true ] || die "$INV_HOST is not opnsense_standby: true in $INV — the cutover converges it, not this verb"
+  local dhcp_enable=0 dhcp_server=kea   # Kea's config converges on every node; only a LIVE one serves
+  if [ "$STANDBY" != true ]; then   # LIVE (ADR-145): the kill switch would trip on the first converge
+    pve "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
+      && die "$INV_HOST is LIVE but $KS_UNIT is still armed/enabled on $PVE — retire it first: $VMID in pve_router_live_vmids, then ansible/pve-router-killswitch.yml"
+    dhcp_enable=1
+  fi
   local p rest plays='opnsense-acme.yml opnsense-bgp.yml opnsense-unbound.yml opnsense-haproxy.yml'
   # opnsense-users.yml is NOT run: a node's users + keys are carried from prod (seed-shape
   # --carry api-users); the play mints keys into the wallet for users that lack one.
   rest="$(cd ansible && ls opnsense-*.yml | grep -vxF -e opnsense-users.yml $(printf -- '-e %s ' $plays))"
   for p in $plays $rest; do
-    log "play $p → $INV_HOST ($HOST), standby"
+    log "play $p → $INV_HOST ($HOST), $( [ "$STANDBY" = true ] && echo standby || echo LIVE)"
     if [ "$p" = opnsense-ddclient.yml ]; then ACME_CF_TOKEN="$(kp cloudflare-acme-token)"; export ACME_CF_TOKEN; fi
     if [ "$p" = opnsense-carp.yml ]; then OPN_CARP_PASSWORD="$(kp opnsense-carp-password)"; export OPN_CARP_PASSWORD; fi
     bash scripts/opnsense-playbook.sh "ansible/$p" -i "$INV" --limit "$INV_HOST" >"$WORK/play-${p%.yml}.log" 2>&1 \
@@ -120,10 +134,11 @@ converge() {
     grep -E '^(opnsense-nx02|PLAY RECAP)|ok=' "$WORK/play-${p%.yml}.log" | tail -1 >&2
   done
   # Both DHCP scripts: OPN_DHCP_SERVER (dnsmasq-dhcp.py) picks the one that serves, the other
-  # converges off — under the standby profile neither serves (ADR-145).
+  # converges off — under the standby profile neither serves; a LIVE node serves from Kea (ADR-145).
   for py in dnsmasq-dhcp kea-dhcp tuya-egress; do
-    log "opnsense/$py.py → $HOST$(case $py in *-dhcp) echo ' (OPN_DHCP_ENABLE=0)';; esac)"
-    OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-api-key)" OPN_API_SECRET="$(kp opnsense-api-secret)" OPN_DHCP_ENABLE=0 \
+    log "opnsense/$py.py → $HOST$(case $py in *-dhcp) echo " (OPN_DHCP_SERVER=$dhcp_server OPN_DHCP_ENABLE=$dhcp_enable)";; esac)"
+    OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-api-key)" OPN_API_SECRET="$(kp opnsense-api-secret)" \
+      OPN_DHCP_ENABLE=$dhcp_enable OPN_DHCP_SERVER=$dhcp_server \
       python3 "opnsense/$py.py" > "$WORK/$py.log" 2>&1 || { tail -15 "$WORK/$py.log" >&2; die "$py.py failed"; }
   done
   # Flush to disk: the nano image's UFS (soft-updates) lost ~1 min of config writes to a hard stop
@@ -132,36 +147,52 @@ converge() {
   node_ssh sync || die "sync on $HOST failed"
 }
 
-# READ-ONLY. One line per rule; exit 1 if any fails or cannot be read.
+# READ-ONLY. One line per rule; exit 1 if any fails or cannot be read. A standing node is read
+# against the inert rules, a LIVE one (opnsense_standby: false, ADR-145) against their inverse.
 check() {
-  local bad=0 v
+  local bad=0 v live=0 on=0
   ok() { echo "  ok    $*"; }; no() { echo "  FAIL  $*"; bad=1; }
+  # expect_on <value-read> <label> — standby wants 0 (off), live wants 1 (on)
+  expect_on() { [ "$1" = "$on" ] && ok "$2 $( [ "$on" = 1 ] && echo on || echo off)" || no "$2 = '${1:-unread}' (want $on)"; }
+  [ "$STANDBY" = true ] || { live=1 on=1; }
   [ -n "$API_CURL" ] || api_setup
-  echo "== $VMNAME ($HOST) — the inert rules"
+  echo "== $VMNAME ($HOST) — $( [ $live = 1 ] && echo 'LIVE: the serving rules' || echo 'the inert rules')"
   v="$(api interfaces/overview/interfaces_info 2>/dev/null | jq -r '.rows[]? | select(.identifier=="lan") | .addr4' || true)"
   [ "${v%%/*}" = "$HOST" ] && ok "LAN address $v" || no "LAN address '${v:-unread}' (want $HOST)"
   v="$(api interfaces/vip_settings/search_item 2>/dev/null | jq -r '[.rows[] | select(.descr|startswith("haproxy-")) | .interface] | group_by(.) | map("\(.[0])=\(length)") | join(" ")' || true)"
   case "$v" in lo0=*) [ "${v#lo0=}" -gt 0 ] && ok "HAProxy VIPs: $v" || no "HAProxy VIPs: $v";; *) no "HAProxy VIPs: '${v:-unread}' (want all on lo0)";; esac
   v="$(api quagga/bgp/search_neighbor 2>/dev/null | jq -r '[.rows[] | .enabled] | unique | join(",")' || true)"
-  [ "$v" = 0 ] && ok "BGP neighbours all disabled" || no "BGP neighbours enabled: '${v:-unread}' (want 0 only)"
+  expect_on "$v" "BGP neighbours (all)"
   v="$(api dnsmasq/settings/get 2>/dev/null | jq -r '.dnsmasq.enable' || true)"; [ "$v" = 0 ] && ok "dnsmasq (DHCP) off" || no "dnsmasq enable='${v:-unread}'"
-  v="$(api dyndns/settings/get 2>/dev/null | jq -r '.ddclient.general.enabled' || true)"; [ "$v" = 0 ] && ok "ddclient off" || no "ddclient enabled='${v:-unread}'"
-  v="$(api acmeclient/settings/get 2>/dev/null | jq -r '.acmeclient.settings.autoRenewal' || true)"; [ "$v" = 0 ] && ok "ACME auto-renewal off" || no "ACME autoRenewal='${v:-unread}'"
-  v="$(killswitch_status | tr '\n' ' ')"; case "$v" in "armed 0 ") ok "kill switch armed, never tripped";; *) no "kill switch: $v";; esac
-  v="$(pve "systemctl is-enabled $KS_UNIT; qm config $VMID | sed -n 's/^onboot: //p'" | tr '\n' ' ' || true)"
-  [ "$v" = "enabled 1 " ] && ok "survives a host reboot (switch enabled, onboot 1)" \
-    || no "host reboot: switch/onboot '$v' (want 'enabled 1' — the play + tofu on_boot; onboot 0 after a trip is the latch)"
-  # CARP (router-nodes group_vars `router_carp_vips`): each trial VIP present on LAN, and in a live
-  # state — MASTER or BACKUP; INIT/DISABLED/absent is a fail. Which node is MASTER is `carp-status`'s.
-  local want gone; want="$(yq -r '.router_carp_vips[]? | select(.state == null) | .address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
-  gone="$(yq -r '.router_carp_vips[]? | select(.state == "absent") | .address | sub("/.*$"; "")' ansible/router-nodes/group_vars/opnsense.yml)"
+  if [ $live = 1 ]; then v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.general.enabled' || true)"; expect_on "$v" "Kea DHCPv4"; fi
+  v="$(api dyndns/settings/get 2>/dev/null | jq -r '.ddclient.general.enabled' || true)"; expect_on "$v" "ddclient"
+  v="$(api acmeclient/settings/get 2>/dev/null | jq -r '.acmeclient.settings.autoRenewal' || true)"; expect_on "$v" "ACME auto-renewal"
+  if [ $live = 1 ]; then   # the kill switch is RETIRED on a live node (pve_router_live_vmids)
+    v="$(pve "systemctl is-active $KS_UNIT; systemctl is-enabled $KS_UNIT; qm config $VMID | sed -n 's/^onboot: //p'" | tr '\n' ' ' || true)"
+    [ "$v" = "inactive disabled 1 " ] && ok "kill switch retired, onboot 1" \
+      || no "kill switch/onboot '$v' (want 'inactive disabled 1' — pve_router_live_vmids + ansible/pve-router-killswitch.yml; tofu on_boot)"
+  else
+    v="$(killswitch_status | tr '\n' ' ')"; case "$v" in "armed 0 ") ok "kill switch armed, never tripped";; *) no "kill switch: $v";; esac
+    v="$(pve "systemctl is-enabled $KS_UNIT; qm config $VMID | sed -n 's/^onboot: //p'" | tr '\n' ' ' || true)"
+    [ "$v" = "enabled 1 " ] && ok "survives a host reboot (switch enabled, onboot 1)" \
+      || no "host reboot: switch/onboot '$v' (want 'enabled 1' — the play + tofu on_boot; onboot 0 after a trip is the latch)"
+  fi
+  # CARP (`router_carp_vips` — the node's host var, else the router-nodes group list): each VIP
+  # present on LAN, and in a live state — MASTER or BACKUP; INIT/DISABLED/absent is a fail. A
+  # LIVE node holding `.1` alone must be its MASTER (window 1 — nobody else can be).
+  local want gone vips; vips="$(carp_vips)"
+  want="$(printf '%s' "$vips" | jq -r '.[]? | select(.state == null) | .address | sub("/.*$"; "")')"
+  gone="$(printf '%s' "$vips" | jq -r '.[]? | select(.state == "absent") | .address | sub("/.*$"; "")')"
   for a in $gone; do
     v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a)] | length' || true)"
     [ "$v" = 0 ] && ok "CARP $a retired (absent)" || no "CARP $a: still configured ('${v:-unread}' rows; want absent)"
   done
   for a in $want; do
     v="$(api diagnostics/interface/get_vip_status 2>/dev/null | jq -r --arg a "$a" '[.rows[] | select(.subnet==$a and .mode=="carp") | "\(.interface | ascii_downcase)/\(.status)"] | join(",")' || true)"
-    case "$v" in lan/MASTER|lan/BACKUP) ok "CARP $a $v";; *) no "CARP $a: '${v:-absent}' (want lan/MASTER or lan/BACKUP)";; esac
+    case "$live:$a:$v" in
+      1:192.168.2.1:lan/MASTER|0:*:lan/MASTER|*:lan/BACKUP) ok "CARP $a $v";;
+      *) no "CARP $a: '${v:-absent}' (want lan/MASTER or lan/BACKUP; a live node's .1 MASTER)";;
+    esac
   done
   if [ -n "$want$gone" ]; then   # pfsync rides with CARP: LAN, unicast to the OTHER node, the pinned version
     local peer; peer="$(yq -r "[.all.children.opnsense.hosts | to_entries[] | select(.key != \"$INV_HOST\") | .value.ansible_host][0]" "$INV")"
@@ -175,11 +206,15 @@ check() {
       *) no "WAN gate: CARP $role, gate/tap '$v' (want active, UP iff MASTER)";;
     esac
   fi
-  echo "== prod unharmed"
+  echo "== $( [ $live = 1 ] && echo 'the router serves (.1)' || echo 'prod unharmed')"
   v="$(pve "ping -c1 -W1 192.168.2.1 >/dev/null; ip neigh show 192.168.2.1 | awk '{print \$5}'" || true)"
-  [ -n "$v" ] && [ "$v" != "$LAN_MAC" ] && ok ".1 is at $v (not the node)" || no ".1 resolves to '${v:-nothing}'"
+  if [ $live = 1 ]; then   # vhid 1's virtual MAC — the CARP VIP, not the node's own LAN MAC
+    [ "$v" = 00:00:5e:00:01:01 ] && ok ".1 is at $v (CARP vhid 1)" || no ".1 resolves to '${v:-nothing}' (want 00:00:5e:00:01:01)"
+  else
+    [ -n "$v" ] && [ "$v" != "$LAN_MAC" ] && ok ".1 is at $v (not the node)" || no ".1 resolves to '${v:-nothing}'"
+  fi
   v="$(dig +short +time=2 +tries=2 @192.168.2.1 opnsense.teststuff.net A | tail -1 || true)"
-  [ -n "$v" ] && ok "prod Unbound answers (opnsense.teststuff.net → $v)" || no "prod Unbound did not answer"
+  [ -n "$v" ] && ok "Unbound @.1 answers (opnsense.teststuff.net → $v)" || no "Unbound @.1 did not answer"
   v="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://grafana.teststuff.net/api/health || true)"
   [ "$v" = 200 ] && ok "HAProxy path (grafana /api/health 200)" || no "grafana via HAProxy: HTTP ${v:-none}"
   return $bad
