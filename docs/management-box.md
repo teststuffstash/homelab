@@ -505,6 +505,23 @@ allowed, create/delete/replace refused, an unknown role refused, seed images all
 outside, and the post-check polling (clean, transient, still regressed at the deadline).
 `maint-self-test` pins the `snapshot`/`compare` verbs.
 
+### Declared windows hold the apply loop (FU-300, 2026-10-02)
+
+Operator ruling 2026-10-02: the box must not apply in the middle of someone else's maintenance (a
+router move), whatever the class. So a span that would plan first reads the live
+[declared windows](glossary.md) — the same record and the same rule as the reconciler's WIP 1
+(§MB4), applied to a root instead of a node — and while any holds it the tick **defers**: no plan,
+no apply, no stamp, no status, one `DEFERRED` journal line naming the window ids, exit 0. A window
+opened with `--admit-apply` (`agents/seat-window.sh`, `scripts/maintenance-window.sh`) does not
+hold it; `--admit-reconciler` does not admit the apply. The loop opens no window itself (its
+Talos bracket above is `snapshot`/`compare`), so it never holds itself; the reconciler's sync
+windows do hold it. An unreadable record defers as a PROBE-FAIL. A span touching no `apply: true`
+root still stamps. Mechanism and fixtures: `mgmt_apply_window_gate` in `mgmt/scripts/mgmt-lib.sh`,
+`mgmt-policy-test`. Visibility: `mgmt_apply_deferred_window{,s,_unreadable}` →
+**`MgmtApplyDeferredByWindow`** after 6 h (`argocd/resources/mgmt-metrics/`) — a deferral posts no
+status and completes its tick, so neither `MgmtApplyResidueStanding` nor `MgmtApplyLoopStale` sees
+it; an unreadable record also trips `MgmtApplyLoopStale`.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
