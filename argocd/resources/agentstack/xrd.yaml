@@ -549,8 +549,8 @@ spec:
                               10Gi / 8 CPU burst (+ dind 6Gi / 6 CPU burst with docker,
                               ~16.5Gi with kata overhead): sized where a test suite's
                               speed-up flattens (~8 workers, ~6 kind cores), not to CI's
-                              node; pinned to the homelab.io/ephemeral tier, where only the
-                              64G ride-tier node (nx-01) fits it, so it trades
+                              node; pinned by name to the 64G ride-tier node (nx-01 —
+                              the launcher's AGENT_LARGE_RIDE_NODES), so it trades
                               concurrency for gate speed. Memory request == limit in every
                               class. Unknown values degrade to standard, loudly.
                           egress:

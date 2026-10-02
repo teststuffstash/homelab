@@ -17,7 +17,7 @@ OUT     nodeAffinity:
 OUT       requiredDuringSchedulingIgnoredDuringExecution:
 OUT         nodeSelectorTerms:
 OUT           - matchExpressions:
-OUT               - { key: homelab.io/ephemeral, operator: In, values: ["true"] }]
+OUT               - { key: kubernetes.io/hostname, operator: In, values: ["nx-01"] }]
 OUT → ride size class: large (agent { cpu: "8", memory: "10Gi" }, dind { cpu: "6",    memory: "6Gi" })
 OUT row docker=1 in=large → size=large agent={ cpu: "2",    memory: "10Gi" }/{ cpu: "8", memory: "10Gi" } dind={ cpu: "1",    memory: "6Gi" }/{ cpu: "6",    memory: "6Gi" }
 OUT affinity: [  affinity:
@@ -25,7 +25,7 @@ OUT     nodeAffinity:
 OUT       requiredDuringSchedulingIgnoredDuringExecution:
 OUT         nodeSelectorTerms:
 OUT           - matchExpressions:
-OUT               - { key: homelab.io/ephemeral, operator: In, values: ["true"] }]
+OUT               - { key: kubernetes.io/hostname, operator: In, values: ["nx-01"] }]
 OUT WARN: unknown ride size class 'xl' (fixer.rideSize / --size) — using standard
 OUT → ride size class: standard (agent { cpu: "2", memory: "2Gi" }, dind { cpu: "2",    memory: "2560Mi" })
 OUT row docker=1 in=xl → size=standard agent={ cpu: "500m", memory: "2Gi" }/{ cpu: "2", memory: "2Gi" } dind={ cpu: "500m", memory: "2560Mi" }/{ cpu: "2",    memory: "2560Mi" }
@@ -40,5 +40,11 @@ OUT       requiredDuringSchedulingIgnoredDuringExecution:
 OUT         nodeSelectorTerms:
 OUT           - matchExpressions:
 OUT               - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }
-OUT               - { key: homelab.io/ephemeral, operator: In, values: ["true"] }]
+OUT               - { key: kubernetes.io/hostname, operator: In, values: ["nx-01"] }]
+OUT override: [  affinity:
+OUT     nodeAffinity:
+OUT       requiredDuringSchedulingIgnoredDuringExecution:
+OUT         nodeSelectorTerms:
+OUT           - matchExpressions:
+OUT               - { key: kubernetes.io/hostname, operator: In, values: ["nx-01", "nx-03"] }]
 RC 0

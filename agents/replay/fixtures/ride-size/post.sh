@@ -1,4 +1,4 @@
-set -u
+set -u; unset AGENT_LARGE_RIDE_NODES
 AVX2=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n              - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }'
 for row in ":" "1:" ":standard" "1:standard" ":large" "1:large" "1:xl" ":Large"; do
   DOCKER="${row%%:*}"; RIDE_SIZE="${row#*:}"
@@ -11,3 +11,6 @@ done
 # large composes with an existing (opencode AVX2) pin: one term, both expressions ANDed
 DOCKER=""; RIDE_SIZE=large; AFFINITY="$AVX2"; ride_size_envelope >/dev/null 2>&1
 printf 'composed: [%s]\n' "$AFFINITY"
+# the pin list is an override (a second ride-tier node joins without a code change)
+DOCKER=1; RIDE_SIZE=large; AFFINITY=""; AGENT_LARGE_RIDE_NODES="nx-01 nx-03"; ride_size_envelope >/dev/null 2>&1
+printf 'override: [%s]\n' "$AFFINITY"; unset AGENT_LARGE_RIDE_NODES

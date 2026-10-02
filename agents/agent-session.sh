@@ -2277,12 +2277,14 @@ ride_size_envelope() {   # in: RIDE_SIZE, DOCKER → out: AGENT_/DIND_ REQUESTS+
       *)     AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }';  AGENT_LIMITS='{ cpu: "6", memory: "4Gi" }';;
     esac
   fi
-  # `large` is PINNED to the ephemeral (ride/compute) tier: with docker the kata RuntimeClass
-  # already confines it, but a non-docker 10Gi ride would otherwise fit the untainted 16G storage
-  # nodes (hp-01, m70s) and contend with Longhorn/Garage. Within the tier only nx-01 fits it.
-  # Same-term matchExpressions AND, so this composes with the opencode AVX2 pin.
+  # `large` is PINNED BY NAME to the ride-tier node(s): AGENT_LARGE_RIDE_NODES (space-separated,
+  # default nx-01). No label means "ride tier" today — homelab.io/ephemeral also covers wk-03 and
+  # the laptops, and wk-metal-04 (16G, Longhorn bulk tier, no AVX2) fits a non-docker 10Gi ride, so
+  # the shared tier label would land `large` beside storage (PR#2184 review). Pinned regardless of
+  # docker/harness; same-term matchExpressions AND, so it composes with the opencode AVX2 pin.
   if [ "$RIDE_SIZE" = large ]; then
-    _tier='              - { key: homelab.io/ephemeral, operator: In, values: ["true"] }'
+    _nodes=""; for _n in ${AGENT_LARGE_RIDE_NODES:-nx-01}; do _nodes="${_nodes:+$_nodes, }\"$_n\""; done
+    _tier="              - { key: kubernetes.io/hostname, operator: In, values: [${_nodes}] }"
     if [ -n "${AFFINITY:-}" ]; then
       AFFINITY="${AFFINITY}"$'\n'"${_tier}"
     else

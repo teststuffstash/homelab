@@ -89,7 +89,7 @@ data:
     8-CPU burst, plus dind 6Gi with a 6-CPU burst under `fixer.docker` (~16.5Gi including kata
     overhead). Memory requests equal limits, so a gate that sizes itself from the cgroup
     (`/sys/fs/cgroup/memory.max`, `nproc`) sees the real budget — size `pytest -n` from
-    `memory.max`, never from the host. `large` is pinned to the ephemeral tier, where only the 64G ride-tier node fits it, so fewer rides run
+    `memory.max`, never from the host. `large` is pinned to the 64G ride-tier node, so fewer rides run
     at once; it is sized where test speed-ups flatten (~8 xdist workers, ~6 kind cores), not to a
     CI runner's whole node. An unknown value renders `standard` and the launcher log says so.
 
