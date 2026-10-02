@@ -17,8 +17,8 @@ Run:
     export OPN_API_KEY=...  OPN_API_SECRET=...  OPN_HOST=<node>
     python3 opnsense/kea-dhcp.py
 Env:
-    OPN_DHCP_SERVER     kea = serve from Kea; anything else (dnsmasq, the default — defined in
-                        dnsmasq-dhcp.py) = Kea converges OFF and empty
+    OPN_DHCP_SERVER     kea (the default since window 1 — defined in dnsmasq-dhcp.py) = serve from
+                        Kea; dnsmasq (Big Data, the fallback) = Kea converges OFF and empty
     OPN_DHCP_ENABLE=0   the STANDBY profile — config converges, the server stays off
     OPN_DHCP_REMAP      test boxes only (see dnsmasq-dhcp.py); refused against the router
     OPN_KEA_HA          unset = HA off (a node serving alone). Else "<this-name>;<peers>" with

@@ -97,15 +97,19 @@ MEM_MIN_MB="${OPN_DRILL_MEM_MIN_MB:-4096}"
 
 log() { printf '[opnsense-drill] %s\n' "$*" >&2; }
 die() { log "REFUSED: $*"; exit 2; }
-# The prod router's API address: the ansible inventory is its one home (docs/router-move.md (B)).
-PROD="$(yq -r '.all.children.opnsense.hosts[].ansible_host' "$ROOT/ansible/inventory.yml")"
-echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read one prod router address from ansible/inventory.yml"
+# The prod router's API address: the ansible inventories are its one home (docs/router-move.md (B))
+# — the one LIVE `opnsense` host (no `opnsense_standby: true`): Big Data's `opnsense-fw` before
+# window 1, the nx-02 node after (ADR-145). NODES = every router node, live or standing: never a drill host.
+PROD="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml")"
+NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
+[ "$(printf '%s\n' "$PROD" | grep -c .)" = 1 ] && echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read ONE live prod router address from the ansible inventories (got: $(echo $PROD))"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
 # fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
 fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
 
 [ "$VMID" != 9110 ] || die "vmid 9110 is the PR-validation VM"
 [ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.1 ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"
+case " $NODES " in *" $HOST "*) die "OPN_DRILL_HOST=$HOST is a router node" ;; esac
 
 SHA="$(git rev-parse --verify "$REF^{commit}")"
 WORK="${OPN_DRILL_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/opnsense-drill.XXXXXX")}"

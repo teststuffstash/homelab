@@ -22,10 +22,11 @@ HOST = os.environ.get("OPN_HOST", "192.168.2.1")
 # OPN_DHCP_ENABLE=0: the STANDBY profile (docs/router-move.md) — the config converges, the
 # server stays off, so a node standing on the real LAN never answers prod's clients.
 ENABLE = os.environ.get("OPN_DHCP_ENABLE", "1")
-# OPN_DHCP_SERVER: which server answers on this box — dnsmasq (prod until the cutover) or kea
-# (ADR-145, opnsense/kea-dhcp.py). The one home of the choice: kea-dhcp.py reads it from here.
+# OPN_DHCP_SERVER: which server answers on this box — kea (the router since window 1, ADR-145;
+# opnsense/kea-dhcp.py) or dnsmasq (Big Data, the fallback — run it with OPN_DHCP_SERVER=dnsmasq).
+# The one home of the choice: kea-dhcp.py reads it from here.
 # The other server converges OFF, so two never bind :67 (the drill runs every opnsense/*.py).
-SERVER = os.environ.get("OPN_DHCP_SERVER", "dnsmasq")
+SERVER = os.environ.get("OPN_DHCP_SERVER", "kea")
 if SERVER not in ("dnsmasq", "kea"):
     sys.exit("OPN_DHCP_SERVER must be dnsmasq or kea")
 KEY = os.environ["OPN_API_KEY"]
