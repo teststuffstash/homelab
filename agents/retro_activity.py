@@ -270,7 +270,9 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                     # Only PR→issue links: check if the source item is a PR
                     src_item = state['items'].get(src_key, {})
                     if src_item.get('is_pr'):
-                        pr_to_issue.setdefault(src_key, []).append(tgt_key)
+                        targets = pr_to_issue.setdefault(src_key, [])
+                        if tgt_key not in targets:
+                            targets.append(tgt_key)
 
     # Weighted score: real failures dominate, but standing stall on agent/*-labelled
     # items carries real weight so blocked issues rank above cancellation-only PRs.

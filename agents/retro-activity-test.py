@@ -384,5 +384,47 @@ class BundleClassificationTests(unittest.TestCase):
         self.assertGreater(issue_task['failure_events'], 0)
 
 
+def test_issue_crediting_dedup_same_pr_issue_pair(self):
+        """Duplicate cross-references for the same PR/issue pair credit only once."""
+        issue_state = {
+            'o/r#1': {'repo': 'o/r', 'item': 1, 'title': 'Linked issue',
+                      'url': 'https://example/issues/1', 'state': 'open',
+                      'created_at': '2026-09-01T00:00:00Z',
+                      'updated_at': '2026-09-28T00:00:00Z',
+                      'labels': ['agent/in-progress'], 'is_pr': False}
+        }
+        pr_state = {
+            'o/r#2': {'repo': 'o/r', 'item': 2, 'title': 'Fixing PR',
+                      'url': 'https://example/issues/2', 'state': 'open',
+                      'created_at': '2026-09-20T00:00:00Z',
+                      'updated_at': '2026-09-28T00:00:00Z',
+                      'labels': [], 'is_pr': True, 'head_sha': 'abc123'}
+        }
+        state = {'version': 1, 'events': [], 'items': {**issue_state, **pr_state},
+                 'collected_until': '2026-09-29T00:00:00Z',
+                 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r']}
+        # PR has a check failure
+        state['events'].append(make_event('check', check_event('failure', sha='abc123'),
+                                          occurred_at='2026-09-23T12:00:00Z', item=2))
+        # Two identical cross-references for the same PR→issue pair
+        for i in range(2):
+            state['events'].append({
+                'id': f'o/r:1:cross-referenced:{i}', 'kind': 'cross-referenced',
+                'occurred_at': '2026-09-25T00:00:00Z',
+                'observed_at': '2026-09-29T00:00:00Z',
+                'repo': 'o/r', 'item': 1,
+                'url': 'https://example/issues/1',
+                'payload': {'source': {'type': 'issue',
+                                       'issue': {'number': 2,
+                                                 'repository': {'full_name': 'o/r'}}}}
+            })
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z', keep=10)
+        issue_task = next(t for t in out['tasks'] if t['key'] == 'o/r#1')
+        pr_task = next(t for t in out['tasks'] if t['key'] == 'o/r#2')
+        # Issue should have exactly the PR's failure_events, not doubled
+        self.assertEqual(issue_task['failure_events'], pr_task['failure_events'],
+                         "duplicate cross-references must not double-credit failure_events")
+
+
 if __name__ == '__main__':
     unittest.main()
