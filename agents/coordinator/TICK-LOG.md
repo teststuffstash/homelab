@@ -11974,3 +11974,31 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   Proposed, NOT armed (operator read). From oracle-fleet#780's stack analysis: #2167 (queued —
   DUPLICATE-closed blocker releases the parked issue), #2168 (body-only fix never re-reviewed),
   #2169 ("line N, nothing else" directives) — the latter two inert.
+
+## 2026-10-02 afternoon — router move WINDOW 1: nx-02 takes `.1` (seat, took over from the primary)
+- Second jail first: WAN loss probed clean after the operator swapped the WAN cable (old one flapped
+  its link lights; 0.17 %/120 s with both node ports on the switch, nothing out of them) → the
+  window-1 change set #2166 (live mode for router-node.sh, kill-switch retire list, prod inventory
+  → the nodes, Kea default, RouterPairMasterCount `!= 1`); bot APPROVED r1.
+- Seat, pre-window: found the standing seed's `LAN_GW` (prio 1 → `.1`) would make a live node route to
+  itself → carp role deletes it on a live node (#2166 r2; `gateway state=absent` needs interface +
+  gateway, name alone is a silent no-op — proven on the test VM). #2161 re-planned SCOPED (the full
+  plan also stripped wk-03's live memory-pressure taint) → 20261002T163905Z-f06b997d.
+- Window seat-1790960221-62 16:57Z: #2166 merged (admin, approved + green), kill switch retired, an
+  unattended cutover script (the jail's own internet rides `.1`): API halt of Big Data 16:57:40 →
+  `.1` silent +25 s → carp play +55 s → internet back +79 s. Converge then died at ddclient
+  (`core/firmware/info` timeout) → Kea never enabled; `mgmt-tf apply` aborted on its `y` prompt.
+- **Big Data came back** (answered `.1` from `a0:36:9f:09:8d:38` on eno1 beside nx-02's CARP MAC by
+  ~17:02; the API showed no CARP rows) — the halt did not keep it down. Operator pulled both its
+  cables (left running for a quick replug). Then: Kea enabled by hand-run scripts, Cilium apply
+  (13/13 Established to .70), stuck `pkg update` killed on the node (started in the double-`.1`
+  minutes) → ddclient converged, full converge changed=0, `check nx02`/`pve` green.
+- `opnsense.teststuff.net` NXDOMAIN after the cutover (Big Data answered it from its hostname) →
+  static Unbound override, direct 3cf5bd16. Checks: WG HANDSHAKE_OK at .1, backup job 5 s, Kea 7
+  leases, six HAProxy names OK, maint check clean (186 targets). New alert:
+  OpnsenseConfigUnattributedRevision = the converge's root-key writes (FU-013 class).
+- Post-window read (~17:45Z): WAN 0/600 (pve) + 1/600 (nx-02) to 1.1.1.1, 0/300 to 8.8.8.8, TCP
+  connect ~31 ms; blackbox dips (grafana, transcripts, mcp.oracle) ONLY 16:58–17:09Z (the double-`.1`
+  + pre-peer minutes), green since; probe latency = yesterday's; the fleet-wide ~1.16/s LAN rx-drop
+  rate is yesterday's baseline too, not the cutover. Windows closed (this one --force on the
+  root-key alert; the 09-30 stale slot). #2161 merged 5121a682 (git == live).
