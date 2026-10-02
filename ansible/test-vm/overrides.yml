@@ -1,0 +1,22 @@
+# Extra-vars for the OPNsense test VM (FU-297) — passed with `-e @` by
+# scripts/opnsense-test-vm.sh on EVERY play, after the checkout's real group_vars. Each key
+# here is an isolation override: it replaces a production value whose effect would reach
+# outside the VM. Everything not listed runs with the production values, so the plays
+# exercise the same modules, fields and loop shapes the router gets.
+
+# BGP: the production neighbour list is the real cluster nodes on 192.168.2.0/24 — the VM's
+# WAN sits on that same segment, so it would dial every node on :179 forever. RFC 5737
+# TEST-NET-1 addresses answer nobody. The router-id is the VM's own address, never .1.
+bgp_router_id: "{{ ansible_host }}"
+bgp_node_ips:
+  - 192.0.2.11
+  - 192.0.2.12
+  - 192.0.2.13
+
+# ACME: no certificate SPECS on the VM — a spec'd cert gets signed by the role (FU-078),
+# i.e. a real Let's Encrypt order + a DNS-01 write into the real teststuff.net zone. With the
+# list empty the role still converges the general settings, the account and the two restart
+# actions; the validation task is skipped because the harness never exports ACME_CF_TOKEN.
+# The HAProxy frontends' certificates come from the harness's fixture step instead (a
+# self-signed cert bound to disabled ACME rows of the right names) — see the script header.
+acme_cert_specs: []

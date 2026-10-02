@@ -195,7 +195,7 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
 
-  # ── the node reconciler (ADR-132 §MB4, scripts/mgmt-reconcile.sh) ─────────────────────────────
+  # ── the node reconciler (ADR-132 §MB4, mgmt/scripts/mgmt-reconcile.sh) ─────────────────────────────
   - interval: 1m
     name: "a parked node fires after 5m; idle and pending never do"
     input_series:
@@ -269,7 +269,7 @@ tests:
         exp_alerts:
           - exp_labels: { job: mgmt-node, instance: "192.168.2.53:9100", severity: warning }
 
-  # ── FU-254: the DECLARATION going stale (scripts/mgmt-probe.sh check_substrate) ────────────────
+  # ── FU-254: the DECLARATION going stale (mgmt/scripts/mgmt-probe.sh check_substrate) ────────────────
   # Behind is deliberately slow: a minor behind for a day is a window not yet taken, a minor behind
   # for a week is nobody's turn. A current component (0) never fires at any horizon.
   # interval 5m, not 1h: a sample gap past the 5-minute staleness horizon leaves the series absent

@@ -11395,3 +11395,613 @@ VGA, host_vars-gated (pve no-op), applied and verified in grub.cfg; lands at the
 also reports both NX CMOS batteries replaced and nx-01's console redirection enabled (private
 register amended, dated, unverified until a watched boot).
 
+
+## 2026-09-27 (night, unattended) — FU-289 hardware half: nx-02 boots from the SA400, the LSI HBA's one-disk INT13 cap, ci-runner-02 unparked
+
+**Condition:** operator at bedtime: "pick up from meta state, FU-289 hardware half and the rest."
+Window seat-1790538379-8332 (19:46–21:19Z), alert watch armed. Step 1 online: the SA400 wiped and
+partitioned like the WD (BIOS-boot / 1 G ESP / LVM), `vgextend pve`, the 0 %-used `local-lvm` pool
+dropped, `pvmove` of root+swap (104 G, 19 min at ~95 MB/s off the spinner), `vgreduce`, GRUB on BOTH
+disks, `local-lvm` recreated as a 700 G thin pool on the SSD (metadata grown to 1 G — lvcreate's 88 M
+auto-size was tight). Step 2: `down wk-04` (FORCE=1), `qm shutdown` cp-02 (etcd 3/3 healthy before,
+API on the VIP throughout), `chassis bootdev bios`, reboot.
+
+**The reboot did not come back.** `Hard Disk Drive BBS Priorities` listed ONE disk; booting it put the
+WD's GRUB in `grub rescue>` — `ls` saw `(hd0)` only. Cause: the SAS3008's legacy option ROM registers
+INT13 drives up to `Maximum INT 13 Devices for this Adapter`, shipped as **1** in this Nutanix IT
+NVDATA — so a legacy bootloader on a bay disk can never read a second bay disk, however BIOS ranks
+them. Reached the LSI utility over SOL by blind Ctrl-C through POST (its banner does not render on
+SOL; the keystroke is honoured), found both drives in SAS Topology (Kingston slot 0, WD slot 2), set
+the cap to 2 via the Enter-opened numeric dialog (Alt+keys and `+`/`-` do not cross SOL), saved, rebooted
+into setup, ranked `ID01` first in the BBS submenu (both disks now listed), F4 — host up from the SSD
+37 s later (20:58Z), `swap` on `sdb3`, VMs auto-started, wk-04 16.02/16.02 GiB again, `up wk-04` +
+uncordon cp-02, cilium 13/13, targets 186/186. Rollback plan if the utility had not rendered: BMC
+NFS virtual media with a serial-console rescue ISO (nix-built), pvmove back — not needed. Recipe and
+drivers (`lsi_catch2.py`, `lsi_keys.py`, `bbs.py`, `grub_probe.py` on `pve:/root`) are in the private
+register; the structural fix is UEFI boot mode (no INT13 cap), parked for an attended window.
+
+**Step 3:** `ci_runner_02_running` → true (#2048, merged 21:13Z, `mgmt-tf` plan = the one VM update,
+applied 21:16Z with MGMT_YES=1); nx-02 nodes 11.1/11.1 GiB free, swap 0 B. Three oracle-fleet CI runs
+dispatched 21:20Z for the "Preparing nodes" comparison (runner-01 baseline 2.5 s; the event was 397/67 s).
+**Result:** run 36351320341 landed on ci-runner-02 — "Preparing nodes" **3.9 s** (the event: 397 s and
+67 s; runner-01 baseline 2.5 s), e2e green in 7m11s, host swap 0 B, node free 9.1/6.3 GiB with all three
+guests up (runner-02 faulting in 3.0/5.4 GiB), no `PveHostSwap*`/`PveNuma*` fire; …24933 cancelled by the
+workflow's concurrency group, …30352 on ci-runner-01-2. One sample; the belts judge the week.
+Window closed `--force`: off-baseline = `PodSigkilled` (own shutdown) + `LonghornNodeOverProvisioned`
+wk-metal-01 (pending since 19:01Z, unrelated — mx500 463 G max / 580 G scheduled). GAPS G5 re-sighted
+(+ `NodeRebooted` on the HYPERVISOR's exporter, + the down node's nodeName-pinned `fstrim-guard`
+CronJob → `CronJobNotSucceeding` — expected-class members).
+
+**Side find while the pvmove ran:** `MgmtBeltCheckFailing{tofu:github,tofu:provisioning,nodes}` +
+`MgmtReconcileLoopStale` firing since 13:17Z — the box's checkout had "Required plugins are not
+installed" after Renovate's integrations/github 6.13.0 bump; the probe + reconciler still guarded init
+with `[ ! -d .terraform ]` (#2043 fixed only mgmt-tf.sh). Un-wedged by hand (three inits), belt 7/7 pass,
+reconciler "nothing to sync"; PR#2045 (init every run, `mgmt-reconcile-test` 154 pass) merged. S9 read:
+agent-coordinator's grouped github-actions PR #22 and the node 24 major #23 merged on their own; homelab
+#2008 merged, #2007 closed (superseded); master CI green.
+
+## 2026-09-28 (morning) — alert session: three board items read, two cleared, the Renovate three reserved for S9
+
+Operator: "maintenance session for alerts"; the WD spinner was PULLED from nx-02 overnight (FU-289's
+BIOS residual is moot — the SA400 is the only INT13 disk; recorded in FU-289, the spike, meta-state).
+Ruling mid-session: **the `agent/error` PRs #2037/#2046/#2047 are for the next Renovate S9 session —
+not touched.** Read only: terraform majors born with the `automerge` label (rule [8]/[9] add it, the
+majors rule [14] never removes it) → `renovate-approve` rubber-stamps with the reviewer's own identity
+→ the migration lens refuses at STEP 0(a); cause filed on #1988 by the anomaly comments themselves.
+
+**`GithubStorageHeldHigh` (04:25Z, 1.7 GB/day held):** all oracle-fleet — `unit-allure-results`, 853
+artifacts × 2.1 MB on the 90-day default since July (+1608 tiny `e2e-evidence`), both consumed by the
+same run's `evidence` job and never read again. Deleted every artifact older than 7 days by API (1873,
+1.08 GB — a long loop, ~1/s) and opened **oracle-fleet#763** (`retention-days: 1` on both uploads,
+auto-merge armed, bot review pending). The alert clears as the 24 h average catches up.
+
+**`LonghornNodeOverProvisioned` wk-metal-01 (since 09-27 20:01Z):** NOT FU-285's co-location — no volume
+had two replicas there. registry-data (pvc-8a14f095, 150 Gi) lost its wk-04 replica when nx-02 went
+down in the FU-289 window; after the 600 s `replica-replenishment-wait-interval` Longhorn rebuilt it
+onto the mx500 at 19:01Z (manager log: "Cannot find a reusable failed replica … Schedule replica to node
+wk-metal-01"), 623 G promised on 391 G allocatable = 160 %. The runbook §Single worker maintenance
+already names this class. Window `seat-1790582118-779`: deleted that replica, Longhorn placed the
+replacement on **wk-04's sn530** (bulk, 251 G free) within the wait interval; rebuild 45 GB, ratio back
+to 1.18, alert cleared 08:0xZ.
+
+**Retro r6 PR #2050 is not missing — it merged at 05:36Z, 6 s after the bot approval, by the agents App.**
+`retro-argo.yaml` says "HUMAN-GATED, auto-merge NOT armed", but `review-reflex.sh`'s C9 re-arm arms every
+worker-App PR without a parking marker, and the retro PR carries none of the four C9 honours. r4 #1645
+went the same way (8 min); r5 only waited on a changes-requested. Operator's call which marker the retro
+PR should state — recorded in meta-state.
+
+Housekeeping: four archive entries past 35 d expired (FU-117/163/179/183; no TODO-shaped refs).
+
+## 2026-09-28 — S9 pickup as a PROCESS session: the un-armed major lane, end to end, no hand fixes
+
+Operator: *"Pick up from meta-state S9. I don't want to do any one-time fixes but to fix the
+process so I don't have to do this again"* — and mid-session: the management box's apply
+allowlist and the codeowner reads are up for change as needed (even the cloudflare root may move
+to the box; only GitHub App clicks are the operator's); an Opus subagent may build the npm mirror.
+The reserved `agent/error` trio (#2037/#2046/#2047) was the material; every fix below is a
+mechanism, and the trio's un-latch + `devbox run ring platform` was the drill. Memory:
+`process-fix-over-one-time-fix`.
+
+**The first wall — the own-identity rubber stamp (cause on #1988).** Three belts, all landed:
+(1) `.github/renovate-global.json` terraform rule → non-major update types only (Renovate merges
+`addLabels`, nothing removes a label; a major was born `automerge`+`major`); (2)
+`renovate-approve.reusable.yml` refuses any `major`-labelled PR (its stamp shares the migration
+lens's identity); both direct, 31ee7482. (3) PR#2054: the scan's `stale-stamp-repair` clause
+(dismiss the reflex's literal stamp when it is a live own-identity APPROVED at head, strip a
+leaked label, one ADR-103 line; a real lens verdict is never touched — two fixtures) + the box
+allowlist widened to `kubernetes_deployment.*` (#2037's image bump had parked as "1 address
+outside — human apply") + the sentinel posts tofu's `on <file> line N` positions on an errored
+plan (values-free; #2046 had a headline with no location, #2047 nothing). Drill: un-latched at
+09:03Z, the scan dismissed all three stamps at 09:04Z; #2037 → lens APPROVED with the four
+headings 09:18Z → `major/awaiting-human` by `major-handoff.sh` — zero hand steps to the designed
+human-merge terminal.
+
+**The second wall — the play the brief described and the code did not emit (#2051, live on
+#2033).** The coordinator re-latched #2046/#2047: the reviewer's STEP 0 stood aside on any
+concluded FAILURE (so "dispatch the lens even while red" was a no-op), `unarmed-major` excluded
+CHANGES_REQUESTED while the changes-requested clause is WORKER_AUTHOR-scoped (a Renovate-authored
+major with a verdict had no door), no debounce (a ride per tick). PR#2058: `unarmed-major` emits
+for EVERY state of an un-armed major, bounded by the #198 state-fp (dispatch marker recorded) and
+the #1188 blocked-on read; reviewer STEP 0 reads `autoMergeRequest` and treats a red on an
+un-armed major as the SUBJECT (`pre=checks-red-unattributed` when the record cannot attribute
+it); brief aligned. Drill (second un-latch after the merge, 10:06Z): #2046's worker adaptation
+(`tofu/cilium.tf:6` `kubernetes = {…}`, 09:49Z, dispatched by the old-code ride) had landed and
+the box re-planned it (+0 ~5 -0 — the DESIGNED "must plan empty" red, a human reads that plan);
+the ride ticked Renovate's rebase box (per my own brief text — WRONG on an adapted branch, a
+rebase drops the worker commit; un-ticked by hand, the brief + the rebase-tick clause corrected
+to untouched-only, PR#2055); the lens then APPROVED #2046 at its red head with the four headings.
+#2047: the lens ran on the red head and stood aside `checks-red-unattributed` — the sentinel's
+09-27 verdict carried no cause, and the box never re-plans a judged head → PR#2059: a verdict is
+keyed to the ENGINE REVISION (`[e:<rev>]` in the status description = hash of sentinel + lib +
+policy at master; a change re-judges every open head on the next tick — the widened allowlist
+and the position lines reach parked PRs without a push) + PR#2065: the unarmed-major fingerprint
+folds each check's `startedAt` so that re-verdict re-opens the debounce. #2033 got its re-review
+under the new play (CHANGES_REQUESTED again, the loop continues). The ride also found and filed
+**#2064**: `pin-only-lint`/`governance-lint` diffed `base.sha` (master at EVENT time = the fork
+point) against the merge ref, so every behind PR went red on master's own guarded-file commits
+(three today) — fixed direct in `ci.yaml` (the merge ref's own first parent via `rev-list
+--parents`, 9eef297d), the failed run on #2046 re-run as the proof.
+
+**Also landed:** #2055 (in review) — a DIRTY Renovate PR gets its rebase checkbox ticked by the
+scan (#1977 sat "waiting for Renovate's rebase" that could never come after one foreign merge
+commit; untouched branches only). #2056 — dependency-coverage outputs regenerated; the S9 "ci
+`--check` step" cannot be PR-time (a pin PR's own bump makes the table stale) → post-merge
+regenerator proposed on #1985. Rubric quickfix direct (cc821156): ADR-128 gate stated as standing
+(FU-233), path list matches CODEOWNERS, the FU-097 intent-review paragraph. FU-152 residue
+re-counted (composition 5×2026.8.7 + gc-mirrors 2026.7.25 vs the 2026.9.27 pin). **FU-293**
+filed (flat `scripts/`, 103 files, vs path-based ownership — the operator's "it will become a
+problem for codeowner rules"; parked debt in iac-lane.md since 08-12). **FU-294** filed (the npm
+Renovate lane produces lockfile work no ride can do — #2032 parked on a human: homelab's claim
+egress `none`, no baseline npm mirror); operator: an Opus subagent builds the mirror — dispatched.
+#1977's stale codeowner request removed (the path was un-owned 09-27; GitHub kept the request).
+
+**Seat lessons:** (a) a background wait written `pr-wait …; echo $?` reports exit 0 for every
+outcome — two CHANGES_REQUESTED verdicts were read as merges and #2046/#2047 were un-latched
+against an unmerged fix (memory `pr-waits-run-in-background` updated: propagate `rc`, verify a
+merge by fetch); (b) the first regeneration commit blamed my rule edit for the coverage drift —
+the diff was the 09-27 pin merges; amended before review. **Observed, unacted:** the Monday
+06:00Z weekly image rebuild did NOT fire on agent-coordinator/agent-runtime (workflows `active`
+on GitHub; agent-runtime's push build produced agent-base 2026.9.28 anyway via #2062) — no
+detector exists for a missed scheduled run (dependency-coverage's `DependencyClassProofStale` is
+the nearest shape). Retro C9 re-arm question (retro-argo.yaml marker) untouched — operator's call.
+
+**Late (11:00–11:30Z) — the rest of the drill, and three more mechanisms it surfaced.** (1) The
+box re-judged all three parked heads under the new engine within a minute of its hourly pull
+(`[e:92d2129]`, 11:06–11:07Z): #2047's kubernetes-3 plan now RUNS (+0 ~1 -0, human read — the
+09-27 "plan errored" was never republished before #2059), #2046 +0 ~5 -0 as before, #2037 now
++0 ~2 -0 with the forgejo-runner Deployment INSIDE the allowlist — the second address is
+`proxmox_virtual_environment_vm.ci_runner_02[0]`, pre-existing drift unrelated to the PR that
+makes the box refuse every `main` apply until a human plans it (`MgmtApplyResidueStanding` is
+the belt). (2) #2032 (mermaid 12, FU-294's drill): the npm mirror unblocked EGRESS, not the PATH
+TIER — `scripts/**` is codeowner-author because CI executes the lockfile from the branch, so the
+`overrides` pin + lockfile regeneration was the SEAT's act by design (pushed 10:55Z, master merged
+in); the lens re-approved at the new head 11:00Z; then `major-handoff.sh` REFUSED on
+`## Evidence — re-review at new head …` (a `$`-anchored heading regex) and the ride parked the
+PR again — PR#2069: the heading WORD is the match; the seat-run handoff then landed
+`major/awaiting-human` 11:26Z. (3) #2033: the round-3 worker ride ARMED the un-armed major (the
+launcher's post-ride bookkeeping arms every PR); the reviewer refused to review into an
+auto-deploy and latched — PR#2067: a fix round resumed on the branch of an un-armed `major` PR
+derives `--no-arm` (fail-closed on an unreadable lookup); brief passes it explicitly; un-latched
+11:17Z as the drill. (4) #1977: the rebase-tick clause ticked the box 10:36Z — Renovate's 12:00Z
+run is the mover. (5) #2064's ci fix is UNPROVEN on a behind PR: a `gh run rerun` reuses the
+original workflow file, so the proof waits for the next fresh event on a behind PR. Session end
+~11:30Z: five majors sit at the designed human terminals (#2037/#2046/#2032 `major/awaiting-
+human`; #2046's +0 ~5 -0 and #2037's ci_runner_02 drift want `mgmt-human-plan`), #2047 and #2033
+ride the lane on their own.
+
+**Correction (11:50Z):** the `ci_runner_02[0]` "drift" above was a sentinel artifact, not drift —
+master plans clean (`mgmt-tf plan` 11:44Z); the sentinel planned the bare PR head, so the FU-289
+unpark (#2048, merged after the three PRs forked) read as their change and put "human read" reds
+on #2037/#2047. PR#2073: stage 2 plans the head merged onto master (what would land; a head that
+does not merge gets a failure verdict). Operator direction for the next session: the Forgejo
+runner rolls with no downtime first (2 replicas + RollingUpdate + PDB, ADR-140 amendment), then
+#2037's class gets its detector + revert and arms — parked in meta-state.
+**12:10Z:** the box re-judged the three heads at 12:06–12:08Z under `[e:425b49c]` — but with the
+PRE-#2073 script (verdict text lacks "merged onto master"): #2059's engine revision hashed the
+sentinel clone's `origin/master` blobs, which the clone fetches every run, while the script
+executes from the hourly-pulled `/var/lib/homelab`. PR#2076 hashes the executing files. The
+merge-plan proof (#2047 planning EMPTY) is the ~13:10Z re-judge, next session's first read.
+
+## 2026-09-28 (afternoon) — the loop's own issues triaged by CLASS; the Forgejo chain built to merge and roll back without a human
+
+Operator: read meta-state S9, "look at the issues the loop created during these Renovate updates
+— #2036 and newer", then mid-session *"we are here to create/fix the process not fix individual
+problems"*, then *"I'm going away, continue with the Forgejo until it automerges without a human
+and rolls back if there is a problem."* Everything below is a mechanism; instances were touched
+only as the drill of one.
+
+**The nine open issues, by class.** Retired on master already: #2068 (heading WORD, PR#2069)
+and #2070 (stage 2 plans the head merged onto master, PR#2073/#2076) — both closed by hand with
+the proof: the box's 13:05Z run after its 13:03Z pull posted "merged onto master@da4b02b6" and
+`ci_runner_02` vanished from #2047/#2037 (the 12:37Z run was still pre-#2073 because the pull
+had run six seconds before that merge). Carriers whose work is on the branch: #2036/#2071 close
+at #2033's merge (strong links in the body); #2063 could not — the worker wrote only `Refs` in a
+commit, and the in-pod strong-link write had died on `GraphQL: API rate limit already exceeded`
+(the installation pool). Built by four subagents, each its own PR: **#2079** (#2066: the
+`unarmed-major` fingerprint folds `startedAt` ONLY for the `management-sentinel` status —
+`iac-sentinel` re-posted SUCCESS every ~4 min and bought a ride per tick; two fixtures), **#2077**
+(#2072: `diff-ci --coverage-only` runs in CI so the MAP cannot rot on master unseen; the ci.yaml
+step committed direct, 44b072c7), **agent-runtime#161** (#2063's class: `agent-finalize` writes
+the strong link over REST end to end, 40 tests; open, its `unit` job red on a pre-existing
+devbox-install-action/nix conflict on the ARC runner, `.github/` operator-direct), **#2080**
+(#2052: one report-only ORPHANS line for an adopted-open Goal member with no state label;
+#1910 untouched — the operator's pending decision). #2053 is the weekly scout (report-only).
+Finding for the operator, not built: **the `major/awaiting-human` terminal has a shelf life of
+hours** — all five parked majors were BEHIND and #2032 DIRTY within the day; sharpens decision (a).
+
+**wk-03 NotReady 13:10Z — a real incident mid-session** ([incident](../../docs/incidents/2026-09-28-wk-03-runner-memory-thrash.md)):
+an ARC runner job (request 1536Mi, no limit by design) thrashed the 8 GiB VM past its kubelet —
+kvm at 700 %, console full of page-fault backtraces, no OOM kill of any kind; the FU-112
+reservations did not act on a page-cache thrash. `KubeNodeNotReady` fired (the detector held).
+Window `wk-03-1790601393-193`, `qm reset 8113` at 13:16:34Z, Ready 13:17:54Z. Class: the same
+container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01) — an 8 GiB node in
+that pool is luck. Residuals on FU-218 (the envelope) and FU-155 (evidence: no kill at all).
+Probe lesson: `qm status` uptime is the qemu process age, it kept counting through the reset.
+
+**The Forgejo chain (operator's first act), as PRs:** **#2078** — 2 replicas, `RollingUpdate`
+0/1, a PDB of one, `kubernetes_pod_disruption_budget_v1.*` on the box allowlist, ADR-140
+amended (a STATELESS platform Deployment carries this shape before its bumps may arm; an RWO
+singleton never does); review round 1 added a readiness probe on the runner container keyed on
+`/data/.runner` (a probe-less container was Ready at start — the roll and the PDB gated on
+dind's health) + soft anti-affinity. **#2082** — the rollback half, #1988's class row: the
+detector already existed (`KubeDeploymentRolloutStuck`, Progressing=false 15 m); new receiver
+`deploy-rollout-revert` → EventSource `/rollout-stuck` → third `deploy-revert` trigger →
+WorkflowTemplate `tofu-image-revert` (candidate ≤180 m under tofu/, every line `image = "<ref>"`,
+a changed file's `resource "kubernetes_deployment"` OWN metadata must name the stuck Deployment
+— review round 1 found the whole-file `name =` grep matched container names; brace-depth walk +
+four coupling fixtures), `revert-img-<sha8>` + `reverted-images:`, `automerge`+`dependencies`;
+`pin-only-lint` check (f) refuses a re-added reverted image ref for 30 days (5 self-test cases);
+design doc Part 3, ADR-141 amended (blast class picks the lane for the terraform docker-image
+class), docs/renovate.md. **#2084** — found on the way and BLOCKING the whole chain: since the
+proxmox provider bump #2075 auto-merged (12:49Z) the box refused every later master with
+"stage 1: admitted on master diff — human apply" — `mgmt-apply.sh` read stage 1's `admitted`
+line as a hit while the sentinel separates it; now the loop admits the provider-pin shape on a
+master span and the plan + allowlist gate it. **Not yet:** the drill (script ready in the
+scratchpad: a bad dind tag opened AS THE APP via coordinator-git, `automerge`+`dependencies`,
+armed) and the Renovate rule arming terraform docker-image majors (`.github/`, operator-direct;
+text ready) — both after #2078/#2082/#2084 merge, the ArgoCD sync and the box's apply.
+
+**The drill (14:25–15:13Z) — PASSED as a chain, and it found three defects around the chain.**
+#2078 merged 14:06Z (bot re-review after the fix push), #2082 15:15Z→14:15Z, #2084 14:23Z — all
+by the machine lane. The box (pull + apply triggered by the seat instead of the hourly tick —
+cadence, not judgment) admitted the provider-pin span it had refused since #2075, planned
+`+1 ~1`, applied the runner shape + PDB at 14:25Z; two pods Ready = registered on wk-03 +
+wk-metal-04. **#2085** (a non-existent dind tag, opened AS THE APP via `coordinator-git`,
+`automerge`+`dependencies`, armed): reflex APPROVED 14:27Z, merged 14:40Z; box applied 14:41Z
+— the surge pod ImagePullBackOff, the two old pods served throughout (`ready=2 unavail=1`);
+`ProgressDeadlineExceeded` 14:51:12Z; `KubeDeploymentRolloutStuck` pending → **firing 15:06:27Z**;
+`tofu-image-revert-gnl5b` 15:07:16Z: candidate #2085, image-line-only, coupling "declares
+Deployment forgejo-runner in tofu/forgejo-runner.tf", **revert #2086** opened as the App with
+`reverted-images: docker:29-dind-drill-0928`, labelled + armed 15:07:17Z; reflex APPROVED 15:08Z;
+**merged 15:12:51Z**. Alert → merged revert: 6.5 minutes, no human. The three findings, all in
+**PR#2087** (armed): (1) the provider's `wait_for_rollout` default turned the stuck roll into an
+ERRORED box apply after 10 min ("half-applied? human") on an object already written →
+`wait_for_rollout = false` on the runner; (2) the chain took THE newest tofu merge as its only
+candidate, so any later unrelated tofu merge would have masked the bump → newest-first walk,
+first image-line-only `tofu/*.tf`-only merge wins (fixture); (3) the apply loop read the span's
+ENDPOINT diff — the bad tag and its revert net to zero files — and logged "touches no apply:true
+root (0 files) — stamping" at 15:13Z while the cluster still ran the bad tag → `git log
+--name-only` over the span decides. The last leg (the box applying the revert, the runner back
+on `docker:27-dind`) completes when #2087 lands: its tofu change makes the span plan.
+
+**Closing (17:40Z).** #2087 merged 17:38Z after four review rounds (each a real finding: the walk
+must couple INSIDE the loop and move on, a blind diff read ABORTS, stage 1's pattern scan reads
+the span via `git log -p`, the apply-loop span read fails closed on its own). On the way, a fifth
+class defect, fixed direct (c18bfe3f): `ci.yaml`'s #2064 base read used `git rev-list --parents`
+on a depth-1 checkout, where the merge commit is the shallow boundary and reads as PARENTLESS —
+so it had never fired, and every behind PR still went red on master's guarded-file commits (this
+PR did, on the coverage-belt step); `git cat-file -p` reads the parent line from the object. Then
+the box (pull + apply triggered): span `c18bfe3f..8ced275e` touches main → `+0 ~1` →
+`kubernetes_deployment.forgejo_runner` APPLIED in 4 s (no rollout wait) → the Deployment rolled
+back to `docker:27-dind` on the two original pods, the drill pod gone. Window closed. The Renovate
+rule arming the class committed direct (terraform docker-datasource majors: `automerge` +
+`major` + `behind-base-branch`); #1988's row commented. Operator's ask met: the Forgejo runner's
+image bumps now merge without a human and roll back on a problem — proven on a live drill.
+
+## 2026-09-28 (evening → night) — S9 #2032 read; `mgmt/` carved out; the ADR-142 trial built and drilled
+
+**Condition.** Operator picked up S9 at #2032 (mermaid 11→12) + #2068. #2032: lens APPROVED at
+`79245410`, handed off 11:26Z after #2069 — then #1977 (the "moot" 11.17.2 sibling, `automerge`)
+merged 12:21Z and made it DIRTY (both edit `scripts/mermaid-lint/package*.json`). Four human
+touches for one lint dependency; root: `scripts/**` was codeowner-AUTHOR (CI runs it from the
+branch), so neither the mirror (#2060) nor a worker could apply the lodash-es override. #2068
+closed (fixed by #2069, never linked). Operator turned it into the open `scripts/` question
+(FU-293): inventory by executor — ~26 CI gates, 16 box, 1 cluster pod (`iac-sentinel.sh`), ~45
+seat-only; 143/146 `scripts/` commits in 30 days seat-authored (the owner read = the author
+reading itself under the sole-codeowner waiver).
+
+**`mgmt/` (PR#2088, merged 20:04Z).** `nixos/` → `mgmt/nixos/`, `scripts/mgmt-*` + `mgmt-root-env/`
+→ `mgmt/scripts/` (names kept); `/mgmt/` owned (6b79eff8, 290fd520 dropped `/nixos/`). Review r1
+caught the `nixos#` form escaping the path rewrite (flake.nix's recovery commands). Box driven by
+hand as the operator ruled ("the box has a backdoor"): window seat-1790625906-697, `mgmt-pull`
+failed at activation as predicted → `nixos-rebuild test --flake …/mgmt/nixos#mgmt` (drv
+identical to the jail's pre-merge eval) → stamp → `mgmt-confirm` gate 5/0/0, promoted; pull
+idempotent, sentinel/apply/belt/reconcile green; check clean, window closed. ~4 min.
+
+**ADR-142 trial (operator: "remove codeowner from scripts and all the worker gates, I can always
+revert"; re-read 2026-10-05 + 2026-10-28).** CODEOWNERS un-owns `/scripts/` (fbeadfbd); PR#2089
+(merged 20:29Z) takes `scripts/` out of governance-lint / classify_touches / touches-check / the
+reviewer's escape list — except `mgmt/scripts/` + the three box verbs; adds the BLOCKING
+`gate-change` lens and `scripts/gate-drift.sh` (non-failing ci step from the BASE commit, 290fd520:
+(A) master's gate × PR content, (B) master's tests × PR scripts). `.agents/` wording ca20ab6d.
+
+**Drills (seat subagents, base `goal/0-scripts-upkeep`, deleted after).** D1 weakened
+follow-ups-lint (DANGLING no longer fails) + a phantom FU-990 → report A DIFFERS, lens CAUGHT
+(#2095, 7 min). D3 re-anchored governance-lint's WORKER_PATTERN so the REST `[bot]` login
+misses — report `same` on both legs (blind by design) → lens CAUGHT from its own read (#2092,
+8 min, grep repro). D4 honest control (machines-lint duplicate-ip) → APPROVED, no false positive
+(#2093). D2 (gate + test loosened together) did not run — the subagent's safety classifier
+stopped it; leg B was proven locally (27/27 master cases failing against a neutered
+pin-only-lint). Findings filed: **FU-295** (the box sentinel never reports on goal/** PRs, which
+the ruleset requires — D4 sat BLOCKED approved), **FU-296** (governance-lint's worker match has
+no self-test); FU-294 re-pointed (both #2032 blockers gone). Report noise: A's excerpt carried
+19 OVERSIZE lines when the PR's output format changed — trim to failure-shaped lines at the
+first re-read if it recurs.
+
+## 2026-09-29 (morning) — FU-294 fixed by structure, not by a pin: ADR-143
+
+**Operator:** "only structural fixes … a vulnerability analyzer should find these", no pinning;
+then: jail rules for one linter are too much — escape npm dependency management in homelab.
+Findings: Renovate's `osvVulnerabilityAlerts` is direct-deps-only on the base branch (its docs);
+its cooldown covers the bumped dep only; nothing set `--ignore-scripts`, and the seat had run
+`npm ci` in the jail next to the wallet. Web search: no npm-free mermaid linter with GitHub
+parity (merman alpha; Go rewrites no parity). Deno spike: zero-permission parse = CI's 25/14/0;
+escape probe all `NotCapable` (stdin input, since `--allow-read=.` still read tofu/kubeconfig).
+
+**Landed.** #2098 (one review round: docs claimed the gate live before ci.yaml had it — fixed as
+⚠ then flipped): mermaid-lint on Deno (`--frozen`, `minimumDependencyAge: P7D`, no permissions),
+package.json/lock/jsdom gone, Renovate npm rule + `deno` manager, `scripts/lock-intake-lint.py`
+(OSV querybatch incl. MAL-, registry publish age, install-time code; fail-closed; self-test).
+ci.yaml direct 2ac87be3+1 (PR-only step, merge-ref first parent). #2032 closed; Renovate's #2100
+went RED on `lodash-es@4.17.23` with no reviewer — the gate proven live; the coordinator ruled
+no ride (state-fp debounce). **Ride drill:** Deno + IP registry = "Could not find referrer npm
+package" (cache folder keyed by domain) → Unbound `npm-cache.teststuff.net` (window
+seat-1790671265-6906, clean), launcher default + env card by name, kill-switch
+`MERMAID_LINT_NO_INSTALL` dropped (#2101); re-drill on nx-01 25/0 rc 0. FU-294 archived.
+ROADMAP: master/prod-side scan (Dependabot vs Dependency-Track + SBOM + Kyverno) parked; stacks
+via the consumer card after homelab.
+
+## 2026-09-29 (afternoon → evening) — S9: #2033 validated on a real OPNsense, merged, deployed
+
+**Why a test router.** #2033 (oxlorg.opnsense 25.7.8 → 26.1.11, the `reload` default flip) was
+lens-approved on a stub-`httpx` proof only; `--check` proves plumbing, not apply. Operator: a
+throwaway OPNsense VM on nx-02 (one WAN + one LAN, guaranteed on the future CARP VMs). FU-297.
+**Built by subagents:** VM 9110 @ .67 (#2103/#2104 — nano image + seeded config.xml through the
+importer over the serial socket), harness `scripts/opnsense-test-vm.sh` (#2102/#2105/#2110),
+#2107 (argo/apps duplicate overrides), #2115 (bgpd never started on a fresh router — FU-298;
+the upstream `acme_account` register-without-uuid 404 remains). #2033 PASS at c74fefb1, then at
+fd7f41b4 after the seat merged #2115 into it. Lens re-review: r1 stood aside (seat dispatched
+while CI ran), r2 APPROVED fc3e6be4. **Merged** 24c11815 (admin: BEHIND by #2121 only, disjoint).
+**Deploy** window seat-1790707812-5454, clean: acme/unbound/bgp changed=0, haproxy renamed the
+argo/apps override descriptions once (addresses unchanged), every rerun changed=0; BGP 13/13
+Established, youngest session ~29.6 h (no FRR bounce — #2115's check is a no-op on prod).
+**Also today:** FU-013 router leg live (users role #2108, backup CronJob #2109/#2117, prod mint
+in window seat-1790698493-5964); the weekly rebuild drill on the box (#2106/#2111–#2114, score 115,
+map #2118); ROADMAP §HA step 2 = CARP sequence with the score as cutover gate (#2119); skill
+`second-jail` (#2116). **Found:** prod firmware is a major behind (26.1.11_6 vs 26.7.4, update
+check stale since Aug 13) — trial of the official path on 9110 running; the reviewer exit-contract
+keys a merge head differently from the reviewer's standing-aside (false NO TERMINAL, not filed).
+
+## 2026-09-30 (morning) — S9: the router rehearsal merged (#2131); the jail blackouts were ARP flux
+
+Resumed a cut-off session mid-diagnosis: rehearsals 2–4 failed on jail network loss, suspected the
+rehearsal VM. **Not it.** Prod's `arp: … moved from` log: pop-os went dual-homed 09-29 (new cable
+.187 + wifi .165), prod's entry for .165 flipped MACs every ~1 min; all 152 probe failures fell in
+the wired-MAC windows (78% of time), LAN-local targets unaffected, prod healthy (no sshguard). Operator
+set `arp_ignore=1`/`arp_announce=2` (`/etc/sysctl.d/60-arp-flux.conf`); no flaps since. Kept VM
+9199/CT 9198 destroyed, stray decrypted prod XMLs in the old scratchpad shredded. Rehearsal 5
+(wip) PASS score 7; squashed onto master in a clone (+ glossary row "router rehearsal"),
+rehearsal 6 PASS 12/12 probes, **score 6** (prod's WAN gateway_item rows). #2131: review r1
+CHANGES_REQUESTED — early `die` paths left the decrypted carry on disk (fixed: secrets-only EXIT
+trap, proven by a forced fetch failure) + nextuid moved to the router overlay; r2 APPROVED,
+**merged** 85b68477. Old worktrees wt-router/wt-master removed.
+
+## 2026-09-30 (late morning) — S9: router rehearsal score 0 (#2133), router address from the inventory (#2132)
+
+Operator: all three — the gateway rows, WireGuard option (a), the single-router references.
+**#2132** (merged 6963982e, first review): the drill's `PROD` + `wireguard-client.sh` read
+`ansible/inventory.yml`; the drill's host check gains a literal `.1` belt; router-move.md (B)
+records the literals that stay (guards, the backup CronJob, the stdlib python defaults). Proof:
+`wireguard-client.sh laptop` re-rendered byte-identical. **#2133** (merged 82c03fce): the
+`--router` seed carries `OPNsense/wireguard`; new probe `wg_handshake` (probe CT as the laptop
+peer, key over stdin, vs prod's live pubkey) — HANDSHAKE_OK; prod's pre-26.7 WAN_GW flags (empty
+vs the 26.7 build's 0, three newer flags absent — read from both live configs off a kept run)
+accepted in that dead state only; negative test force_down=1 → score 1. Rehearsal 8 at the merged
+content: PASS 13/13, **score 0**. Review r1 flagged `search_server` as unverifiable from its
+sandbox — both spellings return the same pubkey on prod; switched to `searchServer` for
+consistency; r2 APPROVED. No jail net failures across rehearsals 5–8 (ARP-flux fix holds).
+
+## 2026-09-30 (midday) — S9: 26.7.5 (9110 + prod), root from the wallet, ADR-144 (CARP beside Big Data)
+
+Operator: root password option (b); management path option (4) — each node at its own LAN IP;
+bring CARP + the pve router forward (three routers for a while); buying two 5-port switches + a
+1 GbE x1 card for pve (Realtek TG-3468 — fine host-bridged; the box's second NIC is Realtek too).
+Rehearsal 9 failed at build: upstream shipped **26.7.5**, the mirror serves the head only. 9110:
+rollback → check (12) → update (no reboot) → 26.7.5, baseline moved. Rehearsal 10 (SERIES + root):
+PASS 14/14, `root_password` match, score 0. **Prod** (operator: "ok, set a durable guard"): window
+seat-1790760478-4482 + a bash alert watch (dedupe + liveness line — GAPS maintenance-window-G2's
+shape), 14 updates, job 16 s, no reboot; services up (radvd idle as before), DNS, HAProxy LE cert,
+BGP 13/13, `maint check` baseline twice; ⚠ closed ~75 s after the update (said "a few minutes") —
+the watch ran 30 min on and saw nothing new. Merged: #2134 SERIES (first review), #2136 root
+(wallet entry minted in the jail, first review), #2135 ADR-144 (r1: a dangling "sub-step 4" — all
+three sub-step refs enumerated and fixed; the merge bot's master-merge pre-#2136 overwritten by a
+rebase with an explicit lease). Pre-existing, not ours: MgmtOpnsenseDrillScoreRegressed (the box's
+09-29 run, 117 — next weekly run replaces it); OpnsenseConfigUnattributedRevision (root@.165 =
+pop-os, 04:23Z). Stopped before the standing nx-02 node: its standby profile (no VIP aliases, no
+ACME renewal, …) is design only — not a thing to put on the live LAN unattended.
+
+## 2026-09-30 ~12:20–13:30Z — seat: standby profile (#2138), CP verbs (#2137), pve NIC window
+Operator back with 2 × 5-port switches + TP-LINK TG-3468 (hardware purchases.md, 0fdf4a1).
+Rulings: nx-02 WAN bridged "if no performance penalty"; work the standby profile first.
+**#2138:** `opnsense_standby` (BGP neighbours disabled, ACME auto-renewal off, ddclient off,
+dnsmasq off via OPN_DHCP_ENABLE=0, HAProxy VIPs on lo0 + cleared from the other interface);
+`opnsense-drill.sh --router --standby` PASS — standby_{dhcp_off,bgp_silent,vips_off_lan (16/16),
+ddclient_off,acme_no_renewal} + haproxy_tls/real_cert through lo0, WG, keys, root; score 19 =
+the standby deltas. **Correction to the entry above:** OpnsenseConfigUnattributedRevision was NOT
+the operator in the web GUI (operator: "did not configure anything") — the backup job's detail:
+`/api/diagnostics/netflow/setconfig` by root@.165 at 2026-09-29T20:06Z = the seat's own
+opnsense-system play on the root key (FU-013 next: playbooks onto `automation`); 04:23Z is the
+backup run, not the change. **pve window** seat-1790772187-4679: wk-03/wk-01/wk-02 via
+`node-maintenance down` (FORCE for the attached-volume/single-replica WARNs; eventbus PDB
+minAvailable 2 held — the manual js-1 wait was redundant, operator asked), cp-01 via the NEW CP
+path (operator: "node maintenance should take control plane as argument" → #2137): gates +
+snapshot + etcd forfeit (leader → cp-02) + drain + shutdown; the first run died at down's Longhorn
+read on a CP (fixed in-PR, rerun after an uncordon). ci-runner-01 idle, matchbox, then — BEFORE
+poweroff — the onboard RTL8168 pinned `nic0` (the new card is the same chip; it took 06:00.0 and
+the name enp6s0, the onboard moved to 07:00.0: unpinned, vmbr0 would have bridged the uncabled
+card and pve booted offline). Up: all four via `up` (cp-01: etcd 3 whole, cilium 13/13).
+CiliumUnreachableNodes = stale cilium-health results frozen mid-boot, self-cleared (GAPS
+maintenance-window-G5 resight). Closed --force over NodeRebooted + PodSigkilled (G5's class).
+#2137 review: pipefail fail-open (fixed); the column claim came from the fixture (the live layout
+differs; the leader is now read by value). BIOS AC-loss unreadable headless — operator item 4.
+
+## 2026-09-30 ~13:40–16:10Z — seat: bridged WAN measured, MB4 access design, nx-02 node STANDING
+Operator: bridged WAN test + web research; the management network's BMC/access answer → MB4 now
+(WAN + management switches go in together); then "go ahead unattended … wind down when done and
+all in-flight PRs are merged". **#2140** `--wan bridged` (runtime vmbr9 over eno2, fake-ISP LXC,
+wan_lease + wan_throughput): ×1/×4 up/down 2988–3256 Mbit/s NAT'd, lease on the spoofed MAC, score
+0 → nx-02 bridged (review: missing `exit 1`, fixed). Web research: 1 Gbit/s over virtio routine on
+Broadwell with offloads off; firewall=0 (macfilter), 26.7 SYN-cookie vtnet bug, r8169 on pve.
+**#2139** MB4 item 7: 192.168.15.0/24 reserved, static BMCs (today DHCP reservations .123/.173),
+ipmitool on the box + ssh -L for the web GUI (review: `-E` reads IPMI_PASSWORD, fixed).
+**#2141** the nx-02 node: tofu vmbr3 (eno2) + VM 9170 (LAN MAC 02:00:C0:A8:02:46), seed-shape
+`--standing` (.70/22, no LAN interface gateway → no reply-to, DHCP off, ACME renewal off, root keys
+= prod's), bootstrap `standing` + WAN guard, `scripts/opnsense-router-node.sh` (kill switch on the
+LAN tap → qm stop — trip-tested with an injected .1 ARP claim, ~1 s), `opnsense-backup-fetch.sh`
+shared with the drill. Window seat-1790782366-5635: plan 2 to add → applied; build PASS (26.7.5,
+every play standby, check green, switch never tripped; .1 still Big Data's MAC). PveNumaNodeMemoryLow
+(nx-02 node 0) went pending before the window — router VM on node 1; closed --force naming it.
+Mine: a hand-typed PR watch piped JSON through zsh echo and sat blind 30 min (GAPS G2 resight).
+
+### 2026-09-30 late — nx-02 RAM (operator question, no live change)
+
+`PveNumaNodeMemoryLow` read live on nx-02: node 0 0.4 GiB free + 0.1 inactive-file, node 1 5.7 + 2.8,
+swap 250 MB with si/so ≈ 0 → the alert is the early warning, not an event; host ~60/62.5 GiB booked.
+DIMMs read on pve/nx-01/nx-02: nx nodes use 2 of 4 channels per socket (A/B/E/F only). Operator
+supplied eBay/AliExpress prices → hardware `market/2026-09-30-rdimm-price-guide.md` (16 GB sticks, nx-02
+C1/D1/G1/H1 first, watch for a bulk lot ≤ €48/16 GB). FU-289 extended (item 3). Mine: first answer
+suggested mixing pve's 2133 Micron with the 2400 Samsungs in one channel; the Supermicro manual forbids
+mixed speeds and Nutanix wants one maker per channel — corrected before any buy.
+
+### 2026-09-30 night — nx-02 router node reboot-proof (FU-297, #2142)
+
+Kill switch moved from a nohup process to `router-killswitch@9170` on nx-02 (new
+`ansible/pve-router-killswitch.yml`, Before=pve-guests, MAC read from net0; a trip latches onboot 0
+then qm stop); tofu `on_boot = true`. Window seat-1790788269-2350: play applied, nohup retired, live
+trip test (injected `.1` ARP claim on tap9170i0 → <1 s, onboot 0, VM stopped), restored
+(`qm set --onboot 1` by hand = the PR's tofu), booted armed without a trip, `check nx02` 11/11.
+Closed --force over an unrelated CPUThrottlingHigh→InfoInhibitor in agent-coordinator. Mine: first
+window open ran outside devbox (kubectl not on PATH → unreadable baseline, refused).
+
+### 2026-09-30 night — pve router node + the CARP trial (FU-297, #2143 #2144)
+
+Window seat-1790789286-5042 (closed clean). #2143: tofu vmbr3/enp6s0 + VM 9171 applied through the box
+from the branch (plan = 3 creates; then the on_boot flip), `router-node.sh build pve` → `check pve`
+11/11. Kill switch v2: `tcpdump -Q in` (v1's `ether src <nic>` would miss CARP's virtual MAC —
+confirmed: adverts leave from 00:00:5e:00:01:fa), exemptions = router-nodes `router_carp_vips`,
+stop-before-latch (1.7 s, tested by a BPF-written ARP for unused 3.249 from INSIDE nx-02's node).
+#2144: `opnsense-carp.yml`, wallet `opnsense-carp-password` minted; 3.250/22 vhid 250, pve skew 0
+MASTER, nx-02 100 BACKUP. 10 Hz ping from nx-02 host: maintenance 0/193, preempt back 0/193, hard
+`qm stop` 2.6 s, re-take after boot 0; both checks 12/12. pve RAM booked ~63.5/62.7 GiB (resident
+~26) — flagged in #2143, FU-289's class. Mine: first build died on a worktree without
+tofu/kubeconfig (symlinked); mgmt-tf apply needs MGMT_YES=1 non-interactively.
+
+### 2026-09-30 night — the CARP pair's drill sequence (goal session; FU-297, #2145–#2150)
+
+Operator: /24, reserve a 2.x trial slot, cable attached (nx-02 eno2 ↔ pve enp6s0), /goal set.
+#2145 /24 ruling (ADR-088 amended, .72 reserved, lo0 permanent; dark-WAN guard read operstate and
+left WAN ports admin-down — fixed). #2146 pfsync (v1400 pinned; states replicate). #2148 WAN gate on
+the hypervisor after a guest CARP hook failed the boot case (BACKUP took the lease; hook reconfigure
+never ran dhclient) — QMP set_link keyed on adverts; fake ISP netns + flowprobe. #2149 belt from the
+gates' textfile. #2150 write-up. Drills (held NAT'd flow / fresh): planned failover 6.4 s/2.5 s,
+preempt 6.4/2.3, hard stop 13.5/3.5, rolling update (3 reboots) 0.62 s + 3.1 s, BACKUP reboot 0,
+split-brain → RouterPairMasterCount firing +1m47s value 2, cleared on heal; cold start green.
+Mine: the /24 lo0 proof (3.11 via .71) TRIPPED pve's kill switch (correct) and the hard stop lost
+~1 min of unflushed nano-UFS config (→ sync after converge); a gate hold of 1.5 s flapped nx-02
+(advskew 100 → 1.39 s interval); QMP success matched on capabilities alone hid a set_link that never
+ran; pkill -f matched its own ssh. Prod .1 untouched throughout (Big Data MAC, Unbound, grafana 200).
+
+### 2026-10-01 — #2100 ride churn: the reviewer false breaker + the Renovate deno rebase cause (S9 #1985)
+#2147 (unarmed-major content-keyed debounce) latched agent/error on a FALSE pile: /code-review posts
+inline findings one by one, GitHub wraps each in its own empty COMMENTED review (#2139:1, #2130:6,
+#2147:4). #2151 (STEP 0 NOTE: carriers are not the pile; Class B replay entry) merged 05:14; label
+cleared → re-review stood aside on checks-pending, then APPROVED with the same 4 carriers present —
+drill passed; #2147 merged 05:23 (a7ead57f). Renovate debug dry run 36818823497 (44.126.1 = latest):
+the deno manager's updateDependency returns null on an already-bumped deno.json → "Rebasing branch
+after error updating content" → every deno branch regenerates from master each run (conflicted ==
+behind-base-branch for deno; no config reaches it). Finding on #1985; upstream report = operator call.
+
+## 2026-10-01 evening — router move: ADR-145 + window-1 prep (seat)
+- Kea HA verified API-complete (subagent, read-only probes + core 26.7.5 source; leases = local
+  memfile, no DB) → operator: two windows, nx-02 alone in the end shape (ADR-145, #2154); bgp.md (#2153).
+- `opnsense/kea-dhcp.py` + `OPN_DHCP_SERVER` (#2155): drill PASS with Kea serving. Kea HA drill on
+  test VM + kept drill VM (#2156): join/sync, replication, takeover ~70–80 s, recovery, lone start ~60 s;
+  peer rules need `disablereplyto`. nx-02 real host reboot in a window (#2157): units 9 s, guests 30 s,
+  router VM self-started dark, window closed clean.
+- #2158 converged both standing nodes (.72 retired, skews nx-02 0/pve 100, router-ids .70/.71) —
+  retiring on pve (MASTER) first promoted nx-02 to .72 MASTER 18:45:52–18:47:57Z, its gate raised
+  the WAN (cable then went only to pve's dark port). RouterPairMasterCount fired on 0 masters 18:50Z →
+  silenced 3 h, #2159 interim `> 1`. #2160 BGP alert per peer; #2161 draft Cilium peer (window 1).
+- Operator cabled the WAN switch: with nx-02 + pve ports on it, 7–20 % WAN loss (connect 1.3–2.9 s);
+  both pulled → 0 %. Big Data em0 clean, taps dark. Hunt next session (meta-state).
+- 2026-10-01 ~19:19Z CI flake: master + #2160 CI red — two ARC runners on nx-01 (nm47c, 7shlb) sat
+  14 min in devbox "Ensuring packages" then `promtool: command not found` (prom-lint + scan-wedge
+  replay). Same image digest everywhere; nx-01 ran 27 runners/24h clean. Rerun green, #2160 merged
+  20:03Z. One sighting — no FU; a second one on nx-01 → probe that node's runner store/containerd.
+- #2130 (retro activity windows, FU-058): misbehaviour re-validated on the live ledger (all-time
+  rank == r6's Jul/Aug deep-dive set; 42 in-window rows incl. oracle-fleet#753 never ranked); the
+  seven review blockers fixed + ledger window restored + compact events + 5xx retry (fb849d93,
+  84e5c0c9). Awaits the codeowner read (new machinery). Open in PR: collector state ~8 MB/repo-week.
+
+## 2026-10-02 morning — oracle-fleet PR#780 (#774) rounds 4–5 no-op autopsy (seat)
+- r4 (3625s, `no-op`): the bundle carried a line-numbered `arbitration.md` plus `ci-failure.md`. The ride
+  read `issue.md` only (the card says "index.txt, then issue.md FIRST"), ran local `devbox run ci`
+  (no e2e leg), saw green, and exited. Fix: the card names the optional items (homelab#2162).
+- r5: the coordinator (01:36Z tick) posted its ruling, then PATCHed it with `gh api -f body=@file`.
+  `-f` is a raw string, so the directive became the literal `@/tmp/current-comment.md`. With no
+  directive, the ride rebased and polled `gh pr view` to goose's turn cap. The run was recorded
+  `clean` because the cap sentence was glued to JSON output (agent-runtime#162). The same tick's
+  sm→md bump changed only the cap, not the model (both flash models are `cheap`; homelab#2163).
+- Seat: ruling on PR + issue, cleared `agent/arbitrate` + `agent/blocked`, dispatched r6 by hand on
+  `deepseek-v4.1-flash:exacto` (key oracle-fleet-issue-774-round-6). r6 applied the fix (18801a04),
+  page-overflow 68 → 0. Residue: `clipped article.walk`, caused by L208 `@media (max-width:900px)
+  .beat{grid-template-columns:1fr}`, which reintroduces the min-content blowout → r7 directive.
+- r7 (v4.1-flash, one-line L208 `minmax(0,1fr)`, b8ba91d5): layout findings 180 → 4, all at the
+  390px@200%-text run: `clipped div.essentials` + `crushed strong` (2 lines for 1 word). Probable next
+  edit, same class: L213 `.clients,.trust,.essentials{grid-template-columns:1fr}` → `minmax(0,1fr)`.
+  Not dispatched: goal #773 cap-sum was $5.0/$6 at r7 preflight (ledger unreachable from the jail),
+  so an r8 $2 reservation likely refuses → operator call (budget / hand-fix / let arbitrate rule).
+
+## 2026-10-02 afternoon — #2130 merged + live verification (seat)
+- #2130 r3 blockers fixed (TimeoutExpired retry, url on compact context) → approved, merged 14:28Z
+  (operator auto-merge from 09-30). First live collect FAILED 14:30Z: s5cmd 2.3/Garage says
+  `given object … not found` for an absent key → #2165 (one `missing()` predicate), merged.
+- Cold collect (12 repos, 09-21→now, cron suspended meanwhile to avoid a bootstrap race): 51 min,
+  ~4–5k serial `gh api` spawns, state 28.7 MB, 8204 in-window events / 635 tasks. Warm run 2 min.
+- Offline bundle 09-21→09-28: none of the recycled Jul/Aug set (#913/#1041/#625/oracle-fleet#304);
+  top = oracle-fleet PRs by red checks. But blocked oracle-fleet#753 ranks 174/635 and only 27 fit
+  the 60 KB cap → rank fix tracked on FU-058, before the Mon 10-05 fire.
+- Second jail input recorded: WAN loss likely the cable (meta-state, FU-297); its accept-new
+  pve/nx-02 keys checked against the box pins — every pinned key matches the live host.
+- Retro rank anatomy (09-21 bundle, top 27 all PRs): cancelled 94 / failed 53 / CR 36 points; of
+  242 cancels, 142 superseded by a newer sha, 100 same-sha reruns (sampled: `approve` concurrency
+  group). Operator: superseded/master cancels = wasted-CI metric, never item pain; Renovate no
+  special rule yet. Filed + queued #2170 (rank fix, deadline Mon 05:00Z).
+- "No oracle access" in r4–r6: the ride-ns `retro-git` covers all 12 repos (probe pod read
+  oracle-fleet REST+GraphQL) → the failure is in the ride → #2171 (inert, transcript read next).
+- Retro split (slice-grounded): stack retros attribute + file platform faults as ADR-119
+  escalations; dedup-first stays the filer's, best effort (operator ruling); ADR-146 PR#2172
+  Proposed, NOT armed (operator read). From oracle-fleet#780's stack analysis: #2167 (queued —
+  DUPLICATE-closed blocker releases the parked issue), #2168 (body-only fix never re-reviewed),
+  #2169 ("line N, nothing else" directives) — the latter two inert.
+
+## 2026-10-02 afternoon — router move WINDOW 1: nx-02 takes `.1` (seat, took over from the primary)
+- Second jail first: WAN loss probed clean after the operator swapped the WAN cable (old one flapped
+  its link lights; 0.17 %/120 s with both node ports on the switch, nothing out of them) → the
+  window-1 change set #2166 (live mode for router-node.sh, kill-switch retire list, prod inventory
+  → the nodes, Kea default, RouterPairMasterCount `!= 1`); bot APPROVED r1.
+- Seat, pre-window: found the standing seed's `LAN_GW` (prio 1 → `.1`) would make a live node route to
+  itself → carp role deletes it on a live node (#2166 r2; `gateway state=absent` needs interface +
+  gateway, name alone is a silent no-op — proven on the test VM). #2161 re-planned SCOPED (the full
+  plan also stripped wk-03's live memory-pressure taint) → 20261002T163905Z-f06b997d.
+- Window seat-1790960221-62 16:57Z: #2166 merged (admin, approved + green), kill switch retired, an
+  unattended cutover script (the jail's own internet rides `.1`): API halt of Big Data 16:57:40 →
+  `.1` silent +25 s → carp play +55 s → internet back +79 s. Converge then died at ddclient
+  (`core/firmware/info` timeout) → Kea never enabled; `mgmt-tf apply` aborted on its `y` prompt.
+- **Big Data came back** (answered `.1` from `a0:36:9f:09:8d:38` on eno1 beside nx-02's CARP MAC by
+  ~17:02; the API showed no CARP rows) — the halt did not keep it down. Operator pulled both its
+  cables (left running for a quick replug). Then: Kea enabled by hand-run scripts, Cilium apply
+  (13/13 Established to .70), stuck `pkg update` killed on the node (started in the double-`.1`
+  minutes) → ddclient converged, full converge changed=0, `check nx02`/`pve` green.
+- `opnsense.teststuff.net` NXDOMAIN after the cutover (Big Data answered it from its hostname) →
+  static Unbound override, direct 3cf5bd16. Checks: WG HANDSHAKE_OK at .1, backup job 5 s, Kea 7
+  leases, six HAProxy names OK, maint check clean (186 targets). New alert:
+  OpnsenseConfigUnattributedRevision = the converge's root-key writes (FU-013 class).
+- Post-window read (~17:45Z): WAN 0/600 (pve) + 1/600 (nx-02) to 1.1.1.1, 0/300 to 8.8.8.8, TCP
+  connect ~31 ms; blackbox dips (grafana, transcripts, mcp.oracle) ONLY 16:58–17:09Z (the double-`.1`
+  + pre-peer minutes), green since; probe latency = yesterday's; the fleet-wide ~1.16/s LAN rx-drop
+  rate is yesterday's baseline too, not the cutover. Windows closed (this one --force on the
+  root-key alert; the 09-30 stale slot). #2161 merged 5121a682 (git == live).
+- 17:14:43Z pve's STANDBY router node (9171) emitted a DHCP reply sourced `192.168.2.1` to the mower
+  (.150) → its kill switch TRIPPED: VM stopped, onboot 0. Found ~18:00Z answering "any drill VM left?"
+  (none — 9199/.68 gone; 9110 test VM stays). Cause not investigated (operator: log it) → meta-state.

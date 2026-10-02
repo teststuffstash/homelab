@@ -14,7 +14,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # 2026-09-13 (ADR-129/-131, FU-012): main's STATE MOVED to the management box, with the
 # dangerous creds — the jail's copy is a frozen backup. A local plan here would plan against a
 # stale state (or, with no state file, plan to CREATE everything it already owns — tofu-state.md).
-# The human path is scripts/mgmt-tf.sh (`devbox run mgmt-tf -- plan`), which runs tofu ON the
+# The human path is mgmt/scripts/mgmt-tf.sh (`devbox run mgmt-tf -- plan`), which runs tofu ON the
 # box from a committed ref. Recovery only: TOFU_MAIN_LOCAL_STATE=1 after copying the state back.
 if [ "${TOFU_MAIN_LOCAL_STATE:-0}" != 1 ]; then
   echo "tf.sh: main's state lives on the management box — use: devbox run mgmt-tf -- $*" >&2

@@ -9,6 +9,6 @@ OUT   [circles] goal #29: CHECKPOINT due (members 1 undispositioned; store 6 tot
 OUT GACTED <none>
 OUT UNITS goal-checkpoint|circles|issue-29 
 OUT THEMES circles:issue-29:themes=agents/coordinator:301+302
-OUT ORPHANS <none>
+OUT ORPHANS [circles] ⏸ goal #29: adopted-open member(s) #301 carry NO agent/* state label — counted by the completion predicate (assembly held) but with no waker of their own (dispatch reads agent/queued only, ADR-122 (2); trigger (c) sees undispositioned only). Visibility only, nothing written: a human queues (agent/queued) or rules it deferred on the store (homelab#2052). 
 OUT REACHED: end
 RC 0

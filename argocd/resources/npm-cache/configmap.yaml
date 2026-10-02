@@ -1,0 +1,100 @@
+# nginx as a read-only PULL-THROUGH cache for the npm registry (registry.npmjs.org) — FU-294.
+# Agent-worker rides set NPM_CONFIG_REGISTRY to this proxy; the first miss fetches upstream and
+# caches to the Longhorn PVC, every run after is LAN-speed. Bodies pass through BYTE-FOR-BYTE — no
+# sub_filter, unlike pypi-cache: packuments keep their canonical
+# `dist.tarball: https://registry.npmjs.org/…` URLs, and npm's own `replace-registry-host`
+# (default `npmjs`) swaps that host for the configured registry at FETCH time. So tarballs still
+# come through here, while a package-lock.json written by a ride records the canonical
+# registry.npmjs.org `resolved` URLs — no LAN-address lock poisoning (the uv.lock lesson,
+# docs/patterns/python-stack.md §caches). Measured with npm 10.9.8 against a logging proxy
+# (2026-09-28): `npm install` + `npm ci` fetched packuments AND tarballs via the proxy, and the
+# lock's `resolved` stayed https://registry.npmjs.org/….
+#
+# Two locations:
+#   tarballs  `/<pkg>/-/<file>.tgz`, `/@scope/<pkg>/-/<file>.tgz` → immutable, long TTL
+#   everything else (packuments `/<pkg>`, `/@scope%2f<pkg>`, `/-/ping`) → short TTL. The cache key
+#   carries Accept: npm asks for the abbreviated `application/vnd.npm.install-v1+json` document on
+#   some paths and the full `application/json` one on others — one key would serve the wrong shape.
+# GET/HEAD only: a publish (PUT) or audit (POST) is refused here, never forwarded.
+#
+# ⚠ MAINTENANCE CONTRACT (issue #519): deployment.yaml mounts this file via subPath, so kubelet never
+# live-refreshes it — only a new pod spec rolls. Editing this file requires recomputing the
+# Deployment's `checksum/config` annotation in the SAME commit (`sha256sum
+# argocd/resources/npm-cache/configmap.yaml`), else the old config keeps running with git and the
+# cluster both green (the #500 inert-fix failure mode).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: npm-cache-nginx
+  namespace: npm-cache
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      # tarballs — immutable (a published version can never be re-published). Big cache, long retention.
+      proxy_cache_path /var/cache/nginx/npm_tarballs levels=1:2 keys_zone=npm_tarballs:50m
+                       max_size=8g inactive=30d use_temp_path=off;
+      # packuments — change on every publish. Small cache, short retention.
+      proxy_cache_path /var/cache/nginx/npm_meta levels=1:2 keys_zone=npm_meta:10m
+                       max_size=1g inactive=1h use_temp_path=off;
+      proxy_temp_path /tmp/proxy_temp;
+      access_log off;
+      # The upstream publishes AAAA records but the pod net is IPv4-only — runtime resolver + ipv6=off
+      # (same shape as pypi-cache / nix-cache); valid=30s re-resolves per-TTL.
+      resolver 10.96.0.10 valid=30s ipv6=off;
+      server {
+        listen 8080;
+        # readiness — cheap, no upstream dependency.
+        location = /healthz { return 200 "ok\n"; }
+
+        # Tarballs. `$npm_upstream` with NO URI part → nginx forwards the request URI exactly as the
+        # client sent it (the %2f in a scoped packument path survives).
+        location ~ ^/(@[^/]+/)?[^/@]+/-/[^/]+\.tgz$ {
+          limit_except GET HEAD { deny all; }
+          set $npm_upstream https://registry.npmjs.org;
+          proxy_pass $npm_upstream;                    # variable → runtime-resolved via resolver above
+          proxy_set_header Host registry.npmjs.org;
+          proxy_ssl_server_name on;
+          proxy_ssl_name registry.npmjs.org;           # explicit — variable proxy_pass must not lose SNI
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_cache npm_tarballs;
+          proxy_cache_key "$request_uri";
+          # The CDN front sets cookies/Vary; a Set-Cookie response is never cached by default.
+          proxy_ignore_headers Set-Cookie Vary Cache-Control Expires;
+          proxy_hide_header Set-Cookie;
+          proxy_cache_valid 200 30d;                   # immutable artifacts — long TTL
+          proxy_cache_valid 404 1m;                    # don't pin 404s
+          proxy_cache_lock on;                         # collapse concurrent identical pulls
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+          proxy_max_temp_file_size 4096m;
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+
+        # Packuments + the rest of the read API.
+        location / {
+          limit_except GET HEAD { deny all; }
+          set $npm_upstream https://registry.npmjs.org;
+          proxy_pass $npm_upstream;
+          proxy_set_header Host registry.npmjs.org;
+          proxy_ssl_server_name on;
+          proxy_ssl_name registry.npmjs.org;
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+          proxy_set_header Accept-Encoding "";         # one (identity) variant per key
+
+          proxy_cache npm_meta;
+          proxy_cache_key "$request_uri|$http_accept"; # abbreviated vs full packument — see header
+          proxy_ignore_headers Set-Cookie Vary Cache-Control Expires;
+          proxy_hide_header Set-Cookie;
+          proxy_cache_valid 200 5m;                    # packuments change on publish — short TTL
+          proxy_cache_valid 404 1m;                    # don't pin 404s
+          proxy_cache_lock on;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+      }
+    }

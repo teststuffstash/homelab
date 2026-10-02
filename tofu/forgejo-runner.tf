@@ -1,9 +1,15 @@
 # Forgejo Actions runner (act_runner) — self-hosted CI. SLSA Build L2 / Phase-1 (docs/slsa.md):
 # a hosted (not-a-laptop) build engine; cosign-signed provenance + SBOM come next. Placement is
-# UNCONSTRAINED since 2026-09-20 (see the pod spec) — one idle fallback runner does not need a
+# UNCONSTRAINED since 2026-09-20 (see the pod spec) — an idle fallback runner does not need a
 # tier. A DinD sidecar gives job containers a Docker daemon (Talos has no host Docker socket);
 # that needs a privileged pod, so the namespace is opted up to PodSecurity=privileged (same as
 # monitoring).
+#
+# ROLLS WITH NO DOWNTIME since 2026-09-28 (ADR-140 as amended): two replicas, RollingUpdate with
+# zero unavailable, and a PodDisruptionBudget of one — so an image bump Renovate lands on this
+# Deployment (the docker:dind tag, homelab#2037's class) is a roll the management box may apply
+# unattended, and a node drain never empties the runner pool. Each pod self-registers under its
+# own name (`k8s-<pod>`), so two replicas are two runners in Forgejo, not a double registration.
 #
 # ⚠ Two-phase bootstrap (Actions must be ENABLED — tofu/forgejo.tf — and applied first):
 #   1. Forgejo Actions are on in argocd/platform/forgejo.yaml (gitea.config.actions.ENABLED)
@@ -73,10 +79,31 @@ resource "kubernetes_deployment" "forgejo_runner" {
     name      = "forgejo-runner"
     namespace = kubernetes_namespace.forgejo_runner.metadata[0].name
   }
+  # The APPLY does not wait for the roll (2026-09-28, the tofu-image-revert drill #2085): the
+  # provider's default waits up to 10 min for the new ReplicaSet to become Ready, so a bad image
+  # tag turned the management box's apply into "apply errored — half-applied? human" — an
+  # errored apply and a refusal on a change the cluster had already taken (the surge pod sat in
+  # ImagePullBackOff while the two old pods served). In this lane the roll is judged by
+  # `KubeDeploymentRolloutStuck` + the `tofu-image-revert` chain (ADR-141 as amended), not by the
+  # apply: the box writes the object, returns, stamps; a stuck roll is the ALERT's to catch.
+  wait_for_rollout = false
   spec {
-    replicas = 1
+    # Two replicas + zero-unavailable rollout + the PDB below = the shape a STATELESS platform
+    # Deployment must have before its image bumps may arm (ADR-140 as amended, 2026-09-28). The
+    # old `replicas = 1` + `Recreate` pair meant every image bump was a runner outage — the reason
+    # #2037 (docker:27-dind → 29-dind) sat on the human lane. Registration is per pod (emptyDir,
+    # name = pod hostname), so a surge pod registers as a NEW runner; the one it replaces goes
+    # offline in Forgejo's list — stale offline records are a later API sweep, not a correctness
+    # problem (Forgejo schedules only on online runners).
+    replicas = 2
     selector { match_labels = { app = "forgejo-runner" } }
-    strategy { type = "Recreate" } # single runner; don't double-register during rollout
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+        max_surge       = "1"
+      }
+    }
     template {
       metadata { labels = { app = "forgejo-runner" } }
       spec {
@@ -93,11 +120,25 @@ resource "kubernetes_deployment" "forgejo_runner" {
           key      = "homelab.io/ephemeral"
           operator = "Exists"
         }
+        # Two replicas on two nodes when the scheduler can (soft): the PDB serializes a graceful
+        # drain either way, this only keeps an unplanned single-node failure from taking the
+        # whole pool — a preference, never a constraint (a one-node-left cluster still schedules).
+        affinity {
+          pod_anti_affinity {
+            preferred_during_scheduling_ignored_during_execution {
+              weight = 100
+              pod_affinity_term {
+                topology_key = "kubernetes.io/hostname"
+                label_selector { match_labels = { app = "forgejo-runner" } }
+              }
+            }
+          }
+        }
 
         # --- DinD: the Docker daemon job containers run on. TLS off → tcp on localhost. ---
         container {
           name  = "dind"
-          image = "docker:27-dind"
+          image = "docker:29-dind"
           security_context { privileged = true }
           env {
             name  = "DOCKER_TLS_CERTDIR"
@@ -175,6 +216,17 @@ resource "kubernetes_deployment" "forgejo_runner" {
             name       = "runner-data"
             mount_path = "/data"
           }
+          # Ready = REGISTERED, not merely running (review finding on PR#2078): a probe-less
+          # container counts Ready the moment it starts, so the roll's `max_unavailable 0` and the
+          # PDB's `min_available 1` would both have gated on dind's health while the runner was
+          # still waiting for dind / registering. `.runner` is what `forgejo-runner register`
+          # writes just before the script execs the daemon — the real "this pod can take a job"
+          # signal this Deployment has.
+          readiness_probe {
+            exec { command = ["test", "-f", "/data/.runner"] }
+            initial_delay_seconds = 5
+            period_seconds        = 5
+          }
           resources { # FU-082: the daemon itself is light (~50Mi); requests-only, no throttle cap.
             requests = { cpu = "50m", memory = "128Mi" }
           }
@@ -195,6 +247,22 @@ resource "kubernetes_deployment" "forgejo_runner" {
   # left to depend on. The runner registers against a live Forgejo; if it starts first it retries.
 }
 
+# "May I lose a runner now?" lives with the service (ADR-140): a drain may take one pod, never
+# both. With `replicas = 2` and `min_available = 1` a single-node maintenance window
+# (scripts/node-maintenance.sh) evicts one runner and waits for its replacement to be Ready
+# before the second could go; a budget already at 0 makes the drain refuse up front. The box
+# applies this address unattended (policy/mgmt/plan-input.yaml `apply_addresses.main`).
+resource "kubernetes_pod_disruption_budget_v1" "forgejo_runner" {
+  metadata {
+    name      = "forgejo-runner"
+    namespace = kubernetes_namespace.forgejo_runner.metadata[0].name
+  }
+  spec {
+    min_available = "1"
+    selector { match_labels = { app = "forgejo-runner" } }
+  }
+}
+
 output "forgejo_runner" {
-  value = "act_runner in ns forgejo-runner, unpinned (any schedulable node); verify: Forgejo → Admin → Actions → Runners"
+  value = "act_runner ×2 in ns forgejo-runner, unpinned (any schedulable node), RollingUpdate + PDB minAvailable 1; verify: Forgejo → Admin → Actions → Runners"
 }

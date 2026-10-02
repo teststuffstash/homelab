@@ -346,7 +346,7 @@ def collect_workflow_runs(lines):
         "# TYPE github_ci_job_duration_seconds gauge",
         "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job, runner_pool).",
         "# TYPE github_ci_job_completed_timestamp gauge",
-        "# HELP github_ci_job_completed_timestamp Completion epoch of each finished job, with the runner that ran it (runner_name = the ARC runner POD name) and the job's conclusion — the rollout's ARC exercise evidence joins it to kube_pod_info's node (scripts/mgmt-rollout-evidence.sh, FU-273). Same series budget as the timings: one per job in the window.",
+        "# HELP github_ci_job_completed_timestamp Completion epoch of each finished job, with the runner that ran it (runner_name = the ARC runner POD name) and the job's conclusion — the rollout's ARC exercise evidence joins it to kube_pod_info's node (mgmt/scripts/mgmt-rollout-evidence.sh, FU-273). Same series budget as the timings: one per job in the window.",
         "# TYPE github_ci_runner_busy_jobs gauge",
         "# HELP github_ci_runner_busy_jobs In-progress CI jobs per runner pool at poll time (runs-on labels via the in-flight /jobs fetch). Capacity: proxmox-vm=2 slots (tofu/ci-runner.tf), arc maxRunners=4 (argocd/platform/arc-runners.yaml). arc/proxmox-vm always emit (0 is a reading); other pools only while busy.",
     ]
@@ -1977,7 +1977,7 @@ def _mgmt_status_of(sha):
 
 def collect_mgmt_apply(lines):
     """FU-252 — the management box refuses an apply by posting a COMMIT STATUS on master
-    (`scripts/mgmt-apply.sh` → `mgmt_post_status`), and until this collector nothing watched it:
+    (`mgmt/scripts/mgmt-apply.sh` → `mgmt_post_status`), and until this collector nothing watched it:
     no `mgmt_*` series exists, nothing scrapes 192.168.2.53, and a commit STATUS is not a
     check-run, so `/commits/<sha>/check-runs` reads green while master carries a failure.
 

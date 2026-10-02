@@ -1,0 +1,33 @@
+{
+  "number": 31,
+  "headRefOid": "76d5a0f3bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "ci",
+      "conclusion": "",
+      "startedAt": ""
+    },
+    {
+      "name": "approve / approve",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-09-30T17:27:18Z"
+    },
+    {
+      "context": "renovate/stability-days",
+      "state": "SUCCESS",
+      "startedAt": "2026-09-30T17:27:21Z"
+    }
+  ],
+  "reviews": [],
+  "commits": [],
+  "comments": [
+    {
+      "body": "🤖 `state-fp:unarmed-major:054a9ba034fd` — deterministic scan dispatching a `unarmed-major` unit at 2026-09-30T12:04:10Z.",
+      "createdAt": "2026-09-30T12:04:10Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    }
+  ]
+}

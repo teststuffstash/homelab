@@ -3,7 +3,9 @@
 # THE CONTRACT: retro-argo.yaml's push belt (~:414-444) pushes the
 # retro_report_last_success_timestamp metric to the pushgateway, retries once on failure,
 # and on final failure writes a marker file, commits it, pushes it, and amends the PR body
-# with a ⚠ warning. A belt whose own failure is a TTL'd log line is not a belt (FU-108 class).
+# with a ⚠ warning — appended to the SAME $PR_BODY the PR was opened with (one body, so the
+# amendment can never drop text the create path carries; homelab#2130 review).
+# A belt whose own failure is a TTL'd log line is not a belt (FU-108 class).
 #
 # Rows: `push-ok` (first curl succeeds — the clean path) · `push-retry-ok` (first curl fails,
 # retry succeeds — the retry leg is real) · `push-fails` (both curls fail — the full failure
@@ -22,5 +24,6 @@ env:
   - BR=retro/2026-08-11-oracle-r3
   - GH_TOKEN=stub-token
   - DEAD_NOTE=
+  - PR_BODY=stub-pr-body
   - DATE_TS=1723400000
 rows: rows.psv

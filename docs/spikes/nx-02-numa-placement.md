@@ -146,6 +146,17 @@ Two consequences the original write-up did not draw:
   disk carries it — a DRAM-less SATA SSD still serves random 4k reads at ~100× the HDD's rate),
   or nowhere. The 256 GB Micron has 120 MB of VG free, so an NVMe swap would be a thin LV inside
   the VM pool — not an option.
+  **Done 2026-09-27 (unattended window):** the SA400 was partitioned like the WD (BIOS-boot, 1 G
+  ESP, LVM), joined `pve`, the empty `local-lvm` thin pool dropped and root+swap `pvmove`d online
+  (104 G, 18 min), the WD left the VG, GRUB installed on both disks, `local-lvm` recreated as a
+  700 G thin pool on the SSD. **The reboot did not come back on its own:** the SAS3008's legacy
+  option ROM caps INT13 drives at **1** (`Maximum INT 13 Devices for this Adapter`), so the BIOS
+  offered only the WD, whose GRUB could not see the SSD's volume group (`grub rescue>`). Raised to
+  2 in the LSI utility over SOL, the SSD ranked first in `Hard Disk Drive BBS Priorities`, host up
+  from the SSD 20:58Z; swap is `/dev/pve/swap` on `sdb3`, 0 B used. Recipe, key-mapping traps and
+  the UEFI alternative are in the private hardware register (`hardware/docs/nx-6035-g5.md`).
+  wk-04's fresh start placed **16.02 / 16.02 GiB** again. **2026-09-28: the WD was pulled** (operator) —
+  the SA400 is the only INT13 disk, so the BBS-priority residual is gone; the HBA cap stays at 2.
 
 Two workers instead of one is not justified by NUMA: the per-socket capacity math is identical
 (16 GiB of worker + one 12 GiB guest per socket either way), the SN530 passes through to one VM

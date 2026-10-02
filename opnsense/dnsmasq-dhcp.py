@@ -19,6 +19,16 @@ Services > ISC DHCPv4 > [LAN] > Enable in the OPNsense UI (one-time manual step)
 import base64, json, os, ssl, sys, urllib.request
 
 HOST = os.environ.get("OPN_HOST", "192.168.2.1")
+# OPN_DHCP_ENABLE=0: the STANDBY profile (docs/router-move.md) — the config converges, the
+# server stays off, so a node standing on the real LAN never answers prod's clients.
+ENABLE = os.environ.get("OPN_DHCP_ENABLE", "1")
+# OPN_DHCP_SERVER: which server answers on this box — kea (the router since window 1, ADR-145;
+# opnsense/kea-dhcp.py) or dnsmasq (Big Data, the fallback — run it with OPN_DHCP_SERVER=dnsmasq).
+# The one home of the choice: kea-dhcp.py reads it from here.
+# The other server converges OFF, so two never bind :67 (the drill runs every opnsense/*.py).
+SERVER = os.environ.get("OPN_DHCP_SERVER", "kea")
+if SERVER not in ("dnsmasq", "kea"):
+    sys.exit("OPN_DHCP_SERVER must be dnsmasq or kea")
 KEY = os.environ["OPN_API_KEY"]
 SEC = os.environ["OPN_API_SECRET"]
 BASE = f"https://{HOST}/api/dnsmasq"
@@ -118,6 +128,20 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "tuya-gaas", "hwaddr": "38:a5:c9:39:14:e0", "ip": "192.168.2.243"},          # Temp-5 sensor
 ]
 
+# Test boxes only (the FU-297 rebuild drill, docs/opnsense-test-vm.md): OPN_DHCP_REMAP="<from>=<to>"
+# moves every address above from one /24 prefix to another, e.g. "192.168.2.=192.168.1." for a
+# drill VM whose isolated LAN is 1.0/24 — the same reservations and pool, on the LAN it has. Unset
+# (always, for the router) = the data above, byte for byte; refused outright against the router.
+REMAP = os.environ.get("OPN_DHCP_REMAP", "")
+if REMAP:
+    if HOST == "192.168.2.1":
+        sys.exit("OPN_DHCP_REMAP is for test boxes — refusing against the router")
+    _frm, _to = REMAP.split("=", 1)
+    for _obj in [RANGE] + OPTIONS + HOSTS:
+        for _k in ("start_addr", "end_addr", "value", "ip"):
+            if _obj.get(_k, "").startswith(_frm):
+                _obj[_k] = _to + _obj[_k][len(_frm):]
+
 
 def call(path, body=None):
     req = urllib.request.Request(f"{BASE}/{path}", data=json.dumps(body or {}).encode(),
@@ -139,13 +163,19 @@ def main():
     rebuild("Range", "range", [RANGE])
     rebuild("Option", "option", OPTIONS)
     rebuild("Host", "host", HOSTS)
-    print("set general (enable, DNS off, bind LAN):",
-          call("settings/set", {"dnsmasq": {"enable": "1", "port": "0", "interface": INTERFACE}}).get("result"))
+    # enable_ra "0": no router advertisements from dnsmasq — prod's value (IPv6 is disallowed on
+    # the router); a fresh install's default is "1" (the FU-297 rebuild drill found the drift).
+    enable = ENABLE if SERVER == "dnsmasq" else "0"
+    print(f"set general (enable={enable}, server={SERVER}, DNS off, bind LAN, no RA):",
+          call("settings/set", {"dnsmasq": {"enable": enable, "port": "0", "interface": INTERFACE,
+                                            "dhcp": {"enable_ra": "0"}}}).get("result"))
     print("apply:", call("service/reconfigure").get("status"))
     print("\nDone. Remember: disable ISC DHCPv4 in the OPNsense UI for reboot-safety.")
 
 
 if __name__ == "__main__":
+    if ENABLE not in ("0", "1"):
+        sys.exit("OPN_DHCP_ENABLE must be 0 or 1")
     if not (KEY and SEC):
         sys.exit("set OPN_API_KEY and OPN_API_SECRET")
     main()

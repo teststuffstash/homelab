@@ -1,0 +1,588 @@
+#!/usr/bin/env bash
+# The OPNsense REBUILD DRILL (FU-297): build a router from nothing, converge ALL router code,
+# score its config.xml against prod's, destroy it. docs/opnsense-test-vm.md §The rebuild drill.
+#
+#   bash scripts/opnsense-drill.sh [--ref <rev>] [--keep]     # jail: wallet creds; box: env file
+#   bash scripts/opnsense-drill.sh --router [--ref <rev>]     # the ROUTER REHEARSAL (jail only)
+#   bash scripts/opnsense-drill.sh --router --standby         # ...converged with the STANDBY profile
+#   bash scripts/opnsense-drill.sh --router --wan bridged     # ...WAN = virtio on a host bridge + THROUGHPUT
+#
+# --router: the same drill in the future router's shape (docs/opnsense-test-vm.md §The router
+# rehearsal): WAN = nx-02's dark eno2 by PCI passthrough (machines.yaml router_wan_pci), DHCP,
+# spoofing the old router's WAN MAC (machines.yaml wan_mac); the vmbr0 NIC becomes an `opt9`
+# MGMT interface; and router IDENTITY — certs + CAs, the registered ACME account + its
+# certificate rows, the FU-013 API users + root's prod key — is CARRIED from the newest FU-013
+# encrypted backup (decrypted with the wallet's age identity into the 0700 secret dir, deleted
+# after the build). Extra probes: the WAN is dark and wears the MAC, every carried API key
+# authenticates, and HAProxy serves the REAL certificate. Scored with the router overlay of the
+# map; never writes the box's metrics (the weekly score stays the plain drill's).
+#
+# --standby (with --router): converge with `opnsense_standby: true` + OPN_DHCP_ENABLE=0 — the
+# profile a node standing on the real LAN wears until the cutover (docs/router-move.md §The
+# standing nodes). The serving probes flip to one probe per inert rule: no DHCP lease, no BGP
+# session, no HAProxy VIP on the LAN interface (they sit on lo0 — HAProxy still serves TLS through
+# the router), ddclient off, ACME auto-renewal off. Its score is reported, not comparable: the
+# standby deltas are the point.
+#
+# --wan bridged (with --router): the WAN is `vtnet2`, virtio on a runtime host bridge whose only
+# port is the same dark eno2 (docs/router-move.md — operator 2026-09-30: bridged "if there is no
+# performance penalty"). After the other probes, a fake-ISP LXC joins that bridge (dnsmasq DHCP +
+# iperf3 on 11.255.0.1/24 — not bogon/private space, so the WAN's blockpriv/blockbogons stay
+# prod's), the router must lease on the SPOOFED MAC through the bridge (`wan_lease`), and iperf3
+# runs from the LAN probe through the router's NAT, 1 and 4 streams, both directions
+# (`wan_throughput`: every run ≥ OPN_DRILL_WAN_MIN_MBPS, default 900 = 1 GbE line rate).
+#
+# Stages (each timed; the report + metrics say which one failed):
+#   preflight  nx-02 thin pool + free memory read, BEFORE anything writes (a stale drill VM from a
+#              crashed run is destroyed first — by name, never anything else)
+#   build      scripts/opnsense-test-vm-bootstrap.sh create + bootstrap: the tofu-shaped VM by qm,
+#              first boot through the config importer, firmware to prod's series, the three
+#              config plugins, snapshot `baseline` — with a THROWAWAY root password + API pair
+#              minted here, in memory, dying with the VM
+#   converge   scripts/opnsense-test-vm.sh --ref <rev> --steps "1 all": every ansible/opnsense-*
+#              play + every opnsense/*.py (OPN_DHCP_SERVER picks dnsmasq or kea), at <rev>, through the
+#              harness's guard/inventory/overrides (+ ansible/test-vm/drill-overrides.yml)
+#   probe      BEHAVIOUR, from a throwaway Debian LXC on the drill's LAN (made after the build, so
+#              its packages come through the fresh router's NAT before any router code runs):
+#              DHCP leases (a reserved MAC → its pinned address, a random MAC → the pool), a
+#              DNS override answering, HAProxy answering TLS on a VIP, and a REAL BGP session
+#              from a fake ASN-64513 peer (FRR) whose /32 the router must learn
+#   compare    GET both config.xml (prod: GET /api/core/backup/download/this — the ONLY call this
+#              script makes to 192.168.2.1), opnsense/drill/config-compare.py → the realism score
+#   destroy    always (trap), unless --keep; the pool must return to its preflight reading
+#
+# SECRETS: prod's config.xml holds private keys and hashes. Both documents live in a 0700 dir
+# under the workdir, mode 0600, and are deleted when compare returns; nothing prints a value.
+# Prod creds: OPN_API_KEY/OPN_API_SECRET if set (the box's env file), else the wallet
+# (opnsense-api-key/-secret). They are read into a curl config and UNSET before anything else
+# runs, so no play or script below can inherit them.
+#
+# Environment: OPN_DRILL_VMID (9199), OPN_DRILL_HOST (192.168.2.68 — machines.yaml),
+# OPN_DRILL_LAN_BRIDGE (vmbr2), OPN_TEST_PVE (192.168.2.59), OPN_TEST_PVE_KEY (the pve seed key),
+# OPN_DRILL_WORKDIR (mktemp), OPN_DRILL_POOL_MAX (70 — refuse above this nvme-thin data %),
+# OPN_DRILL_MEM_MIN_MB (4096 — refuse below this MemAvailable on nx-02),
+# OPN_DRILL_TEXTFILE (unset — the box sets its node_exporter textfile: mgmt_opnsense_drill_*),
+# OPN_DRILL_STATE (unset — the box keeps the previous run's score there, for "score regressed").
+# Exit: 0 drill passed, 1 a stage failed (report says which), 2 refused / environment.
+set -euo pipefail
+
+REF=HEAD; KEEP=0; ROUTER=0; STANDBY=0; WAN_MODE=passthrough
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ref) REF="$2"; shift 2 ;;
+    --keep) KEEP=1; shift ;;
+    --router) ROUTER=1; shift ;;
+    --standby) STANDBY=1; shift ;;
+    --wan) WAN_MODE="$2"; shift 2 ;;
+    *) sed -n '2,57p' "$0" >&2; exit 2 ;;
+  esac
+done
+[ "$STANDBY" -eq 0 ] || [ "$ROUTER" -eq 1 ] || { echo "--standby needs --router" >&2; exit 2; }
+case "$WAN_MODE" in passthrough) ;; bridged) [ "$ROUTER" -eq 1 ] || { echo "--wan bridged needs --router" >&2; exit 2; } ;;
+  *) echo "--wan passthrough|bridged" >&2; exit 2 ;; esac
+
+cd "$(dirname "$0")/.."
+ROOT="$PWD"
+export NIX_CONFIG="experimental-features = nix-command flakes"
+eval "$(devbox shellenv)"   # python3/yq/jq/ssh from the pinned toolchain — the box has no bare python
+T0=$(date +%s)
+VMID="${OPN_DRILL_VMID:-9199}"
+VMNAME=opnsense-drill
+HOST="${OPN_DRILL_HOST:-192.168.2.68}"
+LAN_BRIDGE="${OPN_DRILL_LAN_BRIDGE:-vmbr2}"
+PVE="${OPN_TEST_PVE:-192.168.2.59}"
+PVE_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
+POOL_MAX="${OPN_DRILL_POOL_MAX:-70}"
+MEM_MIN_MB="${OPN_DRILL_MEM_MIN_MB:-4096}"
+
+log() { printf '[opnsense-drill] %s\n' "$*" >&2; }
+die() { log "REFUSED: $*"; exit 2; }
+# The prod router's API address: the ansible inventories are its one home (docs/router-move.md (B))
+# — the one LIVE `opnsense` host (no `opnsense_standby: true`): Big Data's `opnsense-fw` before
+# window 1, the nx-02 node after (ADR-145). NODES = every router node, live or standing: never a drill host.
+PROD="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml")"
+NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
+[ "$(printf '%s\n' "$PROD" | grep -c .)" = 1 ] && echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read ONE live prod router address from the ansible inventories (got: $(echo $PROD))"
+pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+# fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
+fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
+
+[ "$VMID" != 9110 ] || die "vmid 9110 is the PR-validation VM"
+[ "$HOST" != "$PROD" ] && [ "$HOST" != 192.168.2.1 ] && [ "$HOST" != 192.168.2.67 ] || die "OPN_DRILL_HOST=$HOST is not the drill's address"
+case " $NODES " in *" $HOST "*) die "OPN_DRILL_HOST=$HOST is a router node" ;; esac
+
+SHA="$(git rev-parse --verify "$REF^{commit}")"
+WORK="${OPN_DRILL_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/opnsense-drill.XXXXXX")}"
+mkdir -p "$WORK"; WORK="$(cd "$WORK" && pwd)"
+SEC="$WORK/secret"; ( umask 077; mkdir -p "$SEC" ); chmod 700 "$SEC"
+REPORT="$WORK/report.md"; : > "$REPORT"
+rep() { printf '%s\n' "$*" >> "$REPORT"; }
+
+# ---- prod creds → a 0600 curl config, then out of the environment ----------------------------
+_pk="${OPN_API_KEY:-}"; _ps="${OPN_API_SECRET:-}"
+if [ -z "$_pk" ] || [ -z "$_ps" ]; then
+  _kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
+            -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+  _pk="$(_kp opnsense-api-key || true)"; _ps="$(_kp opnsense-api-secret || true)"
+fi
+[ -n "$_pk" ] && [ -n "$_ps" ] || die "no prod API pair (OPN_API_KEY/SECRET or the wallet) — the compare stage needs it"
+( umask 077; printf 'user = "%s:%s"\n' "$_pk" "$_ps" > "$SEC/prod.curl" )
+unset _pk _ps OPN_API_KEY OPN_API_SECRET ACME_CF_TOKEN
+
+# ---- a throwaway credential set for the drill VM (never stored; dies with the VM) -------------
+OPN_TEST_ROOT_PASSWORD="$(openssl rand -base64 24)"
+OPN_TEST_API_KEY="$(openssl rand -base64 60 | tr -d '\n')"
+OPN_TEST_API_SECRET="$(openssl rand -base64 60 | tr -d '\n')"
+export OPN_TEST_ROOT_PASSWORD OPN_TEST_API_KEY OPN_TEST_API_SECRET
+( umask 077; printf 'user = "%s:%s"\n' "$OPN_TEST_API_KEY" "$OPN_TEST_API_SECRET" > "$SEC/drill.curl" )
+export OPN_TEST_VMID="$VMID" OPN_TEST_HOST="$HOST" OPN_TEST_VM_NAME="$VMNAME" \
+       OPN_TEST_LAN_BRIDGE="$LAN_BRIDGE" OPN_TEST_PVE="$PVE" OPN_TEST_PVE_KEY="$PVE_KEY" \
+       OPN_TEST_SNAPSHOT=baseline
+
+# ---- --router: the future router's shape + identity carried from the FU-013 backup -------------
+MAP="$ROOT/opnsense/drill/compare-map.txt"
+if [ "$ROUTER" -eq 1 ]; then
+  M="$ROOT/machines/machines.yaml"
+  WAN_MAC="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' "$M")"
+  WAN_PCI="$(yq -r '.machines[] | select(.name == "nx-02") | .router_wan_pci' "$M")"
+  case "$WAN_MAC$WAN_PCI" in *null*|'') die "machines.yaml lacks opnsense.wan_mac / nx-02.router_wan_pci" ;; esac
+  KUBECONFIG_DRILL="${OPN_DRILL_KUBECONFIG:-$ROOT/tofu/kubeconfig}"
+  [ -f "$KUBECONFIG_DRILL" ] && [ -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ] \
+    || die "--router reads the FU-013 backup (kubeconfig $KUBECONFIG_DRILL + the wallet): jail only"
+  # The carry is prod's decrypted config: until `trap finish EXIT` takes over below, any exit
+  # (a failed fetch, the renewal refusal) must still delete it.
+  trap 'rm -rf "$SEC"' EXIT
+  log "router rehearsal: fetching the newest FU-013 backup (Garage via port-forward)"
+  fetch_backup "$SEC/carry.xml" || die "could not fetch + decrypt the newest FU-013 backup"
+  # An imported cert that falls due during the run would renew FROM THE REHEARSAL (a real LE order
+  # + a Cloudflare TXT write with prod's token). os-acme-client renews at 60 days; refuse at 58.
+  stale="$(python3 - "$SEC/carry.xml" <<'PY'
+import sys, time, xml.etree.ElementTree as ET
+r = ET.parse(sys.argv[1]).getroot()
+for c in r.findall("OPNsense/AcmeClient/certificates/certificate"):
+    if c.findtext("enabled") == "1" and c.findtext("autoRenewal") == "1" \
+       and time.time() - int(c.findtext("lastUpdate") or 0) > 58 * 86400:
+        print(c.findtext("name"))
+PY
+)"
+  [ -z "$stale" ] || die "carried cert(s) within 2 days of renewal — let prod renew first: $(echo $stale)"
+  # Root: the router's own wallet password (operator 2026-09-30 — router-move.md §The identity),
+  # not the drill's throwaway: the rehearsal proves the credential the cutover build will carry.
+  OPN_TEST_ROOT_PASSWORD="$(keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" \
+    -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" opnsense-root-password 2>/dev/null || true)"
+  [ -n "$OPN_TEST_ROOT_PASSWORD" ] || die "no wallet entry opnsense-root-password"
+  export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
+         OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard \
+         OPN_TEST_WAN_MODE="$WAN_MODE" OPN_TEST_WAN_BRIDGE="${OPN_DRILL_WAN_BRIDGE:-vmbr9}"
+  TEXTFILE_FORCE_OFF=1
+  PROBE_EXTRA_PKGS=python3-cryptography   # scripts/wireguard-handshake-probe.py, the wg_handshake probe
+  [ "$WAN_MODE" != bridged ] || PROBE_EXTRA_PKGS="$PROBE_EXTRA_PKGS iperf3"
+  # The router overlay first (first match wins), then the base map minus its two WAN wildcards
+  # (the interface + its gateway): in this shape the WAN IS comparable (DHCP on a real NIC, like prod's).
+  MAP="$WORK/compare-map.txt"
+  { cat "$ROOT/opnsense/drill/compare-map-router.txt"
+    grep -Ev '^env +\* +(interfaces/wan/\*\*|OPNsense/Gateways/gateway_item\[WAN_GW\]/\*\*)$' \
+      "$ROOT/opnsense/drill/compare-map.txt"; } > "$MAP"
+fi
+
+# ---- stage bookkeeping -------------------------------------------------------------------------
+declare -A STAGE_S STAGE_OK
+STAGE=''; STAGE_T=0; FAILED=''
+stage() { # stage <name> — closes the previous one
+  local now; now=$(date +%s)
+  [ -z "$STAGE" ] || STAGE_S[$STAGE]=$((now - STAGE_T))
+  STAGE="$1"; STAGE_T=$now; log "stage: $1"
+}
+fail() { case " $FAILED " in *" $STAGE "*) ;; *) FAILED="${FAILED:+$FAILED }$STAGE" ;; esac; STAGE_OK[$STAGE]=0; rep "- **FAIL** ($STAGE): $*"; log "FAIL ($STAGE): $*"; }
+pool_pct() { pve "lvs --noheadings -o data_percent nvme-thin/data" | tr -d ' '; }
+bootstrap() { bash "$ROOT/scripts/opnsense-test-vm-bootstrap.sh" "$@"; }
+CTID=$((VMID - 1)); CTNAME=opnsense-drill-probe
+PEER_ROUTE=192.168.40.254/32      # the fake node's "LoadBalancer" route; exists only inside the drill
+# A value out of opnsense/dnsmasq-dhcp.py's data (HOSTS / RANGE), remapped onto the drill's LAN
+# prefix exactly as the converge applied it: `dhcp_data "HOSTS[0]['ip']"` (a python subscript of
+# the module's globals).
+dhcp_data() {
+  OPN_API_KEY=x OPN_API_SECRET=x OPN_HOST="$HOST" OPN_DHCP_REMAP="192.168.2.=192.168.1." python3 -c \
+    "import runpy; g = runpy.run_path('$ROOT/opnsense/dnsmasq-dhcp.py', run_name='drill'); print(eval(\"$1\", {}, g))"
+}
+vm_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }
+# ================================================================ probe container ===============
+# A Debian 12 LXC on the drill's LAN (template: tofu/opnsense-test.tf), made and destroyed per
+# run. eth0 = 192.168.1.2 static — the fake cluster node (ansible/test-vm/drill-overrides.yml's
+# BGP neighbour); eth1 carries a reserved MAC from opnsense/dnsmasq-dhcp.py (expects its pinned
+# address), eth2 a random one (expects a pool address). Packages come through the drill VM's own
+# NAT BEFORE the router code runs, so a converge that breaks egress cannot fail the setup.
+probe_ct() { pve "pct exec $CTID -- $*"; }
+probe_create() {
+  local res_mac tmpl=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst
+  res_mac="$(dhcp_data "HOSTS[0]['hwaddr']")"
+  pve "pct create $CTID $tmpl --hostname $CTNAME --tags 'opnsense;drill' --cores 1 --memory 512 --swap 0 \
+        --rootfs nvme-thin:2 --unprivileged 1 --features nesting=1 --onboot 0 \
+        --net0 name=eth0,bridge=$LAN_BRIDGE,ip=192.168.1.2/24,gw=192.168.1.1 \
+        --net1 name=eth1,bridge=$LAN_BRIDGE,ip=manual,hwaddr=$res_mac \
+        --net2 name=eth2,bridge=$LAN_BRIDGE,ip=manual \
+        --nameserver 192.168.1.1 --start 1 >/dev/null"
+  probe_ct "bash -c 'for i in \$(seq 1 30); do getent hosts deb.debian.org >/dev/null && break; sleep 2; done'"
+  probe_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends frr isc-dhcp-client dnsutils curl openssl ca-certificates ${PROBE_EXTRA_PKGS:-} >/dev/null'"
+  # The fake peer: cluster ASN, the router as its neighbour, one LB-shaped /32 announced.
+  # `no bgp network import-check`: announce without a RIB route; `no bgp ebgp-requires-policy`:
+  # the peer side needs no route-map (the ROUTER's side keeps prod's CILIUM-ALLOW-ALL).
+  pve "pct exec $CTID -- bash -c 'sed -i s/^bgpd=no/bgpd=yes/ /etc/frr/daemons && cat > /etc/frr/frr.conf'" <<FRR
+frr defaults traditional
+hostname $CTNAME
+router bgp 64513
+ bgp router-id 192.168.1.2
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+ neighbor 192.168.1.1 remote-as 64512
+ address-family ipv4 unicast
+  network $PEER_ROUTE
+ exit-address-family
+FRR
+  probe_ct "systemctl restart frr"
+}
+probe_destroy() {
+  local h
+  h="$(pve "if pct config $CTID >/dev/null 2>&1; then pct config $CTID | sed -n 's/^hostname: //p'; fi")"
+  [ -n "$h" ] || return 0
+  [ "$h" = "$CTNAME" ] || { log "REFUSING to destroy ct $CTID: hostname '$h'"; return 1; }
+  pve "pct stop $CTID >/dev/null 2>&1 || true; pct destroy $CTID --purge 1"
+}
+
+# ================================================================ fake ISP (--wan bridged) ======
+# A Debian LXC on the WAN bridge: dnsmasq hands the router's WAN a lease, iperf3 serves the
+# throughput runs. Packages come in over a TEMPORARY vmbr0 leg (a DHCP client on the home LAN),
+# with every service start blocked (policy-rc.d) — the leg is deleted BEFORE dnsmasq runs, and
+# dnsmasq binds eth0 (the WAN bridge) only. Made after the other probes, so the router's WAN has
+# no lease while they run.
+ISP_ID=$((VMID - 2)); ISP_NAME=opnsense-drill-isp; ISP_NET=11.255.0; WAN_MIN_MBPS="${OPN_DRILL_WAN_MIN_MBPS:-900}"
+isp_ct() { pve "pct exec $ISP_ID -- $*"; }
+isp_create() {
+  local tmpl=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst br="${OPN_DRILL_WAN_BRIDGE:-vmbr9}"
+  pve "pct create $ISP_ID $tmpl --hostname $ISP_NAME --tags 'opnsense;drill' --cores 2 --memory 512 --swap 0 \
+        --rootfs nvme-thin:2 --unprivileged 1 --features nesting=1 --onboot 0 \
+        --net0 name=eth0,bridge=$br,ip=$ISP_NET.1/24,firewall=0 \
+        --net1 name=eth1,bridge=vmbr0,ip=dhcp,firewall=0 --start 1 >/dev/null"
+  isp_ct "bash -c 'for i in \$(seq 1 30); do getent hosts deb.debian.org >/dev/null && break; sleep 2; done'"
+  isp_ct "bash -c 'printf \"#!/bin/sh\nexit 101\n\" > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d'"
+  isp_ct "env LC_ALL=C.UTF-8 LANG=C.UTF-8 bash -c 'DEBIAN_FRONTEND=noninteractive apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends dnsmasq iperf3 >/dev/null'"
+  pve "pct set $ISP_ID --delete net1"
+  isp_ct "bash -c '! ip -br link show eth1 2>/dev/null'" || { log "ISP container still has its home-LAN leg"; return 1; }
+  isp_ct "bash -c 'cat > /etc/dnsmasq.d/isp.conf'" <<DNSMASQ
+port=0
+interface=eth0
+bind-interfaces
+dhcp-range=$ISP_NET.100,$ISP_NET.199,255.255.255.0,1h
+dhcp-option=option:router,$ISP_NET.1
+dhcp-leasefile=/var/lib/misc/dnsmasq.leases
+DNSMASQ
+  isp_ct "bash -c 'rm -f /usr/sbin/policy-rc.d; systemctl restart dnsmasq && (iperf3 -s -D)'"
+}
+isp_destroy() {
+  local h
+  h="$(pve "if pct config $ISP_ID >/dev/null 2>&1; then pct config $ISP_ID | sed -n 's/^hostname: //p'; fi")"
+  [ -n "$h" ] || return 0
+  [ "$h" = "$ISP_NAME" ] || { log "REFUSING to destroy ct $ISP_ID: hostname '$h'"; return 1; }
+  pve "pct stop $ISP_ID >/dev/null 2>&1 || true; pct destroy $ISP_ID --purge 1"
+}
+
+POOL_BEFORE=''; POOL_AFTER=''; SCORE=''
+TEXTFILE="${OPN_DRILL_TEXTFILE:-}"; STATE="${OPN_DRILL_STATE:-}"
+[ -z "${TEXTFILE_FORCE_OFF:-}" ] || { TEXTFILE=''; STATE=''; }   # --router: never the weekly metrics
+
+# The metrics (the box's textfile; argocd/resources/mgmt-metrics/opnsense-drill.yaml reads them).
+# Written atomically on EVERY finished run, pass or fail; a preflight refusal writes nothing (the
+# stale belt then speaks). The previous run's score comes from $STATE, so "regressed" compares
+# run to run.
+emit_metrics() {
+  local ok="$1" P=mgmt_opnsense_drill prev='' s tmp
+  [ -n "$TEXTFILE" ] || return 0
+  if [ -n "$STATE" ]; then
+    mkdir -p "$STATE"
+    [ -f "$STATE/last-score" ] && prev="$(cat "$STATE/last-score")"
+    [ -z "$SCORE" ] || printf '%s' "$SCORE" > "$STATE/last-score"
+  fi
+  tmp="$TEXTFILE.$$"
+  {
+    echo "# HELP ${P}_success 1 if the last drill passed every stage (FU-297)."
+    echo "# TYPE ${P}_success gauge"; echo "${P}_success $ok"
+    echo "# TYPE ${P}_last_run_timestamp_seconds gauge"; echo "${P}_last_run_timestamp_seconds $(date +%s)"
+    echo "# TYPE ${P}_duration_seconds gauge"; echo "${P}_duration_seconds $DURATION"
+    echo "# TYPE ${P}_stage_seconds gauge"
+    for s in "${!STAGE_S[@]}"; do echo "${P}_stage_seconds{stage=\"$s\"} ${STAGE_S[$s]}"; done
+    echo "# TYPE ${P}_stage_failed gauge"
+    for s in preflight build probe-setup converge probe compare destroy; do
+      case " $FAILED " in *" $s "*) echo "${P}_stage_failed{stage=\"$s\"} 1" ;; *) echo "${P}_stage_failed{stage=\"$s\"} 0" ;; esac
+    done
+    for s in "${!PROBE_OK[@]}"; do echo "${P}_probe_success{probe=\"$s\"} ${PROBE_OK[$s]}"; done
+    if [ -n "$SCORE" ]; then
+      grep -v '^#' "$WORK/compare.prom" 2>/dev/null || true
+      [ -z "$prev" ] || echo "${P}_realism_score_previous $prev"
+    fi
+  } > "$tmp" && chmod 644 "$tmp" && mv "$tmp" "$TEXTFILE"
+}
+declare -A PROBE_OK
+finish() {
+  local rc=$? now; now=$(date +%s)
+  [ -z "$STAGE" ] || STAGE_S[$STAGE]=$((now - STAGE_T))
+  rm -f "$SEC"/*.xml
+  if [ "$KEEP" -eq 0 ]; then
+    STAGE=destroy; STAGE_T=$(date +%s); log "stage: destroy"
+    probe_destroy >&2 || fail "destroy of probe container $CTID failed — clean up by hand (pct destroy $CTID)"
+    isp_destroy >&2 || fail "destroy of ISP container $ISP_ID failed — clean up by hand (pct destroy $ISP_ID)"
+    bootstrap destroy >&2 || fail "destroy of vm $VMID failed — clean up by hand (qm destroy $VMID)"
+    POOL_AFTER="$(pool_pct 2>/dev/null || echo '?')"
+    STAGE_S[destroy]=$(( $(date +%s) - STAGE_T ))
+  else
+    log "--keep: vm $VMID left running at $HOST; its throwaway API pair: $SEC/drill.curl (0600)"
+  fi
+  rm -f "$SEC/prod.curl"; [ "$KEEP" -eq 1 ] || rm -rf "$SEC"
+  DURATION=$(( $(date +%s) - T0 ))
+  if [ -n "$POOL_AFTER" ] && [ "$POOL_AFTER" != '?' ] \
+     && awk -v a="$POOL_AFTER" -v b="$POOL_BEFORE" 'BEGIN { exit !(a - b > 1.0) }'; then
+    rep "- ⚠ nvme-thin rose ${POOL_BEFORE}% → ${POOL_AFTER}% across the run (> 1 point; the other VMs on nx-02 write too — check the pool)"
+  fi
+  emit_metrics "$([ -z "$FAILED" ] && [ "$rc" -eq 0 ] && echo 1 || echo 0)"
+  {
+    echo "## OPNsense $([ "$ROUTER" -eq 1 ] && echo 'ROUTER REHEARSAL' || echo 'rebuild drill')$([ "$STANDBY" -eq 1 ] && echo ' — STANDBY profile') (FU-297) — $(date -u +%FT%TZ)"
+    echo
+    echo "- rev \`$SHA\`, vm $VMID on $PVE, WAN $HOST, LAN $LAN_BRIDGE; duration **${DURATION}s**"
+    echo "- stages: $(for s in preflight build probe-setup converge probe compare destroy; do [ -n "${STAGE_S[$s]:-}" ] && printf '%s %ss · ' "$s" "${STAGE_S[$s]}"; done)"
+    echo "- nvme-thin data%: before $POOL_BEFORE → after ${POOL_AFTER:-kept}"
+    echo "- verdict: **$([ -z "$FAILED" ] && [ "$rc" -eq 0 ] && echo PASS || echo "FAIL (${FAILED:-exit $rc})")**"
+    echo
+    cat "$REPORT"
+  } > "$WORK/drill.md"
+  cat "$WORK/drill.md"
+  [ -z "$FAILED" ] && [ "$rc" -eq 0 ] || exit 1
+}
+trap finish EXIT
+
+# ================================================================ preflight =====================
+stage preflight
+POOL_BEFORE="$(pool_pct)"
+mem_mb="$(pve "awk '/MemAvailable/ {print int(\$2/1024)}' /proc/meminfo")"
+log "nx-02: nvme-thin data ${POOL_BEFORE}%, MemAvailable ${mem_mb} MiB"
+awk -v p="$POOL_BEFORE" -v m="$POOL_MAX" 'BEGIN { exit !(p + 0 < m + 0) }' \
+  || { trap - EXIT; rm -rf "$SEC"; die "nvme-thin at ${POOL_BEFORE}% ≥ ${POOL_MAX}% — not writing a VM into it"; }
+[ "$mem_mb" -ge "$MEM_MIN_MB" ] \
+  || { trap - EXIT; rm -rf "$SEC"; die "nx-02 MemAvailable ${mem_mb} MiB < ${MEM_MIN_MB} (FU-289's NUMA pressure)"; }
+if pve "qm config $VMID" >/dev/null 2>&1 || pve "pct config $CTID" >/dev/null 2>&1; then
+  log "vm $VMID / ct $CTID exists (a crashed run?) — destroying by name first"
+  bootstrap destroy >&2; probe_destroy >&2; isp_destroy >&2
+  POOL_BEFORE="$(pool_pct)"
+fi
+
+# ================================================================ build =========================
+stage build
+if bootstrap create >&2 && bootstrap bootstrap > "$WORK/bootstrap.log" 2>&1; then
+  rep "- build: $(grep -E '^(version|plugin):' "$WORK/bootstrap.log" | tr '\n' ' ')"
+  [ "$ROUTER" -eq 0 ] || rep "- router shape: $(grep -E '^seed-shape:' "$WORK/bootstrap.log" | sed 's/^seed-shape: //' | tr '\n' ' ')"
+else
+  tail -30 "$WORK/bootstrap.log" >&2 || true
+  rm -f "$SEC/carry.xml"
+  fail "the VM did not build (bootstrap log tail above)"; exit 1
+fi
+rm -f "$SEC/carry.xml"   # --router: the seed is on the VM now; the decrypted backup goes
+
+# ================================================================ probe setup ===================
+stage probe-setup
+probe_create > "$WORK/probe-setup.log" 2>&1 || { tail -20 "$WORK/probe-setup.log" >&2; fail "the probe container did not come up"; exit 1; }
+rep "- probe container $CTID on $LAN_BRIDGE: $(probe_ct "sh -c '. /etc/os-release; echo \$PRETTY_NAME, frr \$(dpkg-query -W frr | cut -f2)'" | tr '\n' ' ')"
+
+# ================================================================ converge ======================
+stage converge
+set +e
+EV="$ROOT/ansible/test-vm/drill-overrides.yml"
+if [ "$STANDBY" -eq 1 ]; then
+  EV="$WORK/standby-overrides.yml"
+  { cat "$ROOT/ansible/test-vm/drill-overrides.yml"; echo 'opnsense_standby: true'; } > "$EV"
+fi
+OPN_TEST_WORKDIR="$WORK/harness" OPN_TEST_EXTRA_VARS="$EV" \
+OPN_DHCP_REMAP="192.168.2.=192.168.1." OPN_DHCP_ENABLE="$((1 - STANDBY))" \
+  bash "$ROOT/scripts/opnsense-test-vm.sh" --ref "$SHA" --steps "1 all" > "$WORK/converge.log" 2>&1
+hrc=$?
+set -e
+if [ "$hrc" -eq 0 ]; then rep "- converge: every router-code unit applied (harness PASS)"
+else
+  fail "harness rc=$hrc — $(grep -E '^FAIL' "$WORK/converge.log" | head -5 | tr '\n' ';')"
+  [ "$hrc" -eq 1 ] || exit 1      # 2 = guard/environment: nothing converged, nothing to score
+fi
+sed -n '/^### all\./,/^### /p' "$WORK/harness/report.md" 2>/dev/null | sed '$d' >> "$REPORT" || true
+
+# ================================================================ probe =========================
+# Behaviour, not saved config. Expected values are read from the code under test (the
+# reservation in dnsmasq-dhcp.py, the first unbound_hosts / haproxy_proxied_services entries in
+# group_vars), never restated here. A failing probe fails the drill; each has its own metric.
+stage probe
+GV="$ROOT/ansible/group_vars/opnsense.yml"
+probe() { # probe <name> <ok 0|1> <detail>
+  PROBE_OK[$1]=$2
+  rep "| \`$1\` | $([ "$2" = 1 ] && echo pass || echo **FAIL**) | $3 |"
+  [ "$2" = 1 ] || fail "probe $1: $3"
+}
+rep ''; rep '### Behaviour probes (from the LAN side)'; rep ''; rep '| probe | result | evidence |'; rep '|---|---|---|'
+lease() { # lease <iface> → the address the router's DHCP bound it to (-sf /bin/true: configure nothing)
+  pve "pct exec $CTID -- sh -s $1" <<'SH' | tail -1
+i=$1; rm -f /tmp/$i.lease
+timeout 60 dhclient -1 -v -sf /bin/true -lf /tmp/$i.lease -pf /tmp/$i.pid $i 2>&1 | sed -n 's/^bound to \([0-9.]*\).*/\1/p'
+dhclient -x -pf /tmp/$i.pid $i >/dev/null 2>&1 || true
+SH
+}
+if [ "$STANDBY" -eq 1 ]; then
+  got="$(lease eth2 || true)"
+  probe standby_dhcp_off "$([ -z "$got" ] && echo 1 || echo 0)" "random MAC → \`${got:-no lease}\` (want no lease: OPN_DHCP_ENABLE=0)"
+else
+want="$(dhcp_data "HOSTS[0]['ip']")"; got="$(lease eth1 || true)"
+probe dhcp_reservation "$([ -n "$got" ] && [ "$got" = "$want" ] && echo 1 || echo 0)" "reserved MAC → \`${got:-no lease}\` (want \`$want\`, dnsmasq-dhcp.py HOSTS[0] remapped)"
+got="$(lease eth2 || true)"
+lo="$(dhcp_data "RANGE['start_addr']")"; hi="$(dhcp_data "RANGE['end_addr']")"
+inpool="$(python3 -c "import ipaddress as i, sys; a = sys.argv[1:]; print(int(bool(a[0]) and i.ip_address(a[1]) <= i.ip_address(a[0]) <= i.ip_address(a[2])))" "${got:-}" "$lo" "$hi" 2>/dev/null || echo 0)"
+probe dhcp_pool "$inpool" "random MAC → \`${got:-no lease}\` (want $lo–$hi, dnsmasq-dhcp.py RANGE remapped)"
+fi
+dn="$(yq -r '.unbound_hosts[0] | .hostname + "." + .domain' "$GV")"; dv="$(yq -r '.unbound_hosts[0].value' "$GV")"
+got="$(probe_ct "dig +short +time=3 +tries=2 @192.168.1.1 $dn A" | tail -1 || true)"
+probe dns_override "$([ "$got" = "$dv" ] && echo 1 || echo 0)" "\`$dn\` → \`${got:-no answer}\` (want \`$dv\`, unbound_hosts[0])"
+hv="$(yq -r '.haproxy_proxied_services[0].vip' "$GV")"; hn="$(yq -r '.haproxy_proxied_services[0].cert_domain' "$GV")"
+got="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | grep -E \"^ *(Protocol|New, )\" | head -1'" || true)"
+probe haproxy_tls "$([ -n "$got" ] && echo 1 || echo 0)" "TLS handshake on VIP \`$hv:443\` (SNI \`$hn\`): \`$(echo "${got:-none}" | tr -s ' ' | cut -c1-60)\`"
+# BGP: the session from the PEER's side, and the route in the ROUTER's kernel table (what FRR
+# installs is what the LAN would forward by). Poll: the router's FRR reloads late in the converge.
+st=''; rt=''
+# Standby: the neighbour is configured but disabled — poll the same window, want it NEVER up.
+for i in $(seq 1 $([ "$STANDBY" -eq 1 ] && echo 12 || echo 36)); do
+  st="$(probe_ct "vtysh -c 'show bgp neighbors 192.168.1.1 json'" 2>/dev/null | jq -r '.["192.168.1.1"].bgpState // empty' 2>/dev/null || true)"
+  rt="$(vm_ssh "route -n get ${PEER_ROUTE%/32} 2>/dev/null | awk '/gateway:/ {print \$2}'" 2>/dev/null || true)"
+  [ "$st" = Established ] && [ "$rt" = 192.168.1.2 ] && break
+  sleep 5
+done
+bgpd="$(vm_ssh 'pgrep -x bgpd >/dev/null && echo running || echo "NOT running (FU-298)"' 2>/dev/null || echo '?')"
+if [ "$STANDBY" -eq 1 ]; then
+  probe standby_bgp_silent "$([ "$st" != Established ] && [ "$rt" != 192.168.1.2 ] && echo 1 || echo 0)" \
+    "fake peer @192.168.1.2 after 60 s: \`${st:-no state}\`, route \`$PEER_ROUTE\` → \`${rt:-none}\` (want no session, no route; router bgpd: $bgpd)"
+else
+probe bgp_session "$([ "$st" = Established ] && echo 1 || echo 0)" "fake peer AS64513 @192.168.1.2 ↔ router AS64512: \`${st:-no state}\` (router bgpd: $bgpd)"
+probe bgp_route "$([ "$rt" = 192.168.1.2 ] && echo 1 || echo 0)" "router kernel route \`$PEER_ROUTE\` → \`${rt:-none}\` (want the peer, 192.168.1.2)"
+fi
+
+# The router rehearsal's own probes: the WAN is the passed-through NIC, dark, wearing the old
+# router's MAC; every carried consumer key authenticates (so no consumer flips on the move); and
+# HAProxy serves the REAL carried certificate, not the harness fixture.
+if [ "$ROUTER" -eq 1 ]; then
+  if [ "$WAN_MODE" = bridged ]; then
+    # virtio always has carrier: dark = the HOST port has none, and the bridge holds no address.
+    igb="$(vm_ssh 'ifconfig vtnet2' 2>/dev/null || true)"
+    hd="$(pve "sh -s $WAN_PCI ${OPN_DRILL_WAN_BRIDGE:-vmbr9}" 2>/dev/null <<'SH' || true
+n=$(basename $(ls -d /sys/bus/pci/devices/$1/net/* | head -1))
+echo "$n carrier=$(cat /sys/class/net/$n/carrier) master=$(basename $(readlink /sys/class/net/$n/master)) br_addr=$(ip -br -4 addr show dev $2 | awk '{print $3}')"
+SH
+)"
+    probe wan_dark "$(echo "$hd" | grep -q 'carrier=0 master=vmbr' && echo "$hd" | grep -q 'br_addr=$' && echo 1 || echo 0)" \
+      "host port (nx-02 $WAN_PCI): \`${hd:-unread}\` (want carrier=0, enslaved to the WAN bridge, bridge without an address)"
+  else
+  igb="$(vm_ssh 'ifconfig igb0' 2>/dev/null || true)"
+  probe wan_dark "$(echo "$igb" | grep -q 'status: no carrier' && echo 1 || echo 0)" \
+    "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | head -1)\` (want no carrier)"
+  fi
+  probe wan_mac "$(echo "$igb" | grep -qi "ether $WAN_MAC" && echo 1 || echo 0)" \
+    "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0) ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
+  _kpw() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
+             "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+  for u in root:opnsense-api:core/firmware/info backup-puller:opnsense-backup-puller-api:core/backup/backups/this \
+           automation:opnsense-automation-api:quagga/general/get; do
+    IFS=: read -r who ent path <<<"$u"
+    ( umask 077; printf 'user = "%s:%s"\n' "$(_kpw "$ent-key")" "$(_kpw "$ent-secret")" > "$SEC/k.curl" )
+    code="$(curl -sk -K "$SEC/k.curl" --max-time 20 -o /dev/null -w '%{http_code}' "https://$HOST/api/$path" || true)"
+    rm -f "$SEC/k.curl"
+    probe "carried_key_${who//-/_}" "$([ "$code" = 200 ] && echo 1 || echo 0)" \
+      "prod's \`$ent-*\` wallet pair on \`GET /api/$path\` → HTTP $code (want 200)"
+  done
+  iss="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | openssl x509 -noout -issuer -subject'" 2>/dev/null | tr '\n' ' ' || true)"
+  probe real_cert "$(echo "$iss" | grep -q "Let's Encrypt" && echo "$iss" | grep -q "$hn" && echo 1 || echo 0)" \
+    "VIP \`$hv:443\` SNI \`$hn\` serves \`$(echo "${iss:-nothing}" | cut -c1-110)\` (want the carried LE cert)"
+  # Root: the live config's root hash must verify against the wallet's opnsense-root-password
+  # (recomputed with the hash's own salt; the password never leaves this process's stdin pipes).
+  curl -sfk -K "$SEC/drill.curl" --max-time 60 -o "$SEC/root.xml" "https://$HOST/api/core/backup/download/this" || true
+  rh="$(python3 -c 'import sys, xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); print(next((u.findtext("password") or "" for u in r.findall("system/user") if u.findtext("name") == "root"), ""))' "$SEC/root.xml" 2>/dev/null || true)"
+  rm -f "$SEC/root.xml"
+  salt="$(echo "$rh" | awk -F'$' '$2 == "6" { print $3 }')"
+  got="$([ -n "$salt" ] && printf '%s\n' "$OPN_TEST_ROOT_PASSWORD" | openssl passwd -6 -salt "$salt" -stdin || true)"
+  probe root_password "$([ -n "$rh" ] && [ "$got" = "$rh" ] && echo 1 || echo 0)" \
+    "root's hash in the live config.xml (\`\$$(echo "$rh" | cut -d'$' -f2)\$\` crypt) verifies against the wallet's \`opnsense-root-password\`: $([ -n "$rh" ] && [ "$got" = "$rh" ] && echo match || echo MISMATCH) (want match)"
+  # The carried WireGuard server key: a real Noise handshake from the LAN side (the WAN is dark),
+  # as the laptop peer, against PROD's server pubkey — so the road-warrior clients keep working
+  # across the move with no re-issue. The peer's private key goes over stdin, never argv.
+  wgpub="$(curl -sk -K "$SEC/prod.curl" --max-time 20 "https://$PROD/api/wireguard/server/searchServer" \
+             | jq -r '.rows[] | select(.name == "roadwarrior") | .pubkey' 2>/dev/null || true)"
+  pve "pct exec $CTID -- sh -c 'cat > /root/wg-probe.py'" < "$ROOT/scripts/wireguard-handshake-probe.py"
+  hs="$(_kpw wireguard-laptop-privkey | pve "pct exec $CTID -- timeout 30 python3 /root/wg-probe.py 192.168.1.1 51820 - $wgpub" 2>&1 | tail -1 || true)"
+  probe wg_handshake "$([ -n "$wgpub" ] && [ "${hs%% *}" = HANDSHAKE_OK ] && echo 1 || echo 0)" \
+    "laptop peer → \`192.168.1.1:51820\` against prod's server pubkey \`${wgpub:0:8}…\`: \`$(echo "${hs:-no output}" | cut -c1-80)\` (want HANDSHAKE_OK)"
+fi
+
+# The STANDBY profile's remaining inert rules (DHCP + BGP are probed above, by behaviour).
+# VIPs: on the real LAN (/22) the 3.0/24 aliases are ON-LINK, so a LAN-interface holder answers
+# ARP beside prod — read where each address lives on the VM itself (haproxy_tls above already
+# proved HAProxy serves through the router with them on lo0).
+if [ "$STANDBY" -eq 1 ]; then
+  vips="$(yq -r '(.haproxy_proxied_services + (.stack_gateways // []))[].vip' "$GV" | sort -u)"
+  ifs="$(vm_ssh 'ifconfig -a' 2>/dev/null || true)"
+  onlo="$(echo "$ifs" | awk '/^[a-z]/ { i = $1 } /inet / { print i, $2 }' | grep -c '^lo0: 192\.168\.3\.' || true)"
+  offlo="$(echo "$ifs" | awk '/^[a-z]/ { i = $1 } /inet / { print i, $2 }' | grep '192\.168\.3\.' | grep -v '^lo0:' | tr '\n' ' ' || true)"
+  nv="$(echo "$vips" | wc -l)"
+  probe standby_vips_off_lan "$([ -z "$offlo" ] && [ "$onlo" -ge "$nv" ] && echo 1 || echo 0)" \
+    "$onlo of $nv service VIPs on lo0; elsewhere: \`${offlo:-none}\` (want all on lo0, none elsewhere)"
+  dd="$(curl -sk -K "$SEC/drill.curl" --max-time 20 "https://$HOST/api/dyndns/settings/get" | jq -r '.ddclient.general.enabled' 2>/dev/null || true)"
+  probe standby_ddclient_off "$([ "$dd" = 0 ] && echo 1 || echo 0)" "dyndns general.enabled = \`${dd:-unread}\` (want 0)"
+  ar="$(curl -sk -K "$SEC/drill.curl" --max-time 20 "https://$HOST/api/acmeclient/settings/get" | jq -r '.acmeclient.settings.autoRenewal' 2>/dev/null || true)"
+  probe standby_acme_no_renewal "$([ "$ar" = 0 ] && echo 1 || echo 0)" "acmeclient settings.autoRenewal = \`${ar:-unread}\` (want 0)"
+fi
+
+# The BRIDGED WAN's own probes, LAST (the fake ISP's lease must not exist while the others run).
+if [ "$WAN_MODE" = bridged ]; then
+  isp_create > "$WORK/isp-setup.log" 2>&1 || { tail -15 "$WORK/isp-setup.log" >&2; fail "the fake-ISP container did not come up"; exit 1; }
+  vm_ssh 'configctl interface reconfigure wan' >/dev/null 2>&1 || true
+  wip=''
+  for _ in $(seq 1 24); do
+    wip="$(vm_ssh "ifconfig vtnet2 | awk '/inet $ISP_NET\\./ {print \$2}'" 2>/dev/null || true)"; [ -n "$wip" ] && break; sleep 5
+  done
+  lmac="$(isp_ct "awk -v ip=$wip '\$3 == ip {print \$2}' /var/lib/misc/dnsmasq.leases" 2>/dev/null || true)"
+  probe wan_lease "$([ -n "$wip" ] && [ "$lmac" = "$WAN_MAC" ] && echo 1 || echo 0)" \
+    "router WAN (vtnet2 behind the host bridge) leased \`${wip:-nothing}\` for MAC \`${lmac:-none}\` (want a lease on the spoofed \`$WAN_MAC\`)"
+  tp=''; tmin=''
+  for args in "-P 1" "-P 4" "-P 1 -R" "-P 4 -R"; do
+    bps="$(probe_ct "iperf3 -c $ISP_NET.1 -t 15 -O 2 $args -J" 2>/dev/null | jq -r '.end.sum_received.bits_per_second // empty' 2>/dev/null || true)"
+    m="$(awk -v b="${bps:-0}" 'BEGIN { printf "%d", b / 1e6 }')"
+    tp="$tp$([ -n "$tp" ] && echo ' · ')$(echo "$args" | sed 's/-P /×/; s/ -R/ down/; s/^×\([0-9]\)$/×\1 up/')=${m}"
+    [ -z "$tmin" ] || [ "$m" -lt "$tmin" ] && tmin=$m
+  done
+  probe wan_throughput "$([ -n "$wip" ] && [ "${tmin:-0}" -ge "$WAN_MIN_MBPS" ] && echo 1 || echo 0)" \
+    "LAN → NAT → vtnet2 → host bridge → ISP, Mbit/s: $tp (want every run ≥ $WAN_MIN_MBPS)"
+  rep ''; rep "- WAN throughput (bridged, Mbit/s): $tp"
+fi
+
+# ================================================================ compare =======================
+stage compare
+bash "$ROOT/opnsense/drill/config-compare-test.sh" > "$WORK/compare-test.log" 2>&1 \
+  || { cat "$WORK/compare-test.log" >&2; fail "the scorer's self-test failed — not scoring with it"; exit 1; }
+curl -sfk -K "$SEC/drill.curl" --max-time 60 -o "$SEC/drill.xml" "https://$HOST/api/core/backup/download/this" \
+  || { fail "could not download the drill VM's config.xml"; exit 1; }
+# Retried: a rehearsal run once lost this one GET with prod healthy and the request absent from
+# its audit log (2026-09-29 night). The curl error now lands in the report either way.
+perr=''
+for _ in 1 2 3; do
+  perr="$(curl -sSfk -K "$SEC/prod.curl" --max-time 60 -o "$SEC/prod.xml" "https://$PROD/api/core/backup/download/this" 2>&1)" && break
+  log "prod config GET failed ($perr) — retrying in 15 s"; sleep 15
+done
+[ -s "$SEC/prod.xml" ] || { fail "could not GET prod's config.xml: $perr"; exit 1; }
+chmod 600 "$SEC"/*.xml
+python3 "$ROOT/opnsense/drill/config-compare.py" "$SEC/prod.xml" "$SEC/drill.xml" --map "$MAP" \
+  --report "$WORK/compare.md" --prom "$WORK/compare.prom" --json "$WORK/compare.json" \
+  --detail "$SEC/detail.tsv" || { fail "config-compare failed"; exit 1; }
+rm -f "$SEC"/*.xml
+SCORE="$(jq -r .score "$WORK/compare.json")"
+rep ''; rep '### Realism: prod config.xml vs the from-git build'; rep ''; cat "$WORK/compare.md" >> "$REPORT"
+if [ "$KEEP" -eq 1 ]; then  # the keyed detail (paths + item names, no values) outlives the run only on request
+  install -m 600 "$SEC/detail.tsv" "$WORK/detail.tsv"; log "keyed detail (no values): $WORK/detail.tsv"
+fi

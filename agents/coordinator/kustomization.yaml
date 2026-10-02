@@ -37,6 +37,7 @@ resources:
   - responder-budget-alerts.yaml
   - responder-budget-dashboard.yaml
   - retro-argo.yaml
+  - retro-activity-argo.yaml
   - retro-git.yaml
   - review-argo.yaml
   - reviewer-git.yaml
@@ -59,4 +60,4 @@ configurations:
 
 images:
   - name: ghcr.io/teststuffstash/agent-coordinator
-    newTag: 2026.9.27-gca94f4a2dd99
+    newTag: 2026.9.28-gca94f4a2dd99

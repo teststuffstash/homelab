@@ -13,6 +13,13 @@ opnsense_conn:
   ssl_verify: false                          # default self-signed cert
 
 # --- opnsense-bgp : FRR/BGP peering with Cilium ---
+# STANDBY profile (docs/router-move.md §The standing nodes, ADR-144): a router node standing on
+# the real LAN beside prod must be INERT — no BGP sessions, no DHCP, no ddclient, no ACME
+# renewal, and none of prod's HAProxy VIPs on the LAN (they sit on lo0: HAProxy binds, nothing
+# answers ARP). A standing node's host_vars set it true; the cutover converges it false.
+opnsense_standby: false
+haproxy_vip_interface: "{{ 'lo0' if opnsense_standby else 'lan' }}"
+
 opnsense_asn: 64512
 cluster_asn: 64513
 bgp_router_id: "192.168.2.1"
@@ -173,10 +180,13 @@ ddclient_hostname: wg.teststuff.net
 ddclient_account_description: "wg endpoint (ansible)"
 
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
+# argo/apps are NOT listed: their overrides belong to opnsense-haproxy (haproxy_proxied_services),
+# which creates the VIP they point at. Listing a name in both made the two roles rewrite the same
+# record's description on every run (neither ever idempotent) — found by the FU-297 test VM.
 unbound_hosts:
+  - { hostname: opnsense, domain: teststuff.net, value: 192.168.2.1, description: "the router GUI at the .1 CARP VIP — Big Data answered it from its system hostname, the nodes do not (window 1, ADR-145)" }
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
-  - { hostname: argo, domain: teststuff.net, value: 192.168.3.24, description: "Argo Workflows UI (HAProxy VIP; backend LB 40.24)" }
-  - { hostname: apps, domain: teststuff.net, value: 192.168.3.25, description: "GitHub Apps declared-vs-live page (HAProxy VIP; backend LB 40.25, github-exporter)" }
+  - { hostname: npm-cache, domain: teststuff.net, value: 192.168.40.35, description: "npm pull-through cache (BGP VIP) — Deno needs a hostname registry, an IP URL breaks its cache (ADR-143, FU-294)" }
 
 # Zones Unbound answers NXDOMAIN for, the zone AND every name under it (one DNSBL policy).
 # cluster.local.teststuff.net (2026-09-22): Talos ≥ v1.14.0 applies the DHCP search domain
@@ -212,3 +222,75 @@ unbound_advanced:
   serveexpiredreplyttl: "30"
   serveexpiredttl: "86400"
   serveexpiredclienttimeout: "1800"
+
+# --- opnsense-users : one API user per consumer (FU-013) ---------------------------------
+# Privilege KEYS as the models' ACL/ACL.xml files name them (read on the 26.1.11 test VM +
+# prod's `auth/user/get` priv list, 2026-09-29). Never `page-all`, never a group.
+#
+# backup-puller — the in-cluster config.xml puller (argocd/resources/opnsense-config-backup/).
+#   page-diagnostics-configurationhistory = `api/core/backup/*` (download + the revision list),
+#   which ALSO matches revertBackup/deleteBackup; user-config-readonly is what makes it safe:
+#   both of those call throwReadOnly(), which refuses any user holding it.
+#
+# automation — the ansible plays' own identity (so their revisions stop reading as `root`).
+#   One privilege per API area the opnsense-* roles call (the ACL pattern it grants in brackets):
+#     page-routing                        bgp                  [api/quagga/*]
+#     page-services-acmeclient            acme, haproxy        [api/acmeclient/*]
+#     page-services-haproxy               haproxy              [api/haproxy/*]
+#     page-firewall-virtualipaddress-edit haproxy (VIP alias)  [api/interfaces/vip_settings/*]
+#     page-services-unbound               unbound, haproxy, wg [api/unbound/*]
+#     page-wireguard-config               wireguard            [api/wireguard/{server,client,general,service}/*]
+#     page-filter-api                     wireguard (WAN rule) [api/firewall/filter/*]
+#     page-services-dyndns                ddclient             [os-ddclient's ACL; prod only — the test VM has no plugin]
+#   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]), which
+#   the ddclient role uses to install os-ddclient when missing. Package install is root-equivalent;
+#   plugin installs stay a root/bootstrap step. Nor page-services-dnsforwarder ([api/dnsmasq/*],
+#   opnsense/dnsmasq-dhcp.py) — not an ansible play; add it when that script moves off root's key.
+#   Creating the user changes nothing by itself: scripts/opnsense-playbook.sh still reads root's
+#   key (opnsense-api-{key,secret}) until the wrapper is switched in a separate step.
+opnsense_api_users:
+  - name: backup-puller
+    description: "config.xml backup puller (in-cluster, read-only) - FU-013"
+    privileges:
+      - page-diagnostics-configurationhistory
+      - user-config-readonly
+  - name: automation
+    description: "ansible opnsense-* playbooks - FU-013"
+    privileges:
+      - page-routing
+      - page-services-acmeclient
+      - page-services-haproxy
+      - page-firewall-virtualipaddress-edit
+      - page-services-unbound
+      - page-wireguard-config
+      - page-filter-api
+      - page-services-dyndns
+
+# --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
+# Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill
+# counted each as config not in code. Keys = the `get` response's field names; select fields take
+# the stored value (disablevlanhwfilter: 0 enable / 1 disable / 2 leave default).
+opnsense_interface_settings:
+  disablechecksumoffloading: "1"
+  disablesegmentationoffloading: "1"
+  disablelargereceiveoffloading: "1"
+  disablevlanhwfilter: "1"
+  disableipv6: "1"                 # "Allow IPv6" OFF — prod's LAN track6 / IPv6 rule are inert residue
+# Reporting > NetFlow: local capture for Insight (router-local by design — FU-205). LAN + WAN only:
+# opt1..opt3 (the HP box's spare igb1-3, no carrier, no address) are ignored — they were reserved
+# for a home-vs-platform network split that is not planned now (operator, 2026-09-29).
+opnsense_netflow:
+  capture:
+    interfaces: [lan, wan]
+    egress_only: [wan]
+    version: v9
+    targets: "127.0.0.1:2056"
+  collect:
+    enable: "1"
+  activeTimeout: "1800"
+  inactiveTimeout: "15"
+# Reporting > Settings: the RRD health graphs, on as on prod. The model's default is 1, but 26.7's
+# migration (Diagnostics M1_0_0) writes 0 on any config without a legacy <rrd> — i.e. every
+# fresh build; prod reads 1, migrated from its old <rrd><enable/> (the drill's last (a) row, FU-297).
+opnsense_system_health:
+  enabled: "1"

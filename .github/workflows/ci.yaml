@@ -395,16 +395,37 @@ jobs:
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
         run: devbox run pin-only-lint-test
 
+      # ADR-143: the lockfile-intake gate's offline self-test (extractors, key parsing, fail-closed).
+      - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
+        run: devbox run lock-intake-lint-test
+
+      # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
+      # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local
+      # pre-flight, so a new step here rotted the map on master unseen (the unexecuted-gate class).
+      - name: diff-ci coverage belt — every ci.yaml devbox task has a MAP row (devbox run diff-ci -- --coverage-only)
+        run: devbox run diff-ci -- --coverage-only
+
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
-        # homelab#1441: diff against the PR's base SHA AT EVENT TIME — the merge commit's first
-        # parent — never the base BRANCH tip. The checkout is refs/pull/N/merge; fetching the tip
-        # separately races a busy master, and a two-dot diff against a NEWER tip lists every file
-        # master added since as a "change" of the PR (a merely-behind worker PR went red on
-        # governance files it never touched). base.sha is depth-independent and exact.
+        # homelab#1441 → #2064 (2026-09-28): diff against the MERGE REF'S OWN FIRST PARENT, read
+        # off the checked-out merge commit — never the base BRANCH tip, and not base.sha either.
+        # The checkout is refs/pull/N/merge = merge(master-as-GitHub-merged-it, head); base.sha is
+        # master at EVENT time, which is the fork point for a behind PR, so a two-dot diff from it
+        # spans fork → merge ref and attributes every master commit since (three guarded-file
+        # merges on 2026-09-28) to the PR (#2046 red on files it never touched). The merge
+        # commit's first parent is exactly the master the diff must exclude; the object is listed
+        # in the merge commit itself, so it resolves under a depth-1 checkout after one fetch.
+        # A non-merge HEAD (no second parent) falls back to base.sha.
+        # ⚠ READ THE RAW OBJECT (2026-09-28, PR#2087 red on a belt step master had just merged):
+        # under actions/checkout's depth-1 fetch the merge commit is the SHALLOW BOUNDARY, and
+        # `git rev-list --parents` / `%P` report a boundary commit as PARENTLESS — P1 came back
+        # empty on every run and the fallback base.sha silently re-created the #1441 attribution
+        # (the drill's follow-up was red on the coverage-belt step it never touched). The parent
+        # lines are in the commit object itself; `cat-file -p` reads them shallow or not.
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          devbox run pin-only-lint "$BASE_SHA"
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run pin-only-lint "$BASE"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # The third shape (PR#1993) resolves every added action SHA against the tag upstream, and
@@ -421,8 +442,9 @@ jobs:
         # homelab#1441: same base.sha rule as pin-only-lint above (the two-dot diff against a
         # moved tip is what failed PR#1435 on files master added after its fork).
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          devbox run governance-lint "$BASE_SHA"
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"   # #2064 + the shallow-boundary read, as above
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run governance-lint "$BASE"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # homelab#1441 (b): the file list comes from GitHub's three-dot compare (the checkout is the
@@ -432,6 +454,44 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           # homelab#1036 — the assembly-lane arm reads these (goal/** head + Assembly-for: trailer)
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+      # ADR-143: what this PR's lockfile changes BRING IN (transitive included) must have no OSV
+      # record (incl. MAL-), be ≥7 days published, and carry no install-time code. Static — reads
+      # lockfiles + registry metadata, executes nothing; fails closed (exit 2) when it cannot judge.
+      # Same base rule as pin-only-lint above (#2064: the merge ref's own first parent).
+      - name: Lockfile intake — no vulnerable, too-new or install-script versions (devbox run lock-intake-lint)
+        if: github.event_name == 'pull_request'
+        run: |
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"   # #2064 + the shallow-boundary read, as above
+          git fetch --no-tags --depth=1 origin "$BASE"
+          devbox run lock-intake-lint "$BASE"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+      # ADR-142 trial (2026-09-28): the gate-drift REPORT — master's side of every scripts/ edit,
+      # replayed on this PR: (A) master's gate × this content, (B) master's tests × these scripts.
+      # NON-FAILING by design (the gate is the reviewer's BLOCKING gate-change lens, which reads the
+      # GATE-DRIFT block from this log). The script is extracted from the BASE commit, so a PR cannot
+      # edit its own detector; before the script exists on the base, the step says so and passes.
+      - name: gate-drift report — master's side of each scripts/ edit (non-failing, ADR-142)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          P1="$(git cat-file -p HEAD | awk '/^parent /{print $2; exit}')"; [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ] || P1=""; BASE="${P1:-$BASE_SHA}"
+          git fetch --no-tags --depth=1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- scripts/; then echo "gate-drift: no scripts/ change — nothing to replay"; exit 0; fi
+          if ! git show "$BASE:scripts/gate-drift.sh" > "$RUNNER_TEMP/gate-drift.sh" 2>/dev/null; then
+            echo "gate-drift: the base has no scripts/gate-drift.sh yet — report unavailable"; exit 0
+          fi
+          bash "$RUNNER_TEMP/gate-drift.sh" "$BASE"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
 
@@ -493,10 +553,10 @@ jobs:
       - name: Docs graph lint (devbox run docs-graph-lint)
         run: devbox run docs-graph-lint
 
-      # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (jsdom,
+      # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (linkedom,
       # no browser) — a diagram GitHub refuses to render fails HERE, not on a reader
       # (docs/README.md §Conventions; the docs/agents/README.md worked-example was unrenderable
-      # for weeks). ~3s npm ci + ~1.5s parse; deps pinned in scripts/mermaid-lint/package-lock.json.
+      # for weeks). Deno with NO permissions, deps in scripts/mermaid-lint/deno.lock (ADR-143).
       - name: Mermaid parse lint (devbox run mermaid-lint)
         run: devbox run mermaid-lint
 

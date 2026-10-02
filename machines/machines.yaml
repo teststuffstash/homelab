@@ -111,7 +111,7 @@
 #                     reinstall, unlike the imperative `kubectl label` on wk-metal-01/-02.
 #   reconcile         auto | manual (default manual) — ADR-132 §MB4 layer 3. `auto` hands the node's
 #                     INSTALL (Talos version + schematic, from node_install_targets) to the management
-#                     box's reconciler (scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
+#                     box's reconciler (mgmt/scripts/mgmt-reconcile.sh, docs/management-box.md §MB4): when the
 #                     declared install differs from live it runs `node-maintenance.sh upgrade` (a
 #                     control plane: `controlplane-upgrade.sh`) — WIP 1, the verb's floors, ONE attempt
 #                     per declared target, then PARKED + an alert. A `manual` node's diff is drift on
@@ -157,6 +157,9 @@ machines:
     cpu_cores: 4         # i5-2500
     memory_gb: 8
     ip: 192.168.2.1
+    # The WAN NIC's (em0) hardware MAC — the ISP lease follows it, so the router's successor
+    # spoofs it (the router rehearsal, docs/opnsense-test-vm.md; read from the API 2026-09-29).
+    wan_mac: "00:22:4d:4f:ab:2e"
     plug: sensor.plug_opnsense_power
     idle_w: 57
     load_w: null
@@ -707,6 +710,9 @@ machines:
     cpu_cores: 40        # 2 sockets × 10C/20T
     memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
     ip: 192.168.2.59
+    # eno2 = the I350's second port, alone in IOMMU group 104: the future router VM's WAN by
+    # PCI passthrough (ROADMAP §HA step 2). Never bridged, never addressed on the host.
+    router_wan_pci: "0000:03:00.1"
     plug: null
     idle_w: null         # BMC/DCMI reads only; this column holds WALL-METER numbers. Method +
                          # the per-node ladder: private hardware register docs/nx-6035-g5.md.
@@ -743,6 +749,43 @@ machines:
     hardware: Debian 12 VM on nx-02
     ip: 192.168.2.66
     notes: Same labels as ci-runner-01, so a pve outage is not a CI outage. Specs in tofu/ci-runner.tf.
+
+  - name: opnsense-test
+    kind: vm
+    # No `zone:` — not a k8s node; tofu's kubernetes_labels.node_zone would try to label a
+    # Node that does not exist (same reason as nx-02 / pve above).
+    label: "`opnsense-test` (VM on nx-02)"
+    role: OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297)
+    hardware: OPNsense 26.7 VM on nx-02
+    ip: 192.168.2.67
+    notes: NOT the router — nothing routes through it. Hardware in tofu/opnsense-test.tf; guest bootstrap + baseline rollback in docs/opnsense-test-vm.md.
+
+  - name: opnsense-drill
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-drill` (VM on nx-02, EPHEMERAL)"
+    role: OPNsense REBUILD DRILL — built from nothing, converged with all router code, probed, scored against prod, destroyed; WAN = this IP, LAN = isolated `vmbr2` (FU-297)
+    hardware: OPNsense 26.7 VM on nx-02 (vmid 9199)
+    ip: 192.168.2.68
+    notes: Exists only while scripts/opnsense-drill.sh runs (weekly) — an empty ping is the normal state. Reserved so nothing else takes the address. docs/opnsense-test-vm.md §The rebuild drill.
+
+  - name: opnsense-nx02
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-nx02` (VM on nx-02)"
+    role: CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled eno2
+    hardware: OPNsense 26.7 VM on nx-02 (vmid 9170)
+    ip: 192.168.2.70
+    notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.
+
+  - name: opnsense-pve
+    kind: vm
+    # No `zone:` — not a k8s node (same reason as opnsense-test above).
+    label: "`opnsense-pve` (VM on pve)"
+    role: CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled enp6s0 (TG-3468)
+    hardware: OPNsense 26.7 VM on pve (vmid 9171)
+    ip: 192.168.2.71
+    notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.
 
   - name: droplet
     kind: device

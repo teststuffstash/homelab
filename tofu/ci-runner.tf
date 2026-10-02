@@ -52,9 +52,9 @@ variable "ci_runner_memory_mb" {
 }
 
 variable "ci_runner_02_running" {
-  description = "ci-runner-02's power state (started + on_boot). PARKED false 2026-09-25 (operator) while nx-02's NUMA/swap placement is investigated — FU-289; the VM and its disk stay, ci-runner-01 carries the proxmox-vm lane. Flip back to true to resume."
+  description = "ci-runner-02's power state (started + on_boot). Was PARKED false 2026-09-25 (operator) while nx-02's NUMA/swap placement was investigated — FU-289; UNPARKED 2026-09-27 once the placement belts were live, wk-04 sat at 16/16 GiB and nx-02's swap had left the WD spinner for the SA400 SSD. Flip to false to park again (the VM and its disk stay; ci-runner-01 carries the proxmox-vm lane alone)."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "ci_runner_02_vm_id" {

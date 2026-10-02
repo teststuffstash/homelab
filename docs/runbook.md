@@ -84,8 +84,12 @@ Why the wrapper exists (the non-obvious bits):
   localhost anyway → the interpreter must be passed as **`-e ansible_python_interpreter=...`**.
 - The collection isn't preinstalled in a fresh jail (`ansible-galaxy collection install -r
   ansible/collections/requirements.yml`).
-- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==25.7.8` for
-  os-frr 1.52 / OPNsense 26.1).
+- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==26.1.11` for
+  OPNsense 26.1.x). ⚠ **26.x flipped the collection's global `reload` module-argument default
+  `true` → `false`**: a reload-capable module call without `reload: true` writes *saved* config
+  only — it still reports `changed` while the running service never learns the change. Every
+  reload-capable call site in `ansible/roles/opnsense-*/` sets it explicitly via a role-scoped
+  block-level `module_defaults`; keep new tasks inside that block.
 
 Settings with **no API at all** (legacy pages — a GUI click by necessity, recorded here so nobody
 hunts for a playbook; each one names the code it affects):
@@ -98,8 +102,10 @@ API/module gotchas:
 - The generic **`raw`** module is the escape hatch for plugins with no/incompatible module (HAProxy
   backend/frontend/server). **Mutating `raw` commands need `action: post`** — they default to `get`
   and silently no-op (`{"result":"failed"}`).
-- `unbound_host` **saves but does not apply** — Unbound keeps serving the old answer until you POST
-  `/unbound/service/reconfigure` (the `opnsense-unbound` role's handler does this). Match on
+- `unbound_host`'s API write alone **does not apply** — Unbound keeps serving the old answer until
+  you POST `/unbound/service/reconfigure`. Both paths are covered: the module call carries
+  `reload: true` (26.x requires it explicitly) and the `opnsense-unbound` role's handler
+  reconfigures after the `raw` settings/DNSBL writes. Match on
   `[hostname, domain, record_type]` (exclude `value`) to update-in-place on a repoint.
 - Verify a DNS record bypassing the jail's stale Docker/host cache: `devbox run -- dig +short
   <name> @192.168.2.1` (jail `getent` caches the pre-change answer).
@@ -107,6 +113,32 @@ API/module gotchas:
   GUI-created certs → playbooks are create-if-absent guarded on name.
 - ⚠️ Never iterate destructive firmware endpoints (`/firmware/reboot`, `/poweroff`) with a real
   body to "discover" them — they execute.
+
+### Validate a router-config PR on the OPNsense test VM (FU-297)
+
+`--check` proves plumbing, not apply. A PR that touches `ansible/opnsense-*`, its roles or the
+`oxlorg.opnsense` pin is applied for real to the throwaway OPNsense VM on nx-02
+([FU-297](follow-ups.md)) — never the router: its own inventory (`ansible/test-vm/`), its own
+wallet creds, a guard play before every play. The VM itself — `opnsense-test`, vmid `9110`, WAN
+`192.168.2.67`, snapshot `baseline` — and how it is built: [`opnsense-test-vm.md`](opnsense-test-vm.md).
+
+```bash
+export OPN_TEST_HOST=192.168.2.67 OPN_TEST_VMID=9110         # the VM's identity is an explicit input
+bash scripts/opnsense-test-vm.sh --pr 2033 --steps prep      # no VM: guard + syntax-check, both refs
+bash scripts/opnsense-test-vm.sh --pr 2033 --post            # full run; report as a PR comment
+```
+
+The five steps (rollback → base converges → head on top → a mutation reaches the RUNNING
+daemons, with a BASE-roles negative control → fresh converge + idempotent rerun), the isolation
+overrides and what the run does NOT prove (ACME issuance, real backends, BGP sessions) are in
+the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. `--status`
+also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
+*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
+comment, which names the sha, is the record.
+
+The same harness also drives the weekly **rebuild drill** — a second VM built from nothing,
+converged with all router code and scored against prod, never `9110`:
+[`opnsense-test-vm.md`](opnsense-test-vm.md) §The rebuild drill.
 
 ### Expose an in-cluster service over HTTPS (`<name>.teststuff.net`)
 
@@ -120,6 +152,9 @@ API/module gotchas:
    (all `40.x` black-holes while BGP still shows Established): recover with a real FRR cycle —
    `api/quagga/service/stop` + `start` (the `restart` endpoint is a no-op) — then confirm
    `40.x` rows in `api/diagnostics/interface/get_routes`. Full story: `group_vars/opnsense.yml`.
+   (The haproxy role's `interface_vip` call applies each VIP with `reload: true`, so this
+   reconfigure still fires — under 26.x's flipped default the VIP would be saved-but-unapplied
+   and the frontend two sections below would bind to an address that does not exist.)
 2. Run **in this order**:
    - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert spec **and now
      signs + polls it to `statusCode == 200`** before returning (FU-078, resolved 2026-07-15: the role
@@ -171,6 +206,54 @@ and the ACME cert (`acmeclient/certificates/removeCertificate/<uuid>`). Then rec
 (Used at the oracle-specs → specs.oracle cutover, 2026-07-15 — ⚠ the OLD name/VIP
 (`oracle-specs.teststuff.net` / 3.20) is deliberately KEPT LIVE until the oracle stack migrates
 it — `ansible/group_vars/opnsense.yml` says so, and both names serve 200 as of 2026-08-11.)
+
+### OPNsense config backup + click detector (FU-013)
+
+The router's only off-box `config.xml` copy. A daily read-only CronJob downloads the running config
+with the `backup-puller` API user, age-encrypts it and keeps 90 days (never fewer than 30 objects) in
+the private Garage bucket `opnsense-config-backup`; the same run flags config revisions made by
+anyone but `automation`, `backup-puller` or the ACME renewal script. Mechanism, retention and the
+reasons: [`backup.py`](../argocd/resources/opnsense-config-backup/backup.py) and
+[`cronjob.yaml`](../argocd/resources/opnsense-config-backup/cronjob.yaml); alerts
+`OpnsenseConfigBackupStale`, `OpnsenseConfigUnattributedRevision`, `OpnsenseConfigBackupSuspended`.
+The API users and their privileges: `opnsense_api_users` in `ansible/group_vars/opnsense.yml`.
+
+**Create the users / mint their keys** (a router write — maintenance window). Keys land in the
+wallet (`opnsense-<user>-api-{key,secret}`) and, for the puller, Infisical:
+
+```bash
+bash scripts/opnsense-api-users.sh --check --diff   # GETs only: what would change
+bash scripts/opnsense-api-users.sh                  # users + one key each (idempotent)
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
+$K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
+```
+
+The mint is itself a root-key write, so the first backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`), and so does every playbook run until the wrapper uses the `automation` key.
+Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
+by hand so the first backup does not wait for 04:23 UTC:
+`$K create job --from=cronjob/opnsense-config-backup first-run && $K logs -f job/first-run`.
+
+**Restore (DR).** Fetch the newest object with the workspace's own key (the router may be the thing
+that is down, so no VIP: port-forward Garage through the API server), decrypt with the wallet
+identity, and load it:
+
+```bash
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
+$K -n garage port-forward svc/garage 3900:3900 &
+export AWS_ACCESS_KEY_ID=$($K -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.access_key_id}' | base64 -d)
+export AWS_SECRET_ACCESS_KEY=$($K -n opnsense-config-backup get secret opnsense-config-backup-s3 -o jsonpath='{.data.secret_access_key}' | base64 -d)
+S3="devbox run -- aws --region garage --endpoint-url http://127.0.0.1:3900 s3"
+$S3 ls s3://opnsense-config-backup/opnsense-fw/ | tail -3            # names carry the run date
+$S3 cp s3://opnsense-config-backup/opnsense-fw/<object>.xml.age /tmp/
+keepassxc-cli show -q --no-password -k ~/.claude/homelab-keepass/homelab.keyx -a Password \
+  ~/.claude/homelab-keepass/homelab.kdbx opnsense-config-backup-age-identity > /tmp/id.txt
+devbox run -- age -d -i /tmp/id.txt -o /tmp/config.xml /tmp/<object>.xml.age; shred -u /tmp/id.txt
+```
+
+A running box takes it as `/conf/config.xml` (`scp` it in, then reboot). A fresh install takes it
+at first boot through OPNsense's own importer from a CD/USB carrying `/conf/config.xml` — the
+mechanism the test VM is built with ([`opnsense-test-vm.md`](opnsense-test-vm.md) §Why this
+bootstrap mechanism). `/tmp/config.xml` holds every router secret in clear: shred it afterwards.
 
 ### LAN DHCP / DNS
 
@@ -337,8 +420,12 @@ NotReady. `up` sends WoL from pve for a metal node (MAC from `opnsense/dnsmasq-d
 Ready, uncordons, then waits until the Longhorn node is Schedulable and every attached volume is
 healthy again. Replicas on the node go degraded for the window; Longhorn starts rebuilding them
 elsewhere after `replica-replenishment-wait-interval` (600 s) — a longer window just means a
-re-sync when the node returns. Control planes are out of scope: this script refuses them, and they go through
-`scripts/controlplane-upgrade.sh`.
+re-sync when the node returns. **Control planes take the same verbs** (`down`/`up`/`upgrade <cp>`):
+the script hands them to `scripts/controlplane-upgrade.sh <cp> <verb>`, which adds the CP gates —
+three Ready CPs, odd healthy etcd, another API endpoint, clean Cilium, an etcd snapshot, and on
+`down` an etcd leadership forfeit when the target leads — then re-enters the shared verb; `up`
+ends with the etcd-membership and Cilium post-checks (the one sanctioned ds/cilium roll). The
+Talos API VIP moves on the graceful shutdown by itself (a few seconds of API blip).
 
 **The window also declares itself to the alert path, in two halves that cover different label
 shapes** (FU-230; `SILENCE=0` opts out of both). `settle`/`down` open Alertmanager silences keyed on

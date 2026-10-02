@@ -1,0 +1,4 @@
+CALL gh pr list --repo teststuffstash/homelab --head fix/issue-1515-something --state open --json number,labels,autoMergeRequest
+OUT → VERIFIED: NO_ARM is empty — the ordinary arming path runs
+OUT REACHED: end
+RC 0

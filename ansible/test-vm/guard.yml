@@ -1,0 +1,26 @@
+---
+# Guard play for the OPNsense test VM (FU-297). scripts/opnsense-test-vm.sh runs it, with the
+# SAME inventory + extra-vars, immediately before every play it applies — as its own
+# ansible-playbook invocation, so a failed guard stops the script before the play starts.
+# It checks the values the oxlorg modules will actually use (the rendered opnsense_conn),
+# not the script's idea of them.
+- name: OPNsense test-VM guard (never the production router)
+  hosts: opnsense
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Assert the target is the test VM and nothing else
+      ansible.builtin.assert:
+        that:
+          - groups['opnsense'] == ['opnsense-test-vm']
+          - inventory_hostname == 'opnsense-test-vm'
+          - opnsense_conn.firewall is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+          - opnsense_conn.firewall != opnsense_prod_host
+          - opnsense_conn.firewall != '192.168.2.1'
+          - opnsense_conn.api_key | length > 0
+          - lookup('env', 'OPN_TEST_GUARD') == 'opnsense-test-vm'
+        fail_msg: >-
+          REFUSING: resolved API host '{{ opnsense_conn.firewall }}' / host
+          '{{ inventory_hostname }}' is not the OPNsense test VM (prod router is
+          {{ opnsense_prod_host }}). Only scripts/opnsense-test-vm.sh drives this.
+        quiet: true

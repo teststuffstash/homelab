@@ -1,0 +1,19 @@
+# tofu-image-revert-coupling-container — the tree read that ties the stuck Deployment to the candidate
+# (#1988's class row, 2026-09-28): a changed file must declare the alert's deployment as a
+# `resource "kubernetes_deployment"` block's OWN `metadata { name = … }` — never a pod-template
+# metadata, a container / volume name or a sibling resource's name — read from the checkout,
+# never inferred from the alert. This row: the alert's name is a CONTAINER name in the changed file (`name = "dind"` under the pod template), not a Deployment's metadata name → report-only (the PR#2082 review finding).
+name: tofu-image-revert-coupling-container
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - PRNUM=2037
+  - NS=dind
+  - DEP=dind
+  - FILES=tofu/forgejo-runner.tf
+parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-coupling
+  - file:call.sh
+  - file:post.sh

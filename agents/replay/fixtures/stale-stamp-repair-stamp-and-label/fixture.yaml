@@ -1,0 +1,10 @@
+# stale-stamp repair case 1: un-armed `major` + leaked `automerge` label + the renovate-approve
+# reflex's rubber stamp (own reviewer identity, APPROVED, submitted after the newest content
+# commit) ⇒ the stamp is DISMISSED, the label STRIPPED, one ADR-103 event line (homelab#2037 class)
+name: stale-stamp-repair-stamp-and-label
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:stale-stamp-repair
+  - file:post.sh

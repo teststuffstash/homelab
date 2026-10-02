@@ -208,13 +208,13 @@ modern standard (principle #5). **Consequences:** Cilium owns LB IPAM + BGP.
 `bgp=advertise` are advertised. **Considered:** MetalLB (L2/ARP), Calico-BGP.
 **Why:** the router actually learns the routes (natively routable from LAN/VPN, no ARP tricks/speaker
 pods); both ends as code (CiliumBGP* CRDs + O-X-L `frr_bgp_*` Ansible). **Consequences:** L2
-auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity).
+auto-discovery does **not** cross the L3/BGP boundary; LB IPs come from a separate block (no LAN IP scarcity). Mechanism: [`bgp.md`](bgp.md).
 
 ### ADR-022 — Router as code: OPNsense via the `oxlorg.opnsense` Ansible collection
 **Status:** Accepted (2026-05). **Decision:** manage OPNsense (BGP, ACME, HAProxy, Unbound) as code
 with the O-X-L collection, run through `scripts/opnsense-playbook.sh`. **Considered:** pfSense, manual GUI.
 **Why:** no click-ops (principle #3); OPNsense has the API + an Ansible collection. **Consequences:**
-the collection **pin must track the os-frr/OPNsense version** (currently `25.7.8` for os-frr 1.52 /
+the collection **pin must track the os-frr/OPNsense version** (currently `26.1.11` for os-frr 1.52 /
 OPNsense 26.1); the generic `raw` module needs `action: post` for mutations; `unbound_host` needs a
 reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.xyz/` dirs were deleted for publish.)
 
@@ -223,7 +223,7 @@ reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.x
 `opnsense/dnsmasq-dhcp.py`; dnsmasq is DHCP-only (`port=0`) so Unbound keeps `:53`.
 **Considered:** keep ISC dhcpd. **Why:** ISC has no settings API → can't be driven as code.
 **Consequences:** PXE proxy-DHCP is separate (on the Matchbox LXC); ISC must be disabled in the UI
-once (no API) for reboot-safety.
+once (no API) for reboot-safety. **Superseded at the router cutover by ADR-145** (Kea on the router pair).
 
 ---
 
@@ -716,6 +716,12 @@ VIP on the Docker host — 2026-07-13); physical scale is bounded (~10³, ARP/L2
 is not (routed), so they get differently-sized homes. **Consequences:** legacy `2.0/24` VIPs
 migrate to `3.0/24` opportunistically (FU-071); new exposures land in `3.0/24`/`32.0/19` from day
 one; the wifi-password→VLAN plan slots into the reserved VLAN blocks without touching the table.
+**Amended 2026-09-30 (operator — the CARP pair, ADR-144):** the router LAN is a **`/24`**, as every
+host and DHCP lease already is — Big Data's `.1/22` (click-ops residue, found 2026-09-29) is not
+carried to the pair. So `3.0/24` stays router-local: HAProxy VIPs on the router's `lo0`, reached via
+`.1`; under CARP only `.1` moves (considered: keep `/22` and make every HAProxy VIP a CARP VIP —
+16 more failover addresses for nothing a `/24` client uses). `192.168.2.72` is reserved as the
+pair's CARP trial VIP ([`ip-plan.md`](ip-plan.md)).
 
 ### ADR-089 — Storage tiers with quota-as-contract: consumers get caps, the platform keeps promises
 **Status:** Accepted (2026-07-13, operator-directed). **Decision:** Longhorn splits into three
@@ -2143,9 +2149,9 @@ ADR-100's owner→rule replacement is the next act, not a wider trial). Tracker:
 ### ADR-129 — The management box runs NixOS, installed once from a stick, updated by a git pull it can undo by itself (2026-09-12)
 
 **Status:** Accepted (operator, 2026-09-12, across the R12 design sitting). **Decision:** the R12
-out-of-band applier runs **NixOS** from a flake in this repo (`nixos/`), installed **once from a
+out-of-band applier runs **NixOS** from a flake in this repo (`mgmt/nixos/`), installed **once from a
 USB stick** via `disko` + `nixos-anywhere` (the stick carries only an SSH-able installer; the
-config comes from git). Its **system closure** is pinned by `nixos/flake.lock`; its **toolchain**
+config comes from git). Its **system closure** is pinned by `mgmt/nixos/flake.lock`; its **toolchain**
 (`tofu`, `talosctl`, `ansible`) is NOT in that closure — it rides the repo's existing
 `devbox.lock`, so the jail and the box hold one pin. Updates are a **git pull by the box**, on a
 timer, from a reviewed ref; the cluster may poke it but holds no credential into it. A **local**
@@ -2161,7 +2167,7 @@ not; generations are the only self-update shape that needs no second machine, wh
 spike's own criterion. **Consequences:** a tofu bump's canary is `plan`, never a first `apply` (a
 newer binary may write state an older one cannot read — assumed, unverified for our pin);
 **kernel-class bumps need hands on the pilot**, because boot counting is systemd-boot's and the
-box ships `bootMode = "bios"` pending a firmware read; the `nixos/` tree is a new surface with no
+box ships `bootMode = "bios"` pending a firmware read; the `mgmt/nixos/` tree is a new surface with no
 CI gate yet; SSH authorized keys become declarative config (rotation a two-commit diff); the host key and every other credential are wallet data placed as root-only files outside the store, never in the flake.
 Mechanism, phases and the probe set: [`management-box.md`](management-box.md). Tracker: FU-097
 (which surfaces it may reconcile — still the gate), FU-012 (state + creds move here).
@@ -2169,10 +2175,10 @@ Mechanism, phases and the probe set: [`management-box.md`](management-box.md). T
 `master`, not a reviewed ref.** The original "from a reviewed ref" became an operator-advanced
 `mgmt-release` branch that was never created in two days, while the box already had the three
 things an ArgoCD-shaped updater needs — pull, a gate, a local rollback. The human gate moves to
-where it already was: the `/nixos/` CODEOWNERS row (plus `scripts/` and `policy/`, owned through
+where it already was: the `/mgmt/nixos/` CODEOWNERS row (plus `scripts/` and `policy/`, owned through
 the ADR-128 trial), so every file the box executes from its checkout is a human read at merge;
 the ref was a second promotion of reviewed commits, not safety. Activation stays deliberate —
-`mgmt-pull` re-activates the closure only when `nixos/` changed since the last activated
+`mgmt-pull` re-activates the closure only when `mgmt/nixos/` changed since the last activated
 revision, and every fetch carries the App token (#1637). **Considered:** keep `mgmt-release` and
 advance it by hand (rejected: a promotion step with no second reviewer, and the box's whole point
 is fewer operator touches); a cluster-pushed update (rejected as before — an inbound credential to
@@ -2448,6 +2454,21 @@ safe belongs to the service, and a PDB is the one place every drain already read
 **Consequences:** fail closed needs an override. It is an expiring PDB annotation, or
 `kubectl drain --disable-eviction` for a single drain. There are two belts (closed 2h, open
 against the signal). Design and override: [garage.md §Voluntary disruption](garage.md#voluntary-disruption--may-a-zone-go-now-2026-09-22).
+**Amended 2026-09-28 (operator, the #2037 class):** the PDB is also the third leg of the shape a
+platform Deployment needs before Renovate may ARM its image bumps. A **stateless** platform
+Deployment (the forgejo runner first: registration is per pod, the volumes are emptyDirs) carries
+`replicas = 2`, a `RollingUpdate` with `max_unavailable = 0` / `max_surge = 1`, and a PDB with
+`minAvailable = 1`; a bump is then a readiness-gated roll the management box applies unattended,
+and the lane may arm it once the class row on #1988 is complete (a rollout-stuck detector proven
+by a bad-tag drill in a window, the tofu image-line shape in the deploy-revert lane's reversible
+predicate, an alert-driven trigger). An **RWO singleton** (Home Assistant, UniFi, its Mongo —
+`Recreate` by necessity, one PVC) never gets this shape: its image bumps stay on the human lane
+or take their restart inside a [declared window](glossary.md) (the responder term). Considered:
+arming the singleton bumps too with the roll as the only gate (rejected — a `Recreate` roll IS the
+outage, and a bad tag on Home Assistant has no second replica to hide behind); keeping the runner
+at one replica and accepting the blip (rejected — the operator's cost function is minutes, and a
+parked bump costs a read each time). Live: `tofu/forgejo-runner.tf`,
+`policy/mgmt/plan-input.yaml` `apply_addresses.main` (`kubernetes_pod_disruption_budget_v1.*`).
 
 ### ADR-141 — GitHub Actions majors merge on their own: blast class picks the lane, semver picks the lens, the revert chain is the second gate (2026-09-27)
 
@@ -2492,3 +2513,103 @@ revert is coarse (one bad pin holds N good ones red) and a grouped lens ride has
 verdict, which is why graduated majors are one PR per dependency. The drill (agent-coordinator#20
 → revert #21, 2026-09-27) proved the lane and found two chain defects on the way (PR#2005 the token
 mint, PR#2006 the candidate query).
+**Amended 2026-09-28 (operator: "until it automerges without a human and rolls back if there is a
+problem" — the #2037 class):** blast class picks the lane for the terraform docker-image class
+too. An image tag Renovate's terraform manager rewrites on a `kubernetes_deployment` in `tofu/`
+is ARMED at every update type: non-majors on the terraform `automerge` rule, majors armed and
+keeping `major` (the lens reviews, its APPROVED completes the merge — the Actions pattern). The
+second gate is the `tofu-image-revert` chain (`docs/designs/fu-1990-workflow-pin-revert.md`
+Part 3): `KubeDeploymentRolloutStuck` on the rolled Deployment → the image-line-only merge that
+declares it is reverted as an `automerge`+`dependencies` PR, `reverted-images:` recorded,
+`pin-only-lint` check (f) refuses the re-proposal for 30 days, the box applies the revert.
+Precondition per Deployment: the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB), so
+the old pods serve throughout a stuck roll; an RWO singleton never enters this lane. Considered:
+a human read of every image bump (rejected — the operator's time; #2037 sat a day for a tag
+change); reverting on `KubePodCrashLooping` too (rejected for now — a crash loop inside a
+readiness-gated roll IS a stuck rollout, one detector is enough until evidence says otherwise).
+
+### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
+**Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
+worker gates, I can always revert"); re-read **2026-10-05** (a week) and **2026-10-28** (a month).
+**Decision:** `scripts/**` is un-owned in CODEOWNERS and leaves every worker gate — except
+`mgmt/scripts/**` and the three box-executed verbs
+(`scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh`): the management box runs
+them from master and stays out of the trial. In their place: the **gate-change lens**
+(`agents/lenses/gate-change.md`, BLOCKING, selected on any `scripts/` diff in a repo whose default
+branch carries the report script) and the **gate-drift report** (`scripts/gate-drift.sh`, a
+non-failing `ci` step run from the BASE commit): (A) master's version of each changed gate × the
+PR's content, (B) master's version of each changed test × the PR's scripts, each beside the PR's own
+run. **Considered:** keep the gate (143 of 146 `scripts/` commits in a month were seat-authored: the
+author read itself under the sole-codeowner waiver); un-own without a replacement (ADR-100's
+doctrine forbids it); run gates from the base ref as the enforced gate (rejected for now — a PR that
+changes a rule could never pass its own new rule; kept as the report's evidence instead). **Why:**
+ADR-100 un-gates only by owner→rule replacement; the self-gating hazard is what the rule must cover,
+and the report replays exactly the edit the PR could hide behind. **Consequences:** drills (seat
+subagents, issue says one thing, PR does another) against a throwaway `goal/**` base before trusting
+it; the re-reads count gate-change PRs, lens verdicts, DIFFERS lines and any weakened gate found
+after merge. Revert = restore `/scripts/` in CODEOWNERS + `scripts/` in GOVERNANCE (the ❌ table rows
+follow). Tracker: FU-293; lane table: [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.
+
+### ADR-143 — Third-party JS runs with no permissions; a lockfile's intake is judged statically before anything runs (2026-09-29)
+**Status:** Accepted (operator, 2026-09-29: "only structural fixes … a vulnerability analyzer should find these").
+**Decision:** (1) `scripts/mermaid-lint` leaves npm: the parser runs under **Deno with zero
+permissions** (`deno run --frozen`, markdown piped on stdin by the shell wrapper — no env, fs, net,
+subprocess, FFI), deps in `deno.json` + `deno.lock` with `minimumDependencyAge: P7D`; Renovate's
+`deno` manager proposes. (2) **`lock-intake-lint`** (`scripts/lock-intake-lint.py`, `ci`, PR-only):
+the (package, version) pairs a PR's lockfile diff adds — transitive included — fail on an OSV
+record (incl. `MAL-`), a publish time under 7 days, or install-time code; fail-closed on unknown
+lockfile types and unreachable sources. (3) A red intake **waits for upstream** — never a local
+pin/override. **Considered:** keep npm + an `overrides` pin (#2032's fix — rots, and the finding
+depended on an LLM reviewer noticing); pnpm (install-script allowlist + resolver age, but runtime
+code still sees everything); a compose sidecar for the jail (sub-agent clones, no socket-free
+trigger); nixpkgs `mermaid-cli` (Chromium, full access); Rust/Go reimplementations (no GitHub
+parity; merman is alpha); a scheduled master scan (deferred: Dependabot / Dependency-Track + SBOM
+are the org-wide candidates). **Why:** Renovate's `osvVulnerabilityAlerts` is direct-deps-only on the
+base branch and its cooldown covers the bumped dep only — the lodash-es@4.17.23 intake under mermaid
+12 was invisible to both; a Shai-Hulud-class package executes where credentials live (the jail,
+CI's dind), so the defence must decide before execution and the executor must hold nothing.
+**Consequences:** the linter runs anywhere (jail, CI, sub-agent clones) with no placement rules;
+Renovate's mermaid 12 PR re-proposes on `deno.json` and stays red until upstream clears it (FU-294).
+
+### ADR-144 — The CARP pair is built beside Big Data: two symmetric router VMs, each managed at its own LAN IP (2026-09-30)
+**Status:** Accepted (operator, 2026-09-30: "bring forward CARP + pve box opnsense … temporarily 3
+opnsense boxes — big data + 2 fallbacks"; "go with 4"; a 1 GbE x1 card for pve instead of Big Data's
+4-port). **Decision:** (1) both router VMs — on nx-02 and on pve — are built NOW, beside the live
+Big Data, which keeps `.1` until the cutover window; CARP is learned on the pair with a trial VIP from
+`192.168.3.0/24` (ADR-088) while nothing depends on it. (2) The nodes are symmetric: WAN + LAN only.
+pve gains a single-port x1 NIC; Big Data's Intel card never moves. (3) Each node is managed at its
+own LAN IP — **`192.168.2.70` (nx-02) and `192.168.2.71` (pve)**, ip-plan's servers band — which is
+its `ansible_host` (one inventory host per node); `.1` is only ever a client address (the CARP VIP
+from the cutover on). (4) Root is the routers' own wallet entry `opnsense-root-password`.
+**Considered:** ROADMAP's sequence (nx-02 alone → Big Data dark → its card to pve → CARP: a
+no-fallback gap, and CARP learned inside live windows); a temporary management NIC + LAN re-address
+in the window; a tunnel into an isolated bridge (tooling, and every tool one typo from `.1` = prod);
+a permanent management segment (nx-02 has no third port; the new switches are unmanaged); carrying
+prod's root hash. **Why:** while Big Data serves, both nodes are experiments — the riskiest step
+(every VIP and both BGP peers move) gets rehearsed without windows, and the move gains two fallbacks
+instead of none; the per-node address is the end state's own, so nothing is re-addressed later.
+**Consequences:** only the router holding `.1` may have a cabled WAN (every node spoofs `em0`'s MAC;
+the bootstrap refuses carrier); an idle node must be inert on the LAN (no `.1`, DHCP off); pfsync
+rides the LAN, unauthenticated (no third port) — accepted; nx-02 carries a standing VM beside the
+drills. Design: [`router-move.md`](router-move.md); ROADMAP §HA step 2 amended.
+
+### ADR-145 — The router cutover is two windows, and the first one already runs the pair's mechanisms: Kea DHCP, per-node BGP, `.1` as a CARP VIP (2026-10-01)
+**Status:** Accepted (operator, 2026-10-01: "bite the bullet and try a switchover to nx-02"; "we do Kea
+anyway on single node? So that once the single node is up I can then add the secondary and shut off
+primary without anyone noticing"). **Decision:** (1) window 1 moves `.1` to the **nx-02 node alone** —
+as a CARP VIP with one speaker, not a plain address; (2) that node serves DHCP from **Kea** (OPNsense
+core, `memfile` leases — no database), HA off; dnsmasq DHCP retires (supersedes ADR-023's server);
+(3) BGP is **per-node from window 1**: Cilium peers `.70`, FRR's router-id is the node's own address —
+never the VIP; (4) window 2 adds pve as the BACKUP (Kea hot-standby HA on, Cilium peer `.71`), with
+no client-visible change, and a primary stop then proves it. **Considered:** both nodes at once (Kea
+HA + per-node BGP first exercised with real clients in the same window); dnsmasq on one node first,
+Kea at the pair (a DHCP migration in the second window); a dnsmasq on/off toggle driven by CARP
+state (the guest-side CARP hook was already rejected by the WAN-follows-master drill); peering the
+standing nodes ahead of the window (contradicts the inert profile — the kill switch trips on a
+BGP SYN-ACK). **Why:** the inert drills proved the pair's machinery but cannot prove the service
+layer; a single-node switchover is the next real evidence, and doing it in the end-state shape
+makes the second node purely additive. Kea HA is API-complete (verified 2026-10-01 against core
+26.7.5: peers, `this_server_name`, control agent, subnets, reservations). **Consequences:** nx-02 is
+MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
+on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
+becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.

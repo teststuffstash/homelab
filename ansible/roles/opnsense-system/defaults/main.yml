@@ -1,0 +1,4 @@
+---
+# Defaults — real values live in group_vars/opnsense.yml. Empty = pin nothing on that page.
+opnsense_interface_settings: {}
+opnsense_netflow: {}

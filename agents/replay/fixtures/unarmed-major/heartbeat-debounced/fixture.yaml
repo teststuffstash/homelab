@@ -1,0 +1,19 @@
+# unarmed-major/heartbeat-debounced (2026-09-28, homelab#2066): a third-party heartbeat re-post does
+# NOT re-arm the clause. Same world as rejudge-rearms, but the recorded marker was computed with
+# iac-sentinel's startedAt at an older beat (2026-09-28T10:35:57Z); the world now shows the next
+# beat (10:42:46Z — iac-sentinel re-posts SUCCESS on every open head every ~4 min, 30 posts in 2 h
+# on PR #2047) with management-sentinel unmoved. Under the #2065 all-startedAt fold this bought a
+# coordinator ride per beat with nothing to decide; the #2066 fold scopes startedAt to the
+# management-sentinel status. Expected: DEBOUNCED — the current hash equals the recorded one.
+name: unarmed-major-heartbeat-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

@@ -306,6 +306,10 @@ is stale, so it cannot drift the way the prose register did.
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
+| `major-arm-guard-armed-major` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-ordinary` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-unarmed-major` | actions | - | `agents/agent-session.sh` | - |
+| `major-arm-guard-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `major-handoff` | table | - | `agents/major-handoff.sh` | - |
 | `merge-conflict/clause` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
 | `merge-conflict/debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T06 |
@@ -343,6 +347,10 @@ is stale, so it cannot drift the way the prose register did.
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
+| `renovate-rebase-tick-adapted` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-already-ticked` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-no-checkbox` | actions | - | `agents/coordinator-scan.sh` | - |
+| `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -382,6 +390,7 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-subject/witness-unopted-phase-slow` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-unopted` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-touches-classify/responder-touches-classify` | suite | - | `-` | - |
+| `retro-activity-window` | suite | - | `-` | - |
 | `retro-cell-report/longlog` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/missing` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/multi-block` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
@@ -469,13 +478,32 @@ is stale, so it cannot drift the way the prose register did.
 | `slo-teeth/slo-teeth` | suite | - | `-` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |
+| `stale-stamp-repair-stamp-and-label` | actions | - | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `strike-retry` | table | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
+| `tofu-image-revert-candidate-other-deployment` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-coupling-container` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-coupling-match` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-coupling-mismatch` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-coupling-second-resource` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
+| `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/files-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/heartbeat-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/rebase-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/rejudge-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/settling-unreadable-age` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unblocked-unlabeled/blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled/surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unit-fast-path-author/unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -701,7 +729,7 @@ S5 heat pass; the per-instance prose is in git and in the cited PRs):
   command substitutions — `$(…)` captures stdout alone, so every stream is byte-identical and
   the change only lets the latch's diagnostic stderr reach pod logs), **homelab#1035 / PR#1078**
   (two rationale comments restored inside `>>>REPLAY:config-defaults>>>` in
-  `agents/coordinator-scan.sh`), **homelab#1403 / PR#1409** (reviewer STEP-0's anomaly arm: the update-branch re-point NOTE at `agents/reviewer-session.sh:511`, in the gap between the `lens-posture-handling` close at 493 and the `reviewer-touches-check` open at 571), **PR#1523** (three empty-string initializations — `PF_CM_CREATED`/`PF_CM_MOUNT`/`PF_CM_VOLUME` — placed in `agents/agent-session.sh` between the `fu042-guard-a` close and the `fu042-wip-cap` open, feeding the same inline-rendered pod manifest as the #919 entry; the issue-* arm that every fixture drives re-initializes them unchanged, so every extracted clause and action stream is byte-identical — the diff exists for the task shapes no fixture drives (the retro cells, ad-hoc runs), which died under `set -u` at the manifest), **PR#1522** (the `--model` command substitution inside `responder-argo.yaml`'s `claude -p` invocation now parses the routed id through `model_id.py` — `claude/sonnet` → `sonnet`; the substitution sits between the `responder-reopen-presnap` close and the `responder-reopen-strip` open, the extracted clauses are byte-identical, and the `claude` call itself is not a stubbed action in any responder family; the same one-line parse lands on `fix-debounce-argo.yaml`'s set-pass `--model` substitution, equally outside its sentinels — the fix is the coordinator's FU-127 move, verified by running the substitution locally on both the routed and the fallback path)., **PR#1614** (ADR-130 cutover: the reviewer mint's `permissions.statuses` write→read in `reviewer-git.yaml` — a `GithubAccessToken` DECLARATION consumed by ESO's generator, read by no clause; the harness observes token USE, never the mint's permission set, and the reviewer's clauses only read statuses)
+  `agents/coordinator-scan.sh`), **homelab#1403 / PR#1409** (reviewer STEP-0's anomaly arm: the update-branch re-point NOTE at `agents/reviewer-session.sh:511`, in the gap between the `lens-posture-handling` close at 493 and the `reviewer-touches-check` open at 571), **PR#1523** (three empty-string initializations — `PF_CM_CREATED`/`PF_CM_MOUNT`/`PF_CM_VOLUME` — placed in `agents/agent-session.sh` between the `fu042-guard-a` close and the `fu042-wip-cap` open, feeding the same inline-rendered pod manifest as the #919 entry; the issue-* arm that every fixture drives re-initializes them unchanged, so every extracted clause and action stream is byte-identical — the diff exists for the task shapes no fixture drives (the retro cells, ad-hoc runs), which died under `set -u` at the manifest), **PR#1522** (the `--model` command substitution inside `responder-argo.yaml`'s `claude -p` invocation now parses the routed id through `model_id.py` — `claude/sonnet` → `sonnet`; the substitution sits between the `responder-reopen-presnap` close and the `responder-reopen-strip` open, the extracted clauses are byte-identical, and the `claude` call itself is not a stubbed action in any responder family; the same one-line parse lands on `fix-debounce-argo.yaml`'s set-pass `--model` substitution, equally outside its sentinels — the fix is the coordinator's FU-127 move, verified by running the substitution locally on both the routed and the fallback path)., **PR#1614** (ADR-130 cutover: the reviewer mint's `permissions.statuses` write→read in `reviewer-git.yaml` — a `GithubAccessToken` DECLARATION consumed by ESO's generator, read by no clause; the harness observes token USE, never the mint's permission set, and the reviewer's clauses only read statuses), **PR#2151** (reviewer STEP-0's anomaly arm: the inline-comment-carrier NOTE beside the #1403 update-branch NOTE — empty COMMENTED reviews each carrying one `/code-review` inline comment are not the pile; prompt prose inside the pod-side `PROMPT`, no sentinel, no action stream)
 - **Class C — the retro lane's STANDING fixture debt** (observable diffs, no family to extend at
   the time). The **FU-058 belt** (2026-08-10, one appended `printf | curl` in `retro-argo.yaml`'s
   harvest step — the RetroReportOverdue success-timestamp push), three more jail-lane clause

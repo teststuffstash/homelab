@@ -1,0 +1,3 @@
+[
+  {"number": 31, "title": "Update dependency mermaid to v12", "labels": [{"name": "dependencies"}, {"name": "major"}], "autoMergeRequest": null, "reviewDecision": "REVIEW_REQUIRED", "author": {"login": "app/homelab-renovate-1234"}, "mergeStateStatus": "BLOCKED", "body": "Renovate bump", "headRefOid": "76d5a0f3bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+]

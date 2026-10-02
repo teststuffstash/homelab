@@ -18,19 +18,21 @@
 # what gets dispatched, and the reflex that approves its own PRs. tofu/github/ is the ruleset
 # governing all of it. An agent able to edit these is not gated at all, whatever the ruleset says.
 /agents/            @RasmusSoot
-/scripts/           @RasmusSoot
-# mermaid-lint's npm manifest + lockfile: Renovate's npm lane (renovate-global.json) — required `ci`
-# runs `npm ci` + the parser on every PR, so the bump IS exercised; owned /scripts/ parked #1977/#2012
-# with nothing a human could add (S9 #1988 (c), 2026-09-27). The script itself stays owned above.
-/scripts/mermaid-lint/package.json
-/scripts/mermaid-lint/package-lock.json
+# /scripts/ is UN-OWNED since 2026-09-28 — ADR-142 TRIAL (re-read 2026-10-05 + 2026-10-28): workers may
+# author the repo's checks; the reviewer's gate-change lens + CI's gate-drift report (master's side of
+# each edit) are the gate. Revert = restore `/scripts/ @RasmusSoot` here + `scripts/` in governance-lint.
+# The three verbs the management box runs from master stay owned (the box is outside the trial):
+/scripts/node-maintenance.sh      @RasmusSoot
+/scripts/maintenance-window.sh    @RasmusSoot
+/scripts/controlplane-upgrade.sh  @RasmusSoot
 /policy/            @RasmusSoot
 # The recovery root's own config (ADR-129). Without this row a bot-approved PR could rewrite the
 # management box's kernel, bootloader or sshd and the box would apply it on its next pull — and
 # the spike lists this box beside the CA keys as a trust anchor. The box follows MASTER (ADR-129 amended
 # 2026-09-14), so this row IS the gate for the recovery root's closure, not a second belt: the box
-# re-activates only when nixos/ changed, and every file it executes from its checkout is owned here.
-/nixos/             @RasmusSoot
+# re-activates only when mgmt/nixos/ changed, and every file it executes from its checkout is owned here.
+# /mgmt/ (2026-09-28, PR#2088) = the closure (mgmt/nixos/) + the box scripts (mgmt/scripts/).
+/mgmt/              @RasmusSoot
 /.github/           @RasmusSoot
 
 # ── Renovate's action-pin lane (homelab ADR-100 addendum / ADR-141, S9 #1990). Ownership is

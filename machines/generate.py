@@ -75,7 +75,7 @@ def vm_roles():
 
 def check_reconcile(m):
     """ADR-132 §MB4 layer 3: `reconcile: auto` hands a node to the management box's reconciler
-    (scripts/mgmt-reconcile.sh), which runs `node-maintenance.sh upgrade` on a worker and
+    (mgmt/scripts/mgmt-reconcile.sh), which runs `node-maintenance.sh upgrade` on a worker and
     `controlplane-upgrade.sh` on a control plane, unattended. Only a Talos NODE qualifies (a
     talos_metal_node, or a var.nodes VM) — hypervisors, the router and anything not Talos stay
     manual until a CARP pair exists. Control planes are allowed since ADR-133's three CPs exist
@@ -97,7 +97,7 @@ def check_reconcile(m):
 def check_rollout_switch(data, machines):
     """The fleet-rollout switch (FU-273, docs/management-box.md §MB4): `reconcile_rollout.enabled`
     gates the staged fleet rollout; while it is false the reconciler owns only `pilot` (the
-    pre-rollout scope). Both are read by scripts/mgmt-reconcile.sh — fail here, not on the box."""
+    pre-rollout scope). Both are read by mgmt/scripts/mgmt-reconcile.sh — fail here, not on the box."""
     sw = data.get("reconcile_rollout")
     if sw is None:
         return

@@ -206,6 +206,39 @@ steps the drill found broken. Re-fire without a fresh failure: `kubectl -n agent
 a Workflow with `workflowTemplateRef: workflow-pin-revert` and the Alertmanager payload as the
 `payload` parameter (the ledger is keyed on the merge SHA, so a handled merge is skipped).
 
+## Part 3 — tofu Deployment image bumps: `tofu-image-revert` (2026-09-28, #1988's class row)
+
+The same chain, third template, for the class ADR-140 (as amended) makes armable: an image tag
+Renovate's terraform manager rewrites on a `kubernetes_deployment` in `tofu/` (the `docker:dind`
+sidecar of the forgejo runner was the first, #2037). The [management box](../management-box.md) applies the merge
+unattended (`kubernetes_deployment.*` is allowlisted), the Deployment rolls, and if the roll does
+not complete the lane reverts it — no human in the loop.
+
+| leg | pin chain (Part 2) | image chain (Part 3) |
+|---|---|---|
+| detector | `GithubWorkflowRunFailed` (master) | `KubeDeploymentRolloutStuck` — kube-prometheus default, `Progressing=false` for 15 m; the Deployment's `progressDeadlineSeconds` (600 s) sets the condition. With `RollingUpdate max_unavailable 0` the OLD pods keep serving while the new ReplicaSet is stuck (ImagePullBackOff, crash loop) |
+| route | receiver `deploy-pin-revert` → `/workflow-failed` | receiver `deploy-rollout-revert` → `/rollout-stuck`, `continue: true` (the responder still triages) |
+| candidate | newest merge ≤120 m touching `.github/workflows/` | the merges ≤180 m touching `tofu/` (wider: hourly pull + 600 s deadline + 15 m `for`) walked NEWEST-FIRST; the first whose files are all `tofu/*.tf`, whose diff passes the predicate AND whose files declare the stuck Deployment wins — a later, unrelated tofu merge or a newer bump on another Deployment never masks the bump; an unreadable diff aborts the walk (report-only) |
+| predicate | every line `uses: owner/repo@sha # tag` | every line `image = "<registry/path>[:tag][@sha256:…]"` — the fourth pin shape (`scripts/pin-only-lint.sh` check (f)) |
+| coupling | (the failed workflow is the merged file) | a changed file must DECLARE the stuck Deployment: `name = "<deployment>"` grepped from the tree, never inferred from the alert |
+| memory | `reverted-pins:` → check (e) refuses the SHA | `reverted-images:` → check (f) refuses the ref for `REVERT_MEMORY_DAYS` — runs on any PR that adds an `image =` line under `tofu/` |
+| branch | `revert-wf-<sha8>` | `revert-img-<sha8>` |
+| ledger key | `wf-<hash>` | `ri-<hash>` |
+| recovery | CI green on master | the box applies the revert on its next hourly pull — recovery ≤ ~1 h after the alert, service intact throughout (the old pods never left) |
+| the apply | n/a | `wait_for_rollout = false` on the Deployment (the drill, 2026-09-28): the provider's default waited 10 min for the new ReplicaSet and turned a bad tag into an ERRORED box apply ("half-applied? human") on a change the cluster had already taken. In this lane the roll is the alert's to judge, so the apply writes the object and returns |
+
+What arms the class: ADR-141 as amended 2026-09-28 — `.github/renovate-global.json`'s terraform
+docker-datasource majors are ARMED and keep `major` (the lens reviews them, its APPROVED completes
+the merge); non-majors already rode the terraform `automerge` rule. Shape required first, per
+Deployment: 2 replicas + zero-unavailable rollout + a PDB (`tofu/forgejo-runner.tf`, PR#2078); an
+RWO singleton (`Recreate`) never gets it and stays on the human lane.
+
+Replay pins: `tofu-image-revert-candidate` (the `--jq`-literal candidate read),
+`tofu-image-revert-merge-lane` (reverted refs from the `+` lines, labels before arming),
+`tofu-image-revert-coupling-{match,mismatch}` (the tree read). The drill: a bad tag on the forgejo
+runner's `dind` image opened as the App, merged by the reflex, stuck by the cluster, reverted by
+this chain, applied by the box — recorded in `agents/coordinator/TICK-LOG.md` when run.
+
 ## Future Work
 
 - **Monitoring**: add a Prometheus alert if the revert chain fires more than N times/day (a flapping pin is a deeper problem)

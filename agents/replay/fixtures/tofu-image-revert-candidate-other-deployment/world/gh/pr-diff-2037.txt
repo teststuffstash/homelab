@@ -1,0 +1,9 @@
+diff --git a/tofu/forgejo-runner.tf b/tofu/forgejo-runner.tf
+--- a/tofu/forgejo-runner.tf
++++ b/tofu/forgejo-runner.tf
+@@ -120,7 +120,7 @@
+         container {
+           name  = "dind"
+-          image = "docker:27-dind"
++          image = "docker:29-dind"
+           security_context { privileged = true }

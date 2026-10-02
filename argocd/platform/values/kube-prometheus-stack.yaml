@@ -56,9 +56,9 @@ additionalPrometheusRulesMap:
         rules:
           - alert: CiliumBGPAllSessionsDown
             annotations:
-              description: 'Not one node is peering with OPNsense — all LoadBalancer VIPs (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...) are no longer advertised and are unreachable from the LAN.'
-              summary: No Cilium BGP sessions established
-            expr: sum(cilium_bgp_control_plane_session_state == bool 1) == 0
+              description: 'Router peer {{ or $labels.neighbor "(every peer — no BGP session metrics at all)" }} has not one established session from the cluster — it holds no LoadBalancer routes (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...); if it is the router clients use (the CARP MASTER behind .1), every VIP is unreachable from the LAN. Per peer since the router pair (ADR-145, docs/bgp.md §With the router pair): a sum over all peers stays silent while one router has none.'
+              summary: No Cilium BGP session established to {{ or $labels.neighbor "any router peer" }}
+            expr: (sum by (neighbor) (cilium_bgp_control_plane_session_state == bool 1) == 0) or on() absent(cilium_bgp_control_plane_session_state)
             for: 5m
             labels:
               severity: critical
@@ -283,6 +283,13 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/workflow-failed
+      # #1988's class row (2026-09-28): a tofu-managed Deployment whose rollout is STUCK after an
+      # image-line-only merge under tofu/ is reverted deterministically (deploy-revert-argo.yaml
+      # `tofu-image-revert`). Same composition as deploy-pin-revert: the responder still triages.
+      - name: deploy-rollout-revert
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/rollout-stuck
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -309,6 +316,14 @@ alertmanager:
           matchers:
             - alertname = "GithubWorkflowRunFailed"
           receiver: deploy-pin-revert
+        # #1988's class row: KubeDeploymentRolloutStuck (kube-prometheus default: Progressing=false
+        # for 15m — the deployment's own progressDeadlineSeconds fires first) goes to BOTH
+        # deploy-rollout-revert AND the responder. The revert only fires when the newest merge
+        # under tofu/ within the window was image-line-only AND declares that Deployment.
+        - continue: true
+          matchers:
+            - alertname = "KubeDeploymentRolloutStuck"
+          receiver: deploy-rollout-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts

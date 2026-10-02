@@ -34,8 +34,8 @@ states for every deadman — local to the target.
 | | Phase | Deliverable | State |
 |---|---|---|---|
 | **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 **installed 2026-09-13** (NixOS from the stick, generation 2 promoted by `mgmt-confirm`, the belt 4/4 under its unit on the env-file creds; timers masked by design). **`main`'s state + credential set moved here 2026-09-13** (first plan on the box: init 12 s, plan 17 s, No changes). Remaining: the box-scoped credential swap (FU-012) |
-| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | 🔜 BUILT 2026-09-13 (`scripts/mgmt-sentinel.sh` + `mgmt-sentinel.timer`, `policy/mgmt/plan-input.yaml`); the required-context flip is PR#1617, operator-applied — §MB3 |
-| **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | 🔜 BUILT 2026-09-13 as the apply LOOP (`scripts/mgmt-apply.sh` + `mgmt-apply.timer`: master moved → plan → every address on the policy's apply allowlist → apply, else refused with a `management-apply` status) — phase C's merge trigger and B's first apply are the same mechanism |
+| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | 🔜 BUILT 2026-09-13 (`mgmt/scripts/mgmt-sentinel.sh` + `mgmt-sentinel.timer`, `policy/mgmt/plan-input.yaml`); the required-context flip is PR#1617, operator-applied — §MB3 |
+| **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | 🔜 BUILT 2026-09-13 as the apply LOOP (`mgmt/scripts/mgmt-apply.sh` + `mgmt-apply.timer`: master moved → plan → every address on the policy's apply allowlist → apply, else refused with a `management-apply` status) — phase C's merge trigger and B's first apply are the same mechanism |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
 
@@ -50,6 +50,14 @@ deliberately** (operator ruling, 2026-09-13): it is the one nondestructive thing
 With a single OPNsense (and, when this was ruled, a single control plane — three since 2026-09-22,
 ADR-133), anything that touched the router, the CPs or the Proxmox host was instant whole-cluster downtime — so phases B and C run on this residue, where a
 wrong apply costs a dashboard or a Home Assistant restart, and the quirks get ironed out there.
+The allowlist (`policy/mgmt/plan-input.yaml` `apply_addresses.main`) named three Deployments at
+first; since 2026-09-28 it covers **every `kubernetes_deployment.*`** — the fourth, the forgejo
+runner, carries the docker-in-docker tag Renovate bumps through the terraform manager, and its
+first bump (#2037) planned green and then parked as "1 address outside the allowlist — human
+apply", which the operator ruled adds nothing (a Deployment roll is readiness-gated; the old
+ReplicaSet stays until the new one is Ready). Since 2026-09-28 it also covers every
+`kubernetes_pod_disruption_budget_v1.*` (a PDB changes nothing running; ADR-140 as amended makes
+it one leg of the roll-without-downtime shape). Services and PVCs stay named.
 
 The sequence, in this order:
 
@@ -73,7 +81,7 @@ alternatives are ADR-129.
 **Installed once from a USB stick, declaratively.** The stick only gets an SSH-able installer onto
 a box with no BMC; the install itself is `disko` + the flake, driven by `nixos-anywhere` from the
 jail, so nothing is typed into an installer UI and the result is what git says. `devbox run mgmt-usb`
-(`scripts/mgmt-usb.sh`) writes the medium on the HOST where the stick is — it probes and confirms the
+(`mgmt/scripts/mgmt-usb.sh`) writes the medium on the HOST where the stick is — it probes and confirms the
 target device BEFORE building the flake's `installerIso`, so a wrong device costs nothing.
 
 **Not PXE, yet, and not netboot ever.**
@@ -99,7 +107,7 @@ separately and roll back separately:
 | Layer | Pin | Bumped by | Rollback |
 |---|---|---|---|
 | Toolchain — `tofu`, `talosctl`, `ansible`, `openssl` | **`devbox.lock`** (committed, repo root) | the existing weekly [`devbox-update.yaml`](../.github/workflows/devbox-update.yaml) — one synchronized `@latest` re-resolve across repos, auto-merging CI-gated PR. ⚠ Renovate's nix/devbox manager stays disabled on purpose: `@latest` is untrackable ([`renovate.md`](renovate.md) §Gotchas encountered) | `git revert` the lock commit |
-| System closure — kernel, glibc, systemd | `nixos/flake.lock` | the same git flow | a generation; automatic on a never-boots, see Rollback |
+| System closure — kernel, glibc, systemd | `mgmt/nixos/flake.lock` | the same git flow | a generation; automatic on a never-boots, see Rollback |
 
 This is why the box runs its tools through `devbox run` from a checkout of this repo rather than
 from the system closure: **one toolchain pin for the jail and the box**, which is the whole
@@ -109,13 +117,15 @@ argument for `devbox.lock` being the pin, and it keeps the system closure tiny.
 
 The box pulls **`master`** on a timer (hourly level; the doorbell of FU-237 (d) is the later edge)
 — ADR-129 as **amended 2026-09-14**. The gate is at MERGE, not at a second ref: `CODEOWNERS`
-owns `/nixos/`, and `scripts/` + `policy/` stay owned through the ADR-128 trial, so every file the
+owns `/mgmt/` (the closure in `mgmt/nixos/` + the box scripts in `mgmt/scripts/`, grouped 2026-09-28), and
+`scripts/` (the shared verbs the box calls — `node-maintenance`, `maintenance-window`) + `policy/` stay
+owned, so every file the
 box executes from its checkout was a human read before it landed. The operator-advanced
 `mgmt-release` ref the design was born with (2026-09-12) was a second promotion of commits already
 reviewed, not a safety layer — in its two days it was never created, and the box had pull + gate
 + rollback the whole time (the ArgoCD shape: follow the branch, gate the merge, roll back locally).
 Two things stay deliberate: **activation is diff-gated** — `mgmt-pull` runs `nixos-rebuild test`
-only when `nixos/` changed between the last activated revision and the target, otherwise it just
+only when `mgmt/nixos/` changed between the last activated revision and the target, otherwise it just
 advances the checkout (the units read `scripts/` and `policy/` at each start, no activation
 needed); and **every fetch is authenticated** (`mgmt_git`, the #1637 rule), failing loudly rather
 than falling back to anonymous. The cluster at most pokes it. Not fussiness — a
@@ -133,11 +143,11 @@ This is the **belt**, not the deadman — it reports, and nothing it says reboot
 (§Rollback layer 1 says why). **`tofu plan` returning "No changes" asserts the toolchain, the
 state's readability, the credentials and the network path in one read-only call.** A non-empty diff or a non-zero exit is
 the alarm either way, which is why FU-097's drift belt and this box's own health check are one
-mechanism. The probe set (`scripts/mgmt-probe.sh`, run by a systemd timer on the box):
+mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer on the box):
 
 | Check | Asserts |
 |---|---|
-| `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
+| `tofu plan` → empty on the **cone-clean** roots only (`provisioning`, and **`github`** since 2026-09-13 — read-only PAT + the three App keys via `mgmt/scripts/mgmt-root-env/github.sh`, FU-238) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical` is migrated but its provider auth port-forwards into the live cluster, so its plan asserts the cluster is up — the opposite of what this box probes; **`cloudflare` is the same class** (its cloudflared Deployment half rides the kubernetes provider — found 2026-09-13 on the box, retracting the 2026-09-12 reading that it was cone-clean; the SENTINEL still plans it per PR head with the read-only `homelab-mgmt-read` token, §MB3 — a plan-on-PR may assert the cluster, the belt may not); `main` is local state until FU-012's copy lands here. Measured 2026-09-12 from the jail: `cloudflare` and `provisioning` both plan EMPTY, which retires [`tofu-state.md`](tofu-state.md)'s note that `cloudflare` carries a standing 1-change comment drift |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
@@ -195,7 +205,7 @@ Two properties make it worth its own detector rather than a louder log line:
 
 So the metric the loop actually needs is **age of the oldest unapplied residue** (and its address
 count), not liveness. **Transport, ruled 2026-09-21 (operator): the hypervisors' pattern** — the
-box runs node_exporter with the textfile collector (`nixos/hosts/mgmt/default.nix`, 9100 open to
+box runs node_exporter with the textfile collector (`mgmt/nixos/hosts/mgmt/default.nix`, 9100 open to
 the LAN only), `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus
 scrapes it as the static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`**
 (github-exporter, from master's commit status, since 2026-09-18). The box-side belts in
@@ -215,12 +225,20 @@ exfiltrates), reads the PR's locals and var files — all with the root's creden
 environment. A worker-authored head is hostile by assumption (the sentinel runs BEFORE review), so
 plan-on-PR without a pre-execution gate is remote code execution on the recovery root.
 
+**One verdict per (head, engine revision).** The timer judges a head once — the `management-sentinel`
+status IS the memo — but the memo is keyed to the engine that wrote it: the status description
+starts with `[e:<rev>]`, a hash of `mgmt/scripts/mgmt-sentinel.sh`, `mgmt/scripts/mgmt-lib.sh` and
+`policy/mgmt/plan-input.yaml` as master holds them (2026-09-28). A change to any of the three
+re-judges every open head on the next tick, so a sentinel fix or a policy widening reaches a parked
+PR without a push and without `mgmt-human-plan` — before this, #2046/#2047 kept a red whose cause
+the box would never republish, and the widened Deployment allowlist could not reach #2037's head.
+
 **Two stages, and the first never executes anything:**
 
 | Stage | Reads | Does | Fails as |
 |---|---|---|---|
 | 1 — input allowlist | the PR tree as DATA, the policy from **master** (`git show origin/master:policy/mgmt/…`), never the PR's copy | for each touched root: the diff vs base may touch only allowlisted file classes (`*.tf` declaration bodies, `*.tfvars.example`, docs) and none of the deny list — `.terraform.lock.hcl`, `required_providers`/`terraform {}` blocks, `backend`/`encryption` config, `data "external"`/`data "http"`, any `provisioner`, `.terraformrc`/CLI-config-shaped files, symlinks, files outside the root | `failure`, rule named |
-| 2 — the plan | the head in an **ephemeral worktree** (`git worktree add` under `/var/lib/mgmt/sentinel/`, removed after) — never this box's own checkout, which is the system's source at `master` | `tofu plan -detailed-exitcode -input=false -lock=false -lockfile=readonly` with providers from a **local mirror** pre-populated from master's lockfile (`tofu providers mirror`, refreshed by the pull loop); network reach is the provider APIs the root already needs | engine error → `error` (fail-closed, healed next run); plan error → `failure` |
+| 2 — the plan | the head **merged onto master** in an **ephemeral worktree** — what would land, never the bare head: a stale fork otherwise reads every master change since as the PR's own (#2047 showed the FU-289 unpark as its change, 2026-09-28); a head that does not merge gets a failure verdict and no plan (`git worktree add` under `/var/lib/mgmt/sentinel/`, removed after) — never this box's own checkout, which is the system's source at `master` | `tofu plan -detailed-exitcode -input=false -lock=false -lockfile=readonly` with providers from a **local mirror** pre-populated from master's lockfile (`tofu providers mirror`, refreshed by the pull loop); network reach is the provider APIs the root already needs | engine error → `error` (fail-closed, healed next run); plan error → `failure` |
 
 The first form of the policy is the iac-sentinel's own bash path-rule shape (file classes + a
 grep-shaped declaration deny list); Kyverno over `hcl2json` output is the v2 when a rule needs
@@ -268,7 +286,7 @@ Freshness: `mgmt_sentinel_last_run_timestamp_seconds` beside the belt's, publish
 exit path exists.
 
 **Build order** (FU-237): (1) `policy/mgmt/` allowlist + root list, landed alone; (2)
-`scripts/mgmt-sentinel.sh` + unit + timer on the box in SHADOW (verdicts in the journal only);
+`mgmt/scripts/mgmt-sentinel.sh` + unit + timer on the box in SHADOW (verdicts in the journal only);
 (3) the App key on the box, status + comment posting; (4) the flip — the context required and
 pinned to `homelab-sentinel`'s integration id in `tofu/github/repo_rulesets.tf`, the in-cluster
 no-root poster in the same change; (5) the doorbell.
@@ -284,7 +302,10 @@ and remote module sources (init would fetch them) — and, since the #1635 revie
 credentials, which for the kubernetes provider is the cluster-admin kubeconfig (`main` and
 `cloudflare` both ride it; no scoped variant exists yet — FU-012's next mint), and an error
 quoted back would make the sentinel an existence oracle for any object from any PR. The same
-review narrowed what an errored plan posts: the tofu `Error:` headlines only, never the body.
+review narrowed what an errored plan posts: the tofu `Error:` headlines only, never the body —
+plus, since 2026-09-28, the `on <file> line N, in <block>:` POSITION lines (a file, a line, a block
+header; never a value), because a worker adapting a provider major (#2046: helm 3 rejects the
+`kubernetes {}` block) cannot read the box journal and a headline alone is not actionable.
 
 **What the verdict covers, per root — the reviewer's expectation.** `main`: everything, and the
 apply allowlist decides what ships. `provisioning`: everything, plan only. `github`: repo rulesets
@@ -341,8 +362,8 @@ not judge it; the apply loop now sees inventory-only master commits too (and ref
 human apply like any `metal.tf` change outside the allowlist).
 
 **Built 2026-09-13 (steps 1–3 in one PR, since nothing read the policy before its reader
-existed):** `policy/mgmt/plan-input.yaml`, `scripts/mgmt-lib.sh` (App token, policy, stage 1,
-plan summary), `scripts/mgmt-sentinel.sh`, `scripts/mgmt-apply.sh`, `scripts/mgmt-policy-test.sh`
+existed):** `policy/mgmt/plan-input.yaml`, `mgmt/scripts/mgmt-lib.sh` (App token, policy, stage 1,
+plan summary), `mgmt/scripts/mgmt-sentinel.sh`, `mgmt/scripts/mgmt-apply.sh`, `mgmt/scripts/mgmt-policy-test.sh`
 (`devbox run mgmt-policy-test` — every deny rule fires on a fixture), the two units + `*:0/5`
 timers. Deviations from the paragraphs above, each a residual on FU-237: the box posts for
 EVERY open head (the in-cluster no-root poster is unbuilt, so the flip — PR#1617, operator-
@@ -350,7 +371,7 @@ applied — must wait until posting is reliable); both units run as root off the
 (the per-role user + env split); no doorbell yet (the timer is the level). **`main`'s state
 lives here now** — `/var/lib/mgmt/state/main/terraform.tfstate`, local backend via `-state=`,
 the jail's copy frozen as a backup — so the jail's `devbox run tf-plan|tf-apply` REFUSE and
-point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`scripts/mgmt-tf.sh`: ssh to the box, a
+point at **`devbox run mgmt-tf -- <plan|apply|…>`** (`mgmt/scripts/mgmt-tf.sh`: ssh to the box, a
 COMMITTED ref — `MGMT_REF=origin/<branch>` — under the loops' flock). A human apply of main
 is therefore push-then-apply from now on; the working tree is not something the box can see.
 **And it is plan-then-apply-that-plan** (2026-09-21, FU-248): every `plan` saves itself to
@@ -379,7 +400,7 @@ so the refusal was exactly right), and every `providers.tf` / `versions.tf` / `b
 head, and there is no author-based relaxation** (a bot-vs-human split of the refusal was considered
 and rejected as a second, messier gate). What was missing was the mechanism behind the policy's own
 sentence, *"or gets a human plan in the jail"*: **`devbox run mgmt-human-plan -- <pr>`**
-(`scripts/mgmt-human-plan.sh` → ssh → the box's `mgmt-sentinel.sh --human-plan <pr>`). It is the
+(`mgmt/scripts/mgmt-human-plan.sh` → ssh → the box's `mgmt-sentinel.sh --human-plan <pr>`). It is the
 same sentinel run, for ONE head, ordered by a human who has read the diff — the act `mgmt-tf plan`
 already was, with a verdict at the end: stage 1 runs and is **reported, not enforced** (its hits
 print in the terminal and in the verdict comment as "overridden"), stage 2 plans as usual, the plan
@@ -397,7 +418,7 @@ human orders — the human read added nothing. `admit_shapes: [provider-pin]` in
 `.terraform.lock.hcl` / `versions.tf` whose diff is ONLY `version =` / `constraints =` / `"h1:…"`
 `"zh:…"` lines (`version = "…"` lines in `versions.tf`), with every provider source — the
 `provider "registry…/x/y" {` headers, the `source =` lines — identical between base and head and the
-file present in base (`mgmt_provider_pin_shape` in `scripts/mgmt-lib.sh`; fixtures in
+file present in base (`mgmt_provider_pin_shape` in `mgmt/scripts/mgmt-lib.sh`; fixtures in
 `mgmt-policy-test`). Stage 2 then plans with the HEAD's providers: `init` downloads from the sources
 master already trusts and tofu verifies the zip against the head's h1 hash and the registry's
 signature, so a hostile hash fails `init` and never runs. What the shape cannot vouch for is the new
@@ -417,7 +438,16 @@ its baseline (`applied-rev`) only ever advanced on its own applies, so every lat
 the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
 `refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
 that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
-rather than from the apply's own flags, which a plan-file apply no longer has.
+rather than from the apply's own flags, which a plan-file apply no longer has. **Since 2026-09-28
+the loop ADMITS the provider-pin shape on a master span exactly as the sentinel does on a head**
+— it used to read stage 1's `admitted` line as a hit, so the first auto-merged provider bump
+(#2075) parked every later master on "stage 1: admitted on master diff — human apply" until a
+human apply; now the plan and the apply allowlist are the gate for that span, as for any other.
+**And the span's surface is what any commit in it touched, not the endpoint diff** (same day, the
+tofu-image-revert drill): a bad image tag and its revert net to zero files, so the loop stamped
+past a span whose first half had already reached the cluster (the apply had errored on the
+provider's rollout wait, `wait_for_rollout`, after the object was written) — `git log --name-only`
+over the span now decides whether a root plans.
 
 The probe that found the third gap (same day): a `provider "proxmox" {}` block placed in any other
 `.tf` file passed stage 1 — the deny on `providers.tf` was a basename rule and no pattern matched the
@@ -434,7 +464,7 @@ one is a `proxmox_virtual_environment_vm` change, which stays outside and refuse
 and `talos_machine_configuration_apply.node[…]` / `.metal[…]`. Inside the allowlist is not enough
 for a Talos config apply. Three more things stand between the plan and the apply:
 
-1. **The precondition** (`mgmt_talos_gate` in `scripts/mgmt-lib.sh`, read from the plan's own
+1. **The precondition** (`mgmt_talos_gate` in `mgmt/scripts/mgmt-lib.sh`, read from the plan's own
    `tofu show -json` through the `$out.talos` side channel). Every changed
    `talos_machine_configuration_apply` must be an in-place `update` (a create is an onboarding and
    a delete/replace is a node leaving: rule `talos-action`) whose planned **`apply_mode` is
@@ -542,7 +572,7 @@ applied to what ArgoCD cannot reach: the tofu roots and the metal fleet. Layers,
    inside one sync — which is why `matchbox.tf` holds no per-node group and FU-244 moves today's transient
    flags out of the tracked tree (`flags.local.tf`, gitignored; a live flag shows as drift until unflagged).
 
-**Layers 3–5 as built (2026-09-21): `scripts/mgmt-reconcile.sh`, the `mgmt-reconcile` unit + a
+**Layers 3–5 as built (2026-09-21): `mgmt/scripts/mgmt-reconcile.sh`, the `mgmt-reconcile` unit + a
 `*:4/10` timer** — hand-rolled, another box loop in the belt/apply style, because the FU-242 spike
 ruled the controller substrate out ([`spikes/tofu-controller-on-the-box.md`](spikes/tofu-controller-on-the-box.md)).
 Each tick, for the `auto` nodes only:
@@ -601,7 +631,7 @@ Each tick, for the `auto` nodes only:
   `MgmtReconcileLoopStale` (no evaluation for an hour with no sync open), `MgmtReconcileMetricsAbsent`.
   A long `pending` has no alert of its own — it is `MgmtNodeInstallDrift` / `TalosFleetVersionSplit` at 24h.
 - The state machine is fixture-tested against a fake verb: `devbox run mgmt-reconcile-test` (also run by
-  `mgmt-policy-test`, which CI runs on every `scripts/mgmt-*` change). The unit is `restartIfChanged =
+  `mgmt-policy-test`, which CI runs on every `mgmt/scripts/mgmt-*` change). The unit is `restartIfChanged =
   false`: a `mgmt-pull` activation must never kill a window mid-install.
 
 Not built here: layer 5's PXE flags (FU-244 — the verb in use is an in-place upgrade, which needs none) and
@@ -612,9 +642,32 @@ any sync of the reinstall class.
    human for hypervisor reinstalls and recovery (ISO over virtual media, BIOS over SOL) — a runbook, never a
    loop. `machines.yaml` gains `bmc:` beside `plug:`; `node-maintenance.sh` is the first caller.
 7. **Two networks.** The box's second NIC is the management-network leg; the BMCs (today the Nutanix twin's
-   two IPMI ports sit on the LAN) move behind it, so nothing but the box can speak to BMC firmware. Static
-   addressing, no DHCP, a hosts file. The k3s API (if the spike says yes) binds to loopback; pods reach the
-   BMC network through the node's routing.
+   two IPMI ports sit on the LAN as DHCP reservations, `opnsense/dnsmasq-dhcp.py` `nx-0{1,2}-bmc`) move
+   behind it, so nothing but the box can speak to BMC firmware (it is unpatchable). The segment is
+   `192.168.15.0/24` ([`ip-plan.md`](ip-plan.md)) on its own 5-port switch, **installed in the same visit as
+   the WAN switch** ([`router-move.md`](router-move.md), operator 2026-09-30). Static addressing set in each BMC
+   (`ipmitool lan set 1 ipsrc static` + address, no gateway), the addresses in `machines.yaml` `bmc:` (item
+   6) and rendered into the box's hosts file; no DHCP server on the segment, no route to it from the LAN.
+   The move is the moment to rotate the factory credentials (FU-288): every BMC setting is re-touched
+   anyway, and the wallet entries (`<node>-bmc-password`) are what the verbs below read.
+
+   **Access from the operator's workstation (design, 2026-09-30).** SSH forwards TCP only and IPMI-over-LAN
+   is UDP 623, so the two kinds of access take two paths, both through the box, as one `mgmt/scripts`
+   verb behind `devbox run` tasks:
+
+   | Need | Path | Command shape |
+   |---|---|---|
+   | ipmitool — power, sensors, `chassis bootdev`, SOL | ipmitool runs ON the box (`ssh -t` for SOL); the wrapper sends the password over the ssh session's stdin, the box side exports it as `IPMI_PASSWORD` and runs `ipmitool -E` (which reads that variable) — never argv | `devbox run bmc -- nx-02 power status` / `-- nx-02 sol` |
+   | web GUI (443), HTML5 iKVM, virtual-media upload | `ssh -L <local>:<bmc>:443` through the box; the task picks a free local port and prints `https://localhost:<port>` | `devbox run bmc-web -- nx-02` |
+
+   Considered and not taken as the default: a WireGuard peer for the workstation on the box (routes UDP
+   too, so raw ipmitool/Java iKVM work unchanged — but the workstation then reaches BMC firmware directly,
+   which is the thing the segment removes; the fallback if the wrappers prove clumsy); `sshuttle` (TCP-only,
+   so no gain over `-L`); a socat UDP relay (fragile for RMCP+ sessions). The jail uses the same two
+   tasks — it already has ipmitool in its image, but after the move only the box can reach a BMC.
+
+   The k3s API (if the spike says yes) binds to loopback; pods reach the BMC network through the node's
+   routing.
 
 **The substrate is the hand-rolled box loops** — the FU-242 spike (2026-09-21) said NO to tofu-controller; see its §Verdict. The candidate it tested: a single-node k3s from the NixOS module —
 no Docker daemon, sqlite, `--disable` for traefik/servicelb/metrics-server, API on loopback — with Flux's
@@ -674,7 +727,7 @@ be tested. The rules, ruled before anything below is built:
 - **Order:** the canaries first, then the least dangerous pool first — ephemeral, regular, the Garage/Longhorn zones, the
   control planes — as `node-maintenance.sh order` already ranks them.
 
-**The exercise predicate — built:** `scripts/mgmt-rollout-evidence.sh <node> <since>` answers
+**The exercise predicate — built:** `mgmt/scripts/mgmt-rollout-evidence.sh <node> <since>` answers
 "has this node carried its own kind of work on its current install since then?" — exit 0 yes, 1
 not yet, 2 cannot tell (any read failed; the caller asks again, and owns the timeout). It types the
 node from live facts, never a list, and every type that applies must hold:
@@ -724,7 +777,7 @@ the switch is flipped after them.
 
 ### The rollout as built (FU-273, 2026-09-22)
 
-`scripts/mgmt-reconcile.sh`, same unit and timer, same one-sync-per-tick oneshot — every guarantee
+`mgmt/scripts/mgmt-reconcile.sh`, same unit and timer, same one-sync-per-tick oneshot — every guarantee
 above holds unchanged (WIP 1 incl. declared windows and `--admit-reconciler`, one attempt per
 declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossible path,
 `restartIfChanged = false`, the metrics). What the switch adds is **which node a tick may sync**:
@@ -867,14 +920,14 @@ are the belt. This is also why `main`'s out-of-cone copy belongs here.
 world-readable, so anything the flake can see, every process can. That single fact shapes all of
 this section.
 
-- **SSH authorized keys are declarative** (`nixos/hosts/mgmt/keys/*.pub`, read by the flake), so
+- **SSH authorized keys are declarative** (`mgmt/nixos/hosts/mgmt/keys/*.pub`, read by the flake), so
   rotation is a diff: add the new key, rebuild, verify, remove the old — two commits, never a
   lockout. Only the PUBLIC half is there — the credential's existence and scope stay config, the
   private half is data: [`secrets.md`](secrets.md) §Minting doctrine (precedent: `tofu/ci-runner.tf`
   commits a pubkey the same way). ⚠ Track them: a flake sees only tracked files. `jail.pub` is the
   pve-ssh-seed key the jail already uses for Proxmox; the operator's laptop key is the second.
 - **Everything else is a FILE outside the store, placed by ONE script** —
-  `scripts/mgmt-provision-secrets.sh`. It stages a tree from the Tier-0 wallet
+  `mgmt/scripts/mgmt-provision-secrets.sh`. It stages a tree from the Tier-0 wallet
   (`~/.claude/homelab-mgmt/extra-files/`: the sshd host key at `etc/ssh/`, the belt's credentials
   as `var/lib/mgmt/env`, plus `talosconfig`/`kubeconfig` beside it, all root-only `0600`) and that
   tree is what `nixos-anywhere --extra-files` ships at **install**; `--push` rsyncs the same tree
@@ -924,8 +977,8 @@ this section.
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
 | The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
-| The management network | recovery path 2, after phase C — the topology work, not the box work |
-| A CI gate on `nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
+| The management network | designed (§MB4 item 7: range, static addressing, the two access verbs); built in the WAN-switch visit — the box's second NIC stanza, the BMC re-address, the verbs, FU-288's rotation |
+| A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 
 ## Prior art worth knowing before trusting NixOS here
 

@@ -10,5 +10,7 @@
     oxlorg.opnsense.frr_bgp_general: "{{ opnsense_conn }}"
     oxlorg.opnsense.frr_bgp_route_map: "{{ opnsense_conn }}"
     oxlorg.opnsense.frr_bgp_neighbor: "{{ opnsense_conn }}"
+    oxlorg.opnsense.frr_diagnostic: "{{ opnsense_conn }}"
+    oxlorg.opnsense.service: "{{ opnsense_conn }}"
   roles:
     - opnsense-bgp

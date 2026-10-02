@@ -1,0 +1,59 @@
+---
+# FU-298 (fresh-router defect 2): enabling BGP writes `bgpd` into /etc/rc.conf.d/frr, but the
+# reload the frr_* modules trigger never restarts `watchfrr` — it keeps supervising only
+# `mgmtd zebra`, so on a FRESH router bgpd never runs (prod never meets it: its bgpd predates
+# this code). `restart` does nothing for this (docs/runbook.md); a real stop + start does.
+#
+# NO-OP when bgpd runs, which is prod on every run: the detector is a read (the running FRR
+# config, `vtysh show running-config` over the API) and the cycle is gated on it. A cycle
+# drops every BGP session = every LB VIP, so it must never fire on a router whose bgpd is up.
+#
+# Detector: `router bgp` in the RUNNING config appears only when bgpd runs and has loaded the
+# saved config (probed 2026-09-29 on the test VM: absent while watchfrr runs `-d mgmtd zebra`,
+# present after the cycle; present on prod). `service status` cannot tell — it reads
+# `running` for watchfrr + zebra alone — and bgpsummary is `[]` both with bgpd down and with
+# bgpd up but no session yet. A miss is re-read once after a pause, so a reload still settling
+# is not mistaken for a missing daemon.
+- name: Read the running FRR config (does bgpd run?)
+  oxlorg.opnsense.frr_diagnostic:
+    target: generalrunningconfig
+  register: frr_running
+  changed_when: false
+  check_mode: false
+
+- name: Cycle FRR so watchfrr starts bgpd (fresh router only)
+  when: frr_running.data | string is not search('(?m)^router bgp ')
+  block:
+    - name: Let a settling reload finish before judging
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Re-read the running FRR config
+      oxlorg.opnsense.frr_diagnostic:
+        target: generalrunningconfig
+      register: frr_recheck
+      changed_when: false
+      check_mode: false
+
+    - name: Stop + start FRR (bgpd absent)
+      when: frr_recheck.data | string is not search('(?m)^router bgp ')
+      block:
+        - name: Stop FRR
+          oxlorg.opnsense.service:
+            name: frr
+            action: stop
+
+        - name: Start FRR
+          oxlorg.opnsense.service:
+            name: frr
+            action: start
+
+        - name: Confirm bgpd now runs with the saved config
+          oxlorg.opnsense.frr_diagnostic:
+            target: generalrunningconfig
+          register: frr_running_after
+          until: frr_running_after.data | string is search('(?m)^router bgp ')
+          retries: 12
+          delay: 5
+          changed_when: false
+          when: not ansible_check_mode

@@ -1,8 +1,10 @@
 # `ansible/` — OPNsense + Matchbox as code (roles layout)
 
 Three control targets, each driven by **thin playbooks that call roles**:
-- **`opnsense`** — the router @ `192.168.2.1`, configured via its REST API *from the controller*
-  (`connection: local`, the `oxlorg.opnsense` collection).
+- **`opnsense`** — the router, configured via its REST API *from the controller*
+  (`connection: local`, the `oxlorg.opnsense` collection). Since window 1 (ADR-145) its hosts are the
+  CARP pair's nodes, each at its own address (`router-nodes/inventory.yml`, loaded by `ansible.cfg`
+  beside `inventory.yml`); `.1` is their CARP VIP — [`docs/router-move.md`](../docs/router-move.md) (B).
 - **`matchbox`** — the PXE provisioning LXC @ `192.168.2.30`, configured over SSH.
 
 There is no `site.yml`-style "apply everything" — each concern is its own playbook.
@@ -12,7 +14,7 @@ There is no `site.yml`-style "apply everything" — each concern is its own play
 ```
 ansible/
   ansible.cfg            # inventory + roles_path (paths relative to this dir)
-  inventory.yml          # the opnsense + matchbox hosts
+  inventory.yml          # the matchbox + pve hosts (the router nodes: router-nodes/inventory.yml)
   group_vars/
     opnsense.yml         # CONFIG values: API conn, BGP/ACME/HAProxy/Unbound settings
     matchbox.yml         # CONFIG values: SSH conn, matchbox + Talos-asset settings
@@ -38,6 +40,8 @@ because their real values are here, not baked in).
 | `opnsense-unbound.yml` | `opnsense-unbound` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
 | `opnsense-wireguard.yml` | `opnsense-wireguard` | WireGuard full-LAN VPN (ADR-090) |
 | `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
+| `opnsense-system.yml` | `opnsense-system` | router-wide settings no service role owns: Interfaces > Settings (offloading, VLAN hw filter, Allow IPv6) + Reporting > NetFlow (Insight) — prod's values, pinned on drift only (FU-297) |
+| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013) |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |

@@ -1,0 +1,7 @@
+# FU-058: activity survives issue boundaries, and only publication advances the cutoff.
+name: retro-activity-window
+mode: suite
+entrypoint: agents/retro-cadence-test.sh
+requires:
+  - python3
+  - yq

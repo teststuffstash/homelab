@@ -166,7 +166,7 @@ GUARDED_PATHS="$(guarded_paths || true)"
 # `classify_touches()` in agents/footprint.sh is the ONE machine-readable home for the platform
 # lane path tables (docs/agents/iac-lane.md §The platform lane). It returns `codeowner-author`
 # for the ❌ operator-author set — paths where authoring takes effect BEFORE a human approves
-# (`.github/`, `.agents/`, `devbox.json|lock`, `scripts/`). A queued issue whose declared
+# (`.github/`, `.agents/`, `devbox.json|lock`, `mgmt/scripts/` + the box-executed `scripts/` verbs — ADR-142 trial). A queued issue whose declared
 # `Touches:` footprint lands on any of these paths is undeliverable by any worker PR — the
 # required `ci` check is structurally red before the worker writes a line, and the documented
 # route is an operator push to master. The scan must not dispatch into that hole.
@@ -579,6 +579,37 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# unarmed-major clause fingerprint (homelab#2066, narrowed after #2100): what a ride would DECIDE on,
+# never what merely moved. Three differences from STATE_FP_JQ:
+#   content= replaces head=. An un-armed major waiting on upstream is rebased by Renovate onto
+#     every moved master (#2100: five force-pushes in ~30 h, four with byte-identical deno.json +
+#     deno.lock), and every new head oid bought a ride that re-ruled the same ADR-143 red — seven
+#     rides, one decision. `contentId` is the changed files' blob ids at head (the clause's
+#     `pulls/<n>/files` probe); a push that changes what the PR changes moves it, a rebase does not.
+#     No contentId (probe unreadable) → falls back to head=, the pre-#2100 behaviour.
+#   checks= folds only the entries that are NOT passing (SUCCESS/SKIPPED/NEUTRAL dropped). A
+#     flip either way still moves the hash (the entry appears or leaves); a green sentinel posting
+#     on a fresh head does not — #2100's 7th ride was `management-sentinel` arriving SUCCESS
+#     minutes after the 6th ride's dispatch, with nothing to decide.
+#   `@startedAt` rides only on a non-passing `management-sentinel`: `mgmt_post_status` is an
+#     unconditional POST, so a re-judge on the same head (same FAILURE, new engine revision, fresh
+#     position lines for the lens) moves only its startedAt. Every other entry keeps name=state —
+#     third-party heartbeat re-posts must not re-arm (`iac-sentinel` re-posts on every open head
+#     every ~4 min, 30 posts in 2 h on PR #2047; the #2065 all-startedAt fold bought a ride per beat).
+# Statuses arrive as {context,state,startedAt} and check-runs as {name,conclusion,startedAt}; the
+# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) is left as is here.
+STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .contentId else "head=" + (.headRefOid // "") end)
+  , "review=" + (.reviewDecision // "NONE")
+  , "checks=" + ([ .statusCheckRollup[]?
+                   | ((.name // .context // "?") as $n
+                      | (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end) as $s
+                      | select(($s == "SUCCESS" or $s == "SKIPPED" or $s == "NEUTRAL") | not)
+                      | $n + "=" + $s
+                        + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
+                 | sort | join(","))
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
 # arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
 # conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
 # arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
@@ -624,14 +655,15 @@ state_fp_for_clause() {
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
-# conclusions and narrows head to the newest non-merge commit — homelab#1011); other clauses use
-# STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
+# uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
+# non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
-  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json clause
+  local fp_probe fp_raw fp_prev fp_cur fp_jq pr_json clause fp_files fp_cid
   # Use pre-fetched JSON if provided and valid. When the 4th argument IS provided (even if
   # empty — the hoisted fetch failed), treat it as the probe result rather than falling back
   # to a second fetch (homelab#1211). When it is NOT provided, fetch independently.
@@ -650,6 +682,19 @@ pr_state_fp_pair() {
   clause="${3:-}"
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
+    # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
+    # rebase with unchanged content, a heartbeat re-post or a green check arriving does not.
+    unarmed-major)
+      fp_jq="$STATE_FP_JQ_UNARMED"
+      # the content id (#2100) — probed HERE, so the clause and the dispatch-marker site (which
+      # calls this without a pre-fetched probe) hash the same thing. Changed files' blob ids at
+      # head; unreadable or any blob id missing → no contentId → head= (the old behaviour).
+      fp_files="$(gh api "repos/${1}/pulls/${2}/files" --paginate 2>/dev/null)" || fp_files=''
+      fp_cid="$(printf '%s' "$fp_files" | jq -rs 'add // [] | if length == 0 or any(.[]; (.sha // "") == "") then "" else ([ .[] | .filename + "@" + .sha + "@" + (.status // "") ] | sort | join(",")) end' 2>/dev/null)" || fp_cid=''
+      if [ -n "$fp_cid" ]; then
+        fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg c "$fp_cid" '. + {contentId: $c}' 2>/dev/null)" && fp_probe="$fp_raw"
+      fi
+      ;;
     arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
@@ -3189,6 +3234,42 @@ EOF_GOVERNANCE
                              and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
                   | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
         case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
+        # ── ADOPTED-OPEN-UNLABELLED — the silent deadlock (homelab#2052; live: #1910 under theme
+        # #1907 / Goal #1906). A member that is `adopted` on the store, OPEN, not a container, and
+        # carrying NO `agent/*` lifecycle label is COUNTED by the completion predicate above (it
+        # holds (b) and the tree-empty key) while no waker is its own: dispatch reads
+        # `agent/queued` only (ADR-122 (2)), trigger (c) sees UNDISPOSITIONED members only, and
+        # the report-only reader that would have named it was retired with the bare-tree-member
+        # walk (ADR-122 (1)) because it QUEUED from shape. Visibility only: ONE report line, no
+        # re-queue, no label write — a human queues it or rules it deferred on the store.
+        # Containers by title (the theme-candidate regex, scripts/goal-lint.sh) are excluded: a
+        # `theme:` container is adopted-open-unlabelled by construction and trigger (e) IS its
+        # waker. rule #6: only from a store that READ (`gdisp_ok`) — a blind read has no
+        # `adopted` rows to name and must not fabricate the class. Byte-stable on purpose: sorted
+        # numbers, no ages/timestamps — `kidsall` carries no createdAt (widening its --json list
+        # would re-pin every goal fixture's CALL line), and the replayed report must be
+        # deterministic. Own-repo members print bare `#n`, cross-repo ones `repo#n` (the two
+        # spellings `gopen_n_ckpt` matches against $AD).
+        # No `item_class_push` row: a new board class has three homes (this enum, agents/board.sh,
+        # the class table in docs/agents/observability-and-retro.md) and #2052 declares none of
+        # them — the ORPHANS surface is the deliverable; the class is its own issue if wanted.
+        gadopt_unl=""
+        if [ "$gdisp_ok" = 1 ]; then
+          gadopt_unl="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg GREPO "$repo" \
+            '(($d | split(" ") | map(select(. != "")))) as $D
+             | ($ad | split(" ") | map(select(. != ""))) as $AD
+             | ["agent/queued","agent/in-progress","agent/review","agent/blocked","agent/arbitrate","agent/error","agent/done","agent/linked"] as $LC
+             | [.[] | select(("\(.repo)#\(.number)") as $k | ($D | index($k)) != null) | select(.state == "OPEN")
+                    | select((.title // "") | test("^(post-launch|theme|stint|retro-batch):"; "i") | not)
+                    | select(("\(.repo)#\(.number)") as $qk
+                             | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
+                             | ($AD | index($qk)) != null or ($bk != null and ($AD | index($bk)) != null))
+                    | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+             | sort_by(.repo, .number) | map(if .repo == $GREPO then "#\(.number)" else "\(.repo)#\(.number)" end) | join(" ")' 2>/dev/null || echo "")"
+        fi
+        if [ -n "$gadopt_unl" ]; then
+          orphans="${orphans}[$repo] ⏸ goal #${g}: adopted-open member(s) ${gadopt_unl} carry NO agent/* state label — counted by the completion predicate (assembly held) but with no waker of their own (dispatch reads agent/queued only, ADR-122 (2); trigger (c) sees undispositioned only). Visibility only, nothing written: a human queues (agent/queued) or rules it deferred on the store (homelab#2052).\n"
+        fi
         set -- $gdesc; gtotal_n=$#
         if [ -n "$gcomments" ]; then
           _gf_find "$slug" "$g" "$gcomments" && gf_rc=0 || gf_rc=$?
@@ -3673,8 +3754,54 @@ EOF_GTHEMES_OPEN
     # surfaces. Report-only — the account's lane is unknowable, so dispatching would risk the #595
     # per-tick leak on a PR that might have been seat-authored; the catch-all line keeps it in a
     # human's sight instead of silent.
+    # Renovate rebase-tick (2026-09-28, homelab#1977/#2037): a Renovate-authored DIRTY PR is NOT
+    # "the author's own push" — Renovate rebases only what it still recognizes as its own, and ONE
+    # foreign commit (the updater's update-branch merge on a non-grouped branch, a seat's) flips it
+    # to "Edited/Blocked: will not automatically rebase" for good (#1977 sat DIRTY from 2026-09-27
+    # "waiting for Renovate's rebase" that could never come). Renovate's own escape hatch is the
+    # rebase/retry checkbox in the PR body: honoured on an edited PR too, cleared by Renovate after
+    # the rebase (custom changes are lost — a dependency PR carries none worth keeping). Launcher-
+    # owned and idempotent: a ticked box is left alone (Renovate's next run, ≤6h, is the mover), a
+    # body without the box is a report line. The seat-authored report loop below excludes Renovate.
+    # >>>REPLAY:renovate-rebase-tick>>>
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")))|.number'); do
+      # FRESH body read right before the only full-body overwrite in this file: the per-repo
+      # `prsjson` snapshot can be minutes old, and Renovate regenerates PR bodies on its runs — a
+      # stale copy with one box flipped would clobber the newer text (review finding, #2055).
+      # UNTOUCHED branches only (2026-09-28, #2046): a Renovate rebase REGENERATES the branch from
+      # master + Renovate's own change — a worker's adaptation commit on an un-armed major would be
+      # lost. The updater's definition (agents/update-pr-branch.sh renovate_untouched): every
+      # non-merge commit is Renovate-authored. An adapted branch moves by merging master into it
+      # — the unarmed-major ride's merge-conflict play — never by the box; report it and move on.
+      rt_pr="$(gh pr view "$u" --repo "$slug" --json body,commits 2>/dev/null)" || rt_pr=''
+      if ! printf '%s' "$rt_pr" | jq -e '.commits | type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: could not read body + commits (rule #6) — no write; next tick\n"
+        continue
+      fi
+      if ! printf '%s' "$rt_pr" | jq -e '[ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | (.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate") ] | all' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u} carries a non-Renovate commit (an adaptation) — a rebase would drop it; the branch moves by merging master (the unarmed-major ride's merge-conflict play), not by the rebase box\n"
+        continue
+      fi
+      rt_body="$(printf '%s' "$rt_pr" | jq -r '.body // ""' 2>/dev/null)" || rt_body=''
+      if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
+        continue
+      fi
+      if ! printf '%s' "$rt_body" | grep -q -- '- \[ \] <!-- rebase-check -->'; then
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u} has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)\n"
+        continue
+      fi
+      rt_new="$(printf '%s' "$rt_body" | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/')"
+      if gh pr edit "$u" --repo "$slug" --body "$rt_new" >/dev/null 2>&1; then
+        mc_event "$slug" "$u" repair "**rebase requested** — DIRTY Renovate PR: ticked Renovate's rebase/retry checkbox (a foreign commit had flipped it to Edited/Blocked, so Renovate would never rebase on its own); its next run rebases, the updater clears \`merge-conflict\` (homelab#1977 class)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ merge-conflict Renovate PR #${u}: rebase requested via the checkbox — Renovate's next run (≤6h) rebases it\n"
+      else
+        orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u}: could not tick the rebase checkbox — human check\n"
+      fi
+    done
+    # <<<REPLAY:renovate-rebase-tick<<<
     # >>>REPLAY:merge-conflict-gate>>>
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author != null) and (.author.login != $wa) and ((((.author.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) | startswith("homelab-renovate")) | not))|.number'); do
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} is seat-authored (operator lane) — the author's own push is the next mover; no machine fix-round mandate (homelab#595)\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author == null))|.number'); do
@@ -3719,10 +3846,116 @@ EOF_GTHEMES_OPEN
       item_class_push "$repo" "pr-${u}" "parked-infeasible" "machine"
     done
     # <<<REPLAY:merge-conflict-gate<<<
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
+    # stale-stamp repair (2026-09-28, homelab#2037/#2046/#2047 — cause on #1988): an UN-ARMED `major`
+    # PR that wears the mechanical lane's `automerge` label, or carries the renovate-approve reflex's
+    # rubber stamp ("Auto-approved: Renovate automerge dep bump …") as a LIVE APPROVED of the
+    # reviewer's OWN identity at head, is a contradiction the lanes cannot resolve on their own: the
+    # label reached majors through a Renovate addLabels merge (fixed at the source the same day), the
+    # reflex now refuses `major`, but a stamp that already landed shares the migration lens's identity
+    # — reviewer-session.sh STEP 0(a) refuses on own-verdict-at-head, an update-branch RE-POINTS the
+    # review instead of dismissing it (homelab#1422), and major-handoff.sh never sees the four
+    # headings. Launcher-owned repair (ADR-094: shell ACTS on a deterministic contradiction, no LLM
+    # judgment): strip the label, DISMISS the stamp (a DISMISSED review is an ended round the lens
+    # does not count — STEP 0(a), homelab#556), one ADR-103 event line; the PR enters `unarmed-major`
+    # below on its own. Only the reflex's literal stamp body qualifies — a real lens verdict (four
+    # headings) is never touched. Rule #6 on every probe; `agent/error` PRs stay human-first (a human
+    # un-latches, this clause repairs on the next tick); `major/awaiting-human` is already handed off.
+    # >>>REPLAY:stale-stamp-repair>>>
+    ss_bot="${REVIEWER_AUTHOR:-homelab-reviewer}"; ss_bot="${ss_bot%\[bot\]}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null))|.number'); do
+      ss_leaked=0
+      printf '%s' "$prsjson" | jq -e --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name))|index("automerge")' >/dev/null 2>&1 && ss_leaked=1
+      # the REST list carries the numeric review id the dismissal endpoint needs (gh pr view's is a node id)
+      ss_reviews="$(gh api "repos/$slug/pulls/$u/reviews?per_page=100" 2>/dev/null)" || ss_reviews=''
+      if ! printf '%s' "$ss_reviews" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not list reviews (rule #6). No write; next tick.\n"
+        continue
+      fi
+      ss_cands="$(printf '%s' "$ss_reviews" | jq -c --arg bot "$ss_bot" '[.[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == $bot and .state == "APPROVED" and ((.body // "") | startswith("Auto-approved: Renovate automerge dep bump")))]' 2>/dev/null)" || ss_cands='[]'
+      ss_rid=''
+      if [ "$(printf '%s' "$ss_cands" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+        # "at head" is the reflex's own definition: submitted at or after the newest NON-merge commit
+        # (an update-branch merge commit is not new content) — the exact predicate STEP 0(a) refuses on.
+        ss_pr="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" || ss_pr=''
+        ss_since="$(printf '%s' "$ss_pr" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate] | max) // ""' 2>/dev/null)" || ss_since=''
+        if [ -z "$ss_since" ]; then
+          orphans="${orphans}[$repo] ⏳ stale-stamp repair probe HOLD — PR #${u}: could not read commits (rule #6). No write; next tick.\n"
+          continue
+        fi
+        ss_rid="$(printf '%s' "$ss_cands" | jq -r --arg since "$ss_since" '[.[] | select((.submitted_at // "") >= $since)] | last | .id // empty' 2>/dev/null)" || ss_rid=''
+      fi
+      [ "$ss_leaked" = 1 ] || [ -n "$ss_rid" ] || continue
+      ss_ok=1; ss_what=''
+      if [ -n "$ss_rid" ]; then
+        gh api -X PUT "repos/$slug/pulls/$u/reviews/$ss_rid/dismissals" -f event=DISMISS -f message="stale-stamp repair: this APPROVED is the renovate-approve reflex's rubber stamp on an UN-ARMED \`major\` PR — it shares the migration lens's identity and blocks the lens at STEP 0(a); dismissed by the coordinator scan so the lens can review (homelab#2037 class, cause #1988)." >/dev/null 2>&1 \
+          && ss_what="dismissed the reflex's rubber stamp (review ${ss_rid})" || ss_ok=0
+      fi
+      if [ "$ss_leaked" = 1 ]; then
+        gh pr edit "$u" --repo "$slug" --remove-label automerge >/dev/null 2>&1 \
+          && ss_what="${ss_what:+$ss_what; }stripped the leaked \`automerge\` label" || ss_ok=0
+      fi
+      if [ $ss_ok = 1 ]; then
+        mc_event "$slug" "$u" repair "**stale-stamp repair** — un-armed \`major\` wearing the mechanical lane's marker: ${ss_what}. The migration lens can now review; \`unarmed-major\` picks this PR up on the next tick (homelab#2037 class, cause #1988)." >/dev/null 2>&1 || true
+        orphans="${orphans}[$repo] ✓ stale-stamp repair: PR #${u} — ${ss_what}\n"
+      else
+        orphans="${orphans}[$repo] ⚠ stale-stamp repair FAILED on PR #${u} (${ss_what:-nothing written}) — human check\n"
+      fi
+    done
+    # <<<REPLAY:stale-stamp-repair<<<
+    um_now() { date -u +%s; }   # replay seam: the wall clock (the SETTLING hold below)
+    # unarmed-major (the brief's §Dependency major bumps play) — EVERY state of an un-armed `major`
+    # is this unit's (2026-09-28, homelab#2051 + the #2046/#2047 drill): red at birth (the lens
+    # investigates the red — reviewer STEP 0's un-armed-major exception), CHANGES_REQUESTED (the
+    # ride dispatches a worker on the PR branch; the changes-requested clause is WORKER_AUTHOR-
+    # scoped and never sees a Renovate-authored PR — #2033 sat immobile after its adaptation was
+    # pushed), pushed-not-re-reviewed (the ride re-dispatches the lens), APPROVED with the four
+    # headings (major-handoff.sh). The old `reviewDecision != CHANGES_REQUESTED` guard closed the
+    # only door after the first verdict. What bounds it: the homelab#198 state-fp debounce (the
+    # dispatch-marker case below records `state-fp:unarmed-major:` — a byte-identical state never
+    # buys a second ride; a verdict, a push, a check flip or a dismissal re-opens it) and the
+    # blocked-on predicate (a ride that parks on a human/issue/PR is honoured, homelab#1188).
+    # >>>REPLAY:unarmed-major>>>
+    # Two guards against #2100's churn (seven rides on one Renovate major, one decision): the
+    # fingerprint keys on the diff's content, not the head oid (STATE_FP_JQ_UNARMED + the
+    # pr_state_fp_pair probe — a rebase onto a moved master re-creates the head with identical
+    # content), and here, before the debounce, a SETTLING hold — a ride dispatched while
+    # the fresh head's rollup is still filling in records a marker the next posted check moves,
+    # which buys a second ride on the same state. Held only while a pending entry is younger than
+    # UM_SETTLE_S, so a wedged check still reaches a ride; a pending entry whose age cannot be read
+    # counts as settling (this file's `fromdateiso8601? // null` → recent idiom — holding is the safe
+    # side of this guard). The content probe fails open to the old behaviour.
+    UM_SETTLE_S="${UM_SETTLE_S:-1800}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
+      pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
+      um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
+      case "$um_boc" in
+        blocked*)
+          reason="${um_boc#blocked|}"
+          orphans="${orphans}[$repo] ⏳ unarmed-major held — PR #${u} is blocked-on: ${reason}\n"
+          continue
+          ;;
+      esac
+      um_pending="$(printf '%s' "$pr_json_um" | jq -r --argjson now "$(um_now)" --argjson win "$UM_SETTLE_S" '
+          ([ .commits[]? | .committedDate // empty ] | max // "") as $hc
+          | [ .statusCheckRollup[]?
+              | select((((.conclusion // .state) // "") | . == "" or . == "PENDING" or . == "EXPECTED"))
+              | ((.startedAt // "") | if . == "" or startswith("0001-") then $hc else . end)
+              | (fromdateiso8601? // null)
+              | select(. == null or $now - . < $win) ] | length' 2>/dev/null)" || um_pending=0
+      case "$um_pending" in ''|*[!0-9]*) um_pending=0 ;; esac
+      if [ "$um_pending" -gt 0 ]; then
+        orphans="${orphans}[$repo] ⏳ unarmed-major SETTLING — PR #${u}: ${um_pending} check(s) still pending on the head (<${UM_SETTLE_S}s) — the ride reads a settled rollup, next tick (#2100)\n"
+        continue
+      fi
+      umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
+      if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: content, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push that changes the diff, a check flip or a dismissal re-opens it (a rebase does not, #2100).\n"
+        continue
+      fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
+    # <<<REPLAY:unarmed-major<<<
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
     # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
@@ -5549,8 +5782,9 @@ EOF
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
-    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the three
-    # clauses whose emission is gated on it (arbitrate, ci-red, and merge-conflict since homelab#595).
+    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the clauses
+    # whose emission is gated on it (arbitrate, ci-red, merge-conflict since homelab#595, and
+    # unarmed-major since 2026-09-28 — its play needs several rides per PR, one per STATE).
     # Here and not at emission because this is the one place a unit is known to be THE dispatched
     # one; and BEFORE the spawn because the session's own work (a pushed fix round, a dismissal, a
     # rerun) is exactly the state change that must re-open the gate — recording afterwards would
@@ -5559,14 +5793,14 @@ EOF
     # it never blocks the ride it is annotating.
     # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
-      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*)
+      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*|merge-conflict:pr-*|unarmed-major:pr-*)
         dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}" "${uclause}")"; dfp="${dfp%%|*}"
         if [ -z "$dfp" ]; then
           echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2
         elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
               "🤖 \`state-fp:${uclause}:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
               "" \
-              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. For ci-red clauses (homelab#1108) each check's \`startedAt\` is also folded in, so a CI rerun changes the hash and re-arms the gate. For arbitrate clauses (homelab#1011) per-check conclusions are dropped and head narrows to the newest non-merge commit, so CI churn and updater merges do not re-arm arbitration. For unarmed-major clauses (#2100) head sha becomes the diff's content and only non-passing checks count, so a Renovate rebase or a green check arriving does not re-arm it. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
           echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
         fi
         ;;

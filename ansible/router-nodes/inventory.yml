@@ -1,0 +1,46 @@
+# Inventory for the CARP pair's router NODES (ADR-144, docs/router-move.md §The standing nodes).
+# Since window 1 (ADR-145) the nodes ARE the production router: ansible.cfg loads this file beside
+# ../inventory.yml (which no longer lists Big Data), so a plain `scripts/opnsense-playbook.sh` run
+# converges every node with its own host vars below — never the `.1` VIP with prod's defaults
+# (router-id `.1`, HAProxy VIPs on `lan`). scripts/opnsense-router-node.sh passes it with `-i`.
+# A node with `opnsense_standby: false` is LIVE: its kill switch is retired first
+# (`pve_router_live_vmids` in its hypervisor's host_vars), and the consumers that need "the router's
+# API address" read the live host from here (docs/router-move.md (B)).
+#
+# The group is `opnsense` because the plays hard-code `hosts: opnsense`; values come from
+# ansible/group_vars/opnsense.yml (next to the playbooks) — prod's own — plus the host vars here.
+# Each node's `ansible_host` is its own LAN address for good (ADR-144 (3)); `.1` is never one.
+# `opnsense_standby: true` keeps a node inert on the LAN until the cutover window converges it
+# false (the standby profile — router-move.md); the verb refuses a node without it.
+# `haproxy_vip_interface: lo0` is PERMANENT on a node (ADR-088 as amended 2026-09-30: the LAN is a
+# /24, 192.168.3.0/24 is router-local and reached via .1 — the VIPs never go on `lan`, standby or
+# not). A host var, because prod's group_vars derive it from opnsense_standby and win over this
+# inventory's group_vars.
+all:
+  children:
+    opnsense:
+      hosts:
+        opnsense-nx02:
+          ansible_host: 192.168.2.70
+          bgp_router_id: 192.168.2.70   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
+          ansible_connection: local
+          opnsense_standby: false    # LIVE since window 1 (ADR-145) — serves .1, DHCP (Kea), BGP, WAN
+          router_carp_advskew: 0     # MASTER (ADR-145: nx-02 takes .1 alone in window 1; pve joins as BACKUP)
+          haproxy_vip_interface: lo0
+          # Window 1: `.1` on THIS node only (a host var wins over the group list). pve's node joins
+          # it in window 2 — then the list moves back to group_vars for both.
+          router_carp_vips:
+            - address: 192.168.2.72/24
+              vhid: 72
+              description: carp-trial
+              state: absent
+            - address: 192.168.2.1/24
+              vhid: 1
+              description: lan-gateway
+        opnsense-pve:
+          ansible_host: 192.168.2.71
+          bgp_router_id: 192.168.2.71   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
+          ansible_connection: local
+          opnsense_standby: true
+          router_carp_advskew: 100   # BACKUP (ADR-145)
+          haproxy_vip_interface: lo0

@@ -1,0 +1,5 @@
+CALL gh pr view 31 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api repos/teststuffstash/homelab/pulls/31/files --paginate
+OUT UNIT unarmed-major|homelab|pr-31
+OUT REACHED: end
+RC 0

@@ -113,9 +113,31 @@ work survivable.
    the **ServiceAccount-issuer pin** (ADR-136 — the endpoint cutover is an outage without it), then both joins
    back to back, and the endpoint flip last; single OPNsense stays. Mechanism:
    [`docs/controlplane-ha.md`](docs/controlplane-ha.md). The Nutanix twin pays the ride-pool bill counted below.
-2. **Router HA — OPNsense CARP pair** across two nodes (anti-affinity, never co-located).
-   `pfsync` = stateful failover; `hasync` = config sync; bonus = rolling firewall updates. After the CPs:
-   it rewrites every HAProxy VIP and both BGP peers.
+2. **Router HA — OPNsense CARP pair: two VMs built from git, `nx-02` (master) + `pve` (backup)**
+   (operator, 2026-09-29; roles swapped by ADR-145, 2026-10-01; one per chassis — never both NX nodes, one backplane). `pfsync` = stateful
+   failover; **no XMLRPC config sync** — ansible configures each node from git
+   ([`spikes/no-human-in-the-loop.md`](docs/spikes/no-human-in-the-loop.md) path 1), which is also
+   what keeps prod's leftovers from copying over. Bonus: rolling firmware updates. It rewrites every
+   HAProxy VIP and both BGP peers. Proving ground (FU-297, [`opnsense-test-vm.md`](docs/opnsense-test-vm.md)):
+   the test VM validates router PRs; the weekly rebuild drill builds a router from nothing and scores
+   prod's residue (rows not in code). **The cutover gate is that score:** every row coded, deleted
+   on prod, or knowingly dropped — a from-git node silently loses whatever the score still counts.
+   Sequence (**ADR-144**, 2026-09-30 — the pair is built BESIDE Big Data, not after it):
+   1. score → ≈0 (**done** 2026-09-30: the `--router` rehearsal scores 0, identity carried —
+      [`docs/router-move.md`](docs/router-move.md)); root from the wallet;
+   2. the two nodes stand beside Big Data, each at its own LAN IP (nx-02 `.70`, pve `.71` — pve
+      gets a single-port x1 NIC for its WAN), inert on the LAN (no `.1`, DHCP off, WAN uncabled);
+      CARP is learned on the pair with a trial VIP from `3.0/24` while nothing depends on it;
+   3. **two windows (ADR-145): `.1` moves from Big Data to nx-02 alone**, already in the pair's
+      end shape (`.1` a one-speaker CARP VIP, Kea DHCP, per-node BGP), the WAN switch in (the ONT
+      has one port; only the router holding `.1` has its WAN up — the single-lease rule); **then pve
+      joins as BACKUP**, invisible to clients. Big Data stays cabled and powered off as the fallback
+      for 1–2 weeks, then retires. Its Intel card is not needed. Plan: `docs/router-move.md` §The two windows.
+   Also needed: per-node inventory for the playbooks (`host_vars/` per node), HAProxy VIPs from IP
+   aliases to CARP VIPs (dropped by the `/24` ruling — only `.1` is CARP), DHCP active/passive (Kea
+   hot-standby HA — ADR-145), Cilium peering with both nodes, pfsync over
+   the LAN (no third port — accepted), and the management network (the NX BMCs + the box's second
+   NIC; the routers are not on it — each is managed at its own LAN IP).
 3. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).
    A node dies → its VMs restart/migrate to a survivor.
 4. **Public-service HA — Cloudflare LB** → home primary, Civo (scale-to-zero) failover.
@@ -414,6 +436,16 @@ self-hosted Fulcio/Rekor) is doable in software; **confidential "L4" is hardware
 **EPYC-only** (Threadripper PRO's BIOS toggles are dead; Strix Halo has none), so it means buying a
 **used EPYC Milan quiet tower** when/if it becomes a real project. Hermetic/reproducible via
 **melange/apko/Wolfi** + Nix is the early win.
+
+**Vulnerability management past the PR gate (parked 2026-09-29, operator).** The PR-time leg is
+live: `lock-intake-lint` judges what a lockfile change brings in ([ADR-143](docs/adr.md)). Open is
+what is ALREADY merged or deployed when a new advisory lands: GitHub **Dependabot** alerts vs a
+self-hosted **Dependency-Track** fed SBOMs (`cosign attach sbom` on every image, the FU-016 leg),
+with **Kyverno** checking what actually runs — prod kept in check even when master is not what is
+deployed. Weigh the options before rolling anything; one store for all repos, not per-repo CI jobs
+plus an LLM. Then the **stacks**: no npm there, so not a port of the gate — their dependency
+upgrades ride the consumer card (what the platform provides, what is good practice, what a stack
+copies from the platform — the shape of [`docs/postgres.md`](docs/postgres.md)); homelab first.
 
 ### Bare-metal node suspend/resume — an "autoscaler" without IPMI (parked 2026-06-11)
 Power idle ephemeral nodes off and wake them on demand to cut idle draw. **Parked** until there's

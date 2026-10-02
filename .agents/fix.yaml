@@ -62,8 +62,8 @@ instructions: |
   makes that a human. Authoring here is safe precisely because authoring is not effect.
   ⚠ EXCEPT: `agents/replay/**` and `agents/*-test.sh` are CI-executed FROM YOUR BRANCH (the
   required `ci` check runs `devbox run clause-replay` on the PR head). For those files,
-  authoring IS effect — the same property that makes `.github/**` and CI-invoked `scripts/**`
-  never-touch. They stay authorable because the ADR-103 ratchet REQUIRES fixture changes to
+  authoring IS effect — the same property that makes `.github/**` never-touch (and that the
+  gate-change lens now polices on `scripts/**`, ADR-142). They stay authorable because the ADR-103 ratchet REQUIRES fixture changes to
   ship with clause changes, and the codeowner merge gate holds. Working rule: ADDITIVE rows
   and fixtures are ordinary work; EDITING or REMOVING an existing assertion or recorded world
   is extraordinary — do it only when this PR deliberately changes the pinned behaviour, and
@@ -75,9 +75,15 @@ instructions: |
   - `.github/**` — CI triggers `on: pull_request`, so it runs YOUR branch's workflow. Editing it
     executes your code on the runner, with its token, before any human looks — and can make the
     required `ci` check green by fiat.
-  - `devbox.json` / `devbox.lock` in THIS repo, and any `scripts/**` that CI invokes — same
-    reason: CI runs them from your branch. (Adding a tool is normal in a STACK repo; here the
-    scripts ARE the checks.)
+  - `devbox.json` / `devbox.lock` in THIS repo — same reason: CI runs them from your branch.
+    (Adding a tool is normal in a STACK repo; not here.)
+  - `mgmt/scripts/**` and `scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh`
+    — the management box runs them from master, unattended.
+  ⚖ `scripts/**` otherwise IS authorable since 2026-09-28 (ADR-142 trial) — it holds this repo's
+  CI checks, so the reviewer reads every edit under the BLOCKING gate-change lens with CI's
+  gate-drift report (master's side of your edit, replayed on your branch). Loosening a check is
+  extraordinary exactly like the replay rule above: say which case changes and why in the PR
+  body, and change its self-test in the same PR.
   - `.agents/**` — a fix round resumes on the PR's own branch, so the NEXT round reads its recipe
     from YOUR branch. Editing this file loosens the ceiling you are being held to, mid-PR.
   The line is not "governor files". It is **does this take effect BEFORE a human approves?** Those

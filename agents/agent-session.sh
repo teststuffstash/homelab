@@ -763,7 +763,7 @@ fi
 # (deterministic awk-insert, no YAML dependency) so the worker cannot skip reading it.
 # >>>REPLAY:render_env_card>>>
 render_env_card() {
-  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}"
+  local mdio="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}" mghcr="${AGENT_MIRROR_GHCR-http://192.168.40.21}" mmcr="${AGENT_MIRROR_MCR-http://192.168.40.31}" ncache="${AGENT_NIX_CACHE_URL-http://192.168.40.23}" dsearch="${AGENT_DEVBOX_SEARCH_HOST-http://192.168.40.27}" pypi_cache="${AGENT_PYPI_CACHE_URL-http://192.168.40.34/simple/}" npm_cache="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
   # ═══ MAINTAINER NOTE — read before editing (this comment is NOT sent to the agent) ═══
   # Everything printf'd below is injected VERBATIM into the stack agent's prompt. Keep that text
   # MINIMAL and stack-agnostic: the rule + the value it needs to ACT, nothing else. All homelab-
@@ -803,7 +803,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable); node → \`npm ci\`/\`npm install\` against \`\$NPM_CONFIG_REGISTRY\` (${npm_cache}, every ride, automatic — no registry.npmjs.org egress needed; a package-lock.json keeps its canonical \`https://registry.npmjs.org/…\` \`resolved\` URLs and npm swaps the host at fetch time, so never rewrite them to the proxy). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -871,6 +871,8 @@ render_env_card() {
     printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
     printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
   fi
+  # oracle-fleet PR#780 r4 (2026-10-02): the bundle carried a line-numbered arbitration.md, the ride
+  # read issue.md only, ran local CI (no e2e leg) green and exited no-op. Name the optional items.
   # WHY: homelab#1175 — the launcher pre-fetches the issue + comments via REST and materializes
   # them as /work/issue.md before the harness starts. The env card tells the worker to read the
   # file first instead of making a live `gh issue view` call (which costs tokens and can 403 on
@@ -882,7 +884,7 @@ render_env_card() {
   case "${TASK:-}" in
     issue-[0-9]*)
       if [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
-        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/context/index.txt\` for the bundle index, then \`/work/context/issue.md\` FIRST; a live \`gh issue view\` is optional."
+        printf '%s\n' "- **Issue context:** Your issue + comments were pre-fetched at dispatch: read \`/work/context/index.txt\` for the bundle index, then \`/work/context/issue.md\` FIRST; a live \`gh issue view\` is optional. On a fix round, read every item the index marks OK BEFORE you inspect the repo: \`arbitration.md\` (an ARBITRATE directive) IS this round's task, and \`ci-failure.md\` is the red that a local \`devbox run ci\` may not reproduce. Your own green local run is not evidence that the PR is green."
       fi
       ;;
   esac
@@ -985,6 +987,28 @@ if [ -n "${RECIPE:-}" ]; then
       esac
     fi
     # <<<REPLAY:research-arm-guard<<<
+    # A FIX ROUND ON AN UN-ARMED `major` PR NEVER ARMS IT (2026-09-28, homelab#2033): `major` is the
+    # human-merge lane marker (renovate-global.json / devbox-update.sh; ADR-141 — the arm decides the
+    # owner), and the coordinator's un-armed-major play dispatches worker rounds ONTO the Renovate
+    # branch. The post-ride arming below is the PR-open decision and must not run on a PR someone
+    # else owns the arm of: the round-3 ride on #2033 armed an OPNsense-collection major and the
+    # lens refused to review into an unintended auto-deploy. Keyed on the resumed branch's OPEN PR
+    # carrying `major` with no arm (an already-armed graduated major is left exactly as it is).
+    # Rule #6, the usual direction: an UNREADABLE lookup derives --no-arm too — "not armed" is the
+    # recoverable state (the coordinator arms a worker PR itself, brief step 6), an armed major
+    # is the incident; a probe failure must never fall INTO the write it guards (review finding).
+    # >>>REPLAY:major-arm-guard>>>
+    if [ -n "${WORK_BRANCH:-}" ] && [ -z "${NO_ARM:-}" ]; then
+      _wb_pr="$(gh pr list --repo "${ORG:-teststuffstash}/${PROJECT}" --head "$WORK_BRANCH" --state open --json number,labels,autoMergeRequest 2>/dev/null)" || _wb_pr=''
+      if ! printf '%s' "${_wb_pr:-null}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        NO_ARM=1
+        echo "→ --no-arm derived: could not read the open PR for ${WORK_BRANCH} (rule #6 — a fix round must not arm what it cannot classify; the coordinator arms a worker PR itself if it should be armed)"
+      elif printf '%s' "$_wb_pr" | jq -e '.[0] | (.labels | map(.name) | index("major")) != null and .autoMergeRequest == null' >/dev/null 2>&1; then
+        NO_ARM=1
+        echo "→ --no-arm derived: ${WORK_BRANCH} is the branch of an UN-ARMED \`major\` PR #$(printf '%s' "$_wb_pr" | jq -r '.[0].number') — a fix round never arms the human-merge lane (homelab#2033)"
+      fi
+    fi
+    # <<<REPLAY:major-arm-guard<<<
     # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────
     # The harvest/decompose plays link children as NATIVE sub-issues, and until now NOTHING read
     # those links back: the lineage rendered in the GitHub UI and meant nothing to the machinery,
@@ -2113,6 +2137,20 @@ if [ "${EGRESS_PROFILE:-}" = "python" ]; then
 fi
 # <<<REPLAY:python-profile-env<<<
 
+# FU-294: the npm pull-through cache (argocd/resources/npm-cache/, VIP .40.35) is BASELINE — every
+# ride gets NPM_CONFIG_REGISTRY regardless of egress profile (the CNP allows the VIP on every ride,
+# composition.yaml), so a no-profile ride can `npm ci` / regenerate a package-lock.json. No lock
+# coupling like UV_FROZEN: npm records the packument's canonical dist.tarball URL
+# (registry.npmjs.org) in `resolved` and swaps the host for this registry at fetch time
+# (replace-registry-host=npmjs, the default) — measured, see the configmap header. The address
+# rides an AGENT_NPM_CACHE_URL launcher-side override, like AGENT_PYPI_CACHE_URL; the
+# registry.npmjs.org hostAliases stub below stays (npm never dials that host with this set).
+# By NAME, not the VIP (2026-09-29, the FU-294 ride drill): Deno keys its npm cache folder by the
+# registry's DOMAIN, and a bare-IP URL has none — the fetch succeeded, then module resolution
+# failed ("Could not find referrer npm package"). npm-cache.teststuff.net is an Unbound override
+# (ansible/group_vars/opnsense.yml) → the same .40.35 VIP the CNP allows.
+NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
+
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
 # via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
 # and adds the substituter so the per-pod `devbox install` skips the eval tax. Mount ONLY when
@@ -2580,15 +2618,6 @@ ${DIND_CONTAINER}
         # These are expected drops per PR #503 doctrine (kill at tool, not extraFQDNs).
         - name: OPENCODE_DISABLE_AUTOUPDATE
           value: "1"
-        # homelab#1247 (the #1190 caller hunt): scripts/mermaid-lint.sh's \`npm ci\` ran a full
-        # registry install on every md-touching homelab ride (~12k POLICY_DENIED/24h — the CNP
-        # denies npmjs correctly; the hostAliases fast-fail stub did not stop the retry storm).
-        # Kill at the tool per PR #503 doctrine: the script skips the install (and the lint,
-        # loudly) under this var when node_modules is not already populated — GitHub CI, which
-        # never sets it, stays the real gate. Unconditional like its siblings: only homelab's
-        # diff-ci reaches the script today, but the emitter rides along whichever repo runs it.
-        - name: MERMAID_LINT_NO_INSTALL
-          value: "1"
         # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
         # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
         # devbox already provisions an interpreter satisfying the project's constraint — ~272
@@ -2613,6 +2642,10 @@ ${DIND_CONTAINER}
         # argocd/resources/devbox-search/ + ip-plan.md; the egress CNP allows .40.27 (composition.yaml).
         - name: DEVBOX_SEARCH_HOST
           value: "http://192.168.40.27"
+        # FU-294: npm resolves through the baseline npm pull-through cache (VIP .40.35) — see the
+        # NPM_CACHE_URL note above; argocd/resources/npm-cache/.
+        - name: NPM_CONFIG_REGISTRY
+          value: "${NPM_CACHE_URL}"
         - name: REPO_URL
           value: "${REPO_URL}"
         - name: BASE_REF

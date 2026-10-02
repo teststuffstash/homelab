@@ -376,7 +376,7 @@ preflight() {
     if [ "${CONTROLPLANE_GUARDED:-0}" = 1 ]; then
       ok "control-plane node admitted by controlplane-upgrade.sh after CP-specific gates"
     else
-      fail "control-plane node — use controlplane-upgrade.sh, not this script"
+      fail "control-plane node — \`down\`/\`up\`/\`upgrade\` hand it to controlplane-upgrade.sh; the other verbs refuse"
     fi
   fi
 
@@ -564,7 +564,12 @@ down() {
   left="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o json | jq -r '.items[]|select(.metadata.ownerReferences[0].kind!="DaemonSet")|"\(.metadata.namespace)/\(.metadata.name) \(.status.phase)"')"
   if [ -n "$left" ]; then log "non-DaemonSet pods still on $NODE after drain:"; sed 's/^/  /' <<<"$left" >&2; fi
   # Longhorn's own view: scheduling off on a cordoned node is automatic; confirm before power-off.
-  kubectl -n longhorn-system get nodes.longhorn.io "$NODE" -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}{"\n"}' >&2
+  # A control plane has no nodes.longhorn.io object (wait_storage_back's rule): absent = not a
+  # storage node; a query that FAILED stops before the shutdown (first CP `down`, 2026-09-30).
+  local lh
+  if lh="$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" --ignore-not-found -o jsonpath='longhorn node: allowScheduling={.spec.allowScheduling} schedulable={.status.conditions[?(@.type=="Schedulable")].status}')"; then
+    log "${lh:-no Longhorn node object — not a storage node}"
+  else fail "cannot read the Longhorn node object — refusing the shutdown"; return 1; fi
   log "talosctl shutdown $NODE ($ip)"
   talosctl --talosconfig "$TALOSCONFIG" -n "$ip" -e "$ip" shutdown || log "shutdown returned non-zero (the API often drops mid-call) — verifying"
   local i=0
@@ -690,7 +695,7 @@ load_targets() {
       || { fail "could not read node_install_targets from the local main state"; return 1; }
   else
     log "reading the declared install targets from the management box (mgmt-tf output)"
-    TARGETS_JSON="$(bash "$REPO/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
+    TARGETS_JSON="$(bash "$REPO/mgmt/scripts/mgmt-tf.sh" output -json node_install_targets)" || {
       fail "could not read node_install_targets from the box — is the output on master yet?"
       fail "  INSTALL_TARGETS=<file> $0 upgrade $NODE  to use a pre-fetched dump instead"
       return 1; }
@@ -937,7 +942,7 @@ verify_installed() {
 # PDB-respecting: an eviction a budget refuses is retried until DRAIN_TIMEOUT, and then kubectl
 # gives up with exit 1. That is a workload saying "not now", so this turns it into a REFUSAL:
 # name what stayed and which budgets held it, uncordon, close the window, return 2 — the verb's
-# exit 2, which the reconciler retries next tick (scripts/mgmt-reconcile.sh's exit contract), never
+# exit 2, which the reconciler retries next tick (mgmt/scripts/mgmt-reconcile.sh's exit contract), never
 # a half-done window and never a park. Nothing was written to the node yet. Pods the drain DID
 # evict before the budget refused stay wherever their controllers put them; preflight's
 # pdb_blockers keeps that to the rare budget that closed during settle.
@@ -1247,7 +1252,7 @@ verify() {
 # moved Forgejo onto hp-01, where its init container crash-looped (the FU-277 DNS trap), and the
 # rollout took cp-01, cp-02 and wk-metal-02 down after it: between windows it read node Ready, cilium
 # and multi-node budgets, none of which a single-replica Deployment moves. This verb is only the
-# READ — generic, no service named, no judgement: the reconciler (scripts/mgmt-reconcile.sh) owns
+# READ — generic, no service named, no judgement: the reconciler (mgmt/scripts/mgmt-reconcile.sh) owns
 # the rollout-start baseline and the comparison.
 #
 # One JSON object per line, per workload keyed by its TOP OWNER — "<ns>/<Kind>/<name>": a pod's
@@ -1548,6 +1553,14 @@ upgrade_behind() {
   ok "upgrade-behind ($scope): all ${total} node(s) at their declared version"
 }
 
+# A control plane's down/up/upgrade run through controlplane-upgrade.sh (the etcd quorum, snapshot,
+# leadership and Cilium gates), which re-enters here with CONTROLPLANE_GUARDED=1.
+case "$cmd" in down|up|upgrade)
+  if [ "${CONTROLPLANE_GUARDED:-0}" != 1 ] && [ -n "$NODE" ] && \
+     kubectl get node "$NODE" -o json | jq -e '.metadata.labels | has("node-role.kubernetes.io/control-plane")' >/dev/null; then
+    exec bash "$REPO/scripts/controlplane-upgrade.sh" "$NODE" "$cmd"
+  fi ;;
+esac
 case "$cmd" in
   preflight) preflight ;;
   settle) settle ;;

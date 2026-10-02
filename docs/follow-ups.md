@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-293** (2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-299** (2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -138,6 +138,24 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
+      Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
+      without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
+      `register/<uuid>`); prod hides it (account already registered); the test-VM harness
+      pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
+      enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
+      (operator's call), then a pin bump + drop the harness workaround.
+- [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs
+      validated on VM 9110 (`scripts/opnsense-test-vm.sh`); a weekly from-nothing rebuild drill on
+      the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops residue. Design + recipes:
+      [`opnsense-test-vm.md`](opnsense-test-vm.md); the move it gates: [`router-move.md`](router-move.md)
+      (its §Status is the history). State 2026-09-30: both nodes STANDING (nx-02 `.70`, pve `.71`, `/24`),
+      CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
+      PASSED. 2026-10-01 ADR-145: two windows; window-1 prep DONE (Kea, HA drill, nx-02 reboot).
+      **2026-10-02: WINDOW 1 DONE — nx-02 serves `.1`** (#2166, #2161; the loss was the WAN cable;
+      Big Data running, cables out = the fallback). **Blocker:** pve's standby node sent a DHCP reply
+      as `.1` 17:14Z → kill switch stopped it (meta-state). **Next:** that root cause, soak, then window 2
+      (pve joins as BACKUP). Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
@@ -311,13 +329,17 @@ six OVERSIZE items pointer-ized into
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
       3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
       creds MOVED to the R12 box 2026-09-13** (the jail applies main through `devbox run mgmt-tf`).
-      **Next:** box-scoped credentials — the `scripts/mgmt-provision-secrets.sh` table is the JAIL's
+      **Next:** box-scoped credentials — the `mgmt/scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
       plans** (the #1635 finding — `main` + `cloudflare` plan PR heads with the admin kubeconfig;
       stage 1 denies new `kubernetes_*` data sources / `import` blocks meanwhile). Snapshots: #1834. Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
-      doesn't DR). `tofu/homeassistant.tf`.
+      doesn't DR). `tofu/homeassistant.tf`. **Router leg LIVE 2026-09-29:** prod users + keys
+      minted (#2108), un-suspended (#2117), first run proven (object decrypts to a valid config,
+      metrics in Prometheus); `OpnsenseConfigUnattributedRevision` fired on the root-key mint as
+      designed. **Next:** the playbooks move to the `automation` key (ddclient install → assert;
+      dnsmasq-dhcp.py off root) — then the click detector is quiet; the HA `/config` leg stays open.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
       completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
       rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
@@ -426,6 +448,25 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
+- [ ] **FU-293** — **`scripts/` is one flat directory and path-based ownership cannot cut it.**
+      Inventory by executor 2026-09-28 (~26 CI gates, 16 box, 1 cluster pod, ~45 seat-only; 143/146
+      commits in a month seat-authored). First cuts the same day: the box's closure → `mgmt/`
+      (PR#2088) and the rest of `scripts/` un-owned + worker-authorable under the
+      [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
+      re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
+      until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
+- [ ] **FU-295** — **The box's management-sentinel never reports on a homelab `goal/**` PR**, but the
+      `required-checks` ruleset (`refs/heads/goal/**` + default) requires it — an APPROVED goal-based
+      PR sits BLOCKED forever (the ADR-142 control drill #2093, 2026-09-28, 20+ min). Cause:
+      `mgmt/scripts/mgmt-sentinel.sh:89,94` judges master-bound PRs only. Why deferred: a box
+      change (mgmt/ is operator-owned, window + ssh). **Next:** for a non-master base, post the
+      no-box-surface SUCCESS in seconds (the FU-237 (b) shape) — or plan against the goal base.
+- [ ] **FU-296** — **governance-lint's worker match has no self-test**, and under the ADR-142
+      trial it is worker-authorable: drill D3 (#2092, 2026-09-28) anchored `WORKER_PATTERN` so it
+      missed the REST `homelab-agents-1234[bot]` login — every worker PR would pass — and the
+      gate-drift report read `same` on both legs (nothing pins it); only the lens's own read caught
+      it. **Next:** `scripts/governance-lint-test.sh` (REST `[bot]`, GraphQL `app/`, a sibling App,
+      renovate, a seat login) + devbox task + diff-ci MAP row + the ci.yaml step — then leg B pins it.
 
 Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
 lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
@@ -699,7 +740,12 @@ the block needs pruning, not more headings.
       week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
       **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)
       for ≥10 GB-scratch jobs — its template is a COPY of the general one, diff on every change.
-      Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
+      **2026-09-28 — the envelope is wrong, not the slot count:** a 1536Mi-request runner thrashed
+      wk-03 (8 GiB) past its kubelet — hard reset, [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md);
+      the same container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01).
+      **Next:** either the request states the heavy jobs' envelope (→ only nx-01/16 GiB nodes fit)
+      or the 8 GiB nodes leave the pool — operator call; the job→runner-size split (#1582's shape)
+      is the alternative. Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
       content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
       base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
@@ -784,12 +830,13 @@ the block needs pruning, not more headings.
 - [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
       SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
       `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,
-      the single CODEOWNERS carve-out is in place). **Remaining residue:** the composition
-      (`argocd/resources/agentstack/composition.yaml`, 2 sites) still carries the literal — a
-      different app that kustomize cannot reach, so each coordinator bump sweeps one OWNED file
-      and parks on a codeowner click. Needs a small design (feed the composition the tag) before
+      the single CODEOWNERS carve-out is in place). **Remaining residue (re-counted 2026-09-28):**
+      the composition (`argocd/resources/agentstack/composition.yaml`, 5 sites, all at `2026.8.7`)
+      and `argocd/resources/registry-cache/gc-mirrors.yaml` (1 site, `2026.7.25`) carry literals
+      the deploy-pin sweep never reaches — the kustomize pin is at `2026.9.27`, so those pods run
+      images two months behind. Needs a small design (feed the composition the tag) before
       building — NOT an FU-165 goal child for that reason. **Next:** design the composition-side
-      feed, or accept the one-click cost and archive.
+      feed (one source for the tag), or accept the drift and archive.
 - [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
       circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
       (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
@@ -1018,12 +1065,10 @@ the block needs pruning, not more headings.
       filed as #927–#931 (3 queued, #930 seat, #931 operator), plus the silent success-push
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
-      **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full
-      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then **STACK
-      retros FIRST (priority flipped, operator 2026-09-01** — stack goals carry the deeper
-      business-logic + kind-e2e complexity and a different dynamic; §B2 The split): the first
-      `retro.enabled` graduation + non-overlap brief; ledger emitter gaps + MCP transcript
-      slices behind it.
+      2026-10-02: activity windows LIVE (#2130 + #2165; collector 51 min cold, ~2 min warm).
+      **Next:** the rank fix #2170 (queued; cancellations classified, issues credited) before the
+      Mon 10-05 05:00Z fire; ride token #2171; then the stack-retro split — ADR-146 PR#2172
+      (Proposed, operator read; fork = platform intake container).
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
@@ -1245,18 +1290,17 @@ the block needs pruning, not more headings.
 ## Hardware & nodes
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
-      [diagnosis, counters, placement and the detectors](spikes/nx-02-numa-placement.md).
-      DONE 2026-09-27: detectors live on both hypervisors (#2040/#2042: `meminfo_numa` + reclaim
-      vmstat, per-guest placement/swap/pin series, `PveHostSwapUsed`/`PveHostSwapThrash`/
-      `PveNumaNodeMemoryLow`/`PveGuestSwapped`, replayed against the event); wk-04 restarted with
-      `numa_pin` (#2041 + `04b08852`: `numa0/1` hostnodes `preferred` — `hugepages` is root@pam-only)
-      and sits **16.0/16.0 GiB** (was 6.3/25.7). **Next:** (1) nx-02 boot disk → the SA400 (online
-      `pvmove`, swap leaves the spinner; host window for the reboot; pick the SSD in `Hard Disk Drive BBS
-      Priorities` over SOL — nx-02's COM2/SOL redirection is on, recipe + `bios2.py` in the private
-      hardware register `docs/nx-6035-g5.md`; pulling the HDD is the last resort; GRUB + kernel are on SOL
-      since 2026-09-27, `ansible/pve-serial-console.yml`, #2044), (2) THEN unpark ci-runner-02
-      (`var.ci_runner_02_running`, PR#1978) and rerun the oracle e2e comparison under the belts.
-      Relates FU-266, FU-280.
+      [diagnosis, counters, placement, detectors, the boot-disk move](spikes/nx-02-numa-placement.md).
+      DONE 2026-09-27: detectors live (#2040/#2042); wk-04 `numa_pin` 16.0/16.0 GiB on both restarts;
+      nx-02 root+swap on the SA400 and booted from it 20:58Z (the LSI HBA's legacy `Maximum INT 13 Devices`
+      1 → 2 was the missing piece — recipe in the private register `hardware/docs/nx-6035-g5.md`);
+      ci-runner-02 UNPARKED (#2048); its first oracle `kind e2e` (run 36351320341) prepared nodes in **3.9 s**
+      (was 397/67 s; runner-01 2.5 s), green, swap 0 B, no `PveHostSwap*`/`PveNuma*` fire — ONE sample.
+      **Next:** (1) the belts judge a week of real PR load (a second slow sample reopens placement, not the
+      disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
+      boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
+      maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. (3) 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60/62.5 GiB booked after the two OPNsense VMs; no swap). The structural fix is RAM: 4 × 16 GB into the empty C1/D1/G1/H1 channels. Operator is watching for a bulk lot (hardware `market/2026-09-30-rdimm-price-guide.md`). Relates FU-266, FU-280.
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
@@ -1315,7 +1359,9 @@ the block needs pruning, not more headings.
       now reads ALL metal nodes (nocloud VMs stay excluded). **Next:** operator rules
       tune-vs-accept (the pin experiment first; cilium-agent's residual pod-level exposure —
       container req=limits since 07-28, pod still Burstable — folds into the same ruling). **2026-09-16:
-      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). Relates FU-139/FU-112, ADR-044.
+      the Option A pin gained a second, harder driver — FU-246** (the `page_table_check` reboots). **2026-09-28
+      evidence:** a page-cache thrash on wk-03 (v1.14.1, FU-112 reservations in place) produced NO kill
+      at all — kubelet starved, OOMController silent — [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-246** — **Talos ≥ v1.13.10 on the workers — the `page_table_check` reboot bug: POINTER.**
       Cause + evidence: [`docs/incidents/2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md)
       (siderolabs/talos#13496; v1.13.4+ builds the kernel unenforced). **Done:** every node upgraded past

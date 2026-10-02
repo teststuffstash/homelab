@@ -3,3 +3,7 @@
 # 8113 = wk-03, the only node with `serial = true` in tofu/variables.tf (#882).
 pve_serial_log_vmids:
   - 8113
+
+# --- pve-router-killswitch (ADR-144) ---
+# opnsense-pve (tofu/opnsense-router.tf, vmid 9171) — the standing router node.
+pve_router_killswitch_vmids: [9171]

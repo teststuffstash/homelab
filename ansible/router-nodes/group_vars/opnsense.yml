@@ -1,0 +1,18 @@
+# Router-NODE-only values (ADR-144) — loaded beside ansible/group_vars/opnsense.yml (prod's, which
+# the plays read too) whenever a play runs with `-i ansible/router-nodes/inventory.yml`, and never
+# for prod (whose inventory sits one directory up). ⚠ The playbook-side group_vars WIN over this file
+# for any key both define — override a prod key per host in inventory.yml instead.
+
+# --- CARP (docs/router-move.md, **The CARP trial**) ---
+# ansible/opnsense-carp.yml. While prod serves: the reserved TRIAL slot only — 192.168.2.72
+# (ip-plan.md, ADR-088 as amended: never a real host). The mask is the nodes' LAN /24. vhid = the
+# last octet (the virtual MAC 00:00:5e:00:01:<vhid> then names its address).
+#
+# `state: absent` = converge it AWAY (the role deletes it). The trial `.72` is retired before window 1
+# (ADR-145): the WAN gate opens on ANY CARP advert, so a node MASTER of `.72` would raise its WAN
+# beside nx-02 on the shared MAC. Window 1 adds `.1` here (vhid 1) for the node that takes it.
+router_carp_vips:
+  - address: 192.168.2.72/24
+    vhid: 72
+    description: carp-trial
+    state: absent

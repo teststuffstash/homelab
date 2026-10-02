@@ -21,315 +21,344 @@
 # vip/backend_ip/backend_port), so they flow through the create+rebind tasks unchanged — the
 # only deltas are their `cert_domain` is a cert OBJECT NAME (a wildcard cert) and their DNS is
 # a wildcard override (handled separately at the end, not the per-service Unbound task).
-- name: Merge HTTP frontends (proxied services + per-stack wildcard gateways)
-  ansible.builtin.set_fact:
-    haproxy_all_services: "{{ haproxy_proxied_services + (stack_gateways | default([])) }}"
+#
+# ⚠ APPLY, DON'T JUST SAVE (oxlorg.opnsense 26.x): the collection flipped its global
+# `reload` module-argument default true -> false (plugins/module_utils/defaults/main.py,
+# RELOAD_MOD_ARG). Two calls here MUST reach the live system: `interface_vip` (the
+# per-service IP-alias VIP that the frontend created two sections below binds to — an
+# unapplied VIP means the bind has no address) and `unbound_host` (the LAN name that
+# resolves to it). Both get an explicit `reload: true` from a ROLE-SCOPED block-level
+# module_defaults, so a task added inside the block cannot silently omit the apply.
+#
+# The value carries the whole `opnsense_conn` dict, not just `{reload: true}`: a
+# block-level module_defaults entry REPLACES the play's entry for the same module
+# (verified on the pinned ansible-core), so it has to restate the connection args the
+# playbook sets. The `raw` calls (HAProxy objects, service start) take no `reload`
+# argument — they are applied by their own POST plus the `reconfigure haproxy` handler.
+- name: HAProxy reverse proxy + VIPs + DNS (every reload-capable call applies on change)
+  module_defaults:
+    oxlorg.opnsense.interface_vip: "{{ opnsense_conn | combine({'reload': true}) }}"
+    oxlorg.opnsense.unbound_host: "{{ opnsense_conn | combine({'reload': true}) }}"
+  block:
+    - name: Merge HTTP frontends (proxied services + per-stack wildcard gateways)
+      ansible.builtin.set_fact:
+        haproxy_all_services: "{{ haproxy_proxied_services + (stack_gateways | default([])) }}"
 
-# --- bind addresses: one IP-alias VIP per service ----------------------
-- name: LAN IP-alias VIP per service
-  oxlorg.opnsense.interface_vip:
-    address: "{{ item.vip }}/24"
-    mode: ipalias
-    interface: lan
-    description: "haproxy-{{ item.name }}"
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
+    # --- bind addresses: one IP-alias VIP per service ----------------------
+    - name: LAN IP-alias VIP per service
+      oxlorg.opnsense.interface_vip:
+        address: "{{ item.vip }}/24"
+        mode: ipalias
+        interface: "{{ haproxy_vip_interface }}"
+        description: "haproxy-{{ item.name }}"
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
 
-# --- find issued cert refids (set by the opnsense-acme role) -----------------
-- name: List ACME certificates
-  oxlorg.opnsense.raw: { module: acmeclient, controller: certificates, command: search }
-  register: acme_certs
-- name: Assert every cert exists (issue via the opnsense-acme role first)
-  ansible.builtin.assert:
-    that: acme_certs.response.rows | selectattr('name', 'eq', item.cert_domain) | list | length > 0
-    fail_msg: "No ACME cert named {{ item.cert_domain }} — run opnsense-acme and sign it first."
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.cert_domain }}" }
-- name: Map cert_domain -> certRefId
-  ansible.builtin.set_fact:
-    cert_refid: "{{ dict(acme_certs.response.rows | map(attribute='name') | list | zip(acme_certs.response.rows | map(attribute='certRefId') | list)) }}"
+    # The module matches on address+interface, so flipping haproxy_vip_interface (standby lo0
+    # ↔ lan at the cutover) would leave the old alias behind: two holders of one address.
+    - name: No service VIP on the other interface
+      oxlorg.opnsense.interface_vip:
+        address: "{{ item.vip }}/24"
+        interface: "{{ 'lan' if haproxy_vip_interface == 'lo0' else 'lo0' }}"
+        state: absent
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
 
-# --- HAProxy servers (real server = each cluster VIP) -------------------
-- name: Find HAProxy servers
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
-  register: hap_servers
-- name: Create HAProxy server <name>-srv
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addServer
-    action: post
-    data:
-      server:
-        enabled: "1"
-        name: "{{ item.name }}-srv"
-        address: "{{ item.backend_ip }}"
-        port: "{{ item.backend_port }}"
-        mode: active
-        type: static
-        ssl: "0"
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.name }}-srv" }
-  when: (item.name ~ '-srv') not in (hap_servers.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
-- name: Re-read servers (capture uuids)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
-  register: hap_servers2
-- name: Map server name -> uuid
-  ansible.builtin.set_fact:
-    server_uuid: "{{ dict(hap_servers2.response.rows | map(attribute='name') | list | zip(hap_servers2.response.rows | map(attribute='uuid') | list)) }}"
+    # --- find issued cert refids (set by the opnsense-acme role) -----------------
+    - name: List ACME certificates
+      oxlorg.opnsense.raw: { module: acmeclient, controller: certificates, command: search }
+      register: acme_certs
+    - name: Assert every cert exists (issue via the opnsense-acme role first)
+      ansible.builtin.assert:
+        that: acme_certs.response.rows | selectattr('name', 'eq', item.cert_domain) | list | length > 0
+        fail_msg: "No ACME cert named {{ item.cert_domain }} — run opnsense-acme and sign it first."
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.cert_domain }}" }
+    - name: Map cert_domain -> certRefId
+      ansible.builtin.set_fact:
+        cert_refid: "{{ dict(acme_certs.response.rows | map(attribute='name') | list | zip(acme_certs.response.rows | map(attribute='certRefId') | list)) }}"
 
-# --- HAProxy backends (pools) ------------------------------------------
-- name: Find HAProxy backends
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
-  register: hap_backends
-- name: Create HAProxy backend <name>-backend
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addBackend
-    action: post
-    data:
-      backend:
-        enabled: "1"
-        name: "{{ item.name }}-backend"
-        mode: http
-        algorithm: source
-        linkedServers: "{{ server_uuid[item.name ~ '-srv'] }}"
-        healthCheckEnabled: "0"
-        tuning_timeoutServer: 60m   # keep long-lived WebSockets alive
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.name }}-backend" }
-  when: (item.name ~ '-backend') not in (hap_backends.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
-- name: Re-read backends (capture uuids)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
-  register: hap_backends2
-- name: Map backend name -> uuid
-  ansible.builtin.set_fact:
-    backend_uuid: "{{ dict(hap_backends2.response.rows | map(attribute='name') | list | zip(hap_backends2.response.rows | map(attribute='uuid') | list)) }}"
+    # --- HAProxy servers (real server = each cluster VIP) -------------------
+    - name: Find HAProxy servers
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_servers
+    - name: Create HAProxy server <name>-srv
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addServer
+        action: post
+        data:
+          server:
+            enabled: "1"
+            name: "{{ item.name }}-srv"
+            address: "{{ item.backend_ip }}"
+            port: "{{ item.backend_port }}"
+            mode: active
+            type: static
+            ssl: "0"
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }}-srv" }
+      when: (item.name ~ '-srv') not in (hap_servers.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
+    - name: Re-read servers (capture uuids)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_servers2
+    - name: Map server name -> uuid
+      ansible.builtin.set_fact:
+        server_uuid: "{{ dict(hap_servers2.response.rows | map(attribute='name') | list | zip(hap_servers2.response.rows | map(attribute='uuid') | list)) }}"
 
-# --- HAProxy frontends (TLS :443, one per VIP) -------------------------
-- name: Find HAProxy frontends
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
-  register: hap_frontends
-- name: Create HAProxy frontend <name>-frontend
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addFrontend
-    action: post
-    data:
-      frontend:
-        enabled: "1"
-        name: "{{ item.name }}-frontend"
-        bind: "{{ item.vip }}:443"
-        mode: http
-        defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
-        ssl_enabled: "1"
-        ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
-        http2Enabled: "0"          # h2 breaks HA/Grafana WebSockets through the proxy
-        tuning_timeoutClient: 60m
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:443)" }
-  when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
+    # --- HAProxy backends (pools) ------------------------------------------
+    - name: Find HAProxy backends
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_backends
+    - name: Create HAProxy backend <name>-backend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addBackend
+        action: post
+        data:
+          backend:
+            enabled: "1"
+            name: "{{ item.name }}-backend"
+            mode: http
+            algorithm: source
+            linkedServers: "{{ server_uuid[item.name ~ '-srv'] }}"
+            healthCheckEnabled: "0"
+            tuning_timeoutServer: 60m   # keep long-lived WebSockets alive
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }}-backend" }
+      when: (item.name ~ '-backend') not in (hap_backends.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
+    - name: Re-read backends (capture uuids)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_backends2
+    - name: Map backend name -> uuid
+      ansible.builtin.set_fact:
+        backend_uuid: "{{ dict(hap_backends2.response.rows | map(attribute='name') | list | zip(hap_backends2.response.rows | map(attribute='uuid') | list)) }}"
 
-# Create-if-absent means a VIP change in group_vars silently does NOT rebind the frontend —
-# that trap shipped twice (transcripts .11→.30→.28; found live 2026-07-13 when .30 shadowed the
-# Matchbox LXC). Re-post the full frontend payload keyed by uuid whenever the bind drifts.
-- name: Update HAProxy frontend bind on VIP change
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: "setFrontend/{{ (hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
-    action: post
-    data:
-      frontend:
-        enabled: "1"
-        name: "{{ item.name }}-frontend"
-        bind: "{{ item.vip }}:443"
-        mode: http
-        defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
-        ssl_enabled: "1"
-        ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
-        http2Enabled: "0"
-        tuning_timeoutClient: 60m
-  loop: "{{ haproxy_all_services }}"
-  loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:443" }
-  vars:
-    _existing: "{{ hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
-  when: (_existing | length) > 0 and (_existing | first).bind != (item.vip ~ ':443')
-  notify: reconfigure haproxy
+    # --- HAProxy frontends (TLS :443, one per VIP) -------------------------
+    - name: Find HAProxy frontends
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
+      register: hap_frontends
+    - name: Create HAProxy frontend <name>-frontend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addFrontend
+        action: post
+        data:
+          frontend:
+            enabled: "1"
+            name: "{{ item.name }}-frontend"
+            bind: "{{ item.vip }}:443"
+            mode: http
+            defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
+            ssl_enabled: "1"
+            ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
+            http2Enabled: "0"          # h2 breaks HA/Grafana WebSockets through the proxy
+            tuning_timeoutClient: 60m
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:443)" }
+      when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
 
-# --- TCP passthrough services (no TLS) — e.g. Forgejo SSH clone on :22 --------
-# Raw TCP from <vip>:<port> to the cluster VIP, no cert/termination (SSH does its own
-# crypto). Reuses an IP-alias VIP already created above (e.g. forgejo's .2.9), so the
-# same hostname (forgejo.teststuff.net) serves HTTPS:443 and SSH:22. Config:
-# haproxy_tcp_services in group_vars. All guarded so an empty list is a no-op.
-- name: Find HAProxy servers (TCP pass)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
-  register: hap_tcp_servers
-  when: haproxy_tcp_services | length > 0
-- name: Create HAProxy TCP server <name>-srv
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addServer
-    action: post
-    data:
-      server:
-        enabled: "1"
-        name: "{{ item.name }}-srv"
-        address: "{{ item.backend_ip }}"
-        port: "{{ item.backend_port }}"
-        mode: active
-        type: static
-        ssl: "0"
-  loop: "{{ haproxy_tcp_services }}"
-  loop_control: { label: "{{ item.name }}-srv" }
-  when:
-    - haproxy_tcp_services | length > 0
-    - (item.name ~ '-srv') not in (hap_tcp_servers.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
-- name: Re-read servers (TCP uuids)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
-  register: hap_tcp_servers2
-  when: haproxy_tcp_services | length > 0
-- name: Map TCP server name -> uuid
-  ansible.builtin.set_fact:
-    tcp_server_uuid: "{{ dict(hap_tcp_servers2.response.rows | map(attribute='name') | list | zip(hap_tcp_servers2.response.rows | map(attribute='uuid') | list)) }}"
-  when: haproxy_tcp_services | length > 0
+    # Create-if-absent means a VIP change in group_vars silently does NOT rebind the frontend —
+    # that trap shipped twice (transcripts .11→.30→.28; found live 2026-07-13 when .30 shadowed the
+    # Matchbox LXC). Re-post the full frontend payload keyed by uuid whenever the bind drifts.
+    - name: Update HAProxy frontend bind on VIP change
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: "setFrontend/{{ (hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
+        action: post
+        data:
+          frontend:
+            enabled: "1"
+            name: "{{ item.name }}-frontend"
+            bind: "{{ item.vip }}:443"
+            mode: http
+            defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
+            ssl_enabled: "1"
+            ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
+            http2Enabled: "0"
+            tuning_timeoutClient: 60m
+      loop: "{{ haproxy_all_services }}"
+      loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:443" }
+      vars:
+        _existing: "{{ hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
+      when: (_existing | length) > 0 and (_existing | first).bind != (item.vip ~ ':443')
+      notify: reconfigure haproxy
 
-- name: Find HAProxy backends (TCP pass)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
-  register: hap_tcp_backends
-  when: haproxy_tcp_services | length > 0
-- name: Create HAProxy TCP backend <name>-backend
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addBackend
-    action: post
-    data:
-      backend:
-        enabled: "1"
-        name: "{{ item.name }}-backend"
-        mode: tcp
-        algorithm: source
-        linkedServers: "{{ tcp_server_uuid[item.name ~ '-srv'] }}"
-        healthCheckEnabled: "0"
-        tuning_timeoutServer: 60m   # long-lived git-over-SSH sessions
-  loop: "{{ haproxy_tcp_services }}"
-  loop_control: { label: "{{ item.name }}-backend" }
-  when:
-    - haproxy_tcp_services | length > 0
-    - (item.name ~ '-backend') not in (hap_tcp_backends.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
-- name: Re-read backends (TCP uuids)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
-  register: hap_tcp_backends2
-  when: haproxy_tcp_services | length > 0
-- name: Map TCP backend name -> uuid
-  ansible.builtin.set_fact:
-    tcp_backend_uuid: "{{ dict(hap_tcp_backends2.response.rows | map(attribute='name') | list | zip(hap_tcp_backends2.response.rows | map(attribute='uuid') | list)) }}"
-  when: haproxy_tcp_services | length > 0
+    # --- TCP passthrough services (no TLS) — e.g. Forgejo SSH clone on :22 --------
+    # Raw TCP from <vip>:<port> to the cluster VIP, no cert/termination (SSH does its own
+    # crypto). Reuses an IP-alias VIP already created above (e.g. forgejo's .2.9), so the
+    # same hostname (forgejo.teststuff.net) serves HTTPS:443 and SSH:22. Config:
+    # haproxy_tcp_services in group_vars. All guarded so an empty list is a no-op.
+    - name: Find HAProxy servers (TCP pass)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_tcp_servers
+      when: haproxy_tcp_services | length > 0
+    - name: Create HAProxy TCP server <name>-srv
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addServer
+        action: post
+        data:
+          server:
+            enabled: "1"
+            name: "{{ item.name }}-srv"
+            address: "{{ item.backend_ip }}"
+            port: "{{ item.backend_port }}"
+            mode: active
+            type: static
+            ssl: "0"
+      loop: "{{ haproxy_tcp_services }}"
+      loop_control: { label: "{{ item.name }}-srv" }
+      when:
+        - haproxy_tcp_services | length > 0
+        - (item.name ~ '-srv') not in (hap_tcp_servers.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
+    - name: Re-read servers (TCP uuids)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_tcp_servers2
+      when: haproxy_tcp_services | length > 0
+    - name: Map TCP server name -> uuid
+      ansible.builtin.set_fact:
+        tcp_server_uuid: "{{ dict(hap_tcp_servers2.response.rows | map(attribute='name') | list | zip(hap_tcp_servers2.response.rows | map(attribute='uuid') | list)) }}"
+      when: haproxy_tcp_services | length > 0
 
-- name: Find HAProxy frontends (TCP pass)
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
-  register: hap_tcp_frontends
-  when: haproxy_tcp_services | length > 0
-- name: Create HAProxy TCP frontend <name>-frontend
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: addFrontend
-    action: post
-    data:
-      frontend:
-        enabled: "1"
-        name: "{{ item.name }}-frontend"
-        bind: "{{ item.vip }}:{{ item.port }}"
-        mode: tcp
-        defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
-        ssl_enabled: "0"
-        tuning_timeoutClient: 60m
-  loop: "{{ haproxy_tcp_services }}"
-  loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:{{ item.port }})" }
-  when:
-    - haproxy_tcp_services | length > 0
-    - (item.name ~ '-frontend') not in (hap_tcp_frontends.response.rows | map(attribute='name') | list)
-  notify: reconfigure haproxy
+    - name: Find HAProxy backends (TCP pass)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_tcp_backends
+      when: haproxy_tcp_services | length > 0
+    - name: Create HAProxy TCP backend <name>-backend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addBackend
+        action: post
+        data:
+          backend:
+            enabled: "1"
+            name: "{{ item.name }}-backend"
+            mode: tcp
+            algorithm: source
+            linkedServers: "{{ tcp_server_uuid[item.name ~ '-srv'] }}"
+            healthCheckEnabled: "0"
+            tuning_timeoutServer: 60m   # long-lived git-over-SSH sessions
+      loop: "{{ haproxy_tcp_services }}"
+      loop_control: { label: "{{ item.name }}-backend" }
+      when:
+        - haproxy_tcp_services | length > 0
+        - (item.name ~ '-backend') not in (hap_tcp_backends.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
+    - name: Re-read backends (TCP uuids)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_tcp_backends2
+      when: haproxy_tcp_services | length > 0
+    - name: Map TCP backend name -> uuid
+      ansible.builtin.set_fact:
+        tcp_backend_uuid: "{{ dict(hap_tcp_backends2.response.rows | map(attribute='name') | list | zip(hap_tcp_backends2.response.rows | map(attribute='uuid') | list)) }}"
+      when: haproxy_tcp_services | length > 0
 
-# Same rebind-on-drift as the HTTP frontends above (create-if-absent never propagates a VIP change).
-- name: Update HAProxy TCP frontend bind on VIP change
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: "setFrontend/{{ (hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
-    action: post
-    data:
-      frontend:
-        enabled: "1"
-        name: "{{ item.name }}-frontend"
-        bind: "{{ item.vip }}:{{ item.port }}"
-        mode: tcp
-        defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
-        ssl_enabled: "0"
-        tuning_timeoutClient: 60m
-  loop: "{{ haproxy_tcp_services }}"
-  loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:{{ item.port }}" }
-  vars:
-    _existing: "{{ hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
-  when:
-    - haproxy_tcp_services | length > 0
-    - (_existing | length) > 0
-    - (_existing | first).bind != (item.vip ~ ':' ~ item.port)
-  notify: reconfigure haproxy
+    - name: Find HAProxy frontends (TCP pass)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
+      register: hap_tcp_frontends
+      when: haproxy_tcp_services | length > 0
+    - name: Create HAProxy TCP frontend <name>-frontend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addFrontend
+        action: post
+        data:
+          frontend:
+            enabled: "1"
+            name: "{{ item.name }}-frontend"
+            bind: "{{ item.vip }}:{{ item.port }}"
+            mode: tcp
+            defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
+            ssl_enabled: "0"
+            tuning_timeoutClient: 60m
+      loop: "{{ haproxy_tcp_services }}"
+      loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:{{ item.port }})" }
+      when:
+        - haproxy_tcp_services | length > 0
+        - (item.name ~ '-frontend') not in (hap_tcp_frontends.response.rows | map(attribute='name') | list)
+      notify: reconfigure haproxy
 
-# --- enable + start HAProxy (no enable flag on the general module) -------
-- name: Read HAProxy general settings
-  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: get }
-  register: hap_general
-- name: Enable HAProxy
-  oxlorg.opnsense.raw:
-    module: haproxy
-    controller: settings
-    command: set
-    action: post
-    data: { haproxy: { general: { enabled: "1" } } }
-  when: hap_general.response.haproxy.general.enabled | default("0") != "1"
-  notify: reconfigure haproxy
-- name: Ensure HAProxy service is running
-  oxlorg.opnsense.raw: { module: haproxy, controller: service, command: start, action: post }
-  register: hap_start
-  changed_when: false
+    # Same rebind-on-drift as the HTTP frontends above (create-if-absent never propagates a VIP change).
+    - name: Update HAProxy TCP frontend bind on VIP change
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: "setFrontend/{{ (hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
+        action: post
+        data:
+          frontend:
+            enabled: "1"
+            name: "{{ item.name }}-frontend"
+            bind: "{{ item.vip }}:{{ item.port }}"
+            mode: tcp
+            defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
+            ssl_enabled: "0"
+            tuning_timeoutClient: 60m
+      loop: "{{ haproxy_tcp_services }}"
+      loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:{{ item.port }}" }
+      vars:
+        _existing: "{{ hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
+      when:
+        - haproxy_tcp_services | length > 0
+        - (_existing | length) > 0
+        - (_existing | first).bind != (item.vip ~ ':' ~ item.port)
+      notify: reconfigure haproxy
 
-# --- local DNS: <name>.teststuff.net -> its VIP ------------------------
-- name: Unbound host override per service
-  oxlorg.opnsense.unbound_host:
-    hostname: "{{ item.cert_domain.split('.')[0] }}"
-    domain: "{{ item.cert_domain.split('.')[1:] | join('.') }}"
-    record_type: A
-    value: "{{ item.vip }}"
-    description: "{{ item.name }} via HAProxy"
-    # match on identifying fields only (prio default=10 never matches an A record ->
-    # would append a duplicate every run).
-    match_fields: [hostname, domain, record_type, value]
-  loop: "{{ haproxy_proxied_services }}"
-  loop_control: { label: "{{ item.cert_domain }} -> {{ item.vip }}" }
+    # --- enable + start HAProxy (no enable flag on the general module) -------
+    - name: Read HAProxy general settings
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: get }
+      register: hap_general
+    - name: Enable HAProxy
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: set
+        action: post
+        data: { haproxy: { general: { enabled: "1" } } }
+      when: hap_general.response.haproxy.general.enabled | default("0") != "1"
+      notify: reconfigure haproxy
+    - name: Ensure HAProxy service is running
+      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: start, action: post }
+      register: hap_start
+      changed_when: false
 
-# --- local DNS: WILDCARD per stack gateway: *.<stack>.teststuff.net -> its VIP (ADR-092) --
-# hostname `*` is API-accepted (verified 2026-07-15: two distinct names under a test wildcard
-# both resolved). This is what lets the stack add names with no homelab DNS edit — every
-# `<svc>.<stack>.teststuff.net` resolves to the gateway VIP; the in-cluster gateway host-routes.
-- name: Unbound WILDCARD override per stack gateway
-  oxlorg.opnsense.unbound_host:
-    hostname: "*"
-    domain: "{{ item.wildcard_domain }}"
-    record_type: A
-    value: "{{ item.vip }}"
-    description: "{{ item.name }} wildcard via HAProxy (ADR-092)"
-    match_fields: [hostname, domain, record_type, value]
-  loop: "{{ stack_gateways | default([]) }}"
-  loop_control: { label: "*.{{ item.wildcard_domain }} -> {{ item.vip }}" }
+    # --- local DNS: <name>.teststuff.net -> its VIP ------------------------
+    - name: Unbound host override per service
+      oxlorg.opnsense.unbound_host:
+        hostname: "{{ item.cert_domain.split('.')[0] }}"
+        domain: "{{ item.cert_domain.split('.')[1:] | join('.') }}"
+        record_type: A
+        value: "{{ item.vip }}"
+        description: "{{ item.name }} via HAProxy"
+        # match on identifying fields only (prio default=10 never matches an A record ->
+        # would append a duplicate every run).
+        match_fields: [hostname, domain, record_type, value]
+      loop: "{{ haproxy_proxied_services }}"
+      loop_control: { label: "{{ item.cert_domain }} -> {{ item.vip }}" }
+
+    # --- local DNS: WILDCARD per stack gateway: *.<stack>.teststuff.net -> its VIP (ADR-092) --
+    # hostname `*` is API-accepted (verified 2026-07-15: two distinct names under a test wildcard
+    # both resolved). This is what lets the stack add names with no homelab DNS edit — every
+    # `<svc>.<stack>.teststuff.net` resolves to the gateway VIP; the in-cluster gateway host-routes.
+    - name: Unbound WILDCARD override per stack gateway
+      oxlorg.opnsense.unbound_host:
+        hostname: "*"
+        domain: "{{ item.wildcard_domain }}"
+        record_type: A
+        value: "{{ item.vip }}"
+        description: "{{ item.name }} wildcard via HAProxy (ADR-092)"
+        match_fields: [hostname, domain, record_type, value]
+      loop: "{{ stack_gateways | default([]) }}"
+      loop_control: { label: "*.{{ item.wildcard_domain }} -> {{ item.vip }}" }

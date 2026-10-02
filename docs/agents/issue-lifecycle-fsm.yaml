@@ -205,8 +205,8 @@ transitions:
     owner: fix-debounce `decide` shell (ADR-094 — dispatch acts are launcher-owned)
     when: "exactly one issue pending → `sq_decide` re-reads its body: a `Touches:` line must be
       declared, and none of its paths may match the queue-time deny table (`.github/`, `.agents/`,
-      `devbox.json|lock`, `scripts/` — the paths where authoring takes effect BEFORE a human
-      approves). Pass → `agent/queued`, then ring `/coordinate` so dispatch is edge-driven rather
+      `devbox.json|lock`, `mgmt/scripts/` + the box-executed `scripts/` verbs — the paths where
+      authoring takes effect BEFORE a human approves; the rest of `scripts/` left in the ADR-142 trial). Pass → `agent/queued`, then ring `/coordinate` so dispatch is edge-driven rather
       than cron-bound. Fail, or a refused label write → the issue stays inert and says why."
     status: guarded
     replay:

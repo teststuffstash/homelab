@@ -1,0 +1,13 @@
+---
+# OPNsense API users + their keys (FU-013). Thin role-caller — logic in roles/opnsense-users,
+# the users and their privileges in group_vars/opnsense.yml (opnsense_api_users).
+# Run: bash scripts/opnsense-api-users.sh   (wraps scripts/opnsense-playbook.sh with a key sink
+#      and stores what gets minted — never run this play bare unless every user already has a key)
+- name: OPNsense API users
+  hosts: opnsense
+  gather_facts: false
+  module_defaults:
+    oxlorg.opnsense.user: "{{ opnsense_conn }}"
+    oxlorg.opnsense.raw: "{{ opnsense_conn }}"
+  roles:
+    - opnsense-users

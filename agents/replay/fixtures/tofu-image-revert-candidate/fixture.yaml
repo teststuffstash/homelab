@@ -1,0 +1,22 @@
+# tofu-image-revert-candidate — the revert candidate read of the tofu-image chain (#1988's class
+# row, 2026-09-28; docs/designs/fu-1990-workflow-pin-revert.md Part 3). Same contract as
+# workflow-pin-revert-candidate: ONE `gh pr list` whose --jq carries the cutoff LITERALLY (the
+# CALL line is the pin), a `revert-*` head and an out-of-window merge are never candidates, a
+# newer merge that touches nothing under tofu/ does not win — and (2026-09-28, the drill's
+# follow-up) a NEWER tofu merge that is NOT image-line-only (#2090, `wait_for_rollout`) or not
+# tofu/*.tf-only (#2078) is walked past, never masking the bump (#2037) whose roll stuck. The
+# candidate's number / merge SHA / title / files are what gh printed.
+name: tofu-image-revert-candidate
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - REVERT_WINDOW_MIN=180
+  - CUTOFF=2026-09-28T12:00:00Z
+  - NS=forgejo-runner
+  - DEP=forgejo-runner
+parts:
+  - file:bridge.sh
+  - block:tofu-image-revert-coupling
+  - block:tofu-image-revert-candidate
+  - file:post.sh

@@ -1,0 +1,98 @@
+# OPNsense config.xml backup + click detector (FU-013, router leg — docs/runbook.md §OPNsense
+# config backup). Daily: download the running config with the read-only backup-puller user,
+# age-encrypt it, keep it in the private Garage bucket, and flag config revisions made by anyone
+# but the automation identities. The logic and its reasons are in backup.py.
+#
+# A READ-ONLY belt, so it may run in-cluster: the dependency-cone rule (docs/dependency-upgrades.md)
+# forbids an in-cluster APPLY to the router, not a read. It cannot write the router even if the
+# code were wrong — user-config-readonly is enforced router-side.
+#
+# Live since 2026-09-29: scripts/opnsense-api-users.sh ran on 192.168.2.1 and ESO synced the
+# backup-puller key. Re-suspending is a deliberate act: OpnsenseConfigBackupStale stays quiet while
+# suspended, and OpnsenseConfigBackupSuspended fires after 1h of suspension once the CronJob is a
+# week old, so a forgotten suspend still surfaces.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opnsense-config-backup
+  namespace: opnsense-config-backup
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: opnsense-config-backup
+  namespace: opnsense-config-backup
+spec:
+  suspend: false
+  schedule: "23 4 * * *" # daily, off the hour; the ACME renewal writes at 00:00 local
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels: { app: opnsense-config-backup }
+        spec:
+          restartPolicy: Never
+          serviceAccountName: opnsense-config-backup
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: backup
+              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              command: ["python3", "-u", "/app/backup.py"]
+              env:
+                - { name: OPNSENSE_ADDR, value: "192.168.2.1" }
+                - { name: OPNSENSE_TLS_NAME, value: "opnsense.teststuff.net" }
+                - name: OPNSENSE_API_KEY
+                  valueFrom: { secretKeyRef: { name: opnsense-backup-puller, key: api_key } }
+                - name: OPNSENSE_API_SECRET
+                  valueFrom: { secretKeyRef: { name: opnsense-backup-puller, key: api_secret } }
+                # PUBLIC half of the wallet entry opnsense-config-backup-age-identity (minted
+                # 2026-09-29). Only that identity decrypts — DR reads it from the wallet.
+                - { name: AGE_RECIPIENT, value: "age1y98pjghjrsmh26wzvp7zvnn2fcghhsjwclej5nfehxzt4klg4ugqvrn8y7" }
+                # pyrage 1.4.0 (rage's binding, no deps), cp310-abi3 manylinux x86_64 — ONE wheel,
+                # fetched through the in-cluster pypi-cache (/packages/ = files.pythonhosted.org,
+                # 30-day cache) and checked against PyPI's published sha256 before import.
+                - name: PYRAGE_WHEEL_URL
+                  value: "http://pypi-cache.pypi-cache.svc/packages/d9/f0/41da7d88cfdad2eba492f3275ec50a65916ccd3a78140fb15875569ad1ff/pyrage-1.4.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+                - { name: PYRAGE_WHEEL_SHA256, value: "7f4eb0cbc2b4aee5deac9862c47b3895866df5554153951af822e9c581e68558" }
+                - { name: S3_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+                - { name: S3_BUCKET, value: "opnsense-config-backup" }
+                - { name: S3_PREFIX, value: "opnsense-fw" }
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: { secretKeyRef: { name: opnsense-config-backup-s3, key: access_key_id } }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: { secretKeyRef: { name: opnsense-config-backup-s3, key: secret_access_key } }
+                # 90 days: a bad change noticed weeks late must still have a clean config before it;
+                # the router's own /conf/backup holds 100 revisions, which was two weeks on
+                # 2026-09-29 (one DHCP playbook day is dozens). MIN_KEEP: a month of dailies
+                # survives even if the job was down long enough for everything to age out.
+                - { name: RETENTION_DAYS, value: "90" }
+                - { name: MIN_KEEP, value: "30" }
+                - { name: ALLOWED_USERS, value: "automation,backup-puller" }
+                - { name: PUSHGATEWAY_URL, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: app, mountPath: /app }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 256Mi }
+          volumes:
+            - name: app
+              configMap: { name: opnsense-config-backup }
+            - name: tmp
+              emptyDir: { sizeLimit: 64Mi }

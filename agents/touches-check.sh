@@ -8,8 +8,9 @@
 # normalization/prefix-intersection semantics as the scan's ADR-097 footprint hold.
 #
 # Governance paths are flagged in the output so the reviewer can highlight escapes into
-# `agents/**`, `.agents/**`, `scripts/**`, `policy/**`, `.github/**`, `tofu/github/**`,
-# `tofu/cloudflare/**` as BLOCKING findings.
+# `agents/**`, `.agents/**`, `mgmt/scripts/**` + the three box-executed `scripts/` verbs,
+# `policy/**`, `.github/**`, `tofu/github/**`, `tofu/cloudflare/**` as BLOCKING findings. The rest
+# of `scripts/**` left the set on 2026-09-28 (ADR-142 trial — the gate-change lens owns it).
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/footprint.sh"
 
@@ -17,7 +18,7 @@
 governance_paths() {
   local p="$1"
   case "$p" in
-    agents/*|.agents/*|scripts/*|policy/*|.github/*|tofu/github/*|tofu/cloudflare/*)
+    agents/*|.agents/*|scripts/node-maintenance.sh|scripts/maintenance-window.sh|scripts/controlplane-upgrade.sh|mgmt/scripts/*|policy/*|.github/*|tofu/github/*|tofu/cloudflare/*)
       printf 'governance'
       return 0
       ;;

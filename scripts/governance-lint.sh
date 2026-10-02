@@ -13,6 +13,10 @@
 #   - seat/operator PRs pass untouched (the human IS the gate there);
 #   - renovate and other non-worker bots pass (renovate legitimately bumps devbox/workflow pins);
 #   - the worker App's PRs go red on any governance-path write.
+# ⚖ ADR-142 TRIAL (2026-09-28): the rest of scripts/ LEFT this set — workers may author the
+# repo's checks; the reviewer's gate-change lens + CI's gate-drift report (master's side of each
+# edit, run from the BASE commit) are the gate. mgmt/scripts/ and the three box verbs stay: the
+# management box runs them from master. Revert = put `scripts/` back in GOVERNANCE.
 # SELF-GATING CAVEAT, stated not hidden: this script and ci.yaml are themselves governance paths
 # executed from the PR branch, so a worker PR editing them could neuter the check — which is
 # exactly why the paths sit in the NEVER-TOUCH tier, why this lint reddens the edit attempt, and
@@ -23,7 +27,7 @@ cd "$(dirname "$0")/.."
 BASE="${1:-origin/master}"
 # One greppable line, the pin-only-lint/guarded-set convention: other readers eval THIS line,
 # never a second copy. Anchored patterns over the diff's repo-relative paths.
-GOVERNANCE='^(\.github/|\.agents/|scripts/|policy/|devbox\.json$|devbox\.lock$|CODEOWNERS$)'
+GOVERNANCE='^(\.github/|\.agents/|scripts/(node-maintenance|maintenance-window|controlplane-upgrade)\.sh$|mgmt/scripts/|policy/|devbox\.json$|devbox\.lock$|CODEOWNERS$)'
 # The worker App's PR-author login. Event context shows "homelab-agents-1234[bot]" (the REST
 # surface; GraphQL shows "app/homelab-agents-1234" — the known [bot]-suffix mismatch), so match
 # on the App NAME prefix and neither suffix shape matters. Deliberately NOT "any [bot]":

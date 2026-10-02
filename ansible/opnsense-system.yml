@@ -1,0 +1,11 @@
+---
+# OPNsense router-wide settings no service role owns (Interfaces > Settings, NetFlow). Thin
+# role-caller — logic in roles/opnsense-system, config in group_vars/opnsense.yml.
+# Run: bash scripts/opnsense-playbook.sh ansible/opnsense-system.yml --check --diff   # then without --check
+- name: OPNsense router-wide settings
+  hosts: opnsense
+  gather_facts: false
+  module_defaults:
+    oxlorg.opnsense.raw: "{{ opnsense_conn }}"
+  roles:
+    - opnsense-system

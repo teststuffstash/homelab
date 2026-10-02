@@ -70,6 +70,23 @@ retro_project "$STACK" || exit 2
 # Next run id from the harvested reports (rN numbering is per-stack).
 LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
 RUN_ID="r$(( ${LAST:-0} + 1 ))"
+# >>>REPLAY:retro-window-run-id>>>
+# Published coverage advances independently of report-PR merge; the frozen run id wins.
+if [ -n "${LEDGER:-}" ]; then
+  [ -f "$LEDGER" ] || { echo "FATAL: --ledger $LEDGER: no such file (the frozen evidence bundle)" >&2; exit 2; }
+  FROZEN_RUN=$(python3 - "$LEDGER" <<'PYRUN'
+import json, re, sys
+value = json.load(open(sys.argv[1]))
+run_id = value.get("run_id", "") if isinstance(value, dict) else ""
+if run_id and not re.fullmatch(r"r[1-9][0-9]*", run_id):
+    raise SystemExit("invalid frozen run id")
+print(run_id)
+PYRUN
+)
+  [ -z "$FROZEN_RUN" ] || RUN_ID="$FROZEN_RUN"
+fi
+# <<<REPLAY:retro-window-run-id<<<
+
 
 # Harness-source excerpts: the artifacts findings may target. Fabricators invent APIs exactly
 # where they can't read the target (run-2 evidence) — feed the real text.
