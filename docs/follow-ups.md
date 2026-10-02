@@ -1063,12 +1063,11 @@ the block needs pruning, not more headings.
       filed as #927–#931 (3 queued, #930 seat, #931 operator), plus the silent success-push
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
-      **Next:** the Mon 2026-08-31 05:00 UTC cron = the clean unattended acceptance (full
-      report per cell — r1 was one — no false RetroReportOverdue, #932 landed); then **STACK
-      retros FIRST (priority flipped, operator 2026-09-01** — stack goals carry the deeper
-      business-logic + kind-e2e complexity and a different dynamic; §B2 The split): the first
-      `retro.enabled` graduation + non-overlap brief; ledger emitter gaps + MCP transcript
-      slices behind it.
+      2026-10-02: activity windows LIVE (#2130 + #2165; collector 51 min cold, ~2 min warm).
+      **Next:** the bundle RANK — the 09-21 week no longer recycles Jul/Aug, but blocked
+      oracle-fleet#753 ranks 174/635 (27 fit): issue pain (agent-block/strike/arbitrate, its
+      PRs' red checks) isn't counted, stall is a last tiebreak; fix before the 10-05 05:00 fire.
+      Then STACK retros first (operator 2026-09-01; §B2 The split).
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

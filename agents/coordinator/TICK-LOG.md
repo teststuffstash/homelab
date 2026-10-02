@@ -11951,3 +11951,15 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   edit, same class: L213 `.clients,.trust,.essentials{grid-template-columns:1fr}` → `minmax(0,1fr)`.
   Not dispatched: goal #773 cap-sum was $5.0/$6 at r7 preflight (ledger unreachable from the jail),
   so an r8 $2 reservation likely refuses → operator call (budget / hand-fix / let arbitrate rule).
+
+## 2026-10-02 afternoon — #2130 merged + live verification (seat)
+- #2130 r3 blockers fixed (TimeoutExpired retry, url on compact context) → approved, merged 14:28Z
+  (operator auto-merge from 09-30). First live collect FAILED 14:30Z: s5cmd 2.3/Garage says
+  `given object … not found` for an absent key → #2165 (one `missing()` predicate), merged.
+- Cold collect (12 repos, 09-21→now, cron suspended meanwhile to avoid a bootstrap race): 51 min,
+  ~4–5k serial `gh api` spawns, state 28.7 MB, 8204 in-window events / 635 tasks. Warm run 2 min.
+- Offline bundle 09-21→09-28: none of the recycled Jul/Aug set (#913/#1041/#625/oracle-fleet#304);
+  top = oracle-fleet PRs by red checks. But blocked oracle-fleet#753 ranks 174/635 and only 27 fit
+  the 60 KB cap → rank fix tracked on FU-058, before the Mon 10-05 fire.
+- Second jail input recorded: WAN loss likely the cable (meta-state, FU-297); its accept-new
+  pve/nx-02 keys checked against the box pins — every pinned key matches the live host.
