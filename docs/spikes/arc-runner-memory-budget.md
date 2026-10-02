@@ -1,7 +1,8 @@
 # ARC runner memory budget — a node-sized limit, not node removal
 
 **Tracked by:** FU-218. **Status:** open — option A (below) chosen for a spike (operator,
-2026-10-02); no ADR yet. Pool measurements live in
+2026-10-02); **spiked the same day: the mechanism holds** (§Spike results); two sizing calls and
+the ADR remain. Pool measurements live in
 [`ride-latency-breakdown.md`](ride-latency-breakdown.md) §CI side; the kata side in
 [`kata-ci-gate.md`](kata-ci-gate.md).
 
@@ -68,3 +69,63 @@ unprivileged `runner` container under a no-permission service account.
 
 Acceptance: oracle-fleet's `ci` on nx-01 keeps ~40 workers; on an 8 GB node it sees a ~5 GiB
 `memory.max` and passes; a forced overrun reads OOMKilled.
+
+## Spike results (2026-10-02)
+
+Empirical run on nx-01 (throwaway pod in ns `fu218-resize-spike`, Burstable with a memory request
+and no limit, `restartPolicy: Never` like the runner; maintenance window `seat-1790975014-2480`,
+closed clean). All four held:
+
+| Probe | Result |
+|---|---|
+| resize adding a limit while the container is NOT started (init holding) | accepted; `ResizeCompleted` before start; the container's FIRST read of `memory.max` = 536870912 (512Mi) |
+| live raise 512Mi → 1Gi on the running container | `memory.max` = 1073741824 within 5 s, `restartCount` 0 |
+| overrun inside the limit | `terminated.reason=OOMKilled`, exit 137, pod Failed |
+| remove the limit afterwards | refused (`resource limits cannot be removed`) |
+
+What that settles, question by question:
+
+1. **Timing:** in-place resize is GA since v1.35, so it is on by default on v1.36.1. The apiserver
+   accepts a resize before any container runs, and the kubelet starts the container at the new
+   size. Bind → runner start is ~5 s live (dind at +3 s, runner at +5 s). The cold-start race
+   closes without RBAC: the runner command waits (≤ ~20 s) while
+   `/sys/fs/cgroup/memory.max` reads `max`. The warm runner (`minRunners: 1`) is resized long
+   before a job arrives.
+2. **QoS:** adding a limit keeps a Burstable pod Burstable, which is allowed. The forbidden moves
+   are QoS changes, removing a request or limit, and touching a BestEffort pod. **The template
+   needs no floor limit.**
+3. **Co-tenancy:**
+   - budget = allocatable − Σ other pods' requests (sidecars + `spec.overhead` included,
+     Succeeded/Failed skipped) − headroom.
+   - The controller raises the request too, so the scheduler and the next runner see the memory
+     as taken.
+   - **It needs a cap.** Uncapped, the first runner on nx-01 claims ~50 GiB and blocks rides.
+     Proposal: `min(budget − ride reserve, ~12 GiB)`, the oracle "~10 workers" rule.
+   - Live rides are Burstable (CPU request < limit), not Guaranteed. Their memory request equals
+     their limit, so subtracting requests still covers them.
+4. **Attribution:**
+   - OOMKilled reads on the pod. ARC deletes the pod right after, so the alert must read
+     `kube_pod_container_status_terminated_reason{namespace="arc-runners",reason="OOMKilled"}`
+     over a `max_over_time` window (the `PodEvicted` shape). A restart-based alert never fires
+     with `restartPolicy: Never`.
+   - ARC's EphemeralRunner controller (0.14.2) reacts only to pod phase and never diffs the spec,
+     so it does not fight the resize.
+5. **Shape:**
+   - A watch-stream Deployment in the stdlib-python ConfigMap pattern of
+     `argocd/resources/garage-disruption/` (not a cron: too slow for a ~5 s window).
+   - RBAC: in `arc-runners`, pods get/list/watch plus `pods/resize` patch (the only write);
+     cluster-wide, read-only nodes get and pods list, to sum co-tenants by `spec.nodeName`.
+   - The template changes in `arc-runners-large.yaml` must stay in lockstep with the general one.
+
+**Open (operator calls before the ADR):**
+
+- **The 8 GB acceptance number does not hold with a requests-based budget.** Daemon requests take
+  ~2 GiB per node, so wk-03 gets ~2.8 GiB and wk-metal-03 ~3.6 GiB, not ~5. That is 2–3 xdist
+  workers; a6d47a4 passed with 3 at 3.1 GiB. Reaching ~5 means subtracting live usage, which is
+  racy. The recommendation is to change the acceptance line, not the formula.
+- **dind sits outside the runner's budget.** Docker/kind memory is charged to the dind sidecar
+  (request 1Gi, no limit). Sidecar resize is beta and on in 1.36, so the controller can budget
+  dind too. Without that, kind-heavy jobs stay unbounded.
+- The per-runner cap and the nx-01 ride reserve. The ride size class (`fixer.rideSize: large`,
+  ~16.5 GiB per ride) sets how much nx-01 must keep free for rides.
+
