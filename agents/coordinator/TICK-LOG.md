@@ -11932,3 +11932,17 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   rank == r6's Jul/Aug deep-dive set; 42 in-window rows incl. oracle-fleet#753 never ranked); the
   seven review blockers fixed + ledger window restored + compact events + 5xx retry (fb849d93,
   84e5c0c9). Awaits the codeowner read (new machinery). Open in PR: collector state ~8 MB/repo-week.
+
+## 2026-10-02 morning — oracle-fleet PR#780 (#774) rounds 4–5 no-op autopsy (seat)
+- r4 (3625s, `no-op`): the bundle carried a line-numbered `arbitration.md` plus `ci-failure.md`. The ride
+  read `issue.md` only (the card says "index.txt, then issue.md FIRST"), ran local `devbox run ci`
+  (no e2e leg), saw green, and exited. Fix: the card names the optional items (homelab#2162).
+- r5: the coordinator (01:36Z tick) posted its ruling, then PATCHed it with `gh api -f body=@file`.
+  `-f` is a raw string, so the directive became the literal `@/tmp/current-comment.md`. With no
+  directive, the ride rebased and polled `gh pr view` to goose's turn cap. The run was recorded
+  `clean` because the cap sentence was glued to JSON output (agent-runtime#162). The same tick's
+  sm→md bump changed only the cap, not the model (both flash models are `cheap`; homelab#2163).
+- Seat: ruling on PR + issue, cleared `agent/arbitrate` + `agent/blocked`, dispatched r6 by hand on
+  `deepseek-v4.1-flash:exacto` (key oracle-fleet-issue-774-round-6). r6 applied the fix (18801a04),
+  page-overflow 68 → 0. Residue: `clipped article.walk`, caused by L208 `@media (max-width:900px)
+  .beat{grid-template-columns:1fr}`, which reintroduces the min-content blowout → r7 directive.
