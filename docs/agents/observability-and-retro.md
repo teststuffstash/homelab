@@ -570,6 +570,8 @@ PLATFORM retro and per-stack retros — built in that order.**
    owns. Graduation stays the AgentStack claim knob (`retro.enabled` + cadence + slice) as
    ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
    the first stack graduates, with the platform reports in hand.
+   **ADR-146 (Proposed, 2026-10-02):** stack retros attribute and FILE platform faults as ADR-119
+   escalations; the platform retro narrows to deterministic fleet signals + platform repos.
    **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
    platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
    complexity, and their dynamic differs from the platform's machinery-defect stream. The

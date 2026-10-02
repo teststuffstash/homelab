@@ -2613,3 +2613,24 @@ makes the second node purely additive. Kea HA is API-complete (verified 2026-10-
 MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
 becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
+
+### ADR-146 — Stack retros attribute; platform faults reach the platform as ADR-119 escalations, and the platform retro stops deep-diving stack repos (2026-10-02)
+**Status:** Proposed (operator, 2026-10-02, a slice-grounded seat sitting — §B2 THE SPLIT, ADR-119,
+ADR-122, platform-and-stacks.md §escalation; no `/design-agents` corpus read). Fork (3) open.
+**Decision:** (1) each graduated stack runs its OWN retro, which judges "platform fault vs our own
+mix-up" with the stack's context; (2) a platform-side cause it finds FILES direct on homelab under
+ADR-119 (3)'s contract **unchanged** — dedup-first is the filer's, best effort (operator: misses
+happen even after extensive searches; the coordinator's current-state read before dispatch
+catches the residue), inert, `Origin:` = the stack item; (3) *open:* whether those filings bind
+under a platform container whose checkpoint disposes them (ADR-122 (4) — file INTO it, never
+gather after) or ride today's board intake; (4) the platform retro keeps the fleet-wide
+DETERMINISTIC signals (infra cancels, strikes, stalls, budget-403) and the platform repos, and
+stops LLM deep-dives into stack-repo semantics. **Considered:** two full overlapping retros with a
+cross-dedup rule (who ignores whose findings — a judge nobody can author); dedup moved to a
+container checkpoint (rejected 2026-10-02: the filer's best effort + the dispatch read suffice);
+platform-only retro (r4–r6: every cell called oracle-fleet/sleep-tracking unreachable and could
+not attribute). **Why:** oracle-fleet#780's stack-side round analysis split 12 rounds into
+brief/spec causes only the stack can see and three platform ones (#2162, agent-runtime#162,
+#2168). **Consequences:** §B2 THE SPLIT point 1's fleet-wide deep-dive narrows; the stack brief
+template gains the escalation pointer; the duplicate-close gate defect is #2167; first stack
+graduation = oracle (FU-058).
