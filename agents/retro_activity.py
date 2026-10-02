@@ -270,7 +270,17 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                     # Only PR→issue links: check if the source item is a PR
                     src_item = state['items'].get(src_key, {})
                     if src_item.get('is_pr'):
-                        pr_to_issue[src_key] = tgt_key
+                        pr_to_issue.setdefault(src_key, []).append(tgt_key)
+
+    # Weighted score: real failures dominate, but standing stall on agent/*-labelled
+    # items carries real weight so blocked issues rank above cancellation-only PRs.
+    # Weights chosen so a blocked issue with a week of stall (~604800s) and agent pain
+    # events outranks a PR with a handful of non-superseded cancellations.
+    W_FAILURE = 1000
+    W_INFRA = 500
+    W_AGENT_PAIN = 500
+    W_EVENT = 10
+    W_STALL = 0.005
 
     tasks = []
     for key, item in state['items'].items():
@@ -325,15 +335,6 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
             elif e['kind'] in ('agent-block', 'agent-strike', 'agent-arbitrate', 'agent-park'):
                 agent_pain_events += 1
 
-        # Weighted score: real failures dominate, but standing stall on agent/*-labelled
-        # items carries real weight so blocked issues rank above cancellation-only PRs.
-        # Weights chosen so a blocked issue with a week of stall (~604800s) and agent pain
-        # events outranks a PR with a handful of non-superseded cancellations.
-        W_FAILURE = 1000
-        W_INFRA = 500
-        W_AGENT_PAIN = 500
-        W_EVENT = 10
-        W_STALL = 0.005
         score = (failure_events * W_FAILURE + infra_failure_events * W_INFRA
                  + agent_pain_events * W_AGENT_PAIN
                  + len(direct) * W_EVENT + idle * W_STALL)
@@ -345,14 +346,22 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                           agent_pain_events=agent_pain_events,
                           direct_event_count=len(direct), score=score))
 
+    # Credit is a ranking/visibility device: the population totals below are computed from the
+    # PRE-credit values so crediting never inflates them (acceptance: "Population-before-sampling
+    # totals unchanged except for the new metrics").
+    population_failure_events = sum(t['failure_events'] for t in tasks)
+
     # Roll PR failures up to linked issues (credit issues)
-    for pr_key, issue_key in pr_to_issue.items():
+    for pr_key, issue_keys in pr_to_issue.items():
         pr_task = next((t for t in tasks if t['key'] == pr_key), None)
-        issue_task = next((t for t in tasks if t['key'] == issue_key), None)
-        if pr_task and issue_task:
-            issue_task['failure_events'] += pr_task['failure_events']
-            issue_task['direct_event_count'] += pr_task['direct_event_count']
-            issue_task['score'] += pr_task['failure_events'] * W_FAILURE + pr_task['direct_event_count'] * W_EVENT
+        if not pr_task:
+            continue
+        for issue_key in issue_keys:
+            issue_task = next((t for t in tasks if t['key'] == issue_key), None)
+            if issue_task:
+                issue_task['failure_events'] += pr_task['failure_events']
+                issue_task['direct_event_count'] += pr_task['direct_event_count']
+                issue_task['score'] += pr_task['failure_events'] * W_FAILURE + pr_task['direct_event_count'] * W_EVENT
 
     tasks.sort(key=lambda t: (-t['score'], t['key']))
     late = [e for e in state['events'] if timestamp(e['occurred_at']) < start
@@ -363,7 +372,7 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 collected_until=state['collected_until'], scope_source=state.get('scope_source', 'unknown'), repos=state.get('repos', []),
                 population={'event_count': len(selected), 'task_count': len(tasks),
                             'by_kind': dict(Counter(e['kind'] for e in selected)),
-                            'failure_events': sum(t['failure_events'] for t in tasks),
+                            'failure_events': population_failure_events,
                             'infra_failure_events': sum(t['infra_failure_events'] for t in tasks),
                             'superseded_cancellations': sum(t['superseded_cancellations'] for t in tasks),
                             'agent_pain_events': sum(t['agent_pain_events'] for t in tasks),
