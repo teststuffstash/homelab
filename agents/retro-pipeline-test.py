@@ -120,6 +120,15 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 remote.get('activity.json', {})
 
+    def test_remote_missing_key_is_first_run(self):
+        remote = p.Store()
+        # The exact s5cmd 2.3 / Garage stderr for an absent key (live probe 2026-10-02).
+        error = subprocess.CalledProcessError(1, ['s5cmd'], stderr='ERROR "cat s3://agent-transcripts/_retro/activity.json": '
+                                              'given object s3://agent-transcripts/_retro/activity.json not found')
+        with patch.object(remote, 'command', side_effect=error):
+            self.assertEqual(remote.get('activity.json', {}), {})
+            self.assertEqual(remote.ledger(), [])
+
     def test_frozen_run_id_survives_unmerged_report(self):
         path = Path(__file__).parent / 'retro-session.sh'
         source = path.read_text().split('# >>>REPLAY:retro-window-run-id>>>', 1)[1].split('# <<<REPLAY:retro-window-run-id<<<', 1)[0]
