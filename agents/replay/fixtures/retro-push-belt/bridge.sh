@@ -5,6 +5,7 @@
 #   GH_TOKEN         — from the git secret (fixture.yaml default)
 #   BR               — computed from DATE/STACK/RUN (fixture.yaml default)
 #   DEAD_NOTE        — set earlier in the step (fixture.yaml default)
+#   PR_BODY          — the report PR's body, built once above the block (fixture.yaml default)
 #
 # Three seams, all following the established pattern:
 #   curl — record the call, return CURL_RC_1 on first call, CURL_RC_2 on second
@@ -26,6 +27,7 @@ RUN="${RUN:?fixture must pin RUN}"
 BR="${BR:?fixture must pin BR}"
 GH_TOKEN="${GH_TOKEN:?fixture must pin GH_TOKEN}"
 DEAD_NOTE="${DEAD_NOTE:-}"
+PR_BODY="${PR_BODY:?fixture must pin PR_BODY}"
 
 # ── curl seam ──
 # Count calls so CURL_RC_1 drives the first call and CURL_RC_2 drives the retry.

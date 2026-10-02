@@ -104,7 +104,8 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
   05:00 UTC (unsuspended 2026-08-03; ⚠ the lane's FIRST end-to-end pass was 2026-08-11, hand-fired
   after five latent bugs — FU-058; the PLATFORM series since 2026-08-19, the #587 [stint](chainless-redesign.md): stack
   param `platform`, ride ns from `agents/retro-project.sh`, fleet read token, report content
-  floor); predicate = `minNewTasks` ledger level-trigger; no edge;
+  floor); predicate = `minWindowTasks` level-trigger on the ledger rows emitted in the unpublished
+  weekly window (FU-058 activity windows; a refused window rolls forward); no edge;
   keys/breakers inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
 
 ### scout (model-scout)

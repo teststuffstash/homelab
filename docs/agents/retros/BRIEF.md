@@ -9,7 +9,7 @@ ASSEMBLY (agents/retro-session.sh does this): replace
   {{STACK}}        — stack name (e.g. oracle)
   {{RUN_ID}}       — r<N> (docs/agents/retros/ numbering)
   {{MAIN_REPO}}    — the stack's main repo (e.g. teststuffstash/oracle-fleet)
-  {{LEDGER_JSON}}  — the full pain-ranked ledger array (worst first)
+  {{LEDGER_JSON}}  — the frozen evidence bundle (window, population, ranked tasks, late arrivals)
   {{DEEP_DIVE_K}}  — how many top ranks form the deep-dive set (default 8)
   {{HARNESS_SRC}}  — verbatim excerpts of the harness artifacts findings may target
                      (coordinator-scan clauses, estimate_budget.py bands, fix.yaml text)
@@ -29,8 +29,8 @@ Version log:
 
 You are running a RETROSPECTIVE over the {{STACK}} stack's agent-loop task ledger. The loop:
 GitHub issues labelled `agent-fix`+`agent/queued` are fixed by ephemeral LLM worker pods
-(rounds), reviewed by an LLM reviewer bot, auto-merged on approval. Every finished task left a
-ledger row (below) plus its GitHub issue/PR trail in `{{MAIN_REPO}}`.
+(rounds), reviewed by an LLM reviewer bot, auto-merged on approval. Ongoing and finished tasks supply activity
+and ledger context (below) plus their GitHub issue/PR trail in `{{MAIN_REPO}}`.
 
 ## Known ledger blind spots — do NOT rediscover these, work around them
 
@@ -44,11 +44,35 @@ unreliable and say so ONCE, not per-finding:
   do not appear. Trails are the evidence.
 - `total_cost_usd` of 0.00 on subscription/haiku rows means UNTRACKED, not free.
 
-## Input — the full ledger, pain-ranked (worst first; ranks 1-{{DEEP_DIVE_K}} are the deep-dive set)
+## Input — frozen activity bundle (task ranks 1-{{DEEP_DIVE_K}} are the deep-dive set)
 
 ```json
 {{LEDGER_JSON}}
 ```
+
+## Activity-window discipline
+
+The bundle has `schema_version: 1`, `window: {since, until}`, whole-population statistics,
+ranked `tasks` (key, compact events `{at, kind, detail, url}`, context, standing_stall_seconds), separate
+`late_arrivals`, and a `ledger` section: the task-ledger rows EMITTED inside the window (one per
+task, worst first; `rounds` = `[model, exit_status, error_class, ci]` per round) with its own
+whole-window `population` counters. The blind spots above apply to those rows. Use its explicit coverage window and population statistics. Both model
+cells must analyse that same bundle. The normal window is the previous covered cutoff through
+Monday 00:00 UTC, exclusive; the full run starts Monday 05:00 UTC. Failed runs retain the old
+cutoff. State actual coverage and source completeness in the report; do not infer dates from
+issue numbers, report dates or the newest selected issue.
+
+Only events inside the window count toward its totals. Follow older issue/PR history for
+context, clearly labelled as such. Include ongoing work and completed work alike; the same issue
+can contribute different events in successive reports. Inbound references do not import old
+worker rounds. Report late observations separately as corrections to their original period,
+and standing stalls by waiting time accrued within the window. Undated data is unknown, not
+new activity. Compute rates from the whole eligible population, never the worst-K sample.
+
+A later fix does not erase the historical failure. For every recommendation, check existing
+work and subsequent fixes by substance; distinguish what happened during coverage from whether
+work is still needed at the report's observation time. Deduplicate mechanisms and affected
+surfaces across issue IDs and prior reports. Never refile work simply because its title differs.
 
 ## Access
 
@@ -99,11 +123,11 @@ Additionally:
   revisit label-carried loop state (AgentStack CR status), per ADR-103. (Jail $/day-equivalent is
   NOT a retro input — it lives on the operator's Grafana subscription/gometer dashboards, not a
   cell recomputing it from a query this pod cannot reach; homelab#587.)
-- **Predecessor score**: if a previous retro's process changes have since merged, open by
-  checking the ledger KPIs across them (did rounds/issue actually drop?). If none merged,
-  say "no merged predecessor changes" and move on.
+- **Predecessor score**: if a previous retro's process changes have deployed, open by
+  checking post-deployment opportunities (did rounds/issue actually drop?). A merged PR is not
+  proof of effectiveness. Say "insufficient evidence" when there are no suitable opportunities.
 
-Anti-goals: no platform rewrites; no more than 6 findings; no finding without ledger evidence.
+Anti-goals: no platform rewrites; no more than 6 findings; no finding without dated event evidence.
 
 ## The cost model your "expected saving" column MUST use (operator ruling, 2026-08-31)
 
@@ -130,21 +154,39 @@ claiming rail-1 savings names the operator-touch class it removes.
 
 ## Output contract (strict)
 
-When a retro finding becomes a process-change issue, its parent issue is the finding's ORIGIN
-issue (the ledger row's issue the finding was derived from) when singular; standalone-honest
-when the finding aggregates many rows; NEVER the retro report. The report links each filed
-issue either way.
+Findings are candidates, not accepted work. Human acceptance and a fresh check immediately
+before queueing remain required. Related existing work gets linked; already implemented changes
+need effectiveness scoring, not another issue. Filed process-change children bind under the
+round's label-inert `retro-batch` stint under [the lineage contract](../issue-authoring.md),
+never an automatically launched Goal. A report's publication does not authorize execution.
 
 End your FINAL message with the complete report between these exact markers:
 
 BEGIN-RETRO-REPORT
 # {{STACK}} loop retro {{RUN_ID}} — <your model name>
+## Coverage (window, bundle identity, completeness, late corrections)
 ## Summary (≤5 lines)
 ## Findings (ranked, ≤6)
 ## Proposed process changes (table: change | artifact | expected saving | confidence)
 ## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
 ## Wins to codify (or "none observed")
 ## Platform KPIs (bucket-A count · trend · proposed next gate)
-## Predecessor score (or "no merged predecessor changes")
+## Predecessor score (deployment evidence and opportunities, or "insufficient evidence")
 ## Evidence confidence (what you could NOT verify and why)
 END-RETRO-REPORT
+
+Before `END-RETRO-REPORT`, emit exactly one fenced `retro-findings-json` block, enclosed by the
+following markers. Replace the example with your candidates (maximum six; an empty findings
+array is valid). Use only the fields shown; `related_work` may be empty. Evidence and related
+work are URLs. Reuse an existing finding's exact mechanism and surface strings when extending
+it: the reconciler derives identity from their normalized combination, not from issue IDs.
+Human cross-review must catch semantic duplicates with different wording.
+
+BEGIN-RETRO-FINDINGS
+```retro-findings-json
+{"schema_version":1,"findings":[{"mechanism":"stable-mechanism-slug","surface":"path-or-component","summary":"Concrete failure and proposed change","evidence":["https://github.com/owner/repo/issues/123"],"related_work":[]}]}
+```
+END-RETRO-FINDINGS
+
+Do not emit acceptance, queue authorization or an assertion of verified effectiveness in this
+candidate schema. Those belong to the separate evidence-backed disposition step.
