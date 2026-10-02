@@ -61,11 +61,20 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
 
 - **Dispatch:** `coordinator-scan.sh` surfaces `dockerRepos` per stack; the coordinator adds
   `--docker` to `agent-session.sh`, which renders the ride as a **kata microVM pod** (RuntimeClass
-  `kata` → the three kata-labeled laptops, one ~5Gi VM per node — the 8G ceiling) with a
+  `kata` → the kata-labeled nodes; a `standard` ride is a ~5Gi VM, one per 8G laptop — see the
+  size class below) with a
   **dind sidecar** (image pinned in `agents/images.env`); the agent container gets `DOCKER_HOST`
   and stays non-root — the repo brings its own docker/kind CLI via devbox.json. Every sidecar
   accommodation is a spike finding (`docs/spikes/kata-ci-gate.md`): mknod `/dev/kmsg`, cgroup
   nesting via the dind entrypoint, MTU clamp, tmpfs docker-lib.
+- **Size class (`fixer.rideSize`, 2026-10-02):** `standard` (default) is the envelope above;
+  `large` = agent 10Gi/8-CPU burst + dind 6Gi/6-CPU burst (~16.5Gi with kata overhead; 10Gi
+  agent-only without docker), memory request == limit. A ride's gates run at the size of its cap —
+  oracle-fleet #774's `diff-ci` took ~29 min at `standard` vs ~7 min on an uncapped ARC runner —
+  so a gate-heavy stack opts into fewer, faster rides. `large` fits only nx-01 (the request is the
+  placement); it shares that node with the ARC runners, whose budget is FU-218
+  ([spike](../spikes/arc-runner-memory-budget.md)). Mapping: `agent-session.sh` REPLAY:ride-size,
+  fixture `agents/replay/fixtures/ride-size/`.
 - **Egress:** the composed CNP adds the docker-only legs — the kata LAN-VIP belt (nix-cache,
   devbox-search) and the `ghcr.io` FQDN (the dind's own ghcr pulls stay direct until the gate
   configs route ghcr through the mirror per-tool). The pull-through mirrors themselves are

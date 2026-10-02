@@ -1,0 +1,19 @@
+OUT → ride size class: standard (agent { cpu: "6", memory: "4Gi" })
+OUT row docker=0 in= → size=standard agent={ cpu: "500m", memory: "4Gi" }/{ cpu: "6", memory: "4Gi" } dind=/
+OUT → ride size class: standard (agent { cpu: "2", memory: "2Gi" }, dind { cpu: "2",    memory: "2560Mi" })
+OUT row docker=1 in= → size=standard agent={ cpu: "500m", memory: "2Gi" }/{ cpu: "2", memory: "2Gi" } dind={ cpu: "500m", memory: "2560Mi" }/{ cpu: "2",    memory: "2560Mi" }
+OUT → ride size class: standard (agent { cpu: "6", memory: "4Gi" })
+OUT row docker=0 in=standard → size=standard agent={ cpu: "500m", memory: "4Gi" }/{ cpu: "6", memory: "4Gi" } dind=/
+OUT → ride size class: standard (agent { cpu: "2", memory: "2Gi" }, dind { cpu: "2",    memory: "2560Mi" })
+OUT row docker=1 in=standard → size=standard agent={ cpu: "500m", memory: "2Gi" }/{ cpu: "2", memory: "2Gi" } dind={ cpu: "500m", memory: "2560Mi" }/{ cpu: "2",    memory: "2560Mi" }
+OUT → ride size class: large (agent { cpu: "8", memory: "10Gi" })
+OUT row docker=0 in=large → size=large agent={ cpu: "2",    memory: "10Gi" }/{ cpu: "8", memory: "10Gi" } dind=/
+OUT → ride size class: large (agent { cpu: "8", memory: "10Gi" }, dind { cpu: "6",    memory: "6Gi" })
+OUT row docker=1 in=large → size=large agent={ cpu: "2",    memory: "10Gi" }/{ cpu: "8", memory: "10Gi" } dind={ cpu: "1",    memory: "6Gi" }/{ cpu: "6",    memory: "6Gi" }
+OUT WARN: unknown ride size class 'xl' (fixer.rideSize / --size) — using standard
+OUT → ride size class: standard (agent { cpu: "2", memory: "2Gi" }, dind { cpu: "2",    memory: "2560Mi" })
+OUT row docker=1 in=xl → size=standard agent={ cpu: "500m", memory: "2Gi" }/{ cpu: "2", memory: "2Gi" } dind={ cpu: "500m", memory: "2560Mi" }/{ cpu: "2",    memory: "2560Mi" }
+OUT WARN: unknown ride size class 'Large' (fixer.rideSize / --size) — using standard
+OUT → ride size class: standard (agent { cpu: "6", memory: "4Gi" })
+OUT row docker=0 in=Large → size=standard agent={ cpu: "500m", memory: "4Gi" }/{ cpu: "6", memory: "4Gi" } dind=/
+RC 0

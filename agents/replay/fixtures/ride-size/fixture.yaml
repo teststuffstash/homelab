@@ -1,0 +1,11 @@
+# fixer.rideSize — the launcher's size-class → pod-envelope map (agents/agent-session.sh,
+# REPLAY:ride-size; oracle handoff 2026-10-02 ride-size-class-per-stack). One table over
+# docker × class: the absent knob reproduces the pre-knob envelope byte for byte (standard), `large`
+# raises agent (and dind) memory with request == limit in every row (the 2026-07-27 global-OOM
+# rule), and an unknown class degrades LOUDLY to standard instead of rendering a size no node fits.
+name: ride-size
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:ride-size
+  - file:post.sh

@@ -84,7 +84,7 @@ ib_refuse_malformed() {   # <key> <ref>
 ORIG_ARGS=("$@")
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
-  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
   exit 0
 ;; esac
 shift || true
@@ -93,7 +93,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RIDE_SIZE=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -102,6 +102,7 @@ while [ $# -gt 0 ]; do
     --harness)   HARNESS="$2"; HARNESS_SET=1; shift 2;;
     --model)     MODEL="$2"; MODEL_SET=1; shift 2;;
     --docker)    DOCKER=1; shift;;    # repo needs a real docker daemon (kind/k3d CI gate): kata microVM pod + dind sidecar — stack POLICY, from the AgentStack claim's fixer.docker (counterpart of CI choosing the VM runner)
+    --size)      RIDE_SIZE="$2"; shift 2;;   # ride size class (standard|large) — stack POLICY, from the AgentStack claim's fixer.rideSize; explicit wins (drills)
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
@@ -640,6 +641,9 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
     fi
+    # The ride size class from the SAME claim read (fixer.rideSize; oracle handoff 2026-10-02) —
+    # mapped to the pod envelope by REPLAY:ride-size below. Explicit --size wins.
+    [ -n "$RIDE_SIZE" ] || RIDE_SIZE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.rideSize]|map(select(.!=null))|first // empty' 2>/dev/null)"
     # FU-114 L1: capture the egress knobs from the SAME claim read for the environment card (below).
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
@@ -2223,20 +2227,20 @@ fi
 # (it can't stack on the virtiofs rootfs, and the earlier 2Gi tmpfs charged the dind cgroup —
 # the full kind gate OOMed on image builds). --group=1000 lets the
 # non-root agent use the socket; dockerd-entrypoint.sh (not raw dockerd) keeps the dind cgroup-v2
-# nesting that gives inner containers the memory controller. Memory envelope: agent 2Gi + dind
-# 2560Mi, layer store on disk ≈ the acceptance-proven ~5Gi VM with tmpfs headroom back — sized to
-# FIT THE 8G LAPTOPS: 2560 + 2048 + 512 (RuntimeClass overhead) = 5120Mi against ~6.3Gi
-# allocatable, Guaranteed QoS (kata.tf).
+# nesting that gives inner containers the memory controller. Memory envelope: the ride SIZE
+# CLASS (REPLAY:ride-size below). `standard` is the original one — agent 2Gi + dind 2560Mi, layer
+# store on disk ≈ the acceptance-proven ~5Gi VM, sized to FIT THE 8G LAPTOPS: 2560 + 2048 + 512
+# (RuntimeClass overhead) = 5120Mi against ~6.3Gi allocatable, Guaranteed QoS (kata.tf). `large`
+# (~16.5Gi) fits only nx-01, the ride tier — the request IS the placement, no extra affinity.
 # ⚠ "one docker ride per node" was true of an all-8G kata fleet and is NO LONGER a fleet-wide
-# fact: the pool is wk-metal-01..04 and wk-metal-04 has 16G (~14.2Gi allocatable), so it fits TWO
-# and is the only node that does. The per-node count is a CONSEQUENCE of the request against that
+# fact: wk-metal-04 has 16G (~14.2Gi allocatable) and fits two standard rides, nx-01 (64G) many.
+# Of the laptops it is the only node that does. The per-node count is a CONSEQUENCE of the request against that
 # node's memory, not a policy — which is why concurrency here is memory-bound and asymmetric while
 # REPO_MAX_WIP merely counts pods. Observed live 2026-08-07: two kata rides co-scheduled on -04
 # with -01..-03 free, which is the scheduler placing on capacity, exactly as intended.
 # ⚠ Do NOT "fix" that with a topologySpreadConstraint — spreading moves a ride off the only node
 # with real headroom onto a 6.3Gi one.
 KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
-AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
 # ⚠ MEMORY requests MUST EQUAL limits (no overcommit) for agent workloads — 2026-07-27
 # incident: the #48 docker ride requested 2Gi total but its kata VM grows to limits (~5Gi
 # incl. RuntimeClass overhead); the scheduler placed it on a node with ~2Gi free and the
@@ -2244,10 +2248,40 @@ AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; a
 # The "one docker ride per node" envelope (comment above) is only real if requests SAY so.
 # CPU stays overcommitted deliberately: throttling is safe, and cpu=2 requests can't fit
 # 2-core kata nodes.
-AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }'
+# >>>REPLAY:ride-size>>>
+# The ride SIZE CLASS — stack policy from the claim's fixer.rideSize (or --size), mapped here to
+# the pod envelope. `large` exists because a ride's own gates run at the size of its cap: oracle
+# #774's diff-ci took ~29 min at 2 CPU/2Gi (pytest -n sized to memory.max = 1 worker) vs ~7 min
+# on an uncapped ARC runner (oracle handoff 2026-10-02 ride-size-class-per-stack). It is sized to
+# where the gain flattens — ~8 xdist workers, ~6 kind cores — not to CI's 40 cores: reserved
+# memory past that blocks the next ride for seconds of gain. Memory request == limit in EVERY
+# class (the 2026-07-27 rule above); only CPU is overcommitted. An unknown class degrades LOUDLY
+# to standard (a typo must not wedge the pod Pending on a size no node has).
+ride_size_envelope() {   # in: RIDE_SIZE, DOCKER → out: AGENT_/DIND_ REQUESTS+LIMITS (RIDE_SIZE normalized)
+  case "${RIDE_SIZE:-standard}" in
+    standard|large) RIDE_SIZE="${RIDE_SIZE:-standard}";;
+    *) echo "WARN: unknown ride size class '${RIDE_SIZE}' (fixer.rideSize / --size) — using standard" >&2; RIDE_SIZE=standard;;
+  esac
+  if [ -n "$DOCKER" ]; then
+    case "$RIDE_SIZE" in   # heavy lifting moves into the dind sidecar
+      large)
+        AGENT_REQUESTS='{ cpu: "2",    memory: "10Gi" }'; AGENT_LIMITS='{ cpu: "8", memory: "10Gi" }'
+        DIND_REQUESTS='{ cpu: "1",    memory: "6Gi" }';  DIND_LIMITS='{ cpu: "6",    memory: "6Gi" }';;
+      *)
+        AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }';  AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'
+        DIND_REQUESTS='{ cpu: "500m", memory: "2560Mi" }'; DIND_LIMITS='{ cpu: "2",    memory: "2560Mi" }';;
+    esac
+  else
+    case "$RIDE_SIZE" in   # install is partly CPU-bound; allow burst past 2
+      large) AGENT_REQUESTS='{ cpu: "2",    memory: "10Gi" }'; AGENT_LIMITS='{ cpu: "8", memory: "10Gi" }';;
+      *)     AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }';  AGENT_LIMITS='{ cpu: "6", memory: "4Gi" }';;
+    esac
+  fi
+  echo "→ ride size class: ${RIDE_SIZE} (agent ${AGENT_LIMITS}${DOCKER:+, dind ${DIND_LIMITS}})"
+}
+# <<<REPLAY:ride-size<<<
+ride_size_envelope
 if [ -n "$DOCKER" ]; then
-  AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
-  AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }'
   # dnsPolicy stays the cluster default (FU-072, 2026-09-04): kube-dns answers kata guests over
   # both TCP and UDP for *.svc.cluster.local, and the CNP's kube-dns leg is baseline, not gated on
   # docker. The old `dnsPolicy: None` + LAN resolver (192.168.2.1) could not resolve svc names at
@@ -2328,12 +2362,14 @@ if [ -n "$DOCKER" ]; then
         - { name: docker-run, mountPath: /run }
       volumeDevices:
         - { name: docker-lib, devicePath: /dev/docker-scratch }
-      resources:
-        requests: { cpu: "500m", memory: "2560Mi" }  # = limit (no memory overcommit; wk-metal-03 global-OOM 2026-07-27)
-        limits:   { cpu: "2",    memory: "2560Mi" }
+      resources:   # REPLAY:ride-size — memory request = limit (no overcommit; wk-metal-03 global-OOM 2026-07-27)
+        requests: __DIND_REQUESTS__
+        limits:   __DIND_LIMITS__
 DIND
 )"
   DIND_CONTAINER="${DIND_CONTAINER/__DIND_IMAGE__/${AGENT_DIND_IMAGE:-ghcr.io/k3d-io/k3d:5-dind}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__DIND_REQUESTS__/${DIND_REQUESTS}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__DIND_LIMITS__/${DIND_LIMITS}}"
   DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_DOCKER_IO__/${MIRROR_DOCKER_IO}}"
   # //: each of these now appears more than once (the buildkitd.toml write, homelab#1308) —
   # the single-slash form used here pre-#1308 only ever matched one occurrence and would now
@@ -2566,7 +2602,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-session, project: ${PROJECT}${SUB_LABEL} }
+  labels: { app: agent-session, project: ${PROJECT}, ride-size: ${RIDE_SIZE}${SUB_LABEL} }
 spec:
   restartPolicy: Never
   # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns

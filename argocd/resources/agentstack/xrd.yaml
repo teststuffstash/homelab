@@ -528,16 +528,30 @@ spec:
                               true = this repo's workers need a real Docker daemon (its CI
                               gate runs kind/k3d/testcontainers, e.g. `devbox run ci` with a
                               nested cluster). Worker rides then run as kata microVM pods
-                              (RuntimeClass kata, the 3 kata-labeled laptops) with a dind
+                              (RuntimeClass kata, the kata-labeled nodes) with a dind
                               sidecar: DOCKER_HOST is wired for the repo's own docker CLI
                               (bring it via devbox.json). The counterpart of a CI workflow
                               choosing the Docker-capable VM runner over an ephemeral
-                              in-cluster runner. Costs: ~5Gi VM per ride (one per node —
-                              the 8G-laptop ceiling), in-cluster services ride resolved
-                              endpoint IPs until FU-072, and the `ghcr.io` FQDN stays on the
+                              in-cluster runner. Costs: a ~5Gi VM per `standard` ride (one
+                              per 8G laptop; `rideSize` below sizes it up), and the `ghcr.io` FQDN stays on the
                               egress allowlist because dockerd's `registry-mirrors` is Hub-only
                               (the docker.io/ghcr pull-through mirrors themselves are BASELINE
                               egress for every ride — homelab#520 — not gated by docker=true).
+                          rideSize:
+                            type: string
+                            default: standard
+                            enum: [standard, large]
+                            description: >-
+                              The worker ride's size class — the pod envelope its own gates
+                              run in (xdist sizes to memory.max, kind to the CPU it gets).
+                              standard = the original envelope (agent 2Gi + dind 2560Mi with
+                              docker, agent 4Gi without — fits an 8G node). large = agent
+                              10Gi / 8 CPU burst (+ dind 6Gi / 6 CPU burst with docker,
+                              ~16.5Gi with kata overhead): sized where a test suite's
+                              speed-up flattens (~8 workers, ~6 kind cores), not to CI's
+                              node; fits only the 64G ride-tier node (nx-01), so it trades
+                              concurrency for gate speed. Memory request == limit in every
+                              class. Unknown values degrade to standard, loudly.
                           egress:
                             type: object
                             description: >-
