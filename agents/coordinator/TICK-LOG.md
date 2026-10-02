@@ -11997,3 +11997,8 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   static Unbound override, direct 3cf5bd16. Checks: WG HANDSHAKE_OK at .1, backup job 5 s, Kea 7
   leases, six HAProxy names OK, maint check clean (186 targets). New alert:
   OpnsenseConfigUnattributedRevision = the converge's root-key writes (FU-013 class).
+- Post-window read (~17:45Z): WAN 0/600 (pve) + 1/600 (nx-02) to 1.1.1.1, 0/300 to 8.8.8.8, TCP
+  connect ~31 ms; blackbox dips (grafana, transcripts, mcp.oracle) ONLY 16:58–17:09Z (the double-`.1`
+  + pre-peer minutes), green since; probe latency = yesterday's; the fleet-wide ~1.16/s LAN rx-drop
+  rate is yesterday's baseline too, not the cutover. Windows closed (this one --force on the
+  root-key alert; the 09-30 stale slot). #2161 merged 5121a682 (git == live).
