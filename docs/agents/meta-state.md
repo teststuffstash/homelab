@@ -91,6 +91,13 @@ never the session's arc — that is TICK-LOG's.)
   `pkg update` stuck from the double-`.1` minutes; `mgmt-tf apply` prompts `y`; Kea served only
   after a re-run; `opnsense.teststuff.net` came from Big Data's hostname → static override 3cf5bd16).
   `OpnsenseConfigUnattributedRevision` fires on every jail converge (root key) — FU-013's class.
+  **⚠ WINDOW-2 BLOCKER — pve's STANDBY node served DHCP as `.1`:** kill switch tripped 17:14:43Z on
+  `02:00:c0:a8:02:47 > mower  192.168.2.1.67 > 192.168.2.150.68 BOOTP Reply` → VM 9171 stopped,
+  onboot latched 0 (WAN gate still active). `check pve` was green at 17:02 (DHCP off, switch armed).
+  Cause unknown: the seat's 17:02–17:14 acts all targeted nx-02 (`--limit`/`OPN_HOST=.70`); suspect
+  the #2166 inventory flip (plain playbook runs now hit BOTH nodes — the box's `--check` belt is the
+  routine one) or a pfsync/Kea interaction. **Next:** `killswitch-arm pve` FIRST, boot 9171, read its
+  Kea + dnsmasq config and config history 17:02–17:14Z; do NOT reset onboot until understood.
   Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130

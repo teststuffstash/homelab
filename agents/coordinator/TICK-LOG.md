@@ -12002,3 +12002,6 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   + pre-peer minutes), green since; probe latency = yesterday's; the fleet-wide ~1.16/s LAN rx-drop
   rate is yesterday's baseline too, not the cutover. Windows closed (this one --force on the
   root-key alert; the 09-30 stale slot). #2161 merged 5121a682 (git == live).
+- 17:14:43Z pve's STANDBY router node (9171) emitted a DHCP reply sourced `192.168.2.1` to the mower
+  (.150) → its kill switch TRIPPED: VM stopped, onboot 0. Found ~18:00Z answering "any drill VM left?"
+  (none — 9199/.68 gone; 9110 test VM stays). Cause not investigated (operator: log it) → meta-state.

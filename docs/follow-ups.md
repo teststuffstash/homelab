@@ -153,8 +153,9 @@ six OVERSIZE items pointer-ized into
       CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
       PASSED. 2026-10-01 ADR-145: two windows; window-1 prep DONE (Kea, HA drill, nx-02 reboot).
       **2026-10-02: WINDOW 1 DONE — nx-02 serves `.1`** (#2166, #2161; the loss was the WAN cable;
-      Big Data running, cables out = the fallback). **Next:** soak, then window 2 (pve joins as
-      BACKUP). Relates FU-097, FU-013, FU-298.
+      Big Data running, cables out = the fallback). **Blocker:** pve's standby node sent a DHCP reply
+      as `.1` 17:14Z → kill switch stopped it (meta-state). **Next:** that root cause, soak, then window 2
+      (pve joins as BACKUP). Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
