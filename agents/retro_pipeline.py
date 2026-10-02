@@ -35,6 +35,13 @@ def cutoff(now):
     return iso(day - timedelta(days=day.weekday()))
 
 
+def missing(exc):
+    # s5cmd 2.3 against Garage says `given object <key> not found` (probed 2026-10-02 — the first
+    # live collect died on it); keep the AWS spellings for other s5cmd/backend versions.
+    err = exc.stderr or ''
+    return 'NoSuchKey' in err or 'specified key does not exist' in err or ('given object' in err and 'not found' in err)
+
+
 class Store:
     def __init__(self, local=None):
         self.local = Path(local) if local else None
@@ -55,7 +62,7 @@ class Store:
             return json.loads(self.command('cat', self.prefix + key))
         except subprocess.CalledProcessError as exc:
             # Auth/network failures MUST NOT reset the checkpoint or accumulated activity.
-            if 'NoSuchKey' in exc.stderr or 'specified key does not exist' in exc.stderr:
+            if missing(exc):
                 return default
             raise
 
@@ -97,7 +104,7 @@ class Store:
             try:
                 text = self.command('cat', bucket + '_ledger.jsonl')
             except subprocess.CalledProcessError as exc:
-                if 'NoSuchKey' in exc.stderr or 'specified key does not exist' in exc.stderr:
+                if missing(exc):
                     text = ''
                 else:
                     raise
