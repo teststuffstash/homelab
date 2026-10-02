@@ -75,14 +75,10 @@ never the session's arc — that is TICK-LOG's.)
   #2157 nx-02 host reboot, #2158 .72 retired + skews + router-ids, #2159 RouterPairMasterCount
   interim `> 1`, #2160 BGP alert per peer — auto-merge pending re-review; #2161 DRAFT = the
   Cilium peer .1→.70, apply IN window 1, plan id 20261001T190057Z-f06b997d, re-plan if stale).
-  **⚠ BLOCKER — WAN-switch packet loss:** cabling now ONT → WAN switch → Big Data, node cables
-  OUT. With nx-02 `eno2` + pve `enp6s0` on the switch: 7–20 % loss past Big Data at every packet
-  size, TCP connect 1.3–2.9 s; both pulled → 0 % / 6–19 ms. LAN clean; Big Data `em0` 0 errors;
-  hypervisor WAN taps DOWN, gates dark. Suspects: a frame with em0's MAC leaking from a node
-  (switch MAC flap), PAUSE frames (both NICs flow-control RX/TX on), other bridge chatter.
-  **Next session (operator in the basement with a laptop):** ONT → Big Data DIRECT, nodes alone
-  on the switch → `tcpdump -e -Q out` on eno2/enp6s0 (src = Big Data's em0 MAC?) + `ethtool -S`
-  pause counters + flow control off; operator replaces the WAN cable regardless.
+  **WAN-switch loss — likely the CABLE (2026-10-02, second jail):** nodes on the switch measured
+  clean (0.17 % / 120 s, no frames out of the node ports) after the WAN cable swap. Was: 7–20 % loss
+  with nx-02 `eno2` + pve `enp6s0` on the switch. **Next:** a later re-probe confirms, then window 1.
+  pve/nx-02 host keys the second jail took accept-new: checked against the box's pins 2026-10-02 — match.
   **Window-1 change set still to write:** `.1` VIP (nx-02 host vars only), nx-02 out of standby +
   `OPN_DHCP_SERVER=kea`, **disarm nx-02's kill switch first** (missing from the doc), prod's
   management address → the node (router-move §B), RouterPairMasterCount back to `!= 1`.

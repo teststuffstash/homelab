@@ -152,8 +152,8 @@ six OVERSIZE items pointer-ized into
       (its §Status is the history). State 2026-09-30: both nodes STANDING (nx-02 `.70`, pve `.71`, `/24`),
       CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
       PASSED. 2026-10-01 ADR-145: two windows; window-1 prep DONE (Kea, HA drill, nx-02 reboot).
-      **Next:** the WAN-switch packet-loss hunt (nodes on the switch = loss; meta-state), then the
-      window-1 change set. Relates FU-097, FU-013, FU-298.
+      **Next:** WAN cable the likely cause — nodes on the switch measured clean 2026-10-02 (0.17 %/120 s,
+      no frames out of the node ports); confirm with a later re-probe, then the window-1 change set. Relates FU-097, FU-013, FU-298.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
