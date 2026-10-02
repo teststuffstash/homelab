@@ -729,23 +729,14 @@ the block needs pruning, not more headings.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
-- [ ] **FU-218** — **ARC capacity is RAM placement on the compute tier, not slots.** A runner
-      requests ~2.5 Gi → one per 8 GB laptop; only wk-03/wk-metal-01/-02 are `homelab.io/ephemeral`.
-      Measured 2026-09-05: queue p90 ~10 min while the cap was hit 0–2 % of the time. **Done
-      2026-09-08** (PR#1518 + 09b81dd9): wk-03 8→16Gi/12c (funded by ci-runner-01), `maxRunners`
-      4→6 — the overcommit ceiling; the sizing lives in `arc-runners.yaml`'s maxRunners comment.
-      **2026-09-14 (operator, PR#1671): wk-03 back to 8Gi/6c, maxRunners 6→4** — the pve host
-      sat at 0.5–1 GiB MemAvailable (`PveHostMemoryLow`) and 16 Gi packed ~4 dind onto the 40 G LV.
-      Open: (a) label wk-metal-04 ephemeral ≈ +3–4 slots shared with kata (operator call); (b) the
-      week's re-read of queue p90 at operator hours (07–09/17–19 UTC) — close if under ~2 min.
-      **2026-09-10:** `homelab-ephemeral-large` (#1582: metal-only, 16Gi scratch request, max 1)
-      for ≥10 GB-scratch jobs — its template is a COPY of the general one, diff on every change.
-      **2026-09-28 — the envelope is wrong, not the slot count:** a 1536Mi-request runner thrashed
-      wk-03 (8 GiB) past its kubelet — hard reset, [incident](incidents/2026-09-28-wk-03-runner-memory-thrash.md);
-      the same container's 7-day working-set peak is 20–23.5 GiB (eight rides, all nx-01).
-      **Next:** either the request states the heavy jobs' envelope (→ only nx-01/16 GiB nodes fit)
-      or the 8 GiB nodes leave the pool — operator call; the job→runner-size split (#1582's shape)
-      is the alternative. Relates FU-208, ADR-082, `docs/spikes/kata-ci-gate.md` §CI side.
+- [ ] **FU-218** — **ARC runner memory: a node-sized limit, not node removal: POINTER.** The runner
+      requests 1536 Mi with no limit, so jobs size to the HOST (`pytest -n auto` = one worker per CPU)
+      and vanish on 8 GB nodes; the recurring "move off 8 GB" pressure. 2026-10-02 evidence: the same
+      suite fits an 8 GB node once workers are bounded (oracle-fleet #783: 3 workers, 3.1 GiB, pass).
+      **Next (operator, 2026-10-02): spike option A** — a controller resizes each bound runner pod
+      (`pods/resize`, k8s 1.36) to a node-derived request+limit, so `memory.max` is the budget; ADR
+      before it lands. Design, history, options, acceptance:
+      [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md). Relates FU-208, ADR-082.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL, not
       content.** Its documented pick has no green requirement on purpose (2026-07-10: *"a
       base-side CI fix can only reach a PR through an update"*) — true for a CONTENT red, false
