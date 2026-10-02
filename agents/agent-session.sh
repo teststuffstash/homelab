@@ -2277,6 +2277,18 @@ ride_size_envelope() {   # in: RIDE_SIZE, DOCKER → out: AGENT_/DIND_ REQUESTS+
       *)     AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }';  AGENT_LIMITS='{ cpu: "6", memory: "4Gi" }';;
     esac
   fi
+  # `large` is PINNED to the ephemeral (ride/compute) tier: with docker the kata RuntimeClass
+  # already confines it, but a non-docker 10Gi ride would otherwise fit the untainted 16G storage
+  # nodes (hp-01, m70s) and contend with Longhorn/Garage. Within the tier only nx-01 fits it.
+  # Same-term matchExpressions AND, so this composes with the opencode AVX2 pin.
+  if [ "$RIDE_SIZE" = large ]; then
+    _tier='              - { key: homelab.io/ephemeral, operator: In, values: ["true"] }'
+    if [ -n "${AFFINITY:-}" ]; then
+      AFFINITY="${AFFINITY}"$'\n'"${_tier}"
+    else
+      AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n'"${_tier}"
+    fi
+  fi
   echo "→ ride size class: ${RIDE_SIZE} (agent ${AGENT_LIMITS}${DOCKER:+, dind ${DIND_LIMITS}})"
 }
 # <<<REPLAY:ride-size<<<

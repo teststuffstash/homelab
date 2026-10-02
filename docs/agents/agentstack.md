@@ -71,8 +71,8 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   `large` = agent 10Gi/8-CPU burst + dind 6Gi/6-CPU burst (~16.5Gi with kata overhead; 10Gi
   agent-only without docker), memory request == limit. A ride's gates run at the size of its cap —
   oracle-fleet #774's `diff-ci` took ~29 min at `standard` vs ~7 min on an uncapped ARC runner —
-  so a gate-heavy stack opts into fewer, faster rides. `large` fits only nx-01 (the request is the
-  placement); it shares that node with the ARC runners, whose budget is FU-218
+  so a gate-heavy stack opts into fewer, faster rides. `large` carries a required affinity on
+  `homelab.io/ephemeral` and within that tier only nx-01 fits it (docker or not); it shares that node with the ARC runners, whose budget is FU-218
   ([spike](../spikes/arc-runner-memory-budget.md)). Mapping: `agent-session.sh` REPLAY:ride-size,
   fixture `agents/replay/fixtures/ride-size/`.
 - **Egress:** the composed CNP adds the docker-only legs — the kata LAN-VIP belt (nix-cache,
