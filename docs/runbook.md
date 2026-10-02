@@ -41,8 +41,9 @@ Gotchas:
   ADR-129/-131): `devbox run mgmt-tf -- plan` (ssh, committed ref — `MGMT_REF=origin/<branch>`) prints a
   **plan id**, and `devbox run mgmt-tf -- apply <plan-id>` executes that saved plan — an apply with
   flags is refused (FU-248); a plan that changes a `helm_release` (Cilium, Longhorn, ArgoCD) is applied
-  through `devbox run helm-evidence -- run <plan-id> --label <slug>` inside a window instead, which
-  records the releases before, during and after (report-only; evidence in `~/.claude/helm-evidence/`);
+  through `devbox run helm-evidence -- run <plan-id> --label <slug>` instead: it declares its own
+  maintenance window (refusing while any other is live), records the releases before, during and after,
+  and closes the window only on a clean check (report-only; evidence in `~/.claude/helm-evidence/`);
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
   diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an

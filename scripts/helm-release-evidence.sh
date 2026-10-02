@@ -25,10 +25,14 @@
 # `run` applies through `mgmt/scripts/mgmt-tf.sh apply <plan-id>` with MGMT_YES=1 — plan it first
 # and read it (`devbox run mgmt-tf -- plan`): passing the id to `run` is the confirmation, and the
 # evidence is only as meaningful as the plan you approved.
-# Run it inside a declared window (`devbox run maint -- open --reason …`).
+# `run` declares its OWN maintenance window (refusing while any other is live), banks the window's
+# health baseline, and closes it only on a clean check — a regression leaves it open for a human.
 #
 # Evidence lands in $HELM_EVIDENCE_DIR (default ~/.claude/helm-evidence)/<utc>-<label>/:
 #   before.json after.json timeline.jsonl health-before.json health-compare.txt apply.log summary.txt
+#   window-open.log window-close.log
+# Exit (run): the apply's rc; 2 if it applied but the window could not close clean; 3 = refused
+# before applying (another live window, unreadable registry, the window did not open).
 # Env: HELM_RELEASES ("<release>:<namespace> …"), WATCH_SECS (900), WATCH_INTERVAL (20), KUBECONFIG.
 set -euo pipefail
 
@@ -204,11 +208,26 @@ cmd_run() { # <plan-id> [--label <slug>]
   local plan="${1:-}" label="helm-apply"; shift || true
   [ -n "$plan" ] || { echo "run: <plan-id> required (devbox run mgmt-tf -- plan prints it)" >&2; exit 64; }
   [ "${1:-}" = "--label" ] && label="$2"
+  local W="$ROOT/scripts/maintenance-window.sh"
+  # THE WINDOW IS THIS VERB'S OWN (operator, 2026-10-02): a helm apply always runs inside a declared
+  # maintenance window, and never inside someone else's — another live window means another
+  # session is changing the cluster, and two changes in one window make both records worthless.
+  local live; live="$(bash "$ROOT/agents/seat-window.sh" list 2>&1)" \
+    || { echo "run: cannot read the window registry — refusing (an unread registry is not an empty one)" >&2; printf '%s\n' "$live" >&2; exit 3; }
+  if ! grep -q '^no live seat window' <<<"$live"; then
+    echo "run: a maintenance window is already open — refusing to apply inside another session's change:" >&2
+    printf '%s\n' "$live" >&2; exit 3
+  fi
   local dir="${HELM_EVIDENCE_DIR:-$HOME/.claude/helm-evidence}/$(date -u +%Y%m%dT%H%M%SZ)-$label"
   mkdir -p "$dir"
   echo "evidence → $dir"
-  bash "$ROOT/scripts/maintenance-window.sh" snapshot > "$dir/health-before.json" \
-    || echo "  ⚠ health baseline has unread probes (kept as-is; see the compare)"
+  # `open` takes the health baseline (refusing to bank one built from unread probes) and declares
+  # the window to the responder; its baseline is this record's health-before.
+  bash "$W" open --reason "helm_release apply $plan ($label) — scripts/helm-release-evidence.sh" --hours 1 \
+    2>&1 | tee "$dir/window-open.log" || { echo "run: window did not open — not applying" >&2; exit 3; }
+  local wid; wid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' "$dir/window-open.log" | head -1)"
+  [ -n "$wid" ] || { echo "run: could not read the window id from 'open' — not applying (check 'devbox run maint -- list')" >&2; exit 3; }
+  cp "${MAINT_STATE_DIR:-$HOME/.claude/maintenance-window}/$wid/baseline.json" "$dir/health-before.json" 2>/dev/null || true
   cmd_snapshot > "$dir/before.json"
   echo "  before: $(jq -r '[.releases | to_entries[] | "\(.key)@\(.value.helm.revision)"] | join(" ")' "$dir/before.json")"
   # The timeline starts BEFORE the apply so the roll's first seconds are on it.
@@ -221,10 +240,19 @@ cmd_run() { # <plan-id> [--label <slug>]
   echo "  apply rc=$rc ($t0 → $t1); settling ${WATCH_SECS:-900}s"
   sleep "${WATCH_SECS:-900}"; kill "$wpid" 2>/dev/null || true; wait "$wpid" 2>/dev/null || true
   cmd_snapshot > "$dir/after.json"
-  bash "$ROOT/scripts/maintenance-window.sh" compare "$dir/health-before.json" > "$dir/health-compare.txt" 2>&1 || true
-  { echo "plan $plan  apply rc=$rc  $t0 → $t1"; cmd_diff "$dir/before.json" "$dir/after.json"
-    echo "== health compare (maintenance-window probes)"; cat "$dir/health-compare.txt"; } > "$dir/summary.txt"
+  local crc=0
+  bash "$W" check --id "$wid" > "$dir/health-compare.txt" 2>&1 || crc=$?
+  { echo "plan $plan  apply rc=$rc  $t0 → $t1  window $wid"; cmd_diff "$dir/before.json" "$dir/after.json"
+    echo "== health compare (maintenance-window check, rc=$crc)"; cat "$dir/health-compare.txt"; } > "$dir/summary.txt"
   cat "$dir/summary.txt"
+  # Close only on a clean check: `close` refuses otherwise and the window STAYS OPEN for a human —
+  # report-only means this verb never forces it shut over a regression it just recorded.
+  if bash "$W" close --id "$wid" > "$dir/window-close.log" 2>&1; then
+    echo "  window $wid closed"
+  else
+    echo "  ⚠ window $wid LEFT OPEN — the cluster is not back to baseline (window-close.log); read it, then 'devbox run maint -- close --id $wid' (FORCE=1 to leave a known item, and say so)"
+    [ "$rc" -ne 0 ] || rc=2
+  fi
   return "$rc"
 }
 
