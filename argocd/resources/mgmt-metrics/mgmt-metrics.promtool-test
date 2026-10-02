@@ -87,6 +87,32 @@ tests:
         alertname: MgmtApplyPostCheckFailed
         exp_alerts: []
 
+  # ── FU-300: a declared window holds the apply loop ────────────────────────────────────────────
+  # A 3 h window (seat-window's default) deferring and then closing never fires; a forgotten one
+  # (8 h of deferral) fires after 6 h — and the converse: a deferring loop is a LIVE loop, so the
+  # stale belt stays quiet throughout.
+  - interval: 5m
+    name: "a deferral fires after 6h; a default-length window never does"
+    input_series:
+      - series: 'mgmt_apply_deferred_window{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x12 1x36 0x12 1x96"
+      - series: 'mgmt_apply_last_ok_tick_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x156"
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: MgmtApplyDeferredByWindow
+        exp_alerts: []
+      - eval_time: 11h
+        alertname: MgmtApplyDeferredByWindow
+        exp_alerts: []
+      - eval_time: 12h
+        alertname: MgmtApplyDeferredByWindow
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 12h
+        alertname: MgmtApplyLoopStale
+        exp_alerts: []
+
   # ── the box stops answering ────────────────────────────────────────────────────────────────────
   - interval: 1m
     name: "a down box fires after 15m"

@@ -10,6 +10,13 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-02 night — helm provider 3.x applied under evidence; TICK-LOG 2026-10-02 evening).**
+  (1) **#2183 merged unread by the operator** (author==codeowner waiver) — the box apply loop now DEFERS
+  inside [declared windows](../glossary.md); operator to read its three calls: `MgmtApplyDeferredByWindow` at 6 h, the
+  reconciler's node windows hold the apply loop, `--admit-apply` separate from `--admit-reconciler`.
+  Confirm the box's next pull runs it (a `DEFERRED` line the first time a window is open). (2) The
+  `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299's build
+  (Garage LXC on nx-02 + Longhorn `backupTarget`) is subagent-sized; its apply + restore drill attended.
 - **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
   `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
   reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**

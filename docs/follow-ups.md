@@ -146,11 +146,6 @@ six OVERSIZE items pointer-ized into
       (700 G SA400 thin pool, 0 % used; a VM won't fit: 60.5/62 GiB committed, NUMA node0 625 MB free) +
       an off-site second copy; per-volume classes in `storage-ledger.md`. **Next:** LXC + Garage in tofu,
       `backupTarget`, then a backup/restore drill of a throwaway volume before any RecurringJob.
-- [ ] **FU-300** — **The box's apply loop is window-blind.** `mgmt-apply.sh` applies an allowlisted master
-      change whenever it lands and never reads the seat-window registry — it can apply mid-way through
-      another session's maintenance (the router move). Operator 2026-10-02: the check is right for every
-      class. **Next:** while a live window exists, defer (no plan, no stamp, no refusal) with a metric so a
-      forgotten window cannot freeze applies silently; the box's own Talos-apply bracket excluded. Relates FU-273.
 - [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
       action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
       Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
