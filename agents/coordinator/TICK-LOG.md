@@ -12125,3 +12125,8 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   (3 in-place: 2 PVC labels + the unifi restartedAt drift) applied in window seat-1791049534-1587
   (`echo y |` — mgmt-tf apply prompts). Job run once by hand (`create job --from=cronjob/daily-backup`):
   3/3 backups Completed; `longhorn_volume_last_backup_at` = epoch s (rule stands). Safety snapshots deleted.
+- **#2197 merged 18:38Z, live (window seat-1791052703-5074, closed clean):** `backup-schedule` init
+  container converges `unifi.scheduletask` + `super_mgmt` every start (proved first against live Mongo:
+  idempotent + corrected a planted drift); `backup-age` sidecar → Pushgateway → `UnifiAutobackupStale`
+  / `UnifiAutobackupAgeMissing`. Post-apply: init log `matched=1 modified=0`, pushed age 4260 s (the
+  17:29Z file), both rules inactive. Off-site PARKED by the operator (IAM + billing limits first).
