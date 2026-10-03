@@ -40,7 +40,7 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
 `devbox run -- python3 machines/generate.py` (re-running must produce an empty diff). Steps:
 
 1. **Flag the MAC** — add a `matchbox_group` selecting the MAC to the `talos-worker` profile in
-   `tofu/provisioning/matchbox.tf`, then
+   `tofu/provisioning/flags.local.tf` (gitignored — the shape is in `matchbox.tf`'s header), then
    `devbox run -- tofu -chdir=tofu/provisioning apply -target=matchbox_group.<x>`
    (`source scripts/keepass-env.sh` exports `TF_VAR_proxmox_api_token`).
 2. **Reserve its IP** in `opnsense/dnsmasq-dhcp.py` (`hwaddr → ip`, maintenance IP == node IP) and
@@ -58,8 +58,9 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
    Talos wipes the disk, installs, reboots.
 6. ⚠️ **Remove the Matchbox flag** before/at the post-install reboot
    (`tofu -chdir=tofu/provisioning destroy -target=matchbox_group.<x>`) so the reboot boots from
-   disk and doesn't loop back into maintenance/reinstall. The committed `matchbox.tf` holds **no
-   per-node group** on purpose — flags are transient.
+   disk and doesn't loop back into maintenance/reinstall, then delete the group from
+   `flags.local.tf`. No tracked file holds a per-node group — flags are procedure state (FU-244),
+   and `devbox run machines-lint` fails on one in git.
 6b. **Apply the zone label** — `zone:` in `machines.yaml` is NOT part of the machine config; it is a
    separate tofu resource in `tofu/longhorn.tf`, so the install leaves the node unlabelled:
    the same plan-by-id path, `devbox run mgmt-tf -- plan -target='kubernetes_labels.node_zone["<name>"]'` (or `longhorn_storage` /
