@@ -64,6 +64,7 @@ tests:
           - exp_labels:
               severity: warning
               source: oracle-fleet
+              triage: dig
             exp_annotations: {}
 
   # ══ 3. PYPI FROM HOMELAB FIRES ═══════════════════════════════════════════════════════════════
@@ -79,6 +80,7 @@ tests:
           - exp_labels:
               severity: warning
               source: homelab
+              triage: dig
             exp_annotations: {}
 
   # ══ 4. THE EXCLUSION STAYS TIGHT — protocol scope + anchored names ═══════════════════════════
@@ -102,13 +104,13 @@ tests:
       - eval_time: 15m
         alertname: AgentWorkerEgressDropped
         exp_alerts:
-          - exp_labels: {severity: warning, source: ns-a-agents}
+          - exp_labels: {severity: warning, source: ns-a-agents, triage: dig}
             exp_annotations: {}
-          - exp_labels: {severity: warning, source: ns-b-agents}
+          - exp_labels: {severity: warning, source: ns-b-agents, triage: dig}
             exp_annotations: {}
-          - exp_labels: {severity: warning, source: ns-c-agents}
+          - exp_labels: {severity: warning, source: ns-c-agents, triage: dig}
             exp_annotations: {}
-          - exp_labels: {severity: warning, source: ns-d-agents}
+          - exp_labels: {severity: warning, source: ns-d-agents, triage: dig}
             exp_annotations: {}
 
   # ══ 5. OUT-OF-SCOPE NAMESPACE NEVER FIRES (the source regex is unchanged) ════════════════════

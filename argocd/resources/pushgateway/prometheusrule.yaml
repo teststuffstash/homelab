@@ -323,8 +323,8 @@ spec:
           for: 2m
           labels:
             severity: warning
-            # triage: audit 2026-10-03: operator direction, becomes a per-ride egress summary; mostly phone-home noise
-            triage: none
+            # triage: phone-home noise is excluded above (#2194); what remains is an allowlist miss or a misconfigured client
+            triage: dig
           annotations:
             summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
             # The first instruction must be a read that works from an IN-CLUSTER responder pod: the
