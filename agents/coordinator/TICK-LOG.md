@@ -12121,3 +12121,7 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   Three controller restarts.
 - **PR#2196** (auto-merge armed): RecurringJob `daily-backup` 02:00Z retain 14; PVC labels on HA config,
   unifi-config, forgejo storage; unifi-mongo + coordinator-transcripts out of the daily class.
+- **#2196 merged 17:44Z, live:** ArgoCD synced the RecurringJob + forgejo label; the box plan
+  (3 in-place: 2 PVC labels + the unifi restartedAt drift) applied in window seat-1791049534-1587
+  (`echo y |` — mgmt-tf apply prompts). Job run once by hand (`create job --from=cronjob/daily-backup`):
+  3/3 backups Completed; `longhorn_volume_last_backup_at` = epoch s (rule stands). Safety snapshots deleted.
