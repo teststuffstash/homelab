@@ -2613,3 +2613,25 @@ makes the second node purely additive. Kea HA is API-complete (verified 2026-10-
 MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
 becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
+
+### ADR-147 — Every CNPG Cluster is backed up by default: the Barman Cloud plugin, wired at admission, one bucket per namespace (2026-10-03)
+**Status:** Accepted (operator, 2026-10-03: "some backups by default for everybody makes sense…
+I need something for the 'oops the Longhorn upgrade broke everything'"). **Decision:** (1) CNPG
+backups ride the **Barman Cloud plugin** (CNPG-I) into the backup Garage outside Longhorn (FU-299's
+target), with **cert-manager** installed only as the plugin's mTLS issuer; (2) a native
+**MutatingAdmissionPolicy** wires every Cluster in a store-holding namespace to that namespace's
+`ObjectStore` — the consumer declares nothing, `homelab.io/pg-backup: disabled` opts out; (3) **one
+bucket + key per namespace**; (4) a daily platform CronJob takes a base backup of every Cluster and
+FAILS on any uncovered one — the same job is `devbox run pg-backup-now`, the pre-upgrade restore point.
+**Considered:** in-tree `barmanObjectStore` (spike-proven against Garage, but CNPG 1.29 warns it is
+"completely removed in 1.30.0" — one minor away); Longhorn block backups of the CNPG volumes (2 MiB
+amplification, ~full every day, crash-consistent, and two copies of every database); a backup line
+in each consumer's manifest (stacks would have to opt in; the platform's three never were); one
+shared bucket (any tenant's key would read Infisical's database); Kyverno for the mutation (a new
+engine; the native API is v1 on Kubernetes 1.36). **Why:** physical base backups + WAL restore a
+whole cluster in about a minute (spike: 200k rows, identical checksum, 62 s), consistent by
+construction; the default reaches stack clusters without touching their repos. **Consequences:**
+the namespace list lives in three places (policy, `store-<ns>.yaml`, the bucket list) — the job's
+UNCOVERED verdict is the belt; a cluster restored by `recovery` is not auto-wired (its own name's WAL
+is already in the store); retention `14d`, cadence daily, no knobs yet. Mechanism + restore:
+[`postgres.md`](postgres.md) §Backups.

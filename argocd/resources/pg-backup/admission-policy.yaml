@@ -1,0 +1,53 @@
+# Wire every CNPG Cluster to its namespace's backup store at admission (ADR-147) — the "default for
+# everybody": a Cluster's own repo declares nothing. Adds the Barman Cloud plugin as WAL archiver
+# with `barmanObjectName: pg-backup` (the ObjectStore in store-<ns>.yaml); serverName defaults to the
+# Cluster's name. Existing Clusters pick it up on their next UPDATE.
+#
+# Skipped, each on purpose:
+#   • a namespace with no store — archiving into a missing store fails, and failed archiving keeps
+#     WAL on the volume until it fills. The list below MUST equal the store-<ns>.yaml files (and the
+#     buckets in ansible/group_vars/garage_backup.yml). A Cluster elsewhere is reported by the
+#     pg-backup job as UNCOVERED, which fails the job (CronJobNotSucceeding).
+#   • a Cluster annotated `homelab.io/pg-backup: disabled` (the opt-out).
+#   • a Cluster that already declares any backup (spec.backup, or the plugin itself).
+#   • a Cluster bootstrapping by `recovery` — archiving under its own name into a store that still
+#     holds that name's WAL fails CNPG's empty-archive check. A restored cluster gets its store wired
+#     by hand after the restore (docs/postgres.md §Restore).
+# failurePolicy Ignore: a broken policy must never block a database write; the job is the belt.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: pg-backup-default
+spec:
+  failurePolicy: Ignore
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [postgresql.cnpg.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [clusters]
+  matchConditions:
+    - name: namespace-has-a-store
+      expression: "request.namespace in ['infisical', 'forgejo', 'monitoring', 'oracle-fleet']"
+    - name: not-opted-out
+      expression: "!has(object.metadata.annotations) || !('homelab.io/pg-backup' in object.metadata.annotations) || object.metadata.annotations['homelab.io/pg-backup'] != 'disabled'"
+    - name: no-backup-declared
+      expression: "!has(object.spec.backup) && (!has(object.spec.plugins) || !object.spec.plugins.exists(p, p.name == 'barman-cloud.cloudnative-pg.io'))"
+    - name: not-a-recovery
+      expression: "!has(object.spec.bootstrap) || !has(object.spec.bootstrap.recovery)"
+  # dyn(): a CEL map literal must be homogeneous — mixed string/bool/map values fail to compile.
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          has(object.spec.plugins)
+          ? [JSONPatch{op: "add", path: "/spec/plugins/-", value: {"name": dyn("barman-cloud.cloudnative-pg.io"), "isWALArchiver": dyn(true), "parameters": dyn({"barmanObjectName": "pg-backup"})}}]
+          : [JSONPatch{op: "add", path: "/spec/plugins", value: [{"name": dyn("barman-cloud.cloudnative-pg.io"), "isWALArchiver": dyn(true), "parameters": dyn({"barmanObjectName": "pg-backup"})}]}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: pg-backup-default
+spec:
+  policyName: pg-backup-default

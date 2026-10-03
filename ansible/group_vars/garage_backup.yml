@@ -16,5 +16,14 @@ garage_dir: /var/lib/garage
 # Layout capacity: what Garage may promise, below the LXC's 400 G thin rootfs (OS + LMDB headroom).
 garage_capacity: 360G
 garage_zone: nx-02
-garage_bucket: longhorn-backup
-garage_key_name: longhorn-backup
+# One bucket + one key of the SAME name per consumer — isolation is by bucket (ADR-031/ADR-073), so a
+# stack's key can never read another tenant's backups (Infisical's database among them).
+#   longhorn-backup    Longhorn's BackupTarget (docs/longhorn-backup.md)
+#   cnpg-<namespace>   CNPG backups of every Cluster in that namespace (docs/postgres.md §Backups) —
+#                      the list must match argocd/resources/pg-backup/ (one file per namespace)
+garage_buckets:
+  - longhorn-backup
+  - cnpg-infisical
+  - cnpg-forgejo
+  - cnpg-monitoring
+  - cnpg-oracle-fleet

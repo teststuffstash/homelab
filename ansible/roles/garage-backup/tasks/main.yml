@@ -105,28 +105,31 @@
     garage -c /etc/garage/garage.toml layout assign -z {{ garage_zone }} -c {{ garage_capacity }} "$id"
     garage -c /etc/garage/garage.toml layout apply --version 1
 
-# ---- bucket + key ----
+# ---- buckets + keys: one key per bucket, same name (group_vars garage_buckets) ----
 - name: List buckets
   ansible.builtin.command: garage -c /etc/garage/garage.toml bucket list
-  register: garage_buckets
+  register: garage_bucket_list
   changed_when: false
 
-- name: Create bucket
-  when: garage_bucket not in garage_buckets.stdout
-  ansible.builtin.command: garage -c /etc/garage/garage.toml bucket create {{ garage_bucket }}
+- name: Create buckets
+  loop: "{{ garage_buckets }}"
+  when: item not in garage_bucket_list.stdout
+  ansible.builtin.command: garage -c /etc/garage/garage.toml bucket create {{ item }}
 
 - name: List keys
   ansible.builtin.command: garage -c /etc/garage/garage.toml key list
-  register: garage_keys
+  register: garage_key_list
   changed_when: false
 
-- name: Create key
-  when: garage_key_name not in garage_keys.stdout
-  ansible.builtin.command: garage -c /etc/garage/garage.toml key create {{ garage_key_name }}
+- name: Create keys
+  loop: "{{ garage_buckets }}"
+  when: item not in garage_key_list.stdout
+  ansible.builtin.command: garage -c /etc/garage/garage.toml key create {{ item }}
 
 # `bucket allow` is idempotent (it sets flags), so it runs every time and reports no change.
-- name: Grant the key read+write on the bucket
+- name: Grant each key read+write on its own bucket
+  loop: "{{ garage_buckets }}"
   ansible.builtin.command: >-
     garage -c /etc/garage/garage.toml bucket allow --read --write
-    --key {{ garage_key_name }} {{ garage_bucket }}
+    --key {{ item }} {{ item }}
   changed_when: false

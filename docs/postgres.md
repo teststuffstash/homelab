@@ -85,11 +85,48 @@ don't.
 | you need a second *database* later | declare a `Database` CR (the CRD is live, operator 1.28) — it does **not** mint another `-app` secret; that role/password is yours |
 | CNPG pod-status alerts stay silent for your cluster | the `CNPGInstanceNotReady`/`CNPGInstanceCrashLooping` belts pin namespaces in [`kube-prometheus-stack.yaml`](../argocd/platform/values/kube-prometheus-stack.yaml) — a platform one-liner adds yours (the metric-based belts cover you automatically once the PodMonitor is on) |
 
+## Backups — on by default (ADR-147)
+
+**You declare nothing.** Every `Cluster` in a namespace the platform has given a backup store is
+wired at admission to the **Barman Cloud plugin**: continuous WAL archiving plus a **daily base
+backup** (the platform's `pg-backup` CronJob, 02:15Z), kept **14 days**, in bucket `cnpg-<namespace>`
+on the backup Garage — outside Longhorn, so a Longhorn failure cannot take the copies with the
+originals ([`longhorn-backup.md`](longhorn-backup.md) §The target). Each namespace has its own
+bucket and key; no tenant can read another's backups.
+
+| you want | do |
+|---|---|
+| nothing (the default) | nothing — after your next `Cluster` apply it carries `spec.plugins: [barman-cloud…]`; that line is the platform's, not drift |
+| no backups for a throwaway cluster | annotate it `homelab.io/pg-backup: disabled` |
+| a backup NOW (before a risky change) | the seat runs `devbox run pg-backup-now` — every cluster, waits, exit 0 only if all completed |
+| a namespace that has no store yet | ask the platform: a `store-<ns>.yaml` in `argocd/resources/pg-backup/` + the bucket. Until then the daily job reports your cluster UNCOVERED and fails, so it is seen |
+
+**Restore** (the "the upgrade broke everything" path: accept the loss since the backup, rebuild
+from it). A new `Cluster` bootstraps from the store, under a NEW name — its old name's WAL is in
+the store, and CNPG refuses to archive over it:
+
+```yaml
+spec:
+  bootstrap:
+    recovery: { source: origin }          # latest backup + all archived WAL; add recoveryTarget for a point in time
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters: { barmanObjectName: pg-backup, serverName: <old cluster name> }
+```
+
+A recovery-bootstrapped cluster is **not** auto-wired. After it is healthy, add the plugin by hand
+(`isWALArchiver: true`, `barmanObjectName: pg-backup`) or the job reports it UNCOVERED. Point the
+app at the new `-rw` Service/secret (or restore under the old name in a fresh namespace).
+**After a total loss**, Infisical (which feeds the store credentials) is itself on a CNPG volume:
+seed `pg-backup-s3` in `infisical` from the wallet (`cnpg-backup-infisical-{key-id,secret}`, keys
+`ACCESS_KEY_ID`/`ACCESS_SECRET_KEY`) and restore Infisical's cluster first.
+
 ## What the platform owns — and deliberately does not provide
 
 The platform owns the operator lifecycle (`argocd/platform/cnpg-operator.yaml`), failover, the
 alert belts, and the Longhorn storage underneath. It does **not** provision databases for you
 (the `Cluster` CR is yours, in your repo), does not manage extra roles or databases beyond the
-bootstrap one, and declares no backups on your behalf — CNPG's `Backup`/`ScheduledBackup` CRs
-exist and are the consumer's call (per the boot-from-git rule, non-rebuildable data belongs in
-S3).
+bootstrap one, and leaves retention and cadence to the defaults above until per-tenant knobs exist (FU-299) — backups
+themselves are the platform's, on by default (§Backups).

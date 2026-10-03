@@ -44,6 +44,8 @@ Gotchas:
   through `devbox run helm-evidence -- run <plan-id> --label <slug>` instead: it declares its own
   maintenance window (refusing while any other is live), records the releases before, during and after,
   and closes the window only on a clean check (report-only; evidence in `~/.claude/helm-evidence/`);
+  **before a Longhorn chart bump, take the restore point first: `devbox run pg-backup-now`** (every CNPG
+  cluster, ADR-147) — Longhorn refuses downgrades, so a bad upgrade is rolled back by restoring;
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
   diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an

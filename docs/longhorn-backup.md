@@ -45,7 +45,8 @@ class is per PVC.
 
 | Class | Volumes | Why | Actual size |
 |---|---|---|---|
-| **daily** | `home-assistant-config`, `unifi-config`, `unifi-mongo`, `forgejo/gitea-shared-storage`, the CNPG instance volumes (`infisical-pg-*`, `forgejo-pg-*`, `grafana-pg-*`, `oracle-pg-*`), `coordinator-transcripts` (×5) | irreplaceable state. A CNPG volume snapshot is crash-consistent, which Postgres recovers from. CNPG-native `ScheduledBackup` ([`postgres.md`](postgres.md)) would be better and stays a separate choice | ≈ 14 G |
+| **daily** | `home-assistant-config`, `unifi-config`, `unifi-mongo`, `forgejo/gitea-shared-storage`, `coordinator-transcripts` (×5) | irreplaceable state | ≈ 5 G |
+| **none — CNPG backs itself up** | the CNPG instance volumes (`infisical-pg-*`, `forgejo-pg-*`, `grafana-pg-*`, `oracle-pg-*`) | the Barman Cloud plugin into `cnpg-<ns>` buckets on this same Garage: WAL + daily base backups, consistent, one copy per database instead of two (ADR-147, [`postgres.md`](postgres.md) §Backups). A block backup of these is ~full every day (2 MiB amplification) | —
 | **none — rebuildable** | the registry/pypi/npm/nix/uv caches, `mirror-*`, `arc-uv-cache`, `registry-data` (CI rebuilds it), `devbox-search-data`, eventbus JetStream, `redis` | a cache re-warms. A day of slow builds is the cost, not data loss | — |
 | **none — accepted loss** | `prometheus-*`, `data-loki-0`, `alertmanager`, `pushgateway` | telemetry history. Losing it is acceptable | — |
 | **none — own replication** | `data-garage-*`, `meta-garage-*` | Garage rf=3 across three zones. 340 G does not fit here, and backing up Garage means bucket-level copies off-site, not block backups | — |
