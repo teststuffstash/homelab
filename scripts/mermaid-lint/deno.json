@@ -1,6 +1,6 @@
 {
   "imports": {
-    "mermaid": "npm:mermaid@11.17.2",
+    "mermaid": "npm:mermaid@12.0.0",
     "linkedom": "npm:linkedom@0.18.13"
   },
   "minimumDependencyAge": "P7D"
