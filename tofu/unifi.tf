@@ -254,7 +254,7 @@ resource "kubernetes_deployment" "unifi" {
         # If this sidecar dies the pushed value freezes and the alert fires anyway — the safe side.
         container {
           name  = "backup-age"
-          image = "alpine:3.20"
+          image = "alpine:3.24"
           command = ["sh", "-c", <<-EOT
             PG=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
             while true; do
