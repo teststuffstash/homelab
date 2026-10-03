@@ -1,0 +1,39 @@
+# CNPG availability belt that the instance belts cannot see (the rest of the CNPG rules live in
+# argocd/platform/values/kube-prometheus-stack.yaml; this one is a CR so its fixture is drift-pinned —
+# cnpg-availability.promtool-{rules,test}).
+#
+# The -rw Service is a cluster's ONLY write path, and CNPG empties it the moment a switchover starts
+# (the old primary is labelled unhealthy) — every instance can stay Ready meanwhile. Found 2026-10-03
+# (the ADR-147 rollout): a switchover deadlocked on WAL archiving left grafana-pg 10:23–10:33Z and
+# forgejo-pg 10:35–10:45Z with no writable primary and nothing fired. Replay of this expr: exactly
+# those two windows, and nothing else in 7 days but 1-minute cluster bootstraps (`for` absorbs them).
+# An EMPTY EndpointSlice exports kube_endpointslice_info but no kube_endpointslice_endpoints at all,
+# hence `unless`; `cnpg_collector_up` restricts it to namespaces that run CNPG.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cnpg-availability
+  namespace: monitoring
+  labels:
+    app: pg-backup
+spec:
+  groups:
+    - name: cnpg-availability
+      rules:
+        - alert: CNPGNoWritablePrimary
+          expr: |
+            (
+              kube_endpointslice_info{endpointslice=~".+-rw-[a-z0-9]{5}"}
+                unless on (namespace, endpointslice) kube_endpointslice_endpoints{ready="true"}
+            )
+            and on (namespace) count by (namespace) (cnpg_collector_up)
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CloudNativePG cluster in {{ $labels.namespace }} has no writable primary"
+            description: >-
+              The {{ $labels.endpointslice }} Service in {{ $labels.namespace }} has had no ready
+              endpoint for 3m — the CNPG cluster has no writable primary and its apps cannot write.
+              Read the Cluster status (currentPrimary vs targetPrimary, phase) and the operator log;
+              a switchover waiting on the old primary is the known shape (docs/postgres.md §Backups).

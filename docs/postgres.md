@@ -96,10 +96,26 @@ bucket and key; no tenant can read another's backups.
 
 | you want | do |
 |---|---|
-| nothing (the default) | nothing — after your next `Cluster` apply it carries `spec.plugins: [barman-cloud…]`; that line is the platform's, not drift |
+| nothing (the default) | nothing — a NEW `Cluster` is created wired (`spec.plugins: [barman-cloud…]` appears; that line is the platform's, not drift) |
+| an EXISTING cluster in a newly-stored namespace wired | the seat runs `devbox run pg-backup-wire -- <ns>/<cluster>` in a maintenance window — never a bare re-apply (below) |
 | no backups for a throwaway cluster | annotate it `homelab.io/pg-backup: disabled` |
 | a backup NOW (before a risky change) | the seat runs `devbox run pg-backup-now` — every cluster, waits, exit 0 only if all completed |
 | a namespace that has no store yet | ask the platform: a `store-<ns>.yaml` in `argocd/resources/pg-backup/` + the bucket. Until then the daily job reports your cluster UNCOVERED and fails, so it is seen |
+
+Backups are taken **from the primary**: its `pg_backup_stop` waits until the backup's WAL is in the
+store, so a completed backup is restorable at once. A standby backup is not — on 2026-10-03 one
+reported `completed` four minutes before its WAL was archived, and one taken from a standby that had
+just rejoined after a failover could not be restored at all (*"unexpected timeline ID"*).
+
+**Why wiring a running cluster is a verb, not an apply.** Adding the plugin changes the running
+primary's `archive_command` at once, before its pod has the plugin sidecar; the rolling update's
+switchover then waits for that primary to archive its last WAL — which it cannot — and CNPG has
+already emptied the `-rw` Service. Result: no writable primary until `switchoverDelay` (1 h). The
+2026-10-03 rollout hit it on grafana-pg and forgejo-pg (~10 min each, nothing alerted —
+`CNPGNoWritablePrimary` now does). So the admission policy wires only new clusters, re-asserts
+already-wired ones, and wires a running one only on the explicit `homelab.io/pg-backup: wire`
+request that `pg-backup-wire` makes: it waits for the switchover to start, checks the old primary's
+LSN equals the target's, and fails it over at once (`-rw` gap 16–17 s on infisical-pg and oracle-pg).
 
 **Restore** (the "the upgrade broke everything" path: accept the loss since the backup, rebuild
 from it). A new `Cluster` bootstraps from the store, under a NEW name — its old name's WAL is in
@@ -116,8 +132,11 @@ spec:
         parameters: { barmanObjectName: pg-backup, serverName: <old cluster name> }
 ```
 
-A recovery-bootstrapped cluster is **not** auto-wired. After it is healthy, add the plugin by hand
-(`isWALArchiver: true`, `barmanObjectName: pg-backup`) or the job reports it UNCOVERED. Point the
+Proven 2026-10-03: infisical-pg restored from a primary backup into `infisical-pg-drill` (same
+namespace, 1 instance) — healthy in 85 s, all 704 tables with identical row counts. To restore a
+specific backup rather than the latest, add `backup: { name: <Backup CR> }` under `recovery`.
+A recovery-bootstrapped cluster is **not** auto-wired: once it is healthy, `devbox run
+pg-backup-wire -- <ns>/<name>`, or the daily job reports it UNCOVERED. Point the
 app at the new `-rw` Service/secret (or restore under the old name in a fresh namespace).
 **After a total loss**, Infisical (which feeds the store credentials) is itself on a CNPG volume:
 seed `pg-backup-s3` in `infisical` from the wallet (`cnpg-backup-infisical-{key-id,secret}`, keys

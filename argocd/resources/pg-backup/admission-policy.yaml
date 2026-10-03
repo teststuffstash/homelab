@@ -1,7 +1,18 @@
 # Wire every CNPG Cluster to its namespace's backup store at admission (ADR-147) — the "default for
 # everybody": a Cluster's own repo declares nothing. Adds the Barman Cloud plugin as WAL archiver
 # with `barmanObjectName: pg-backup` (the ObjectStore in store-<ns>.yaml); serverName defaults to the
-# Cluster's name. Existing Clusters pick it up on their next UPDATE.
+# Cluster's name.
+#
+# WHEN it injects — never into a RUNNING, unwired cluster on an arbitrary update:
+#   • CREATE — a new cluster starts with the plugin; nothing is running yet.
+#   • UPDATE of a cluster that was ALREADY wired — re-asserts it, so an apply that drops the field
+#     cannot silently unwire it.
+#   • UPDATE carrying `homelab.io/pg-backup: wire` — the deliberate act, `devbox run pg-backup-wire`.
+# Wiring a running cluster changes the PRIMARY's archive_command at once, before its pod has the
+# plugin sidecar; the rolling update's switchover then waits for that primary to archive its last
+# WAL, which it cannot, and CNPG has already emptied the -rw Service — a write outage until
+# switchoverDelay (1 h). Found live 2026-10-03 (grafana-pg, forgejo-pg: ~10 min each). The wire verb
+# replaces that wait with an LSN-checked failover (scripts/pg-backup.sh).
 #
 # Skipped, each on purpose:
 #   • a namespace with no store — archiving into a missing store fails, and failed archiving keeps
@@ -36,6 +47,12 @@ spec:
       expression: "!has(object.spec.backup) && (!has(object.spec.plugins) || !object.spec.plugins.exists(p, p.name == 'barman-cloud.cloudnative-pg.io'))"
     - name: not-a-recovery
       expression: "!has(object.spec.bootstrap) || !has(object.spec.bootstrap.recovery)"
+    - name: create-or-already-wired-or-wire-requested
+      expression: >-
+        request.operation == 'CREATE'
+        || (has(oldObject.spec.plugins) && oldObject.spec.plugins.exists(p, p.name == 'barman-cloud.cloudnative-pg.io'))
+        || (has(object.metadata.annotations) && 'homelab.io/pg-backup' in object.metadata.annotations
+            && object.metadata.annotations['homelab.io/pg-backup'] == 'wire')
   # dyn(): a CEL map literal must be homogeneous — mixed string/bool/map values fail to compile.
   mutations:
     - patchType: JSONPatch

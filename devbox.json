@@ -159,7 +159,10 @@
         "bash scripts/garage-backup.sh \"$@\""
       ],
       "pg-backup-now": [
-        "bash scripts/pg-backup-now.sh \"$@\""
+        "bash scripts/pg-backup.sh now"
+      ],
+      "pg-backup-wire": [
+        "bash scripts/pg-backup.sh wire \"$@\""
       ],
       "github-secrets-sync": [
         "bash scripts/github-secrets-sync.sh \"$@\""
