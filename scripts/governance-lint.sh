@@ -31,7 +31,8 @@ GOVERNANCE='^(\.github/|\.agents/|scripts/(node-maintenance|maintenance-window|c
 # The worker App's PR-author login. Event context shows "homelab-agents-1234[bot]" (the REST
 # surface; GraphQL shows "app/homelab-agents-1234" — the known [bot]-suffix mismatch), so match
 # on the App NAME prefix and neither suffix shape matters. Deliberately NOT "any [bot]":
-# renovate[bot] must keep its update lane.
+# renovate[bot] must keep its update lane. Every login shape is pinned by
+# scripts/governance-lint-test.sh (FU-296) — change the pattern, run that.
 WORKER_PATTERN="${WORKER_PATTERN:-^(app/)?homelab-agents}"
 
 author="${PR_AUTHOR:-}"
