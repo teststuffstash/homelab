@@ -360,11 +360,11 @@ tests:
   - interval: 1m
     name: "a belt check failing for two hours pages and names itself; a transient one does not"
     input_series:
-      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="talos",status="fail"}'
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="talos",status="fail",reason="skew"}'
         values: "1x200"
-      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="ansible",status="fail"}'
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="ansible",status="fail",reason="unreachable"}'
         values: "1x30"
-      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="substrate",status="pass"}'
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="substrate",status="pass",reason="ok"}'
         values: "1x200"
     alert_rule_test:
       # t=1h: talos is pending (30 min short of the 2h `for:`), ansible's series went away 25 min
@@ -382,4 +382,29 @@ tests:
               instance: "192.168.2.53:9100"
               mode: belt
               check: talos
+              status: fail
+
+  # ── THE REASON LABEL (2026-10-03, responder audit) ───────────────────────────────────────────
+  # mgmt_probe_check carries a bounded `reason` word (mgmt-probe.sh REASONS). The rule aggregates it
+  # OUT, so (a) the alert's labels above carry no reason, and (b) a check whose reason flips between
+  # ticks is still ONE standing failure: ansible unreachable for an hour, then failed (the node came
+  # back answering errors) — the 2h `for:` keeps counting from t=0. With `reason` in the alert's
+  # identity the second series would restart the clock at 1h01m and nothing would fire at 2h05m.
+  - interval: 1m
+    name: "a belt check whose reason flips is one standing failure — the for: does not restart"
+    input_series:
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="ansible",status="fail",reason="unreachable"}'
+        values: "1x60 _x100"
+      - series: 'mgmt_probe_check{job="mgmt-node",instance="192.168.2.53:9100",mode="belt",check="ansible",status="fail",reason="failed"}'
+        values: "_x60 1x100"
+    alert_rule_test:
+      - eval_time: 2h5m
+        alertname: MgmtBeltCheckFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: mgmt-node
+              instance: "192.168.2.53:9100"
+              mode: belt
+              check: ansible
               status: fail
