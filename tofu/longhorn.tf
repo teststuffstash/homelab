@@ -40,6 +40,15 @@
 # longer re-renders configs against the new minor's contract: talos.tf pins
 # `local.talos_config_contract` apart from the install version, so moving it past 1.13 is its own
 # deliberate PR — read that plan for this document.
+# The PVC labels that put a volume in the daily Longhorn backup (FU-299): the RecurringJob is
+# argocd/resources/longhorn-backup/recurringjob.yaml, the class table docs/longhorn-backup.md.
+locals {
+  longhorn_daily_backup_labels = {
+    "recurring-job.longhorn.io/source"             = "enabled"
+    "recurring-job-group.longhorn.io/daily-backup" = "enabled"
+  }
+}
+
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string

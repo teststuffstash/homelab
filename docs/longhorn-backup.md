@@ -21,6 +21,7 @@ on nx-02**. Its rootfs is 400 G thin on nx-02's 700 G SA400 `local-lvm` pool. S3
 | BackupTarget `default` | `tofu/longhorn.tf` chart values `defaultBackupStore` (`s3://longhorn-backup@garage/`) |
 | credential Secret `longhorn-system/longhorn-backup-target` | ExternalSecret in `argocd/resources/longhorn-backup/` ← Infisical `LONGHORN_BACKUP_{KEY_ID,SECRET}` |
 | canonical key | wallet `longhorn-backup-key-id` / `longhorn-backup-secret` |
+| the daily job | RecurringJob `daily-backup` (02:00Z, retain 14, concurrency 2) — same dir; a volume joins via labels on its PVC (below) |
 | belts | `LonghornBackupTargetDown` (blackbox `/health`), `LonghornBackupStale` (newest backup > 36 h) — same dir, promtool-pinned |
 
 **Why outside Longhorn.** The in-cluster Garage rides `longhorn-local-xfs`. A Longhorn failure
@@ -40,12 +41,17 @@ originals. The off-site copy is what closes the gap for a whole-site loss.
 
 ## Classes — which volumes are backed up
 
-Read live on 2026-10-03 (43 volumes). This is a **proposal until the RecurringJob lands**; the
-class is per PVC.
+Read live on 2026-10-03 (43 volumes). The class is per PVC: a **daily** PVC carries
+`recurring-job.longhorn.io/source: enabled` + `recurring-job-group.longhorn.io/daily-backup:
+enabled`, set where the PVC is declared (`local.longhorn_daily_backup_labels` in `tofu/longhorn.tf`
+for the tofu-owned ones, `persistence.labels` in `argocd/platform/forgejo.yaml`). Every other
+volume carries no recurring-job label and is backed up by nothing.
 
 | Class | Volumes | Why | Actual size |
 |---|---|---|---|
-| **daily** | `home-assistant-config`, `unifi-config`, `unifi-mongo`, `forgejo/gitea-shared-storage`, `coordinator-transcripts` (×5) | irreplaceable state | ≈ 5 G |
+| **daily** | `home-assistant-config`, `unifi-config` (with the UniFi `.unf`, §UniFi), `forgejo/gitea-shared-storage` | irreplaceable state | ≈ 2 G |
+| **none — the .unf covers it** | `unifi-mongo` | the settings-only `.unf` on `unifi-config` restores the controller; what Mongo adds is statistics (§UniFi) | — |
+| **none — the record is Garage** | `coordinator-transcripts` (×5) | a working mirror: the session exit trap uploads every file to `s3://agent-transcripts` (`agents/coordinator/transcripts-pvc.yaml`) | — |
 | **none — CNPG backs itself up** | the CNPG instance volumes (`infisical-pg-*`, `forgejo-pg-*`, `grafana-pg-*`, `oracle-pg-*`) | the Barman Cloud plugin into `cnpg-<ns>` buckets on this same Garage: WAL + daily base backups, consistent, one copy per database instead of two (ADR-147, [`postgres.md`](postgres.md) §Backups). A block backup of these is ~full every day (2 MiB amplification) | — |
 | **none — rebuildable** | the registry/pypi/npm/nix/uv caches, `mirror-*`, `arc-uv-cache`, `registry-data` (CI rebuilds it), `devbox-search-data`, eventbus JetStream, `redis` | a cache re-warms. A day of slow builds is the cost, not data loss | — |
 | **none — accepted loss** | `prometheus-*`, `data-loki-0`, `alertmanager`, `pushgateway` | telemetry history. Losing it is acceptable | — |
@@ -78,6 +84,26 @@ The steps, as run:
 Cleanup: delete the namespace (the PV's `Delete` reclaim takes the volume), then the `Backup` and
 the `BackupVolume`. Deleting those also removes the objects from the target.
 
+## UniFi — a settings-only export, not the database
+
+The controller writes a **settings-only autobackup** (`autobackup_<version>_<date>.unf`, ~45 KB,
+7 kept) to `/config/data/backup/autobackup/` on `unifi-config` **daily at 01:00Z**; the Longhorn
+job at 02:00Z carries it off the cluster. Restore = a fresh controller (empty Mongo) → the setup
+wizard's "restore from backup" with that file. Client/traffic history is not kept, by choice.
+
+The schedule is controller state, not code: `unifi.scheduletask` (`action: backup`, `cron_expr`)
+is what the scheduler reads at startup — `setting.super_mgmt.autobackup_cron_expr` is only the
+UI's copy, and changing it alone does nothing. Settings-only is `super_mgmt.autobackup_days: 0`.
+A change takes a controller restart. A restored `.unf` brings the schedule back with it.
+
+**Why the autobackup had never worked (found 2026-10-03).** It was monthly, and its one run in
+range (10-01 00:30Z) failed with `MongoSocketReadException`: the backup's read of
+`unifi.network_heartbeat` hit a WiredTiger checksum error and panicked `mongod` (`potential
+hardware corruption … WT_PANIC`) — the cause of the pod's restarts. Every other collection
+validated clean; the corrupt one held a single heartbeat document and was dropped (a Longhorn
+snapshot `pre-fu299-unifi-mongo` was taken first). The first daily-schedule `.unf` was written
+the same evening.
+
 ⚠ **`LonghornBackupStale`'s unit is unverified.** The drill volume was deleted before
 `longhorn_volume_last_backup_at` left 0, so the metric never showed a real value. The rule
 assumes epoch seconds. Read the metric after the first RecurringJob run, and fix the rule if it is
@@ -99,6 +125,6 @@ Then restore Infisical's CNPG volumes first. ESO takes the Secret back over once
 
 The FU tracks these, not this doc:
 
-- the daily RecurringJob for the **daily** class
 - the off-site second copy
+- a belt for a failing or stale UniFi `.unf` (no metric sees the file today)
 - a periodic restore drill
