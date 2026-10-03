@@ -104,10 +104,9 @@ validated clean; the corrupt one held a single heartbeat document and was droppe
 snapshot `pre-fu299-unifi-mongo` was taken first). The first daily-schedule `.unf` was written
 the same evening.
 
-⚠ **`LonghornBackupStale`'s unit is unverified.** The drill volume was deleted before
-`longhorn_volume_last_backup_at` left 0, so the metric never showed a real value. The rule
-assumes epoch seconds. Read the metric after the first RecurringJob run, and fix the rule if it is
-not seconds.
+**`longhorn_volume_last_backup_at` is epoch seconds** — read 2026-10-03 after the first
+`daily-backup` run (1791049636 against `date +%s` 1791049672), so `LonghornBackupStale` stands as
+written. That run backed up all three daily volumes in under a minute (≈2 G).
 
 **After a total loss**, Infisical is gone too, because it rides Longhorn. Seed the Secret from the
 wallet first:

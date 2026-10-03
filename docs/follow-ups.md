@@ -142,9 +142,9 @@ six OVERSIZE items pointer-ized into
       Longhorn → [`longhorn-backup.md`](longhorn-backup.md); Postgres → [`postgres.md`](postgres.md) §Backups (plugin,
       admission-wired, daily + `pg-backup-now`; infisical-pg restore 85 s, 704/704 tables). Rollout incident:
       [`2026-10-03-cnpg-wire-switchover-deadlock`](incidents/2026-10-03-cnpg-wire-switchover-deadlock.md).
-      **Next:** Longhorn daily RecurringJob for the doc's **daily** class (≈5 G; then read
-      `longhorn_volume_last_backup_at`'s unit) → UniFi as a settings-only `.unf` instead of `unifi-mongo`
-      (operator's call) → off-site copy (`scripts/garage-backup.sh`'s parked offsite bucket) → knobs (retention/cadence).
+      Daily job + UniFi settings-only `.unf` (01:00Z; the never-working autobackup was a corrupt Mongo
+      collection, dropped) = PR#2196, applied + first run 2026-10-03 (3 backups, unit = epoch s).
+      **Next:** a `.unf` staleness belt → off-site copy (operator: later) → a periodic restore drill.
 - [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
       action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
       Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
