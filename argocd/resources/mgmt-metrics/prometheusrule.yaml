@@ -199,7 +199,7 @@ spec:
           # 2 h = 8 ticks. A single tick can fail on a transient (an upstream fetch, a
           # port-forward, a node mid-reboot); eight in a row is a standing condition.
           for: 2h
-          # triage none: audit 2026-10-03: cause only in the management box journal
+          # triage none: self-describing since #2195's reason label; the remedy is a box, router or window job
           labels: { severity: warning, triage: none }
           annotations:
             summary: >-
