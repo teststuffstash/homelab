@@ -98,6 +98,8 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: warning
+          # CNPGNoWritablePrimary (the -rw Service has no endpoint) lives in argocd/resources/pg-backup/
+          # prometheusrule.yaml — a CR, so its fixture is drift-pinned (values-defined rules are not).
           - alert: CNPGInstanceExporterDown
             annotations:
               description: The CNPG collector on {{ $labels.pod }} can't reach Postgres for 5m — the instance is unhealthy or the exporter is failing.

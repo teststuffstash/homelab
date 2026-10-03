@@ -2633,5 +2633,7 @@ whole cluster in about a minute (spike: 200k rows, identical checksum, 62 s), co
 construction; the default reaches stack clusters without touching their repos. **Consequences:**
 the namespace list lives in three places (policy, `store-<ns>.yaml`, the bucket list) — the job's
 UNCOVERED verdict is the belt; a cluster restored by `recovery` is not auto-wired (its own name's WAL
-is already in the store); retention `14d`, cadence daily, no knobs yet. Mechanism + restore:
-[`postgres.md`](postgres.md) §Backups.
+is already in the store); retention `14d`, cadence daily, no knobs yet. **Amended same day (rollout):** a RUNNING cluster
+is wired only by the explicit `pg-backup-wire` verb (an apply-time wire deadlocks the switchover,
+~10 min write outage on two clusters), and backups target the primary (a standby backup was not
+restorable). Mechanism + restore: [`postgres.md`](postgres.md) §Backups.
