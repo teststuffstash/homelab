@@ -165,17 +165,11 @@ never the session's arc — that is TICK-LOG's.)
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
-- **⚑ RESPONDER UN-PAUSE (FU-249, due 2026-09-23 — on the operator list).** When it is re-enabled, run
-  this read-list in order. First delete the never-matching `alert-dep` filter in
-  `agents/coordinator/responder-argo.yaml`, which reverts #1746. Then:
-  (a) `responder_triage_sessions_today` for a day should sit well under the 09-11→16 ceiling of
-  11–12/day.
-  (b) `responder-seen` should gain `none-`/`window-`/`humandecided-`/`decided-` markers.
-  (c) The `agent-transcripts/homelab/` prefix should exist (FU-210's acceptance: a report-only session
-  still leaves a readable decision).
-  (d) One real `node-maintenance` window should cost no session (FU-230 leg b).
-  Known one-time cost: the FU-232 re-key files ONE fresh issue per affected (alert, object). That burst
-  is not a regression.
+- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Step (1)
+  LIVE (PR#2193: every rule carries `triage`, upstream via the relabel map). Next: the subject-key residuals
+  (FU-249 (2)) → route `triage="now"` with the crosscheck and §routing test, then delete the filter → the
+  grouped deep dig. oracle-fleet's own rules (ert-pipeline ×2, oracle-gateway ×3) still carry no `triage` —
+  the stack's lane (`patterns/observability.md` §3).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.
   Theme #1907's assembly (`goal/1906-scan → master`) is the one codeowner read, and it has not been

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-303** (2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-304** (2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -232,7 +232,11 @@ six OVERSIZE items pointer-ized into
       `allure-reports` burst), 09-16, 09-22. garage-2 is still on wk-metal-01 (read 2026-09-24).
       **Next, in order:** (1) garage-2 off the X240 (the third std SFF; ledger via FU-137); (2) THEN
       alerts on `garage:s3_latency_seconds:{p50,p99}_5m` per endpoint + the 30d burn rate; (3) attribute
-      one CI-hour window by bucket from the S3 access log (the #499 method). Link: FU-093, FU-137.
+      one CI-hour window by bucket from the S3 access log (the #499 method). **Resight 2026-10-03 — a
+      NIGHTLY shape:** since 09-30, 00:10Z → up to 02:30Z, wk-metal-01 `sdb` ~90 % busy (m70s/wk-metal-04
+      NVMe ~18 %), health probes 2 s, write-probe 3 s, growing nightly — `GarageClusterFlapping` ×3,
+      `NodeDiskIOSaturation`, `NodeMemoryMajorPagesFaults`; no cluster cron at 00:00, cause unread
+      (a Garage-internal daily worker?) — read it in (3). Link: FU-093, FU-137.
 - [ ] **FU-280** — **The first-party registry left Garage S3 — soak, then remove the S3 half. POINTER.**
       CUT OVER 2026-09-24 14:50Z (operator: "just roll it out"; ADR-121 amended): `registry.teststuff.net`
       is served by `registry-fs` on the 150Gi `registry-data` volume (#1961, #1962), verified via VIP and
@@ -555,9 +559,13 @@ the block needs pruning, not more headings.
       cron-woken ≈ 0 once soaked); (b) `Touches:` fence demotion + governance lint = Bucket A4.
       Evidence: [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
       findings 4–5. **⚠ The (a) soak read FAILED 2026-08-25**: `changes(cron_woken[24h])` = 2
-      and 5 — #459 fires legitimately, a dead doorbell edge remains. **Next:** the emitter hunt
-      (the scan states wake source per dispatch), on #459; then A4's fence half; close when
-      cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
+      and 5 — #459 fires legitimately, a dead doorbell edge remains. **2026-10-03 hunt found four**
+      (oracle-fleet pr-780 ×11 cron dispatches, 10-02): (A) the scan labels `agent/arbitrate` and rings
+      nothing (`coordinator-scan.sh` no-op/exhausted paths); (B) the exporter skips CI/conflict rings on
+      arbitrate PRs; (C) a lane walk dispatches one unit and leaves the second for the cron; (D) the
+      gauge is stamped before a refused dispatch, and `unarmed-major` (cron-woken by design, FU-290) counts.
+      **Next:** fix A–D (A/C/D `agents/` — codeowner merge; B the exporter — machine merge); then A4's
+      fence half; close when cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
 
 - [ ] **FU-169** — **Differential coverage as a REVIEW INPUT (operator design, 2026-08-13).**
       The reviewer can't see whether a PR improves or reduces coverage; the blanket per-repo
@@ -1007,6 +1015,14 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
+- [ ] **FU-303** — **etcd is not scraped; scheduler + controller-manager only on cp-01.** Found by the
+      2026-10-03 upstream triage classification (ADR-148): no etcd job in `up` at all, so the 13 stock
+      etcd alerts can never fire on a 3-CP cluster (ADR-133); `kube-scheduler`/`kube-controller-manager`
+      targets exist for cp-01 only — cp-02 and wk-metal-02 are unwatched. Deferred: the fix is a Talos
+      machine-config change on all three CPs, a maintenance window. **Next:** metrics listen addresses
+      (`cluster.etcd.extraArgs listen-metrics-urls`, scheduler/controller-manager `bind-address`) via
+      the CP config patch, then the chart's `kubeEtcd`/`kubeScheduler`/`kubeControllerManager` endpoints.
+
 - [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** Three instances: the sync
       manager's in-memory state corrupted under a failure storm (2026-08-31, "5/5" against an empty
       semaphore); a BENIGN twin with the same signature (2026-09-12, latched `respond-*` holding
@@ -1110,8 +1126,9 @@ the block needs pruning, not more headings.
       produces, for the ones carrying no `node`/`instance`/pod label at all — a ConfigMap, so the
       FU-195 durability caveat is retired. Mechanism: [`agents/roles.md`](agents/roles.md)
       §responder; evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md).
-      **Next:** at FU-249's un-pause, run one real `node-maintenance` window and confirm the
-      DaemonSet-rollout class costs no triage session.
+      **Next:** at FU-249's step (3), run one real `node-maintenance` window and confirm the
+      DaemonSet-rollout class costs no triage session; and a STALE declared window mutes its names
+      cluster-wide (a 09-30 one stood ~2 days, closed 10-02) — the `now` lane needs a window-expiry belt.
 - [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
       (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
       `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage
@@ -1193,7 +1210,10 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, history (Longhorn
       metering 2026-08-04, the ADR-089 quota arming 2026-08-07, the 08-24 third-100% incident, the
-      09-03 fourth) and status detail: [`docs/storage-ledger.md`](storage-ledger.md). Garage
+      09-03 fourth) and status detail: [`docs/storage-ledger.md`](storage-ledger.md). ⚠ 2026-10-03:
+      hp-01/hg5d under the scheduling floor holds a 57 GB SYSTEM snapshot (markRemoved, 09-29) on the
+      Prometheus volume's replica — `LonghornDiskBelowSchedulingFloor`'s text blames the image store (not
+      on that disk); fix the text, clear the snapshot, and (a) below is the class fix. Garage
       metrics SHIPPED (#934 → #965); pve fstrim SCHEDULED (PR#925); **pve thin-pool meter BUILT
       2026-09-04 (PR#1367)** — node_exporter textfile on the hypervisor, `PveThinPool*` /
       `PveVmIoError` belts, ci-runner-01's own `fstrim.timer` VERIFIED enabled+active on the
@@ -1312,7 +1332,7 @@ the block needs pruning, not more headings.
       disk); (2) DONE 2026-09-28: the operator pulled the WD, the SA400 is the only INT13 disk; UEFI
       boot mode stays the structural fix. Window side-effect, documented class (runbook §Single worker
       maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
-      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. (3) 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60/62.5 GiB booked after the two OPNsense VMs; no swap). The structural fix is RAM: 4 × 16 GB into the empty C1/D1/G1/H1 channels. Operator is watching for a bulk lot (hardware `market/2026-09-30-rdimm-price-guide.md`). Relates FU-266, FU-280.
+      `LonghornNodeOverProvisioned` (160 %); moved back to wk-04 by hand 2026-09-28. (3) 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60/62.5 GiB booked after the two OPNsense VMs; no swap). The structural fix is RAM: 4 × 16 GB into the empty C1/D1/G1/H1 channels. Operator is watching for a bulk lot (hardware `market/2026-09-30-rdimm-price-guide.md`). Relates FU-266, FU-280. (4) 2026-10-03 read: 60 of 62.8 GiB dedicated (wk-04 32, cp-02 12, ci-runner-02 12, 2×OPNsense 2); swap 1.2 GiB from 09-30 (the opnsense-nx02 build), cold pages — PSI memory ~0, swap-in median 0.2 KB/s, guest steal <0.02 %; `PveHostSwapUsed`/`PveGuestSwapped` are `triage: none` placement facts (ADR-148).
 - [ ] **FU-285** — **Pulling a Longhorn disk silently CO-LOCATES both replicas, and
       `replica-replenishment-wait-interval` does NOT prevent it.** 2026-09-23 wk-metal-04 swap:
       with `intel0`/`intel1` out ~70 min, all four `bulk` cache volumes rebuilt onto `wk-metal-01`
@@ -1391,12 +1411,15 @@ the block needs pruning, not more headings.
       Either way the Workspace must be able to go green. Link: [`docs/cloudflare.md`](cloudflare.md)
       §PublicRoute completion table (RUM row, #1311).
 
-- [ ] **FU-249** — **Responder PAUSED 2026-09-16 (operator: "still doing only noise") — re-enable ≈2026-09-23.**
-      The `responder` Sensor's `alert-dep` carries a never-matching data filter
-      (`agents/coordinator/responder-argo.yaml`); WorkflowTemplate, Role and seen-cache untouched.
-      Alerts still fire in Alertmanager/Grafana — only the issue-filing stops. **Next:** after the
-      FU-230/FU-231 soak of PR#1733's four legs, delete the filter (one revert) and watch
-      `responder_triage_sessions_today` for a day. Relates FU-230, FU-231, ADR-122.
+- [ ] **FU-249** — **Responder PAUSED 2026-09-16 → REPLACED, not re-enabled (ADR-148, 2026-10-03): POINTER.**
+      The Sensor's never-matching `alert-dep` filter stays until the replacement lands. Evidence (the
+      09-26→10-03 old-vs-new replay, the per-alert digs): [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
+      §2026-10-03. **Next, in order:** (1) DONE 2026-10-03 — the `triage: none|now|dig` label on every
+      rule + the upstream relabel map + the lint (PR#2193, live; oracle-fleet's 5 stack rules still unlabelled); (2) the FU-232 subject residuals the audit found
+      (kube-state-metrics pod alerts keyed `alert:<name>`/the exporter IP, github-exporter + pushgateway jobs
+      missing from the reporter list, the `job=kubelet` witness fixture, a subject ledger blind to alertname);
+      (3) route `triage="now"` + crosscheck + `responder-behaviour-test` §routing + roles.md, then delete the
+      filter; (4) the grouped deep dig (FU-231's consumer leg is its output). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat in Loki
       (`{namespace="loki",container="kmsg-reader"} |~ "kernel BUG at|Oops:"`, node-labelled) from
       2026-09-10 09:38 and nothing read it for six days. **Detector LANDED + PROVEN LIVE 2026-09-23**
