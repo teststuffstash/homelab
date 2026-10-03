@@ -2,8 +2,8 @@
 # — explicit, reviewable manifests rather than an opaque chart.
 #
 # Storage: Longhorn (replicated, default StorageClass) — dynamically provisioned, so the
-# pod is NOT node-pinned and reschedules freely across the iscsi-capable nodes. Data
-# backs up to object storage later (FU-013).
+# pod is NOT node-pinned and reschedules freely across the iscsi-capable nodes. The config
+# volume is in the daily Longhorn backup (docs/longhorn-backup.md).
 provider "kubernetes" {
   host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
   client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)
@@ -23,6 +23,7 @@ resource "kubernetes_persistent_volume_claim" "ha" {
   metadata {
     name      = "home-assistant-config"
     namespace = kubernetes_namespace.ha.metadata[0].name
+    labels    = local.longhorn_daily_backup_labels
   }
   spec {
     access_modes       = ["ReadWriteOnce"]

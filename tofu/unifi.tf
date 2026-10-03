@@ -10,6 +10,11 @@
 # Storage: Longhorn (replicated, default StorageClass) for both the Mongo data and the
 # UniFi config — dynamically provisioned, so neither pod is node-pinned.
 #
+# Backup: the controller writes a settings-only autobackup (.unf, ~45 KB) to unifi-config daily
+# at 01:00Z, and unifi-config is in the daily Longhorn backup; unifi-mongo is NOT backed up — the
+# .unf restores the settings, the rest is statistics (docs/longhorn-backup.md §UniFi). The
+# schedule is controller state in Mongo (`unifi.scheduletask`, action backup), not code here.
+#
 # Secrets: Mongo root + the unifi DB password are generated (random_password, kept in
 # tofu state which is gitignored) — nothing sensitive in git.
 
@@ -81,6 +86,7 @@ resource "kubernetes_persistent_volume_claim" "config" {
   metadata {
     name      = "unifi-config"
     namespace = kubernetes_namespace.unifi.metadata[0].name
+    labels    = local.longhorn_daily_backup_labels
   }
   spec {
     access_modes       = ["ReadWriteOnce"]
