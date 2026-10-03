@@ -182,7 +182,8 @@ stalled-rollout case from `kube_node_info`, with no transport at all.
 
 ⚠ **Known hole:** Prometheus is in-cluster, so a cluster-down event blinds the detector. Acceptable
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
-work), but the spike's "alerts leave by two independent paths" has no second path yet.
+work). The spike's "alerts leave by two independent paths" was reframed 2026-10-02: no human
+notification, the box's own Prometheus-free view instead (FU-302, §Open, and deliberately not built yet).
 
 ### A standing refusal is a THIRD verdict shape, and nothing detects it
 
@@ -534,7 +535,9 @@ toggle. A surface enters with its first unattended success, never with a belief 
 do. Anchors (2026-09-13): the router, the control planes' substrate and Proxmox stay human; the
 raw-k8s residue belongs to the box; `provisioning` is the canary. On a box-applied surface the
 codeowner read becomes an **intent review** (does the plan + install-impact line do what the issue
-asked, given what the fleet and the box already run?). That reviewer instruction is not written yet.
+asked, given what the fleet and the box already run?). The reviewer instruction is in
+[`.agents/review.md`](../.agents/review.md) since 2026-09-28: intent and plan disagreeing is BLOCKING
+even when every check is green.
 
 | Surface | Toggle | Tested on its own | Evidence |
 |---|---|---|---|
@@ -995,10 +998,10 @@ this section.
 
 | Question | Why it waits |
 |---|---|
-| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review reviewer instruction is still unwritten |
+| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review instruction is live in `.agents/review.md` (2026-09-28) |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
-| The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
+| The second alert path | **Reframed by the operator 2026-10-02: no out-of-band human notification** ("if I am home I will notice, otherwise it burns until I get home"). The box needs its OWN verdict on the cluster for its gates, one that bypasses Prometheus (whose reads ride a Cilium BGP VIP): Talos API, kube API via the CP VIP, `kubectl exec` into cilium for BGP, LAN HTTP to the BGP VIPs, Prometheus/Alertmanager `/-/ready`. Most reads exist (the maintenance-window probes, the belt's node diff); the missing piece is one verdict function that `mgmt-apply` and `mgmt-reconcile` call — FU-302 |
 | The management network | designed (§MB4 item 7: range, static addressing, the two access verbs); built in the WAN-switch visit — the box's second NIC stanza, the BMC re-address, the verbs, FU-288's rotation |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 
