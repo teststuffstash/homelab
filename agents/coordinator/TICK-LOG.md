@@ -12107,3 +12107,17 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   `argocd/registry-cache` (60 d, no Argo tracking) duplicated `RegistryMirrorCacheAlmostFull` — found
   because it was the only platform rule still label-less after the sync. YAML saved before delete; the
   managed copy in ns `registry-cache` is the one left.
+
+## 2026-10-03 evening — FU-299: daily Longhorn job + UniFi settings-only `.unf` (seat, unattended)
+
+- **Operator call:** UniFi = settings-only export; off-site copy later.
+- **Found:** UniFi autobackup existed (monthly, settings-only) but had never produced a file — its
+  10-01 run panicked `mongod` on a WiredTiger checksum error in `unifi.network_heartbeat` (Loki:
+  `potential hardware corruption … WT_PANIC`), the cause of unifi-mongo's 6 restarts.
+- **Window seat-1791047885-4910 (closed clean):** Longhorn snapshots `pre-fu299-unifi-{mongo,config}`
+  → validated every collection (all clean but the one) → dropped the 1-doc collection → schedule set in
+  `unifi.scheduletask` (the `super_mgmt` cron is only the UI copy — first restart proved it ignored) →
+  test run wrote `autobackup_10.3.58_20261003_1729….unf` (44 KB) → daily 01:00Z, scheduler log confirms.
+  Three controller restarts.
+- **PR#2196** (auto-merge armed): RecurringJob `daily-backup` 02:00Z retain 14; PVC labels on HA config,
+  unifi-config, forgejo storage; unifi-mongo + coordinator-transcripts out of the daily class.
