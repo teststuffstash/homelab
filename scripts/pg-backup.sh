@@ -18,7 +18,8 @@
 #   policy's explicit-request condition), waits for the switchover to START, checks the old
 #   primary's LSN equals the target's, and fails the old primary over at once (-rw gap ~16 s,
 #   measured on infisical-pg and oracle-pg). A replica stuck in its shutdown (it waits on the same
-#   archive, up to stopDelay) is restarted after 60 s. Run it inside a maintenance window.
+#   archive, up to stopDelay) is restarted after 60 s. A single-instance cluster has no switchover:
+#   its one pod restarts in place (wire_single). Run it inside a maintenance window.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export NIX_CONFIG="experimental-features = nix-command flakes" DEVBOX_QUIET=1
@@ -56,6 +57,9 @@ wire() {
   k -n "$ns" annotate "$C" "$c" homelab.io/pg-backup=wire --overwrite >/dev/null
   k -n "$ns" get "$C" "$c" -o jsonpath='{.spec.plugins[*].name}' | grep -q barman-cloud \
     || { log "$ref: NOT injected — is $ns in the admission policy's list (store-$ns.yaml)?"; return 1; }
+  if [ "$(k -n "$ns" get "$C" "$c" -o jsonpath='{.spec.instances}')" = "1" ]; then
+    wire_single "$ns" "$c" "$ref" "$old"; return
+  fi
   # Wait for CNPG to start the switchover; restart a replica stuck in its shutdown meanwhile.
   for i in $(seq 1 400); do
     t=$(k -n "$ns" get "$C" "$c" -o jsonpath='{.status.targetPrimary}')
@@ -86,6 +90,37 @@ wire() {
     [ -n "$ep" ] && { log "$ref: -rw serving again ($ep)"; break; }
     sleep 2
   done
+  for i in $(seq 1 60); do
+    st=$(k -n "$ns" get "$C" "$c" -o jsonpath='{.status.phase}|{range .status.conditions[*]}{.type}={.status} {end}')
+    case "$st" in "Cluster in healthy state|"*ContinuousArchiving=True*) break ;; esac
+    sleep 10
+  done
+  k -n "$ns" annotate "$C" "$c" homelab.io/pg-backup- >/dev/null
+  log "$ref: $st"
+  case "$st" in "Cluster in healthy state|"*ContinuousArchiving=True*) ;; *) return 1 ;; esac
+}
+
+# A single-instance cluster has no switchover: CNPG restarts its one pod in place, and that pod's
+# shutdown waits on the same impossible archive (up to stopDelay). Restart it if it hangs — the
+# unarchived WAL stays on the volume and the new sidecar archives it. The outage is the restart.
+wire_single() {
+  local ns=$1 c=$2 ref=$3 pod=$4 st i del
+  log "$ref: single instance — CNPG restarts $pod in place (no switchover to wait for)"
+  for i in $(seq 1 200); do
+    del=$(k -n "$ns" get pod "$pod" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true)
+    [ -n "$del" ] && break
+    sleep 3
+  done
+  if [ -n "$del" ]; then
+    for i in $(seq 1 20); do
+      k -n "$ns" get pod "$pod" -o jsonpath='{.metadata.deletionTimestamp}' >/dev/null 2>&1 || break
+      sleep 3
+    done
+    if k -n "$ns" get pod "$pod" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null | grep -q .; then
+      log "$ref: $pod stuck in its shutdown after 60 s — restarting it"
+      k -n "$ns" delete pod "$pod" --grace-period=10 --wait=false >/dev/null || true
+    fi
+  fi
   for i in $(seq 1 60); do
     st=$(k -n "$ns" get "$C" "$c" -o jsonpath='{.status.phase}|{range .status.conditions[*]}{.type}={.status} {end}')
     case "$st" in "Cluster in healthy state|"*ContinuousArchiving=True*) break ;; esac
