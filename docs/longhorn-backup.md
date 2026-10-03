@@ -91,10 +91,19 @@ The controller writes a **settings-only autobackup** (`autobackup_<version>_<dat
 job at 02:00Z carries it off the cluster. Restore = a fresh controller (empty Mongo) → the setup
 wizard's "restore from backup" with that file. Client/traffic history is not kept, by choice.
 
-The schedule is controller state, not code: `unifi.scheduletask` (`action: backup`, `cron_expr`)
-is what the scheduler reads at startup — `setting.super_mgmt.autobackup_cron_expr` is only the
-UI's copy, and changing it alone does nothing. Settings-only is `super_mgmt.autobackup_days: 0`.
-A change takes a controller restart. A restored `.unf` brings the schedule back with it.
+**The schedule is code** (`local.unifi_autobackup_cron` in `tofu/unifi.tf`). It lives in Mongo —
+`unifi.scheduletask` (`action: backup`, `cron_expr`) is what the scheduler reads, **only at
+startup**; `setting.super_mgmt.autobackup_cron_expr` is the UI's copy, and changing it alone does
+nothing; settings-only is `autobackup_days: 0`. So the deployment's `backup-schedule` init
+container (the pinned Mongo image's `mongosh`) converges both before every controller start.
+It is non-fatal: on a fresh controller there is no `scheduletask` yet, and it converges on the
+next start after setup or a `.unf` restore.
+
+**The belt.** The `backup-age` sidecar pushes the newest `.unf`'s mtime (0 = none) to the
+Pushgateway every 5 min as `unifi_autobackup_last_file_timestamp_seconds`.
+`UnifiAutobackupStale` fires when it is over 36 h old, `UnifiAutobackupAgeMissing` when nothing
+is pushed (rules in `argocd/resources/longhorn-backup/`, promtool-pinned). A dead sidecar freezes
+its last value, which ages into the stale alert — the safe side.
 
 **Why the autobackup had never worked (found 2026-10-03).** It was monthly, and its one run in
 range (10-01 00:30Z) failed with `MongoSocketReadException`: the backup's read of
@@ -125,5 +134,4 @@ Then restore Infisical's CNPG volumes first. ESO takes the Secret back over once
 The FU tracks these, not this doc:
 
 - the off-site second copy
-- a belt for a failing or stale UniFi `.unf` (no metric sees the file today)
 - a periodic restore drill
