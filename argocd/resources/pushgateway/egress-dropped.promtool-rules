@@ -1,0 +1,18 @@
+# AgentWorkerEgressDropped, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file egress-dropped.promtool-test loads. Not a manifest
+# and applied to nothing: `promtool test rules` needs upstream-format rules (top-level `groups:`).
+# Named .promtool-rules, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# DRIFT-PINNED, both directions, by `devbox run prometheus-rules-lint` (homelab#337/#375): expr and
+# `for` must equal the CR's. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "egress-dropped", "rules": [.spec.groups[].rules[] | select(.alert == "AgentWorkerEgressDropped") | del(.annotations)]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: egress-dropped
+    rules:
+      - alert: AgentWorkerEgressDropped
+        expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab|agent-runtime|agent-coordinator|.*-agents", destination!~"((www|accounts|clients2|android\\.clients)\\.google\\.com)(,(www|accounts|clients2|android\\.clients)\\.google\\.com)*|grafana\\.com|api\\.segment\\.io|169\\.254\\.169\\.254"}[5m]) unless rate(hubble_drop_total{reason="POLICY_DENIED", protocol="UDP", destination=~"142\\.251\\.[0-9]{1,3}\\.[0-9]{1,3}"}[5m]) unless rate(hubble_drop_total{reason="POLICY_DENIED", protocol="ICMPv4", destination="10.96.0.10"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
