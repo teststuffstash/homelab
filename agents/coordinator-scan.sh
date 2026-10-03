@@ -2443,6 +2443,7 @@ EOF
         dnum="${dep##*#}"; dslug="$slug"
         case "$dep" in *"/"*"#"*) dslug="${dep%#*}";; esac
         case "$dnum" in ''|*[!0-9]*) continue;; esac  # not a #N token — ignore, don't guess
+        # >>>REPLAY:deps-resolve>>>
         if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,blockedBy 2>/dev/null </dev/null)"; then
           if [ "$(jq -r .state <<<"$depjson")" = "OPEN" ]; then
             blocked="${blocked} ${dslug}#${dnum}"
@@ -2455,10 +2456,43 @@ EOF
             fi
           elif [ "$(jq -r '.stateReason // ""' <<<"$depjson")" = "NOT_PLANNED" ]; then
             stale="${stale} ${dslug}#${dnum}"
+          elif [ "$(jq -r '.stateReason // ""' <<<"$depjson")" = "DUPLICATE" ]; then
+            # ADR-122: a blocker closed as DUPLICATE is not resolved — follow the canonical
+            # issue (MarkedAsDuplicateEvent.canonical on its timeline) and gate on that
+            # issue's state instead. If the canonical issue can't be read, hold and print
+            # a loud line; never release (rule #6).
+            if canonical="$(gh api "/repos/${dslug}/issues/${dnum}/timeline" \
+              --jq '[.[] | select(.event == "marked_as_duplicate")] | last | .canonical' \
+              2>/dev/null </dev/null)"; then
+              if [ -n "$canonical" ] && [ "$canonical" != "null" ]; then
+                c_repo="$(jq -r '.repository.full_name // ""' <<<"$canonical")"
+                c_num="$(jq -r '.number // ""' <<<"$canonical")"
+                if [ -n "$c_repo" ] && [ -n "$c_num" ]; then
+                  if c_state="$(gh issue view "$c_num" --repo "$c_repo" --json state --jq '.state' 2>/dev/null)"; then
+                    if [ "$c_state" = "OPEN" ]; then
+                      blocked="${blocked} ${dslug}#${dnum}(→${c_repo}#${c_num})"
+                    fi
+                  else
+                    blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+                    orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical state unreadable, holding conservatively (rule #6)\n"
+                  fi
+                else
+                  blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+                  orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical issue unreadable, holding conservatively (rule #6)\n"
+                fi
+              else
+                blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+                orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical issue unreadable, holding conservatively (rule #6)\n"
+              fi
+            else
+              blocked="${blocked} ${dslug}#${dnum}(→CANONICAL-UNREADABLE)"
+              orphans="${orphans}[$repo] ⚠ DUPLICATE blocker #${dnum} — canonical timeline unreadable, holding conservatively (rule #6)\n"
+            fi
           fi
         else
           blocked="${blocked} ${dslug}#${dnum}(PROBE-FAILED)"
         fi
+        # <<<REPLAY:deps-resolve<<<
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
