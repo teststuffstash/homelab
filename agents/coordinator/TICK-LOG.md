@@ -12055,3 +12055,23 @@ Operator: "Do it unattended — the apply + restore drill also."
   PVC deleted → Volume `fromBackup` (diskSelector std) → PV/PVC → `sha256sum -c` OK. Residue deleted,
   bucket 0 objects. Window closed `--force` on two unrelated alerts (oracle-fleet ride egress; InfoInhibitor).
   Recipe → PR#2189. Metric unit for `LonghornBackupStale` still unverified (volume deleted too early).
+
+## 2026-10-03 midday — ADR-147: CNPG backups by default (spike → build → rollout → drill), seat
+
+Operator: "Go and do a spike on cnpg now, if it is successful then build it… backups by default for
+everybody… the 'oops the Longhorn upgrade broke everything'."
+- **Spike** (throwaway ns): in-tree barman → backup Garage OK (`AWS_DEFAULT_REGION=garage`), restore 62 s
+  checksum-identical; but CNPG 1.29.1 warns in-tree "completely removed in 1.30.0" → plugin + cert-manager.
+- **PR#2190** merged (bot approve): cert-manager, plugin-barman-cloud 0.8.1, per-ns bucket+key (ansible,
+  wallet → Infisical → ExternalSecret) + ObjectStore 14d, MutatingAdmissionPolicy (CEL needs `dyn()` for
+  mixed map values — caught by the live dry-run), daily `pg-backup` CronJob. CI red first on the
+  iac-sentinel baseline → policy/iac direct commit 8b48d369 (pg-backup names + the admission-policy kinds
+  the fence was missing).
+- **Rollout (window seat-1791022866-8424):** wiring a RUNNING cluster deadlocks the switchover →
+  grafana-pg 10:23–10:33Z, forgejo-pg 10:35–10:45Z with no writable primary, nothing alerted → incident
+  `2026-10-03-cnpg-wire-switchover-deadlock`. LSN-checked forced failovers, then oracle-pg/infisical-pg
+  with 17 s/16 s gaps. `pg-backup-now`: 4/4 completed.
+- **Drill:** the first (standby) backup was unrestorable ("unexpected timeline ID 20"; WAL not yet
+  archived). A primary-target backup restored infisical-pg in 85 s, 704/704 tables identical.
+- **PR#2192** (fixes): wire = explicit verb (`pg-backup-wire`), backups `target: primary`,
+  `CNPGNoWritablePrimary` (replay = exactly the two windows).

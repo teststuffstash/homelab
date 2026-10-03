@@ -15,8 +15,8 @@ never the session's arc — that is TICK-LOG's.)
   inside [declared windows](../glossary.md); operator to read its three calls: `MgmtApplyDeferredByWindow` at 6 h, the
   reconciler's node windows hold the apply loop, `--admit-apply` separate from `--admit-reconciler`.
   Confirm the box's next pull runs it (a `DEFERRED` line the first time a window is open). (2) The
-  `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: target LIVE +
-  restore drill PASSED 2026-10-03 (PR#2188/#2189) — NEXT the daily RecurringJob (FU-299's item).
+  `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: Longhorn target LIVE +
+  drilled (PR#2188/#2189); CNPG backups by default LIVE + drilled (ADR-147, PR#2190/#2192) — NEXT per FU-299.
 - **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
   `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
   reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**
