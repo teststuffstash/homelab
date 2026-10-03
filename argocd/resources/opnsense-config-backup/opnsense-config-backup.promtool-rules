@@ -15,7 +15,7 @@ groups:
           unless on()
             (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
         for: 1h
-        labels: { severity: warning }
+        labels: { severity: warning, triage: dig}
       - alert: OpnsenseConfigUnattributedRevision
         expr: |
           max by (username) (opnsense_config_unattributed_revisions) > 0

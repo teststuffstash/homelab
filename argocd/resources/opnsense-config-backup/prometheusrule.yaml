@@ -27,7 +27,8 @@ spec:
             unless on()
               (max(kube_cronjob_spec_suspend{namespace="opnsense-config-backup",cronjob="opnsense-config-backup"}) == 1)
           for: 1h
-          labels: { severity: warning }
+          # triage dig: backup Job log is readable in-cluster; 401/403 points at router credentials
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "No OPNsense config.xml backup has landed in >26 h"
             description: >-

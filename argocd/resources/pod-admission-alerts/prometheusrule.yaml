@@ -41,7 +41,8 @@ spec:
                   unless pod_security_evaluations_total{decision="deny",mode="enforce"} offset 10m
               ) > 0
             )
-          labels: { severity: warning }
+          # triage dig: dry-run against each apiserver separates a skewed apiserver from a bad manifest
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "apiserver {{ $labels.instance }} refused a {{ $labels.resource }} under PodSecurity {{ $labels.policy_level }}"
             description: >-

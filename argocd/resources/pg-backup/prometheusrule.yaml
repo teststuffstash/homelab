@@ -30,6 +30,8 @@ spec:
           for: 3m
           labels:
             severity: critical
+            # triage: writes failing now; the CNPG Cluster status, pods and operator logs say why
+            triage: now
           annotations:
             summary: "CloudNativePG cluster in {{ $labels.namespace }} has no writable primary"
             description: >-

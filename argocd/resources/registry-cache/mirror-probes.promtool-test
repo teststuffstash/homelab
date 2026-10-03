@@ -51,6 +51,7 @@ tests:
               instance: http://192.168.40.20/v2/
               job: blackbox-mirrors
               namespace: monitoring
+              triage: dig
       # mid-hole, past the staleness marker: the raw selector is EMPTY here. The bridged one is
       # not — the range still reaches the samples at t=19,20.
       - eval_time: 21m
@@ -174,11 +175,13 @@ tests:
               instance: http://192.168.40.20/v2/
               job: blackbox-mirrors
               namespace: monitoring
+              triage: dig
           - exp_labels:
               severity: warning
               instance: http://192.168.40.31/v2/
               job: blackbox-mirrors
               namespace: monitoring
+              triage: dig
       - eval_time: 30m
         alertname: RegistryMirrorProbeFailing
         exp_alerts:
@@ -187,8 +190,10 @@ tests:
               instance: http://192.168.40.20/v2/
               job: blackbox-mirrors
               namespace: monitoring
+              triage: dig
           - exp_labels:
               severity: warning
               instance: http://192.168.40.31/v2/
               job: blackbox-mirrors
               namespace: monitoring
+              triage: dig

@@ -130,6 +130,7 @@ tests:
               severity: warning
               namespace: garage
               poddisruptionbudget: garage
+              triage: dig
             exp_annotations:
               summary: "Garage has refused voluntary disruption for 2h, so no zone node can be drained"
 
@@ -159,6 +160,7 @@ tests:
               severity: warning
               namespace: garage
               poddisruptionbudget: garage
+              triage: dig
             exp_annotations:
               summary: "The garage PodDisruptionBudget lets a zone go while Garage's signal says it must not"
 

@@ -50,6 +50,8 @@ spec:
             # at "author a PR, never auto-merge"; it does NOT silence triage (that is `triage:
             # none`, which this alert must not have — the overdue state is worth diagnosing).
             platform_machinery: "true"
+            # triage: retro CronWorkflow runs and guard refusals are readable in Argo
+            triage: dig
           annotations:
             summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
             description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
@@ -60,6 +62,8 @@ spec:
           expr: agent_run_cost_usd < 0
           labels:
             severity: warning
+            # triage: negative cost points at a cost-pipeline probe bug; run labels and code are in reach
+            triage: dig
           annotations:
             summary: "Agent run reported NEGATIVE cost ({{ $labels.project }} issue {{ $labels.issue }})"
             description: "agent_run_cost_usd={{ $value }} for pod-pushed run (model {{ $labels.model }}, round {{ $labels.round }}) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class."
@@ -109,6 +113,8 @@ spec:
             ) >= 3
           labels:
             severity: warning
+            # triage: strike comments and run terminals are readable; recurring infra deaths have causes
+            triage: dig
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
@@ -232,6 +238,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: slow phase usually an image-cache miss; node image state and pull events readable
+            triage: dig
           annotations:
             summary: "Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline"
             description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red. Subject-collision note (homelab#724): this is a fleet-level signal — the responder uses the catch-all `alert:AgentRunPhaseSlow` subject, and two projects tripping it in one window subject-dedupe into one triage (accepted: the one live firing was fleet-wide)."
@@ -265,6 +273,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: sentinel CronWorkflow runs are readable in Argo; required -iac gate is stalled
+            triage: dig
           annotations:
             summary: "iac-sentinel heartbeat silent >30m — the required -iac merge gate is not evaluating"
             description: "SYMPTOM ONLY — no iac_sentinel_last_run_timestamp_seconds push for >30m (the sentinel CronWorkflow ticks every few minutes; scripts/iac-sentinel.sh pushes the heartbeat on every tick, zero-PR ticks included, FU-176). While silent, open -iac PRs wait on a required `iac-sentinel` commit status nobody posts — merges stall rather than bypass (fail-closed). Look at the `iac-sentinel` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, or a pushgateway outage are the observed-plausible causes to check in that order."
@@ -281,6 +291,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: audit 2026-10-03: a dig found 3 dead dispatch edges from Prometheus and GitHub
+            triage: dig
           annotations:
             summary: "{{ $value }} cron-woken coordinator dispatches on stack {{ $labels.project }} lane {{ $labels.base }} in 24h — a doorbell edge is dead"
             description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h, on ONE LANE (repo, base — ADR-125). Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack and lane: the labels above; `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` enumerates them. A single firing lane beside healthy siblings points at that lane's emitters (a goal-branch PR's events, the assembly path) rather than at the doorbell as a whole. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
@@ -311,6 +323,8 @@ spec:
           for: 2m
           labels:
             severity: warning
+            # triage: phone-home noise is excluded above (#2194); what remains is an allowlist miss or a misconfigured client
+            triage: dig
           annotations:
             summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
             # The first instruction must be a read that works from an IN-CLUSTER responder pod: the
@@ -357,6 +371,8 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: CPU spin on an Argo Events pod; metrics and restart history readable even with empty logs
+            triage: dig
           annotations:
             summary: "Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)"
             description: "{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative."
@@ -585,6 +601,8 @@ spec:
           for: 2m
           labels:
             severity: warning
+            # triage: scan pod logs and its gh/kubectl calls are readable in-cluster
+            triage: dig
           annotations:
             summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
             description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last. If that marker is MISSING, check `time() - process_start_time_seconds{job=\"prometheus-pushgateway\"}` before concluding anything: a gateway younger than the pod means its emptyDir store was destroyed with its last pod, so the markers for pods older than it are gone and this alert is deliberately degraded for them until they end (homelab#353)."

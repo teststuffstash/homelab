@@ -49,7 +49,7 @@ tests:
       - eval_time: 25h
         alertname: DiskDefectsGrowing
         exp_alerts:
-          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sda", attribute_name: "Reallocated_Sector_Ct", attribute_value_type: "raw" }
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sda", attribute_name: "Reallocated_Sector_Ct", attribute_value_type: "raw" , triage: dig}
             exp_annotations:
               summary: "wk-metal-04 sda: Reallocated_Sector_Ct grew by 4 in 7 d"
               description: "A defect counter that was stable is moving. A non-zero standing count is normal here (drives are bought used, with disclosed defects) — GROWTH is not. Read the drive (docs/runbook.md §Reading a fleet disk's identity and health) and record the numbers in the private hardware register's inventory row before deciding."
@@ -58,11 +58,11 @@ tests:
       - eval_time: 2h
         alertname: DiskWearHigh
         exp_alerts:
-          - exp_labels: { severity: "warning", job: "pve-node", node: "nx-02", device: "nvme0" }
+          - exp_labels: { severity: "warning", job: "pve-node", node: "nx-02", device: "nvme0" , triage: none}
             exp_annotations:
               summary: "nx-02 nvme0: 82% of rated endurance used"
               description: "Standardized wear indicator past 80%. Not urgent on its own — plan the replacement into the hardware register rather than reacting. ⚠ Trust THIS field, not a vendor SSD_Life_Left attribute: they disagree on the same drive (Kingston SA400 read 6 vs 5%, and the ADATA SU630's raw field is unusable — docs/runbook.md)."
-          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-01", device: "sda" }
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-01", device: "sda" , triage: none}
             exp_annotations:
               summary: "wk-metal-01 sda: 85% of rated endurance used"
               description: "Standardized wear indicator past 80%. Not urgent on its own — plan the replacement into the hardware register rather than reacting. ⚠ Trust THIS field, not a vendor SSD_Life_Left attribute: they disagree on the same drive (Kingston SA400 read 6 vs 5%, and the ADATA SU630's raw field is unusable — docs/runbook.md)."
@@ -100,7 +100,7 @@ tests:
       - eval_time: 110m
         alertname: DiskCrcErrorsGrowing
         exp_alerts:
-          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc", attribute_name: "UDMA_CRC_Error_Count", attribute_value_type: "raw" }
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc", attribute_name: "UDMA_CRC_Error_Count", attribute_value_type: "raw" , triage: none}
             exp_annotations:
               summary: "wk-metal-04 sdc: 1 new SATA interface CRC error(s) in 1 h"
               description: "Interface CRC errors are the CABLE, not the drive (docs/storage-ledger.md §2026-09-05 — wk-metal-04's SA400 sat on 1,867 of these at a negotiated 3.0 of 6.0 Gb/s, and NCQ retries after them stalled the queue on large writes). Reseat or replace the data cable for this device; do not condemn the drive on this alert alone."
@@ -112,7 +112,7 @@ tests:
       - eval_time: 30m
         alertname: DiskInterfaceSpeedDegraded
         exp_alerts:
-          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc" }
+          - exp_labels: { severity: "warning", job: "smartctl-exporter", node: "wk-metal-04", device: "sdc" , triage: none}
             exp_annotations:
               summary: "wk-metal-04 sdc: SATA link negotiated below its rating"
               description: "The link came up slower than the drive and port can do — the wk-metal-04 signature, found by hand in 2026-09 only after a 9-hour Garage write job had already paid for it. Pair with DiskCrcErrorsGrowing: CRC errors alongside this means the cable. ⚠ This covers SATA only. NVMe PCIe LANE WIDTH is not exported and is not covered — see FU-284's residual and docs/runbook.md's fit-time check."
@@ -124,7 +124,7 @@ tests:
       - eval_time: 15m
         alertname: NvmeSpareBelowThreshold
         exp_alerts:
-          - exp_labels: { severity: "critical", job: "smartctl-exporter", node: "wk-metal-04", device: "nvme0" }
+          - exp_labels: { severity: "critical", job: "smartctl-exporter", node: "wk-metal-04", device: "nvme0" , triage: dig}
             exp_annotations:
               summary: "wk-metal-04 nvme0: NVMe available spare 10% is below the drive's own threshold"
               description: "The controller has burned through its spare block pool past the point IT calls critical. Plan the replacement now — a drive here is close to going read-only."
@@ -152,7 +152,7 @@ tests:
       - eval_time: 55m
         alertname: DiskHealthMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: "warning", job: "smartctl-exporter" }
+          - exp_labels: { severity: "warning", job: "smartctl-exporter" , triage: dig}
             exp_annotations:
               summary: "No disk-health metrics from smartctl-exporter for 15m — those drives are unwatched"
               description: "smartctl_devices is absent for a whole half of the fleet. If `job=smartctl-exporter` is missing, the DaemonSet is down, the ServiceMonitor lost its target, or the image cannot start — `kubectl -n node-maintenance get ds,pod`. If `job=pve-node` is missing, the hypervisors' smart-textfile-metrics timer has stopped or node_exporter is down — `systemctl status smart-textfile-metrics.timer` on pve and nx-02. While this fires, the drives on that side are not being watched at all."

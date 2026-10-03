@@ -34,6 +34,7 @@ tests:
               severity: warning
               pod: garage-0
               volume: data
+              triage: dig
             exp_annotations:
               summary: "Garage data volume is 85% full on garage-0"
               description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity."
@@ -57,6 +58,7 @@ tests:
               severity: warning
               pod: garage-0
               volume: data
+              triage: dig
             exp_annotations:
               summary: "Garage data volume is 85% full on garage-0"
               description: "Garage's disk has less than 20% available. The ledger's >80% threshold (docs/storage-ledger.md). Check the node's disk usage and whether the Longhorn volume or the underlying pve thin pool is filling. A full disk makes Garage go read-only — the 2026-08-24 meta wipe started this way. At rf=3 this is ONE zone, not the store: compare the three pods (`garage stats -a` MetaAvail / kubelet_volume_stats). One pod full = rotate that zone from a finished compacted snapshot (docs/garage.md §Metadata reclamation); all three full = capacity."
@@ -88,6 +90,7 @@ tests:
               severity: warning
               pod: garage-0
               table_name: block
+              triage: now
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
@@ -109,6 +112,7 @@ tests:
               severity: warning
               pod: garage-0
               table_name: block
+              triage: now
             exp_annotations:
               summary: "Garage table block is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
@@ -167,6 +171,7 @@ tests:
               severity: warning
               pod: garage-0
               table_name: object
+              triage: now
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
@@ -178,6 +183,7 @@ tests:
               severity: warning
               pod: garage-0
               table_name: object
+              triage: now
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
@@ -204,6 +210,7 @@ tests:
               severity: warning
               pod: garage-0
               table_name: object
+              triage: now
             exp_annotations:
               summary: "Garage table object is empty on garage-0"
               description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
@@ -229,6 +236,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
               description: "The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist."
@@ -267,6 +275,7 @@ tests:
               severity: warning
               job: blackbox-garage-health
               instance: http://garage-0.garage-headless.garage.svc.cluster.local:3903/health
+              triage: dig
             exp_annotations:
               summary: "Garage cluster degraded ≥5 min in the last hour as seen from http://garage-0.garage-headless.garage.svc.cluster.local:3903/health"
       - eval_time: 59m
@@ -279,6 +288,7 @@ tests:
               severity: warning
               job: blackbox-garage-health
               instance: http://garage-0.garage-headless.garage.svc.cluster.local:3903/health
+              triage: dig
             exp_annotations:
               summary: "Garage cluster degraded as seen from http://garage-0.garage-headless.garage.svc.cluster.local:3903/health"
   # ── PEER RPC TIMEOUTS: 0.2/s sustained fires after 15m; a quiet pod does not ────────────────
@@ -299,6 +309,7 @@ tests:
           - exp_labels:
               severity: warning
               pod: garage-2
+              triage: dig
             exp_annotations:
               summary: "Garage garage-2 is timing out RPCs to a peer (200m/s)"
 
@@ -320,6 +331,7 @@ tests:
           - exp_labels:
               severity: warning
               status_code: "503"
+              triage: dig
             exp_annotations:
               summary: "Garage S3 returned 5 × HTTP 503 in 5m"
       - eval_time: 70m
@@ -345,6 +357,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "3 Garage quorum members started within the last 5 minutes"
       - eval_time: 17m
@@ -368,6 +381,7 @@ tests:
           - exp_labels:
               severity: warning
               pod: garage-2
+              triage: dig
             exp_annotations:
               summary: "Garage garage-2 has 600k GC items parked for 26h"
 
@@ -389,7 +403,7 @@ tests:
       - eval_time: 11m
         alertname: GarageZoneDegraded
         exp_alerts:
-          - exp_labels: { severity: warning }
+          - exp_labels: { severity: warning , triage: dig}
             exp_annotations:
               summary: "Garage is running with a zone down — one more zone loss stops writes"
       - eval_time: 16m

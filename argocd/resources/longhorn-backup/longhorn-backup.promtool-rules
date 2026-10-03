@@ -12,6 +12,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
       # Only volumes that HAVE a backup (`> 0`): a volume nobody backs up exports 0 and is a
       # class decision (docs/longhorn-backup.md §Classes), not a stale backup. 36 h = a daily
       # job missed once plus slack.
@@ -20,3 +21,4 @@ groups:
         for: 1h
         labels:
           severity: warning
+          triage: dig

@@ -47,7 +47,7 @@ tests:
       - eval_time: 2h20m
         alertname: MgmtApplyLoopStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # ── scraped, but the loop's file is missing ────────────────────────────────────────────────────
   - interval: 1m
@@ -62,7 +62,7 @@ tests:
       - eval_time: 40m
         alertname: MgmtApplyMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # ── the post-apply health gate regressed after a Talos config apply ─────────────────────────────
   - interval: 1m
@@ -82,7 +82,7 @@ tests:
       - eval_time: 20m
         alertname: MgmtApplyPostCheckFailed
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: now}
       - eval_time: 35m
         alertname: MgmtApplyPostCheckFailed
         exp_alerts: []
@@ -108,7 +108,7 @@ tests:
       - eval_time: 12h
         alertname: MgmtApplyDeferredByWindow
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
       - eval_time: 12h
         alertname: MgmtApplyLoopStale
         exp_alerts: []
@@ -126,7 +126,7 @@ tests:
       - eval_time: 25m
         alertname: MgmtBoxDown
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # ── FU-235: the node diff ──────────────────────────────────────────────────────────────────────
   # The 2026-09-12 shape: kata declared on a laptop, the label absent live. Live-applied axes get
@@ -145,7 +145,7 @@ tests:
       - eval_time: 75m
         alertname: MgmtNodeLiveStateDrift
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-03, axis: labels }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-03, axis: labels , triage: dig}
 
   # The 2026-09-21 shape: wk-metal-02 answers talosctl, no Node object. A reinstall window is under
   # 2h; this one is not.
@@ -163,7 +163,7 @@ tests:
       - eval_time: 2h15m
         alertname: MgmtNodeMissing
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-02, axis: registered }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-metal-02, axis: registered , triage: dig}
 
   # The 2026-09-16 shape: nx-01's EPHEMERAL on the SATA disk after a clean plan. Install-time — a
   # window fixes it, and windows queue, so a day.
@@ -181,7 +181,7 @@ tests:
       - eval_time: 25h
         alertname: MgmtNodeInstallDrift
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: nx-01, axis: ephemeral_disk }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: nx-01, axis: ephemeral_disk , triage: dig}
       # version is TalosFleetVersionSplit's, never these rules'
       - eval_time: 25h
         alertname: MgmtNodeLiveStateDrift
@@ -203,7 +203,7 @@ tests:
       - eval_time: 2h20m
         alertname: MgmtBeltStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", mode: belt }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", mode: belt , triage: none}
 
   - interval: 5m
     name: "exporter up with only the GATE's file (no belt) fires after 1h"
@@ -219,7 +219,7 @@ tests:
       - eval_time: 80m
         alertname: MgmtBeltMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # ── the node reconciler (ADR-132 §MB4, mgmt/scripts/mgmt-reconcile.sh) ─────────────────────────────
   - interval: 1m
@@ -239,7 +239,7 @@ tests:
       - eval_time: 17m
         alertname: MgmtReconcileParked
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03, state: parked }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03, state: parked , triage: dig}
 
   # A sync that started at t=60s: fine at 2h, stuck past 3h + 5m. The loop does not tick while it
   # runs, so its last-run stays at the sync start — and must NOT read as a stale loop.
@@ -257,7 +257,7 @@ tests:
       - eval_time: 3h10m
         alertname: MgmtReconcileSyncStuck
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03 }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", node: wk-03 , triage: dig}
       - eval_time: 4h
         alertname: MgmtReconcileLoopStale
         exp_alerts: []
@@ -276,7 +276,7 @@ tests:
       - eval_time: 2h30m
         alertname: MgmtReconcileLoopStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
       - eval_time: 3h
         alertname: MgmtReconcileSyncStuck
         exp_alerts: []
@@ -293,7 +293,7 @@ tests:
       - eval_time: 65m
         alertname: MgmtReconcileMetricsAbsent
         exp_alerts:
-          - exp_labels: { job: mgmt-node, instance: "192.168.2.53:9100", severity: warning }
+          - exp_labels: { job: mgmt-node, instance: "192.168.2.53:9100", severity: warning , triage: none}
 
   # ── FU-254: the DECLARATION going stale (mgmt/scripts/mgmt-probe.sh check_substrate) ────────────────
   # Behind is deliberately slow: a minor behind for a day is a window not yet taken, a minor behind
@@ -318,7 +318,7 @@ tests:
       - eval_time: 7d2h
         alertname: MgmtSubstrateBehind
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", component: kubernetes }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", component: kubernetes , triage: none}
       # a component that is current is not "behind" at any horizon, and nothing here is EOL
       - eval_time: 7d2h
         alertname: MgmtSubstrateUnsupported
@@ -344,7 +344,7 @@ tests:
       - eval_time: 2h
         alertname: MgmtSubstrateUnsupported
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", component: talos-controlplane }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", component: talos-controlplane , triage: none}
       - eval_time: 8d
         alertname: MgmtSubstrateBehind
         exp_alerts: []
@@ -383,6 +383,7 @@ tests:
               mode: belt
               check: talos
               status: fail
+              triage: none
 
   # ── THE REASON LABEL (2026-10-03, responder audit) ───────────────────────────────────────────
   # mgmt_probe_check carries a bounded `reason` word (mgmt-probe.sh REASONS). The rule aggregates it
@@ -408,3 +409,4 @@ tests:
               mode: belt
               check: ansible
               status: fail
+              triage: none

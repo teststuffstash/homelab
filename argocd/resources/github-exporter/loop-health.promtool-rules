@@ -37,6 +37,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: none
         annotations:
           summary: GitHub App {{ $labels.app }} permissions differ from the declared state
           description: 'Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app="{{ $labels.app }}"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration.'
@@ -44,6 +45,7 @@ groups:
         expr: (time() - github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out", branch=~"master|main"}) < 3600 unless (max by (repo, workflow, branch) (github_workflow_run_updated_timestamp{conclusion="success"}) > on (repo, workflow, branch) group_right () github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out"})
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed
           description: 'Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip).'
@@ -71,6 +73,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: none
         annotations:
           summary: GitHub is billing real money this month
           description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
@@ -80,6 +83,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: none
         annotations:
           summary: GitHub Actions hosted minutes burning above the elapsed share of quota
           description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
@@ -88,6 +92,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: github-exporter is not being scraped
           description: The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed.
@@ -96,6 +101,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: github-exporter polls are failing
           description: 'No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens).'
@@ -104,6 +110,7 @@ groups:
         for: 2h
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Agent queue stalled — queued issues but a fully idle loop
           description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
@@ -116,6 +123,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: dig
         annotations:
           summary: GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})
           description: '{{ $labels.token }} has {{ $value | humanizePercentage }} of its {{ $labels.resource }} pool left — consumers of this installation will start erroring "API rate limit exceeded" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp.'

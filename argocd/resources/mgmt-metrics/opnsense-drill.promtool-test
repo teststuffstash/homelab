@@ -45,7 +45,7 @@ tests:
       - eval_time: 6m
         alertname: MgmtOpnsenseDrillFailed
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
       - { eval_time: 10m, alertname: MgmtOpnsenseDrillScoreRegressed, exp_alerts: [] }
 
   # The score rose run over run (40 → 43): Regressed, with the new score as its value.
@@ -60,7 +60,7 @@ tests:
       - eval_time: 10m
         alertname: MgmtOpnsenseDrillScoreRegressed
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # The last run is frozen at t=0: 9 days + the 1h for: → Stale; before that, silent.
   - interval: 5m   # ≤ the 5m lookback: sparser samples go stale between points and reset `for:`
@@ -73,7 +73,7 @@ tests:
       - eval_time: 9d2h
         alertname: MgmtOpnsenseDrillStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
 
   # The box answers but never wrote the drill's file: Absent after 9 days, not before.
   - interval: 5m
@@ -86,4 +86,4 @@ tests:
       - eval_time: 9d1h
         alertname: MgmtOpnsenseDrillMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
