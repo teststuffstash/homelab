@@ -1,0 +1,168 @@
+# Alert triage labels for the UPSTREAM kube-prometheus-stack rules (operator decision 2026-10-03).
+#
+# Every alert that reaches Alertmanager carries `triage` with one of three values:
+#   none — no in-cluster investigation can change what anyone does (self-describing state,
+#          operator-only remedy, meta, or the alert cannot fire on this cluster);
+#   now  — acute: a real-time responder session starts immediately;
+#   dig  — the default: investigated in depth only if it stands or recurs unexplained.
+# OUR rules (argocd/**, the values file's own rule groups, the AgentStack
+# composition) carry the label in the rule itself. The chart has no per-alert label hook
+# (customRules sets only `for`/`severity`; additionalRuleGroupLabels is per group and the groups
+# are mixed), so the upstream rules get theirs HERE, on the way to Alertmanager.
+#
+# FILL-IF-EMPTY by construction: each entry matches `<triage>;<alertname>` with an EMPTY triage,
+# so a rule that carries its own label is never rewritten, and the first matching entry wins
+# (the severity-specific lines sit above the per-name ones). The label is added at SEND time:
+# Alertmanager (API, UI, routes) sees it; the ALERTS series in Prometheus does not.
+#
+# Coverage is held by scripts/prometheus-rules-lint.sh against
+# argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt — the alert names the PINNED
+# chart renders. A chart bump that changes that set reds the lint until
+# `devbox run upstream-alerts-refresh` re-renders the list and every new name is classified here.
+prometheus:
+  prometheusSpec:
+    additionalAlertRelabelConfigs:
+      # ── severity-specific (first match wins) ──
+      - {source_labels: [triage, alertname, severity], regex: ';KubePersistentVolumeFillingUp;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      - {source_labels: [triage, alertname, severity], regex: ';KubePersistentVolumeInodesFillingUp;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      - {source_labels: [triage, alertname, severity], regex: ';NodeFilesystemAlmostOutOfFiles;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      - {source_labels: [triage, alertname, severity], regex: ';NodeFilesystemAlmostOutOfSpace;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      - {source_labels: [triage, alertname, severity], regex: ';NodeFilesystemFilesFillingUp;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      - {source_labels: [triage, alertname, severity], regex: ';NodeFilesystemSpaceFillingUp;critical', target_label: triage, replacement: now}  # critical variant: writes fail within minutes; a resize/cleanup PR helps fast
+      # ── now ──
+      - {source_labels: [triage, alertname], regex: ';KubePodNotReady', target_label: triage, replacement: now}  # operator ruling 2026-10-03: the kata-handler catch class (nx-01, found in 20 min)
+      - {source_labels: [triage, alertname], regex: ';PrometheusNotIngestingSamples', target_label: triage, replacement: now}  # whole alert belt going blind; pod logs/config diagnosable, fast fix matters
+      # ── dig ──
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerClusterCrashlooping', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerClusterFailedToSendAlerts', target_label: triage, replacement: dig}  # operator ruling 2026-10-03: accepted — it rides the integration that is failing
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerFailedReload', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerFailedToSendAlerts', target_label: triage, replacement: dig}  # operator ruling 2026-10-03: accepted — it rides the integration that is failing
+      - {source_labels: [triage, alertname], regex: ';ConfigReloaderSidecarErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeAPIDown', target_label: triage, replacement: dig}  # operator ruling 2026-10-03: accepted — a blind kubectl cannot help in real time
+      - {source_labels: [triage, alertname], regex: ';KubeAPIErrorBudgetBurn', target_label: triage, replacement: dig}  # apiserver errors; logs/metrics diagnosable
+      - {source_labels: [triage, alertname], regex: ';KubeAPIInstanceUnreachable', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeAPITerminatedRequests', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeAggregatedAPIDown', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeAggregatedAPIErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeClientCertificateExpiration', target_label: triage, replacement: dig}  # Talos rotates; standing = find the stale client
+      - {source_labels: [triage, alertname], regex: ';KubeClientErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeContainerWaiting', target_label: triage, replacement: dig}  # arc-runners PodInitializing dominates; image/volume waits worth digging
+      - {source_labels: [triage, alertname], regex: ';KubeControllerManagerDown', target_label: triage, replacement: dig}  # absent() over cp-01 only (1 of 3 CPs scraped)
+      - {source_labels: [triage, alertname], regex: ';KubeControllerManagerInstanceUnreachable', target_label: triage, replacement: dig}  # cp-01 only scraped; leaks on cp-01 reboot
+      - {source_labels: [triage, alertname], regex: ';KubeDaemonSetMisScheduled', target_label: triage, replacement: dig}  # longhorn-manager/arc prepull dominate; standing = taint/selector drift
+      - {source_labels: [triage, alertname], regex: ';KubeDaemonSetNotScheduled', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeDaemonSetRolloutStuck', target_label: triage, replacement: dig}  # leaks during reboots (window-gated); stuck >hours worth digging
+      - {source_labels: [triage, alertname], regex: ';KubeDeploymentGenerationMismatch', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeDeploymentReplicasMismatch', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeDeploymentRolloutStuck', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeJobNotCompleted', target_label: triage, replacement: dig}  # job running >12h; partly overlaps our KubeJobFailed/CronJob*
+      - {source_labels: [triage, alertname], regex: ';KubeNodeNotReady', target_label: triage, replacement: dig}  # node-down class, window-gated; standing = dig events/kubelet
+      - {source_labels: [triage, alertname], regex: ';KubeNodePressure', target_label: triage, replacement: dig}  # info; pressure precedes evictions, cause diagnosable
+      - {source_labels: [triage, alertname], regex: ';KubeNodeReadinessFlapping', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeNodeUnreachable', target_label: triage, replacement: dig}  # leaks during reboots; overlaps CiliumUnreachableNodes; standing = dig
+      - {source_labels: [triage, alertname], regex: ';KubePdbNotEnoughHealthyPods', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubePersistentVolumeErrors', target_label: triage, replacement: dig}  # PV Failed/Pending; Longhorn CRs/events diagnosable
+      - {source_labels: [triage, alertname], regex: ';KubePersistentVolumeFillingUp', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';KubePersistentVolumeInodesFillingUp', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';KubePodCrashLooping', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeQuotaExceeded', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeSchedulerDown', target_label: triage, replacement: dig}  # absent() over cp-01 only (1 of 3 CPs scraped)
+      - {source_labels: [triage, alertname], regex: ';KubeSchedulerInstanceUnreachable', target_label: triage, replacement: dig}  # cp-01 only scraped; leaks on cp-01 reboot
+      - {source_labels: [triage, alertname], regex: ';KubeStateMetricsListErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeStateMetricsWatchErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeStatefulSetGenerationMismatch', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeStatefulSetReplicasMismatch', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeStatefulSetUpdateNotRolledOut', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeVersionMismatch', target_label: triage, replacement: dig}  # rollout-transient; overlaps TalosFleetVersionSplit; standing = dig
+      - {source_labels: [triage, alertname], regex: ';KubeletClientCertificateExpiration', target_label: triage, replacement: dig}  # Talos rotates; standing = rotation broken on a node
+      - {source_labels: [triage, alertname], regex: ';KubeletClientCertificateRenewalErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeletDown', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeletInstanceUnreachable', target_label: triage, replacement: dig}  # leaks during reboots; standing outside window = dig
+      - {source_labels: [triage, alertname], regex: ';KubeletPlegDurationHigh', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';KubeletPodStartUpLatencyHigh', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeClockNotSynchronising', target_label: triage, replacement: dig}  # NTP path via router; skew breaks TLS/etcd, diagnosable
+      - {source_labels: [triage, alertname], regex: ';NodeClockSkewDetected', target_label: triage, replacement: dig}  # NTP path via router; diagnosable from node-exporter
+      - {source_labels: [triage, alertname], regex: ';NodeDiskIOSaturation', target_label: triage, replacement: dig}  # bulk-tier SATA disks; Longhorn rebuild/IO pattern worth digging
+      - {source_labels: [triage, alertname], regex: ';NodeFileDescriptorLimit', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeFilesystemAlmostOutOfFiles', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';NodeFilesystemAlmostOutOfSpace', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';NodeFilesystemFilesFillingUp', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';NodeFilesystemSpaceFillingUp', target_label: triage, replacement: dig}  # warning variant: capacity trend — dig if it stands
+      - {source_labels: [triage, alertname], regex: ';NodeHighNumberConntrackEntriesUsed', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeMemoryHighUtilization', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeMemoryMajorPagesFaults', target_label: triage, replacement: dig}  # X240 (8GB) dominates; memory pressure diagnosable
+      - {source_labels: [triage, alertname], regex: ';NodeNetworkInterfaceFlapping', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeNetworkReceiveErrs', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeNetworkTransmitErrs', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';NodeTextFileCollectorScrapeError', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusBadConfig', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusDuplicateTimestamps', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusErrorSendingAlertsToSomeAlertmanagers', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusHighQueryLoad', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusKubernetesListWatchFailures', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusLabelLimitHit', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusMissingRuleEvaluations', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusNotificationQueueRunningFull', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorListErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorNodeLookupErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorNotReady', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorReconcileErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorRejectedResources', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorStatusUpdateErrors', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorSyncFailed', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusOperatorWatchErrors', target_label: triage, replacement: dig}  # transient API watch errors; standing = dig
+      - {source_labels: [triage, alertname], regex: ';PrometheusOutOfOrderTimestamps', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusRuleFailures', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusSDRefreshFailure', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusScrapeBodySizeLimitHit', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusScrapeSampleLimitHit', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusTSDBCompactionsFailing', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusTSDBReloadsFailing', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusTargetLimitHit', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';PrometheusTargetSyncFailure', target_label: triage, replacement: dig}  # generic degraded state; dig if it stands for hours or recurs
+      - {source_labels: [triage, alertname], regex: ';TargetDown', target_label: triage, replacement: dig}  # loki dominates firing minutes; scrape breakage diagnosable
+      # ── none ──
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerClusterDown', target_label: triage, replacement: none}  # single AM replica: firing means AM down, so it cannot deliver itself; Watchdog dead-man covers
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerConfigInconsistent', target_label: triage, replacement: none}  # cannot fire: single Alertmanager replica, no peer hash to differ
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerMembersInconsistent', target_label: triage, replacement: none}  # cannot fire: single Alertmanager replica, no cluster peers
+      - {source_labels: [triage, alertname], regex: ';CPUThrottlingHigh', target_label: triage, replacement: none}  # info; self-describing limit state, noisy, no decision changes
+      - {source_labels: [triage, alertname], regex: ';InfoInhibitor', target_label: triage, replacement: none}  # meta inhibitor for info alerts; routes to null
+      - {source_labels: [triage, alertname], regex: ';KubeCPUOvercommit', target_label: triage, replacement: none}  # self-describing capacity; remedy is hardware or operator sizing
+      - {source_labels: [triage, alertname], regex: ';KubeCPUQuotaOvercommit', target_label: triage, replacement: none}  # self-describing: quota sum vs cluster capacity, operator sizing decision
+      - {source_labels: [triage, alertname], regex: ';KubeHpaMaxedOut', target_label: triage, replacement: none}  # cannot fire: no HPA metrics (kube_horizontalpodautoscaler_* absent)
+      - {source_labels: [triage, alertname], regex: ';KubeHpaReplicasMismatch', target_label: triage, replacement: none}  # cannot fire: no HPA metrics (kube_horizontalpodautoscaler_* absent)
+      - {source_labels: [triage, alertname], regex: ';KubeMemoryOvercommit', target_label: triage, replacement: none}  # self-describing capacity; remedy is hardware or operator sizing
+      - {source_labels: [triage, alertname], regex: ';KubeMemoryQuotaOvercommit', target_label: triage, replacement: none}  # self-describing: quota sum vs cluster capacity, operator sizing decision
+      - {source_labels: [triage, alertname], regex: ';KubeNodeEviction', target_label: triage, replacement: none}  # info; duplicates our PodEvicted which names the pod
+      - {source_labels: [triage, alertname], regex: ';KubeQuotaAlmostFull', target_label: triage, replacement: none}  # info; self-describing quota state, ADR-owned budget
+      - {source_labels: [triage, alertname], regex: ';KubeQuotaFullyUsed', target_label: triage, replacement: none}  # info; self-describing quota state
+      - {source_labels: [triage, alertname], regex: ';KubeStateMetricsShardingMismatch', target_label: triage, replacement: none}  # cannot fire: KSM unsharded, kube_state_metrics_total_shards absent
+      - {source_labels: [triage, alertname], regex: ';KubeStateMetricsShardsMissing', target_label: triage, replacement: none}  # cannot fire: KSM unsharded, kube_state_metrics_total_shards absent
+      - {source_labels: [triage, alertname], regex: ';KubeletServerCertificateExpiration', target_label: triage, replacement: none}  # cannot fire: kubelet_certificate_manager_server_ttl_seconds absent (Talos-managed serving cert)
+      - {source_labels: [triage, alertname], regex: ';KubeletServerCertificateRenewalErrors', target_label: triage, replacement: none}  # cannot fire: kubelet_server_expiration_renew_errors absent
+      - {source_labels: [triage, alertname], regex: ';KubeletTooManyPods', target_label: triage, replacement: none}  # info; self-describing capacity statement
+      - {source_labels: [triage, alertname], regex: ';NodeBondingDegraded', target_label: triage, replacement: none}  # physical link down on a bond; operator-only remedy, labels name the link
+      - {source_labels: [triage, alertname], regex: ';NodeCPUHighUsage', target_label: triage, replacement: none}  # info; our NodeSystemSaturation is the actionable variant
+      - {source_labels: [triage, alertname], regex: ';NodeRAIDDegraded', target_label: triage, replacement: none}  # cannot fire: no md RAID anywhere (node_md_* absent)
+      - {source_labels: [triage, alertname], regex: ';NodeRAIDDiskFailure', target_label: triage, replacement: none}  # cannot fire: no md RAID anywhere (node_md_* absent)
+      - {source_labels: [triage, alertname], regex: ';NodeSystemdServiceCrashlooping', target_label: triage, replacement: none}  # cannot fire: node_systemd_service_restart_total absent (Talos, no systemd)
+      - {source_labels: [triage, alertname], regex: ';NodeSystemdServiceFailed', target_label: triage, replacement: none}  # cannot fire: Talos has no systemd; systemd collector only on pve-node job
+      - {source_labels: [triage, alertname], regex: ';PrometheusErrorSendingAlertsToAnyAlertmanager', target_label: triage, replacement: none}  # self-defeating: delivery path down when it fires; Watchdog dead-man covers
+      - {source_labels: [triage, alertname], regex: ';PrometheusNotConnectedToAlertmanagers', target_label: triage, replacement: none}  # self-defeating: no AM to deliver through; Watchdog dead-man covers
+      - {source_labels: [triage, alertname], regex: ';PrometheusRemoteStorageFailures', target_label: triage, replacement: none}  # cannot fire: no remote_write configured
+      - {source_labels: [triage, alertname], regex: ';PrometheusRemoteWriteBehind', target_label: triage, replacement: none}  # cannot fire: no remote_write configured
+      - {source_labels: [triage, alertname], regex: ';PrometheusRemoteWriteDesiredShards', target_label: triage, replacement: none}  # cannot fire: no remote_write configured
+      - {source_labels: [triage, alertname], regex: ';Watchdog', target_label: triage, replacement: none}  # meta heartbeat; routes to null / dead-man
+      - {source_labels: [triage, alertname], regex: ';etcdDatabaseHighFragmentationRatio', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdDatabaseQuotaLowSpace', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdExcessiveDatabaseGrowth', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdGRPCRequestsSlow', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdHighCommitDurations', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdHighFsyncDurations', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdHighNumberOfFailedGRPCRequests', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdHighNumberOfFailedProposals', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdHighNumberOfLeaderChanges', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdInsufficientMembers', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdMemberCommunicationSlow', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdMembersDown', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored
+      - {source_labels: [triage, alertname], regex: ';etcdNoLeader', target_label: triage, replacement: none}  # cannot fire: no etcd scrape job (Talos etcd metrics not scraped); 3-CP etcd unmonitored

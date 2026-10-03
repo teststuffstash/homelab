@@ -10,6 +10,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "Garage bucket {{ $labels.bucket }} is at {{ $value | humanizePercentage }} of its size quota"
           description: >-
@@ -26,6 +27,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
           description: >-

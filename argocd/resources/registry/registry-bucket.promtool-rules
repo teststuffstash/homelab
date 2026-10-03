@@ -8,6 +8,7 @@ groups:
         for: 10m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "registry bucket has {{ $value | humanize1024 }}B of quota headroom — the next 10 GB layer push will fail at commit"
           description: >-

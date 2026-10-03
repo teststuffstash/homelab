@@ -39,6 +39,7 @@ tests:
               name: agent-git-readonly-0
               target: agent-git-readonly-0
               remote_key: agent-git-readonly-oracle-fleet-0
+              triage: dig
             exp_annotations:
               summary: "oracle-fleet/agent-git-readonly-0 still holds the token before the latest mint of agent-git-readonly-oracle-fleet-0 (10m+)"
       # the mirror's own refresh at 45m resets it; the next mint at 46m re-arms — a FIXED window
@@ -54,6 +55,7 @@ tests:
               name: agent-git-readonly-0
               target: agent-git-readonly-0
               remote_key: agent-git-readonly-oracle-fleet-0
+              triage: dig
             exp_annotations:
               summary: "oracle-fleet/agent-git-readonly-0 still holds the token before the latest mint of agent-git-readonly-oracle-fleet-0 (10m+)"
       - eval_time: 57m
@@ -101,6 +103,7 @@ tests:
               name: retro-git
               target: retro-git
               generator_kind: GithubAccessToken
+              triage: dig
             exp_annotations:
               summary: "agent-coordinator/retro-git has not minted a GitHub token for 55m+ — it expires within minutes"
       - eval_time: 62m
@@ -119,5 +122,6 @@ tests:
           - exp_labels:
               severity: warning
               generator_kind: GithubAccessToken
+              triage: dig
             exp_annotations:
               summary: "No GithubAccessToken ExternalSecret refresh_time series for 30m — the token mirror belt is blind"

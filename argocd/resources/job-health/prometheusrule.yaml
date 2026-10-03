@@ -47,7 +47,8 @@ spec:
             (time() - kube_cronjob_status_last_successful_time)
               > 3 * clamp_min(kube_cronjob_next_schedule_time - kube_cronjob_status_last_schedule_time, 600)
           for: 15m
-          labels: { severity: warning }
+          # triage dig: newest Job pod log in-cluster names the failure; the per-CronJob belt may say more
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in 3 scheduled runs"
             description: >-
@@ -68,7 +69,8 @@ spec:
             (kube_cronjob_created < time() - 86400)
               unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
           for: 30m
-          labels: { severity: warning }
+          # triage dig: suspend flag, schedule or admission failure readable via describe cronjob
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has never completed successfully"
             description: >-
@@ -87,7 +89,8 @@ spec:
             kube_job_failed{job="kube-state-metrics"} > 0
               unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}
           for: 15m
-          labels: { severity: warning }
+          # triage dig: one-shot Job pod log is readable in-cluster; decide rerun or delete
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete"
             description: >-

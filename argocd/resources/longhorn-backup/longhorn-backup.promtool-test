@@ -28,7 +28,7 @@ tests:
       - eval_time: 16m
         alertname: LonghornBackupTargetDown
         exp_alerts:
-          - exp_labels: { severity: warning, job: blackbox-longhorn-backup-target, instance: dead }
+          - exp_labels: { severity: warning, job: blackbox-longhorn-backup-target, instance: dead , triage: dig}
 
   - interval: 1m
     name: "Stale: only a volume that HAS a backup, and only past 36h + 1h"
@@ -49,4 +49,4 @@ tests:
       - eval_time: 38h
         alertname: LonghornBackupStale
         exp_alerts:
-          - exp_labels: { severity: warning, volume: v-stale, pvc: p, pvc_namespace: ns }
+          - exp_labels: { severity: warning, volume: v-stale, pvc: p, pvc_namespace: ns , triage: dig}

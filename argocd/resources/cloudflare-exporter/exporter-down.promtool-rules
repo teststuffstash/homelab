@@ -41,6 +41,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Cloudflare exporter scrape target down/absent
           description: 'Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix).'

@@ -57,6 +57,7 @@ tests:
               container: controller
               namespace: argo
               pod: argo-workflows-workflow-controller-559f59c754-5lchc
+              triage: dig
       - eval_time: 30m
         alertname: WorkflowControllerMemoryNearLimit
         exp_alerts: *near_limit_alert

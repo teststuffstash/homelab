@@ -25,7 +25,7 @@ groups:
               kube_externalsecret_refresh_time{namespace!="agent-coordinator", remote_key!=""}
           ) > 0
         for: 10m
-        labels: {severity: warning}
+        labels: {severity: warning, triage: dig}
         annotations:
           summary: "{{ $labels.namespace }}/{{ $labels.name }} still holds the token before the latest mint of {{ $labels.remote_key }} (10m+)"
       # The mint itself stalled (generator erroring, ESO down): the served token dies at 60m.
@@ -33,7 +33,7 @@ groups:
         expr: |
           time() - kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"} > 3300
         for: 5m
-        labels: {severity: warning}
+        labels: {severity: warning, triage: dig}
         annotations:
           summary: "{{ $labels.namespace }}/{{ $labels.name }} has not minted a GitHub token for 55m+ — it expires within minutes"
       # Blind-belt guard (FU-125/FU-108 class): if the series stop, both rules above go quiet.
@@ -41,6 +41,6 @@ groups:
         expr: |
           absent(kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"})
         for: 30m
-        labels: {severity: warning}
+        labels: {severity: warning, triage: dig}
         annotations:
           summary: "No GithubAccessToken ExternalSecret refresh_time series for 30m — the token mirror belt is blind"

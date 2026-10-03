@@ -38,6 +38,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: dig
             exp_annotations:
               summary: "Renovate has not opened a PR anywhere in the org for 14 days"
               description: 'The newest `renovate/*` PR on any teststuffstash repo is over 14 days old (github_renovate_last_pr_timestamp, org-wide max). Renovate runs every 6h from .github/workflows/renovate.yaml and reports success even when it opens nothing (FU-125, docs/dependency-upgrades.md §Ground truth): read the latest run log for `integration-unauthorized` / `repository-changed` per repo, then `gh api /orgs/teststuffstash/installations` for the homelab-renovate App and its permissions (GithubAppPermissionDrift is the sibling belt). Never re-enable the dependency dashboard as the fix — liveness is this gauge by ruling.'
@@ -90,6 +91,7 @@ tests:
               platform_machinery: "true"
               class: "8"
               class_name: GitHub Actions
+              triage: dig
             exp_annotations:
               summary: "Dependency class 8 (GitHub Actions) is complete but its proof is over 90 days old"
               description: 'docs/dependency-upgrades.md §The dependency inventory marks class 8 (GitHub Actions) complete — no ⚠ column — but its newest end-to-end proof (a merged proposer PR, or the capability-ledger date) is older than 90 days: the owner may have left and nothing has exercised propose → gate → deploy since. Re-run `devbox run dependency-coverage` (it refreshes the proofs from GitHub); if the date does not move, the class has stalled — find why nothing proposed (docs/renovate.md) or re-add the owner in docs/dependency-classes.yaml.'

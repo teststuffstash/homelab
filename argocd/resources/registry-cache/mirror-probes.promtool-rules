@@ -25,6 +25,7 @@ groups:
         for: 10m
         labels:
           severity: warning
+          triage: dig
 
   # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
   # Class rule (ii): max is alert-PRESERVING only where HIGH is the bad reading. `probe_success ==

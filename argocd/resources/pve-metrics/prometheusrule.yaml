@@ -43,7 +43,8 @@ spec:
         - alert: NodeRebootedTwiceIn24h
           expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[24h])) >= 2
           for: 0m
-          labels: { severity: warning }
+          # triage dig: boot times, pre-boot resource series and kmsg in Loki are readable
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
             description: >-
@@ -58,7 +59,8 @@ spec:
         - alert: NodeRebootingRepeatedly
           expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
           for: 0m
-          labels: { severity: warning }
+          # triage dig: slow-cadence reboots; boot times, resource series and kmsg in Loki are readable
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"
             description: >-
@@ -71,7 +73,8 @@ spec:
         - alert: PveThinPoolFillingUp
           expr: pve_lvm_thin_pool_data_percent > 80
           for: 10m
-          labels: { severity: warning }
+          # triage dig: which guest and workload grows the pool is attributable from cluster metrics
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.host }} thin pool {{ $labels.vg }}/{{ $labels.lv }} at {{ $value | printf \"%.1f\" }}%"
             description: >-
@@ -86,7 +89,8 @@ spec:
         - alert: PveThinPoolAlmostFull
           expr: pve_lvm_thin_pool_data_percent > 90
           for: 2m
-          labels: { severity: critical }
+          # triage now: audit 2026-10-03: pool fills fast; history shows a worker-landed fix
+          labels: { severity: critical, triage: now }
           annotations:
             summary: "{{ $labels.host }} thin pool {{ $labels.vg }}/{{ $labels.lv }} at {{ $value | printf \"%.1f\" }}% — VMs pause at 100%"
             description: >-
@@ -98,7 +102,8 @@ spec:
         - alert: PveThinPoolMetadataHigh
           expr: pve_lvm_thin_pool_metadata_percent > 80
           for: 10m
-          labels: { severity: warning }
+          # triage none: metadata growth needs lvextend on the host; operator-only by construction
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.host }} thin pool {{ $labels.vg }}/{{ $labels.lv }} metadata at {{ $value | printf \"%.1f\" }}%"
             description: >-
@@ -109,7 +114,8 @@ spec:
         - alert: PveVmIoError
           expr: pve_qemu_status{qmpstatus="io-error"} == 1
           for: 1m
-          labels: { severity: critical }
+          # triage none: guest paused at the hypervisor; qm resume is a Proxmox act; co-fires with PveThinPoolAlmostFull
+          labels: { severity: critical, triage: none }
           annotations:
             summary: "{{ $labels.host }} guest {{ $labels.name }} (vmid {{ $labels.vmid }}) is paused on io-error"
             description: >-
@@ -120,7 +126,8 @@ spec:
         - alert: PveHostMemoryLow
           expr: node_memory_MemAvailable_bytes{job="pve-node"} < 3 * 1024 * 1024 * 1024
           for: 15m
-          labels: { severity: warning }
+          # triage none: host memory commit is a placement fact read at placement time
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.host }} memory available {{ $value | humanize1024 }}B — below 3GiB"
             description: >-
@@ -146,6 +153,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: audit 2026-10-03: placement fact, read at placement time
+            triage: none
           annotations:
             summary: '{{ $labels.host }} has {{ $value | humanize1024 }}B in swap'
             description: 'A hypervisor is paging guest memory out. This is the PRECURSOR with hours of lead: nx-02 crossed 1 GiB at 2026-09-24 ~23:00Z and the CI stalls came at 07:24 next morning when those pages were needed back (FU-289). PveHostMemoryLow stays quiet for it — the box had 9 GiB available globally while kswapd emptied one NUMA node. On {{ $labels.host }}: which guest (`pve_qemu_swap_bytes{host="{{ $labels.host }}"}`), which node is starved (`node_memory_numa_MemFree{host="{{ $labels.host }}"}`), what is pinned there (`pve_qemu_numa_resident_bytes`, `pve_qemu_locked_bytes`). Relief is placement — hugepages + `numaN: hostnodes=` on the pinned guest, a restart — or a smaller allocation; while the swap lives on a spinning disk this becomes PveHostSwapThrash.'
@@ -154,6 +163,8 @@ spec:
           for: 5m
           labels:
             severity: critical
+            # triage: acute: guest pages are being read back under I/O pressure; name the stalled workload fast
+            triage: now
           annotations:
             summary: '{{ $labels.host }} swapping in at {{ $value | humanize1024 }}B/s with I/O pressure'
             description: 'Guest memory is coming back from swap at disk speed and the host is I/O-bound on it — every guest on {{ $labels.host }} crawls (a CI runner in this state took 397 s for a 2 s step, FU-289; the 09-25 runs showed ~1 MiB/s swap-in at 20% I/O pressure, i.e. a 5400 rpm disk at 98%). It ends when the pages are back, not when memory frees. Now: stop adding load on {{ $labels.host }} (park the runner: `var.ci_runner_0N_running=false`); then the cause via PveHostSwapUsed. Structural: swap on the SSD/NVMe, never the spinner.'
@@ -162,6 +173,8 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: audit 2026-10-03: placement fact, read at placement time
+            triage: none
           annotations:
             summary: '{{ $labels.host }} NUMA node {{ $labels.node }} down to {{ $value | humanize1024 }}B free + reclaimable file'
             description: 'One physical memory node of a dual-socket hypervisor is nearly exhausted while the other may be wide open. MemAvailable hides it, and kswapd works PER NODE: it evicts whatever is evictable on that node — the unpinned guests, to swap — to hold its watermarks, regardless of free RAM on the other node (FU-289: wk-04 pinned 6/26 GiB across the nodes of nx-02, node 1 at ~1 GiB, ci-runner-02 went to the HDD). On {{ $labels.host }}: `pve_qemu_numa_resident_bytes{host="{{ $labels.host }}",node="{{ $labels.node }}"}` names the guests on that node, `pve_qemu_locked_bytes` which is pinned (VFIO). A pinned guest is rebalanced only by a restart with explicit `numaN: hostnodes=` (+ hugepages) — docs/spikes/nx-02-numa-placement.md.'
@@ -170,13 +183,16 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: audit 2026-10-03: placement fact, read at placement time
+            triage: none
           annotations:
             summary: '{{ $labels.host }} guest {{ $labels.name }} (vmid {{ $labels.vmid }}) has {{ $value | humanize1024 }}B on host swap'
             description: 'The host has paged part of this guest out. The guest cannot know — it sees its RAM as present — so every touch of a swapped page is a disk read it did not ask for; a Talos node or a CI runner in this state stalls for minutes, and a control-plane guest here is an etcd member on a spinning disk. Find the pressure with PveHostSwapUsed / PveNumaNodeMemoryLow on {{ $labels.host }}; the guest recovers when its pages are back (`vmstat 1` on the host, column si), not when this clears.'
         - alert: PveMetricsStale
           expr: time() - node_textfile_mtime_seconds{job="pve-node", file=~".*/pve.prom"} > 600
           for: 5m
-          labels: { severity: warning }
+          # triage none: collector timer on the hypervisor; cause only on the host
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.host }} textfile metrics not refreshed for {{ $value | humanizeDuration }}"
             description: >-
@@ -195,7 +211,8 @@ spec:
             absent(pve_lvm_thin_pool_data_percent{job="pve-node", host="pve"})
             or absent(pve_lvm_thin_pool_data_percent{job="pve-node", host="nx-02"})
           for: 15m
-          labels: { severity: warning }
+          # triage dig: ScrapeConfig target loss is checkable in-cluster; host-side causes then go to the operator
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.host }} thin-pool meter absent — that pool is unmetered again"
             description: >-
@@ -221,7 +238,8 @@ spec:
         - alert: RouterPairMasterCount
           expr: sum(router_node_carp_master{job="pve-node"}) != 1
           for: 1m
-          labels: { severity: critical }
+          # triage none: CARP split or no master: cause in router or hypervisor network, out of reach
+          labels: { severity: critical, triage: none }
           annotations:
             summary: "Router pair has {{ $value }} CARP masters (want exactly 1)"
             description: >-
@@ -240,7 +258,8 @@ spec:
             or on() (count(router_node_wangate_heartbeat_seconds{job="pve-node"}) < 2)
             or on() absent(router_node_wangate_heartbeat_seconds{job="pve-node"})
           for: 5m
-          labels: { severity: warning }
+          # triage none: WAN gate unit on the hypervisor; cause only on the host
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Router WAN gate silent{{ with $labels.host }} on {{ . }}{{ end }} — the pair's master count is unreadable"
             description: >-

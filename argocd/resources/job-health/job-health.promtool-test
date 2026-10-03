@@ -66,6 +66,7 @@ tests:
               severity: warning
               namespace: garage
               cronjob: garage-write-probe
+              triage: dig
             exp_annotations:
               summary: "CronJob garage/garage-write-probe has not succeeded in 3 scheduled runs"
               description: >-
@@ -119,6 +120,7 @@ tests:
               namespace: infisical
               job_name: infisical-bootstrap-1
               job: kube-state-metrics
+              triage: dig
             exp_annotations:
               summary: "Job infisical/infisical-bootstrap-1 failed to complete"
               description: >-
@@ -156,6 +158,7 @@ tests:
               severity: warning
               namespace: monitoring
               cronjob: never-ran
+              triage: dig
             exp_annotations:
               summary: "CronJob monitoring/never-ran has never completed successfully"
               description: >-

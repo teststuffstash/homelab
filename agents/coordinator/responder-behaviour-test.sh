@@ -409,7 +409,7 @@ grep -qF 'responder PAUSED at the Sensor' "$XCHK" \
 # the same reason: a rule edit that drops one makes the alert dispatchable again in silence, and
 # no schema has an opinion about labels. Each entry here is an OPERATOR-QUEUE alert — its remedy
 # is an act only the operator can take, so a session could only re-conclude the annotation.
-triageval() { # <alertname> <file> → "none" | "unset" | "" (alert not found)
+triageval() { # <alertname> <file> → "none" | "now" | "dig" | "unset" | "" (alert not found)
   A="$1" yq -r '.spec.groups[].rules[] | select(.alert == strenv(A)) | .labels.triage // "unset"' \
     "$REPO/$2" 2>/dev/null | head -1
 }
@@ -429,11 +429,12 @@ notriage AgentAttentionStanding       argocd/resources/pushgateway/prometheusrul
 # …and the counterexamples, so `triage: none` stays a JUDGMENT rather than a habit. Both are
 # alerts whose cause lives inside something the lane can read, so both must keep costing a
 # session: a red master CI run in a claimed repo, and a rate-limit pool that a loop can drain
-# (the FU-084 shape).
+# (the FU-084 shape). Since every rule carries a value (none|now|dig, 2026-10-03 — the lint holds
+# that), "eligible" reads as a value other than `none`, never as the label being absent.
 for pair in "GithubWorkflowRunFailed" "GithubRateLimitLow"; do
   v="$(triageval "$pair" argocd/resources/github-exporter/prometheusrule.yaml)"
-  [ "$v" = "unset" ] && ok "$pair stays triage-eligible (investigable from in-cluster reads)" \
-                     || bad "$pair stays triage-eligible" "got '${v:-alert not found}'"
+  case "$v" in now|dig) ok "$pair stays triage-eligible (investigable from in-cluster reads; triage: $v)" ;;
+               *) bad "$pair stays triage-eligible" "got '${v:-alert not found}'" ;; esac
 done
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────

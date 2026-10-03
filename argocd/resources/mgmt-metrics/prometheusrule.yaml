@@ -22,7 +22,8 @@ spec:
           expr: |
             (time() - mgmt_apply_last_ok_tick_timestamp_seconds) > 3600
           for: 15m
-          labels: { severity: warning }
+          # triage none: apply timer on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Management box apply loop has not completed a tick in over an hour"
             description: >-
@@ -36,7 +37,8 @@ spec:
             up{job="mgmt-node"} == 1
               unless on (instance) mgmt_apply_last_ok_tick_timestamp_seconds
           for: 30m
-          labels: { severity: warning }
+          # triage none: apply textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Management box is scraped but publishes no mgmt_apply_* metrics"
             description: >-
@@ -53,7 +55,8 @@ spec:
           expr: |
             mgmt_apply_post_check_failed == 1
           for: 5m
-          labels: { severity: warning }
+          # triage now: box auto-apply regressed the cluster, nothing reverted; regression is readable in-cluster, revert PR helps
+          labels: { severity: warning, triage: now }
           annotations:
             summary: "The management box auto-applied a Talos config and the cluster regressed"
             description: >-
@@ -76,7 +79,8 @@ spec:
           expr: |
             mgmt_apply_deferred_window == 1
           for: 6h
-          labels: { severity: warning }
+          # triage none: a declared operator window is open; the deferral is the designed behaviour
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The management box has deferred master's apply behind a declared window for 6h"
             description: >-
@@ -93,7 +97,8 @@ spec:
           expr: |
             up{job="mgmt-node"} == 0 or absent(up{job="mgmt-node"})
           for: 15m
-          labels: { severity: warning }
+          # triage none: management box down or off the LAN; no ssh, physical or box-side remedy
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The management box (192.168.2.53) is not answering its scrape"
             description: >-
@@ -117,7 +122,8 @@ spec:
           expr: |
             mgmt_node_drift{axis=~"reachable|registered"} == 1
           for: 2h
-          labels: { severity: warning }
+          # triage dig: node absence or Talos API silence; node events, metrics and kmsg in Loki are readable
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.node }} is declared but not {{ $labels.axis }} — for 2h"
             description: >-
@@ -132,7 +138,8 @@ spec:
           expr: |
             mgmt_node_drift{axis=~"labels|taints"} == 1
           for: 1h
-          labels: { severity: warning }
+          # triage dig: label or taint drift vs tofu is readable via kubectl; often an imperative edit
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.node }}'s {{ $labels.axis }} differ from the declaration for 1h"
             description: >-
@@ -146,7 +153,8 @@ spec:
           expr: |
             mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
           for: 24h
-          labels: { severity: warning }
+          # triage dig: schematic or EPHEMERAL disk drift stood 24h past the reconciler; node state readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.node }} runs an install that differs from the declaration ({{ $labels.axis }}) for 24h"
             description: >-
@@ -163,7 +171,8 @@ spec:
           expr: |
             (time() - mgmt_probe_last_run_timestamp{mode="belt"}) > 3600
           for: 15m
-          labels: { severity: warning }
+          # triage none: belt timer on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Management box drift belt has not finished a run in over an hour"
             description: >-
@@ -190,7 +199,8 @@ spec:
           # 2 h = 8 ticks. A single tick can fail on a transient (an upstream fetch, a
           # port-forward, a node mid-reboot); eight in a row is a standing condition.
           for: 2h
-          labels: { severity: warning }
+          # triage none: audit 2026-10-03: cause only in the management box journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: >-
               Management box belt check `{{ $labels.check }}` has been failing for 2 hours
@@ -213,7 +223,8 @@ spec:
             up{job="mgmt-node"} == 1
               unless on (instance) mgmt_probe_last_run_timestamp{mode="belt"}
           for: 1h
-          labels: { severity: warning }
+          # triage none: belt textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Management box is scraped but publishes no drift-belt metrics"
             description: >-
@@ -236,7 +247,8 @@ spec:
             mgmt_substrate_minors_behind >= 1
               and on (component) mgmt_substrate_supported == 1
           for: 7d
-          labels: { severity: warning }
+          # triage none: audit 2026-10-03: a roadmap version bump, not an in-cluster fault
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.component }} declares a version {{ $value }} upstream minor(s) old — for 7 days"
             description: >-
@@ -251,7 +263,8 @@ spec:
           expr: |
             mgmt_substrate_supported == 0
           for: 1h
-          labels: { severity: warning }
+          # triage none: support-window fact; the remedy is a planned version bump
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.component }} declares a version outside its project's support window"
             description: >-
@@ -274,7 +287,8 @@ spec:
           expr: |
             mgmt_reconcile_node_state{state="parked"} == 1
           for: 5m
-          labels: { severity: warning }
+          # triage dig: parked upgrade often has an in-cluster blocker: PDB, stuck pods, node conditions
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "The management box's reconciler PARKED {{ $labels.node }} — its one attempt failed"
             description: >-
@@ -292,7 +306,8 @@ spec:
             mgmt_reconcile_sync_started_timestamp_seconds > 0
               and (time() - mgmt_reconcile_sync_started_timestamp_seconds) > 3 * 3600
           for: 5m
-          labels: { severity: warning }
+          # triage dig: cordoned or draining node; blocking PDBs and terminating pods readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "The reconciler's sync of {{ $labels.node }} has run for over 3h"
             description: >-
@@ -308,7 +323,8 @@ spec:
             (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
               unless on (instance) (max by (instance) (mgmt_reconcile_sync_started_timestamp_seconds) > 0)
           for: 15m
-          labels: { severity: warning }
+          # triage none: reconciler timer or inputs on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The management box's node reconciler has not evaluated in over an hour"
             description: >-
@@ -321,7 +337,8 @@ spec:
             up{job="mgmt-node"} == 1
               unless on (instance) mgmt_reconcile_last_run_timestamp_seconds
           for: 1h
-          labels: { severity: warning }
+          # triage none: reconcile textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Management box is scraped but publishes no mgmt_reconcile_* metrics"
             description: >-
@@ -446,7 +463,8 @@ spec:
               and on (signal) (mgmt:rollout_signal:namespaces{side="upgraded"} >= 2)
               and on () (count(mgmt:node_rollout_behind:since) >= 2)
           for: 30m
-          labels: { severity: warning }
+          # triage dig: the reconciler halts on it; which signal regressed on upgraded nodes is readable from Prometheus
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Talos rollout: {{ $labels.signal }} worse on the just-upgraded nodes than on the ones still behind"
             description: >-

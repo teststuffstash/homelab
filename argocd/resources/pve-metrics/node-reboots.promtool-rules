@@ -8,12 +8,12 @@ groups:
       - alert: NodeRebootedTwiceIn24h
         expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[24h])) >= 2
         for: 0m
-        labels: { severity: warning }
+        labels: { severity: warning, triage: dig}
         annotations:
           summary: "{{ $labels.instance }} booted {{ $value }} times in 24 h — a box rebooting itself"
       - alert: NodeRebootingRepeatedly
         expr: sum by (instance) (changes(node_boot_time_seconds{job="node-exporter"}[7d])) >= 3
         for: 0m
-        labels: { severity: warning }
+        labels: { severity: warning, triage: dig}
         annotations:
           summary: "{{ $labels.instance }} booted {{ $value }} times in 7 d"

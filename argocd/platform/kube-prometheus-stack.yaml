@@ -39,6 +39,8 @@ spec:
         skipCrds: true
         valueFiles:
           - $values/argocd/platform/values/kube-prometheus-stack.yaml
+          # the upstream rules' `triage` labels (alert relabelling) — one home, see its header
+          - $values/argocd/platform/values/kube-prometheus-stack-triage.yaml
     # 2) THIS repo, referenced as $values — supplies the values file above.
     - repoURL: https://github.com/teststuffstash/homelab.git
       targetRevision: master

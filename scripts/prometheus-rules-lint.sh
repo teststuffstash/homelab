@@ -29,6 +29,20 @@ check_info_severity() {
   return 1
 }
 
+# triage check (operator decision 2026-10-03): every alert we OWN carries `triage` — none (no in-cluster
+# investigation can change what anyone does), now (acute: a real-time responder session), or dig
+# (the default: a deep investigation if it stands or recurs unexplained). Missing or any other value
+# REDS. Upstream chart rules get theirs from argocd/platform/values/kube-prometheus-stack-triage.yaml
+# (the TRIAGE MAP leg below). Args: <rules-json> <label>.
+check_triage() {
+  local bad
+  bad=$(jq -r '[.groups[].rules[]? | select(.alert)
+                | select((.labels.triage // "") | IN("none","now","dig") | not)
+                | "\(.alert)=\(.labels.triage // "<missing>")"] | join(", ")' "$1" 2>/dev/null || true)
+  [ -z "$bad" ] && return 0
+  echo "  FAIL $2: alert(s) without a valid triage label (none|now|dig): $bad" >&2
+  return 1
+}
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 files=$(grep -rl "^kind: PrometheusRule" argocd/ tofu/ 2>/dev/null | sort || true)
 [ -n "$files" ] || { echo "prometheus-rules-lint: FAIL — found no PrometheusRule manifests at all" >&2; exit 2; }
@@ -47,6 +61,8 @@ for f in $files; do
     rc=1
   fi
   check_info_severity "$tmp/r.json" "$f" || rc=1
+  check_triage "$tmp/r.json" "$f" || rc=1
+  jq -r '.groups[].rules[]? | select(.alert) | .alert' "$tmp/r.json" >> "$tmp/our-alerts"
   checked=$((checked+1)); rules=$((rules+n))
 done
 [ "$checked" -gt 0 ] && echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
@@ -91,6 +107,8 @@ for f in $vfiles; do
       rc=1; file_rc=1
     fi
     check_info_severity "$out" "$f (entry '$e')" || { rc=1; file_rc=1; }
+    check_triage "$out" "$f (entry '$e')" || { rc=1; file_rc=1; }
+    jq -r '.groups[].rules[]? | select(.alert) | .alert' "$out" >> "$tmp/our-alerts"
   done <<EOF
 $entries
 EOF
@@ -103,6 +121,56 @@ EOF
 done
 [ "$vchecked" -gt 0 ] && echo "prometheus-rules-lint: values-defined rules: $vchecked file(s), $vgroups group(s), $valerts alert(s) checked"
 [ "$checked" -gt 0 ] || [ "$vchecked" -gt 0 ] || { echo "prometheus-rules-lint: FAIL — validated nothing" >&2; exit 2; }
+
+# TRIAGE — the rules leg 1's `^kind:` grep cannot see: the AgentStack composition templates a
+# PrometheusRule per stack (indented, Go-templated — not parseable as YAML here), so its alerts are
+# checked as text: every `- alert:` must carry a `triage:` label with a valid value before the next rule.
+for f in argocd/resources/agentstack/composition.yaml; do
+  [ -f "$f" ] || continue
+  bad=$(awk '
+    /^[[:space:]]*- (alert|record):/ { if (a != "" && !ok) print a; a=""; ok=0 }
+    /^[[:space:]]*- alert:/ { a=$3 }
+    a != "" && /^[[:space:]]*triage:[[:space:]]*"?(none|now|dig)"?([[:space:]]|$)/ { ok=1 }
+    END { if (a != "" && !ok) print a }' "$f" | tr '\n' ' ')
+  if [ -n "$bad" ]; then echo "  FAIL $f: templated alert(s) without a valid triage label: $bad" >&2; rc=1
+  else echo "  ok  $f (templated alerts carry triage)"; fi
+  grep -E '^[[:space:]]*- alert:' "$f" | awk '{print $3}' >> "$tmp/our-alerts"
+done
+
+# TRIAGE MAP — the UPSTREAM rules' labels (operator decision 2026-10-03, option B: alert relabelling).
+# The map is kube-prometheus-stack-triage.yaml; the names it must cover are
+# kube-prometheus-stack-upstream-alerts.txt, rendered from the PINNED chart by
+# scripts/upstream-alerts-refresh.sh. Hermetic (no helm template here): a chart bump moves
+# targetRevision away from the list's recorded version and REDS until the list is re-rendered and
+# every new name classified — the one moment new upstream names can arrive.
+tmap=argocd/platform/values/kube-prometheus-stack-triage.yaml
+tlist=argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt
+tapp=argocd/platform/kube-prometheus-stack.yaml
+if [ -f "$tmap" ] && [ -f "$tlist" ]; then
+  pinned=$(yq -r '.spec.sources[] | select(.chart == "kube-prometheus-stack") | .targetRevision' "$tapp")
+  listed=$(sed -n 's/^# chart: kube-prometheus-stack \([^ ]*\) .*/\1/p' "$tlist")
+  if [ -z "$pinned" ] || [ "$pinned" != "$listed" ]; then
+    echo "  FAIL $tlist: rendered for chart '${listed:-?}', $tapp pins '${pinned:-?}' — run scripts/upstream-alerts-refresh.sh and classify any new name in $tmap" >&2; rc=1
+  fi
+  yq -o=json '.prometheus.prometheusSpec.additionalAlertRelabelConfigs' "$tmap" > "$tmp/tmap.json"
+  # shape: fill-if-empty only — triage first among the source labels, regex anchored on an EMPTY triage
+  shape=$(jq -r '[.[] | select((.source_labels[0] != "triage") or ((.regex // "") | startswith(";") | not)
+                   or (.target_label != "triage") or ((.replacement // "") | IN("none","now","dig") | not)) | .regex] | join(", ")' "$tmp/tmap.json")
+  [ -z "$shape" ] || { echo "  FAIL $tmap: entries not of the fill-if-empty shape (or a value outside none|now|dig): $shape" >&2; rc=1; }
+  jq -r '.[] | select(.source_labels == ["triage","alertname"]) | .regex | ltrimstr(";")' "$tmp/tmap.json" | sort > "$tmp/mapped"
+  grep -v '^#' "$tlist" | sed '/^$/d' | sort > "$tmp/listed"
+  dup=$(uniq -d "$tmp/mapped" | tr '\n' ' ')
+  missing=$(comm -13 "$tmp/mapped" "$tmp/listed" | tr '\n' ' ')
+  stale=$(comm -23 "$tmp/mapped" "$tmp/listed" | tr '\n' ' ')
+  ours=$(comm -12 "$tmp/mapped" <(sort -u "$tmp/our-alerts" 2>/dev/null) | tr '\n' ' ')
+  [ -z "$dup" ] || { echo "  FAIL $tmap: alert(s) mapped twice: $dup" >&2; rc=1; }
+  [ -z "$missing" ] || { echo "  FAIL $tmap: upstream alert(s) with no triage entry: $missing" >&2; rc=1; }
+  [ -z "$stale" ] || { echo "  FAIL $tmap: entries for alert(s) the pinned chart does not render: $stale" >&2; rc=1; }
+  [ -z "$ours" ] || { echo "  FAIL $tmap: maps alert(s) WE own — their rule carries the label: $ours" >&2; rc=1; }
+  [ -z "$dup$missing$stale$ours" ] && echo "  ok  $tmap ($(wc -l < "$tmp/mapped") upstream alert(s), chart $pinned)"
+else
+  echo "  FAIL triage map or upstream list missing ($tmap, $tlist)" >&2; rc=1
+fi
 
 # FU-158 behaviour half (PR#310's deferred codeowner hook): run every promtool BEHAVIOUR fixture.
 # Fixture pairs live beside their PrometheusRule as <name>.promtool-{rules,test} (deliberately not

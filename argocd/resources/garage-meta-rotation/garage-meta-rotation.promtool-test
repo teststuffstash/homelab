@@ -22,6 +22,7 @@ tests:
           - exp_labels:
               severity: warning
               pod: garage-0
+              triage: dig
             exp_annotations:
               summary: "Garage metadata rotation of garage-0 failed"
   # ── the heartbeat going stale fires; a fresh heartbeat does not ─────────────────────────────
@@ -40,6 +41,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Garage metadata rotation controller has not run for over an hour"
   # ── the loop clearing nothing: a metadata volume >80% for 6h30m (6h past the alert's own 30m) ─
@@ -68,5 +70,6 @@ tests:
               severity: warning
               volume: metadata
               pod: garage-0
+              triage: dig
             exp_annotations:
               summary: "GarageDiskFillingUp on garage-0 metadata has fired for 6h — the rotation loop did not clear it"
