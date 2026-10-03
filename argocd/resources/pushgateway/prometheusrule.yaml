@@ -295,7 +295,19 @@ spec:
           # its `enforce: false` flips; in monitor mode Cilium never emits a DROPPED verdict.
           # WIDENED 2026-09-01 (homelab#1056): loop namespaces (<stack>-agents) and agent-coordinator
           # now carry monitor-mode CNPs — the regex must cover them before any enforce flip.
-          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab|agent-runtime|agent-coordinator|.*-agents"}[5m])) > 0
+          # BENIGN-NOISE EXCLUSION (operator direction 2026-10-03, responder audit): ~95 % of a week's
+          # oracle-fleet denials were browser/SDK phone-home that broke nothing — Chrome/Google sign-in
+          # + update pings (www/accounts/clients2/android.clients.google.com, Hubble comma-joins names
+          # sharing an IP), grafana.com + api.segment.io telemetry, the 169.254.169.254 cloud-metadata
+          # probe, Google QUIC to bare 142.251.x IPs (UDP ONLY — TCP to the same IPs stays signal), and
+          # ICMP to kube-dns 10.96.0.10 (ICMP ONLY — a UDP/TCP drop to kube-dns is real). EXACT names,
+          # never a domain wildcard; registry mirrors / pypi / nixos / opentofu / galaxy / oxl / deno
+          # stay signal. The `unless` legs match the SAME series (identical labelsets) so they remove
+          # exactly the protocol-scoped flows. Fixture: egress-dropped.promtool-test.
+          expr: >-
+            sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab|agent-runtime|agent-coordinator|.*-agents", destination!~"((www|accounts|clients2|android\\.clients)\\.google\\.com)(,(www|accounts|clients2|android\\.clients)\\.google\\.com)*|grafana\\.com|api\\.segment\\.io|169\\.254\\.169\\.254"}[5m])
+            unless rate(hubble_drop_total{reason="POLICY_DENIED", protocol="UDP", destination=~"142\\.251\\.[0-9]{1,3}\\.[0-9]{1,3}"}[5m])
+            unless rate(hubble_drop_total{reason="POLICY_DENIED", protocol="ICMPv4", destination="10.96.0.10"}[5m])) > 0
           for: 2m
           labels:
             severity: warning
@@ -308,9 +320,13 @@ spec:
             # already IS the FQDN (drop:destinationContext=dns|ip, tofu/cilium.tf). Full runbook:
             # docs/agents/roles.md §responder; keep the two in sync.
             description: >-
-              Sustained POLICY_DENIED drops from namespace {{ $labels.source }}. SYMPTOM ONLY — observed causes so far:
-              tool phone-home noise (jetify update+telemetry, 2026-07-21/22 — rides ran fine throughout) and genuine
-              allowlist misses; a drop does not imply a hung ride.
+              Sustained POLICY_DENIED drops from namespace {{ $labels.source }} to a destination NOT on the known-benign
+              list. SYMPTOM ONLY — observed causes so far: tool phone-home noise (jetify update+telemetry, 2026-07-21/22 —
+              rides ran fine throughout) and genuine allowlist misses; a drop does not imply a hung ride.
+              EXCLUDED from this alert (the rule's expr is the one list): browser/SDK phone-home — www/accounts/clients2/
+              android.clients.google.com, grafana.com, api.segment.io, 169.254.169.254, Google QUIC (UDP to 142.251.x),
+              ICMP to kube-dns 10.96.0.10. The STEP 1 query below is UNFILTERED on purpose — it shows the full drop
+              picture, benign rows included; read past them to the destination that tripped this alert.
               STEP 1, name the destination (works from anywhere, and usually the whole answer): `curl -sG
               http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode
               'query=topk(10, sum by (source,destination,protocol) (increase(hubble_drop_total{reason="POLICY_DENIED",source="{{ $labels.source }}"}[6h])) > 0)'`
