@@ -1,0 +1,22 @@
+# The daily backup for the **daily** class (FU-299, docs/longhorn-backup.md §Classes). A volume
+# joins by its PVC carrying two labels, set where that PVC is declared:
+#   recurring-job.longhorn.io/source: enabled                 ← the PVC's labels drive the volume's
+#   recurring-job-group.longhorn.io/daily-backup: enabled     ← membership in this group
+# Without the first, Longhorn reads the VOLUME's labels and the PVC's are ignored. A volume with no
+# recurring-job label at all falls into Longhorn's implicit `default` group — no job uses it, so
+# an unlabelled volume is backed up by nothing, on purpose.
+# 01:00Z is UniFi's settings-only autobackup (the .unf on unifi-config); 02:00Z picks it up the
+# same night. LonghornBackupStale (prometheusrule.yaml) fires on a volume this job stopped covering.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: daily-backup
+  namespace: longhorn-system
+spec:
+  name: daily-backup
+  task: backup
+  cron: "0 2 * * *"
+  groups: [daily-backup]
+  retain: 14
+  concurrency: 2
+  labels: {}
