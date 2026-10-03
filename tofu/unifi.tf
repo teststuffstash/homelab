@@ -13,7 +13,9 @@
 # Backup: the controller writes a settings-only autobackup (.unf, ~45 KB) to unifi-config daily
 # at 01:00Z, and unifi-config is in the daily Longhorn backup; unifi-mongo is NOT backed up — the
 # .unf restores the settings, the rest is statistics (docs/longhorn-backup.md §UniFi). The
-# schedule is controller state in Mongo (`unifi.scheduletask`, action backup), not code here.
+# schedule is controller state in Mongo, so the `backup-schedule` init container below converges
+# it on every controller start; the `backup-age` sidecar pushes the newest .unf's mtime for
+# UnifiAutobackupStale (argocd/resources/longhorn-backup/prometheusrule.yaml).
 #
 # Secrets: Mongo root + the unifi DB password are generated (random_password, kept in
 # tofu state which is gitignored) — nothing sensitive in git.
@@ -26,6 +28,21 @@ locals {
   # deliberately, then `tofu apply` (Recreate strategy → brief downtime, slow first boot).
   unifi_image = "lscr.io/linuxserver/unifi-network-application@sha256:f87c4d57285f3118a0bad24f696f5aa088859d332b5bf865cdb8e515a1c819ab"
   mongo_image = "mongo:7.0" # UniFi 8.1+ supports mongo<=7.0; >4.4 needs AVX (cpu=host → ok)
+
+  # The settings-only autobackup, converged by the init container on every controller start (the
+  # scheduler reads it ONLY at startup). `scheduletask` is what the scheduler runs;
+  # `setting.super_mgmt` is the UI's copy — both are written so the UI shows the truth.
+  # autobackup_days 0 = settings only. 01:00Z runs before the 02:00Z Longhorn daily-backup.
+  unifi_autobackup_cron = "0 1 * * *"
+  unifi_autobackup_js   = <<-EOT
+    const c = "${local.unifi_autobackup_cron}";
+    const t = db.scheduletask.updateMany({action: "backup"}, {$set: {cron_expr: c, timezone: "UTC"}});
+    const s = db.setting.updateOne({key: "super_mgmt"}, {$set: {autobackup_enabled: true,
+      autobackup_cron_expr: c, autobackup_timezone: "UTC", autobackup_days: 0, autobackup_max_files: 7}});
+    print("backup-schedule: scheduletask matched=" + t.matchedCount + " modified=" + t.modifiedCount +
+      ", super_mgmt matched=" + s.matchedCount + " modified=" + s.modifiedCount);
+    if (t.matchedCount === 0) print("backup-schedule: no scheduletask yet (fresh controller) — converges on the next start");
+  EOT
 }
 
 resource "random_password" "mongo_root" {
@@ -195,6 +212,70 @@ resource "kubernetes_deployment" "unifi" {
     template {
       metadata { labels = { app = "unifi" } }
       spec {
+        # Converges the autobackup schedule before the controller reads it. NON-FATAL on purpose:
+        # Mongo being unreachable must not keep the controller down; a schedule that did not
+        # converge shows up as a stale .unf (UnifiAutobackupStale), which is the outcome that matters.
+        init_container {
+          name    = "backup-schedule"
+          image   = local.mongo_image
+          command = ["sh", "-c", "mongosh --quiet --host \"$MONGO_HOST\" -u \"$MONGO_USER\" -p \"$MONGO_PASS\" --authenticationDatabase unifi unifi --eval \"$JS\" || echo 'backup-schedule: WARN could not converge (non-fatal)'"]
+          env {
+            name  = "MONGO_HOST"
+            value = "${kubernetes_service.mongo.metadata[0].name}.${kubernetes_namespace.unifi.metadata[0].name}.svc.cluster.local"
+          }
+          env {
+            name = "MONGO_USER"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.unifi_mongo.metadata[0].name
+                key  = "mongo-user"
+              }
+            }
+          }
+          env {
+            name = "MONGO_PASS"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.unifi_mongo.metadata[0].name
+                key  = "mongo-pass"
+              }
+            }
+          }
+          env {
+            name  = "JS"
+            value = local.unifi_autobackup_js
+          }
+          resources {
+            requests = { cpu = "10m", memory = "64Mi" }
+            limits   = { memory = "256Mi" }
+          }
+        }
+        # Pushes the newest .unf's mtime (0 = none) every 5 min; UnifiAutobackupStale ages it.
+        # If this sidecar dies the pushed value freezes and the alert fires anyway — the safe side.
+        container {
+          name  = "backup-age"
+          image = "alpine:3.20"
+          command = ["sh", "-c", <<-EOT
+            PG=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+            while true; do
+              f=$(ls -t /config/data/backup/autobackup/*.unf 2>/dev/null | head -1)
+              ts=0; [ -n "$f" ] && ts=$(stat -c %Y "$f")
+              wget -q -O- --timeout=5 --post-data="unifi_autobackup_last_file_timestamp_seconds $ts
+            " "$PG/metrics/job/unifi_autobackup" >/dev/null 2>&1 || echo "WARN push failed (newest=$f ts=$ts)"
+              sleep 300
+            done
+          EOT
+          ]
+          volume_mount {
+            name       = "config"
+            mount_path = "/config"
+            read_only  = true
+          }
+          resources {
+            requests = { cpu = "5m", memory = "8Mi" }
+            limits   = { memory = "32Mi" }
+          }
+        }
         container {
           name  = "unifi"
           image = local.unifi_image

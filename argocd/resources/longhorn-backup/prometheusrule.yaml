@@ -42,3 +42,38 @@ spec:
               Its newest backup is older than a daily RecurringJob allows. Look at the volume's
               backups and the recurring job's last run in the Longhorn UI, and at
               LonghornBackupTargetDown. docs/longhorn-backup.md.
+    # UniFi's settings-only .unf (docs/longhorn-backup.md §UniFi). The controller writes it daily at
+    # 01:00Z; the `backup-age` sidecar in tofu/unifi.tf pushes the newest file's mtime (0 = no file)
+    # to the Pushgateway every 5 min. Stale = the export stopped, whatever the cause — a schedule
+    # that did not converge, a Mongo fault (the 2026-10-01 corrupt collection failed it silently),
+    # or the sidecar itself dead (its last value freezes and ages into this alert).
+    - name: unifi-backup
+      rules:
+        - alert: UnifiAutobackupStale
+          expr: (time() - unifi_autobackup_last_file_timestamp_seconds) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            # triage: the controller's server.log and the sidecar/init logs say which link broke
+            triage: dig
+          annotations:
+            summary: "UniFi's settings-only autobackup (.unf) is {{ $value | humanizeDuration }} old"
+            description: >-
+              The newest .unf on unifi-config is older than a daily export allows (0 = there is
+              none). Read `grep backup /config/logs/server.log` in the unifi container (a Mongo
+              exception means a database fault — the 2026-10-01 class), the `backup-schedule` init
+              container's log (did the cron converge?), and the `backup-age` sidecar's log (is it
+              pushing?). docs/longhorn-backup.md §UniFi.
+        # Nothing has been pushed at all: the sidecar never ran, or the Pushgateway lost its store.
+        - alert: UnifiAutobackupAgeMissing
+          expr: absent(unifi_autobackup_last_file_timestamp_seconds)
+          for: 1h
+          labels:
+            severity: warning
+            # triage: sidecar log + pushgateway state are readable in-cluster
+            triage: dig
+          annotations:
+            summary: "No UniFi autobackup age is being reported"
+            description: >-
+              UnifiAutobackupStale cannot fire without this series. Check the `backup-age` sidecar
+              of deploy/unifi in ns unifi, then the Pushgateway (ns monitoring). docs/longhorn-backup.md §UniFi.
