@@ -7,7 +7,7 @@
         "detector",
         "canary"
       ],
-      "gap_rows": 12,
+      "gap_rows": 14,
       "human_cells": [
         "revert"
       ],
@@ -17,7 +17,7 @@
       "last_proven_pr": null,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
-      "rows": 12
+      "rows": 14
     },
     {
       "complete": false,
@@ -481,9 +481,24 @@
       "key": "1:argo-workflows",
       "last_proven": null,
       "name": "argo-workflows",
-      "version": "1.0.20",
+      "version": "1.0.24",
       "where": [
         "argocd/platform/argo-workflows.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:cert-manager",
+      "last_proven": null,
+      "name": "cert-manager",
+      "version": "v1.21.2",
+      "where": [
+        "argocd/platform/cert-manager.yaml"
       ]
     },
     {
@@ -635,6 +650,21 @@
       "version": "3.12.2",
       "where": [
         "argocd/platform/metrics-server.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [
+        "canary",
+        "detector",
+        "proposer"
+      ],
+      "key": "1:plugin-barman-cloud",
+      "last_proven": null,
+      "name": "plugin-barman-cloud",
+      "version": "0.8.1",
+      "where": [
+        "argocd/platform/plugin-barman-cloud.yaml"
       ]
     },
     {
@@ -841,7 +871,9 @@
         "argocd/resources/garage-meta-rotation/rotation.yaml",
         "argocd/resources/garage-write-probe/cronjob.yaml",
         "argocd/resources/github-exporter/deployment.yaml",
-        "argocd/resources/openrouter-proxy/deployment.yaml"
+        "argocd/resources/openrouter-proxy/deployment.yaml",
+        "argocd/resources/opnsense-config-backup/cronjob.yaml",
+        "argocd/resources/pg-backup/cronjob.yaml"
       ]
     },
     {
@@ -918,7 +950,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-09-27T12:57:20Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.28-gca94f4a2dd99; 25 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.28-gca94f4a2dd99; 26 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -926,6 +958,7 @@
         "agents/coordinator/fix-debounce-argo.yaml",
         "agents/coordinator/reflexes-argo.yaml",
         "agents/coordinator/responder-argo.yaml",
+        "agents/coordinator/retro-activity-argo.yaml",
         "agents/coordinator/retro-argo.yaml",
         "agents/coordinator/review-argo.yaml",
         "agents/coordinator/transcripts-sync.yaml",
@@ -960,7 +993,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-09-27T12:46:30Z",
       "name": "homelab/arc-runner",
-      "version": "2026.9.28-g047c2153138f (×3)",
+      "version": "2026.10.2-gd0b15ed85110 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1075,7 +1108,7 @@
       "key": "5:hashicorp/helm@tofu",
       "last_proven": null,
       "name": "hashicorp/helm",
-      "version": "2.17.0 (`~> 2.17`)",
+      "version": "3.3.0 (`~> 3.0`)",
       "where": [
         "tofu/versions.tf",
         "tofu/.terraform.lock.hcl"
@@ -1830,7 +1863,7 @@
       "key": "8:renovatebot/github-action",
       "last_proven": "2026-09-27T11:34:01Z",
       "name": "renovatebot/github-action",
-      "version": "9fea9f0fbf80401026d11d03911d62b1f70fef1f (v46.3.3)",
+      "version": "f3a31a786096ba6b40d0f0ffe11a494ef73bfa7c (v46.3.4)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]
@@ -1856,7 +1889,7 @@
       "key": "10:jetify-com/devbox",
       "last_proven": null,
       "name": "jetify-com/devbox",
-      "version": "0.18.3",
+      "version": "0.18.4",
       "where": [
         "docker/arc-runner/Dockerfile"
       ]
