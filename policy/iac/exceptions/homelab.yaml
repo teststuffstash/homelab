@@ -52,6 +52,7 @@ spec:
             - loki-tenant-reader
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
+            - pg-backup
       - resources:
           kinds:
             - ClusterRoleBinding
@@ -65,3 +66,10 @@ spec:
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
+            - pg-backup
+      - resources:
+          kinds:
+            - MutatingAdmissionPolicy
+            - MutatingAdmissionPolicyBinding
+          names:
+            - pg-backup-default # ADR-147: CNPG Clusters wired to their namespace's backup store
