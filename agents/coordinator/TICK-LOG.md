@@ -12096,3 +12096,14 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   `reason` label). stack-lint run from a clone reds on live state unrelated to this work (REG-04
   OutOfSync fixer apps ×3, REPO-03 agent-coordinator recipe files, GH-02 allure-behavior-snippets
   unprotected) — not chased.
+- **Landed + live (afternoon):** #2194 (egress-drop benign exclusion; oracle backtest 67→42 episodes; the
+  remaining :31 drop = ride `agent-oracle-fleet-issue-778-r1` → `192.168.40.31:443`, a client defaulting to
+  https against the HTTP-only mcr mirror — commented on oracle-fleet#778), #2195 (belt `reason` label;
+  SKIP-by-intent left open — no clean "down on purpose" signal, question in the PR), #2193 (ADR-148 step 1;
+  one review round: `CiliumBGPAllSessionsDown` now→dig, per-peer). Live check: Alertmanager shows the
+  relabelled upstream labels (Watchdog/InfoInhibitor `none`) and ours; Prometheus serves every platform
+  rule labelled except oracle-fleet's five (stack lane).
+- **Orphan removed (window seat-1791039391-4150, closed clean):** a hand-applied PrometheusRule
+  `argocd/registry-cache` (60 d, no Argo tracking) duplicated `RegistryMirrorCacheAlmostFull` — found
+  because it was the only platform rule still label-less after the sync. YAML saved before delete; the
+  managed copy in ns `registry-cache` is the one left.

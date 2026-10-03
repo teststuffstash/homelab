@@ -165,11 +165,11 @@ never the session's arc — that is TICK-LOG's.)
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
-- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Order:
-  PR#2193 (triage label on every rule + upstream relabel map + lint) → the subject-key residuals (FU-249 (2)) →
-  route `triage="now"` with the crosscheck and §routing test, then delete the filter → the grouped deep dig.
-  In flight from the same session: two seat-subagent PRs — the egress-drop alert's benign-destination
-  exclusion, and a bounded `reason` label on `MgmtBeltCheckFailing` (codeowner read: mgmt/scripts/).
+- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Step (1)
+  LIVE (PR#2193: every rule carries `triage`, upstream via the relabel map). Next: the subject-key residuals
+  (FU-249 (2)) → route `triage="now"` with the crosscheck and §routing test, then delete the filter → the
+  grouped deep dig. oracle-fleet's own rules (ert-pipeline ×2, oracle-gateway ×3) still carry no `triage` —
+  the stack's lane (`patterns/observability.md` §3).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.
   Theme #1907's assembly (`goal/1906-scan → master`) is the one codeowner read, and it has not been

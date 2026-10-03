@@ -1414,8 +1414,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-249** — **Responder PAUSED 2026-09-16 → REPLACED, not re-enabled (ADR-148, 2026-10-03): POINTER.**
       The Sensor's never-matching `alert-dep` filter stays until the replacement lands. Evidence (the
       09-26→10-03 old-vs-new replay, the per-alert digs): [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
-      §2026-10-03. **Next, in order:** (1) the `triage: none|now|dig` label on every rule + the upstream
-      relabel map + the lint (PR#2193); (2) the FU-232 subject residuals the audit found
+      §2026-10-03. **Next, in order:** (1) DONE 2026-10-03 — the `triage: none|now|dig` label on every
+      rule + the upstream relabel map + the lint (PR#2193, live; oracle-fleet's 5 stack rules still unlabelled); (2) the FU-232 subject residuals the audit found
       (kube-state-metrics pod alerts keyed `alert:<name>`/the exporter IP, github-exporter + pushgateway jobs
       missing from the reporter list, the `job=kubelet` witness fixture, a subject ledger blind to alertname);
       (3) route `triage="now"` + crosscheck + `responder-behaviour-test` §routing + roles.md, then delete the
