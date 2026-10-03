@@ -1,0 +1,22 @@
+# The longhorn-backup group lifted out of prometheusrule.yaml with annotations stripped (they are
+# runbooks; their one home is the manifest) — the rules file longhorn-backup.promtool-test loads.
+# Named .promtool-rules so manifest-lint does not kubeconform it. Re-copy after editing an expr:
+#   yq -o=yaml '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/longhorn-backup/prometheusrule.yaml
+groups:
+  - name: longhorn-backup
+    rules:
+      # max_over_time: one good probe in the window holds it off, so a blackbox-exporter roll
+      # (replicas: 1 — the EndpointProbeFailing restart-gap class) never pages on its own.
+      - alert: LonghornBackupTargetDown
+        expr: max_over_time(probe_success{job="blackbox-longhorn-backup-target"}[10m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+      # Only volumes that HAVE a backup (`> 0`): a volume nobody backs up exports 0 and is a
+      # class decision (docs/longhorn-backup.md §Classes), not a stale backup. 36 h = a daily
+      # job missed once plus slack.
+      - alert: LonghornBackupStale
+        expr: (time() - longhorn_volume_last_backup_at) > 36 * 3600 and longhorn_volume_last_backup_at > 0
+        for: 1h
+        labels:
+          severity: warning

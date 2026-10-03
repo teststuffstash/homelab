@@ -1,0 +1,52 @@
+# Behaviour fixture for the longhorn-backup alerts (FU-299).
+#
+#   devbox run -- promtool test rules argocd/resources/longhorn-backup/longhorn-backup.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs every *.promtool-test in CI. promtool's clock starts at
+# 0, so a "last backup at" timestamp is a literal epoch second relative to it.
+rule_files:
+  - longhorn-backup.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: "TargetDown: a blackbox roll (a few missed probes) holds; a dead target pages at 15m"
+    input_series:
+      # flake: 4 failed probes, then healthy again — never a whole 10m window of zeros
+      - series: 'probe_success{job="blackbox-longhorn-backup-target",instance="flaky"}'
+        values: "1x5 0x3 1x30"
+      # dead from t=0
+      - series: 'probe_success{job="blackbox-longhorn-backup-target",instance="dead"}'
+        values: "0x30"
+    alert_rule_test:
+      # dead from t=0: the window is all-zero at once, so only `for: 5m` holds it
+      - eval_time: 4m
+        alertname: LonghornBackupTargetDown
+        exp_alerts: []
+      # the flake never fires; the dead target does
+      - eval_time: 16m
+        alertname: LonghornBackupTargetDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: blackbox-longhorn-backup-target, instance: dead }
+
+  - interval: 1m
+    name: "Stale: only a volume that HAS a backup, and only past 36h + 1h"
+    input_series:
+      # backed up at t=0 (epoch 1, so it is > 0) and never again — stale from 36h, pages at 37h
+      - series: 'longhorn_volume_last_backup_at{volume="v-stale",pvc="p",pvc_namespace="ns"}'
+        values: "1x2400"
+      # never backed up: exports 0 — a class decision, not a stale backup
+      - series: 'longhorn_volume_last_backup_at{volume="v-never",pvc="q",pvc_namespace="ns"}'
+        values: "0x2400"
+      # backed up daily: the timestamp advances by a day every 1440 steps
+      - series: 'longhorn_volume_last_backup_at{volume="v-daily",pvc="r",pvc_namespace="ns"}'
+        values: "1x1439 86400x1439 172800x100"
+    alert_rule_test:
+      - eval_time: 36h
+        alertname: LonghornBackupStale
+        exp_alerts: []
+      - eval_time: 38h
+        alertname: LonghornBackupStale
+        exp_alerts:
+          - exp_labels: { severity: warning, volume: v-stale, pvc: p, pvc_namespace: ns }

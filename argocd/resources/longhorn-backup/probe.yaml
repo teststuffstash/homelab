@@ -1,0 +1,17 @@
+# The backup target's own health, from inside the cluster (the path Longhorn uses). Garage's
+# /health answers 200 "fully operational" on a healthy single node; garage_health is the in-cluster
+# Garage's module (argocd/resources/blackbox/blackbox.yaml). Rule: LonghornBackupTargetDown.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: longhorn-backup-target
+  namespace: monitoring
+spec:
+  jobName: blackbox-longhorn-backup-target
+  interval: 60s
+  module: garage_health
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - http://192.168.2.73:3903/health
