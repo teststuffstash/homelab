@@ -50,3 +50,51 @@ tests:
         alertname: LonghornBackupStale
         exp_alerts:
           - exp_labels: { severity: warning, volume: v-stale, pvc: p, pvc_namespace: ns , triage: dig}
+
+  - interval: 1m
+    name: "UniFi .unf: a daily file holds; a frozen one pages at 37h"
+    input_series:
+      # file written at t=0 and never again (export stopped, or the sidecar died — same value)
+      - series: 'unifi_autobackup_last_file_timestamp_seconds{job="unifi_autobackup",instance="stale"}'
+        values: "1x2400"
+      # a new file every day
+      - series: 'unifi_autobackup_last_file_timestamp_seconds{job="unifi_autobackup",instance="daily"}'
+        values: "1x1439 86400x1439 172800x100"
+    alert_rule_test:
+      - eval_time: 36h
+        alertname: UnifiAutobackupStale
+        exp_alerts: []
+      - eval_time: 38h
+        alertname: UnifiAutobackupStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: unifi_autobackup, instance: stale }
+
+  - interval: 1m
+    # No file pushes 0, i.e. "1970" — in production that is ~56 years stale and pages after
+    # `for: 1h`. promtool's clock starts AT epoch 0, so here 0 only reads as stale past 36h.
+    name: "UniFi .unf: no file at all (0) reads as stale"
+    input_series:
+      - series: 'unifi_autobackup_last_file_timestamp_seconds{job="unifi_autobackup",instance="none"}'
+        values: "0x2400"
+    alert_rule_test:
+      - eval_time: 36h
+        alertname: UnifiAutobackupStale
+        exp_alerts: []
+      - eval_time: 38h
+        alertname: UnifiAutobackupStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: unifi_autobackup, instance: none }
+
+  - interval: 1m
+    name: "UniFi .unf: nothing pushed at all → AgeMissing after 1h; present → silent"
+    input_series:
+      - series: 'some_other_series'
+        values: "1x120"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UnifiAutobackupAgeMissing
+        exp_alerts: []
+      - eval_time: 62m
+        alertname: UnifiAutobackupAgeMissing
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
