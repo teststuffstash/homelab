@@ -144,7 +144,9 @@ six OVERSIZE items pointer-ized into
       [`2026-10-03-cnpg-wire-switchover-deadlock`](incidents/2026-10-03-cnpg-wire-switchover-deadlock.md).
       Daily job + UniFi settings-only `.unf` (01:00Z; the never-working autobackup was a corrupt Mongo
       collection, dropped) = PR#2196, applied + first run 2026-10-03 (3 backups, unit = epoch s).
-      **Next:** a `.unf` staleness belt → off-site copy (operator: later) → a periodic restore drill.
+      UniFi schedule as code (init container) + `UnifiAutobackupStale` belt = PR#2197, live 2026-10-03.
+      **Next:** off-site copy — PARKED by the operator (2026-10-03: AWS-class target needs IAM + billing
+      limits first; no cluster write access to an unbounded store yet) → a periodic restore drill.
 - [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
       action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
       Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm

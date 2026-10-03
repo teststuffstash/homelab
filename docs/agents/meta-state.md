@@ -16,7 +16,8 @@ never the session's arc — that is TICK-LOG's.)
   reconciler's node windows hold the apply loop, `--admit-apply` separate from `--admit-reconciler`.
   Confirm the box's next pull runs it (a `DEFERRED` line the first time a window is open). (2) The
   `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: daily Longhorn job + UniFi
-  `.unf` LIVE (PR#2196, first run 2026-10-03) — glance at the 10-04 02:00Z scheduled run and the 01:00Z `.unf`.
+  `.unf` LIVE (PR#2196/#2197: schedule as code + UnifiAutobackupStale) — glance at the 10-04 01:00Z `.unf` +
+  02:00Z run; off-site PARKED by the operator.
 - **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
   `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
   reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**
