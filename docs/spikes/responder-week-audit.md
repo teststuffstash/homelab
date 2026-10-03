@@ -348,3 +348,33 @@ Two things the 09-16 measurement did not name, both shipped the next day:
    #1 of the 09-16 list was only half fixed: the reopen belt stops a REOPEN and the session simply
    files a fresh issue instead. A User close now decides for 14 days, and nothing is written on a
    thread a person ended.
+
+## The 2026-10-03 audit — the week the responder was paused, replayed both ways (→ ADR-148)
+
+Method: the 7 d of `ALERTS` (218 firing series, ~60 names) replayed through the pre-#1733 gates and
+the current ones (#1733/#1748–#1750): Alertmanager's route + 3 h re-delivery, the fp and subject
+ledgers, DECIDED-ONCE, the human-close shelf, the declared windows (reconstructed from TICK-LOG —
+Alertmanager kept only the last ~3 days of silences), the 12/day budget.
+
+| | old (`1450ff43`) | new (current) |
+|---|---|---|
+| triage sessions | 92 | 62–85 (report-only vs fix anchors) |
+| days the budget ran out | every full day | 3–6 of 8 |
+| (alert, day) never triaged | 68 | 4–26 |
+
+The new gates work as designed — standing conditions cost one session, the 09-27/09-30 reboot noise
+none — and the budget still binds. **Then each firing alert was dug into, with the responder's own
+reach:** three paid (AgentDispatchCronWoken → four dispatch defects, FU-168; AgentErrorFlagged →
+the docker.io mirror refusing the pinned MinIO image, red CI on 11 sleep-tracking PRs, #150;
+LonghornDiskBelowSchedulingFloor → a 57 GB stuck system snapshot, FU-093), seven did not (the Pve
+swap trio = placement facts; the three `Mgmt*` = cause only in the box's journal; the HA plug =
+out of reach). All three wins had stood for days; none needed minutes. **Value is per firing, not
+per alert name** — which is why the filter became a rule-site declaration plus a dynamic "standing
+and unexplained" selection rather than a deny-list.
+
+Subject-key residuals the replay surfaced (FU-249 step 2): pod-level kube-state-metrics alerts
+(`job=kube-state-metrics`, `pod` = the failing pod) skip their `pod` and key to `alert:<name>` or
+the exporter's IP — every KubePodNotReady in the cluster becomes ONE subject, and DECIDED-ONCE then
+mutes them all; github-exporter and pushgateway-pushed jobs are missing from the reporter list; the
+witness fixture uses `job=kubelet`, a shape that never occurs live; the per-day subject ledger is
+blind to alertname (PveGuestSwapped skipped the day PveHostSwapUsed triaged).
