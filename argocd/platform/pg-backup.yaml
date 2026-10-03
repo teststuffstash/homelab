@@ -1,0 +1,24 @@
+# Postgres backups BY DEFAULT for every CNPG Cluster (ADR-147, docs/postgres.md §Backups): the
+# per-namespace ObjectStores + credentials, the admission policy that wires each Cluster to its
+# namespace's store, and the daily `pg-backup` CronJob (also `devbox run pg-backup-now`).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pg-backup
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after the plugin's ObjectStore CRD (wave 1)
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/pg-backup
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false
+      - SkipDryRunOnMissingResource=true
