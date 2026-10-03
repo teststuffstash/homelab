@@ -5,8 +5,8 @@ Runs daily as the `pg-backup` CronJob and on demand before a risky change (the L
 restore point): `devbox run pg-backup-now` = a Job from this CronJob, same code path.
 
 For each Cluster:
-  covered    the Barman Cloud plugin is wired (the admission policy, or the Cluster's own spec)
-             → create a `Backup` (method plugin), wait for it
+  covered    the Barman Cloud plugin is wired (the admission policy, or the Cluster's own spec), or
+             an in-tree spec.backup.barmanObjectStore → create a `Backup` from the PRIMARY, wait for it
   opted out  annotated `homelab.io/pg-backup: disabled` → skipped, named in the summary
   UNCOVERED  anything else → named, and the run FAILS — a database with no backup is the alert,
              not a footnote (job-health's CronJobNotSucceeding / KubeJobFailed carry it)
@@ -50,8 +50,13 @@ def log(msg):
     print(f"{dt.datetime.now(dt.timezone.utc):%H:%M:%SZ} {msg}", flush=True)
 
 
-def covered(c):
-    return any(p.get("name") == PLUGIN for p in c["spec"].get("plugins") or [])
+def method(c):
+    """The backup method a Cluster is wired for, or None (uncovered)."""
+    if any(p.get("name") == PLUGIN for p in c["spec"].get("plugins") or []):
+        return "plugin"
+    if (c["spec"].get("backup") or {}).get("barmanObjectStore"):
+        return "barmanObjectStore"  # a hand-declared in-tree store (gone in CNPG 1.30) — still a backup
+    return None
 
 
 def main():
@@ -65,7 +70,8 @@ def main():
         if (c["metadata"].get("annotations") or {}).get(OPT_OUT) == "disabled":
             skipped.append(ref)
             continue
-        if not covered(c):
+        m = method(c)
+        if not m:
             uncovered.append(ref)
             continue
         bname = f"{name}-{TRIGGER}-{stamp}"[:63]
@@ -73,9 +79,15 @@ def main():
             "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",
             "metadata": {"name": bname, "namespace": ns,
                          "labels": {"homelab.io/pg-backup": TRIGGER, "cnpg.io/cluster": name}},
-            "spec": {"cluster": {"name": name}, "method": "plugin",
-                     "pluginConfiguration": {"name": PLUGIN}},
+            # target primary, never CNPG's prefer-standby default: a primary backup's pg_backup_stop
+            # WAITS for its WAL to be archived, so the backup is restorable the moment it completes
+            # (the pre-upgrade restore point needs exactly that). A standby backup reported
+            # "completed" 4 min before its WAL reached the store, and one taken from a standby that
+            # had just rejoined after a failover was unrestorable outright (2026-10-03 drill).
+            "spec": {"cluster": {"name": name}, "method": m, "target": "primary"},
         }
+        if m == "plugin":
+            body["spec"]["pluginConfiguration"] = {"name": PLUGIN}
         try:
             api("POST", f"/apis/postgresql.cnpg.io/v1/namespaces/{ns}/backups", body)
             started.append((ns, bname, ref))
