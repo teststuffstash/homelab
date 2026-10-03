@@ -181,21 +181,33 @@ spec:
           # ⚠ Per CHECK, not the mgmt_probe_checks{result="fail"} COUNT, so the alert can name
           # which one. The textfile is rewritten whole each run, so a check that stops failing
           # loses its status="fail" series rather than carrying it stale.
+          # ⚠ `reason` (2026-10-03) is aggregated OUT of the alert's identity and read back into
+          # the summary by query: a check whose reason flips between ticks (unreachable ↔ failed)
+          # is the SAME standing failure, and a reason-labelled series would restart the 2h `for:`
+          # on every flip — a flapping reason would never page.
           expr: |
-            mgmt_probe_check{mode="belt",status="fail"} == 1
+            max without (reason) (mgmt_probe_check{mode="belt",status="fail"}) == 1
           # 2 h = 8 ticks. A single tick can fail on a transient (an upstream fetch, a
           # port-forward, a node mid-reboot); eight in a row is a standing condition.
           for: 2h
           labels: { severity: warning }
           annotations:
-            summary: "Management box belt check `{{ $labels.check }}` has been failing for 2 hours"
+            summary: >-
+              Management box belt check `{{ $labels.check }}` has been failing for 2 hours
+              (reason: {{ with printf "mgmt_probe_check{mode=\"belt\",status=\"fail\",check=\"%s\"}" $labels.check | query }}{{ . | first | label "reason" }}{{ else }}unknown{{ end }})
             description: >-
               The drift belt is running and one of its checks keeps returning FAIL — so whatever
               that check compares has been out of agreement for at least eight consecutive ticks.
-              This alert says nothing about WHICH way: read the verdict line on the box,
-              `journalctl -u mgmt-belt -n 50 | grep FAIL` on 192.168.2.53. The belt is deliberately
-              report-only (it never acts), so nothing is being retried in the background — a
-              standing FAIL stays standing until a person moves it.
+              The summary's reason is the CURRENT tick's word from a fixed vocabulary
+              (mgmt/scripts/mgmt-probe.sh, REASONS): drift = declared and live disagree;
+              skew = talosctl a minor off the cluster; unreachable = a target did not answer
+              (for `ansible`, a router NODE — the verdict line names which); toolchain = tofu init
+              failed; failed = the command errored otherwise; unparseable = an unrecognised answer;
+              missing = a declared input is gone; other = a word outside the vocabulary (a probe
+              bug). The full verdict line (which host, which root, the error tail) stays on the
+              box: `journalctl -u mgmt-belt -n 50 | grep FAIL` on 192.168.2.53. The belt is
+              deliberately report-only (it never acts), so nothing is being retried in the
+              background — a standing FAIL stays standing until a person moves it.
         - alert: MgmtBeltMetricsAbsent
           expr: |
             up{job="mgmt-node"} == 1

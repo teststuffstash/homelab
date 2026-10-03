@@ -70,7 +70,7 @@ groups:
           severity: warning
       - alert: MgmtBeltCheckFailing
         expr: |
-          mgmt_probe_check{mode="belt",status="fail"} == 1
+          max without (reason) (mgmt_probe_check{mode="belt",status="fail"}) == 1
         for: 2h
         labels:
           severity: warning

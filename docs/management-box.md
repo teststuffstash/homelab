@@ -171,7 +171,12 @@ reinstall window), `MgmtNodeLiveStateDrift` (labels/taints, 1 h — applied live
 belt's own VERDICTS** — `mgmt_probe_check{check,status}`, published since the beginning with no
 rule consuming it, so a check could fail on every tick and say so to nobody: the `talos` skew
 check did exactly that from the 2026-09-22 move to v1.14.1 until a seat ran the unit by hand
-([FU-286](follow-ups.md)). The **version** axis has no box-side alert:
+([FU-286](follow-ups.md)). Since 2026-10-03 each series also carries a **`reason`** — one word
+from the probe's fixed vocabulary (`REASONS` in `mgmt/scripts/mgmt-probe.sh`: `drift`, `skew`,
+`unreachable`, `toolchain`, `failed`, …), never free text — which the alert's summary prints, so
+a cluster-side reader can say *why* without ssh; the full verdict line stays in journald. The
+`ansible` check judges per router NODE: a node that does not answer reads `unreachable`, not an
+opaque run failure. The **version** axis has no box-side alert:
 `TalosFleetVersionSplit` (`argocd/resources/talos-substrate/`, `for: 24h`) already owns the
 stalled-rollout case from `kube_node_info`, with no transport at all.
 
