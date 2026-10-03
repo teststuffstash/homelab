@@ -12075,3 +12075,24 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   archived). A primary-target backup restored infisical-pg in 85 s, 704/704 tables identical.
 - **PR#2192** (fixes): wire = explicit verb (`pg-backup-wire`), backups `target: primary`,
   `CNPGNoWritablePrimary` (replay = exactly the two windows).
+
+## 2026-10-03 afternoon — responder audit → ADR-148 (started as a second jail, took over the seat)
+
+- **Audit** (operator: "alerts over the last week that were not silenced; what would the responder
+  have done, old vs new"): the responder has been paused since 09-16 (FU-249 filter still live). Replay
+  of the week's 218 firing series through the pre-#1733 and current gates: 92 vs 62–85 sessions, the
+  12/day budget binding either way. Evidence: `spikes/responder-week-audit.md` §2026-10-03.
+- **Per-alert digs** with the responder's reach: 3 of 10 currently-firing classes paid, all standing
+  for days — dispatch defects A–D (FU-168), the docker.io mirror refusing sleep-tracking's pinned MinIO
+  image (root cause commented on sleep-tracking#150), a 57 GB stuck snapshot under hp-01's floor
+  (FU-093). nx-02 swap read as cold pages, no harm (FU-289 (4)). A nightly Garage I/O saturation since
+  09-30 (FU-229 resight). Loki in-cluster bypass = already accepted (`loki-tenancy.md` §Tightening).
+- **Rulings (operator):** responder narrows to `triage=now`, grouped deep dig for the rest; option B
+  (alert relabelling) for the stock rules; `KubePodNotReady` = now; `KubeAPIDown` + `*FailedToSendAlerts`
+  accepted as dig; the Pve capacity trio stays warning with `triage: none`. → **ADR-148**, PR#2193
+  (183 own rules + 134 upstream classified by two subagents, 1 upstream question left to the operator,
+  answered). FU-303 minted (etcd/scheduler/controller-manager scrape gaps). The fu-mint gate refused two
+  more mints → seat subagents building them as PRs instead (egress-drop benign exclusion; mgmt belt
+  `reason` label). stack-lint run from a clone reds on live state unrelated to this work (REG-04
+  OutOfSync fixer apps ×3, REPO-03 agent-coordinator recipe files, GH-02 allure-behavior-snippets
+  unprotected) — not chased.
