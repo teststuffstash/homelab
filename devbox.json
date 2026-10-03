@@ -196,6 +196,9 @@
       "governance-lint": [
         "bash scripts/governance-lint.sh \"$@\""
       ],
+      "governance-lint-test": [
+        "bash scripts/governance-lint-test.sh"
+      ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
       ],
