@@ -1,0 +1,132 @@
+---
+# Single-node Garage for Longhorn backups (FU-299). Idempotent end to end: binary, config, unit,
+# then layout + bucket + key — every CLI step reads before it writes. Config in
+# group_vars/garage_backup.yml; design in docs/longhorn-backup.md.
+
+# Debian 'standard' LXC template may lack python3 — bootstrap it for ansible (as matchbox).
+- name: Bootstrap python3 (raw, pre-facts)
+  ansible.builtin.raw: command -v python3 || (apt-get update && apt-get install -y python3)
+  changed_when: false
+
+- name: Gather facts
+  ansible.builtin.setup:
+
+- name: Create garage system group
+  ansible.builtin.group:
+    name: garage
+    system: true
+
+- name: Create garage system user
+  ansible.builtin.user:
+    name: garage
+    group: garage
+    system: true
+    home: "{{ garage_dir }}"
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Create garage directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: garage
+    group: garage
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ garage_dir }}", mode: "0750" }
+    - { path: "{{ garage_dir }}/meta", mode: "0750" }
+    - { path: "{{ garage_dir }}/data", mode: "0750" }
+    - { path: /etc/garage, mode: "0750" }
+
+- name: Install garage binary (checksum-pinned)
+  ansible.builtin.get_url:
+    url: "{{ garage_url }}"
+    dest: /usr/local/bin/garage
+    checksum: "sha256:{{ garage_sha256 }}"
+    mode: "0755"
+  notify: Restart garage
+
+# The RPC secret only authenticates this node to itself — it never leaves the box and nothing else
+# needs it, so it is minted here once rather than carried in the wallet.
+- name: Mint the RPC secret once
+  ansible.builtin.shell: |
+    set -e
+    umask 077
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > /etc/garage/rpc_secret
+    chown garage:garage /etc/garage/rpc_secret
+  args:
+    creates: /etc/garage/rpc_secret
+
+- name: Render garage.toml
+  ansible.builtin.template:
+    src: garage.toml.j2
+    dest: /etc/garage/garage.toml
+    owner: garage
+    group: garage
+    mode: "0640"
+  notify: Restart garage
+
+- name: Install systemd unit
+  ansible.builtin.template:
+    src: garage.service.j2
+    dest: /etc/systemd/system/garage.service
+    mode: "0644"
+  notify: Restart garage
+
+- name: Enable + start garage
+  ansible.builtin.systemd:
+    name: garage
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Flush handlers (config changes take effect before the CLI steps)
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the RPC port
+  ansible.builtin.wait_for:
+    port: 3901
+    timeout: 30
+
+# ---- layout: one node, assigned once ----
+- name: Read layout
+  ansible.builtin.command: garage -c /etc/garage/garage.toml layout show
+  register: garage_layout
+  changed_when: false
+  retries: 5
+  delay: 2
+  until: garage_layout.rc == 0
+
+- name: Assign + apply the single-node layout
+  when: "'Current cluster layout version: 0' in garage_layout.stdout or 'No nodes currently have a role' in garage_layout.stdout"
+  ansible.builtin.shell: |
+    set -e
+    id=$(garage -c /etc/garage/garage.toml node id -q | cut -d@ -f1)
+    garage -c /etc/garage/garage.toml layout assign -z {{ garage_zone }} -c {{ garage_capacity }} "$id"
+    garage -c /etc/garage/garage.toml layout apply --version 1
+
+# ---- bucket + key ----
+- name: List buckets
+  ansible.builtin.command: garage -c /etc/garage/garage.toml bucket list
+  register: garage_buckets
+  changed_when: false
+
+- name: Create bucket
+  when: garage_bucket not in garage_buckets.stdout
+  ansible.builtin.command: garage -c /etc/garage/garage.toml bucket create {{ garage_bucket }}
+
+- name: List keys
+  ansible.builtin.command: garage -c /etc/garage/garage.toml key list
+  register: garage_keys
+  changed_when: false
+
+- name: Create key
+  when: garage_key_name not in garage_keys.stdout
+  ansible.builtin.command: garage -c /etc/garage/garage.toml key create {{ garage_key_name }}
+
+# `bucket allow` is idempotent (it sets flags), so it runs every time and reports no change.
+- name: Grant the key read+write on the bucket
+  ansible.builtin.command: >-
+    garage -c /etc/garage/garage.toml bucket allow --read --write
+    --key {{ garage_key_name }} {{ garage_bucket }}
+  changed_when: false

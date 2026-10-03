@@ -239,6 +239,16 @@ resource "helm_release" "longhorn" {
       # only ever uses those.
       defaultDiskSelector = { enable = true, selector = "std" }
     }
+    # FU-299: the BackupTarget `default` → the single-node Garage LXC on nx-02 (tofu/provisioning/
+    # backup-target.tf), OUTSIDE Longhorn on purpose — the in-cluster Garage rides Longhorn itself.
+    # `s3://<bucket>@<region>/`; the region is Garage's s3_region. The credential Secret (incl.
+    # AWS_ENDPOINTS) is an ExternalSecret in argocd/resources/longhorn-backup/. Which volumes get
+    # backed up, and the restore recipe: docs/longhorn-backup.md.
+    defaultBackupStore = {
+      backupTarget                 = "s3://longhorn-backup@garage/"
+      backupTargetCredentialSecret = "longhorn-backup-target"
+      pollInterval                 = 300
+    }
     # single replica of the UI/manager bits is plenty for a homelab
     longhornUI = { replicas = 1 }
     # The user-deployed components need the same taint tolerance as defaultSettings.taintToleration

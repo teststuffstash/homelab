@@ -1,0 +1,23 @@
+# Managed by ansible/roles/garage-backup — FU-299, docs/longhorn-backup.md.
+# Single node, so replication_factor 1: the redundancy of a backup is the backup itself (plus the
+# off-site copy), not a second replica inside the same LXC.
+metadata_dir = "{{ garage_dir }}/meta"
+data_dir = "{{ garage_dir }}/data"
+db_engine = "lmdb"
+metadata_auto_snapshot_interval = "6h"
+
+replication_factor = 1
+compression_level = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret_file = "/etc/garage/rpc_secret"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+# No admin_token: the admin API's mutating endpoints stay disabled; the role administers through
+# the local `garage` CLI over RPC. /metrics and /health stay open for a LAN scrape (no secrets).
+[admin]
+api_bind_addr = "[::]:3903"

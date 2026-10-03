@@ -1,0 +1,40 @@
+# Longhorn backup belts (FU-299, docs/longhorn-backup.md). Behaviour pinned by
+# longhorn-backup.promtool-test — re-copy longhorn-backup.promtool-rules after editing an expr.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-backup
+  namespace: monitoring
+  labels:
+    app: longhorn-backup
+spec:
+  groups:
+    - name: longhorn-backup
+      rules:
+        # max_over_time: one good probe in the window holds it off, so a blackbox-exporter roll
+        # (replicas: 1 — the EndpointProbeFailing restart-gap class) never pages on its own.
+        - alert: LonghornBackupTargetDown
+          expr: max_over_time(probe_success{job="blackbox-longhorn-backup-target"}[10m]) == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn's backup target (Garage LXC 220 on nx-02) has failed every health probe for 15m"
+            description: >-
+              Every backup and restore fails while this fires. Check the LXC (`pct status 220` on
+              nx-02), then `systemctl status garage` + `garage status` inside it
+              (ssh root@192.168.2.73). Re-converge: ansible/garage-backup.yml. docs/longhorn-backup.md.
+        # Only volumes that HAVE a backup (`> 0`): a volume nobody backs up exports 0 and is a
+        # class decision (docs/longhorn-backup.md §Classes), not a stale backup. 36 h = a daily
+        # job missed once plus slack.
+        - alert: LonghornBackupStale
+          expr: (time() - longhorn_volume_last_backup_at) > 36 * 3600 and longhorn_volume_last_backup_at > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has had no backup for 36h+"
+            description: >-
+              Its newest backup is older than a daily RecurringJob allows. Look at the volume's
+              backups and the recurring job's last run in the Longhorn UI, and at
+              LonghornBackupTargetDown. docs/longhorn-backup.md.

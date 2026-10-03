@@ -41,6 +41,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
 | Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
+| Backup Garage LXC (CTID 220) | 192.168.2.73 | Longhorn backup target — single-node Garage S3 (FU-299) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
 | `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker (left the Longhorn std tier 2026-09-14 — compute-only; mounts volumes, serves none) |
