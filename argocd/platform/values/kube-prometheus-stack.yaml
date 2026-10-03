@@ -66,8 +66,8 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: critical
-              # triage: every LoadBalancer VIP unreachable: outage in progress; cilium BGP status readable in-cluster
-              triage: now
+              # triage: per router peer — a standby-only loss is reduced redundancy; a MASTER loss also trips the endpoint probes
+              triage: dig
           - alert: CiliumBGPNodeSessionDown
             annotations:
               description: '{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (reduced redundancy/ECMP). A new node must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml.'

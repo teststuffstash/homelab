@@ -2640,9 +2640,8 @@ restorable). Mechanism + restore: [`postgres.md`](postgres.md) §Backups.
 
 ### ADR-148 — Every alert declares `triage: none|now|dig`; the responder narrows to `now`, a grouped deep dig takes the rest (2026-10-03)
 **Status:** Accepted (operator, 2026-10-03, after the responder audit). **Decision:** (1) every alert
-rule carries `triage` — `none` (no in-cluster investigation can change what anyone does), `now`
-(acute: a real-time session), `dig` (default: a thorough investigation if it stands or recurs
-unexplained); ours and stacks' at the rule site, the stock kube-prometheus-stack rules through an
+rule carries `triage: none|now|dig` (meanings: [`patterns/observability.md`](patterns/observability.md)
+§3); ours and stacks' at the rule site, the stock kube-prometheus-stack rules through an
 alert-relabel map (`kube-prometheus-stack-triage.yaml`, fill-if-empty), `prometheus-rules-lint`
 holding both; (2) the per-fingerprint responder takes `triage="now"` only; (3) `dig` alerts go to a
 scheduled, GROUPED deep dig (standing ≥ N h or recurring, not explained by an FU/issue/meta-state,

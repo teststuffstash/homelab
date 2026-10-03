@@ -130,7 +130,7 @@ for f in argocd/resources/agentstack/composition.yaml; do
   bad=$(awk '
     /^[[:space:]]*- (alert|record):/ { if (a != "" && !ok) print a; a=""; ok=0 }
     /^[[:space:]]*- alert:/ { a=$3 }
-    a != "" && /^[[:space:]]*triage:[[:space:]]*"?(none|now|dig)"?([[:space:]]|$)/ { ok=1 }
+    a != "" && /^[[:space:]]*triage:[[:space:]]*"?(none|now|dig)"?[[:space:]]*(#.*)?$/ { ok=1 }
     END { if (a != "" && !ok) print a }' "$f" | tr '\n' ' ')
   if [ -n "$bad" ]; then echo "  FAIL $f: templated alert(s) without a valid triage label: $bad" >&2; rc=1
   else echo "  ok  $f (templated alerts carry triage)"; fi
@@ -152,9 +152,16 @@ if [ -f "$tmap" ] && [ -f "$tlist" ]; then
   if [ -z "$pinned" ] || [ "$pinned" != "$listed" ]; then
     echo "  FAIL $tlist: rendered for chart '${listed:-?}', $tapp pins '${pinned:-?}' — run scripts/upstream-alerts-refresh.sh and classify any new name in $tmap" >&2; rc=1
   fi
+  # The rendered set also moves with OUR `defaultRules` (disable/re-add, e.g. KubeJobFailed) — pin that subtree too.
+  dr_now=$(yq -o=json '.defaultRules' argocd/platform/values/kube-prometheus-stack.yaml | sha256sum | cut -c1-12)
+  dr_listed=$(sed -n 's/^# defaultRules: \([0-9a-f]*\)$/\1/p' "$tlist")
+  if [ "$dr_now" != "$dr_listed" ]; then
+    echo "  FAIL $tlist: rendered for defaultRules '${dr_listed:-?}', the values file now hashes '$dr_now' — run scripts/upstream-alerts-refresh.sh" >&2; rc=1
+  fi
   yq -o=json '.prometheus.prometheusSpec.additionalAlertRelabelConfigs' "$tmap" > "$tmp/tmap.json"
   # shape: fill-if-empty only — triage first among the source labels, regex anchored on an EMPTY triage
   shape=$(jq -r '[.[] | select((.source_labels[0] != "triage") or ((.regex // "") | startswith(";") | not)
+                   or (((.regex // "") | split(";") | length) != (.source_labels | length))
                    or (.target_label != "triage") or ((.replacement // "") | IN("none","now","dig") | not)) | .regex] | join(", ")' "$tmp/tmap.json")
   [ -z "$shape" ] || { echo "  FAIL $tmap: entries not of the fill-if-empty shape (or a value outside none|now|dig): $shape" >&2; rc=1; }
   jq -r '.[] | select(.source_labels == ["triage","alertname"]) | .regex | ltrimstr(";")' "$tmp/tmap.json" | sort > "$tmp/mapped"
