@@ -52,16 +52,35 @@ class is per PVC.
 
 ## Restore — the recipe the drill proved
 
-FU-299's drill, step by step, run against a throwaway volume:
+**Drill PASSED 2026-10-03** (FU-299; window `seat-1791016796-9107`). A 1 Gi PVC was filled with
+50 MB of random data plus its `sha256sum`, backed up, deleted, restored, and the checksum
+re-verified `OK` (verify pod on wk-04). The backup took under a minute and landed 36 objects / 50.1 MB
+in the bucket. The drill's residue was deleted afterwards, and the bucket was back to 0 objects.
+The steps, as run:
 
-1. A PVC `backup-drill` (1 Gi, default class) in a scratch namespace, written by a pod with a known
-   file + its `sha256sum`.
-2. Backup: a Longhorn `Snapshot` CR → a `Backup` CR naming it (or the UI's "Create Backup"). Wait
-   for `status.state: Completed`, and check that a `BackupVolume` exists on the target.
-3. Delete the PVC (the volume goes with it).
-4. Restore: a Longhorn `Volume` CR with `spec.fromBackup: <backup URL>`. Then a PV/PVC bound to it
-   (`kubectl` or the UI's "Create PV/PVC").
-5. A pod mounts the restored PVC and compares the checksum.
+1. **Snapshot**: a `longhorn.io/v1beta2` `Snapshot` named for the drill, with `spec: {volume: <pv
+   name>, createSnapshot: true}`. A detached volume works: Longhorn attaches it itself. Wait for
+   `status.readyToUse: true`.
+2. **Backup**: a `Backup` with `spec.snapshotName` set and the label `backup-volume: <pv name>`.
+   Wait for `status.state: Completed`; `status.url` is the restore handle
+   (`s3://longhorn-backup@garage/?backup=<name>&volume=<pv name>`). A `BackupVolume` appears.
+3. Delete the PVC. The volume goes with it, but the backup stays on the target.
+4. **Restore**: a `Volume` with `spec.fromBackup: <status.url>`, `size` in bytes,
+   `numberOfReplicas: 2`, **`diskSelector: [std]`**, `frontend: blockdev`, `accessMode: rwo`,
+   `dataEngine: v1`. A raw Volume CR does NOT inherit the StorageClass's `std` fence (ADR-089), so
+   it must be stated, or the replicas can land on the bulk disks. It is done when
+   `status.restoreRequired: false` (state `detached`).
+5. **Bind**: a PV with `csi: {driver: driver.longhorn.io, volumeHandle: <volume name>, fsType:
+   ext4}` and `storageClassName: longhorn`, plus a PVC that names it via `volumeName`. Mount it and
+   compare.
+
+Cleanup: delete the namespace (the PV's `Delete` reclaim takes the volume), then the `Backup` and
+the `BackupVolume`. Deleting those also removes the objects from the target.
+
+⚠ **`LonghornBackupStale`'s unit is unverified.** The drill volume was deleted before
+`longhorn_volume_last_backup_at` left 0, so the metric never showed a real value. The rule
+assumes epoch seconds. Read the metric after the first RecurringJob run, and fix the rule if it is
+not seconds.
 
 **After a total loss**, Infisical is gone too, because it rides Longhorn. Seed the Secret from the
 wallet first:
