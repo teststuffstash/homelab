@@ -92,6 +92,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: audit 2026-10-03: HA and the plug are out of investigator reach
+            triage: none
           annotations:
             summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
             description: "A Home Assistant power sensor has stopped receiving updates while still reporting available=1 — its last value is being served as if live. The metering source is the tuya_local LAN-polling integration (FU-038 cutover 2026-08-07; the old tuya_sharing cloud path is GONE — do not chase it). Symptom triage: compare staleness ACROSS entities first (`time() - homeassistant_last_updated_time_seconds`) — one frozen plug points at that device/its LAN; every tuyalocal_* entity frozen at the same instant points at the integration or an HA restart (check `up{job=\"home-assistant\"}` for a scrape gap). Check HA's /api/error_log for `tuya_local`. ⚠ Reloading a config entry republishes cached state ONCE (last_updated jumps, the value does not) — verify the VALUE moves before calling it fixed. Consequences while stale: perf/W numbers are fiction and the ThinkCentre's smart-plug power control does not work."
@@ -134,6 +136,8 @@ spec:
           for: 2h
           labels:
             severity: info
+            # triage: info severity; HA integrations and devices are out of investigator reach
+            triage: none
           annotations:
             summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
             description: "Informational: this HA sensor has not changed in over a day. Some sensors legitimately sit still (daily totals, config-ish selects) — the point of this rule is that a whole GROUP going quiet at once is an integration dying, which is invisible otherwise because HA keeps entities `available` and serves the stale value."
@@ -156,6 +160,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: ESPHome device or HA integration; physical node and HA API are out of reach
+            triage: none
           annotations:
             summary: "The office-plants irrigation node has been silent for over an hour"
             description: "Every 60s-cadence sensor on the ESPHome irrigation node (4x soil moisture + wifi signal) has stopped updating at once — the node is dead, unreachable, or its HA integration is wedged (HA keeps the entities available and serves the last values, so dashboards look alive). Plants stop being watered when soil thresholds cannot be read. Check the device (devbox run irrigation-logs), then the HA ESPHome integration; service doc docs/office-plants/README.md. The pump *_water_seconds counters are NOT liveness signals — they legitimately freeze for days when soil is wet (homelab#221)."

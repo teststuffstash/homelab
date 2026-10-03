@@ -235,10 +235,11 @@ never harder posture on quiet ones.
   GitHub spend/quota rules. ⚠ Two readers of the tier-0 predicate exist and must agree — the route
   and `agents/meta-alert-crosscheck.sh`, which would otherwise report every denied alert as stuck
   machinery; the pairing is asserted in `responder-behaviour-test.sh` §routing, which also pins
-  two counterexamples so `triage: none` stays a judgment rather than a habit. ⚠ A STOCK
-  kube-prometheus-stack rule cannot carry the label (the chart has no per-alert label hook), so its
-  only tier-0 route is an `alertname!~` matcher — and the standing preference is to scope or replace
-  the rule instead. **`KubeJobFailed` is the worked example, and it ended in a replacement**
+  two counterexamples so `triage: none` stays a judgment rather than a habit. A STOCK
+  kube-prometheus-stack rule gets its label from the alert-relabel map
+  (`argocd/platform/values/kube-prometheus-stack-triage.yaml`, 2026-10-03 — the chart has no
+  per-alert label hook), and `prometheus-rules-lint` holds every rule to `none|now|dig`; the
+  standing preference to scope or replace a misleading rule stands. **`KubeJobFailed` is the worked example, and it ended in a replacement**
   (`argocd/resources/job-health/`, 2026-09-17): 48 firing series in the 7 d to that date read like
   the loudest thing on the board, and the volume was name churn — a CronJob mints a new `job_name`
   per run, so one broken schedule bills one series per tick. The real defect was worse than volume:

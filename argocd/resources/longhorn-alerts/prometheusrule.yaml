@@ -32,7 +32,8 @@ spec:
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.85
           for: 30m
-          labels: { severity: warning }
+          # triage dig: Longhorn node CRs and the storage ledger show which tier and volume fills
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} physically full"
             description: >-
@@ -50,7 +51,8 @@ spec:
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.75
           for: 30m
-          labels: { severity: warning }
+          # triage dig: audit 2026-10-03: a dig found a stuck 57 GB snapshot
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} used — under the 25% free floor, Longhorn will not place new replicas on it"
             description: >-
@@ -65,7 +67,8 @@ spec:
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.93
           for: 10m
-          labels: { severity: critical }
+          # triage now: a Longhorn disk about to fill; volumes go read-only mid-write; Longhorn CRs show what to evict
+          labels: { severity: critical, triage: now }
           annotations:
             summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} full — volumes on it can go read-only"
             description: >-
@@ -79,7 +82,8 @@ spec:
               / (longhorn_node_storage_capacity_bytes - longhorn_node_storage_reservation_bytes)
               > 1.5
           for: 1h
-          labels: { severity: warning }
+          # triage none: promised-vs-physical ratio is a capacity fact read at planning time (homelab#94 levers)
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Longhorn node {{ $labels.node }} has promised {{ $value | humanizePercentage }} of its allocatable storage"
             description: >-

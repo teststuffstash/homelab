@@ -45,6 +45,7 @@ tests:
               platform_machinery: "true"
               repo: homelab
               context: management-apply
+              triage: none
             exp_annotations:
               summary: "The management box has been refusing to apply homelab master for over a day"
               description: 'mgmt-apply has held a `management-apply` failure on homelab master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="homelab"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/homelab/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'

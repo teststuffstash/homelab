@@ -18,7 +18,7 @@ groups:
       - alert: RouterPairMasterCount
         expr: sum(router_node_carp_master{job="pve-node"}) != 1
         for: 1m
-        labels: {severity: critical}
+        labels: {severity: critical, triage: none}
         annotations:
           summary: "Router pair has {{ $value }} CARP masters (want exactly 1)"
           description: >-
@@ -27,7 +27,7 @@ groups:
         expr: >-
           (time() - max by (host, vmid) (router_node_wangate_heartbeat_seconds{job="pve-node"})) > 120 or on() (count(router_node_wangate_heartbeat_seconds{job="pve-node"}) < 2) or on() absent(router_node_wangate_heartbeat_seconds{job="pve-node"})
         for: 5m
-        labels: {severity: warning}
+        labels: {severity: warning, triage: none}
         annotations:
           summary: "Router WAN gate silent{{ with $labels.host }} on {{ . }}{{ end }} — the pair's master count is unreadable"
           description: >-

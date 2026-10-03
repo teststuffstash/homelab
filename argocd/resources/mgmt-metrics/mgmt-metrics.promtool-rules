@@ -13,6 +13,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: none
       - alert: MgmtApplyMetricsAbsent
         expr: |
           up{job="mgmt-node"} == 1
@@ -20,18 +21,21 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: none
       - alert: MgmtApplyPostCheckFailed
         expr: |
           mgmt_apply_post_check_failed == 1
         for: 5m
         labels:
           severity: warning
+          triage: now
       - alert: MgmtApplyDeferredByWindow
         expr: |
           mgmt_apply_deferred_window == 1
         for: 6h
         labels:
           severity: warning
+          triage: none
   - name: mgmt-node
     rules:
       - alert: MgmtBoxDown
@@ -40,6 +44,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: none
   - name: mgmt-node-drift
     rules:
       - alert: MgmtNodeMissing
@@ -48,18 +53,21 @@ groups:
         for: 2h
         labels:
           severity: warning
+          triage: dig
       - alert: MgmtNodeLiveStateDrift
         expr: |
           mgmt_node_drift{axis=~"labels|taints"} == 1
         for: 1h
         labels:
           severity: warning
+          triage: dig
       - alert: MgmtNodeInstallDrift
         expr: |
           mgmt_node_drift{axis=~"schematic|ephemeral_disk"} == 1
         for: 24h
         labels:
           severity: warning
+          triage: dig
   - name: mgmt-belt
     rules:
       - alert: MgmtBeltStale
@@ -68,12 +76,14 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: none
       - alert: MgmtBeltCheckFailing
         expr: |
           max without (reason) (mgmt_probe_check{mode="belt",status="fail"}) == 1
         for: 2h
         labels:
           severity: warning
+          triage: none
       - alert: MgmtBeltMetricsAbsent
         expr: |
           up{job="mgmt-node"} == 1
@@ -81,6 +91,7 @@ groups:
         for: 1h
         labels:
           severity: warning
+          triage: none
   - name: mgmt-substrate
     rules:
       - alert: MgmtSubstrateBehind
@@ -90,12 +101,14 @@ groups:
         for: 7d
         labels:
           severity: warning
+          triage: none
       - alert: MgmtSubstrateUnsupported
         expr: |
           mgmt_substrate_supported == 0
         for: 1h
         labels:
           severity: warning
+          triage: none
   - name: mgmt-reconcile
     rules:
       - alert: MgmtReconcileParked
@@ -104,6 +117,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
       - alert: MgmtReconcileSyncStuck
         expr: |
           mgmt_reconcile_sync_started_timestamp_seconds > 0
@@ -111,6 +125,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
       - alert: MgmtReconcileLoopStale
         expr: |
           (time() - mgmt_reconcile_last_run_timestamp_seconds) > 3600
@@ -118,6 +133,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: none
       - alert: MgmtReconcileMetricsAbsent
         expr: |
           up{job="mgmt-node"} == 1
@@ -125,6 +141,7 @@ groups:
         for: 1h
         labels:
           severity: warning
+          triage: none
   - name: mgmt-rollout
     rules:
       - record: mgmt:node_talos_since:timestamp
@@ -221,3 +238,4 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig

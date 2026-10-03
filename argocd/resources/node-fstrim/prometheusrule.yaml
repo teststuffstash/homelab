@@ -24,7 +24,8 @@ spec:
         - alert: NodeFstrimFailed
           expr: node_fstrim_success != 0
           for: 15m
-          labels: { severity: warning }
+          # triage dig: fstrim Job log in node-maintenance names the error
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "fstrim failed on {{ $labels.node }} (rc={{ $value }})"
             description: >-
@@ -38,7 +39,8 @@ spec:
         - alert: NodeFstrimStale
           expr: time() - node_fstrim_last_run_timestamp > 129600
           for: 1h
-          labels: { severity: warning }
+          # triage dig: CronJob and Job state in node-maintenance are readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "No successful fstrim on {{ $labels.node }} for {{ $value | humanizeDuration }}"
             description: >-
@@ -61,7 +63,8 @@ spec:
         - alert: NodeFstrimGuardTrimFailed
           expr: node_fstrim_guard_rc != 0 and on(node) node_fstrim_guard_trimmed == 1
           for: 5m
-          labels: { severity: warning }
+          # triage dig: guard Job log is readable; the pool alerts carry the acute side
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Reactive fstrim guard failed on {{ $labels.node }} (rc={{ $value }})"
             description: >-

@@ -2637,3 +2637,22 @@ is already in the store); retention `14d`, cadence daily, no knobs yet. **Amende
 is wired only by the explicit `pg-backup-wire` verb (an apply-time wire deadlocks the switchover,
 ~10 min write outage on two clusters), and backups target the primary (a standby backup was not
 restorable). Mechanism + restore: [`postgres.md`](postgres.md) §Backups.
+
+### ADR-148 — Every alert declares `triage: none|now|dig`; the responder narrows to `now`, a grouped deep dig takes the rest (2026-10-03)
+**Status:** Accepted (operator, 2026-10-03, after the responder audit). **Decision:** (1) every alert
+rule carries `triage: none|now|dig` (meanings: [`patterns/observability.md`](patterns/observability.md)
+§3); ours and stacks' at the rule site, the stock kube-prometheus-stack rules through an
+alert-relabel map (`kube-prometheus-stack-triage.yaml`, fill-if-empty), `prometheus-rules-lint`
+holding both; (2) the per-fingerprint responder takes `triage="now"` only; (3) `dig` alerts go to a
+scheduled, GROUPED deep dig (standing ≥ N h or recurring, not explained by an FU/issue/meta-state,
+grouped by onset and host) whose output is a seat finding plus a PR only where the bot can merge.
+**Considered:** re-enabling the #1733 responder (the replay: the 12/day budget binds either way, and
+its sessions go to standing conditions it can only restate); severity as the filter (27 days: 13
+critical episodes, ~2 useful, and the best real-time catch — the nx-01 kata handler — was a warning);
+a per-alert static allow-list (value is per firing, not per name: AgentErrorFlagged was noise four
+times and a real CI break once); per-group chart labels (the groups are mixed). **Why:** the audit's
+three wins were all standing alerts the seat had seen for days, each needing 20–50 tool calls.
+**Consequences:** the route, `meta-alert-crosscheck.sh` and `responder-behaviour-test` §routing move
+together in the next step; the dig needs in-cluster Loki reads, which triggers `loki-tenancy.md`
+§Tightening; stack responders inherit the label. Evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
+§2026-10-03. Tracked: FU-249.

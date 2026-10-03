@@ -38,7 +38,7 @@ tests:
       - eval_time: 10m
         alertname: CNPGNoWritablePrimary
         exp_alerts:
-          - exp_labels: { severity: critical, namespace: monitoring, endpointslice: grafana-pg-rw-kjctf }
+          - exp_labels: { severity: critical, namespace: monitoring, endpointslice: grafana-pg-rw-kjctf, triage: now }
       - eval_time: 20m
         alertname: CNPGNoWritablePrimary
         exp_alerts: []

@@ -18,6 +18,8 @@ spec:
           for: 5m
           labels:
             severity: warning
+            # triage: BackupTarget CR message separates in-cluster credential or URL faults from LXC-down
+            triage: dig
           annotations:
             summary: "Longhorn's backup target (Garage LXC 220 on nx-02) has failed every health probe for 15m"
             description: >-
@@ -32,6 +34,8 @@ spec:
           for: 1h
           labels:
             severity: warning
+            # triage: recurring job runs and backup CRs are readable in-cluster
+            triage: dig
           annotations:
             summary: "Longhorn volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has had no backup for 36h+"
             description: >-

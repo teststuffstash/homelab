@@ -79,6 +79,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -90,6 +91,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -158,6 +160,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -230,6 +233,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -237,6 +241,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone teststuff.net"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -322,6 +327,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -368,6 +374,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -411,6 +418,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
@@ -464,6 +472,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare edge probe is blind on zone minutark.ee"
               description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."

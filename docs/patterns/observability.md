@@ -88,8 +88,16 @@ Rule-author conventions the platform reads:
 - **`description` is the SYMPTOM, not a guessed cause** — the responder's job is the diagnosis;
   a description that names a cause primes a wrong fix (the `PodSigkilled` text is the worked
   example of listing the candidate causes without asserting one).
-- **`triage: none`** on the rule = "notify, do not investigate"; **`platform_machinery: "true"`**
-  = "investigate, but a human merges the fix" (routes to homelab). Both are rule-site labels.
+- **`triage: none | now | dig`** — REQUIRED on every rule (operator decision 2026-10-03). `none` =
+  no investigation from inside the cluster can change what anyone does (self-describing state,
+  operator-only remedy, meta); `now` = acute, minutes matter — a real-time session should start;
+  `dig` = the default: worth a thorough investigation if it stands or recurs unexplained. Classify
+  by what an investigator with the cluster's read access could change, never by severity.
+  homelab's `prometheus-rules-lint` reds a platform rule without it; run the same check in the
+  stack's CI. The stock kube-prometheus-stack rules get theirs from the platform's relabel map
+  (`argocd/platform/values/kube-prometheus-stack-triage.yaml`).
+- **`platform_machinery: "true"`** = "investigate, but a human merges the fix" (routes to
+  homelab). Like `triage`, a rule-site label.
 - The `namespace` label must be the app's real namespace — it is the routing key.
 
 **Testing is the stack's.** homelab's `prometheus-rules-lint` covers only homelab's manifests.

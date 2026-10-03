@@ -41,6 +41,7 @@ tests:
               repo: homelab
               pr: "101"
               issue: "42"
+              triage: none
             exp_annotations:
               summary: "Blocking codeowner park: homelab#101 gates blocked work (issue #42)"
               description: "PR homelab#101 is codeowner-parked and its closing issue #42 has 3 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/101"
@@ -72,6 +73,7 @@ tests:
               repo: homelab
               pr: "202"
               issue: "99"
+              triage: none
             exp_annotations:
               summary: "Blocking codeowner park: homelab#202 gates blocked work (issue #99)"
               description: "PR homelab#202 is codeowner-parked and its closing issue #99 has 0 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/202"
@@ -95,6 +97,7 @@ tests:
               repo: homelab
               pr: "303"
               issue: "77"
+              triage: none
             exp_annotations:
               summary: "Blocking codeowner park: homelab#303 gates blocked work (issue #77)"
               description: "PR homelab#303 is codeowner-parked and its closing issue #77 has 5 blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/teststuffstash/homelab/pull/303"

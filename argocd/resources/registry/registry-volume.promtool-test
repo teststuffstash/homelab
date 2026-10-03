@@ -34,6 +34,7 @@ tests:
               severity: warning
               namespace: registry
               persistentvolumeclaim: registry-data
+              triage: dig
             exp_annotations:
               summary: "registry volume has 13.33% free — a 10 GB layer push may not fit"
       - eval_time: 50m

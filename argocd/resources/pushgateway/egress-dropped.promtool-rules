@@ -16,3 +16,4 @@ groups:
         for: 2m
         labels:
           severity: warning
+          triage: dig

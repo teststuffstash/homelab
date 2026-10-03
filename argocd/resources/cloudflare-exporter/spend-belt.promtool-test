@@ -115,6 +115,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: none
             exp_annotations:
               summary: "Cloudflare product zone minutark.ee is no longer on the free plan"
               description: "Zone minutark.ee reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
@@ -196,6 +197,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: none
             exp_annotations:
               summary: "Cloudflare product zone minutark.ee is no longer on the free plan"
               description: "Zone minutark.ee reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
@@ -290,6 +292,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone minutark.ee"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -297,6 +300,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone teststuff.net"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -390,6 +394,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -450,6 +455,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: minutark.ee
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone minutark.ee"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -457,6 +463,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone teststuff.net"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -520,6 +527,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone teststuff.net"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -576,6 +584,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
+              triage: dig
             exp_annotations:
               summary: "Cloudflare spend belt is blind on zone teststuff.net"
               description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."

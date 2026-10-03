@@ -24,6 +24,7 @@ groups:
         for: 2h
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage has refused voluntary disruption for 2h, so no zone node can be drained
       - alert: GarageDisruptionBudgetOpenAgainstSignal
@@ -36,5 +37,6 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: The garage PodDisruptionBudget lets a zone go while Garage's signal says it must not

@@ -14,6 +14,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage metadata rotation of {{ $labels.pod }} failed
       - alert: GarageMetaRotationControllerSilent
@@ -23,6 +24,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage metadata rotation controller has not run for over an hour
       - alert: GarageMetaRotationNotReclaiming
@@ -31,5 +33,6 @@ groups:
         for: 6h30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: GarageDiskFillingUp on {{ $labels.pod }} metadata has fired for 6h — the rotation loop did not clear it
