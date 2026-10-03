@@ -18,7 +18,11 @@ spec:
   source:
     repoURL: https://argoproj.github.io/argo-helm
     chart: argo-workflows
-    targetRevision: 1.0.20 # app v4.0.7
+    # app v4.0.8 (the last 1.0.x chart; 2.0.x = app v4.1). v4.0.8 carries the two upstream fixes the
+    # 2026-09-20 apiserver-restart storm and the 2026-08-31 lock-plane wedge asked for: configmap
+    # watchers replaced by informers (#16516 — FU-260's never-re-established watch, 96% of Loki
+    # ingest) and semaphore slots no longer leaked when the limit fetch fails on release (#16471 — FU-198).
+    targetRevision: 1.0.24
     helm:
       valuesObject:
         crds:
