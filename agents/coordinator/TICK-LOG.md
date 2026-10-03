@@ -12039,3 +12039,19 @@ Operator: explain #2037 / #2046 in the S9 frame → the box-autonomy design thre
   (`.claude/hooks/`, trial): a new FU id is denied once per session with the tracker's three tests, the
   retry passes; no clicks, no tracker text (both rejected). FU-301/302 stay ("700 ids to go"). Bookkeeping
   pushed early (1df91cf3) because #2183's CI read FU-300 as dangling. `mgmt-state-pull` done.
+
+## 2026-10-03 morning — FU-299: Longhorn backup target built, applied, restore drill PASSED (seat, unattended by operator order)
+
+Operator: "Do it unattended — the apply + restore drill also."
+- **Target**: CT 220 `backup-garage` @ .73 on nx-02 `local-lvm` (SA400, 400 G thin) in `tofu/provisioning`
+  (survives a cluster wipe), Garage v2.3.0 rf=1 by `ansible/garage-backup.yml` (rerun changed=0).
+  Key in the wallet (`longhorn-backup-{key-id,secret}`) + Infisical → ExternalSecret. **PR#2188** merged
+  08:22Z (bot approve). The box sentinel refused the PR on a `provider` block (deny pattern) and then
+  could not plan provisioning (no `nx02_api_token` in the box's provisioning.tfvars) → fixed in
+  `mgmt-provision-secrets.sh` + `--push`, `mgmt-human-plan -- 2188 --yes` posted success (main ~1, prov 0).
+- **Apply** via `helm-evidence run 20261003T082230Z-e2a552ed`: longhorn rev 12→13, 0 pods replaced,
+  0 restarts, BGP 13/13 no resets, window closed clean. BackupTarget available 08:23:50Z.
+- **Drill** (window seat-1791016796-9107): 50 MB + sha256 → Snapshot → Backup Completed (36 objects) →
+  PVC deleted → Volume `fromBackup` (diskSelector std) → PV/PVC → `sha256sum -c` OK. Residue deleted,
+  bucket 0 objects. Window closed `--force` on two unrelated alerts (oracle-fleet ride egress; InfoInhibitor).
+  Recipe → PR#2189. Metric unit for `LonghornBackupStale` still unverified (volume deleted too early).

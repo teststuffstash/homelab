@@ -138,14 +138,11 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
-- [ ] **FU-299** — **Longhorn volumes have no backup at all.** Live 2026-10-02: BackupTarget `default`
-      URL empty (`available: false`), 0 RecurringJobs, 0 Backups — ADR-031's "Longhorn/HA backups
-      currently sent to external S3/B2" is stale. A bad Longhorn upgrade has no revert (downgrades refused),
-      so restore IS the rollback. Direction (operator, 2026-10-02): the target sits OUTSIDE Longhorn (the
-      in-cluster Garage rides `longhorn-local-xfs`) — a single-node Garage in an LXC on nx-02's `local-lvm`
-      (700 G SA400 thin pool, 0 % used; a VM won't fit: 60.5/62 GiB committed, NUMA node0 625 MB free) +
-      an off-site second copy; per-volume classes in `storage-ledger.md`. **Next:** LXC + Garage in tofu,
-      `backupTarget`, then a backup/restore drill of a throwaway volume before any RecurringJob.
+- [ ] **FU-299** — **Longhorn backups: target LIVE + restore drill PASSED (2026-10-03), no volume backed up yet.**
+      Target = single-node Garage LXC CT 220 @ .73 on nx-02 (PR#2188); BackupTarget `default` available;
+      backup→delete→restore→sha256 OK. Pointer: [`longhorn-backup.md`](longhorn-backup.md) (classes, recipe).
+      **Next:** a daily RecurringJob for the doc's **daily** class (≈14 G) → read `longhorn_volume_last_backup_at`'s
+      unit after its first run (`LonghornBackupStale` assumes seconds) → the off-site second copy.
 - [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
       action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
       Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
