@@ -507,7 +507,7 @@ fails when you skip it" property applies, so it is a checklist. First run: `thin
 6. **The DHCP reservation and the smart plug STAY** if the box stays on the LAN (`opnsense/`,
    `homeassistant/`) — the machine still needs an address and a power path. Remove the MAC from
    §WoL recovery above (that list is for cluster recovery) and never re-add a Matchbox group for
-   it (`tofu/provisioning/matchbox.tf`) unless you intend a reinstall.
+   it (`tofu/provisioning/flags.local.tf`, the gitignored flag file) unless you intend a reinstall.
 7. **The doc rows the onboarding list names**, in reverse: `docs/provisioning.md`,
    `tofu/README.md`, `docs/network-physical.md`, `docs/storage-ledger.md` (tier tables + a ledger
    row for the eviction), `SERVICES.md` (if a tier or service changed), `ROADMAP.md`. The
