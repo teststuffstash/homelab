@@ -59,8 +59,8 @@ follows fix-density per ADR-103, never big-bang):
    — upstream drift stops being invisible. **v1 LIVE 2026-08-12 (PR after #382):** `world: <name>` in fixture.yaml +
    materialized overlay (base copied, fixture files win — stubs AND seam-reading bridges see one
    plain directory), first registry entry `worlds/circles-29-tree/` (6 fixtures dedup'd, 6 shared
-   files, provenance.yaml with the reconstruction note). Remaining half: the `record` wrapper +
-   `--rerecord`.
+   files, provenance.yaml with the reconstruction note). Maintenance half (`--record` +
+   `--rerecord`) LIVE in `run.sh` (FU-167 sweep, 2026-10-03).
 2. **Table mode** — `mode: table`: one fixture per family = family header (the contract prose,
    once) + `bridge.sh` + `rows.psv` (a pipe-delimited decision table: id · world · patch · env ·
    expect · params) + `expected/<verdict>.txt` templates parametrized by row. Base worlds are

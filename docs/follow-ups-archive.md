@@ -10,6 +10,38 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-151** *(archived 2026-10-04)* — **First-party `-iac` deploy bumps skipped LLM review by TIMING, not
+  design.** Every deploy-pin now labels its -iac PR `automerge`+`dependencies` on every run: sleep-tracking
+  (`5b8c384`), snore-recorder#43, circles#97 (+ its `specs-pr-route.sh` route PRs, the reviewer's catch).
+- **FU-097** *(archived 2026-10-03)* — **The box's capability ledger.** Ledger (#1893, [`management-box.md`](management-box.md)
+  §The capability ledger), first toggle (Talos config, `no_reboot`), the intent-review instruction in
+  `.agents/review.md` (c8e38675) and the generated dependency-class table (#1992/PR#2028) all live.
+- **FU-224** *(archived 2026-10-03)* — **transcripts-viewer bucket-sync CFS throttling.** PR#1519 fixed
+  longhorn-manager + cilium-agent; bucket-sync stays ~51 % throttled at any limit, but its measured cycle is
+  344–374 s against the loop's 300 s sleep (~45–75 s of work) — the lag is the sleep, not CPU; no raise.
+- **FU-150** *(archived 2026-10-03)* — **"CI cannot dispatch" alerting:** `GithubVendorOutage` + `CiDispatchStalled`
+  live; CiDispatchStalled fired on a real stall (the 2026-09-13 zombie run 34748702282 in the GitHub outage) and
+  resolved. Analysis: [`incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
+- **FU-148** *(archived 2026-10-03)* — **The environmental CI-red retry terminal** (App `actions:write`, retry
+  once with a stated diagnosis) passed its first organic case: homelab PR#1538 (2026-09-10) diagnosis → rerun
+  → green, auto-merge intact; a dozen `class=environment|infra` rulings since.
+- **FU-154** *(archived 2026-10-03)* — **Close-and-re-PR reset `RED_ROUNDS_MAX`.** The round count is
+  issue-keyed, summed across every PR referencing the issue (homelab#156), in both the scan's ci-red clause
+  and review-reflex's verdict ceiling — live on master since August.
+- **FU-219** *(archived 2026-10-03)* — **`coordinate-perstack` exit 141 (SIGPIPE)** = the `coordinator-scan.sh`
+  parity-assertion `| head -1` under pipefail (responder #1547). Fixed PR#1576 (09-14); 10-03 Loki read: 0
+  Failed/Error/141 against 4025 Succeeded perstack runs in 7d.
+- **FU-129** *(archived 2026-10-03)* — **`gh issue view --comments` printed nothing for zero-comment issues** —
+  a comments-only view (gh semantics, not image/token). Every stack recipe now reads `--json title,body,comments`;
+  sleep-tracking was the last (sleep-tracking#168), so the next `new-stack --from` donor is clean.
+- **FU-212** *(archived 2026-10-03)* — **respond-* runs Errored on `configmaps is forbidden`.** The write
+  was Argo v4.0 offloading an oversized pod template into a ConfigMap; granted cluster-wide by
+  `controller.rbac.writeConfigMaps` (PR#1678, 2026-09-14). Verified `auth can-i` across 5 namespaces;
+  0 forbidden Workflows among 155 live.
+- **FU-246** *(archived 2026-10-03)* — **Talos ≥ v1.13.10 on the workers (`page_table_check`, siderolabs/talos#13496).**
+  Fleet on v1.14.1 since the 2026-09-22 rollout; PXE/USB pins lint-held (2026-09-23). Soak clean:
+  no `NodeRebootingRepeatedly` after 09-23 14:05Z (nx-01's pre-rollout boots aging out), zero
+  `page_table_check|Oops:` lines in Loki 09-26→10-03. Incident: [`2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md).
 - **FU-300** *(archived 2026-10-02)* — **The box's apply loop is window-blind: fixed.** PR#2183 (built by a
   background subagent the same day): `mgmt-apply.sh` defers (no plan/apply/stamp/refusal) while a live
   declared window holds it; `--admit-apply` lets the box through; an unreadable registry defers as a
@@ -249,26 +281,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   fixer block); agent-coordinator stays CONTEXT-ONLY by the kept 2026-07-16 ruling (tier-3 loop
   machinery, no repo-side lane — recorded in the platform claim). New repos enter via
   `new-stack --from` (FU-070). ROADMAP §Onboard reflects the same state.
-- **FU-173** *(archived 2026-08-25)* — **Grafana frser plugin pinned 4.0.6.** PR#935 + the
-  same-evening syntax quickfix (8bd4dc67): Grafana's background installer parses `id@version`
-  — the docs' legacy `id version` space form SPLIT, installed "4.0.6" as its own pluginId and
-  crashlooped the new RS (old pod kept serving; the gotcha is now a ⚠ comment at the pin site).
-  Verified end-to-end: 4.0.6 in-pod, app Synced/Healthy, `grafana.teststuff.net/api/health` 200.
-  Renovate owns the bump from here.
-- **FU-149** *(archived 2026-08-25)* — **Responder daily budget = 12: the soak answered LEAVE IT.**
-  The 14d read (daily `max(responder_triage_sessions_today)`): ordinary days 0–6, the cap bound
-  only on genuine storm days (08-18 the board-clearing/ARC day = 12, 08-24 the pve/Garage
-  incident = 11) — which is what a storm cap is for. `RESPONDER_DAILY_MAX` stays 12; a non-storm
-  exhaustion re-opens this as a new datum, not this id.
-- **FU-184** — **Garage's metadata auto-snapshot never worked; env rebuilt.** `MDB_CP_COMPACT`
-  refuses a page-leaked env by arithmetic (mdb.c "page leak or corrupt DB"), and the 08-24 torn
-  write left 4,745,586 pages for ~550k live ones — plus 8 freelist records stranded in the main db,
-  which is what broke `garage convert-db` too (it also rejects lmdb→lmdb outright, so the tracker's
-  original recipe was wrong twice over). Rebuilt by insertion with
-  `scripts/garage-forensics/lmdb-rebuild.py` (PR#911): **18.10 GiB → 1.57 GiB**, 67 trees /
-  4,279,175 entries exact, every bucket count unchanged, meta volume 62% → 6%. Container limit
-  512Mi → 2Gi — a healthy env makes the copy ~15 s instead of ~11 min and the first fast one
-  OOM-killed Garage. **Acceptance PASSED same day**: a snapshot completed (1.68 GB, 67 trees,
-  4,280,149 entries, zero junk keys, tracking live), no OOM, `restarts=0`. Mechanism:
-  [`garage.md`](garage.md) §Durability. Pre-rebuild copies held in
-  `backups/garage-meta-20260825-prerebuild/` — delete after ~2026-09-01. (archived 2026-08-25)

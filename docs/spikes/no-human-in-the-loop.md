@@ -1,7 +1,7 @@
 # Spike — no human in the loop, even for OPNsense / PXE / tofu
 
-**Tracked by:** FU-097 (this is its radical end-state: the "human-applied + belt" column shrinking
-toward empty). **Status:** thought exercise, 2026-08-02 — except for path 5's pilot, which is DECIDED and
+**Origin:** FU-097 (archived 2026-10-03; this is the radical end-state of its capability ledger: the
+"human-applied + belt" column shrinking toward empty). **Status:** thought exercise, 2026-08-02 — except for path 5's pilot, which is DECIDED and
 part-BUILT (ADR-129 + [`../management-box.md`](../management-box.md): the OS, the update loop and
 the rollback layers are ruled, the config evaluates, the probe runs; the box is not installed).
 Everything else here remains a thought exercise.
