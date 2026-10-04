@@ -351,10 +351,13 @@ while IFS=$'\t' read -r pr sha; do
       # no type in this root's state may move to a schema (or identity) version master's provider
       # cannot read back (mgmt_schema_upgrades). Unreadable = failure — never a vacuous pass.
       rel="$(mgmt_root_dir "$POL" "$root")"
-      if [ -n "$wtb" ] && [ -s "$out.types" ] \
+      # the types to judge: plan + state + plan exclusions (mgmt_judged_types; PR#2205's review)
+      types_ok=0
+      if xt="$(mgmt_policy_get "$POL" ".roots.\"$root\".plan_exclude_types[]?")" && mgmt_judged_types "$out" "$xt" >"$out.types-all"; then types_ok=1; fi
+      if [ -n "$wtb" ] && [ $types_ok = 1 ] \
          && mgmt_provider_schema "$wtb/$rel" "$out.schema-base.json" \
          && mgmt_provider_schema "$wt/$rel" "$out.schema-head.json" \
-         && ups="$(mgmt_schema_upgrades "$out.schema-base.json" "$out.schema-head.json" "$out.types")"; then
+         && ups="$(mgmt_schema_upgrades "$out.schema-base.json" "$out.schema-head.json" "$out.types-all")"; then
         if [ -n "$ups" ]; then
           state=failure; pin_state="${pin_state:-} $root($(awk -F'\t' '{printf "%s%s", (NR>1?",":""), $1}' <<<"$ups"))"
           { echo; echo "### ⚠ \`$root\` — the provider bump changes what STATE stores — human read"
@@ -363,7 +366,7 @@ while IFS=$'\t' read -r pr sha; do
             awk -F'\t' -v bt='`' '{printf "| %s%s%s | %s | %s |\n", bt, $1, bt, $2, $3}' <<<"$ups"; } >>"$bodyf"
           log "[#$pr] provider-pin head: $root state shape changes ($(tr '\n' ' ' <<<"$ups")) — failing the context"
         else
-          { echo; echo "State compatibility: every resource type in \`$root\`'s plan keeps its schema and identity version under the head's providers — the lockfile revert stays a revert."; } >>"$bodyf"
+          { echo; echo "State compatibility: every managed resource type in \`$root\` (plan, state and plan exclusions: $(grep -c . "$out.types-all") types) keeps its schema and identity version under the head's providers — the lockfile revert stays a revert."; } >>"$bodyf"
         fi
       else
         state=failure; failed_roots="$failed_roots $root"

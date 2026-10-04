@@ -436,7 +436,7 @@ schema versions, and the old provider cannot read a newer version back, so after
 lockfile revert would need a state restore. Stage 2 therefore also compares, per root, the
 `tofu providers schema -json` of master's lockfile against the head's (`mgmt_provider_schema` — a
 scratch root built from the lockfile alone, since `providers schema` wants an initialised backend)
-over every managed type the plan carries (`mgmt_schema_upgrades`): a raised schema version, a raised
+over every managed type in the plan, the state and the plan exclusions (`mgmt_judged_types` → `mgmt_schema_upgrades`): a raised schema version, a raised
 or newly added identity version, or a removed type fails the context with `provider bump changes
 stored state: <root>(<types>) — human read`. Additive attributes pass — the old provider drops
 attributes it does not know when it reads state. The kubernetes 3 major (#2047) passed it: zero

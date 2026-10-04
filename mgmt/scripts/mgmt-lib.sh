@@ -166,6 +166,22 @@ mgmt_provider_pin_shape() {
   return 0
 }
 
+# mgmt_addr_types → the MANAGED resource types of the addresses on stdin (one per line; anything
+# after a TAB ignored), deduped — module prefixes stripped, `data.` addresses skipped.
+mgmt_addr_types() {
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' | grep -v '^data\.' | sed -E 's/^([^.]+)\..*/\1/' | grep -v '^$' | sort -u
+}
+
+# mgmt_judged_types <plan-out> <policy exclude types, one per line> → the types a provider-pin head's
+# state-compatibility check must judge: the plan's ($out.types), PLUS every type in state ($out.state)
+# and in the plan exclusions ($out.excluded + the policy's plan_exclude_types) — an excluded type never
+# reaches resource_changes, and a type the check never saw must not pass as compatible (review
+# finding on PR#2205). rc 1 when the plan's type list was never written.
+mgmt_judged_types() {
+  [ -f "$1.types" ] || return 1
+  { cat "$1.types"; { cat "$1.state" "$1.excluded" 2>/dev/null; printf '%s\n' "$2" | grep . | sed 's/$/.x/'; } | mgmt_addr_types; } | sort -u
+}
+
 # mgmt_schema_upgrades <base-schema.json> <head-schema.json> <types-file> → lines
 # "type<TAB>before<TAB>after" for every type in <types-file> (the plan's `$out.types` side channel) whose STORED shape the head's providers
 # would change: a raised resource schema version, a raised (or newly added) identity schema version,

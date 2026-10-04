@@ -296,5 +296,17 @@ jq -n '{resource_changes:[{address:"k_svc.a",mode:"managed",type:"k_svc",change:
 if [ "$(tr '\n' ' ' <"$T/tp.types")" = "k_old k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:plan-types-side-channel"
 else fail=$((fail+1)); echo "FAIL schema:plan-types-side-channel — got '$(tr '\n' ' ' <"$T/tp.types")'"; fi
 
+# the excluded-types path (review finding on PR#2205): a type the plan never carried — excluded by
+# policy, so absent from resource_changes — still reaches the compare via the state / exclusion lists
+printf '%s\n' 'module.m.k_old.x["a.b"]' 'data.k_data.y' >"$T/tp.excluded"
+mgmt_judged_types "$T/tp" 'k_policy' >"$T/tp.types-all"
+if [ "$(tr '\n' ' ' <"$T/tp.types-all")" = "k_old k_policy k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:excluded-types-reach-the-compare"
+else fail=$((fail+1)); echo "FAIL schema:excluded-types-reach-the-compare — got '$(tr '\n' ' ' <"$T/tp.types-all")'"; fi
+sch "$T/sh.json" '{"k_svc":1,"k_secret":0}' '{"k_secret":1}'
+printf 'k_svc\n' >"$T/tq.types"; printf 'k_old.x\n' >"$T/tq.state"; mgmt_judged_types "$T/tq" '' >"$T/tp-union"
+got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/tp-union" | tr '\t\n' '|;')"
+if [ "$got" = "k_old|schema 0|removed;" ]; then pass=$((pass+1)); echo "PASS schema:excluded-type-removal-caught"
+else fail=$((fail+1)); echo "FAIL schema:excluded-type-removal-caught — got '$got'"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]
