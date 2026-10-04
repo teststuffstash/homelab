@@ -52,6 +52,7 @@ MAP=(
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   "responder-behaviour-test:^agents/"
+  "deep-dig-test:^agents/"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
   "state-fp-replay:^agents/"

@@ -55,6 +55,26 @@ spec:
           annotations:
             summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
             description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+        # ── the deep dig's own belt (ADR-148, FU-249 step 4, 2026-10-04) ───────────────────────
+        # agents/coordinator/deep-dig-argo.yaml pushes deep_dig_last_run_timestamp_seconds on EVERY
+        # exit path of a run (nothing to dig, selection failed, rails latched, session done), so a
+        # run that stops HAPPENING — cron suspended, workflow stuck behind the semaphore, pod never
+        # scheduled — is the only thing this reads. Same restart-gap harden as RetroReportOverdue
+        # above (a pushgateway wipe must not page): `max_over_time(...[8d])` reads Prometheus's own
+        # retention, `or vector(0)` makes never-run fire. Threshold 2 d on a daily schedule = one
+        # missed night is tolerated, two are not. triage: none + platform_machinery — the remedy is
+        # to read the cron in Argo (argo -n agent-coordinator list | grep deep-dig), which is the
+        # seat's; a session could only restate that. Fixture: deep-dig.promtool-test.
+        - alert: DeepDigStale
+          expr: (time() - (max(max_over_time(deep_dig_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "The grouped deep dig has not run in >2 days — standing/recurring dig alerts are not being investigated"
+            description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."
         # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
         # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
         # new path that subtracts against a failed read).

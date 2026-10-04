@@ -363,47 +363,57 @@ v="$(stampval GithubWorkflowRunFailed argocd/resources/github-exporter/prometheu
 [ "$v" = "unset" ] && ok "GithubWorkflowRunFailed stays dispatchable (not stamped)" \
                    || bad "GithubWorkflowRunFailed unstamped" "got '${v:-alert not found}'"
 
-# ── THE ROUTING FILTER: what never reaches the lane at all (2026-09-17) ─────────────────────────
-# Tier 0 of the three routing tiers. The responder's Alertmanager child route carries
-# `severity != "info"` and `triage != "none"`, so a denied alert costs no Sensor trigger, no
-# workflow, no clone. Nothing downstream can catch a regression here: the route is in a values
-# file kubeconform SKIPs, and the in-pod `triage:none` belt would silently absorb a dropped
-# matcher while the workflow cost came back. Two readers exist and must agree — the route and
+# ── THE ROUTING FILTER: what never reaches the lane at all (2026-09-17; `now`-only 2026-10-04) ──
+# Tier 0 of the three routing tiers. Since ADR-148 the responder's Alertmanager child route
+# carries exactly `triage = "now"`, so a `dig` or `none` alert costs no Sensor trigger, no
+# workflow, no clone — `dig` is the grouped deep dig's (deep-dig-argo.yaml), `none` nobody's.
+# Nothing downstream can catch a regression here: the route is in a values file kubeconform
+# SKIPs, and the in-pod `none|dig` belt would silently absorb a dropped matcher while the
+# workflow cost came back. Two readers exist and must agree — the route and
 # agents/meta-alert-crosscheck.sh, which would otherwise report every denied alert as stuck
-# machinery. So: assert the matchers ARE on the route, assert the crosscheck applies the same
-# two predicates, and assert the declarations on the rules the filter is FOR.
-section "routing — the tier-0 filter (route matchers ⟷ the crosscheck ⟷ the rule-site labels)"
+# machinery. So: assert the matcher IS the route's only one, assert the crosscheck applies the
+# same predicate, assert the Sensor carries no pause filter, and assert the declarations on the
+# rules the filter is FOR.
+section "routing — the tier-0 filter (route matcher ⟷ the crosscheck ⟷ the Sensor ⟷ the rule-site labels)"
 VALUES="$REPO/argocd/platform/values/kube-prometheus-stack.yaml"
 RMATCH="$(yq -r '.alertmanager.config.route.routes[] | select(.receiver == "agent-responder") | .matchers[]' "$VALUES" 2>/dev/null | tr '\n' ' ')"
 case "$RMATCH" in
-  *'severity != "info"'*) ok "the responder route denies severity:info" ;;
-  *) bad "responder route denies severity:info" "matchers are: ${RMATCH:-<none>}" ;;
-esac
-case "$RMATCH" in
-  *'triage != "none"'*) ok "the responder route honours triage:none (tier 0, not just the in-pod belt)" ;;
-  *) bad "responder route honours triage:none" "matchers are: ${RMATCH:-<none>}" ;;
+  'triage = "now" ') ok "the responder route takes triage:now and NOTHING else (ADR-148 tier 0)" ;;
+  *) bad "responder route is exactly triage = \"now\"" "matchers are: ${RMATCH:-<none>}" ;;
 esac
 # The crosscheck's predicate, asserted on the SOURCE rather than by running it: its Alertmanager
 # read needs the LAN and this harness is hermetic. A dropped `select` here is the loud-but-wrong
 # failure (every denied alert reported UNTRIAGED), which is how a belt teaches its reader to
 # ignore it — so it is worth a grep-level pin.
 XCHK="$REPO/agents/meta-alert-crosscheck.sh"
-grep -qF 'select((.labels.triage // "") != "none")' "$XCHK" \
-  && ok "meta-alert-crosscheck excludes triage:none (reader 2 agrees with the route)" \
-  || bad "crosscheck excludes triage:none" "predicate missing from $XCHK"
-grep -qF 'select((.labels.severity // "") != "info")' "$XCHK" \
-  && ok "meta-alert-crosscheck excludes severity:info (reader 2 agrees with the route)" \
-  || bad "crosscheck excludes severity:info" "predicate missing from $XCHK"
+grep -qF 'select((.labels.triage // "") == "now")' "$XCHK" \
+  && ok "meta-alert-crosscheck keeps triage:now only (reader 2 agrees with the route)" \
+  || bad "crosscheck keeps triage:now only" "predicate missing from $XCHK"
+grep -qF 'routing-dig' "$XCHK" \
+  && ok "…and names the dig set once, so a dig alert is the deep dig's, not invisible" \
+  || bad "crosscheck names the dig set" "no routing-dig summary line in $XCHK"
 grep -qF 'routing-denied' "$XCHK" \
   && ok "…and names the denied set once, so a denied alert is quiet but not invisible" \
   || bad "crosscheck names the denied set" "no routing-denied summary line in $XCHK"
-# The same rule one level up: a PAUSED lane (FU-249's never-matching Sensor filter) is a deliberate
-# stop, and without this the crosscheck reports every firing alert as stuck machinery — observed
-# live during the 2026-09-17 pause. A belt that cries wolf through a planned stand-down is one its
-# reader learns to skip.
+# The Sensor itself carries NO data filter: the 2026-09-16 pause was a never-matching filter on
+# `alert-dep`, and ADR-148 replaced the lane rather than un-pausing it — the route above is the
+# filter now. A filter left behind here would silently re-pause a lane whose route says `now`.
+SFILT="$(yq -r 'select(.kind == "Sensor") | .spec.dependencies[] | select(.name == "alert-dep") | .filters // "none"' "$YAML" 2>/dev/null)"
+[ "$SFILT" = "none" ] && ok "the Sensor's alert-dep carries no data filter (the FU-249 pause is gone; the route is the filter)" \
+                      || bad "Sensor alert-dep unfiltered" "filters: $SFILT"
+# The same rule one level up: a PAUSED lane (a never-matching Sensor filter, the FU-249 shape) is a
+# deliberate stop, and without this the crosscheck reports every firing alert as stuck machinery —
+# observed live during the 2026-09-17 pause. A belt that cries wolf through a planned stand-down is
+# one its reader learns to skip.
 grep -qF 'responder PAUSED at the Sensor' "$XCHK" \
   && ok "…and a PAUSED lane reads as a deliberate stop, not as stuck machinery" \
   || bad "crosscheck sees a paused lane" "no pause line in $XCHK"
+# The in-pod belt UNDER tier 0: a `dig` that somehow arrives spawns nothing and leaves a marker.
+scenario triage-dig
+go "$(alert f12d '{"alertname":"KubePodCrashLooping","namespace":"cloudflared","pod":"cloudflared-596888554d-f7zcn","uid":"740fd5bc","job":"kube-state-metrics","triage":"dig"}')"
+want       "triage:dig in-pod → skipped as the deep dig's" "triage:dig"
+wantnocall "triage:dig → spawns no session" "claude -p"
+wantcall   "triage:dig → leaves a dig- marker (a deliberate skip, FU-113a)" '"dig-'
 
 # The rule-site declarations the filter is FOR. Same shape as the #239 stamp assertions above and
 # the same reason: a rule edit that drops one makes the alert dispatchable again in silence, and
@@ -495,6 +505,58 @@ wantbrief "grouping belongs at Alertmanager/filing, not to a comment (FU-133 leg
           "Grouping alerts together is Alertmanager's job at filing time"
 wantbrief "the marker rule itself is split: FILE always carries it, a COMMENT only on a match" \
           "a COMMENT carries it ONLY on a thread that already does"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-249 (2) — the subject residuals: live kube-state-metrics / pushgateway / github-exporter shapes"
+# The 2026-10-03 replay (spikes/responder-week-audit.md §2026-10-03) found the #1733 reporter rule
+# skipped `pod` on EVERY kube-state-metrics alert, so a pod-level one — the honorLabels case the
+# rule itself described — keyed to the exporter's address or the per-class key: every PodSigkilled
+# in the cluster was ONE subject, and DECIDED-ONCE then muted them all. Every payload below is a
+# live label set read off Prometheus's ALERTS on 2026-10-04 (the replay fixtures under
+# agents/replay/fixtures/responder-subject/ pin the same shapes at the clause level).
+
+scenario ksm-pod-notready-live
+go "$(alert s1 '{"alertname":"KubePodNotReady","namespace":"agent-coordinator","pod":"coordinator-sensor-kfmcv-6d7759c844-b2qm6","job":"kube-state-metrics","triage":"now"}')"
+want    "KubePodNotReady (job=kube-state-metrics, target set aggregated away) keys to ITS pod" "subject=workload:agent-coordinator/coordinator-sensor-kfmcv"
+wantnot "…not the per-class key that made every KubePodNotReady one subject" "subject=alert:KubePodNotReady"
+
+scenario ksm-pod-uid-live
+go "$(alert s2 '{"alertname":"PodSigkilled","namespace":"longhorn-system","pod":"engine-image-ei-a4d05f02-2jrm7","uid":"8a50f29d-dff2-4c6e-85a0-c3e4bf0f5039","container":"engine-image-ei-a4d05f02","job":"kube-state-metrics","instance":"10.244.6.51:8080","service":"kube-prometheus-stack-kube-state-metrics","endpoint":"http"}')"
+want    "PodSigkilled (uid present — honorLabels brought the pod) keys to ITS pod" "subject=workload:longhorn-system/engine-image-ei"
+wantnot "…never to kube-state-metrics' own address" "subject=instance:10.244.6.51:8080"
+
+scenario ksm-object-level-live
+go "$(alert s3 '{"alertname":"GithubTokenMintStale","namespace":"agent-coordinator","pod":"kube-prometheus-stack-kube-state-metrics-fd54d4bcb-ggcf8","container":"kube-state-metrics","job":"kube-state-metrics","instance":"10.244.6.51:8080","service":"kube-prometheus-stack-kube-state-metrics","endpoint":"http"}')"
+want    "an object-level kube-state-metrics alert with no object label → the per-class key" "subject=alert:GithubTokenMintStale"
+wantnot "…and the reporter's own instance is never a subject" "subject=instance:10.244.6.51:8080"
+wantnot "…nor its pod" "kube-prometheus-stack-kube-state-metrics"
+
+scenario cronjob-live
+go "$(alert s4 '{"alertname":"CronJobNotSucceeding","namespace":"node-maintenance","cronjob":"fstrim-guard-wk-04","pod":"kube-prometheus-stack-kube-state-metrics-fd54d4bcb-ggcf8","container":"kube-state-metrics","job":"kube-state-metrics","instance":"10.244.6.51:8080","service":"kube-prometheus-stack-kube-state-metrics"}')"
+want "cronjob is an object label (the daemonset arm's sibling)" "subject=workload:node-maintenance/fstrim-guard-wk-04"
+
+scenario pushgateway-live
+go "$(alert s5 '{"alertname":"GarageWriteProbeFailing","namespace":"monitoring","pod":"prometheus-pushgateway-5f67df54bd-kzjs7","container":"pushgateway","job":"garage_write_probe","service":"prometheus-pushgateway","endpoint":"http"}')"
+want    "a pushgateway-fed alert (job = the PUSHED name, service tells the reporter) → per-class key" "subject=alert:GarageWriteProbeFailing"
+wantnot "…never the pushgateway's own workload (the #241 magnet under a new name)" "workload:monitoring/prometheus-pushgateway"
+
+scenario github-exporter-live
+go "$(alert s6 '{"alertname":"AgentErrorFlagged","namespace":"monitoring","repo":"homelab","pod":"github-exporter-68f95b7779-x9fsd","container":"exporter","job":"github-exporter","instance":"10.244.11.154:9504","service":"github-exporter","endpoint":"http-metrics"}')"
+want    "github-exporter is a reporter; a bare repo names the subject" "subject=repo:homelab"
+wantnot "…never the exporter's workload" "workload:monitoring/github-exporter"
+wantnot "…nor the exporter's address" "subject=instance:10.244.11.154:9504"
+
+# The per-day subject ledger keys on (alertname, subject): PveGuestSwapped was skipped as a
+# subject-dup on the day PveHostSwapUsed had triaged the same pve host. The harness cannot stage
+# the ledger's read-back (the kubectl stub serves an empty ledger), so it pins the KEY the write
+# carries — two names on one instance write two different keys.
+scenario subject-ledger-alertname
+go '{"alerts":[{"status":"firing","fingerprint":"pv1","labels":{"alertname":"PveHostSwapUsed","instance":"192.168.2.59:9100","job":"pve-node"}},{"status":"firing","fingerprint":"pv2","labels":{"alertname":"PveGuestSwapped","instance":"192.168.2.59:9100","job":"pve-node"}}]}'
+want "both pve alerts share the subject (the host)" "subject=instance:192.168.2.59:9100"
+k1="subj-$(printf '%s' 'PveHostSwapUsed|instance:192.168.2.59:9100' | sha256sum | cut -c1-16)"
+k2="subj-$(printf '%s' 'PveGuestSwapped|instance:192.168.2.59:9100' | sha256sum | cut -c1-16)"
+wantcall "the subject-ledger key carries the alertname (PveHostSwapUsed)" "\"$k1\":\"triaged-"
+wantcall "…so PveGuestSwapped on the same host writes ITS OWN key, not a subject-dup" "\"$k2\":\"triaged-"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "LEG 2 — the resolve leg keys on the recorded verdict, not on the alert"

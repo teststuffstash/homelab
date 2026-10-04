@@ -379,10 +379,15 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-seat-window/undeclared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/cronjob` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/daemonset-reporter-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/github-exporter-repo` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/homelab` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/ksm-object-no-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/ksm-pod-uid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/node-exporter-instance` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/pushgateway-pushed-job` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/statefulset` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-infra-death` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-negative-cost` | actions | - | `agents/coordinator/responder-argo.yaml` | - |

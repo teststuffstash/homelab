@@ -220,6 +220,12 @@
       "responder-behaviour-test": [
         "bash agents/coordinator/responder-behaviour-test.sh \"$@\""
       ],
+      "deep-dig-test": [
+        "bash agents/deep-dig-test.sh"
+      ],
+      "deep-dig-select": [
+        "DIG_AM_URL=http://192.168.40.14:9093 DIG_PROM_URL=http://192.168.40.13:9090 bash agents/deep-dig-select.sh select \"$@\""
+      ],
       "py-compile-lint": [
         "bash scripts/py-compile-lint.sh"
       ],

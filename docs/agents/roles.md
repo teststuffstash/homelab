@@ -215,27 +215,37 @@ never harder posture on quiet ones.
     (`specs-<pr>.oracle.teststuff.net`, torn down on PR close) is the existing precedent/donor
     shape. Open: per-goal endpoint vs header-based flag routing, teardown, and whether the
     probe that runs there is the smoke (once) or the canary (cron) flavor.
-- **responder** (FU-103) — alert-triggered triage. ⏸ **PAUSED 2026-09-16** (never-matching `alert-dep` filter; un-pause = FU-249). **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
+- **responder** (FU-103) — alert-triggered triage, **the ACUTE half since 2026-10-04 (ADR-148)**:
+  the per-fingerprint lane takes `triage: now` alerts only; `dig` alerts belong to the
+  **deep dig** bullet below, `none` to nobody. (Paused 2026-09-16 → 10-04 by a never-matching
+  Sensor filter — FU-249 — and REPLACED rather than un-paused: the 2026-10-03 replay showed the
+  old lane's 12/day budget binding either way and its sessions going to standing conditions it
+  could only restate, [`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
+  §2026-10-03.) **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
   `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136),
-  **filtered in THREE TIERS, cheapest first (2026-09-17)**: tier 0 = the route's own matchers
-  `severity != "info"` ∧ `triage != "none"` — a denied alert costs no Sensor trigger, no workflow,
-  no clone, and still reaches Home Assistant and Grafana; tier 1 = the in-pod `triage:none` belt
-  (ledger marker, no session, no daily-cap spend) which is now the belt UNDER tier 0 rather than
-  the mechanism; tier 2 = a session. **The test for tier 0 is `could a bounded in-cluster
-  investigation change what anyone does about this?`** — `info` fails it by definition, and
-  `triage: none` is the rule AUTHOR asserting the same thing where they know it, exactly as
-  `platform_machinery` is declared at the rule site (the two compose: `triage: none` = *do not
-  investigate*, `platform_machinery` = *investigate, but a human merges the fix*). The
-  OPERATOR-QUEUE class is what the 2026-09-17 pass added — an alert whose remedy is an act only
-  the operator can take by construction, so a session can only re-state the annotation:
-  `CodeownerParkWaiting` (ruled 2026-08-12), `BlockingCodeownerParkWaiting`,
-  `AgentAttentionStanding` (every class it counts is `who=operator` by definition), and the three
-  GitHub spend/quota rules. ⚠ Two readers of the tier-0 predicate exist and must agree — the route
-  and `agents/meta-alert-crosscheck.sh`, which would otherwise report every denied alert as stuck
-  machinery; the pairing is asserted in `responder-behaviour-test.sh` §routing, which also pins
-  two counterexamples so `triage: none` stays a judgment rather than a habit. A STOCK
+  **filtered in THREE TIERS, cheapest first (2026-09-17; `now`-only 2026-10-04)**: tier 0 = the
+  route's one matcher `triage = "now"` — a `dig`/`none` alert costs no Sensor trigger, no
+  workflow, no clone, and still reaches Home Assistant and Grafana; tier 1 = the in-pod
+  `triage: none|dig` belt (ledger marker, no session, no daily-cap spend) which is the belt
+  UNDER tier 0 rather than the mechanism; tier 2 = a session. **The test for `now` is `could a
+  bounded in-cluster investigation, started within minutes, change what anyone does about
+  this?`** ([`../patterns/observability.md`](../patterns/observability.md) §3 has the three
+  values) — `triage: none` is the rule AUTHOR asserting that nothing can, where they know it,
+  exactly as `platform_machinery` is declared at the rule site (the two compose: `triage: none`
+  = *do not investigate*, `platform_machinery` = *investigate, but a human merges the fix*);
+  the old `severity != "info"` matcher is subsumed (severity says how bad, triage says whether
+  looking can help). The OPERATOR-QUEUE class is what the 2026-09-17 pass added — an alert
+  whose remedy is an act only the operator can take by construction, so a session can only
+  re-state the annotation: `CodeownerParkWaiting` (ruled 2026-08-12),
+  `BlockingCodeownerParkWaiting`, `AgentAttentionStanding` (every class it counts is
+  `who=operator` by definition), and the three GitHub spend/quota rules. ⚠ Two readers of the
+  tier-0 predicate exist and must agree — the route and `agents/meta-alert-crosscheck.sh`,
+  which would otherwise report every denied alert as stuck machinery; the pairing is asserted
+  in `responder-behaviour-test.sh` §routing (which also asserts the Sensor carries no pause
+  filter), and the same section pins two counterexamples so `triage: none` stays a judgment
+  rather than a habit. A STOCK
   kube-prometheus-stack rule gets its label from the alert-relabel map
   (`argocd/platform/values/kube-prometheus-stack-triage.yaml`, 2026-10-03 — the chart has no
   per-alert label hook), and `prometheus-rules-lint` holds every rule to `none|now|dig`; the
@@ -379,6 +389,40 @@ never harder posture on quiet ones.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
+- **deep dig** (ADR-148, FU-249 step 4) — **BUILT 2026-10-04**: the SCHEDULED, GROUPED half of
+  alert triage, taking every `triage: dig` alert the responder no longer sees.
+  predicate = the digest `agents/deep-dig-select.sh select` builds (deterministic shell, replayed
+  by `agents/deep-dig-test.sh`): a `dig` alert that has STOOD ≥ 6 h on Alertmanager or RECURRED on
+  ≥ 3 of the last 7 days (Prometheus's `ALERTS` series, one instant read per day — a stock-chart
+  name carries no `triage` there, so it is resolved from the relabel map as Alertmanager would), and
+  that NOTHING already explains — a declared window naming it, an OPEN issue anywhere in the org
+  whose title names it, an open follow-up item or the seat's meta-state naming it, or a dig finding
+  for the same (alert, subject) within 7 d. The explained set is RECORDED in the digest with its
+  reason, so the session reads the record instead of re-deriving it. The subject is the responder's
+  own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
+  fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03
+  audit named ([`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
+  §2026-10-03: every real win of the paused week was a standing alert the seat had seen for days,
+  each needing 20–50 tool calls); at most 4 groups per run, the rest deferred by name.
+  edge = the `deep-dig` CronWorkflow (`agents/coordinator/deep-dig-argo.yaml`), daily 03:30Z, ONE
+  session per run on the subscription semaphore, the responder's model route (`role: responder`,
+  `lane=dig` in telemetry). key = the prior findings, read back from the bucket with the READER key —
+  the one lane whose state may live in the bucket, because its key can read (the responder's cannot,
+  FU-231). outcome = a `dig-finding/v1` record PER GROUP (verdict `explained | unexplained |
+  cause-found | fix-proposed`, cause, evidence with the reads named, recommendation, `TOOL_GAP`
+  lines) uploaded beside the digest, brief, transcript and manifest under
+  `homelab/dig-<date>/dig-r1-<ts>/` ([`observability-and-retro.md`](observability-and-retro.md)
+  §A1) — FU-231's consumer leg: NO issues, NO comments; a PR ONLY where the fix is mechanical,
+  in-diff and on a file the bot reviewer can merge. reads = Prometheus + Alertmanager in-cluster,
+  Loki in-cluster with the tenant header (the in-cluster agent read that
+  [`../loki-tenancy.md`](../loki-tenancy.md) §Tightening says must land its three moves together —
+  open on FU-249), kubectl READS under the coordinator SA (pods/logs/namespaces/endpoints/PVCs; the
+  brief asks for `TOOL_GAP` lines where a denied read mattered), gh, the fresh clone. belt =
+  `deep_dig_*` gauges (job `deep_dig`) + `DeepDigStale` (2 d, restart-gap hardened like
+  `RetroReportOverdue`); `meta-alert-crosscheck.sh` names the firing `dig` set once per sweep as
+  `routing-dig`, never as untriaged machinery. What the seat reads: the findings in the bucket
+  (`devbox run garage-s3 s3 ls s3://agent-transcripts/homelab/` for the `dig-<date>/` prefixes) —
+  surfacing them on the board is the next step, not built here.
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
   MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a

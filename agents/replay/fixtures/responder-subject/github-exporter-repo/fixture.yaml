@@ -1,0 +1,21 @@
+# FU-249 step 2 (ADR-148) — github-exporter is a reporter; a bare `repo` names the subject.
+#
+# CONDITION UNDER REPLAY. AgentErrorFlagged, live shape (ALERTS, 2026-10-04): a github-exporter
+# metric keyed by `repo` and no `workflow`; the exporter's target set (pod=github-exporter-…,
+# instance=10.244.11.154:9504, service=github-exporter) rides along.
+#
+# WHAT IT REDS ON. github-exporter was missing from the reporter list, so this keyed to
+# `workload:monitoring/github-exporter` — one subject for every github-exporter alert in every
+# repo (the fourth residual of the 2026-10-03 replay). With the reporter recognised, the old
+# cascade would have fallen to `instance:10.244.11.154:9504`, the exporter's address: the same
+# collapse with a different spelling. The repo IS what the alert is about.
+#
+# THE CONTRACT: `repo:homelab`, never the exporter's workload or address, RC 0. The sibling with
+# `repo`+`workflow` (GithubWorkflowRunFailed) keeps `workflow:<repo>/<wf>` — asserted by the
+# responder-behaviour-test `workflow-alert` scenario.
+name: responder-subject-github-exporter-repo
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

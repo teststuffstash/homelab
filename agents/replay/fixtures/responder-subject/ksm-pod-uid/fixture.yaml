@@ -1,0 +1,23 @@
+# FU-249 step 2 (ADR-148) — a kube-state-metrics POD-level alert keeps its pod: the `uid` tell.
+#
+# CONDITION UNDER REPLAY. The live KubePodCrashLooping shape (ALERTS, 2026-10-04) — the same shape
+# PodSigkilled, KubeContainerWaiting, PodEvicted and CNPGInstanceNotReady arrive in: kube-state-
+# metrics is scraped with honorLabels, so the kube_pod_* metric's own `pod`+`namespace`+`uid` win
+# over the target's, while the target's `instance` (kube-state-metrics' pod address, 10.244.6.51:
+# 8080), `service` and `endpoint` ride along untouched.
+#
+# WHAT IT REDS ON. Before 2026-10-04 the cascade skipped `pod` because `job=kube-state-metrics`,
+# fell past `node`, and keyed to `instance:10.244.6.51:8080` — the EXPORTER's address, one subject
+# for every PodSigkilled/CrashLooping/Evicted pod in the cluster, which DECIDED-ONCE then muted as
+# one judged condition (the 2026-10-03 replay, spikes/responder-week-audit.md §2026-10-03).
+#
+# THE CONTRACT:
+#   1. `uid` present ⇒ the metric brought its own pod ⇒ the pod is the subject;
+#   2. the exporter's `instance` is never reached;
+#   3. RC 0.
+name: responder-subject-ksm-pod-uid
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

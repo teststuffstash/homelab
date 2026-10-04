@@ -1,0 +1,73 @@
+# Behaviour fixture for DeepDigStale (ADR-148, 2026-10-04) — the deep dig's own belt.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/deep-dig.promtool-test
+#   (in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# The same three cases as retro-report.promtool-test, at this alert's 2-day threshold: a fresh
+# run is quiet; a pushgateway wipe of a <2d-old run must NOT page (the restart-gap bridge —
+# the `stale` marker, not `_`, is what reproduces the wipe, see that file's header); a run that
+# genuinely stops happening fires after 2 d + the 6 h for-window.
+#
+# CLOCK: promtool's test clock starts at 0; a push VALUE is the epoch the run happened at, so
+# "ran at test-hour H" is literally H*3600, and `time() - value` at any later eval is the run's age.
+rule_files:
+  - deep-dig.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── (a) a run 10 minutes ago is nowhere near stale ───────────────────────────────────────────
+  - interval: 1m
+    name: "(a) a run pushed 10 minutes ago stays quiet"
+    input_series:
+      - series: 'deep_dig_last_run_timestamp_seconds{job="deep_dig"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DeepDigStale
+        exp_alerts: []
+
+  # ── (b) THE RESTART GAP — a wipe of a 20h-old run must not page ──────────────────────────────
+  # A run lands at test-hour 40 (value 144000) and the gateway is wiped two hours later (`stale`
+  # at hour 42, nothing pushed again). At hour 60 the real run is 20 h old — well under 2 d — and
+  # the bridge must read straight through the wipe. Without `max_over_time(...[8d])` the current
+  # scrape is absent, `or vector(0)` falls to epoch 0, and `time() - 0 = 60h > 48h` fires.
+  - interval: 1h
+    name: "(b) a pushgateway wipe of a <2d-old run must not page"
+    input_series:
+      - series: 'deep_dig_last_run_timestamp_seconds{job="deep_dig"}'
+        values: "_x40 144000 stale"
+    alert_rule_test:
+      - eval_time: 50h
+        alertname: DeepDigStale
+        exp_alerts: []
+      # 60h: real age 20 h; time() = 216000 > 172800, so the un-bridged expr false-fires HERE —
+      # this eval is the regression pin.
+      - eval_time: 60h
+        alertname: DeepDigStale
+        exp_alerts: []
+
+  # ── (c) a run that genuinely stops — fires after 2 d + for:6h ────────────────────────────────
+  - interval: 1h
+    name: "(c) a continuously-present run ages past 2d and fires after for:6h"
+    input_series:
+      - series: 'deep_dig_last_run_timestamp_seconds{job="deep_dig"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 47h
+        alertname: DeepDigStale
+        exp_alerts: []
+      # 48h is when the condition turns true; `for: 6h` holds it pending here
+      - eval_time: 53h
+        alertname: DeepDigStale
+        exp_alerts: []
+      - eval_time: 55h
+        alertname: DeepDigStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "The grouped deep dig has not run in >2 days — standing/recurring dig alerts are not being investigated"
+              description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."

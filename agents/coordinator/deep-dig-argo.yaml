@@ -1,0 +1,233 @@
+# deep-dig-argo — the GROUPED deep dig (ADR-148 (3), FU-249 step 4): the scheduled half of the
+# alert-triage split. The responder (responder-argo.yaml) is per-fingerprint and takes
+# `triage: now`; THIS takes `triage: dig` — on a schedule, over the set that has STOOD or RECURRED
+# and that nothing already explains, grouped by onset and host, ONE session per run.
+#
+# WHY. The 2026-10-03 audit (docs/spikes/responder-week-audit.md §2026-10-03) replayed the paused
+# week both ways: the old per-fire lane's 12/day budget bound either way and its sessions went to
+# standing conditions it could only restate — while every one of the week's three real wins was a
+# STANDING alert the seat had seen for days, each needing 20–50 tool calls. Value is per firing,
+# not per name; the shape that pays is a bounded, scheduled, grouped investigation, not a reflex.
+#
+# Machinery inventory:
+#   predicate  = the digest agents/deep-dig-select.sh builds — deterministic shell, replayable by
+#                agents/deep-dig-test.sh: `triage: dig` ∧ (standing ≥ 6 h ∨ ≥ 3 of 7 days) ∧ not
+#                explained by a declared window / an open issue naming it / an open follow-up /
+#                meta-state / a dig finding for the same (alert, subject) within 7 d. The subject is
+#                the responder's own cascade, extracted from responder-argo.yaml at run time.
+#   edge       = this CronWorkflow, daily 03:30Z (before the Monday 05:00Z retro, after the night's
+#                alerts have had hours to stand). No Sensor: a dig is never urgent by definition.
+#   key        = the (alert, subject) of each prior finding, read back from the bucket with the
+#                READER key — unlike the responder, this lane CAN read its own records (the retro
+#                already holds both keys), so "already dug this week" is a real gate, not a ledger.
+#   capacity   = ONE session per run, the subscription-capacity semaphore, activeDeadline 1 h;
+#                groups beyond DIG_MAX_GROUPS wait for the next day (listed as deferred).
+#   output     = a `dig-finding/v1` record PER GROUP in the agent-transcripts bucket
+#                (homelab/dig-<date>/dig-r1-<ts>/finding-N.json, beside the digest, the transcript
+#                and an A1 manifest) — the FU-231 consumer leg: findings go to the bucket, NOT to
+#                issues. A PR ONLY where the fix is mechanical, in-diff and on a file the bot
+#                reviewer can merge; never an issue per alert, never a comment on a thread.
+#   belts      = deep_dig_* gauges on the pushgateway (job/deep_dig) + DeepDigStale
+#                (argocd/resources/pushgateway/prometheusrule.yaml): a run that stops happening is
+#                visible, the way RetroReportOverdue watches the retro.
+#   reads      = Prometheus + Alertmanager (in-cluster services), Loki (in-cluster, tenant header
+#                = the namespace — docs/loki-tenancy.md; this is the in-cluster agent read that
+#                the §Tightening section says must land its three moves together, tracked on
+#                FU-249), kubectl READS under the agent-coordinator SA (pods, logs, namespaces,
+#                endpoints, PVCs — nothing node- or event-shaped: the brief says so and asks for
+#                TOOL_GAP lines), gh, and the fresh homelab clone.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: deep-dig
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "30 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 3600
+    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
+    # FU-088 Argo layer: queue, never spawn, into a full subscription pool.
+    synchronization:
+      semaphores:
+        - configMapKeyRef: { name: subscription-capacity, key: claude }
+    # homelab#103 / #867 soft spread + Longhorn-disk de-preference — the respond template's.
+    podSpecPatch: |
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchExpressions:
+              - { key: workflows.argoproj.io/workflow, operator: Exists }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 10
+              preference:
+                matchExpressions:
+                  - key: node.longhorn.io/create-default-disk
+                    operator: NotIn
+                    values:
+                      - "true"
+    entrypoint: dig
+    volumes:
+      - { name: work, emptyDir: {} }
+    templates:
+      - name: dig
+        metadata:
+          labels: { app: deep-dig-workflow }
+        # A latched rail exits 1 (both subscription rails busy) — retry with backoff rather than
+        # lose the day; a selection or session failure also lands here, bounded by `limit`.
+        retryStrategy:
+          limit: "3"
+          retryPolicy: OnFailure
+          backoff: { duration: "30m", factor: "2" }
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
+            - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
+            - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+            # Cost attribution (the responder's contract): role=responder, lane=dig.
+            - { name: CLAUDE_CODE_ENABLE_TELEMETRY, value: "1" }
+            - { name: OTEL_METRICS_EXPORTER, value: "otlp" }
+            - { name: OTEL_LOGS_EXPORTER, value: "otlp" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: "http/protobuf" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.monitoring.svc.cluster.local:4318" }
+            - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=responder,lane=dig,stack=platform" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            # §A1 capture: the WRITER key for the record, the READER key for "already dug" — both
+            # `optional: true`, each degrading to one loud line (no capture / no redig gate).
+            - { name: AWS_REGION, value: "garage" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+            - name: AGENT_TS_READER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+            - name: AGENT_TS_READER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+            - { name: DIG_MAX_GROUPS, value: "4" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              DAY="$(date -u +%Y-%m-%d)"; TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"
+              PGW="${PUSHGATEWAY:-}"
+              # ── metrics: best-effort, every exit path pushes, the alert reads last_run ──────
+              _push() { # <probe_ok> <candidates> <groups> <explained> <session_ran> <findings>
+                [ -n "$PGW" ] || return 0
+                printf '%s\n' \
+                  "# TYPE deep_dig_last_run_timestamp_seconds gauge" "deep_dig_last_run_timestamp_seconds $(date -u +%s)" \
+                  "# TYPE deep_dig_probe_ok gauge" "deep_dig_probe_ok $1" \
+                  "# TYPE deep_dig_candidates gauge" "deep_dig_candidates $2" \
+                  "# TYPE deep_dig_groups gauge" "deep_dig_groups $3" \
+                  "# TYPE deep_dig_explained gauge" "deep_dig_explained $4" \
+                  "# TYPE deep_dig_session_ran gauge" "deep_dig_session_ran $5" \
+                  "# TYPE deep_dig_findings gauge" "deep_dig_findings $6" \
+                  | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/deep_dig" >/dev/null 2>&1 \
+                  || echo "deep-dig: pushgateway unreachable — metrics stale, verdicts unaffected"
+              }
+              # ── §A1 capture (the responder's helpers, same degrade) ─────────────────────────
+              TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/dig-${DAY}/dig-r1-${TS_RUN}"
+              _ts_put() { # <local> <remote-basename>
+                [ -s "$1" ] || return 0
+                [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 writer key — $2 not captured"; return 0; }
+                command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — $2 not captured"; return 0; }
+                AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" \
+                  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
+                  || echo "transcripts: upload FAILED for $2 (non-fatal)"
+              }
+
+              rm -rf /work/homelab
+              # homelab#1136 + the 2026-09-03 recurrence: authenticated, preemptive-auth clone.
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { _push 0 0 0 0 0 0; echo "deep-dig: clone failed"; exit 1; }
+              cd /work/homelab
+
+              # ── 1. SELECT (deterministic; rule #6 — an unreadable Alertmanager is exit 1) ────
+              if ! DIG_REPO=/work/homelab bash agents/deep-dig-select.sh select --out /tmp/dig.json 2>/tmp/dig-select.log; then
+                cat /tmp/dig-select.log; _push 0 0 0 0 0 0; echo "deep-dig: selection failed — no session"; exit 1
+              fi
+              cat /tmp/dig-select.log
+              CAND="$(jq -r '.counts.candidates' /tmp/dig.json)"; GROUPS="$(jq -r '.counts.selected' /tmp/dig.json)"; EXPL="$(jq -r '.counts.explained' /tmp/dig.json)"
+              _ts_put /tmp/dig.json digest.json
+              _ts_put /tmp/dig-select.log select.log
+              if [ "${GROUPS:-0}" -eq 0 ]; then
+                _push 1 "$CAND" 0 "$EXPL" 0 0
+                echo "deep-dig: nothing unexplained is standing or recurring — no session today (digest → $TS_PREFIX)"; exit 0
+              fi
+
+              # ── 2. one session, on whichever rail is clear (FU-088) ─────────────────────────
+              rail="$(SUBSCRIPTION_TIER=dispatch bash agents/subscription-latch.sh --pick-rail)" || rail=""
+              if [ -z "$rail" ]; then _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
+              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
+
+              # The brief is composed into a FILE: the digest rides inside it, and an argument of
+              # that size is how the retro's cell died (E2BIG at 146 KB) — DIG_MAX_GROUPS bounds it.
+              {
+              cat <<'BRIEF'
+              You are the DEEP DIG — the scheduled, grouped half of the homelab alert triage (docs/agents/roles.md §deep dig, ADR-148). Not the responder: nothing here is urgent, and you are paid for DEPTH, not speed. Each group below is a set of `triage: dig` alerts that have STOOD for hours or RECURRED across days, started in the same window on the same host, and that no open issue, declared window, follow-up or earlier dig explains. The alerts that WERE explained are listed too so you do not re-derive them; the `explained_by` reference is the record — read it before you touch anything related.
+
+              YOUR JOB, per group: find the ONE cause (or say honestly that you could not), with evidence you actually read, and say what would change it. Standing conditions have history — use it. Read in this order, naming each read in your evidence:
+                (1) The alert annotations in the digest — the rule author wrote the runbook hints there.
+                (2) Prometheus, in-cluster: curl -sG http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode 'query=…' (and /api/v1/query_range with start/end/step for the shape over the group's onset ± 6h). The `ALERTS` series carries every alert's history for 7 d; `ALERTS_FOR_STATE` its pending start. Alertmanager: curl -s http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts.
+                (3) Loki, in-cluster and MULTI-TENANT (tenant == namespace, docs/loki-tenancy.md): curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/query_range --data-urlencode 'query={namespace="<ns>",pod=~"<pod>.*"}' --data-urlencode 'start=<unix-ns>' --data-urlencode 'limit=500'. Node kernel logs are {container="kmsg-reader", node="<node>"} under tenant `loki`. Queries are capped at 7 d; a request without the header is 401 — that is the contract, not an outage.
+                (4) kubectl READS only, under this pod's ServiceAccount: pods, pods/log, namespaces, endpoints, persistentvolumeclaims. Nodes, events, deployments and CRDs are RBAC-denied by design — when a denied read would have changed your conclusion, add ONE line starting exactly `TOOL_GAP: <verb/resource> — <what it was for>` to that group's evidence and move on; never a bare "could not verify".
+                (5) gh (issues + PRs across the agent repos, read-only here) and /work/homelab (a fresh clone: docs/follow-ups.md, docs/agents/meta-state.md, docs/incidents/, docs/runbook.md, the rule's own file under argocd/) for the story so far.
+
+              HARD RULES. File NO issues and comment on NO issue — findings go to the bucket (the shell uploads what you print), not to the tracker (FU-231). No kubectl mutations, no silences, no pushes to master. A PR is allowed ONLY when all three hold: the fix is mechanical and in-diff (a threshold, a `for:`, an annotation, a scope on a selector, a doc line), it is on a file the bot reviewer can merge (never .github/, .agents/, CODEOWNERS, devbox.json/.lock, mgmt/, agents/coordinator/*-argo.yaml or any file scripts/pin-only-lint.sh guards), and the group's evidence supports it without a human decision — branch `dig/<slug>`, one PR, body carries the evidence and the group key, `gh pr merge --auto --squash`, and name it in the finding's `pr` field. Anything that needs a person to decide is a RECOMMENDATION in the finding, written so the seat can act on it in one read. Before any write, search `gh search issues --owner teststuffstash "<alertname>" --match title` and `gh pr list --search "<alertname>"` across the repos — a match means the record exists; cite it, never duplicate it. If anything smells like an automation loop (your own earlier PRs piling up), STOP and report only.
+
+              OUTPUT CONTRACT — the shell parses this, so the shape is not optional. For EVERY group in the digest, print exactly one block:
+              BEGIN-DIG-FINDING
+              {"schema":"dig-finding/v1","group":"<the group key verbatim>","alerts":["<alertname> (<subject>)", ...],"verdict":"explained|unexplained|cause-found|fix-proposed","cause":"<one paragraph, or why none was found>","evidence":["<read> → <what it showed>", ...],"recommendation":"<the one next action, who takes it, or empty>","pr":"<repo#n or empty>","related":["<repo#n or FU-NNN>", ...],"tool_gaps":["<TOOL_GAP lines>", ...]}
+              END-DIG-FINDING
+              One JSON object per block, valid JSON, no markdown fences inside the block. `explained` = you found the existing record that already answers it (name it in `related`); `unexplained` = you looked (say where) and could not say; `cause-found` = the cause is established, the fix needs a decision; `fix-proposed` = the PR above exists. Keep prose outside the blocks short; the blocks are the deliverable.
+              BRIEF
+              printf '\nTHE DIGEST (deep-dig-digest/v1, built %s):\n' "$(jq -r .ts /tmp/dig.json)"
+              jq '{params, groups, explained: (.explained | map({alertname, subject, explained_by})), deferred}' /tmp/dig.json
+              } > /tmp/brief.md
+              _ts_put /tmp/brief.md brief.md
+
+              : > /tmp/ts-mark; : > /tmp/dig.log
+              claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 80 </dev/null 2>&1 \
+                | tee /tmp/dig.log \
+                || echo "WARN: the dig session failed — whatever it printed is still harvested" | tee -a /tmp/dig.log
+
+              # ── 3. HARVEST + CAPTURE, before anything can fail ───────────────────────────────
+              N=0
+              if DIG_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" DIG_RUN="dig-${DAY}/dig-r1-${TS_RUN}" bash agents/deep-dig-select.sh harvest /tmp/dig.log /tmp/findings; then
+                N="$(ls /tmp/findings/finding-*.json 2>/dev/null | wc -l | tr -d ' ')"
+              else
+                echo "deep-dig: the session produced NO valid finding block for $GROUPS group(s) — the transcript is the only record"
+              fi
+              jq -n --arg role responder --arg lane dig --arg project homelab --arg task "dig-$DAY" \
+                    --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
+                    --argjson groups "$GROUPS" --argjson findings "$N" \
+                    '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
+                      session_key:"coordinator-claude", pod:$pod, timestamp:$ts, groups:$groups, findings:$findings,
+                      files:["digest.json","brief.md","dig.log","select.log"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
+              _ts_put /tmp/dig.log dig.log
+              _ts_put /tmp/ts-manifest.json manifest.json
+              for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && _ts_put "$f" "$(basename "$f")"; done
+              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")"; done
+              _push 1 "$CAND" "$GROUPS" "$EXPL" 1 "$N"
+              echo "deep-dig: $GROUPS group(s) dug, $N finding(s) → $TS_PREFIX"
+              for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && jq -r '"  \(.verdict) \(.group): \(.cause | .[0:160])\(if .pr != "" then " [PR \(.pr)]" else "" end)"' "$f"; done
+              exit 0
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "1Gi" }
