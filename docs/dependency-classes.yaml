@@ -35,7 +35,7 @@ classes:
     proposer: {status: gap, text: "Renovate's `argocd` manager has no default file match and renovate-global.json does not configure one — no PR has ever proposed a chart bump here (§Ground truth: 97 deps extracted, none of them these)"}
     merge_gate: {status: ok, text: "minor → `deps-review` (reflex + lens), major → un-armed `major` lane (renovate-global.json; ADR-141 for the arm rule)"}
     deploy_edge: {status: ok, text: "ArgoCD `syncPolicy.automated` — a merge IS the deploy (27 of 34 Applications auto-sync)"}
-    detector: {status: gap, text: "ArgoCD health is shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe); the contract probe is FU-102"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` (15 m) / `ArgoCDAppSyncFailed` (10 m) since 2026-10-04 (argocd/resources/argocd-metrics/, `triage: dig` → responder) + the generic rollout belt; ArgoCD health stays shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe) — the deep contract probe is FU-102"}
     revert: {status: human, text: "a human `git revert` — the FU-044 deterministic revert is scoped to first-party image pins; extending it to charts REJECTED (operator 2026-08-04, IAC-G09: CRD/schema downgrades are not reversible by a revert)"}
     canary: {status: gap, text: "none — a chart bump lands on the only instance; ARC controller/runners must move in lockstep (two files, one version)"}
 
@@ -49,7 +49,7 @@ classes:
     proposer: {status: gap, text: "unmanaged — Renovate's `kubernetes` manager has no default file match and none is configured; digest-pinned refs never move (cloudflared 2026.5.2, python:3.13-slim@sha256, k3d:5-dind@sha256)"}
     merge_gate: {status: ok, text: "digest → `automerge` (reflex), version minor → `deps-review`, major → un-armed (renovate-global.json) — the lanes exist, nothing feeds them"}
     deploy_edge: {status: ok, text: "ArgoCD auto-sync of the manifest — path-scoped per resource dir"}
-    detector: {status: gap, text: "ArgoCD health (shallow) + the per-service alert belts where they exist; no post-deploy contract probe (FU-102)"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` / `ArgoCDAppSyncFailed` since 2026-10-04 + the generic rollout belt + the per-service alert belts where they exist (11 of 16 rows have one); no post-deploy contract probe (FU-102)"}
     revert: {status: human, text: "a human `git revert`; the FU-044 chain's pin-only predicate covers FIRST-PARTY pins only (class 3)"}
     canary: {status: gap, text: "none — single replica for most of these"}
 
@@ -63,7 +63,7 @@ classes:
     proposer: {status: ok, text: "the image repo's `deploy-pin` job (agent-runtime → agent-base, agent-coordinator) and `runner-image.yaml` (arc-runner) open `deploy/*` / `runner-image-pin` PRs; weekly `schedule` rebuilds since 2026-09-27"}
     merge_gate: {status: ok, text: "`automerge`+`dependencies` → renovate-approve reflex → CI-green auto-merge (`pin-only-lint` guards the diff shape)"}
     deploy_edge: {status: ok, text: "ArgoCD auto-sync; the deploy-pin sweep bumps every mirrored literal by git-grep (images.env header) — a ref with a DIFFERENT tag than images.env is one the sweep missed (⚠ on the row)"}
-    detector: {status: gap, text: "ArgoCD Degraded → `/deploy-degraded` (wired 2026-08-04) but NEVER fired by a real Degraded homelab app (FU-044); a bare `:latest`-equivalent ref is invisible to it"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` since 2026-10-04; ArgoCD Degraded → `/deploy-degraded` was wired 2026-08-04 but its first hop was DEAD until #2217 (recipient `webhook:agent-loop`, 150 failed deliveries) — never fired by a real Degraded app for that reason; `ArgoCDNotificationDeliveryFailing` now watches the hop; a bare `:latest`-equivalent ref is still invisible"}
     revert: {status: ok, text: "the cluster pin IS the revert (operator 2026-09-27): `deploy-revert-argo.yaml`'s pin-only predicate opens the revert PR; the FU-1990 sibling chain proved the shape end to end in the 2026-09-27 drill (agent-coordinator#20 → #21, ~3.5 min)"}
     canary: {status: gap, text: "none — the pin rolls every consumer at once (the coordinator, the reviewer, the sentinel, the transcript viewer)"}
 

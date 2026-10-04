@@ -1,0 +1,100 @@
+# The ArgoCD belt for GitOps dependency bumps (docs/dependency-upgrades.md §5 Monitoring, classes 1–3):
+# a merged chart or image bump IS the deploy, so the first mechanical read of "did it break" is the
+# Application's own health/sync state — which until 2026-10-04 reached nothing but the ArgoCD UI and a
+# webhook that never delivered. These rules make that state an alert the responder triages (ADR-148).
+# Shallow by construction (docs/agents/iac-lane.md §"ArgoCD health is NOT the post-deploy gate"): a
+# pod that is Ready on a tcpSocket probe is Healthy here; the deep contract probe stays FU-102.
+#
+# Fixtures: argocd-apps.promtool-{rules,test} (drift-pinned by prometheus-rules-lint).
+# No replay is possible for the first three — the series did not exist before the PodMonitors in this
+# directory; the live proof is `registry` (Degraded since 2026-10-04 04:00Z) firing ArgoCDAppDegraded
+# within 15 min of the first scrape, and ArgoCDNotificationDeliveryFailing on the next Degraded
+# transition until the recipient fix lands.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: argocd-apps
+  namespace: monitoring
+  labels:
+    app: argocd-metrics
+spec:
+  groups:
+    - name: argocd-apps
+      rules:
+        - alert: ArgoCDAppDegraded
+          # Health aggregates over the whole resource TREE, children included — a failed Job under a
+          # CronJob degrades the app while `.status.resources` (managed objects only) shows nothing
+          # Degraded (the registry case: the 04:00 registry-garbage-collect Job). 15m absorbs a rollout.
+          expr: |
+            max by (name, dest_namespace) (argocd_app_info{health_status="Degraded"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+            # triage: which resource, and whether a dependency bump merged just before, decides it
+            triage: dig
+          annotations:
+            summary: "ArgoCD Application {{ $labels.name }} has been Degraded for 15m"
+            description: >-
+              Application {{ $labels.name }} (namespace {{ $labels.dest_namespace }}) reports health
+              Degraded for 15 minutes. `argocd app get {{ $labels.name }} --show-operation` and
+              `kubectl get app -n argocd {{ $labels.name }} -o yaml` (health is aggregated over child
+              resources too — look at Jobs under CronJobs, ReplicaSets under Deployments). If a
+              dependency bump (a Renovate chart/image PR, a deploy-pin PR) merged into its path within
+              the last hours, that merge is the first suspect: docs/dependency-upgrades.md §4 Rollout.
+        - alert: ArgoCDAppSyncFailed
+          # A sync that ERRORED (render failure, a missing required value, a CRD skew) leaves the app
+          # OutOfSync and never Degraded — the one shape the Degraded webhook could never see.
+          expr: |
+            sum by (name) (increase(argocd_app_sync_total{phase=~"Error|Failed"}[30m])) > 0
+              and on (name)
+            max by (name) (argocd_app_info{sync_status!="Synced"}) == 1
+          for: 10m
+          labels:
+            severity: warning
+            # triage: the operation state says what failed to render or apply
+            triage: dig
+          annotations:
+            summary: "ArgoCD Application {{ $labels.name }}: a sync failed and it is still not Synced"
+            description: >-
+              A sync operation on {{ $labels.name }} ended in Error/Failed within the last 30 minutes
+              and the app is still not Synced 10 minutes later. Read `argocd app get {{ $labels.name }}
+              --show-operation` for the operation message (helm render error, missing value, CRD/schema
+              refusal). A chart bump merged into its Application file is the first suspect — a render
+              failure there has no CI gate (`argocd-validate-pins.sh` renders first-party OCI charts only).
+        - alert: ArgoCDNotificationDeliveryFailing
+          # The FU-044 revert chain's first hop. 150 failures / 0 successes over 2026-07-27 → 10-04
+          # went unseen because this counter was never scraped.
+          expr: |
+            sum by (service, trigger) (increase(argocd_notifications_deliveries_total{succeeded="false"}[1h])) > 0
+          for: 5m
+          labels:
+            severity: warning
+            # triage: the notifications-controller log names the recipient and the error
+            triage: dig
+          annotations:
+            summary: "argocd-notifications: {{ $labels.trigger }} → {{ $labels.service }} deliveries failing"
+            description: >-
+              The notifications controller failed to deliver {{ $labels.trigger }} to the
+              {{ $labels.service }} service in the last hour (`kubectl -n argocd logs
+              deploy/argocd-notifications-controller | grep "Failed to notify"`). For on-health-degraded
+              this is the deploy-revert chain (agents/coordinator/deploy-revert-argo.yaml) NOT being
+              rung — a Degraded app goes un-reverted and un-reported until this is fixed. Config lives
+              in tofu/argocd.tf (notifications block), applied by `devbox run mgmt-tf`.
+        - alert: ArgoCDMetricsAbsent
+          # The belt's own blindness: no argocd_app_info means the controller is down or the scrape
+          # broke — either way every rule above is silent while it looks green.
+          expr: |
+            absent(argocd_app_info)
+          for: 15m
+          labels:
+            severity: warning
+            # triage: controller pod state vs the PodMonitor's target list in Prometheus
+            triage: dig
+          annotations:
+            summary: "No ArgoCD application metrics for 15m — the ArgoCD belt is blind"
+            description: >-
+              Prometheus has had no argocd_app_info series for 15 minutes. Either
+              argocd-application-controller-0 is down (then nothing syncs either) or the
+              argocd-application-controller PodMonitor in argocd/resources/argocd-metrics/ lost its
+              target (Prometheus → Status → Targets). ArgoCDAppDegraded/ArgoCDAppSyncFailed cannot fire
+              while this does.

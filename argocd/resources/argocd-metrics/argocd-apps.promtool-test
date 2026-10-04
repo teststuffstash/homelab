@@ -1,0 +1,84 @@
+# Behaviour fixture for the ArgoCD belt (2026-10-04, the S9 class-1/2 wave prep).
+#
+#   devbox run -- promtool test rules argocd/resources/argocd-metrics/argocd-apps.promtool-test
+#
+# Shapes from the live 2026-10-04 scrape: `argocd_app_info` is a 1-valued gauge whose label set
+# changes with state (a Healthy→Degraded transition is a NEW series, the old one goes stale);
+# `argocd_app_sync_total` is a counter per phase; the deliveries counter read
+# {service="webhook",succeeded="false",trigger="on-health-degraded"} 150 with no succeeded series.
+rule_files:
+  - argocd-apps.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: "Degraded fires at 15m, not at 14m; a 5-minute Degraded (a rollout) never fires"
+    input_series:
+      # registry: Healthy for 5m, then Degraded for 25m
+      - series: 'argocd_app_info{name="registry",dest_namespace="registry",health_status="Healthy",sync_status="Synced"}'
+        values: "1x5 stale _x24"
+      - series: 'argocd_app_info{name="registry",dest_namespace="registry",health_status="Degraded",sync_status="Synced"}'
+        values: "_x5 1x25"
+      # blackbox: a 5-minute Degraded during a rollout, then Healthy again
+      - series: 'argocd_app_info{name="blackbox",dest_namespace="monitoring",health_status="Degraded",sync_status="Synced"}'
+        values: "_x5 1x5 stale _x19"
+      - series: 'argocd_app_info{name="blackbox",dest_namespace="monitoring",health_status="Healthy",sync_status="Synced"}'
+        values: "1x5 stale _x5 1x19"
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: ArgoCDAppDegraded
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: ArgoCDAppDegraded
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, name: registry, dest_namespace: registry }
+      - eval_time: 29m
+        alertname: ArgoCDAppDegraded
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, name: registry, dest_namespace: registry }
+
+  - interval: 1m
+    name: "SyncFailed fires 10m after an errored sync while still OutOfSync; a failed sync that then Synced does not"
+    input_series:
+      # argo-events: one Error at minute 5, stays OutOfSync
+      - series: 'argocd_app_sync_total{name="argo-events",phase="Error"}'
+        values: "0x5 1x25"
+      - series: 'argocd_app_info{name="argo-events",dest_namespace="argo-events",health_status="Healthy",sync_status="OutOfSync"}'
+        values: "1x30"
+      # cert-manager: one Failed at minute 5, Synced again from minute 8
+      - series: 'argocd_app_sync_total{name="cert-manager",phase="Failed"}'
+        values: "0x5 1x25"
+      - series: 'argocd_app_info{name="cert-manager",dest_namespace="cert-manager",health_status="Healthy",sync_status="OutOfSync"}'
+        values: "1x8 stale _x21"
+      - series: 'argocd_app_info{name="cert-manager",dest_namespace="cert-manager",health_status="Healthy",sync_status="Synced"}'
+        values: "_x8 1x22"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ArgoCDAppSyncFailed
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: ArgoCDAppSyncFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, name: argo-events }
+
+  - interval: 1m
+    name: "a failed webhook delivery fires 5m later; the belt-absent guard fires at 15m without argocd_app_info"
+    input_series:
+      - series: 'argocd_notifications_deliveries_total{service="webhook",succeeded="false",trigger="on-health-degraded"}'
+        values: "150x5 151x25"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ArgoCDNotificationDeliveryFailing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: ArgoCDNotificationDeliveryFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, service: webhook, trigger: on-health-degraded }
+      - eval_time: 14m
+        alertname: ArgoCDMetricsAbsent
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: ArgoCDMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }

@@ -1,0 +1,20 @@
+# ArgoCD notifications-controller metrics (:9001): `argocd_notifications_deliveries_total{service,
+# succeeded, trigger}` + `argocd_notifications_trigger_eval_total`. This is the FU-044 chain's first
+# hop — the `on-health-degraded` → `/deploy-degraded` webhook — and on 2026-10-04 the counter read
+# 150 failed deliveries, 0 succeeded, since the chain was wired on 2026-07-27 (the subscription named
+# the recipient `webhook:agent-loop`; a webhook service is addressed by its own name). Two months of
+# "never fired by a real Degraded app" were a dead hop, visible in a metric nobody scraped.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: argocd-notifications-controller
+  namespace: monitoring
+  labels: { app: argocd-metrics }
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels: { app.kubernetes.io/name: argocd-notifications-controller }
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 60s
