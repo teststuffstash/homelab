@@ -12279,3 +12279,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   CodeownerParkWaiting, CronJobNotSucceeding, HomeAssistantPowerSensorStale, HomeAssistantSensorStale,
   InfoInhibitor, LonghornDiskBelowSchedulingFloor, MgmtBeltCheckFailing, MgmtOpnsenseDrillFailed,
   PveGuestSwapped, PveHostSwapUsed, Watchdog; `sum(up)` 187.
+- **Takeover 20:05Z (operator: "work unattended — hourly limit 6 temporarily, merge the PR, document problems
+  as renovate updates, watch alerts + each rollout; S9 end state = operator out of updates/reverts").**
+  #2216 rebuilt on master after #2200 merged (generated register conflicted; one squashed commit, 175f94b2).
+- **#2200 (argo-workflows chart 1.0.20 → 1.0.24, hand-proposed, rebased + armed by the seat) MERGED
+  20:13:49Z** → ArgoCD sync Succeeded 20:14:38Z, controller + server on v4.0.8 by 20:16Z, baseline
+  compare clean (13 nodes, 188 targets, no new alert). The first class-1 landing of the wave — NOT a
+  Renovate proof (hand-proposed); upstream chart is at **2.0.11**, so Renovate will open a patch AND an
+  un-armed major for it. Hand vs machine: the hand PR sat DIRTY+un-armed 19 h; nobody owned it.
+- **Detection-first finds while probing "what would catch a bad chart merge" (→ §Gap register in
+  dependency-upgrades.md, G1–G6):** (G1) ArgoCD's controller metrics NEVER scraped in 109 days —
+  `registry` Degraded since 04:00Z today (a failed registry-garbage-collect Job; health aggregates
+  over children) and nothing said so; (G2) **FU-044's first hop was DEAD since 2026-07-27** —
+  subscription recipient `webhook:agent-loop` → `notification service 'webhook' is not supported`;
+  the notifications controller's counter: 150 failed / 0 succeeded deliveries, 7240 trigger
+  evaluations. "Never fired by a real Degraded app" was this hop, not the predicate. **PR#2217** (one
+  line in tofu/argocd.tf: `recipients = ["agent-loop"]`; a helm_release apply → helm-evidence run
+  after merge). **PR#2218** (argocd/resources/argocd-metrics/: PodMonitors on both controllers,
+  `ArgoCDAppDegraded` 15m / `ArgoCDAppSyncFailed` 10m / `ArgoCDNotificationDeliveryFailing` /
+  `ArgoCDMetricsAbsent`, promtool fixture drift-pinned; docs: §5 row, gap register, register detector
+  cells classes 1–3 → ok, iac-lane dead-hop paragraph). (G3) no render gate for third-party charts;
+  (G4) five autosync apps chronically OutOfSync (agent-fixer-{circles,openrouter-operator,oracle-fleet,
+  sleep-tracking}, logging) — OutOfSync alert deferred; (G5) 11 belt-only deps; (G6) 3 PRs/chart.

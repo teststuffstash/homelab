@@ -18,7 +18,12 @@ never the session's arc — that is TICK-LOG's.)
   `docs/dependency-upgrades.md` §Last proven (the "Helm charts / in-cluster images" row is ❌) and
   every flow gap (what went wrong / what would catch it / what should revert) — the S9 end state is
   the operator OUT of updates and reverts: mechanical revert or responder. Open before the wave:
-  #2200 (argo-workflows 1.0.24, hand-proposed) will be duplicated by Renovate — merge or close.
+  #2200 MERGED 20:13Z (rollout clean). **Gap register** = `docs/dependency-upgrades.md` §Gap register
+  (G1–G6, PR#2218); **PR#2217** (notifications recipient — FU-044's dead first hop) needs an ATTENDED
+  `helm_release.argocd` apply after merge: `devbox run mgmt-tf -- plan` → `devbox run helm-evidence --
+  run <plan-id>`; proof = a succeeded `on-health-degraded` delivery on the next Degraded transition.
+  After #2216 merges: `gh workflow run renovate.yaml -f dryRun=true` → read the log → the 6-hourly run
+  (or dispatch) opens the first wave; watch each PR → merge → sync → alert delta.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;
