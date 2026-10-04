@@ -76,13 +76,15 @@ GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yam
 # Two pin shapes, one rule. The arc-runner bump writes an `image:` line; the chart-deploy lane
 # writes a `targetRevision:` line — CalVer + -g<sha> for our own OCI charts (ADR-084), plain
 # SemVer (`0.14.2`, `v1.21.2`) for a third-party chart the Renovate `argocd` manager bumps
-# (#2216: arc-runners.yaml rides the grouped `arc` PR with its two siblings). A trailing
-# `# comment` is allowed on the pin line: every targetRevision in arc-runners.yaml carries one, and
-# Renovate rewrites the value and keeps the comment. Anything else in a guarded file is still
-# refused, so widening the FILE set does not widen what may be written to it.
+# (#2216: arc-runners.yaml rides the grouped `arc` PR with its two siblings). The two branches are
+# DISJOINT: SemVer leads with 1–3 digits, CalVer with a 4-digit year, so a first-party pin that lost
+# its `-g<sha>` provenance (`2026.9.25`) still fails, and the optional trailing `# comment` is
+# scoped to the SemVer branch (every targetRevision in arc-runners.yaml carries one; Renovate
+# rewrites the value and keeps the comment) — a CalVer pin still admits no comment. Anything else
+# in a guarded file is still refused, so widening the FILE set does not widen what may be written.
 # ⚠ GUARDED= and PIN_LINE= are ONE HOME: ci.yaml's ratchet exemption eval-extracts both lines and
 # coordinator-scan.sh / goal-lint.sh split GUARDED on `|` — keep them single-line, single-quoted.
-PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+|targetRevision:[[:space:]]*([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]+|v?[0-9]+\.[0-9]+\.[0-9]+)([[:space:]]+#.*)?)$'
+PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+|targetRevision:[[:space:]]*([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]+|v?[0-9]{1,3}\.[0-9]+\.[0-9]+([[:space:]]+#.*)?))$'
 # The third shape has its own pair so the two above stay byte-for-byte (their consumers never see
 # a workflow path in GUARDED, and the ratchet exemption never sees a `uses:` line as a pin).
 WORKFLOW_GUARDED='^\.github/workflows/[^/]+\.ya?ml$'

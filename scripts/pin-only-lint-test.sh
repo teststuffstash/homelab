@@ -184,6 +184,14 @@ case_ arc-chart-comment-only-edit ok "" \
   "sed -i 's|# lockstep with arc-controller.yaml|# keep in step|' argocd/platform/arc-runners.yaml"
 case_ arc-chart-non-semver 'may only receive PIN lines' "" \
   "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: latest # lockstep|' argocd/platform/arc-runners.yaml"
+# The CalVer branch stays exact (reviewer, #2216): a first-party pin with its -g<sha> dropped is NOT
+# a SemVer pin (4-digit year vs 1–3 digits — disjoint), and a CalVer pin admits no trailing comment.
+case_ calver-githash-dropped 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25|' argocd/platform/openrouter-operator.yaml"
+case_ calver-with-comment 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb # note|' argocd/platform/openrouter-operator.yaml"
+case_ calver-githash-bump ok "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
 case_ target-revision-pin ok "" \
   "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
 case_ target-revision-smuggled 'may only receive PIN lines' "" \
