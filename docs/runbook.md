@@ -396,7 +396,9 @@ hand-written inventory rows.
 
 ⚠ **Removing a Longhorn DISK (not just downing the node) co-locates replicas — Tracked by: FU-285.**
 Pulling a drive that holds replicas makes Longhorn rebuild them onto whatever node is left, and with
-`replica-soft-anti-affinity: true` it will happily put BOTH copies of a volume on one disk. Raising
+`replica-disk-soft-anti-affinity: true` it will happily put BOTH copies of a volume on one disk (the
+same-NODE half is `replica-soft-anti-affinity`; both `true` live, per-StorageClass overridable —
+Longhorn v1.12.0 `filterDisksWithMatchingReplicas`, read 2026-10-03). Raising
 `replica-replenishment-wait-interval` does NOT stop this (measured 2026-09-23). Check replica
 placement per volume after any disk pull, and expect to rebalance by hand on refit.
 

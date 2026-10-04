@@ -1261,8 +1261,8 @@ the block needs pruning, not more headings.
       `replica-disk-soft-anti-affinity` + `replica-soft-anti-affinity` (both `true` live; per-StorageClass
       override exists); the wait applies only while a failed replica is "potentially reusable" (FailedAt,
       NodeID+DiskID set, retries < max, not EvictionRequested). **Next:** name which condition a pulled
-      disk fails, then fix [`runbook.md`](runbook.md) §Single worker maintenance (it currently credits
-      `replica-soft-anti-affinity` for the same-disk case). Relates FU-093, ADR-089.
+      disk fails, then name it in [`runbook.md`](runbook.md) §Single worker maintenance (the knob is
+      named there since 2026-10-03). Relates FU-093, ADR-089.
 - [ ] **FU-284** — **Disk health is metered fleet-wide; two gaps remain: POINTER.** `smartctl_exporter`
       on every Talos node + a textfile twin on pve/nx-02, nine growth-based belts (BUILT 2026-09-23).
       Mechanism + evidence: [`storage-ledger.md`](storage-ledger.md) §Build (Disk HEALTH metering).
