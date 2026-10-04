@@ -350,5 +350,14 @@ mgmt_record_exercised "$T/uv" "$T/uex-fresh" "$T/uch3"
 ux record-from-nothing 'talos|0.9.0;' "$(tr '\t\n' '|;' <"$T/uex-fresh")"
 ux after-record-clean '' "$(mgmt_unexercised "$T/uv" "$T/uex2" "$T/uch" | tr '\t\n' '|;')"
 
+# empty state + no exclusions (main: local state, `state list` reads nothing) must still SUCCEED under
+# pipefail — the drill PR #2209 failure (2026-10-04): right output, rc 1, check failed closed
+: >"$T/te.state"; : >"$T/te.excluded"; printf 'k_svc\n' >"$T/te.types"
+if got="$(mgmt_judged_types "$T/te" '')" && [ "$got" = "k_svc" ]; then pass=$((pass+1)); echo "PASS schema:judged-types-empty-state-rc0"
+else fail=$((fail+1)); echo "FAIL schema:judged-types-empty-state-rc0 — rc≠0 or got '$got'"; fi
+printf 'data.k_x.a\tread\n' >"$T/uch-data"
+if got="$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch-data")" && [ -z "$got" ]; then pass=$((pass+1)); echo "PASS unex:data-only-rc0"
+else fail=$((fail+1)); echo "FAIL unex:data-only-rc0 — rc≠0 or got '$got'"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]
