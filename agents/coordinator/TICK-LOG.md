@@ -12323,3 +12323,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   only the CalVer-githash shape and refused trailing comments → the first `arc` bump would have been
   permanently red on arc-runners.yaml. Widened to `v?M.m.p` + optional `# comment` (e3f637c4), 3
   self-test cases (semver bump ok, non-semver refused, comment-only edit ok — line-shape rule, stated).
+- **20:50Z helm-evidence run complete** (`~/.claude/helm-evidence/20261004T203407Z-argocd-notifications-recipient`:
+  before/after per-release snapshots identical — argocd {Degraded/Synced 1, Healthy/OutOfSync 5,
+  Healthy/Synced 68}, longhorn robustness unchanged; 187 targets, 13 nodes, cilium 13/13). The close
+  check found two NEW firing names and LEFT THE WINDOW OPEN: `InfoInhibitor` (stock, severity none,
+  flaps with any info alert) and **`DeepDigStale`** (the daily 03:30Z grouped deep dig has not completed
+  in >2 days; `for: 6h` crossed inside the window by coincidence — a notifications-cm change cannot
+  cause it). Both unrelated to the apply → window FORCE-closed by the seat, said here. DeepDigStale is
+  G7's own evidence: the dig lane that would read `dig` alerts is itself stale, and its alert is
+  `triage: none`.
