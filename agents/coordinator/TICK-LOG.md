@@ -12398,3 +12398,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
   new alert names; scrape targets 190→189 during the kps roll. The five `deps-review` PRs each took
   the reflex ~8–15 min open→merged with the reviewer approving on the first read — ZERO
   CHANGES_REQUESTED on a Renovate bump so far (the FU-046 worker-adapts leg still unproven; G12b).
+- **22:24Z WAVE 2 OPENED by the second dispatched run (37239701308): 6 PRs again (limit held) — #2228
+  `renovate/patch-crossplane` (the group — but the ANNOTATION DID NOT MOVE: "Could not determine new
+  digest for update (docker package crossplane/crossplane)": with extractVersionTemplate stripping the
+  v, Renovate looked the digest up for tag `2.3.6`, which does not exist, dropped the regex update and
+  shipped the chart alone → red on publicroute-tf-validate, as designed; #2224 CLOSED/superseded ✓),
+  #2229 pushgateway 1.11.3, #2230 alpine 3.24, #2231 **arc 0.15.0 — three files, one version (G9
+  proof pending CI)**, #2232 cloudflared 2026.9.3, #2233 busybox 1.38.0. G11 second cut: the
+  annotation KEY carries the image TAG (`engine-image-digest.v2.3.2`), the gate reads `xp_version`
+  (it already computed it), the regex captures `v<semver>`, no extractVersion → PR opened + armed
+  (see the next line for its number). Proof = the NEXT run's grouped PR carries both lines.
+  **#2227** (docs: §Last proven rows, G12/G12b, register regen) opened + armed 22:30Z.
