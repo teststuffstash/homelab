@@ -1,0 +1,10 @@
+# homelab#2171 control: an ordinary ride (no RETRO_GH_SECRET) keeps its broker env and gets no
+# retro mount or volume — the block is inert outside the retro lane.
+name: retro-gh-token-env-mount-unset
+mode: actions
+source: agents/agent-session.sh
+env:
+  - CRED_BROKER_ENV=broker-env-rendered
+parts:
+  - block:retro-gh-mount
+  - file:post.sh

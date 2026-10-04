@@ -1,0 +1,8 @@
+OUT → retro ride: git identity = Secret retro-git file-mounted (fleet-wide read-only, re-read per call); broker URL not rendered (homelab#2171)
+OUT CRED_BROKER_ENV: (empty)
+OUT RETRO_GH_MOUNT:
+OUT         - { name: retro-git, mountPath: /secrets/git, readOnly: true }
+OUT RETRO_GH_VOLUME:
+OUT     - name: retro-git
+OUT       secret: { secretName: "retro-git", optional: true, items: [ { key: GH_TOKEN, path: token } ] }
+RC 0
