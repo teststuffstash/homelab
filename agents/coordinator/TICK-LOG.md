@@ -12345,3 +12345,10 @@ updates or reverts as much as possible — mechanical revert or a responder."
   markers was pushed (1e6bf2fe) — caught by `dependency-coverage --check` red in the same chain,
   repaired and re-pushed within 4 min (9d36a431). Lesson restated: never pipe-filter a gate, and
   never loop over an unsplit zsh variable in a chain that pushes.
+- **21:17:30Z #2216 MERGED (0394e6a7) — class 1/2 proposers ON, `prHourlyLimit` 6.** Dry run dispatched
+  21:17:55Z (`renovate.yaml` run 37235526289, dryRun=true) to read the wave before the 00:00Z scheduled
+  run opens it (the 20:44Z scheduled run ran on the OLD config). **G1 LIVE PROOF: `ArgoCDAppDegraded
+  {name="registry"}` FIRING by 21:18Z** — 15 m after the first scrape, on the app that sat Degraded
+  unseen since 04:00Z; `triage: dig` → reaches nobody today (G7). Decision (2) of the 2026-10-04 pickup
+  (updater skip + `rebaseWhen` for Renovate branches beyond Actions) deliberately NOT taken yet:
+  the first wave is the measurement — count the updater's master-merges per Renovate PR, then rule.
