@@ -147,7 +147,7 @@ explain_issue() { # <alertname> <subject> — an OPEN issue anywhere in the org 
 explain_fu() { # <alertname> — an OPEN follow-up item mentioning the alert by name
   [ -f "$DIG_REPO/docs/follow-ups.md" ] || return 0
   awk -v n="$1" '
-    /^- \[ \] \*\*FU-[0-9]+\*\*/ { match($0, /FU-[0-9]+/); id = substr($0, RSTART, RLENGTH); next_item = 1 }
+    /^- \[ \] \*\*FU-[0-9]+\*\*/ { match($0, /FU-[0-9]+/); id = substr($0, RSTART, RLENGTH) }
     /^- \[x\] / || /^## / { id = "" }
     id != "" && index($0, n) { print "follow-up " id; exit }' "$DIG_REPO/docs/follow-ups.md"
 }
@@ -254,9 +254,16 @@ cmd_select() {
     | {schema: "deep-dig-digest/v1", ts: $ts, params: $p,
        groups: .[:$max], deferred: (.[$max:] | map({key, alerts: (.alerts | map("\(.alertname) (\(.subject))"))})),
        explained: $expl,
-       counts: {candidates: ((map(.alerts | length) | add) // 0) + ($expl | length),
+       counts: {candidates: (((map(.alerts | length) | add) // 0) + ($expl | length)),
                 unexplained: ((map(.alerts | length) | add) // 0), explained: ($expl | length),
-                groups: length, selected: (.[:$max] | length)}}' "$tmp/keep.jsonl" > "$tmp/digest.json"
+                groups: length, selected: (.[:$max] | length)}}' "$tmp/keep.jsonl" > "$tmp/digest.json" \
+  || { echo "deep-dig-select: building the digest FAILED (jq) — no digest written" >&2; rm -rf "$tmp"; exit 1; }
+  # Never an empty digest on exit 0: the pod and the harness both read this file, and an empty
+  # one read as "nothing to dig" is the silent failure the reviewer caught on PR#2212 (the jq
+  # above compiled on jq 1.7 and not on the image's 1.6 — every object value with a trailing
+  # binary operator needs its own parentheses there).
+  jq -e '.schema == "deep-dig-digest/v1"' "$tmp/digest.json" >/dev/null 2>&1 \
+    || { echo "deep-dig-select: the digest is not a deep-dig-digest/v1 document — refusing to emit it" >&2; rm -rf "$tmp"; exit 1; }
 
   if [ -n "$OUT" ]; then cp "$tmp/digest.json" "$OUT"; else cat "$tmp/digest.json"; fi
   jq -r '"deep-dig: \(.counts.candidates) candidate(s) — \(.counts.unexplained) unexplained in \(.counts.groups) group(s) (\(.counts.selected) selected), \(.counts.explained) explained"

@@ -63,6 +63,13 @@ go() {
 want()   { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
 wantnot(){ printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stderr has: $2" || ok "$1"; }
 jqok()   { # <label> <jq predicate over the digest>
+  # The digest must EXIST and be a digest before a predicate may pass: `jq -e` over an empty file
+  # runs the filter zero times and exits 0, which made every assertion here vacuous while the
+  # selector's own jq failed to compile on the pod's jq (PR#2212 review). A missing or malformed
+  # digest is a failure of the assertion, never a pass.
+  if ! [ -s "$H/digest.json" ] || ! jq -e '.schema == "deep-dig-digest/v1"' "$H/digest.json" >/dev/null 2>&1; then
+    bad "$1" "no digest produced (rc=$RC): $(head -c 300 "$H/err.txt" | tr '\n' ' ')"; return
+  fi
   jq -e "$2" "$H/digest.json" >/dev/null 2>&1 && ok "$1" || bad "$1" "digest fails: $2 — $(jq -c '{counts, groups: [.groups[] | {key, alerts: [.alerts[].alertname]}], explained}' "$H/digest.json" 2>/dev/null)"
 }
 
@@ -77,7 +84,7 @@ go
 jqok "a dig alert standing 8h (≥ 6h) is a candidate" '.counts.unexplained == 1'
 jqok "…with the responder's own subject (the daemonset/deployment arm)" '.groups[0].alerts[0].subject == "workload:cf-api-proxy/cf-api-proxy"'
 jqok "…its standing hours recorded" '.groups[0].alerts[0].standing_h == 8'
-jqok "…and a kube-state-metrics alert's host is `cluster`, never the exporter's pod IP" '.groups[0].host == "cluster"'
+jqok "…and a kube-state-metrics alert's host is 'cluster', never the exporter's pod IP" '.groups[0].host == "cluster"'
 
 scenario too-fresh
 am "[$(alert KubeDeploymentReplicasMismatch $((NOW - 2*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
@@ -95,7 +102,7 @@ am '[]'
 for k in 0 2 4; do promday $k "$(day '{"alertname":"NodeRebooted","alertstate":"firing","instance":"192.168.2.51:9100","job":"node-exporter","severity":"warning","triage":"dig"}')"; done
 go
 jqok "an alert present on 3 of 7 days but quiet now is a candidate (recurrence, not level)" '.counts.unexplained == 1'
-jqok "…grouped under onset `recurring`" '.groups[0].onset == "recurring"'
+jqok "…grouped under onset 'recurring'" '.groups[0].onset == "recurring"'
 jqok "…with the host from its instance (port stripped)" '.groups[0].host == "192.168.2.51"'
 jqok "…days_present counted" '.groups[0].alerts[0].days_present == 3'
 
@@ -118,7 +125,7 @@ scenario recurring-upstream-none
 am '[]'
 for k in 0 1 2; do promday $k "$(day '{"alertname":"KubeCPUOvercommit","alertstate":"firing","severity":"warning"}')"; done
 go
-jqok "an upstream name the map classifies `none` never qualifies" '.counts.candidates == 0'
+jqok "an upstream name the map classifies 'none' never qualifies" '.counts.candidates == 0'
 
 scenario recurring-stack-unlabelled
 am '[]'
