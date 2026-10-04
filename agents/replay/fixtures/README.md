@@ -10,7 +10,14 @@ model Argo Events dependency filtering). The `respond` WorkflowTemplate itself i
 so every existing responder fixture keeps asserting exactly what it asserted before. What pins the
 pause is live: `responder_triage_sessions_today` flat at 0 while alerts fire, and no `respond-*`
 Workflows in `agent-coordinator` (`argo list`). Re-enabling (delete the filter) is the same
-no-fixture change in reverse.
+no-fixture change in reverse. **Removed 2026-10-04 (ADR-148, FU-249 steps 2–4):** the lane was
+replaced rather than un-paused — the route carries `triage = "now"` and the Sensor is unfiltered
+(pinned by `responder-behaviour-test.sh` §routing, which reads the Sensor out of the manifest);
+the subject residuals the audit found are pinned by six new `responder-subject/*` fixtures
+(`ksm-pod-uid`, `ksm-object-no-pod`, `cronjob`, `pushgateway-pushed-job`,
+`github-exporter-repo`, and `witness-pod-owned` re-recorded in the live KubePodNotReady shape);
+the [grouped deep dig](../../../docs/agents/roles.md)'s selector has its own behavioural harness (`agents/deep-dig-test.sh`),
+not a clause fixture — it is a standalone script, not a sentinel block.
 
 ## FU-072 — removing the kata endpoint-IP rewrite and `dnsPolicy: None`
 

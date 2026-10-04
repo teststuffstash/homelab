@@ -9,13 +9,14 @@
 # window with NO ledger entry = the responder is stuck → the meta session investigates the
 # machinery (EventSource/Sensor/latch), never hand-triages the alert first.
 #
-# ⚠ TRIAGE-ELIGIBLE IS A ROUTING FACT, AND THE ROUTE IS ITS HOME. Since 2026-09-17 the
-# responder's Alertmanager child route carries `severity != "info"` and `triage != "none"`
-# (argocd/platform/values/kube-prometheus-stack.yaml §THE TRIAGE-ROUTING FILTER), so a denied
-# alert never reaches the lane and can never gain a ledger entry. This script must apply the SAME
-# predicate or it reports every deliberately-unrouted alert as stuck machinery — the loud-but-
-# wrong direction, which is how a belt teaches its reader to ignore it. Change one, change both;
-# the pairing is asserted by responder-behaviour-test.sh §routing.
+# ⚠ TRIAGE-ELIGIBLE IS A ROUTING FACT, AND THE ROUTE IS ITS HOME. Since 2026-10-04 (ADR-148) the
+# responder's Alertmanager child route carries exactly `triage = "now"`
+# (argocd/platform/values/kube-prometheus-stack.yaml §THE TRIAGE-ROUTING FILTER), so a `dig` or
+# `none` alert never reaches the lane and can never gain a ledger entry — `dig` is the grouped
+# deep dig's (agents/coordinator/deep-dig-argo.yaml, on a schedule), `none` is nobody's. This
+# script must apply the SAME predicate or it reports every deliberately-unrouted alert as stuck
+# machinery — the loud-but-wrong direction, which is how a belt teaches its reader to ignore it.
+# Change one, change both; the pairing is asserted by responder-behaviour-test.sh §routing.
 #
 # Output: one line per discrepancy (empty + exit 0 = belts healthy), plus ONE trailing summary
 # line naming what routing denied, so a denied alert is quiet but never invisible. Loud probe
@@ -36,27 +37,28 @@ kubectl() { "$KUBECTL" $KUBE "$@"; }
 ALERTS="$(curl -fsS --max-time 10 "$AM_URL/api/v2/alerts?active=true&silenced=false&inhibited=false" 2>/dev/null)" \
   || { echo "PROBE_FAILED: Alertmanager unreachable at $AM_URL — that is itself the incident"; exit 1; }
 
-# FU-113(a): marker values (deferred-/cap-/none- prefixes) mean SEEN-BUT-NOT-TRIAGED — they
-# explain the machinery but do not settle the alert. Split the ledger accordingly.
+# FU-113(a): marker values (deferred-/cap-/none-/dig- prefixes) mean SEEN-BUT-NOT-TRIAGED — they
+# explain the machinery but do not settle the alert. Split the ledger accordingly. `none-` and
+# `dig-` are the in-pod belt under the route (a value the route should never have delivered).
 LEDGER_JSON="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -c '.data // {}' 2>/dev/null)" || LEDGER_JSON='{}'
-LEDGER="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(deferred-|cap-|none-)") | not) | .key' | tr '\n' ' ')"
+LEDGER="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(deferred-|cap-|none-|dig-)") | not) | .key' | tr '\n' ' ')"
 MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(deferred-|cap-)")) | "\(.key)=\(.value)"' | tr '\n' ' ')"
-NONE_MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^none-")) | .key' | tr '\n' ' ')"
+NONE_MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(none|dig)-")) | .key' | tr '\n' ' ')"
 [ -n "$LEDGER$MARKED$NONE_MARKED" ] || echo "NOTE: responder-seen ledger empty/unreadable — every eligible alert below is unexplained"
 
 # ── A PAUSED LANE IS A DELIBERATE STOP, NOT STUCK MACHINERY (2026-09-17) ───────────────────────
 # The same rule this script applies per-alert (a marker distinguishes a deliberate skip from a
-# drop), applied to the lane as a whole. FU-249 pauses the responder by giving its Sensor's
-# `alert-dep` a never-matching data filter; nothing else changes, so from here the lane looks
-# exactly like an EventSource that died — and every firing alert reads UNTRIAGED. Observed live
-# during the 2026-09-17 pause: 3 UNTRIAGED lines and a non-zero exit for a state the operator
-# deliberately created. A belt that cries wolf through a planned stand-down is a belt its reader
-# learns to skip, which is the only failure mode it actually has.
+# drop), applied to the lane as a whole. A pause is a never-matching data filter on the Sensor's
+# `alert-dep` (the FU-249 shape, 2026-09-16 → 2026-10-04); nothing else changes, so from here the
+# lane looks exactly like an EventSource that died — and every firing alert reads UNTRIAGED.
+# Observed live during the 2026-09-17 pause: 3 UNTRIAGED lines and a non-zero exit for a state
+# the operator deliberately created. A belt that cries wolf through a planned stand-down is a
+# belt its reader learns to skip, which is the only failure mode it actually has.
 # Read from the Sensor itself, not from a second copy of the fact. An unreadable read says so and
 # falls through to the ordinary report — a pause it cannot prove is not a pause.
 PAUSE="$(kubectl -n agent-coordinator get sensor responder   -o jsonpath='{.spec.dependencies[*].filters.data[*].value[*]}' 2>/dev/null || true)"
 case "$PAUSE" in
-  *paused*) echo "responder PAUSED at the Sensor ('$PAUSE') — every firing alert below is untriaged BY DESIGN, not by a stuck belt; re-enable by deleting that filter (FU-249)";;
+  *paused*) echo "responder PAUSED at the Sensor ('$PAUSE') — every firing alert below is untriaged BY DESIGN, not by a stuck belt; re-enable by deleting that filter";;
 esac
 
 CUTOFF="$(date -u -d "-${GRACE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
@@ -66,7 +68,7 @@ while IFS=$'\t' read -r fp name started; do
   case " $LEDGER " in
     *" fp-$fp "*) : ;;  # triaged — healthy
     *)
-      case " $NONE_MARKED " in *" fp-$fp "*) continue;; esac  # triage:none — self-describing
+      case " $NONE_MARKED " in *" fp-$fp "*) continue;; esac  # triage:none|dig — not this lane's, marker says so
       case " $MARKED " in
         *" fp-$fp="*)
           FOUND=1
@@ -83,19 +85,27 @@ while IFS=$'\t' read -r fp name started; do
 done < <(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '
   .[]
   | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
-  | select((.labels.triage // "") != "none")
-  | select((.labels.severity // "") != "info")
+  | select((.labels.triage // "") == "now")
   | select(.startsAt < $cutoff)
   | [.fingerprint, .labels.alertname, .startsAt] | @tsv')
 
 # The routing-denied set, counted not enumerated per alert: one line so a deliberately-unrouted
-# alert is quiet and still visible. `info` and `triage:none` are the route's two matchers.
+# alert is quiet and still visible. `dig` names go to the grouped deep dig (its own belt is the
+# DeepDigStale alert); `none` and an unlabelled alert (a stack rule without the label — the
+# stack's lane, patterns/observability.md §3) go to nobody.
+DIG="$(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '
+  [ .[]
+    | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
+    | select((.labels.triage // "") == "dig")
+    | select(.startsAt < $cutoff)
+    | .labels.alertname ] | unique | join(", ")')"
 DENIED="$(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '
   [ .[]
     | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")
-    | select((.labels.triage // "") == "none" or (.labels.severity // "") == "info")
+    | select((.labels.triage // "") != "now" and (.labels.triage // "") != "dig")
     | select(.startsAt < $cutoff)
-    | .labels.alertname ] | unique | join(", ")')"
-[ -n "$DENIED" ] && echo "routing-denied (firing, deliberately never triaged — severity:info / triage:none): $DENIED"
+    | "\(.labels.alertname)\(if (.labels.triage // "") == "" then " (unlabelled)" else "" end)" ] | unique | join(", ")')"
+[ -n "$DIG" ] && echo "routing-dig (firing, the grouped deep dig's — never a responder session): $DIG"
+[ -n "$DENIED" ] && echo "routing-denied (firing, deliberately never triaged — triage:none or no label): $DENIED"
 
-[ "$FOUND" -eq 0 ] && echo "belts healthy: every firing triage-eligible alert (> ${GRACE_MIN}m) has a responder ledger entry"
+[ "$FOUND" -eq 0 ] && echo "belts healthy: every firing triage:now alert (> ${GRACE_MIN}m) has a responder ledger entry"

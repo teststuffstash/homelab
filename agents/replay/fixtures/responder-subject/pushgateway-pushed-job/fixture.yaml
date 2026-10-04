@@ -1,0 +1,21 @@
+# FU-249 step 2 (ADR-148) — the pushgateway is a reporter, told by its Service, not its `job`.
+#
+# CONDITION UNDER REPLAY. GarageWriteProbeFailing, live shape (ALERTS, 2026-10-04): a pushgateway-
+# fed metric. Prometheus scrapes the pushgateway with honorLabels, so `job` is whatever the push
+# named (`garage_write_probe`) and `instance` is absent (an empty pushed instance drops the
+# target's); the target's `pod` (prometheus-pushgateway-…), `container=pushgateway` and
+# `service=prometheus-pushgateway` ride along.
+#
+# WHAT IT REDS ON. The old reporter list keyed on `job` (`prometheus-pushgateway|pushgateway`),
+# which a pushed job name never equals, so every pushed alert keyed to
+# `workload:monitoring/prometheus-pushgateway` — the reporter's own workload (the #241 magnet,
+# back under a new name; the third residual of the 2026-10-03 replay).
+#
+# THE CONTRACT: the pod is the reporter's (service tell), no object label ⇒ the per-class key,
+# never the pushgateway's workload, RC 0.
+name: responder-subject-pushgateway-pushed-job
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

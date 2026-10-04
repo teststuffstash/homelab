@@ -1,0 +1,26 @@
+# DeepDigStale, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
+# one home) — the rules file that deep-dig.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
+#
+# ONE ALERT, its OWN file, for the same reason RetroReportOverdue has one (retro-report.promtool-
+# rules' header): the restart-gap contract is a DIFFERENCE-shaped behaviour worth its own fixture.
+#
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "DeepDigStale")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-runs
+    rules:
+      - alert: DeepDigStale
+        expr: (time() - (max(max_over_time(deep_dig_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: "The grouped deep dig has not run in >2 days — standing/recurring dig alerts are not being investigated"
+          description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."
