@@ -495,6 +495,8 @@ is stale, so it cannot drift the way the prose register did.
 | `tofu-provider-revert-alert-foreign-root` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-alert` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-ref-pr` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-ref-sha` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
