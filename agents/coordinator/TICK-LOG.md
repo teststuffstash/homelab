@@ -12352,3 +12352,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   unseen since 04:00Z; `triage: dig` → reaches nobody today (G7). Decision (2) of the 2026-10-04 pickup
   (updater skip + `rebaseWhen` for Renovate branches beyond Actions) deliberately NOT taken yet:
   the first wave is the measurement — count the updater's master-merges per Renovate PR, then rule.
+- **21:21Z dry run read (run 37235526289): homelab would commit 30 branches** — charts: kps 86.1.x
+  (patch) / 86.x (minor) / 91.x (MAJOR), argo-workflows 1.x + 2.x (MAJOR), crossplane 2.3.x + 2.x,
+  argo-events 2.4.x, cloudnative-pg 0.x, external-secrets 2.x, infisical-standalone 1.x, metrics-server
+  3.x, forgejo 17.1.x, `arc` (the group); images: alpine 3.x, busybox 1.x, cloudflared 2026.x, alloy
+  1.x, loki 3.4.x + 3.x, nginx 1.x, nginx-unprivileged 1.x, otel 0.x, python 3.x + python-3.13-slim
+  (digest), kube-rbac-proxy 0.x, blackbox 0.x, registry 3.x, pushgateway 1.11.x; plus the standing
+  mermaid-12.x (#2100). Not proposed: cert-manager, plugin-barman-cloud, gateway-api, smartctl,
+  cloudflare_exporter (current, or inside the 7-day cooldown). Dry run shows no PR-limit lines (it
+  commits branches, never opens PRs) — the real run is where `prHourlyLimit: 6` bites. **21:24Z real
+  run dispatched** rather than waiting for 00:00Z (operator: speed this up).
