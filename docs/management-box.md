@@ -92,7 +92,7 @@ target device BEFORE building the flake's `installerIso`, so a wrong device cost
   to boot at all — the inversion this box exists to remove.
 - *PXE as the install path is deferred, not rejected*: it needs a non-Talos asset class in Matchbox
   (whose ansible role syncs Talos assets only) plus the flag→install→**unflag** discipline, or a
-  PXE-first box with a live group sits in a reinstall loop (`tofu/provisioning/matchbox.tf`). It
+  PXE-first box with a live group sits in a reinstall loop (a transient flag in the gitignored `tofu/provisioning/flags.local.tf`, FU-244). It
   earns its keep at the **second** install of a config that has stopped churning — i.e. when the
   role moves to the permanent Tiny. Until then the stick has a property PXE cannot have: it works
   with Matchbox, dnsmasq and OPNsense all down, which is the recovery-root property anyway.
