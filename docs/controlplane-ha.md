@@ -150,7 +150,7 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
    what etcd wants. A CP that cannot fsync quickly is a cluster-wide latency problem, and this
    costs three minutes *before* the box is load-bearing (wk-metal-02's X250: 1.60 s ⇒ ~1.6 ms).
 3. `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data`.
-4. **Flag the MAC** in `tofu/provisioning/matchbox.tf` and apply that root (its own S3 backend —
+4. **Flag the MAC** in `tofu/provisioning/flags.local.tf` (gitignored — never commit a flag, FU-244) and apply that root (its own S3 backend —
    `keepass-env.sh` *and* `tofu-state-env.sh`, per the onboarding skill's step 1).
 5. `kubectl delete node <name>` — the join recreates the object; the worker-era one would otherwise
    carry stale labels and taints into its CP life.
