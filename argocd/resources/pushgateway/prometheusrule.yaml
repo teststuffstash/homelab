@@ -296,6 +296,26 @@ spec:
           annotations:
             summary: "{{ $value }} cron-woken coordinator dispatches on stack {{ $labels.project }} lane {{ $labels.base }} in 24h — a doorbell edge is dead"
             description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h, on ONE LANE (repo, base — ADR-125). Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack and lane: the labels above; `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` enumerates them. A single firing lane beside healthy siblings points at that lane's emitters (a goal-branch PR's events, the assembly path) rather than at the doorbell as a whole. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
+        # The #1162 class, resighted 2026-10-04 on sleep-tracking#121: a goal whose tree emptied but
+        # which never reached `goal/post-launch` (a legacy body with no `Base:` line — the tree-empty
+        # key only fires for `Base: master`) kept trigger (b) true on every scan; each checkpoint
+        # session ruled "no change", its findings-store stamp rang the doorbell, and the next scan
+        # re-dispatched — ~45 Sonnet rides in 3 h, and the shared homelab-agents GraphQL pool hit
+        # GithubRateLimitLow (the symptom that was seen; this is the cause). `changes()` over the
+        # per-clause wake stamp COUNTS goal-checkpoint dispatches per lane (homelab#459 grouping
+        # key). 14-day baseline before the event: max 3/h on any lane; the storm read 20–22/h.
+        # Fixture: goal-checkpoint-storm.promtool-test.
+        - alert: GoalCheckpointStorm
+          expr: sum by (project, base) (changes(agent_dispatch_wake_clause_timestamp{clause="goal-checkpoint"}[1h])) >= 6
+          for: 15m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: the scan log names the goal and the trigger that keeps firing
+            triage: dig
+          annotations:
+            summary: "{{ $value }} goal-checkpoint dispatches in 1h on stack {{ $labels.project }} lane {{ $labels.base }} — a checkpoint trigger is re-firing without latching"
+            description: "SYMPTOM ONLY — a goal-checkpoint is a rare event (14-day baseline ≤3/h per lane) and each one is a reasoning session. A sustained rate means one of the scan's level-triggered checkpoint triggers stays true after the session rules, so every doorbell (including the session's own store stamp) re-summons it. Find the goal: the stack's coordinate-perstack logs (Loki, ns <stack>-agents) print `goal #N: CHECKPOINT due (<trigger>)` on every pass — the trigger text names which predicate never retires (agents/coordinator-scan.sh §goal-lane: (a) findings, (b) child-set complete pre-launch, (c) undispositioned members, (e) theme complete). Known shapes: (b) on a goal that should be `goal/post-launch` but has no transition key (the 2026-10-04 legacy no-`Base:` goal — backfill the line and the scan transitions it; homelab#1450 for themed goals); (c) re-firing on members already ruled (FU-281). Each firing hour also drains the shared App GraphQL pool (GithubRateLimitLow on coordinator-git, FU-290)."
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
         # the namespace (hubble drop metric runs sourceContext=namespace, tofu/cilium.tf); scoped to
