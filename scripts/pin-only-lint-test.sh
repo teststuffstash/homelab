@@ -75,7 +75,7 @@ jobs:
     steps:
       - uses: teststuffstash/some-action@$FP_OLD # v1
 EOF
-printf 'spec:\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
+printf 'spec:\n  source:\n    targetRevision: 0.14.2 # lockstep with arc-controller.yaml\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
 printf 'spec:\n  source:\n    targetRevision: 2026.9.1-gaaaa\n    chart: x\n' >"$R/argocd/platform/openrouter-operator.yaml"
 # the fourth shape's home: a tofu Deployment with the dind sidecar's image line (check (f)).
 mkdir -p "$R/tofu"
@@ -174,6 +174,16 @@ case_ arc-runner-pin ok "" \
   "sed -i 's|arc-runner:2026.9.1-gaaaa|arc-runner:2026.9.25-gbbbb|' argocd/platform/arc-runners.yaml"
 case_ arc-runner-smuggled 'may only receive PIN lines' "" \
   "sed -i 's|arc-runner:2026.9.1-gaaaa|arc-runner:2026.9.25-gbbbb|' argocd/platform/arc-runners.yaml; echo '      privileged: true' >> argocd/platform/arc-runners.yaml"
+# A third-party chart pin (the Renovate `argocd` manager's `arc` group, #2216): SemVer with the
+# trailing lockstep comment kept is a pin; a non-SemVer value is not. The rule judges LINE SHAPE,
+# so a comment-only edit on the pin line is accepted too (a deliberate trade-off of allowing the
+# comment: it deploys nothing; the value is still the only thing that may move).
+case_ arc-chart-semver-bump ok "" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: 0.15.0 # lockstep|' argocd/platform/arc-runners.yaml"
+case_ arc-chart-comment-only-edit ok "" \
+  "sed -i 's|# lockstep with arc-controller.yaml|# keep in step|' argocd/platform/arc-runners.yaml"
+case_ arc-chart-non-semver 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: latest # lockstep|' argocd/platform/arc-runners.yaml"
 case_ target-revision-pin ok "" \
   "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
 case_ target-revision-smuggled 'may only receive PIN lines' "" \
