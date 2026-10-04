@@ -129,18 +129,18 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 
 | Class | Dependency | Version | Pinned in | P | G | D | Det | R | C | Last proven E2E |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `argo-events` | 2.4.23 | `argocd/platform/argo-events.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 1 | `argo-events` | 2.4.27 | `argocd/platform/argo-events.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `argo-workflows` | 1.0.24 | `argocd/platform/argo-workflows.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `cert-manager` | v1.21.2 | `argocd/platform/cert-manager.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `cloudnative-pg` | 0.28.3 | `argocd/platform/cnpg-operator.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `crossplane` | 2.3.2 | `argocd/platform/crossplane.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `external-secrets` | 2.6.0 | `argocd/platform/eso-operator.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
-| 1 | `forgejo` | 17.1.1 | `argocd/platform/forgejo.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 1 | `forgejo` | 17.1.7 | `argocd/platform/forgejo.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `gateway-api` | v1.4.1 | `argocd/platform/gateway-api-crds.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `gha-runner-scale-set` | 0.14.2 | `argocd/platform/arc-runners-large.yaml`, `argocd/platform/arc-runners.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `gha-runner-scale-set-controller` | 0.14.2 | `argocd/platform/arc-controller.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `infisical-standalone` | 1.9.0 | `argocd/platform/infisical.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
-| 1 | `kube-prometheus-stack` | 86.1.0 | `argocd/platform/kube-prometheus-stack.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 1 | `kube-prometheus-stack` | 86.1.1 | `argocd/platform/kube-prometheus-stack.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `metrics-server` | 3.12.2 | `argocd/platform/metrics-server.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 1 | `plugin-barman-cloud` | 0.8.1 | `argocd/platform/plugin-barman-cloud.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `alpine` | 3.20 | `argocd/resources/node-fstrim/fstrim.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
@@ -150,12 +150,12 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 2 | `ghcr.io/k3d-io/k3d` | 5-dind@sha256:ee3872700ed0 | `agents/images.env` | ⚠ no Renovate manager reads `agents/images.env` (`AGENT_DIND_IMAGE`) | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `ghcr.io/lablabs/cloudflare_exporter` | 0.2.3@sha256:6bf84a81725c | `argocd/resources/cloudflare-exporter/deployment.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `grafana/alloy` | v1.5.1 | `argocd/resources/loki/alloy.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
-| 2 | `grafana/loki` | 3.4.2 | `argocd/resources/loki/loki.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 2 | `grafana/loki` | 3.4.6 | `argocd/resources/loki/loki.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `nginx` | 1.27-alpine | `argocd/resources/registry/registry-fs.yaml`, `argocd/resources/registry/registry.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `nginxinc/nginx-unprivileged` | 1.27-alpine | `argocd/resources/cf-api-proxy/deployment.yaml`, `argocd/resources/devbox-search/deployment.yaml`, `argocd/resources/nix-cache/deployment.yaml` +2 | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `otel/opentelemetry-collector-contrib` | 0.116.1 | `argocd/resources/otel-collector/deployment.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `prom/pushgateway` | v1.11.1 | `argocd/resources/pushgateway/deployment.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
-| 2 | `python` | 3.13-slim, 3.13-slim@sha256:cc9dffa47c82 | `argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml`, `argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml`, `argocd/resources/garage-disruption/controller.yaml` +6 | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
+| 2 | `python` | 3.13-slim, 3.13-slim@sha256:b92e6b9bb1ea | `argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml`, `argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml`, `argocd/resources/garage-disruption/controller.yaml` +6 | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `quay.io/brancz/kube-rbac-proxy` | v0.22.1 | `argocd/resources/loki/loki-rbac-proxy.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `quay.io/prometheus/blackbox-exporter` | v0.27.0 | `argocd/resources/blackbox/blackbox.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
 | 2 | `registry` | 3.0.0 | `argocd/resources/registry-cache/mirror-docker-io.yaml`, `argocd/resources/registry-cache/mirror-ghcr.yaml`, `argocd/resources/registry-cache/mirror-mcr.yaml` +3 | ✅ | ✅ | ✅ | ✅ | 👤 | ⚠ | — never |
@@ -274,7 +274,7 @@ did. Rows whose evidence is a homelab merge live in the generated column and are
 | **Python runtime deps, patch/minor** → `deps-review` (reflex → CHANGES_REQUESTED → a worker on the `renovate/*` branch) | ❌ **not yet** | FU-046 — no `deps-review` PR has drawn a CHANGES_REQUESTED; openrouter-operator#80 (python 3.14) is `deps-review` but a human merge by that repo's chokepoint rule (operator) |
 | **base-image major merging WITHOUT a human** | ❌ **not yet, by design** | stays un-armed until #1988's runtime-in-prod post-merge half exists: a `deploy/agent-coordinator` pin revert on `ArgoWorkflowsFailing` whose pod runs the PREVIOUS tag (a broken coordinator image would otherwise revert the revert lane out of existence) |
 | **substrate** (Talos, Kubernetes, Cilium) → never self-merges | ❌ **no Renovate proof** | the 2026-09-22 box-run rollout to Talos v1.14.1 was hand-proposed (row 6 above, ADR-132); the Renovate proposer for class 6 is #1988's substrate row |
-| **Helm charts / in-cluster images** (classes 1, 2) → `deps-review` / `major` | ❌ **not yet** | no chart or image bump has ridden Renovate into `argocd/` since the 2026-09-25 restart; the deploy edge (ArgoCD) is proven, the Renovate proposer→gate→merge is not |
+| **Helm charts / in-cluster images** (classes 1, 2) → `deps-review` / `automerge` | **2026-10-04** | the first wave after #2216: class 2 digest #2220 (python:3.13-slim, `automerge`, open→merged 21:27→21:32Z, no human); class 1 chart #2223 (argo-events 2.4.23→2.4.27, `deps-review`, reflex-approved, merged 21:46Z, Healthy/Synced); then #2222 loki, #2221 forgejo chart, #2225 kps 86.1.1 (after a hand `upstream-alerts-refresh` — G12). 6/6 merged, every ArgoCD sync Healthy, no alert delta. Unproven: a `deps-review` CHANGES_REQUESTED → worker-adapts round (none drawn), and a chart MAJOR through the lens |
 
 ### Version SETS — what must move together (operator ruling 2026-09-27; owner #2014)
 
@@ -588,6 +588,8 @@ mechanism lives in the linked places.
 | G9 | `pin-only-lint` guarded `arc-runners.yaml` with a `targetRevision` shape that only matched our CalVer-githash charts and refused trailing comments — the first Renovate `arc` bump would have been permanently CI-red on that member (reviewer finding on #2216) | the lint's own self-test now carries the SemVer-with-comment case | — | ✅ fixed in #2216 (PIN_LINE widened, 3 self-test cases) |
 | G10 | The `deploy-revert` chain's "report-only" branch reports to NOBODY: it echoes to the workflow pod's log and exits 0; the pod is gone minutes later. `registry`'s first real ring (20:35Z) left no issue, no meta-event, no alert of its own | `ArgoCDAppDegraded` (G1) is the durable report for this class; the chain's own verdict should still land as a meta-event (the `triage` source, FU-2xx-shaped — not filed here) | — | ⚠ open |
 | G11 | A chart whose pin has a hand-maintained SIBLING artifact cannot merge mechanically: `publicroute-tf-validate` requires `crossplane.io/engine-image-digest.<chart version>` next to the crossplane pin (render by digest, homelab#1779) — Renovate's first crossplane PR (#2224, 2.3.2 → 2.3.6) was CI-red on the missing key with no path to green | the gate caught it (CI red, by design); the register's §Version SETS now lists the set | a regex customManager moves the annotation with the chart, grouped into one PR (`crossplane`); #2224 is superseded by the grouped branch | ✅ fixed 2026-10-04 (this PR); proof = the grouped PR's diff carries both lines and `publicroute-tf-validate` is green |
+| G12 | A kube-prometheus-stack chart bump reds `prometheus-rules-lint` until `scripts/upstream-alerts-refresh.sh` re-renders the upstream alert-name list for the pinned chart (network — the lint never runs it) and any NEW name gets a `triage` entry; #2225 (86.1.0 → 86.1.1) sat red until the seat ran it by hand (header-only change, no new name) | the lint (CI red, by design) | for a patch/minor with no new names the refresh is mechanical and could ride the PR (a `pull_request` job on `renovate/kube-prometheus-stack-*` that commits the re-render); a new name needs the judgment the `deps-review` worker-adapts leg is for (FU-046) | ⚠ open — hand step tonight |
+| G12b | A CI-RED **armed** Renovate PR has NO actor: the review reflex reviews green heads only, the orphan backstop counts `deps-review` as owned, the coordinator's investigate-while-red covers un-armed majors — #2224 and #2225 would have sat red until a human looked | a scan clause: armed Renovate PR ∧ CI red at head ∧ older than N h → dispatch the fixer with the failing step's log as the brief (the FU-046 worker-adapts trigger, red CI instead of CHANGES_REQUESTED) | the worker adapts in-PR; a hopeless one is closed and the gap filed | ⚠ open — the S9 end state's "operator not involved" needs this |
 
 ---
 
