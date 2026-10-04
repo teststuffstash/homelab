@@ -12130,3 +12130,17 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   idempotent + corrected a planted drift); `backup-age` sidecar → Pushgateway → `UnifiAutobackupStale`
   / `UnifiAutobackupAgeMissing`. Post-apply: init log `matched=1 modified=0`, pushed age 4260 s (the
   17:29Z file), both rules inactive. Off-site PARKED by the operator (IAM + billing limits first).
+
+## 2026-10-03 night → 10-04 morning — fu-sweep (whole tracker, no-judgement scope) + GithubRateLimitLow
+
+- **fu-sweep:** four slice subagents, the agents block classified without the corpus. 10 archived, ~35
+  advanced on live evidence, soaks FAILED: FU-134, FU-102. PRs #2198 #2199 #2201, sleep-tracking#168,
+  snore-recorder#43, circles#97 merged; #2200 (Argo v4.0.8) left unarmed for an attended merge.
+  STALL: the gitops subagent's bespoke Monitor misread #2199's round-3 CHANGES_REQUESTED as stale and
+  idled overnight; the seat took the interim "waiting" at face value (memory: pr-waits-run-in-background).
+- **GithubRateLimitLow{coordinator-git,graphql} 06:08Z:** cause = sleep-tracking#121, a legacy goal with
+  no `Base:` line — tree empty since 04:20Z, the tree-empty key only fires for `Base: master`, so trigger
+  (b) re-dispatched a Sonnet goal-checkpoint every ~3 min (wake-clause changes 4→21→20/h; ~4.1k/5k
+  points/h). Un-wedged 07:10:44Z by backfilling `Base: master` (true: master-lane children); the scan
+  transitioned it itself at 07:12:48Z (`goal/post-launch`, comment), no further dispatch. Last Base-less
+  goal in the fleet. Belt: `GoalCheckpointStorm` (PR#2204; replay true from 05:26Z).
