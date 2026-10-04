@@ -169,7 +169,11 @@ mgmt_provider_pin_shape() {
 # mgmt_addr_types → the MANAGED resource types of the addresses on stdin (one per line; anything
 # after a TAB ignored), deduped — module prefixes stripped, `data.` addresses skipped.
 mgmt_addr_types() {
-  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' | grep -v '^data\.' | sed -E 's/^([^.]+)\..*/\1/' | grep -v '^$' | sort -u
+  # awk filters, never `grep -v`: on an EMPTY input (main's state list — its state is local and
+  # `state list` without -state= reads nothing) grep exits 1, and under the callers' pipefail the
+  # whole read failed CLOSED — drill PR #2209: "state-compatibility check FAILED to run" on an
+  # empty plan (2026-10-04)
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' | awk '!/^data\./' | sed -E 's/^([^.]+)\..*/\1/' | awk 'NF' | sort -u
 }
 
 # mgmt_judged_types <plan-out> <policy exclude types, one per line> → the types a provider-pin head's
@@ -179,7 +183,7 @@ mgmt_addr_types() {
 # finding on PR#2205). rc 1 when the plan's type list was never written.
 mgmt_judged_types() {
   [ -f "$1.types" ] || return 1
-  { cat "$1.types"; { cat "$1.state" "$1.excluded" 2>/dev/null; printf '%s\n' "$2" | grep . | sed 's/$/.x/'; } | mgmt_addr_types; } | sort -u
+  { cat "$1.types"; { cat "$1.state" "$1.excluded" 2>/dev/null; printf '%s\n' "$2" | awk 'NF { print $0 ".x" }'; } | mgmt_addr_types; } | sort -u
 }
 
 # mgmt_schema_upgrades <base-schema.json> <head-schema.json> <types-file> → lines
@@ -277,7 +281,7 @@ mgmt_lock_versions() {
 # broken provider shows, and long after any merge-time window. Pure: the fixtures feed it files.
 mgmt_unexercised() {
   local locks="$1" ex="$2" addrs="$3"
-  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' "$addrs" | grep -v '^data\.' | sed -E 's/^([^.]+)\..*/\1/' | sort -u \
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' "$addrs" | awk '!/^data\./' | sed -E 's/^([^.]+)\..*/\1/' | sort -u \
     | awk -F'\t' -v locks="$locks" -v ex="$ex" '
         BEGIN { while ((getline l < locks) > 0) { split(l, a, "\t"); ver[a[1]] = a[2] }
                 while ((getline l < ex) > 0) { split(l, a, "\t"); done[a[1]] = a[2] } }

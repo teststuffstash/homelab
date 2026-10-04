@@ -20,7 +20,8 @@
 #                                     markers; caller fixes IN CONTEXT, pushes, re-invokes
 #                                     (the new commit re-enters the reflex path by itself)
 #   exit 3  CLOSED unmerged         — a human acted; caller stops and reports
-#   exit 4  CI RED at head          — failing run id+name printed; `gh run view --log-failed <id>`
+#   exit 4  CI RED at head          — failing run id+name printed; `gh run view --log-failed <id>`;
+#                                     or a failing COMMIT STATUS (management-sentinel et al.)
 #   exit 5  timeout                 — nothing conclusive; caller reports, never spins
 #   exit 6  MERGE CONFLICT          — `mergeable: CONFLICTING` on two consecutive polls (GitHub
 #                                     says UNKNOWN while it recomputes); the reviewer never
@@ -114,6 +115,17 @@ check_pr() {
   if [ -n "$red" ]; then
     echo "pr-wait: #${pr} CI RED at head — $(printf '%s' "$red" | jq -r '"run \(.databaseId) (\(.name))"')"
     echo "pr-wait: read it with: gh run view --repo ${REPO} --log-failed $(printf '%s' "$red" | jq -r .databaseId)"
+    return 4
+  fi
+  # COMMIT STATUSES at head too (2026-10-04): `management-sentinel` (the box) and the other
+  # required non-Actions gates post a STATUS, not a run — `gh run list` never sees them, and the
+  # drill PR #2209 sat APPROVED + BLOCKED on a red sentinel for this script's whole hour.
+  sred="$("$GH" api "/repos/${REPO}/commits/${head}/status" \
+          --jq '[.statuses[] | select(.state == "failure" or .state == "error")] | first // empty | "\(.context): \(.description)"' \
+          2>/dev/null || true)"
+  if [ -n "$sred" ]; then
+    echo "pr-wait: #${pr} STATUS RED at head — ${sred}"
+    echo "pr-wait: read it with: gh pr view ${pr} --repo ${REPO} --comments (the gate's own comment carries the detail)"
     return 4
   fi
   return 1
