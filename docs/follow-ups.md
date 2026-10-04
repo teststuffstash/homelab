@@ -824,8 +824,10 @@ the block needs pruning, not more headings.
       health events (never in the Actions deploy run). Deep acceptance stays the FU-102 prober;
       operator prereq: harden app CI so breakages are rare. **⚖ IAC-G09 platform half WIRED
       2026-08-04** (homelab reversible class = first-party image pins only; pin-only predicate in
-      `deploy-revert-argo.yaml`, unit-exercised, **never fired by a real Degraded homelab app**; its
-      candidate query was dead until PR#2006 — `gh --jq` takes no `--arg` — now replay-pinned).
+      `deploy-revert-argo.yaml`, unit-exercised, **never fired by a real Degraded homelab app** — CAUSE
+      FOUND 2026-10-04: the notifications recipient `webhook:agent-loop` never delivered (150 failed /
+      0 ok since 07-27), fixed by PR#2217, hop now alerted (`ArgoCDNotificationDeliveryFailing`, PR#2218);
+      its candidate query was dead until PR#2006 — `gh --jq` takes no `--arg` — now replay-pinned).
       Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
       post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 
