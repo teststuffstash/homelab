@@ -10,8 +10,8 @@ the App autodiscovers and is not repeated here. The **app-stack** deploy shapes 
 operator chart, pod image) are `ROADMAP.md` → *Programs in flight* → "Deploy paths" (FU-051). The
 surfaces homelab doesn't reconcile at all are FU-097, same section.
 
-**Tracked by:** FU-097 (the ledger rule this feeds — generalized to dependency classes 2026-09-27),
-FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
+The ledger rule this feeds: [`management-box.md`](management-box.md) §The capability ledger
+(FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
 **FU-151** (the `automerge` label — §2's mechanical lane — is not set by the `-iac` deploy
 producers, so those bumps skip LLM review only by timing), FU-016 (SLSA signing/SBOM). ADR-084
 (deploy shape), ADR-093 (Argo as the orchestration engine), ADR-088/089 (the invariants a bump

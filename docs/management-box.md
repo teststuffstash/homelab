@@ -1,7 +1,7 @@
 # The management box (R12) — the out-of-band applier
 
-**Decision:** [`adr.md`](adr.md) ADR-129 (the OS + update shape). **Tracked by:** FU-097 (which
-surfaces it may reconcile — its ruling table gates the box's first real job) and FU-012 (the state
+**Decision:** [`adr.md`](adr.md) ADR-129 (the OS + update shape). Which surfaces it may reconcile: §The capability ledger
+(FU-097, archived 2026-10-03). **Tracked by:** FU-012 (the state
 and credentials that move here). **End-state it serves:**
 [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md) — recovery path 5, and this doc
 is the build for the pilot that path's §The pilot's build order sequences.
