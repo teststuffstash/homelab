@@ -100,20 +100,21 @@ spec:
           expr: |
             mgmt_apply_errored_unexercised == 1
           for: 5m
-          # triage now: an apply errored on a provider version no apply had run; reverting the pin is readable and safe (state-compatible by gate)
+          # triage now: a box apply errored on a provider version no apply had run; the journal says whether the provider or the change caused it
           labels: { severity: warning, triage: now }
           annotations:
-            summary: "The box's apply of {{ $labels.root }} errored on {{ $labels.provider }} {{ $labels.locked }}, a version no apply had run yet"
+            summary: "The box's apply of {{ $labels.root }} errored while {{ $labels.provider }} {{ $labels.locked }} was on its first changing apply"
             description: >-
-              mgmt-apply's apply of root {{ $labels.root }} ERRORED, and provider {{ $labels.provider }}
-              owns a changed address at {{ $labels.locked }} while the last successful changing apply
-              ran {{ $labels.exercised }} — the bump planned empty at merge, so this is the first time
-              its apply path ran. Master stays refused (`management-apply` status). The cause is
-              likely the provider, not the change: revert the provider-pin PR that moved it to
-              {{ $labels.locked }} (the lockfile revert is a revert — the sentinel refuses pins that
-              raise a stored schema version, docs/management-box.md §MB3) and the box re-applies on
-              the next pull. The error itself: `journalctl -u mgmt-apply -n 80` on 192.168.2.53.
-              Clears when a new master sha is evaluated.
+              mgmt-apply's apply of root {{ $labels.root }} ERRORED (master stays refused, the
+              `management-apply` status says so). What the box verified: provider
+              {{ $labels.provider }} owns an address this apply changed, at {{ $labels.locked }}, while
+              the last successful changing apply ran {{ $labels.exercised }} — so this was the first
+              time {{ $labels.locked }}'s create/update/delete code ran here. That is a CORRELATION,
+              not a cause: the error may equally come from the change itself. Read the error first —
+              `journalctl -u mgmt-apply -n 80` on 192.168.2.53 (the failing resource and the
+              provider's message). If it is the provider's, the provider-pin PR that moved it to
+              {{ $labels.locked }} is lockfile-revertable (the sentinel refuses pins that raise a stored
+              schema version, docs/management-box.md §MB3). Clears when a new master sha is evaluated.
     - name: mgmt-node
       rules:
         - alert: MgmtBoxDown
