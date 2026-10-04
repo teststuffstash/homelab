@@ -361,7 +361,11 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 # PRs flapped agent/error|blocked a dozen times under the seat's hands.
                 agent_pain_events += 1
 
-        round_count = sum(e['kind'] == 'agent-dispatch' for e in direct)
+        # A round is the launcher's `picking this up (round N)` dispatch marker (agent-dispatch —
+        # 303 in the live store on 2026-10-04, read by goal_graph.round_evidence too); a ride that
+        # emits only its completed-round stats marker (agent-stats) still counts, never both.
+        round_count = max(sum(e['kind'] == 'agent-dispatch' for e in direct),
+                          sum(e['kind'] == 'agent-stats' for e in direct))
         score = (failure_events * W_FAILURE + infra_failure_events * W_INFRA
                  + agent_pain_events * W_AGENT_PAIN + max(0, round_count - 1) * W_ROUND
                  + len(direct) * W_EVENT + idle * W_STALL)

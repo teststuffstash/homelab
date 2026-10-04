@@ -55,6 +55,21 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(len([e for e in state['events'] if e['kind'] == 'agent-stats']), 2)
         self.assertFalse(any(e['kind'] == 'commented' for e in state['events']))
 
+    def test_dispatch_markers_collect_as_rounds(self):
+        # The launcher's dispatch notice carries `kind=dispatch` (agents/machine-comment.sh:90 builds
+        # the marker from the caller's kind): through the real collect() parse it becomes an
+        # `agent-dispatch` event, and the bundle counts one round per marker; a stats-only ride
+        # counts its stats markers instead, never the sum.
+        lines = ['- `2026-09-%sT08:00:00Z` · **picking this up (round %d)** — work <!-- agent-event kind=dispatch ts=2026-09-%sT08:00:00Z -->'
+                 % (d, i + 1, d) for i, d in enumerate(('22', '23', '24'))]
+        state = self.collect([summary('\n'.join(lines + [marker('22'), marker('23')]))])
+        self.assertEqual(len([e for e in state['events'] if e['kind'] == 'agent-dispatch']), 3)
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z')
+        self.assertEqual(out['tasks'][0]['round_count'], 3)
+        stats_only = self.collect([summary(marker('22') + '\n' + marker('23'))])
+        out = a.bundle(stats_only, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z')
+        self.assertEqual(out['tasks'][0]['round_count'], 2)
+
     def test_stats_correction_is_not_a_new_round(self):
         first = self.collect([summary(marker('22', 1))])
         first['items']['o/r#1']['updated_at'] = '2026-09-27T00:00:00Z'
