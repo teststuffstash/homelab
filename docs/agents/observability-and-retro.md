@@ -575,12 +575,26 @@ PLATFORM retro and per-stack retros — built in that order.**
    on every run).
 2. **Stack retros SECOND, their briefs authored AGAINST the platform retro's coverage** —
    deliberately non-overlapping: stack-local concerns only (recipe quality, spec adherence,
-   the stack's own model cells), never the cross-cutting classes the platform retro already
-   owns. Graduation stays the AgentStack claim knob (`retro.enabled` + cadence + slice) as
-   ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
-   the first stack graduates, with the platform reports in hand.
-   **ADR-146 (Proposed, 2026-10-02):** stack retros attribute and FILE platform faults as ADR-119
-   escalations; the platform retro narrows to deterministic fleet signals + platform repos.
+   the stack's own model cells); the cross-cutting classes the platform retro owns are
+   ESCALATED from a stack retro (ADR-146), never fixed there. Every stack runs one by default
+   since ADR-146 (the claim knob is an opt-out, not a graduation gate); the escalation contract
+   is authored INTO the stack brief template with the platform reports in hand.
+   **Stack series (ADR-146, accepted 2026-10-04).** The same workflow with `stack=<name>`:
+   ride ns = the stack's fixer ns (`agents/retro-project.sh`), git identity = the stack's own
+   worker token (its repos + the public platform repos — the platform series alone mounts
+   `retro-git`, #2215), bundle + ledger guard scoped to the claim's repos, its own weekly slot
+   (platform Mon 05:00Z; stacks on later days — the subscription semaphore and the ride-ns
+   busy-probe serialize them); the guard's event floor gates every fire, which is what makes
+   default-on safe. Context = `BRIEF.md` rendered for the stack + whatever the stack repo gives
+   every ride (its CLAUDE.md, `.agents/`); a stack may replace the brief wholesale with its own
+   `.agents/retro.md` — the placeholders and the report markers the harvest self-check reads
+   stay the platform's. The brief asks for attribution with evidence (platform cause vs the
+   stack's own; unseen-from-the-stack = platform), not a rubric. Platform-attributed findings
+   target homelab with `Origin:` = the stack item and ride the acceptance act (`retro_queue.py`
+   takes a per-finding repo; the seat adds the cross-repo `blockedBy` edge; board intake, or
+   INTO a covering platform Goal per ADR-122 (4)). The platform series keeps the bundle's
+   fleet-wide population counters and narrows its deep-dive set to the platform claim's repos.
+   Build = FU-058's next; oracle first, hand-fired after platform r7.
    **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
    platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
    complexity, and their dynamic differs from the platform's machinery-defect stream. The
