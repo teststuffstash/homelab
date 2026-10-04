@@ -1,0 +1,46 @@
+# cert-manager — ONLY as the issuer of the Barman Cloud plugin's internal mTLS (operator ↔ plugin
+# gRPC), which the plugin's chart requires (ADR-147). NOT a TLS-termination path: LAN TLS still
+# terminates at OPNsense HAProxy with the ACME wildcard (the ADR-085 ruling stands).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.21.2
+    helm:
+      valuesObject:
+        crds:
+          enabled: true
+          keep: true
+        # FU-082 shape: requests + memory limits, nothing BestEffort.
+        resources:
+          requests: { cpu: "20m", memory: "64Mi" }
+          limits: { memory: "256Mi" }
+        webhook:
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits: { memory: "128Mi" }
+        cainjector:
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+        startupapicheck:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

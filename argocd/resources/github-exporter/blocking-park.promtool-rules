@@ -22,6 +22,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: none
         annotations:
           summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
           description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"

@@ -1,0 +1,10 @@
+# tofu-provider-revert-alert-foreign-root — a root the box does not apply (policy `apply: false`) is
+# REPORT-ONLY: the chain never guesses a lockfile for it, and exits before any clone or revert.
+name: tofu-provider-revert-alert-foreign-root
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - REPO_SLUG=teststuffstash/homelab
+parts:
+  - file:bridge.sh
+  - block:tofu-provider-revert-alert

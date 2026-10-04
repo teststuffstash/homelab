@@ -12005,3 +12005,187 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
 - 17:14:43Z pve's STANDBY router node (9171) emitted a DHCP reply sourced `192.168.2.1` to the mower
   (.150) → its kill switch TRIPPED: VM stopped, onboot 0. Found ~18:00Z answering "any drill VM left?"
   (none — 9199/.68 gone; 9110 test VM stays). Cause not investigated (operator: log it) → meta-state.
+
+## 2026-10-02 evening — S9 residue read (#2037/#2046), helm provider 3.x applied under evidence (seat; started as a second jail, took over)
+
+Operator: explain #2037 / #2046 in the S9 frame → the box-autonomy design thread → rulings → build.
+- **#2037 closed** (operator): the agents App's merge commit had made Renovate treat it as edited, so
+  it could never ride the ADR-141-amended armed lane; retitled + branch deleted so Renovate re-proposed.
+  **#2176** (the fresh docker v29 PR) merged on the lens alone 17:57Z — the lane works from scratch.
+- **The box refused every master since 6fd4ee62** on `opnsense_router_pve on_boot false→true` (the
+  17:14Z kill-switch latch). docker v29 applied by a scoped plan excluding the router VM (19:30Z,
+  runner 2/2 on 29-dind); #2180 (operator's other session) declared `on_boot=false`; the box then
+  planned `no changes` and stamped adfa17b0. Class → `router-move.md` §kill switch (FU-297).
+- **Rulings (operator):** no box action / revert / agent autonomy on a Cilium/Longhorn/ArgoCD failure
+  until breakage data exists — data gathering first (FU-301); the second alert path is the BOX seeing
+  the cluster without Prometheus, not a human notification (FU-302); the box's apply loop should respect
+  maintenance windows (FU-300). Found: Longhorn has NO backup (target URL empty, 0 jobs) → FU-299
+  (target outside Longhorn: Garage LXC on nx-02's 700 G SA400 pool; a VM won't fit, 60.5/62 GiB).
+- **PR#2179** `scripts/helm-release-evidence.sh` (`devbox run helm-evidence`): per-release snapshot /
+  timeline / diff + `run <plan-id>` that opens its OWN window (refuses inside another), applies via
+  mgmt-tf, settles, checks, closes only clean. Review round 1 found the fixed 1 h window; the round-2
+  verdict raced my push and attached to the fixed head (dismissed by hand → APPROVED) → **#2182**.
+- **#2046** brought current by two seat `Merge remote-tracking branch` commits — `major-handoff.sh`
+  counts those as content while the lens does not → wedged handoff, coordinator filed **#2181**; merged
+  directly (route 1) e7627b89 after the operator read the `+0 ~4` plan. Applied 19:56Z through
+  `helm-evidence run` (window seat-1790970971-5257): 4 new revisions (argocd 8, apps 6, cilium 14,
+  longhorn 12), manifests UNCHANGED, 0 pods replaced, 0 restarts, 13/13 BGP no resets, no Secret
+  rotated, Longhorn/ArgoCD unchanged; applies parallel, longest 29 s. Window closed `--force` on one
+  unrelated item: `AgentWorkerEgressDropped{oracle-fleet}` from 20:05Z = ride issue-774-r14's browser
+  egress (google/segment) denied by policy. Box stamped e7627b89 (full apply), loop clean.
+- **Close (21:15Z).** FU-300 built by a background subagent → **PR#2183 merged 21:08Z** (defer while a
+  declared window holds the apply loop; `--admit-apply`; 97/97 policy tests; archived). Operator on the
+  four mints: the bar lived in the tracker + memory and fired at no moment of filing → **`fu-mint-gate`**
+  (`.claude/hooks/`, trial): a new FU id is denied once per session with the tracker's three tests, the
+  retry passes; no clicks, no tracker text (both rejected). FU-301/302 stay ("700 ids to go"). Bookkeeping
+  pushed early (1df91cf3) because #2183's CI read FU-300 as dangling. `mgmt-state-pull` done.
+
+## 2026-10-03 morning — FU-299: Longhorn backup target built, applied, restore drill PASSED (seat, unattended by operator order)
+
+Operator: "Do it unattended — the apply + restore drill also."
+- **Target**: CT 220 `backup-garage` @ .73 on nx-02 `local-lvm` (SA400, 400 G thin) in `tofu/provisioning`
+  (survives a cluster wipe), Garage v2.3.0 rf=1 by `ansible/garage-backup.yml` (rerun changed=0).
+  Key in the wallet (`longhorn-backup-{key-id,secret}`) + Infisical → ExternalSecret. **PR#2188** merged
+  08:22Z (bot approve). The box sentinel refused the PR on a `provider` block (deny pattern) and then
+  could not plan provisioning (no `nx02_api_token` in the box's provisioning.tfvars) → fixed in
+  `mgmt-provision-secrets.sh` + `--push`, `mgmt-human-plan -- 2188 --yes` posted success (main ~1, prov 0).
+- **Apply** via `helm-evidence run 20261003T082230Z-e2a552ed`: longhorn rev 12→13, 0 pods replaced,
+  0 restarts, BGP 13/13 no resets, window closed clean. BackupTarget available 08:23:50Z.
+- **Drill** (window seat-1791016796-9107): 50 MB + sha256 → Snapshot → Backup Completed (36 objects) →
+  PVC deleted → Volume `fromBackup` (diskSelector std) → PV/PVC → `sha256sum -c` OK. Residue deleted,
+  bucket 0 objects. Window closed `--force` on two unrelated alerts (oracle-fleet ride egress; InfoInhibitor).
+  Recipe → PR#2189. Metric unit for `LonghornBackupStale` still unverified (volume deleted too early).
+
+## 2026-10-03 midday — ADR-147: CNPG backups by default (spike → build → rollout → drill), seat
+
+Operator: "Go and do a spike on cnpg now, if it is successful then build it… backups by default for
+everybody… the 'oops the Longhorn upgrade broke everything'."
+- **Spike** (throwaway ns): in-tree barman → backup Garage OK (`AWS_DEFAULT_REGION=garage`), restore 62 s
+  checksum-identical; but CNPG 1.29.1 warns in-tree "completely removed in 1.30.0" → plugin + cert-manager.
+- **PR#2190** merged (bot approve): cert-manager, plugin-barman-cloud 0.8.1, per-ns bucket+key (ansible,
+  wallet → Infisical → ExternalSecret) + ObjectStore 14d, MutatingAdmissionPolicy (CEL needs `dyn()` for
+  mixed map values — caught by the live dry-run), daily `pg-backup` CronJob. CI red first on the
+  iac-sentinel baseline → policy/iac direct commit 8b48d369 (pg-backup names + the admission-policy kinds
+  the fence was missing).
+- **Rollout (window seat-1791022866-8424):** wiring a RUNNING cluster deadlocks the switchover →
+  grafana-pg 10:23–10:33Z, forgejo-pg 10:35–10:45Z with no writable primary, nothing alerted → incident
+  `2026-10-03-cnpg-wire-switchover-deadlock`. LSN-checked forced failovers, then oracle-pg/infisical-pg
+  with 17 s/16 s gaps. `pg-backup-now`: 4/4 completed.
+- **Drill:** the first (standby) backup was unrestorable ("unexpected timeline ID 20"; WAL not yet
+  archived). A primary-target backup restored infisical-pg in 85 s, 704/704 tables identical.
+- **PR#2192** (fixes): wire = explicit verb (`pg-backup-wire`), backups `target: primary`,
+  `CNPGNoWritablePrimary` (replay = exactly the two windows).
+
+## 2026-10-03 afternoon — responder audit → ADR-148 (started as a second jail, took over the seat)
+
+- **Audit** (operator: "alerts over the last week that were not silenced; what would the responder
+  have done, old vs new"): the responder has been paused since 09-16 (FU-249 filter still live). Replay
+  of the week's 218 firing series through the pre-#1733 and current gates: 92 vs 62–85 sessions, the
+  12/day budget binding either way. Evidence: `spikes/responder-week-audit.md` §2026-10-03.
+- **Per-alert digs** with the responder's reach: 3 of 10 currently-firing classes paid, all standing
+  for days — dispatch defects A–D (FU-168), the docker.io mirror refusing sleep-tracking's pinned MinIO
+  image (root cause commented on sleep-tracking#150), a 57 GB stuck snapshot under hp-01's floor
+  (FU-093). nx-02 swap read as cold pages, no harm (FU-289 (4)). A nightly Garage I/O saturation since
+  09-30 (FU-229 resight). Loki in-cluster bypass = already accepted (`loki-tenancy.md` §Tightening).
+- **Rulings (operator):** responder narrows to `triage=now`, grouped deep dig for the rest; option B
+  (alert relabelling) for the stock rules; `KubePodNotReady` = now; `KubeAPIDown` + `*FailedToSendAlerts`
+  accepted as dig; the Pve capacity trio stays warning with `triage: none`. → **ADR-148**, PR#2193
+  (183 own rules + 134 upstream classified by two subagents, 1 upstream question left to the operator,
+  answered). FU-303 minted (etcd/scheduler/controller-manager scrape gaps). The fu-mint gate refused two
+  more mints → seat subagents building them as PRs instead (egress-drop benign exclusion; mgmt belt
+  `reason` label). stack-lint run from a clone reds on live state unrelated to this work (REG-04
+  OutOfSync fixer apps ×3, REPO-03 agent-coordinator recipe files, GH-02 allure-behavior-snippets
+  unprotected) — not chased.
+- **Landed + live (afternoon):** #2194 (egress-drop benign exclusion; oracle backtest 67→42 episodes; the
+  remaining :31 drop = ride `agent-oracle-fleet-issue-778-r1` → `192.168.40.31:443`, a client defaulting to
+  https against the HTTP-only mcr mirror — commented on oracle-fleet#778), #2195 (belt `reason` label;
+  SKIP-by-intent left open — no clean "down on purpose" signal, question in the PR), #2193 (ADR-148 step 1;
+  one review round: `CiliumBGPAllSessionsDown` now→dig, per-peer). Live check: Alertmanager shows the
+  relabelled upstream labels (Watchdog/InfoInhibitor `none`) and ours; Prometheus serves every platform
+  rule labelled except oracle-fleet's five (stack lane).
+- **Orphan removed (window seat-1791039391-4150, closed clean):** a hand-applied PrometheusRule
+  `argocd/registry-cache` (60 d, no Argo tracking) duplicated `RegistryMirrorCacheAlmostFull` — found
+  because it was the only platform rule still label-less after the sync. YAML saved before delete; the
+  managed copy in ns `registry-cache` is the one left.
+
+## 2026-10-03 evening — FU-299: daily Longhorn job + UniFi settings-only `.unf` (seat, unattended)
+
+- **Operator call:** UniFi = settings-only export; off-site copy later.
+- **Found:** UniFi autobackup existed (monthly, settings-only) but had never produced a file — its
+  10-01 run panicked `mongod` on a WiredTiger checksum error in `unifi.network_heartbeat` (Loki:
+  `potential hardware corruption … WT_PANIC`), the cause of unifi-mongo's 6 restarts.
+- **Window seat-1791047885-4910 (closed clean):** Longhorn snapshots `pre-fu299-unifi-{mongo,config}`
+  → validated every collection (all clean but the one) → dropped the 1-doc collection → schedule set in
+  `unifi.scheduletask` (the `super_mgmt` cron is only the UI copy — first restart proved it ignored) →
+  test run wrote `autobackup_10.3.58_20261003_1729….unf` (44 KB) → daily 01:00Z, scheduler log confirms.
+  Three controller restarts.
+- **PR#2196** (auto-merge armed): RecurringJob `daily-backup` 02:00Z retain 14; PVC labels on HA config,
+  unifi-config, forgejo storage; unifi-mongo + coordinator-transcripts out of the daily class.
+- **#2196 merged 17:44Z, live:** ArgoCD synced the RecurringJob + forgejo label; the box plan
+  (3 in-place: 2 PVC labels + the unifi restartedAt drift) applied in window seat-1791049534-1587
+  (`echo y |` — mgmt-tf apply prompts). Job run once by hand (`create job --from=cronjob/daily-backup`):
+  3/3 backups Completed; `longhorn_volume_last_backup_at` = epoch s (rule stands). Safety snapshots deleted.
+- **#2197 merged 18:38Z, live (window seat-1791052703-5074, closed clean):** `backup-schedule` init
+  container converges `unifi.scheduletask` + `super_mgmt` every start (proved first against live Mongo:
+  idempotent + corrected a planted drift); `backup-age` sidecar → Pushgateway → `UnifiAutobackupStale`
+  / `UnifiAutobackupAgeMissing`. Post-apply: init log `matched=1 modified=0`, pushed age 4260 s (the
+  17:29Z file), both rules inactive. Off-site PARKED by the operator (IAM + billing limits first).
+
+## 2026-10-03 night → 10-04 morning — fu-sweep (whole tracker, no-judgement scope) + GithubRateLimitLow
+
+- **fu-sweep:** four slice subagents, the agents block classified without the corpus. 10 archived, ~35
+  advanced on live evidence, soaks FAILED: FU-134, FU-102. PRs #2198 #2199 #2201, sleep-tracking#168,
+  snore-recorder#43, circles#97 merged; #2200 (Argo v4.0.8) left unarmed for an attended merge.
+  STALL: the gitops subagent's bespoke Monitor misread #2199's round-3 CHANGES_REQUESTED as stale and
+  idled overnight; the seat took the interim "waiting" at face value (memory: pr-waits-run-in-background).
+- **GithubRateLimitLow{coordinator-git,graphql} 06:08Z:** cause = sleep-tracking#121, a legacy goal with
+  no `Base:` line — tree empty since 04:20Z, the tree-empty key only fires for `Base: master`, so trigger
+  (b) re-dispatched a Sonnet goal-checkpoint every ~3 min (wake-clause changes 4→21→20/h; ~4.1k/5k
+  points/h). Un-wedged 07:10:44Z by backfilling `Base: master` (true: master-lane children); the scan
+  transitioned it itself at 07:12:48Z (`goal/post-launch`, comment), no further dispatch. Last Base-less
+  goal in the fleet. Belt: `GoalCheckpointStorm` (PR#2204; replay true from 05:26Z).
+
+## 2026-10-04 — S9: kubernetes provider 3.x merged; provider pins get a deploy + revert path, drilled (seat)
+
+Operator: "#2047 needs the usual what would it take for an automated deploy + revert" → merge + continue.
+- **#2047 merged** (8be319e7) after a fresh human plan vs current master (`main: +0 ~0 -0`); the box
+  applied it 08:52Z `no changes`. Schema diff 2.38.0 vs 3.2.1: zero version moves, additive attrs only.
+  kubernetes 3.2.1 has NOT run a changing apply yet — the box's exercised record holds 2.38.0.
+- **Built (machine lane):** #2205 sentinel state-compatibility gate (a pin may not raise a stored
+  schema/identity version — review found excluded types unchecked); #2206 `MgmtApplyErroredOnNewProvider`
+  (exercised-version record per root; review: describe the correlation, not a cause); #2207
+  `tofu-provider-revert` chain + sentinel "plan relative to master's own pending plan" + pin-only-lint (g)
+  (CI: ADR-103 ratchet wanted replay fixtures); ADR-131 amended.
+- **Drill (synthetic alert, random 3.9.1):** injected 11:20:20Z → #2209 11:20:51Z → merged 13:03:05Z →
+  box applied 13:03:54Z, no human click. Findings: #2210 (body ref `#19761976`), #2211 (judged-types read
+  rc 1 on main's empty state list under pipefail → check failed closed; pr-wait blind to commit
+  statuses). Memory line removed from #2209 by hand. Box seeded `exercised-main.tsv` (kubernetes 2.38.0).
+- **Process:** chained `pr-wait A; pr-wait B | tail` hid #2207's red and #2206's conflict (operator
+  caught it) → #2208 multi-PR + exit 6; my direct ci.yaml step lacked its diff-ci MAP row and red every
+  PR (c2186192 fix, 14de8b4d pre-push runs the belt). Open: arming terraform provider MAJORS (operator).
+
+## 2026-10-04 evening — provider MAJORS armed; the default-backfill plan shape (seat, operator in the loop)
+
+Operator walked the arming scenarios, then pointed at #2191 (cloudflare provider 5.25→5.26, a MINOR):
+"it does not get a reviewer although renovate gives us release notes which nobody would read if
+management sentinel had not caught it". Grounded on the box (a non-posting `--human-plan`, nothing
+written): `+0 ~6 -0` = `+ include_shadow_metadata = false` on six `cloudflare_dns_record`s — a new
+Computed+Optional attribute with a static default, absent from the 5.26.0 changelog. The reflex had
+approved 36 s after open ("CI is the gate"); the PR sat 30 h on `human read` while the updater merged
+master in 29× and the box re-planned 32× (same verdict).
+- **Armed provider MAJORS** (operator yes): rule after the Deployment-image one in
+  `.github/renovate-global.json`, `major` kept, no `automerge` label, lens APPROVED merges — direct
+  e1748261 (governance file; Renovate reads master → pushed at once). ADR-141 amended; class 5 cells;
+  the "human-ordered only" Last-proven row was stale (#2075/#2096 merged on the sentinel's own green
+  2026-09-28, #2213 today) — fixed.
+- **Default-backfill shape** (operator "do 1" over routing non-empty plans to the lens): #2214 merged
+  18:50Z — `mgmt_plan_default_backfill` (pure, over the local `show -json`; every change the pin ADDS
+  beyond master's own plan = managed update, null→value leaves under objects only, nothing
+  after-unknown, no replace), `admit_plan_shapes` in the policy, ADR-131 amended (second 10-04 line),
+  16→19 fixtures. Review round 1 caught a real gap (a NEW list with its key absent in `before` anchored
+  at the root and passed) → d5bb1a2a. Box pulled 2461b0cb by hand (`systemctl start mgmt-pull`); the
+  engine hash re-judged #2191 on the next tick: `cloudflare: +0 ~6 -0 (3 not planned) (default
+  backfill)` = success, attribute table in the comment, no push needed. **#2191 merged 19:00:20Z by
+  Renovate** on the standing reflex approval — no human click; cloudflare is plan-only on the box, so
+  the six `include_shadow_metadata = false` writes land with the jail's next cloudflare apply.
+- Memory: renovate-after-attended-bumps (plan is the evidence; deterministic shape over an LLM read).

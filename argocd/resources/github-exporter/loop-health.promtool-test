@@ -82,6 +82,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -91,6 +92,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -116,6 +118,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -124,6 +127,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -156,6 +160,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -200,6 +205,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -210,6 +216,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -276,6 +283,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
@@ -315,6 +323,7 @@ tests:
               status: completed
               conclusion: failure
               runner: hosted
+              triage: dig
             exp_annotations:
               summary: "GitHub workflow homelab/ci failed"
               description: "Run #100 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -356,6 +365,7 @@ tests:
               status: completed
               conclusion: failure
               runner: hosted
+              triage: dig
             exp_annotations:
               summary: "GitHub workflow homelab/ci failed"
               description: "Run #200 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/2000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -375,6 +385,7 @@ tests:
               status: completed
               conclusion: failure
               runner: hosted
+              triage: dig
             exp_annotations:
               summary: "GitHub workflow homelab/ci failed"
               description: "Run #200 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/2000 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -422,6 +433,7 @@ tests:
               status: completed
               conclusion: failure
               runner: hosted
+              triage: dig
             exp_annotations:
               summary: "GitHub workflow homelab/ci failed"
               description: "Run #102 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1002 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -441,6 +453,7 @@ tests:
               status: completed
               conclusion: failure
               runner: hosted
+              triage: dig
             exp_annotations:
               summary: "GitHub workflow homelab/ci failed"
               description: "Run #102 (schedule on master) concluded failure: https://github.com/teststuffstash/homelab/actions/runs/1002 — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -476,6 +489,7 @@ tests:
               namespace: monitoring
               pod: github-exporter-5c6d9f4f76-kcmdn
               service: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter is not being scraped"
               description: "The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed."
@@ -505,6 +519,7 @@ tests:
           - exp_labels:
               severity: warning
               job: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -555,6 +570,7 @@ tests:
           - exp_labels:
               severity: warning
               job: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -564,6 +580,7 @@ tests:
           - exp_labels:
               severity: warning
               job: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -578,6 +595,7 @@ tests:
           - exp_labels:
               severity: warning
               job: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -625,6 +643,7 @@ tests:
           - exp_labels:
               severity: warning
               job: github-exporter
+              triage: dig
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -699,6 +718,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               app: homelab-agents
+              triage: none
             exp_annotations:
               summary: "GitHub App homelab-agents permissions differ from the declared state"
               description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -710,6 +730,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               app: homelab-agents
+              triage: none
             exp_annotations:
               summary: "GitHub App homelab-agents permissions differ from the declared state"
               description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -769,6 +790,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               app: homelab-agents
+              triage: none
             exp_annotations:
               summary: "GitHub App homelab-agents permissions differ from the declared state"
               description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -814,6 +836,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               app: homelab-agents
+              triage: none
             exp_annotations:
               summary: "GitHub App homelab-agents permissions differ from the declared state"
               description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -832,6 +855,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               app: homelab-agents
+              triage: none
             exp_annotations:
               summary: "GitHub App homelab-agents permissions differ from the declared state"
               description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -1084,6 +1108,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 8% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1096,6 +1121,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 7.6% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1144,6 +1170,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1211,6 +1238,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 8% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1254,6 +1282,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1265,6 +1294,7 @@ tests:
               platform_machinery: "true"
               token: coordinator-git
               resource: graphql
+              triage: dig
             exp_annotations:
               summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
               description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
@@ -1314,6 +1344,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: none
             exp_annotations:
               summary: "GitHub is billing real money this month"
               description: "Month-to-date net spend is $1.25 (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount)."
@@ -1376,6 +1407,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: none
             exp_annotations:
               summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
               description: "2500 hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."
@@ -1417,6 +1449,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: none
             exp_annotations:
               summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
               description: "1500 hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."

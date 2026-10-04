@@ -25,7 +25,8 @@ spec:
           expr: |
             1 - garage_local_disk_avail / garage_local_disk_total > 0.8
           for: 30m
-          labels: { severity: warning }
+          # triage dig: per-pod fill vs rotation loop vs thin pool is comparable from Prometheus and pods
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage {{ $labels.volume }} volume is {{ $value | humanizePercentage }} full on {{ $labels.pod }}"
             description: >-
@@ -56,7 +57,8 @@ spec:
           expr: |
             table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
           for: 5m
-          labels: { severity: warning }
+          # triage now: meta-wipe signature: data loss in progress; Garage health, volume and logs readable in-cluster
+          labels: { severity: warning, triage: now }
           annotations:
             summary: "Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}"
             description: >-
@@ -81,7 +83,8 @@ spec:
           expr: |
             absent(garage_local_disk_total) or absent(table_size)
           for: 30m
-          labels: { severity: warning }
+          # triage dig: scrape breakage (ServiceMonitor, token, metric rename) diagnosable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage admin-metrics families are absent — the disk/table belts are blind"
             description: >-
@@ -104,7 +107,8 @@ spec:
           expr: |
             min_over_time(probe_success{job="blackbox-garage-health"}[5m]) == 0
           for: 10m
-          labels: { severity: warning }
+          # triage dig: audit 2026-10-03: unexplained nightly I/O pattern found by a dig; Loki and disk metrics in reach
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage cluster degraded as seen from {{ $labels.instance }}"
             description: >-
@@ -121,7 +125,8 @@ spec:
             count_over_time(probe_success{job="blackbox-garage-health"}[1h])
               - sum_over_time(probe_success{job="blackbox-garage-health"}[1h]) >= 5
           for: 0m
-          labels: { severity: warning }
+          # triage dig: audit 2026-10-03: unexplained nightly I/O pattern found by a dig; Loki and disk metrics in reach
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}"
             description: >-
@@ -143,7 +148,8 @@ spec:
           expr: |
             min(cluster_healthy) == 0
           for: 5m
-          labels: { severity: warning }
+          # triage dig: quorum still serves; which zone and why is readable in-cluster, often an open window
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage is running with a zone down — one more zone loss stops writes"
             description: >-
@@ -169,7 +175,8 @@ spec:
           expr: |
             sum by (pod) (table_gc_todo_queue_length) > 500000
           for: 26h
-          labels: { severity: warning }
+          # triage dig: GC backlog past tombstone delay points at an unreachable peer; pod logs in reach
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 26h"
             description: >-
@@ -185,7 +192,8 @@ spec:
           expr: |
             sum by (pod) (rate(rpc_timeout_counter[10m])) > 0.1
           for: 15m
-          labels: { severity: warning }
+          # triage dig: peer id is in the pod log; correlate with node disk latency and load
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage {{ $labels.pod }} is timing out RPCs to a peer ({{ $value | humanize }}/s)"
             description: >-
@@ -208,7 +216,8 @@ spec:
           expr: |
             sum by (status_code) (increase(api_s3_error_counter{status_code=~"500|503"}[5m])) >= 3
           for: 0m
-          labels: { severity: warning }
+          # triage dig: transient quorum misses; Loki error text plus restart and mesh alerts explain it
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage S3 returned {{ $value | humanize }} × HTTP {{ $labels.status_code }} in 5m"
             description: >-
@@ -224,7 +233,8 @@ spec:
           expr: |
             count(kube_pod_start_time{namespace="garage",pod=~"garage-[0-9]+"} > time() - 300) >= 2
           for: 0m
-          labels: { severity: warning }
+          # triage dig: after-the-fact quorum gap; pod start times, events and ArgoCD sync time explain it
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $value }} Garage quorum members started within the last 5 minutes"
             description: >-
@@ -389,7 +399,8 @@ spec:
           expr: |
             garage_bucket_bytes / garage_bucket_quota_bytes > 0.8
           for: 30m
-          labels: { severity: warning }
+          # triage dig: standing fill can hide a retention bug (the #811 class); remedy is a prune or quota PR
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage bucket {{ $labels.bucket }} is at {{ $value | humanizePercentage }} of its size quota"
             description: >-
@@ -409,7 +420,8 @@ spec:
             (time() - max(garage_bucket_gauges_timestamp) > 3600)
               or absent(garage_bucket_gauges_timestamp)
           for: 15m
-          labels: { severity: warning }
+          # triage dig: CronJob log names the failing gauge push; quota belts read stale numbers meanwhile
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
             description: >-
@@ -472,7 +484,8 @@ spec:
           expr: |
             kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace="garage",poddisruptionbudget="garage"} == 0
           for: 2h
-          labels: { severity: warning }
+          # triage dig: the blocking clause (pod readiness, health, resync queue) is readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage has refused voluntary disruption for 2h, so no zone node can be drained"
             description: >-
@@ -497,7 +510,8 @@ spec:
             ) > 0
             unless on() (garage:disruption_allowed == 1)
           for: 5m
-          labels: { severity: warning }
+          # triage dig: override annotation or a stalled reconcile CronJob, both readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "The garage PodDisruptionBudget lets a zone go while Garage's signal says it must not"
             description: >-

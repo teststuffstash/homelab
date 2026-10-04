@@ -223,5 +223,193 @@ left="$(grep -c . "$T/hseq")"
 if [ "$left" = 2 ]; then pass=$((pass+1)); echo "PASS post:deadline-poll-count (4 readings)"
 else fail=$((fail+1)); echo "FAIL post:deadline-poll-count — $((6-left)) readings, want 4"; fi
 
+# FU-300 — the apply loop's declared-window gate (mgmt_apply_window_gate) over a stubbed ConfigMap
+# read. WCM = the raw `kubectl get cm responder-window -o json` the stub prints; WGET = ok | notfound
+# | fail. rc 0 = proceed, 2 = deferred (the holding windows on stdout), 1 = unreadable (defer too).
+FUT="$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)"; PAST="$(date -u -d '-2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+wrec() {  # <id> <until> [extra jq object fields] → one ConfigMap data entry
+  jq -cn --arg id "$1" --arg u "$2" --argjson x "${3:-{\}}" \
+    '{("w-" + $id): ({id:$id, by:"seat", until:$u, reason:("doing " + $id), node:"", alerts:["X"]} + $x | tojson)}'
+}
+wcm() { jq -cs '{data: (add // {})}'; }   # entries on stdin → a ConfigMap
+win_case() {  # <name> <want-rc> <WGET> <cm-json> [grep -x pattern for the output | !pattern = must NOT appear]
+  local name="$1" want="$2" how="$3" cm="$4" pat="${5:-}" out rc ok=1
+  printf '%s' "$cm" >"$T/wcm.json"
+  out="$( _mgmt_windows_get() { case "$how" in
+            ok) cat "$T/wcm.json" ;;
+            notfound) echo 'Error from server (NotFound): configmaps "responder-window" not found' >&2; return 1 ;;
+            *) echo 'The connection to the server 192.168.2.51:6443 was refused' >&2; return 1 ;; esac; }
+          mgmt_apply_window_gate )"; rc=$?
+  [ "$rc" = "$want" ] || ok=0
+  case "$pat" in '') ;; '!'*) grep -q -- "${pat#!}" <<<"$out" && ok=0 ;; *) grep -qx -- "$pat" <<<"$out" || ok=0 ;; esac
+  if [ $ok = 1 ]; then pass=$((pass+1)); echo "PASS window:$name (rc=$rc)"
+  else fail=$((fail+1)); echo "FAIL window:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
+}
+win_case no-configmap       0 notfound ''
+win_case no-window          0 ok '{"data":{}}'
+win_case no-data            0 ok '{}'
+win_case expired-only       0 ok "$(wrec old "$PAST" | wcm)"
+win_case live-window        2 ok "$(wrec router-move "$FUT" | wcm)" 'router-move (seat): doing router-move'
+win_case live-node-window   2 ok "$(wrec nx-01 "$FUT" '{"node":"nx-01","by":"node-maintenance.sh"}' | wcm)" 'nx-01 (node-maintenance.sh): doing nx-01'
+win_case admit-apply        0 ok "$(wrec watched "$FUT" '{"admit_apply":true}' | wcm)"
+# --admit-reconciler admits ONE node's sync, never the root-wide apply
+win_case admit-reconciler-only 2 ok "$(wrec canary "$FUT" '{"node":"wk-03","admit_reconciler":true}' | wcm)" 'canary (seat): doing canary'
+win_case admit-plus-other   2 ok "$( { wrec watched "$FUT" '{"admit_apply":true}'; wrec other "$FUT"; } | wcm)" '!watched'
+win_case expired-plus-admit 0 ok "$( { wrec old "$PAST"; wrec watched "$FUT" '{"admit_apply":true}'; } | wcm)"
+win_case garbage-entry-skipped 0 ok '{"data":{"w-x":"not json"}}'
+win_case unreadable-kubectl 1 fail ''
+win_case unreadable-json    1 ok 'Warning: something devbox printed{'
+win_case unreadable-empty   1 ok ''
+
+# --- state compatibility of a provider-pin head (S9 #1988, 2026-10-04): mgmt_schema_upgrades over
+# synthetic `tofu providers schema -json`, and the plan's managed-type side channel it reads ---
+sch() {  # <file> <jq object of resource schema versions> [<jq object of identity versions>]
+  jq -n --argjson r "$2" --argjson i "${3:-{\}}" '{provider_schemas:{"registry.opentofu.org/x/k":{
+    resource_schemas:($r | with_entries(.value = {version:.value})),
+    resource_identity_schemas:($i | with_entries(.value = {version:.value}))}}}' >"$1"
+}
+printf '%s\n' k_svc k_secret k_old >"$T/types"
+sch "$T/sb.json" '{"k_svc":1,"k_secret":0,"k_old":0,"k_unused":0}' '{"k_secret":1}'
+schema_case() {  # <name> <head resources> <head identities> <want lines ('|' for TAB, ';' between lines)>
+  local got want
+  sch "$T/sh.json" "$2" "$3"
+  got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/types" | tr '\t\n' '|;')"
+  want="$4"; [ -n "$want" ] && want="$want;"
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "PASS schema:$1"
+  else fail=$((fail+1)); echo "FAIL schema:$1 — want '$want', got '$got'"; fi
+}
+schema_case same            '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":1}' ''
+schema_case additive-type   '{"k_svc":1,"k_secret":0,"k_old":0,"k_new":3}'  '{"k_secret":1,"k_new":1}' ''
+schema_case unused-raised   '{"k_svc":1,"k_secret":0,"k_old":0,"k_unused":4}' '{"k_secret":1}' ''
+schema_case schema-raised   '{"k_svc":2,"k_secret":0,"k_old":0}'            '{"k_secret":1}' 'k_svc|schema 1|schema 2'
+schema_case identity-raised '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":2}' 'k_secret|identity 1|identity 2'
+schema_case identity-added  '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":1,"k_svc":0}' 'k_svc|identity none|identity 0'
+schema_case removed         '{"k_svc":1,"k_secret":0}'                      '{"k_secret":1}' 'k_old|schema 0|removed'
+schema_case lowered         '{"k_svc":0,"k_secret":0,"k_old":0}'            '{"k_secret":1}' ''
+echo '{}' >"$T/sbad.json"
+if out="$(mgmt_schema_upgrades "$T/sbad.json" "$T/sb.json" "$T/types")"; then fail=$((fail+1)); echo "FAIL schema:unreadable — rc 0 (must fail closed), out '$out'"
+else pass=$((pass+1)); echo "PASS schema:unreadable (rc≠0)"; fi
+jq -n '{resource_changes:[{address:"k_svc.a",mode:"managed",type:"k_svc",change:{actions:["no-op"]}},
+  {address:"module.m.k_secret.b[\"x\"]",mode:"managed",type:"k_secret",change:{actions:["update"]}},
+  {address:"data.k_svc.c",mode:"data",type:"k_data",change:{actions:["read"]}},
+  {address:"k_old.d",mode:"managed",type:"k_old",change:{actions:["delete"]}}]}' | mgmt_plan_digest "$T/tp" >/dev/null
+if [ "$(tr '\n' ' ' <"$T/tp.types")" = "k_old k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:plan-types-side-channel"
+else fail=$((fail+1)); echo "FAIL schema:plan-types-side-channel — got '$(tr '\n' ' ' <"$T/tp.types")'"; fi
+
+# the excluded-types path (review finding on PR#2205): a type the plan never carried — excluded by
+# policy, so absent from resource_changes — still reaches the compare via the state / exclusion lists
+printf '%s\n' 'module.m.k_old.x["a.b"]' 'data.k_data.y' >"$T/tp.excluded"
+mgmt_judged_types "$T/tp" 'k_policy' >"$T/tp.types-all"
+if [ "$(tr '\n' ' ' <"$T/tp.types-all")" = "k_old k_policy k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:excluded-types-reach-the-compare"
+else fail=$((fail+1)); echo "FAIL schema:excluded-types-reach-the-compare — got '$(tr '\n' ' ' <"$T/tp.types-all")'"; fi
+sch "$T/sh.json" '{"k_svc":1,"k_secret":0}' '{"k_secret":1}'
+printf 'k_svc\n' >"$T/tq.types"; printf 'k_old.x\n' >"$T/tq.state"; mgmt_judged_types "$T/tq" '' >"$T/tp-union"
+got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/tp-union" | tr '\t\n' '|;')"
+if [ "$got" = "k_old|schema 0|removed;" ]; then pass=$((pass+1)); echo "PASS schema:excluded-type-removal-caught"
+else fail=$((fail+1)); echo "FAIL schema:excluded-type-removal-caught — got '$got'"; fi
+# --- the tofu-provider-revert candidate (S9 #1988): mgmt_provider_pin_commit over a synthetic history ---
+R="$T/pinhist"; git init -q -b master "$R"; mkdir -p "$R/tofu"
+cp "$T/tofu/.terraform.lock.hcl" "$R/tofu/"; cp "$T/tofu/versions.tf" "$R/tofu/"; echo 'x' >"$R/tofu/main.tf"
+git -C "$R" add -A && git -C "$R" commit -q -m base
+sed -i "s/3.9.0/3.9.1/" "$R/tofu/.terraform.lock.hcl"; git -C "$R" commit -q -am "random 3.9.1 (#11)"; PIN1="$(git -C "$R" rev-parse HEAD)"
+echo 'y' >>"$R/tofu/main.tf"; git -C "$R" commit -q -am "unrelated tofu edit (#12)"
+pc() {  # <name> <provider> <version> <want: sha|before or 'rc1'>
+  local got
+  got="$(mgmt_provider_pin_commit "$R" HEAD tofu/.terraform.lock.hcl "$2" "$3" 2>/dev/null | tr '\t' '|')" || got=rc1
+  if [ "$got" = "$4" ]; then pass=$((pass+1)); echo "PASS pincommit:$1"; else fail=$((fail+1)); echo "FAIL pincommit:$1 — want '$4', got '$got'"; fi
+}
+pc found-past-unrelated random 3.9.1 "$PIN1|3.9.0"
+pc version-never-set   random 3.9.7 rc1
+pc unknown-provider    kubernetes 3.2.1 rc1
+sed -i "s/3.9.1/3.9.2/" "$R/tofu/.terraform.lock.hcl"; echo 'z' >>"$R/tofu/main.tf"; git -C "$R" commit -q -am "random 3.9.2 + a tf edit (#13)"
+pc introducer-not-pin-only random 3.9.2 rc1
+sed -i "s/3.9.2/3.9.3/" "$R/tofu/.terraform.lock.hcl"; sed -i 's/~> 3.6/~> 3.9/' "$R/tofu/versions.tf"; git -C "$R" commit -q -am "random 3.9.3 + constraint (#14)"; PIN4="$(git -C "$R" rev-parse HEAD)"
+pc lock-plus-versions-tf random 3.9.3 "$PIN4|3.9.2"
+
+# --- unexercised providers (S9 #1988, 2026-10-04): which provider an apply error lands on, and the
+# record a successful changing apply leaves (mgmt_lock_versions / mgmt_unexercised / mgmt_record_exercised) ---
+printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "3.2.1"\n  constraints = "~> 3.0"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n\nprovider "registry.opentofu.org/siderolabs/talos" {\n  version = "0.9.0"\n}\n' >"$T/ulock.hcl"
+ux() {  # <name> <want ('|' TAB, ';' lines)> <got>
+  if [ "$3" = "$2" ]; then pass=$((pass+1)); echo "PASS unex:$1"; else fail=$((fail+1)); echo "FAIL unex:$1 — want '$2', got '$3'"; fi
+}
+mgmt_lock_versions "$T/ulock.hcl" >"$T/uv"
+ux lock-versions 'kubernetes|3.2.1;helm|3.0.2;talos|0.9.0;' "$(tr '\t\n' '|;' <"$T/uv")"
+if mgmt_lock_versions "$T/nonexistent.hcl" >/dev/null; then ux lock-unreadable 'rc1' 'rc0'; else ux lock-unreadable 'rc1' 'rc1'; fi
+printf 'kubernetes\t2.38.0\nhelm\t3.0.2\n' >"$T/uex"
+printf 'kubernetes_deployment.a\tupdate\nmodule.m["x"].helm_release.b\tupdate\n' >"$T/uch"
+ux new-kubernetes 'kubernetes|2.38.0|3.2.1;' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch" | tr '\t\n' '|;')"
+printf 'helm_release.b\tupdate\n' >"$T/uch2"
+ux only-exercised-touched '' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch2" | tr '\t\n' '|;')"
+printf 'talos_machine_configuration_apply.w\tupdate\ndata.kubernetes_secret.s\tread\n' >"$T/uch3"
+ux never-recorded-and-data-skipped 'talos|unknown|0.9.0;' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch3" | tr '\t\n' '|;')"
+printf 'random_password.p\tcreate\n' >"$T/uch4"
+ux provider-not-in-lock '' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch4" | tr '\t\n' '|;')"
+cp "$T/uex" "$T/uex2"; mgmt_record_exercised "$T/uv" "$T/uex2" "$T/uch"
+ux record-merges 'helm|3.0.2;kubernetes|3.2.1;' "$(tr '\t\n' '|;' <"$T/uex2")"
+mgmt_record_exercised "$T/uv" "$T/uex-fresh" "$T/uch3"
+ux record-from-nothing 'talos|0.9.0;' "$(tr '\t\n' '|;' <"$T/uex-fresh")"
+ux after-record-clean '' "$(mgmt_unexercised "$T/uv" "$T/uex2" "$T/uch" | tr '\t\n' '|;')"
+
+# empty state + no exclusions (main: local state, `state list` reads nothing) must still SUCCEED under
+# pipefail — the drill PR #2209 failure (2026-10-04): right output, rc 1, check failed closed
+: >"$T/te.state"; : >"$T/te.excluded"; printf 'k_svc\n' >"$T/te.types"
+if got="$(mgmt_judged_types "$T/te" '')" && [ "$got" = "k_svc" ]; then pass=$((pass+1)); echo "PASS schema:judged-types-empty-state-rc0"
+else fail=$((fail+1)); echo "FAIL schema:judged-types-empty-state-rc0 — rc≠0 or got '$got'"; fi
+printf 'data.k_x.a\tread\n' >"$T/uch-data"
+if got="$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch-data")" && [ -z "$got" ]; then pass=$((pass+1)); echo "PASS unex:data-only-rc0"
+else fail=$((fail+1)); echo "FAIL unex:data-only-rc0 — rc≠0 or got '$got'"; fi
+
+# --- the default-backfill plan shape (ADR-131 amended 2026-10-04, homelab#2191): mgmt_plan_default_backfill
+# over a synthetic `show -json` — every listed change must be null→value under an object, nothing else ---
+jq -n '{resource_changes: [
+  {address:"a.x",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"1", f:null, tags:[]},  after:{id:"1", f:false, tags:[]}}},
+  {address:"a.y",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"2"},                   after:{id:"2", f:false}}},
+  {address:"a.v",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"3", f:true},           after:{id:"3", f:false}}},
+  {address:"a.n",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"4", s:{x:null}},       after:{id:"4", s:{x:1}}}},
+  {address:"a.nn",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"5", s:null},           after:{id:"5", s:{x:1}}}},
+  {address:"a.arr", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6", t:[]},             after:{id:"6", t:["x"]}}},
+  {address:"a.arrnew", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6b"},                after:{id:"6b", t:["x"]}}},
+  {address:"a.arrobj", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6c"},                after:{id:"6c", t:[{x:1}]}}},
+  {address:"a.arrnest", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6d", s:{}},         after:{id:"6d", s:{t:["x"]}}}},
+  {address:"a.unk", mode:"managed", type:"a", change:{actions:["update"], before:{id:"7", f:null},           after:{id:"7", f:null}, after_unknown:{f:true}}},
+  {address:"a.cr",  mode:"managed", type:"a", change:{actions:["create"], before:null,                       after:{id:"8", f:false}}},
+  {address:"a.rm",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"9", f:true},           after:{id:"9"}}},
+  {address:"a.noop",mode:"managed", type:"a", change:{actions:["update"], before:{id:"10", f:false},         after:{id:"10", f:false}}},
+  {address:"a.rp",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"11", f:null},          after:{id:"11", f:false}, replace_paths:[["f"]]}},
+  {address:"a.ty",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"12", s:"str"},         after:{id:"12", s:{x:1}}}},
+  {address:"data.d.x", mode:"data", type:"d", change:{actions:["read"],   before:null,                       after:{id:"13"}}}
+]}' >"$T/bf.json"
+bfcase() {  # <name> <changes-lines ('|' TAB, ';' lines)> <want rc> <want stdout ('|' TAB, ';' lines)>
+  local got rc
+  if printf '%s\n' "$2" | tr ';|' '\n\t' | mgmt_plan_default_backfill "$T/bf" >"$T/bf.out" 2>"$T/bf.err"; then rc=0; else rc=$?; fi
+  got="$(tr '\t\n' '|;' <"$T/bf.out")"
+  if [ "$rc" = "$3" ] && [ "$got" = "$4" ]; then pass=$((pass+1)); echo "PASS backfill:$1"
+  else fail=$((fail+1)); echo "FAIL backfill:$1 — want rc $3 '$4', got rc $rc '$got' (stderr: $(tr '\t\n' '|;' <"$T/bf.err"))"; fi
+}
+bfcase two-ok          'a.x|update;a.y|update'    0 'a.x|f;a.y|f;'
+bfcase nested-ok       'a.n|update;a.nn|update'   0 'a.n|s.x;a.nn|s.x;'
+bfcase value-change    'a.v|update'               1 ''
+bfcase mixed           'a.x|update;a.v|update'    1 ''
+bfcase array-element   'a.arr|update'             1 ''
+bfcase array-new-key   'a.arrnew|update'          1 ''
+bfcase array-of-objects 'a.arrobj|update'         1 ''
+bfcase array-nested    'a.arrnest|update'         1 ''
+bfcase after-unknown   'a.unk|update'             1 ''
+bfcase create          'a.cr|create'              1 ''
+bfcase removed-attr    'a.rm|update'              1 ''
+bfcase noop-update     'a.noop|update'            1 ''
+bfcase replace-path    'a.rp|update'              1 ''
+bfcase type-change     'a.ty|update'              1 ''
+bfcase data-source     'data.d.x|read'            1 ''
+bfcase missing-address 'a.zz|update'              1 ''
+bfcase empty-list      ''                         1 ''
+cp "$T/bf.json" "$T/bf.good.json"; echo '{}' >"$T/bf.json"
+bfcase unreadable      'a.x|update'               2 ''
+cp "$T/bf.good.json" "$T/bf.json"
+# the offenders are named on stderr, address + why, never a value
+printf 'a.v\tupdate\n' | mgmt_plan_default_backfill "$T/bf" >/dev/null 2>"$T/bf.err" || true
+if grep -q $'^a.v\t' "$T/bf.err" && ! grep -q 'true\|false' "$T/bf.err"; then pass=$((pass+1)); echo "PASS backfill:offender-named-no-values"
+else fail=$((fail+1)); echo "FAIL backfill:offender-named-no-values — stderr: $(cat "$T/bf.err")"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

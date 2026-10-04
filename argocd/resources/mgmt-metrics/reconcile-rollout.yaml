@@ -21,7 +21,8 @@ spec:
           expr: |
             mgmt_reconcile_rollout_canary_timed_out == 1
           for: 5m
-          labels: { severity: warning }
+          # triage none: a fact: the rollout advanced unproven; evidence state lives on the management box
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The fleet rollout left its canary stage on the TIMEOUT, not on evidence"
             description: >-
@@ -38,7 +39,8 @@ spec:
           expr: |
             mgmt_reconcile_rollout_halted{reason="unreadable"} == 1
           for: 1h
-          labels: { severity: warning }
+          # triage none: the box cannot query Prometheus; box-side network or config, out of reach
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The fleet rollout is halted because the box cannot read MgmtRolloutDifferential"
             description: >-
@@ -51,7 +53,8 @@ spec:
           expr: |
             mgmt_reconcile_rollout_halted{reason=~"workload-health|workload-health-unreadable"} == 1
           for: 30m
-          labels: { severity: warning }
+          # triage dig: which workload went unhealthy since rollout start is readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "The fleet rollout is held: a workload went unhealthy after the rollout started"
             description: >-

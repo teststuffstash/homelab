@@ -210,6 +210,9 @@ echo "  + var/lib/mgmt/provisioning.tfvars  (+ proxmox_api_token ← pve-api-tok
 _nt="$(kp_val nx-02-api-token-tofu)"; [ -n "$_nt" ] || { echo "FATAL: wallet entry nx-02-api-token-tofu missing" >&2; exit 1; }
 grep -q '^nx02_api_token' "$OUT/var/lib/mgmt/main.tfvars" 2>/dev/null || printf 'nx02_api_token = "%s"\n' "$_nt" >> "$OUT/var/lib/mgmt/main.tfvars"
 echo "  + var/lib/mgmt/main.tfvars  (+ nx02_api_token ← nx-02-api-token-tofu)"
+# provisioning needs it too since FU-299 (the backup-target LXC on nx-02, tofu/provisioning/backup-target.tf).
+grep -q '^nx02_api_token' "$OUT/var/lib/mgmt/provisioning.tfvars" 2>/dev/null || printf 'nx02_api_token = "%s"\n' "$_nt" >> "$OUT/var/lib/mgmt/provisioning.tfvars"
+echo "  + var/lib/mgmt/provisioning.tfvars  (+ nx02_api_token ← nx-02-api-token-tofu)"
 # 3. talosconfig + kubeconfig from this checkout (gitignored, tofu-generated)
 for f in talosconfig kubeconfig; do
   if [ -s "$REPO/tofu/$f" ]; then

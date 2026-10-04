@@ -17,5 +17,6 @@ groups:
         for: 0m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "{{ $labels.node }} printed {{ $value | printf \"%.0f\" }} kernel fault-dump line(s) in the last 6 h"

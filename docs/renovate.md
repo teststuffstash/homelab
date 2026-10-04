@@ -79,17 +79,24 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
-  (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
-  `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
+  (registry-signed, hash-verified), and **a bump must plan empty** — relative to master's own pending
+  plan, or be a default backfill (null→default attributes a release adds, #2191; ADR-131 amended
+  2026-10-04): `management-sentinel` is green on those and red — `provider bump changes the plan:
+  <root>(…) — human read` — otherwise. With
   `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
   ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
   (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
-  **Terraform PROVIDER majors are not this lane** (2026-09-28): a provider major takes the major
-  catch-all — un-armed, `major`, the coordinator's lane (README §Dependency major bumps), because
-  a major here typically needs an in-PR adaptation (helm 3 turned the provider's `kubernetes {}`
-  block into an attribute, #2046).
+  **Terraform PROVIDER majors are ARMED since 2026-10-04** (operator, S9 #1988; the rule after the
+  Deployment-image one): `major` kept, no `automerge` label, so the reflex refuses it and the
+  migration lens is the merge gate — its APPROVED completes the merge. Behind it: the same
+  sentinel gate (empty plan relative to master's own, no stored schema/identity version raised —
+  PR#2205), `MgmtApplyErroredOnNewProvider` on the first changing apply (PR#2206) and the
+  `tofu-provider-revert` chain (PR#2207, drilled as #2209). A major that needs an in-PR adaptation
+  (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046) is red on the
+  sentinel and never auto-merges — the adaptation is no longer a pin-only diff. Until this flip a
+  provider major took the un-armed catch-all (2026-09-28..10-04: #2046, #2047 merged by hand).
   **Deployment IMAGE tags in tofu are their own armed lane** (ADR-141 amended 2026-09-28, #1988's
   class row): an `image = "<ref>"` line Renovate rewrites on a `kubernetes_deployment` is armed at
   every update type — non-majors on the terraform `automerge` rule, majors armed + `major` (the

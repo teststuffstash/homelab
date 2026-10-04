@@ -31,12 +31,14 @@ tests:
           - exp_labels:
               leg: get
               severity: warning
+              triage: now
             exp_annotations:
               summary: "Garage write probe failing"
               description: "A write probe operation has failed in every 5m window for 10m. This is a client-perspective detector."
           - exp_labels:
               leg: put
               severity: warning
+              triage: now
             exp_annotations:
               summary: "Garage write probe failing"
               description: "A write probe operation has failed in every 5m window for 10m. This is a client-perspective detector."
@@ -57,6 +59,7 @@ tests:
           - exp_labels:
               leg: put
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Garage write probe PUT latency > 10s"
               description: "The write probe's PUT operation latency > 10s for 15m."
@@ -76,6 +79,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Garage write probe has not run for >10 minutes"
               description: "The write probe has not reported a timestamp in over 10 minutes."
@@ -93,6 +97,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "Garage write probe has not run for >10 minutes"
               description: "The write probe has not reported a timestamp in over 10 minutes."

@@ -45,6 +45,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -77,6 +78,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 25m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -134,6 +136,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -154,6 +157,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 45m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."

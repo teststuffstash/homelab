@@ -38,14 +38,14 @@ tests:
       - eval_time: 2h5m
         alertname: KernelOopsCaptured
         exp_alerts:
-          - exp_labels: { severity: warning, node: nx-01 }
+          - exp_labels: { severity: warning, node: nx-01 , triage: dig}
             exp_annotations:
               summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
       # t=7h55m: 6 h ago is t=1h55m — still before the series existed → still firing.
       - eval_time: 7h55m
         alertname: KernelOopsCaptured
         exp_alerts:
-          - exp_labels: { severity: warning, node: nx-01 }
+          - exp_labels: { severity: warning, node: nx-01 , triage: dig}
             exp_annotations:
               summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
       # t=8h10m: 6 h ago is t=2h10m, where the counter already read 1 → 1 - 1 = 0, and increase()
@@ -72,7 +72,7 @@ tests:
       - eval_time: 10h10m
         alertname: KernelOopsCaptured
         exp_alerts:
-          - exp_labels: { severity: warning, node: nx-01 }
+          - exp_labels: { severity: warning, node: nx-01 , triage: dig}
             exp_annotations:
               summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"
       # t=16h15m: 6 h ago the counter already read 2 → quiet again. Two events, two alerts, no latch.
@@ -93,6 +93,6 @@ tests:
       - eval_time: 7h20m
         alertname: KernelOopsCaptured
         exp_alerts:
-          - exp_labels: { severity: warning, node: nx-01 }
+          - exp_labels: { severity: warning, node: nx-01 , triage: dig}
             exp_annotations:
               summary: "nx-01 printed 1 kernel fault-dump line(s) in the last 6 h"

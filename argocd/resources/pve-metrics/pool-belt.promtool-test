@@ -35,7 +35,7 @@ tests:
       - eval_time: 22m
         alertname: PveThinPoolFillingUp
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: pve, vg: pve, lv: data }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, vg: pve, lv: data , triage: dig}
             exp_annotations:
               summary: "pve thin pool pve/data at 85.0%"
               description: >-
@@ -52,7 +52,7 @@ tests:
       - eval_time: 29m
         alertname: PveThinPoolAlmostFull
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, host: pve, vg: pve, lv: data }
+          - exp_labels: { severity: critical, job: pve-node, host: pve, vg: pve, lv: data , triage: now}
             exp_annotations:
               summary: "pve thin pool pve/data at 95.0% — VMs pause at 100%"
               description: >-
@@ -93,7 +93,7 @@ tests:
       - eval_time: 20m
         alertname: PveThinPoolFillingUp
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vg: nvme-thin, lv: data }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vg: nvme-thin, lv: data , triage: dig}
             exp_annotations:
               summary: "nx-02 thin pool nvme-thin/data at 92.0%"
               description: >-
@@ -107,7 +107,7 @@ tests:
       - eval_time: 20m
         alertname: PveThinPoolAlmostFull
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, host: nx-02, vg: nvme-thin, lv: data }
+          - exp_labels: { severity: critical, job: pve-node, host: nx-02, vg: nvme-thin, lv: data , triage: now}
             exp_annotations:
               summary: "nx-02 thin pool nvme-thin/data at 92.0% — VMs pause at 100%"
               description: >-
@@ -135,7 +135,7 @@ tests:
       - eval_time: 3m
         alertname: PveVmIoError
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, host: pve, vmid: "8112", name: wk-02, status: running, qmpstatus: io-error }
+          - exp_labels: { severity: critical, job: pve-node, host: pve, vmid: "8112", name: wk-02, status: running, qmpstatus: io-error , triage: none}
             exp_annotations:
               summary: "pve guest wk-02 (vmid 8112) is paused on io-error"
               description: >-
@@ -160,7 +160,7 @@ tests:
       - eval_time: 16m
         alertname: PveMetricsStale
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: pve, file: /var/lib/prometheus/node-exporter/pve.prom }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, file: /var/lib/prometheus/node-exporter/pve.prom , triage: none}
             exp_annotations:
               summary: "pve textfile metrics not refreshed for 16m 0s"
               description: >-
@@ -186,7 +186,7 @@ tests:
       - eval_time: 16m
         alertname: PveMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02 }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02 , triage: dig}
             exp_annotations:
               summary: "nx-02 thin-pool meter absent — that pool is unmetered again"
               description: >-
@@ -208,7 +208,7 @@ tests:
       - eval_time: 16m
         alertname: PveMetricsAbsent
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: pve }   # absent() keeps the equality matchers' labels
+          - exp_labels: { severity: warning, job: pve-node, host: pve, triage: dig }   # absent() keeps the equality matchers' labels
             exp_annotations:
               summary: "pve thin-pool meter absent — that pool is unmetered again"
               description: >-
@@ -219,7 +219,7 @@ tests:
                 <host>:9100/metrics | grep pve_lvm` from the LAN (pve 192.168.2.3, nx-02
                 192.168.2.59), then the ScrapeConfig (`kubectl -n monitoring get scrapeconfig
                 pve-node`) and Prometheus targets.
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02 }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02 , triage: dig}
             exp_annotations:
               summary: "nx-02 thin-pool meter absent — that pool is unmetered again"
               description: >-
@@ -252,7 +252,7 @@ tests:
       - eval_time: 27m
         alertname: PveHostMemoryLow
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: pve, instance: "192.168.2.3:9100" }
+          - exp_labels: { severity: warning, job: pve-node, host: pve, instance: "192.168.2.3:9100" , triage: none}
             exp_annotations:
               summary: "pve memory available 2GiB — below 3GiB"
               description: >-
@@ -306,7 +306,7 @@ tests:
       - eval_time: 42m
         alertname: PveHostSwapUsed
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" , triage: none}
             exp_annotations:
               summary: "nx-02 has 4GiB in swap"
               description: >-
@@ -329,7 +329,7 @@ tests:
       - eval_time: 56m
         alertname: PveHostSwapThrash
         exp_alerts:
-          - exp_labels: { severity: critical, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" }
+          - exp_labels: { severity: critical, job: pve-node, host: nx-02, instance: "192.168.2.59:9100" , triage: now}
             exp_annotations:
               summary: "nx-02 swapping in at 400kiB/s with I/O pressure"
               description: >-
@@ -375,7 +375,7 @@ tests:
       - eval_time: 27m
         alertname: PveNumaNodeMemoryLow
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100", node: "1" }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, instance: "192.168.2.59:9100", node: "1" , triage: none}
             exp_annotations:
               summary: "nx-02 NUMA node 1 down to 1.093GiB free + reclaimable file"
               description: >-
@@ -391,7 +391,7 @@ tests:
       - eval_time: 27m
         alertname: PveGuestSwapped
         exp_alerts:
-          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vmid: "9002", name: ci-runner-02 }
+          - exp_labels: { severity: warning, job: pve-node, host: nx-02, vmid: "9002", name: ci-runner-02 , triage: none}
             exp_annotations:
               summary: "nx-02 guest ci-runner-02 (vmid 9002) has 3.7GiB on host swap"
               description: >-

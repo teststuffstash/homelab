@@ -37,6 +37,7 @@ groups:
         expr: agent_run_cost_usd < 0
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Agent run reported NEGATIVE cost ({{ $labels.project }} issue {{ $labels.issue }})
           description: agent_run_cost_usd={{ $value }} for pod-pushed run (model {{ $labels.model }}, round {{ $labels.round }}) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class.
@@ -49,6 +50,7 @@ groups:
           ) >= 3
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: 3+ non-clean agent runs in 1h on {{ $labels.project }}
           description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
@@ -81,6 +83,7 @@ groups:
         labels:
           severity: warning
           platform_machinery: "true"
+          triage: dig
         annotations:
           summary: Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline
           description: 'SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher''s deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source="in-pod"` and is agent-finalize''s: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric''s own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red.'
@@ -89,6 +92,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)
           description: '{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative.'

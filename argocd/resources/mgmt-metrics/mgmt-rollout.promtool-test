@@ -64,7 +64,7 @@ tests:
       - eval_time: 52h30m
         alertname: MgmtRolloutDifferential
         exp_alerts:
-          - exp_labels: { severity: warning, signal: container-restarts, side: upgraded }
+          - exp_labels: { severity: warning, signal: container-restarts, side: upgraded , triage: dig}
     promql_expr_test:
       - expr: mgmt:node_rollout_upgraded:since
         eval_time: 52h30m
@@ -320,7 +320,7 @@ tests:
       - eval_time: 53h
         alertname: MgmtRolloutDifferential
         exp_alerts:
-          - exp_labels: { severity: warning, signal: unready-pods, side: upgraded }
+          - exp_labels: { severity: warning, signal: unready-pods, side: upgraded , triage: dig}
 
   # ── a fleet-wide symptom is not a differential: the behind side suffers the same ──────────────
   - interval: 5m

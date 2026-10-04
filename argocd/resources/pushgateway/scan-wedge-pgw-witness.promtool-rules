@@ -50,6 +50,7 @@ groups:
         for: 2m
         labels:
           severity: warning
+          triage: dig
       # ── the PRE-#353 expr: the three pushgateway reads raw, no generation guard ───────────────
       # Identical to the shipped one everywhere else — the KSM conjuncts carry #347's `[5m]` bridge
       # and `max by (namespace,pod,uid)` unchanged, so every row below isolates the pushgateway
@@ -74,3 +75,4 @@ groups:
         for: 2m
         labels:
           severity: warning
+          triage: dig

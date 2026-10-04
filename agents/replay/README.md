@@ -59,8 +59,8 @@ follows fix-density per ADR-103, never big-bang):
    — upstream drift stops being invisible. **v1 LIVE 2026-08-12 (PR after #382):** `world: <name>` in fixture.yaml +
    materialized overlay (base copied, fixture files win — stubs AND seam-reading bridges see one
    plain directory), first registry entry `worlds/circles-29-tree/` (6 fixtures dedup'd, 6 shared
-   files, provenance.yaml with the reconstruction note). Remaining half: the `record` wrapper +
-   `--rerecord`.
+   files, provenance.yaml with the reconstruction note). Maintenance half (`--record` +
+   `--rerecord`) LIVE in `run.sh` (FU-167 sweep, 2026-10-03).
 2. **Table mode** — `mode: table`: one fixture per family = family header (the contract prose,
    once) + `bridge.sh` + `rows.psv` (a pipe-delimited decision table: id · world · patch · env ·
    expect · params) + `expected/<verdict>.txt` templates parametrized by row. Base worlds are
@@ -379,10 +379,15 @@ is stale, so it cannot drift the way the prose register did.
 | `responder-seat-window/undeclared` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-selfref/platform-machinery` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-selfref/unlabelled` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/cronjob` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/daemonset-reporter-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/github-exporter-repo` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/homelab` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/ksm-object-no-pod` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/ksm-pod-uid` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/node-exporter-instance` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/oracle-fleet` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
+| `responder-subject/pushgateway-pushed-job` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/statefulset` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-infra-death` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-subject/witness-opted-negative-cost` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
@@ -444,6 +449,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-touches/sentinel-exempt` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
+| `ride-size` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `router-report-adhoc` | actions | - | `agents/agent-session.sh` | - |
@@ -491,6 +497,11 @@ is stale, so it cannot drift the way the prose register did.
 | `tofu-image-revert-coupling-mismatch` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-coupling-second-resource` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-alert-foreign-root` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-alert` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-ref-pr` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-ref-sha` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |

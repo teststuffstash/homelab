@@ -41,6 +41,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
 | Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
+| Backup Garage LXC (CTID 220) | 192.168.2.73 | Longhorn backup target — single-node Garage S3 (FU-299) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
 | `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker (left the Longhorn std tier 2026-09-14 — compute-only; mounts volumes, serves none) |
@@ -131,7 +132,7 @@ as if at home; recipe in `docs/runbook.md`.
   `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
   `ghcr-mirror-pat-bootstrap.sh` (upstream PAT for the ghcr mirror's private images, FU-196),
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
-  `longhorn-register-optane.sh`, `node-maintenance.sh` (single-worker cordon→drain→shutdown→wake window, runbook §Storage), `make-client-p12.sh` (phone mTLS cert, pinned openssl),
+  `longhorn-register-optane.sh`, `node-maintenance.sh` (single-worker cordon→drain→shutdown→wake window, runbook §Storage), `helm-release-evidence.sh` (`devbox run helm-evidence -- run <plan-id>`: a `helm_release` apply recorded before/during/after — report-only data gathering), `pg-backup.sh` (`devbox run pg-backup-now` — every CNPG cluster's restore point, before a Longhorn upgrade; `pg-backup-wire` — ADR-147), `make-client-p12.sh` (phone mTLS cert, pinned openssl),
   `coordinator-logs.sh`/`render-transcript.py` (+ `--dialogue`), `follow-ups-lint.sh`,
   `claude-model-shim.py` + `claude-go.sh` (jail sessions with OpenCode Go models on the
   subagent slots — the claude-or pattern through a local model-splitting proxy),

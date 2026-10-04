@@ -49,8 +49,17 @@ resource "matchbox_profile" "talos_worker" {
 # the R12 management-box pilot): do NOT flag it here again. Its MAC, like every other host's,
 # lives in the one DHCP source of truth, opnsense/dnsmasq-dhcp.py.
 
-# To onboard a new metal node, add a matchbox_group here selecting its MAC (see git
-# history for the wk-metal-01 X240 / wk-metal-02 X250 onboardings), apply, PXE it into
-# maintenance, then REMOVE the group again post-install so it boots from disk (not a
-# reinstall loop). Groups are intentionally transient — only persistent flags stay.
+# A FLAG IS PROCEDURE STATE, NEVER A COMMIT (FU-244, ADR-132). To onboard a node, write its group
+# into tofu/provisioning/flags.local.tf — gitignored (*.local.tf), tofu reads it like any .tf:
+#
+#   resource "matchbox_group" "<node>" {
+#     name     = "<node>"
+#     profile  = matchbox_profile.talos_worker.name
+#     selector = { mac = "<aa:bb:cc:dd:ee:ff>" }
+#   }
+#
+# flag = write it + `apply -target=matchbox_group.<node>`; unflag = `destroy -target=...` + delete
+# the file. While it stands, the box's plan of this root shows it as drift — that is the belt.
+# `devbox run machines-lint` fails on a matchbox_group in any TRACKED file here (nx_01_diag sat in
+# git for six days, f844711a → #1822, because the live flag existed nowhere else).
 

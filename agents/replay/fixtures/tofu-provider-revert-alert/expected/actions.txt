@@ -1,0 +1,2 @@
+OUT ROOT=main PROV=kubernetes VER=3.2.1 EXER=2.38.0 LOCK=tofu/.terraform.lock.hcl
+RC 0

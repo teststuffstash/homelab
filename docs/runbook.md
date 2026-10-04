@@ -40,7 +40,12 @@ Gotchas:
 - **The main root runs on the management box since 2026-09-13** (state + creds moved there,
   ADR-129/-131): `devbox run mgmt-tf -- plan` (ssh, committed ref — `MGMT_REF=origin/<branch>`) prints a
   **plan id**, and `devbox run mgmt-tf -- apply <plan-id>` executes that saved plan — an apply with
-  flags is refused (FU-248);
+  flags is refused (FU-248); a plan that changes a `helm_release` (Cilium, Longhorn, ArgoCD) is applied
+  through `devbox run helm-evidence -- run <plan-id> --label <slug>` instead: it declares its own
+  maintenance window (refusing while any other is live), records the releases before, during and after,
+  and closes the window only on a clean check (report-only; evidence in `~/.claude/helm-evidence/`);
+  **before a Longhorn chart bump, take the restore point first: `devbox run pg-backup-now`** (every CNPG
+  cluster, ADR-147) — Longhorn refuses downgrades, so a bad upgrade is rolled back by restoring;
   `tf-plan`/`tf-apply` refuse and say so. A PR the sentinel's stage 1 REFUSES (provider/backend/CLI
   surface) gets its required verdict from `devbox run mgmt-human-plan -- <pr>` after you read the
   diff; a full (unscoped) plan of master, applied by its id, un-wedges the apply loop — only an
@@ -391,7 +396,9 @@ hand-written inventory rows.
 
 ⚠ **Removing a Longhorn DISK (not just downing the node) co-locates replicas — Tracked by: FU-285.**
 Pulling a drive that holds replicas makes Longhorn rebuild them onto whatever node is left, and with
-`replica-soft-anti-affinity: true` it will happily put BOTH copies of a volume on one disk. Raising
+`replica-disk-soft-anti-affinity: true` it will happily put BOTH copies of a volume on one disk (the
+same-NODE half is `replica-soft-anti-affinity`; both `true` live, per-StorageClass overridable —
+Longhorn v1.12.0 `filterDisksWithMatchingReplicas`, read 2026-10-03). Raising
 `replica-replenishment-wait-interval` does NOT stop this (measured 2026-09-23). Check replica
 placement per volume after any disk pull, and expect to rebalance by hand on refit.
 
@@ -502,7 +509,7 @@ fails when you skip it" property applies, so it is a checklist. First run: `thin
 6. **The DHCP reservation and the smart plug STAY** if the box stays on the LAN (`opnsense/`,
    `homeassistant/`) — the machine still needs an address and a power path. Remove the MAC from
    §WoL recovery above (that list is for cluster recovery) and never re-add a Matchbox group for
-   it (`tofu/provisioning/matchbox.tf`) unless you intend a reinstall.
+   it (`tofu/provisioning/flags.local.tf`, the gitignored flag file) unless you intend a reinstall.
 7. **The doc rows the onboarding list names**, in reverse: `docs/provisioning.md`,
    `tofu/README.md`, `docs/network-physical.md`, `docs/storage-ledger.md` (tier tables + a ledger
    row for the eviction), `SERVICES.md` (if a tier or service changed), `ROADMAP.md`. The

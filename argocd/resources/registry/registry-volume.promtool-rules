@@ -9,5 +9,6 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "registry volume has {{ $value | humanizePercentage }} free — a 10 GB layer push may not fit"

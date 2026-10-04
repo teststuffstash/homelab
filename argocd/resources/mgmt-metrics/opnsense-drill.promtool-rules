@@ -13,12 +13,14 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: none
       - alert: MgmtOpnsenseDrillStale
         expr: |
           (time() - mgmt_opnsense_drill_last_run_timestamp_seconds) > 9 * 86400
         for: 1h
         labels:
           severity: warning
+          triage: none
       - alert: MgmtOpnsenseDrillMetricsAbsent
         expr: |
           up{job="mgmt-node"} == 1
@@ -26,9 +28,11 @@ groups:
         for: 9d
         labels:
           severity: warning
+          triage: none
       - alert: MgmtOpnsenseDrillScoreRegressed
         expr: |
           mgmt_opnsense_drill_realism_score > mgmt_opnsense_drill_realism_score_previous
         for: 5m
         labels:
           severity: warning
+          triage: none

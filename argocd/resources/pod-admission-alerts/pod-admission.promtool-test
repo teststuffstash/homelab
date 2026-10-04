@@ -23,11 +23,11 @@ tests:
       - eval_time: 21m
         alertname: PodSecurityEnforceDenied
         exp_alerts:
-          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod }
+          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod , triage: dig}
       - eval_time: 29m
         alertname: PodSecurityEnforceDenied
         exp_alerts:
-          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod }
+          - exp_labels: { severity: warning, instance: "192.168.2.183:6443", policy_level: baseline, resource: pod , triage: dig}
 
   # ── Self-clearing: a long-standing counter with no NEW denial is quiet ────────────────────────
   - interval: 1m

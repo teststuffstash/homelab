@@ -150,6 +150,14 @@
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "Terraform PROVIDER majors — ARMED (operator 2026-10-04, S9 #1988; ADR-131 as amended 2026-10-04). Same shape as the Deployment-image rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. What stands behind that merge, all built and drilled before this rule: the box sentinel's provider-pin gate (a pin head must plan EMPTY relative to master's own pending plan, or be a default backfill, and may not raise any stored schema/identity version — PR#2205), the empty plan IS the deploy, `MgmtApplyErroredOnNewProvider` names the provider when its first CHANGING apply errors (PR#2206), and the `tofu-provider-revert` chain reverts the introducing pin on that alert (PR#2207; drilled 2026-10-04, #2209: alert → merged + applied revert, no human). A major whose plan is not empty or whose plan ERRORS (helm 3, #2046: the `kubernetes {}` block) is red on the sentinel and never auto-merges — the worker adapts in-PR and the adaptation is no longer a pin-only diff. The two humans this lane still has: a red sentinel (`mgmt-human-plan`) and a lens that requests changes. The residual accepted here is the same as for Actions and Deployment images: a change that plans empty, applies clean and is still wrong later — the lens's upstream read is the only defence. First real acceptance: the first `MgmtApplyErroredOnNewProvider` firing on a real apply (the detector is fixture- and drill-proven only). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["terraform"],
+      "matchDatasources": ["terraform-provider"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
     }
   ],
 

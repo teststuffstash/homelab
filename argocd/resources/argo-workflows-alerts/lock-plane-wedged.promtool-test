@@ -45,6 +45,7 @@ tests:
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: dig
             exp_annotations: {}
 
   # ── 2. THE LATCH — same pile, both rails latched: expected, quiet ────────────────────────────

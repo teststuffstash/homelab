@@ -22,7 +22,8 @@ spec:
             (min_over_time(garage_write_probe_success{leg="get"}[5m]) == 0) or
             (min_over_time(garage_write_probe_success{leg="delete"}[5m]) == 0)
           for: 10m
-          labels: { severity: warning }
+          # triage now: clients cannot PUT/GET/DELETE: an S3 outage in progress, diagnosable from probe and Garage logs
+          labels: { severity: warning, triage: now }
           annotations:
             summary: "Garage write probe failing"
             description: >-
@@ -40,7 +41,8 @@ spec:
           expr: |
             garage_write_probe_seconds{leg="put"} > 10
           for: 15m
-          labels: { severity: warning }
+          # triage dig: write latency regression; Garage logs and node disk latency are in reach
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage write probe PUT latency > 10s"
             description: >-
@@ -62,7 +64,8 @@ spec:
             (time() - garage_write_probe_last_run_timestamp > 600)
             or absent(garage_write_probe_last_run_timestamp)
           for: 0m
-          labels: { severity: warning }
+          # triage dig: probe pod dead or stuck; pod status and events readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage write probe has not run for >10 minutes"
             description: >-

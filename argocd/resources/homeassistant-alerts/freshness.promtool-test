@@ -74,6 +74,7 @@ tests:
               friendly_name: Plug pve power
               instance: 192.168.40.10:8123
               job: home-assistant
+              triage: none
       # mid-hole, past the staleness marker: the raw selector is EMPTY here. The bridged one still
       # reaches the samples at t=33..39.
       - eval_time: 41m
@@ -216,6 +217,7 @@ tests:
               friendly_name: Plug laptop3 power
               instance: 192.168.40.10:8123
               job: home-assistant
+              triage: none
       - eval_time: 30m
         alertname: HomeAssistantPowerSensorStalePre336
         exp_alerts: []
@@ -257,6 +259,7 @@ tests:
               friendly_name: Plug pve power
               instance: 192.168.40.10:8123
               job: home-assistant
+              triage: none
       - eval_time: 180m
         alertname: HomeAssistantSensorStale
         exp_alerts: *pve_stale_alert
@@ -343,6 +346,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: none
 
   # ── 8. IrrigationNodeSilent, quiet half: ONE live sensor proves the node alive ────────────────
   # Four fast sensors frozen (a real partial shape: saturated ADCs, a quiet wifi diagnostic) while

@@ -50,6 +50,11 @@ spec:
     - name: rollout-stuck-dep
       eventSourceName: agent-loop
       eventName: rollout-stuck
+    # S9 #1988 (2026-10-04): MgmtApplyErroredOnNewProvider — the box's first changing apply under a
+    # new provider version errored; the tofu-provider-revert chain (the fourth template below).
+    - name: provider-errored-dep
+      eventSourceName: agent-loop
+      eventName: provider-errored
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 4 }
       template:
@@ -120,6 +125,29 @@ spec:
                       value: "{}"
           parameters:
             - src: { dependencyName: rollout-stuck-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+    # S9 #1988: the tofu-provider-revert trigger — fires on provider-errored-dep. Rate-limited separately.
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-tofu-provider-revert
+        conditions: "provider-errored-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: tofu-provider-revert-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: tofu-provider-revert }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: provider-errored-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -733,6 +761,160 @@ spec:
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on CI green; the box applies the revert on its next pull)"
             # <<<REPLAY:tofu-image-revert-merge-lane<<<
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "512Mi" }
+---
+# tofu-provider-revert — S9 #1988 (2026-10-04): deterministic revert of a PROVIDER-PIN-ONLY merge
+# when the management box's first CHANGING apply under the new version ERRORS. A provider pin plans
+# EMPTY at merge (the sentinel's gate), so its create/update/delete code first runs on a later,
+# unrelated apply — the box names the provider then (mgmt-apply.sh → mgmt_apply_errored_unexercised →
+# MgmtApplyErroredOnNewProvider, docs/management-box.md §MB3). This workflow:
+#   (1) reads root/provider/locked from the firing alert; only the box's apply root `main` (tofu/),
+#   (2) confirms master's lockfile still pins provider@locked (a stale alert reverts nothing),
+#   (3) finds the commit that moved the provider TO that version — mgmt_provider_pin_commit from the
+#       cloned master's mgmt-lib.sh: it must be provider-pin-only, or the walk is report-only,
+#   (4) reverts it on `revert-prov-<sha8>` with a `reverted-providers: <name>@<version>` body line —
+#       pin-only-lint check (g) refuses a re-proposal of that version for REVERT_MEMORY_DAYS,
+#   (5) opens it `automerge`+`dependencies`, armed: the reflex approves, CI + the box sentinel gate
+#       it (a pin head may add NOTHING to master's own pending plan), the box applies on its pull.
+# ON A CORRELATION, BY DESIGN: the alert proves only that the errored apply was the version's first
+# changing one, not that the provider caused it. The revert is the probe — safe (state-compatible by
+# gate) and cheap; a clean re-apply confirms the provider, a repeat error clears it.
+# WHY A REVERT IS SAFE HERE: the sentinel refuses any pin that raises a stored schema/identity
+# version (mgmt_schema_upgrades), so the old provider reads the state the errored apply left.
+# COMPOSITION: Alertmanager routes the alert to BOTH this chain and the responder.
+# SAFETY: fail-closed on every read (report-only, never a revert on bad data); idempotent by the
+# ledger + the deterministic branch name; a revert-* commit is never a candidate (it is not a pin
+# that INTRODUCED the locked version by moving it forward — and the walk stops at the introducer).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: tofu-provider-revert
+  namespace: agent-coordinator
+spec:
+  entrypoint: revert
+  serviceAccountName: agent-coordinator
+  # Same podSpecPatch as deploy-revert (homelab#103 soft hostname spread, homelab#867 soft Longhorn-
+  # disk de-preference). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: revert
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: tofu-provider-revert-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          # The repo whose tofu/ the management box applies (ADR-131/-132). One repo by design.
+          - { name: REPO_SLUG, value: "teststuffstash/homelab" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            # >>>REPLAY:tofu-provider-revert-alert>>>
+            printf '%s' "$PAYLOAD" > /tmp/alert.json
+            ALERT="$(jq -c '.alerts[] | select(.status == "firing") | select(.labels.alertname == "MgmtApplyErroredOnNewProvider") | .labels' /tmp/alert.json 2>/dev/null | head -1)"
+            [ -n "$ALERT" ] || { echo "→ no firing MgmtApplyErroredOnNewProvider in payload — nothing to do"; exit 0; }
+            ROOT="$(printf '%s' "$ALERT" | jq -r '.root // empty')"
+            PROV="$(printf '%s' "$ALERT" | jq -r '.provider // empty')"
+            VER="$(printf '%s' "$ALERT" | jq -r '.locked // empty')"
+            EXER="$(printf '%s' "$ALERT" | jq -r '.exercised // empty')"
+            [ -n "$ROOT" ] && [ -n "$PROV" ] && [ -n "$VER" ] || { echo "→ alert lacks root/provider/locked — nothing to do"; exit 0; }
+            # Only the box's apply root. Others plan only (policy/mgmt/plan-input.yaml `apply`), so an
+            # apply error cannot come from them; an unexpected root is report-only, never guessed.
+            case "$ROOT" in main) LOCK=tofu/.terraform.lock.hcl ;; *) echo "→ root '$ROOT' is not the box's apply root — report-only"; exit 0 ;; esac
+            # <<<REPLAY:tofu-provider-revert-alert<<<
+            SLUG="${REPO_SLUG:-teststuffstash/homelab}"
+            echo "→ $ROOT: apply errored on $PROV $VER (last exercised: ${EXER:-?}) — looking for the provider-pin merge that introduced $VER"
+            rm -rf /work/repo
+            _cu="https://github.com/${SLUG}.git"
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            # Full history, blobs on demand: the introducing pin can be weeks old (it planned empty and
+            # waited for the first changing apply) — a fixed depth would silently miss it.
+            git clone -c "$_ah" --filter=blob:none "$_cu" /work/repo
+            cd /work/repo
+            [ -n "${GH_TOKEN:-}" ] && git config http.extraHeader "${_ah#http.extraHeader=}"   # on-demand blob fetches reuse the preemptive auth
+            git config user.name "tofu-provider-revert (#1988)"
+            git config user.email "noreply@teststuff.net"
+            # shellcheck source=/dev/null
+            . mgmt/scripts/mgmt-lib.sh
+            NOW="$(_mgmt_lock_version_of "$PROV" < "$LOCK")"
+            [ "$NOW" = "$VER" ] || { echo "→ master's $LOCK pins $PROV at '${NOW:-absent}', not $VER — the alert is stale (already reverted or bumped); nothing to do"; exit 0; }
+            if ! CAND="$(mgmt_provider_pin_commit . HEAD "$LOCK" "$PROV" "$VER")"; then
+              echo "→ no provider-pin-only merge introduced $PROV $VER (reason above) — not a rollback case (responder/operator lane owns it)"; exit 0
+            fi
+            SHA="$(printf '%s' "$CAND" | cut -f1)"; PREV="$(printf '%s' "$CAND" | cut -f2)"
+            SUBJ="$(git log -1 --format=%s "$SHA")"
+            PRNUM="$(printf '%s' "$SUBJ" | grep -oE '\(#[0-9]+\)$' | tr -dc '0-9' || true)"
+            # >>>REPLAY:tofu-provider-revert-ref>>>
+            # How the body names the reverted change: `#<pr>` when the squash subject carries one, else
+            # the short sha. (The drill PR #2209 printed `#19761976` — `${PRNUM:-…}` re-expands PRNUM.)
+            REF="#$PRNUM"; [ -n "$PRNUM" ] || REF="$(printf '%s' "$SHA" | cut -c1-8)"
+            echo "→ reverted change: $REF"
+            # <<<REPLAY:tofu-provider-revert-ref<<<
+            echo "→ candidate: ${SHA:0:8} \"$SUBJ\" — moved $PROV $PREV → $VER, provider-pin-only"
+
+            KEY="rp-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"
+            SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$KEY}" 2>/dev/null || true)"
+            [ -n "$SEEN" ] && { echo "→ $SLUG@$SHA: already handled ($SEEN) — skip"; exit 0; }
+            kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$KEY\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}" >/dev/null 2>&1 \
+              || echo "WARN: ledger patch failed — branch-name idempotency is the remaining belt"
+
+            BR="revert-prov-$(printf '%s' "$SHA" | cut -c1-8)"
+            if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+              echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
+            fi
+            git checkout -b "$BR"
+            git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
+            git push origin "$BR"
+            BODY="$(printf '#1988 deterministic rollback (S9, 2026-10-04) — on a CORRELATION, by design. The management box'"'"'s first CHANGING apply of `%s` under **%s %s** ERRORED (`MgmtApplyErroredOnNewProvider`; the last successful changing apply ran %s). That the provider caused it is not proven — the change may have. The revert is the cheap, safe probe: %s moved it %s → %s and was provider-pin-only, and the box sentinel refuses any pin that raises a stored schema/identity version, so %s reads the state back. If the box then applies clean, the provider was the cause; if the apply still errors, it was not, and the error stays with the responder/operator (the version is re-proposable after the 30-day memory, or by editing this body). pin-only-lint check (g) refuses a re-proposal of %s %s meanwhile. Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI + `management-sentinel` gate.\n\n**Reverted:** %s\n**Errored apply:** root `%s` (journal: `journalctl -u mgmt-apply -n 80` on 192.168.2.53)\n\nreverted-providers: %s@%s' \
+              "$ROOT" "$PROV" "$VER" "${EXER:-unknown}" "$REF" "$PREV" "$VER" "$PREV" "$PROV" "$VER" "${PRNUM:+#$PRNUM — }$SUBJ" "$ROOT" "$PROV" "$VER")"
+            PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
+              --title "revert: ${SUBJ} (auto-rollback — ${ROOT} apply errored on ${PROV} ${VER})" \
+              --body "$BODY" \
+              | grep -oE '[0-9]+$')"
+            # >>>REPLAY:tofu-provider-revert-merge-lane>>>
+            # The MECHANICAL lane: labels BEFORE arming — the `labeled` event fires the reflex.
+            gh pr edit "$PR" --repo "$SLUG" --add-label automerge --add-label dependencies \
+              || { echo "FATAL: could not label $SLUG#$PR — the reflex will not approve it (a human must)"; exit 1; }
+            gh pr merge --auto --squash "$PR" --repo "$SLUG"
+            echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on green; the box applies on its next pull)"
+            # <<<REPLAY:tofu-provider-revert-merge-lane<<<
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }

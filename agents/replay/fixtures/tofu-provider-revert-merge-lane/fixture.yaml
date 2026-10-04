@@ -1,0 +1,11 @@
+# tofu-provider-revert-merge-lane — the provider chain's revert PR is labelled `automerge` +
+# `dependencies` BEFORE it is armed (the `labeled` event fires the reflex, which approves only that
+# pair). The action stream pins the ORDER and the exact label pair.
+name: tofu-provider-revert-merge-lane
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - PR=2210
+parts:
+  - block:tofu-provider-revert-merge-lane

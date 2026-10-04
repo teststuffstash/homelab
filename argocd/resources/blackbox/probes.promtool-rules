@@ -43,11 +43,13 @@ groups:
         labels:
           severity: warning
           stack: oracle
+          triage: dig
       - alert: EndpointProbeFailing
         expr: min_over_time(probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*",job!="blackbox-garage-health"}[5m]) == 0
         for: 10m
         labels:
           severity: warning
+          triage: dig
 
   # ── The templated lane, hand-rendered at $sloStack = oracle (see the header) ──────────────────
   # ErrorBudgetBurnt and the stack:error_budget_burnt:bool recording rule that feeds it are NOT
@@ -62,6 +64,7 @@ groups:
         labels:
           severity: warning
           stack: oracle
+          triage: dig
 
   # ── REGRESSION WITNESS — NOT a deployed rule (the #310/#328/#335 device, homelab#336) ─────────
   # EndpointProbeFailing exactly as it shipped before #336: no hole half, no identity half (it
@@ -104,6 +107,7 @@ groups:
         for: 3m
         labels:
           severity: warning
+          triage: none
 
   # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
   # Class rule (ii) at GithubRateLimitLow: `max_over_time` is the alert-PRESERVING function only

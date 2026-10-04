@@ -141,7 +141,8 @@
       "mgmt-policy-test": [
         "bash mgmt/scripts/mgmt-policy-test.sh",
         "bash mgmt/scripts/mgmt-reconcile-test.sh",
-        "bash mgmt/scripts/mgmt-rollout-evidence-test.sh"
+        "bash mgmt/scripts/mgmt-rollout-evidence-test.sh",
+        "bash mgmt/scripts/mgmt-probe-test.sh"
       ],
       "mgmt-reconcile-test": [
         "bash mgmt/scripts/mgmt-reconcile-test.sh"
@@ -157,6 +158,12 @@
       ],
       "garage-backup": [
         "bash scripts/garage-backup.sh \"$@\""
+      ],
+      "pg-backup-now": [
+        "bash scripts/pg-backup.sh now"
+      ],
+      "pg-backup-wire": [
+        "bash scripts/pg-backup.sh wire \"$@\""
       ],
       "github-secrets-sync": [
         "bash scripts/github-secrets-sync.sh \"$@\""
@@ -180,6 +187,9 @@
       "pin-only-lint": [
         "bash scripts/pin-only-lint.sh \"$@\""
       ],
+      "pr-wait-test": [
+        "bash scripts/pr-wait-test.sh"
+      ],
       "pin-only-lint-test": [
         "bash scripts/pin-only-lint-test.sh"
       ],
@@ -188,6 +198,9 @@
       ],
       "governance-lint": [
         "bash scripts/governance-lint.sh \"$@\""
+      ],
+      "governance-lint-test": [
+        "bash scripts/governance-lint-test.sh"
       ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
@@ -206,6 +219,12 @@
       ],
       "responder-behaviour-test": [
         "bash agents/coordinator/responder-behaviour-test.sh \"$@\""
+      ],
+      "deep-dig-test": [
+        "bash agents/deep-dig-test.sh"
+      ],
+      "deep-dig-select": [
+        "DIG_AM_URL=http://192.168.40.14:9093 DIG_PROM_URL=http://192.168.40.13:9090 bash agents/deep-dig-select.sh select \"$@\""
       ],
       "py-compile-lint": [
         "bash scripts/py-compile-lint.sh"
@@ -272,6 +291,9 @@
       ],
       "maint": [
         "bash scripts/maintenance-window.sh \"$@\""
+      ],
+      "helm-evidence": [
+        "bash scripts/helm-release-evidence.sh \"$@\""
       ],
       "maint-self-test": [
         "bash scripts/maintenance-window-self-test.sh"

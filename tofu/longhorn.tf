@@ -40,6 +40,15 @@
 # longer re-renders configs against the new minor's contract: talos.tf pins
 # `local.talos_config_contract` apart from the install version, so moving it past 1.13 is its own
 # deliberate PR — read that plan for this document.
+# The PVC labels that put a volume in the daily Longhorn backup (FU-299): the RecurringJob is
+# argocd/resources/longhorn-backup/recurringjob.yaml, the class table docs/longhorn-backup.md.
+locals {
+  longhorn_daily_backup_labels = {
+    "recurring-job.longhorn.io/source"             = "enabled"
+    "recurring-job-group.longhorn.io/daily-backup" = "enabled"
+  }
+}
+
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string
@@ -238,6 +247,16 @@ resource "helm_release" "longhorn" {
       # All original disks are tagged "std" (see the tagging note below) — the default class
       # only ever uses those.
       defaultDiskSelector = { enable = true, selector = "std" }
+    }
+    # FU-299: the BackupTarget `default` → the single-node Garage LXC on nx-02 (tofu/provisioning/
+    # backup-target.tf), OUTSIDE Longhorn on purpose — the in-cluster Garage rides Longhorn itself.
+    # `s3://<bucket>@<region>/`; the region is Garage's s3_region. The credential Secret (incl.
+    # AWS_ENDPOINTS) is an ExternalSecret in argocd/resources/longhorn-backup/. Which volumes get
+    # backed up, and the restore recipe: docs/longhorn-backup.md.
+    defaultBackupStore = {
+      backupTarget                 = "s3://longhorn-backup@garage/"
+      backupTargetCredentialSecret = "longhorn-backup-target"
+      pollInterval                 = 300
     }
     # single replica of the UI/manager bits is plenty for a homelab
     longhornUI = { replicas = 1 }

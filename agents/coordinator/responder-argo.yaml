@@ -12,7 +12,10 @@
 # meta-sessions exercise, scoped to GitOps verbs + issue writes (no kubectl mutations).
 #
 # Machinery inventory:
-#   predicate  = Alertmanager firing (fan-out route in tofu/monitoring.tf)
+#   predicate  = Alertmanager firing AND `triage = "now"` (the child route in
+#                argocd/platform/values/kube-prometheus-stack.yaml — ADR-148, 2026-10-04: this
+#                lane is the ACUTE half; `dig` alerts go to the scheduled grouped deep dig in
+#                deep-dig-argo.yaml, `none` to nobody)
 #   edge       = /alert webhook (review-argo.yaml EventSource) → this Sensor
 #   backstop   = NONE by design — alerts are level-triggered (repeat_interval refires ≤3h)
 #   key        = THREE keys, cheapest first, all checked before a session is spawned. TWO live in
@@ -91,8 +94,13 @@
 #                daemonset=runner-image-prepull-pve AND pod=…kube-state-metrics…, so the old
 #                cascade keyed 19 of 28 triage comments onto five reporter threads (#811/#882/#542
 #                kube-state, #241 pushgateway, #103 node-exporter, #884 ns:monitoring). With no
-#                object label the key falls to node, then `instance:` (the failing scrape target,
-#                verbatim — never renamed to a node), then the per-class `alert:<name>`.
+#                object label the key falls to node, then `repo:`, then `instance:` (the failing
+#                scrape target, verbatim — never renamed to a node), then the per-class
+#                `alert:<name>`. The 2026-10-03 replay's residuals (FU-249 step 2, ADR-148) closed
+#                2026-10-04: a kube-state-metrics POD-level alert keeps its pod (the `uid` tell,
+#                or a target set aggregated away), `cronjob` is an object label, the pushgateway
+#                and github-exporter are reporters, a reporter's own `instance` is never a
+#                subject, and the per-day subject ledger keys on (alertname, subject).
 #   identity   = ONE subject marker per thread (#149, 2026-08-08). The subject IS an issue's
 #                identity and the dedup search greps COMMENTS, so a triage that comments its own
 #                'subject:' onto a thread born of a DIFFERENT subject makes that thread the
@@ -127,15 +135,14 @@ spec:
     - name: alert-dep
       eventSourceName: agent-loop
       eventName: alert
-      # PAUSED 2026-09-16 (operator: "still doing only noise") until the responder mechanism
-      # fixes soak — FU-249 re-enables by deleting this filter (≈2026-09-23). The filter can
-      # never match: an Alertmanager webhook status is "firing" or "resolved". Everything else
-      # (the WorkflowTemplate, the Role, the seen-cache) stays, so re-enabling is one revert.
-      filters:
-        data:
-          - path: body.status
-            type: string
-            value: ["__paused-FU-249__"]
+      # No data filter here BY DESIGN. The lane was PAUSED 2026-09-16 → 2026-10-04 by a
+      # never-matching filter on this dependency (operator: "still doing only noise", FU-249),
+      # and was REPLACED rather than un-paused (ADR-148): what reaches this Sensor is decided
+      # one hop upstream, by the Alertmanager route's `triage = "now"` matcher
+      # (argocd/platform/values/kube-prometheus-stack.yaml §THE TRIAGE-ROUTING FILTER) — a
+      # `dig` alert never arrives, and the grouped deep dig (deep-dig-argo.yaml) takes it on a
+      # schedule instead. Pausing again is the same one-line filter, and
+      # agents/meta-alert-crosscheck.sh reads a `*paused*` value here as a deliberate stop.
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 6 } # dumb outer belt vs alert storms
       template:
@@ -605,14 +612,26 @@ spec:
               NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
               [ -n "$FP" ] || FP="$(printf '%s' "$a" | jq -r '.labels | tostring' | sha256sum | cut -c1-16)"
 
-              # triage:none — the rule AUTHOR declared this alert self-describing (capacity
-              # states, heartbeats): no session, no ledger slot, no daily-cap spend. The label
-              # rides in the payload, so this costs zero lookups. Rule-side convention:
-              # argocd/resources/*/prometheusrule.yaml.
-              if [ "$(printf '%s' "$a" | jq -r '.labels.triage // empty')" = "none" ]; then
-                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"none-$TODAY\"}}" >/dev/null 2>&1 || true
-                echo "→ $NAME ($FP): triage:none (self-describing by rule author) — marker written, skip"; continue
-              fi
+              # The rule author's `triage` declaration (ADR-148): this lane is for `now` ALONE.
+              # `none` = self-describing (capacity states, heartbeats), nobody investigates;
+              # `dig` = the grouped deep dig's on a schedule (deep-dig-argo.yaml), never a
+              # per-fingerprint session. Tier 0 is the Alertmanager route's `triage = "now"`
+              # matcher, so neither value should ever arrive here; this is the belt UNDER it —
+              # no session, no ledger slot, no daily-cap spend, one marker so the crosscheck
+              # reads a deliberate skip rather than a drop (FU-113a). The label rides in the
+              # payload, so this costs zero lookups. An ABSENT label is left alone: the route
+              # cannot deliver one (every rule carries a value — prometheus-rules-lint), and the
+              # behaviour harness's payloads are mostly bare.
+              case "$(printf '%s' "$a" | jq -r '.labels.triage // empty')" in
+                none|dig)
+                  _tri="$(printf '%s' "$a" | jq -r '.labels.triage')"
+                  kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$_tri-$TODAY\"}}" >/dev/null 2>&1 || true
+                  case "$_tri" in
+                    none) echo "→ $NAME ($FP): triage:none (self-describing by rule author) — marker written, skip";;
+                    dig)  echo "→ $NAME ($FP): triage:dig — not this lane's (the grouped deep dig takes it, ADR-148); the route should not have delivered it — marker written, skip";;
+                  esac
+                  continue;;
+              esac
 
               # >>>REPLAY:responder-seat-window>>>
               # The declared-window gate (FU-230 leg b). Keyed on the ALERT NAME alone — see the
@@ -714,17 +733,67 @@ spec:
               # ⚠ THIS RE-KEYS EXISTING THREADS. The magnets above stop matching, so each affected
               # (alert, object) files ONE fresh issue on its next fire and the magnets stop
               # collecting — which is the point of FU-232, paid once.
+              #
+              # ── the RESIDUALS the 2026-10-03 replay found (FU-249 step 2, ADR-148) ───────────
+              # Rule 2 above skipped `pod` on EVERY kube-state-metrics alert, and that threw away
+              # the honorLabels case it had just described: a pod-dimension metric's pod IS the
+              # object. Live 7 d label sets, read off Prometheus's ALERTS 2026-10-04:
+              #   PodSigkilled / KubePodCrashLooping / KubeContainerWaiting / PodEvicted /
+              #   CNPGInstanceNotReady   job=kube-state-metrics pod=<THE FAILING POD> uid=<its uid>
+              #                          instance=10.244.6.51:8080 (kube-state-metrics' own address)
+              #   KubePodNotReady        job=kube-state-metrics namespace pod — nothing else (the
+              #                          rule aggregates the target labels away)
+              #   GithubTokenMintStale   job=kube-state-metrics pod=…kube-state-metrics… (no uid)
+              #   CronJobNotSucceeding   … cronjob=<the schedule> pod=…kube-state-metrics…
+              #   GarageWriteProbeFailing job=garage_write_probe (the PUSHED job name) pod=…pushgateway…
+              #                          service=prometheus-pushgateway container=pushgateway
+              #   AgentErrorFlagged      job=github-exporter pod=github-exporter-… repo=homelab
+              # So every PodSigkilled in the cluster keyed to `instance:10.244.6.51:8080` (one subject,
+              # and DECIDED-ONCE then muted them all), every KubePodNotReady to `alert:KubePodNotReady`,
+              # CronJobNotSucceeding to the exporter's address, pushgateway-fed and github-exporter
+              # alerts to the reporter's own workload. The tells are structural, read off how
+              # Prometheus composes a target's labels (job, instance, container, service, endpoint,
+              # pod, namespace) with a metric's own under honorLabels:
+              #   · every kube_pod_* family carries the pod's `uid`; a target's label set never does
+              #     — `uid` present ⇒ the metric brought its own pod, which is the object;
+              #   · a rule that aggregated the target set away (no instance/container/service/
+              #     endpoint) kept `pod` BY NAME in its by-clause, so it is the object;
+              #   · a reporter's `instance` is its own address EXCEPT for a hostNetwork exporter
+              #     (node-exporter), where the scrape address IS the failing machine;
+              #   · pushgateway's `job` is whatever was pushed, so the reporter is told by the
+              #     target's `service`, which no push can overwrite;
+              #   · `cronjob` is an object label like `daemonset`; `repo` alone (no workflow) names
+              #     the repo a github-exporter alert is about, which is the subject when the pod is
+              #     the exporter's.
               _ds="$(printf '%s' "$a" | jq -r '.labels.daemonset // empty')"
               _sts="$(printf '%s' "$a" | jq -r '.labels.statefulset // empty')"
               _dep="$(printf '%s' "$a" | jq -r '.labels.deployment // empty')"
               _jn="$(printf '%s' "$a" | jq -r '.labels.job_name // empty')"
+              _cj="$(printf '%s' "$a" | jq -r '.labels.cronjob // empty')"
               _inst="$(printf '%s' "$a" | jq -r '.labels.instance // empty')"
               _job="$(printf '%s' "$a" | jq -r '.labels.job // empty')"
-              # The scrape jobs whose target labels ride along on every alert they derive. Adding a
-              # name here is how a new exporter opts in; it is never inferred from the pod name.
-              _reporter_job() {
-                case "$1" in kube-state-metrics|node-exporter|prometheus-pushgateway|pushgateway) return 0;; esac
+              _uid="$(printf '%s' "$a" | jq -r '.labels.uid // empty')"
+              _svc="$(printf '%s' "$a" | jq -r '.labels.service // empty')"
+              _cont="$(printf '%s' "$a" | jq -r '.labels.container // empty')"
+              _ep="$(printf '%s' "$a" | jq -r '.labels.endpoint // empty')"
+              # The REPORTERS: scrape targets whose own pod/instance labels ride along on every alert
+              # they derive, named by scrape job or — for the pushgateway, whose `job` is the pushed
+              # name — by the target's Service. Adding a name here is how a new exporter opts in; it
+              # is never inferred from the pod name.
+              _reporter_target() {
+                case "$_job" in kube-state-metrics|node-exporter|github-exporter) return 0;; esac
+                case "$_svc" in prometheus-pushgateway|github-exporter|kube-prometheus-stack-kube-state-metrics|kube-prometheus-stack-prometheus-node-exporter) return 0;; esac
                 return 1
+              }
+              # A reporter whose scrape address IS the failing host (hostNetwork exporters). Every
+              # other reporter's `instance` is its own pod and never a subject.
+              _instance_is_host() { case "$_job" in node-exporter) return 0;; esac; return 1; }
+              _pod_is_object() {
+                [ -n "$_pod" ] || return 1
+                _reporter_target || return 0            # an ordinary workload scrape: the pod is the object
+                [ -n "$_uid" ] && return 0              # honorLabels: a pod-dimension metric brought the pod's uid
+                [ -z "$_inst$_cont$_svc$_ep" ] && return 0   # the target set was aggregated away; `pod` was kept by name
+                return 1                                # the reporter's own pod
               }
               _strip() { printf '%s' "$1" | sed -E 's/-[a-z0-9]{5}$//; s/-[0-9]{4,}$//; s/-[a-f0-9]{8,10}$//'; }
               if   [ -n "$_pvc" ];                    then SUBJ="pvc:${_ns}/${_pvc}"
@@ -733,16 +802,19 @@ spec:
               elif [ -n "$_sts" ];                    then SUBJ="workload:${_ns}/${_sts}"
               elif [ -n "$_dep" ];                    then SUBJ="workload:${_ns}/${_dep}"
               elif [ -n "$_jn" ];                     then SUBJ="workload:${_ns}/$(_strip "$_jn")"
-              elif [ -n "$_pod" ] && ! _reporter_job "$_job"; then SUBJ="workload:${_ns}/$(_strip "$_pod")"
+              elif [ -n "$_cj" ];                     then SUBJ="workload:${_ns}/${_cj}"
+              elif _pod_is_object;                    then SUBJ="workload:${_ns}/$(_strip "$_pod")"
               elif [ -n "$_node" ];                   then SUBJ="node:${_node}"
+              elif [ -n "$_repo" ];                   then SUBJ="repo:${_repo}"
               # The failing SCRAPE TARGET, verbatim. Never renamed to a node: for node-exporter it
               # is the node's ip:port, for blackbox it is the probed URL, and inventing a node name
-              # from either would key two different things the same way.
-              elif [ -n "$_inst" ];                   then SUBJ="instance:${_inst}"
+              # from either would key two different things the same way. A reporter's own address
+              # (kube-state-metrics, github-exporter, a pushed `instance`) is not a subject at all.
+              elif [ -n "$_inst" ] && { ! _reporter_target || _instance_is_host; }; then SUBJ="instance:${_inst}"
               # A reporter-job alert's `namespace` is the EXPORTER's (monitoring), which is how
               # `ns:monitoring` became #884's magnet. Guarded, it falls to the per-class key, which
               # grafts nothing.
-              elif [ -n "$_ns" ] && ! _reporter_job "$_job"; then SUBJ="ns:${_ns}"
+              elif [ -n "$_ns" ] && ! _reporter_target; then SUBJ="ns:${_ns}"
               else                                         SUBJ="alert:${NAME}"; fi
               echo "→ $NAME ($FP): subject=$SUBJ"
               # <<<REPLAY:responder-subject<<<
@@ -759,7 +831,13 @@ spec:
               # an already-seen incident is unbounded by construction).
               # Marker value is 'triaged-' prefixed so it starts with neither TODAY nor a bare
               # date — the cap's N_TODAY/INC_SEEN arithmetic cannot see it (FU-113a convention).
-              SUBJ_KEY="subj-$(printf '%s' "$SUBJ" | sha256sum | cut -c1-16)"
+              # Keyed on (alertname, subject), not the subject alone (FU-249 step 2, 2026-10-04):
+              # the 2026-10-03 replay found PveGuestSwapped skipped as a subject-dup on the day
+              # PveHostSwapUsed had triaged `instance:192.168.2.59:9100` — a different alert class
+              # on one resource is a different problem (the DECIDED-ONCE gate below already says
+              # so), and the guard this ledger exists for — one alert class minting N fingerprints
+              # on one resource (GithubWorkflowRunFailed per failed run) — keeps the same name.
+              SUBJ_KEY="subj-$(printf '%s' "$NAME|$SUBJ" | sha256sum | cut -c1-16)"
               SUBJ_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$SUBJ_KEY}" 2>/dev/null || true)"
               if [ "$SUBJ_SEEN" = "triaged-$TODAY" ]; then
                 kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"subjdup-$TODAY\"}}" >/dev/null 2>&1 || true
