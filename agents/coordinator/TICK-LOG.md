@@ -12332,3 +12332,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cause it). Both unrelated to the apply → window FORCE-closed by the seat, said here. DeepDigStale is
   G7's own evidence: the dig lane that would read `dig` alerts is itself stale, and its alert is
   `triage: none`.
+- **20:57Z #2218 MERGED (lens APPROVED after one round: G2's status said open after #2217 had merged —
+  fixed, plus G4 detail and G7–G10 added).** ArgoCD synced it by 21:00Z: both PodMonitors + the rule
+  live, **75 `argocd_app_info` series in Prometheus, `ArgoCDAppDegraded{name="registry"}` PENDING** —
+  the first scrape saw the Degraded app the UI had shown alone for 17 h; fires at the 15 m mark. #2216
+  drew a SECOND round (ADR-142 gate-change lens, correct again): the SemVer widening also admitted a
+  CalVer pin with its -g<sha> dropped and a comment on the CalVer shape → branches made disjoint (1–3
+  leading digits vs the 4-digit year), comment scoped to SemVer, 3 more self-test cases (37/37). Then
+  #2216 went DIRTY a THIRD time (G8: the generated register conflicts with every concurrent pin PR —
+  #2200, #2218, now its own rebase). Seat gotcha, owned: the conflict-file loop was `for f in $U` in
+  zsh (the known no-split, memory jail-ops-gotchas) → checkout silently failed and a head WITH conflict
+  markers was pushed (1e6bf2fe) — caught by `dependency-coverage --check` red in the same chain,
+  repaired and re-pushed within 4 min (9d36a431). Lesson restated: never pipe-filter a gate, and
+  never loop over an unsplit zsh variable in a chain that pushes.
