@@ -12368,3 +12368,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   3.4.2→3.4.6, #2223 argo-events 2.4.23→2.4.27, #2224 crossplane 2.3.2→2.3.6, #2225 kps 86.1.0→86.1.1.
   Labels correct on all (no `automerge` leak onto a chart PR). Watching the five through review →
   merge → sync → alert delta (baseline re-taken at 21:31Z).
+- **21:32:25Z #2220 MERGED — the FIRST Renovate-proposed class-2 merge (python:3.13-slim digest →
+  `automerge` lane: reflex approval + CI, no human, ~5 min open→merged).** §Last proven's "Helm charts /
+  in-cluster images" row moves from ❌ to this (docs land with the wave report). Baseline re-taken
+  21:33Z: 16 names (new vs 19:56Z: `ArgoCDAppDegraded` — ours, G1; `DeepDigStale` — the never-run lane;
+  `PveNumaNodeMemoryLow` — nx-02 NUMA, the FU-289 class, unrelated), 190 targets.
