@@ -2629,35 +2629,29 @@ MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sy
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
 becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
 
-### ADR-146 — Every stack runs its own retro; it attributes and escalates platform faults as ADR-119 filings; the platform retro stops deep-diving stack repos (2026-10-02, accepted 2026-10-04)
-**Status:** Accepted (operator, 2026-10-04 — wording talked through on the #2172 read; no
-`/design-agents` corpus read). Mechanism:
+### ADR-146 — Every stack runs its own retro; it escalates platform faults as ADR-119 filings; the platform retro stops deep-diving stack repos (2026-10-02, accepted 2026-10-04)
+**Status:** Accepted (operator, 2026-10-04, wording read on #2172; no corpus read). Mechanism:
 [observability-and-retro.md](agents/observability-and-retro.md) §B2 "Stack series".
-**Decision:** (1) EVERY stack runs its own retro — the same `retro-session` workflow with
-`stack=<name>`, riding in the stack's fixer namespace on the stack's own worker token, bundle scoped
-to the claim's repos, on its own weekly slot; a claim knob is optional and defaults to true — the
-guard's event floor (nothing worth two rides → the window rolls forward) is what makes default-on
-safe. (2) The ride's context is the platform brief template rendered for the stack plus what the
-stack's repo gives every ride (its CLAUDE.md, `.agents/`); a stack may replace the brief wholesale
-with its own `.agents/retro.md` — the platform keeps only the placeholders and the report contract
-the harvest self-check reads. The brief asks for attribution with evidence (a platform cause vs the
-stack's own; what the stack cannot see from its repos it names as platform) and nothing more
-prescriptive — the cell is a strong model. (3) A platform cause becomes a finding targeting homelab
-with `Origin:` = the stack item; filing is the acceptance act's — inert, dedup by the canonical
-check, plus the cross-repo `blockedBy` edge; it rides the board intake, or files INTO an open
-platform Goal whose theme covers it (ADR-122 (4)). (4) The platform series keeps the bundle's
-fleet-wide population counters (whatever `retro_activity.py` computes) and narrows its deep-dive set
-to the platform claim's repos.
+**Decision:** (1) EVERY stack runs its own retro by default — the same `retro-session` workflow with
+`stack=<name>`, in the stack's fixer namespace on its own worker token, bundle scoped to the claim's
+repos, on its own weekly slot; the knob is an opt-out, and the guard's event floor (the window rolls
+forward) is what makes default-on safe. (2) The ride's context is the platform brief template
+rendered for the stack plus what the stack repo gives every ride (CLAUDE.md, `.agents/`); a stack
+may replace the brief wholesale with its own `.agents/retro.md` — only the placeholders and the
+report contract stay the platform's. The brief asks for attribution with evidence (platform cause vs
+the stack's own; unseen-from-the-stack = platform), nothing more prescriptive. (3) A platform cause
+is a finding targeting homelab with `Origin:` = the stack item; filing is the acceptance act's —
+inert, dedup by the canonical check, plus the cross-repo `blockedBy` edge; board intake, or INTO a
+covering platform Goal (ADR-122 (4)). (4) The platform series keeps the bundle's fleet-wide
+population counters and narrows its deep-dive set to the platform claim's repos.
 **Considered:** two overlapping full retros with a cross-dedup rule (a judge nobody can author);
-dedup at a container checkpoint (rejected 2026-10-02: the filer's best effort + the dispatch-time
-state read suffice); a platform-only retro (r4–r6 could not attribute — the token defect behind
-"unreachable" was #2171); a prescriptive attribution rubric and an enumerated signal list (both go
-stale; rejected 2026-10-04). **Why:** oracle-fleet#780's stack-side round analysis split 12 rounds
-into brief/spec causes only the stack can see and three platform ones (#2162, agent-runtime#162,
-#2168). **Consequences:** §B2 THE SPLIT point 2 amended — a stack retro escalates a platform cause,
-it never proposes the platform fix; build = FU-058's next (repo scope in bundle + guard, a per-stack
-CronWorkflow, the brief's escalation clause, the opt-out knob); the duplicate-close gate defect is
-#2167; first run = oracle, hand-fired after platform r7.
+dedup at a container checkpoint (rejected 2026-10-02); a platform-only retro (r4–r6 could not
+attribute; "unreachable" was #2171); an attribution rubric and an enumerated signal list (both go
+stale, 2026-10-04). **Why:** oracle-fleet#780 split 12 rounds into causes only the stack can see and
+three platform ones (#2162, agent-runtime#162, #2168). **Consequences:** §B2 point 2 amended
+(escalate, never fix); build = FU-058's next (bundle + guard repo scope, per-stack CronWorkflow, the
+brief's escalation clause, the opt-out knob); #2167 is the duplicate-close gate defect; oracle
+first, hand-fired after platform r7.
 ### ADR-147 — Every CNPG Cluster is backed up by default: the Barman Cloud plugin, wired at admission, one bucket per namespace (2026-10-03)
 **Status:** Accepted (operator, 2026-10-03: "some backups by default for everybody makes sense…
 I need something for the 'oops the Longhorn upgrade broke everything'"). **Decision:** (1) CNPG
