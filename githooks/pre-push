@@ -48,6 +48,15 @@ fi
 if ! devbox run -- tofu fmt -check -recursive tofu/ >&2; then
   echo "pre-push: BLOCKED — tofu fmt -check red (run: devbox run -- tofu fmt -recursive tofu/). Fix, commit, push again." >&2; exit 1
 fi
+# The diff-ci coverage belt (2026-10-04): f0c74393 added a ci.yaml step (`pr-wait-test`) with no
+# scripts/diff-ci.sh MAP row and every open PR's `ci` went red on the belt (drill PR #2209 found
+# it). A direct push is the only way ci.yaml changes (operator-direct governance file), so the
+# belt runs here whenever the range touches ci.yaml, devbox.json or diff-ci.sh. ~1 s.
+if git diff --name-only "$range" 2>/dev/null | grep -qE '^(\.github/workflows/ci\.yaml|devbox\.json|scripts/diff-ci\.sh)$'; then
+  if ! devbox run diff-ci -- --coverage-only >&2; then
+    echo "pre-push: BLOCKED — diff-ci coverage belt red: a ci.yaml devbox task has no MAP row in scripts/diff-ci.sh. Add the row, commit, push again." >&2; exit 1
+  fi
+fi
 # ADR-103's ratchet for the DIRECT lane (2026-09-04): a master push that touches a clause path
 # runs the clause replays too — CI's ratchet never sees a direct push, so c6262200 (a one-line
 # pin-only-lint edit) shipped with a stale fixture and redded every fixer PR's replay for an
