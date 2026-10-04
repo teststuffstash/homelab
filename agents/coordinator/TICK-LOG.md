@@ -12388,3 +12388,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   coordinator's "investigate while red" covers un-armed majors only. Seat hand-fixes #2225 tonight
   (refresh + classify, pushed to the Renovate branch — Renovate then leaves the branch alone) and
   records the hand step as the gap.
+- **WAVE 1 RESULT (by 22:21Z): 6 of 6 Renovate PRs merged, no human in any merge.** #2220 python
+  digest (automerge, 21:32), #2223 argo-events 2.4.27 (21:46), #2222 loki 3.4.6 (21:54), #2221 forgejo
+  chart 17.1.7 (22:02), #2225 kps 86.1.1 (22:19 — after the seat's hand refresh of the upstream alert
+  list, G12), plus #2226 (the crossplane version-set fix, 22:12). #2224 (crossplane) stays red until
+  Renovate's next run supersedes it with the grouped branch. Rollouts: forgejo 17.1.7 + argo-events
+  2.4.27 Healthy/Synced; loki StatefulSet on 3.4.6 (app `logging` still OutOfSync — G4, pre-existing);
+  kps 86.1.1 sync Running/Progressing at 22:21Z (the big one — watched below). Baseline compare: no
+  new alert names; scrape targets 190→189 during the kps roll. The five `deps-review` PRs each took
+  the reflex ~8–15 min open→merged with the reviewer approving on the first read — ZERO
+  CHANGES_REQUESTED on a Renovate bump so far (the FU-046 worker-adapts leg still unproven; G12b).
