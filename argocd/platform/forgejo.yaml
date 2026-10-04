@@ -31,7 +31,7 @@ spec:
   source:
     repoURL: code.forgejo.org/forgejo-helm
     chart: forgejo
-    targetRevision: 17.1.1
+    targetRevision: 17.1.7
     helm:
       skipCrds: true
       valuesObject:
