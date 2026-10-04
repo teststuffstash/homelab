@@ -19,7 +19,9 @@ case "$1 $2" in
   "run list")
     head="$(printf '%s\n' "$@" | grep -A1 -x -- --commit | tail -1)"
     [ -f "$WORLD/red-$head" ] && cat "$WORLD/red-$head"; exit 0 ;;
-  "api "*) exit 0 ;;
+  "api "*)
+    case "$2" in */commits/*/status) h="${2#*/commits/}"; h="${h%/status}"; f="$WORLD/status-$h"; [ -f "$f" ] && jq -r "$4" <"$f"; exit 0 ;; esac
+    exit 0 ;;
 esac
 echo "stub: unexpected $*" >&2; exit 64
 STUB
@@ -56,6 +58,10 @@ case_ multi-all-merged 0 "pr-wait: MERGED" 6 7
 { v MERGED APPROVED h1 MERGEABLE; } >"$WORLD/view-8"
 { v OPEN REVIEW_REQUIRED i1 CONFLICTING; } >"$WORLD/view-9"
 case_ multi-merged-plus-conflict 6 "#9 MERGE CONFLICT" 8 9
+# a red COMMIT STATUS (the box's management-sentinel posts one, not an Actions run) exits 4
+{ v OPEN APPROVED k1 MERGEABLE; } >"$WORLD/view-11"
+echo '{"statuses":[{"context":"ci","state":"success","description":"ok"},{"context":"management-sentinel","state":"failure","description":"plan errored: main"}]}' >"$WORLD/status-k1"
+case_ status-red-exits-4 4 "#11 STATUS RED at head — management-sentinel: plan errored: main" 11
 # a timeout names the PRs still open
 { v OPEN REVIEW_REQUIRED j1 MERGEABLE; } >"$WORLD/view-10"
 out="$(bash "$HERE/pr-wait.sh" 10 --interval 1 --timeout 1 --no-arm 2>&1)"; rc=$?
