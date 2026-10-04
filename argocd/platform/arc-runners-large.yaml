@@ -30,7 +30,7 @@ spec:
   source:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
     chart: gha-runner-scale-set
-    targetRevision: 0.14.2 # keep in lockstep with arc-controller.yaml
+    targetRevision: 0.14.2 # lockstep with arc-controller.yaml — Renovate bumps all three in one grouped PR (`arc`, renovate-global.json)
     helm:
       valuesObject:
         githubConfigUrl: https://github.com/teststuffstash

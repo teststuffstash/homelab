@@ -71,6 +71,22 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
   adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
   other major stays un-armed on the human lane until its class row is complete (#1988).
+- **Helm charts in `argocd/platform/*.yaml` and in-cluster images in `argocd/resources/**` (classes 1/2
+  of [`dependency-upgrades.md`](dependency-upgrades.md), proposers ON since 2026-10-04 — S9 next step 7).**
+  Neither the `argocd` nor the `kubernetes` manager has a default file match; `renovate-global.json`
+  gives each its pattern. Lanes: digest → `automerge`; patch/minor → `deps-review` (the merge-path
+  review reflex + the migration lens read the changelog, APPROVED merges, ArgoCD auto-sync is the
+  deploy); majors → the un-armed catch-all (human lane). First-party `ghcr.io/teststuffstash/**` images
+  and charts are disabled (class 3 — the deploy-pin PR owns them); the ARC controller + two runner scale
+  sets are one grouped PR (`arc`, lockstep); `prHourlyLimit: 6` (root-only, every repo; temporarily 6 for the watched first wave, 3 after —
+  operator 2026-10-04) paces the backlog per 6-hourly run. **What holds this lane, honestly:** the 7-day cooldown
+  (helm-repo charts; OCI charts and images are timestamp-optional = no cooldown), the LLM review, and
+  after the merge ArgoCD's sync/health (`/deploy-degraded` on Degraded — never fired by a real one,
+  FU-044) plus the per-service alert belts. **What it lacks** (the register's ⚠ cells): `ci` renders
+  only OUR OCI charts (`argocd-validate-pins.sh`) — a third-party chart bump has no render gate before
+  ArgoCD sync; no post-sync [contract probe](glossary.md) (FU-102); the revert is a human `git revert`, and a
+  CRD-carrying chart (Argo, Crossplane, cert-manager, ESO, CNPG) can change schema in a MINOR
+  (IAC-G09) — the lens is the only read of that.
 - **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
   exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
   catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
