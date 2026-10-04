@@ -504,7 +504,7 @@
       "key": "1:argo-workflows",
       "last_proven": null,
       "name": "argo-workflows",
-      "version": "1.0.20",
+      "version": "1.0.24",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -1103,7 +1103,7 @@
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
       "last_proven": "2026-09-27T12:31:17Z",
       "name": "cloudflare/cloudflare",
-      "version": "5.25.0 (`~> 5.0`)",
+      "version": "5.26.0 (`~> 5.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"

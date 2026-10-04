@@ -130,7 +130,7 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | Class | Dependency | Version | Pinned in | P | G | D | Det | R | C | Last proven E2E |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `argo-events` | 2.4.23 | `argocd/platform/argo-events.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
-| 1 | `argo-workflows` | 1.0.20 | `argocd/platform/argo-workflows.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
+| 1 | `argo-workflows` | 1.0.24 | `argocd/platform/argo-workflows.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 1 | `cert-manager` | v1.21.2 | `argocd/platform/cert-manager.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 1 | `cloudnative-pg` | 0.28.3 | `argocd/platform/cnpg-operator.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
 | 1 | `crossplane` | 2.3.2 | `argocd/platform/crossplane.yaml` | ⚠ | ✅ | ✅ | ⚠ | 👤 | ⚠ | — never |
@@ -168,7 +168,7 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 4 | `longhorn` | 1.12.0 | `tofu/longhorn.tf` | ⚠ | 👤 | 👤 | ✅ | 👤 | ⚠ | — never |
 | 5 | `bpg/proxmox` | 0.114.0 (`~> 0.114`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-09-28 ([#2075](https://github.com/teststuffstash/homelab/pull/2075)) |
 | 5 | `bpg/proxmox` | 0.114.0 (`~> 0.114`) | `tofu/provisioning/versions.tf`, `tofu/provisioning/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-09-28 ([#2075](https://github.com/teststuffstash/homelab/pull/2075)) |
-| 5 | `cloudflare/cloudflare` | 5.25.0 (`~> 5.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-09-27 ([#1981](https://github.com/teststuffstash/homelab/pull/1981)) |
+| 5 | `cloudflare/cloudflare` | 5.26.0 (`~> 5.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-09-27 ([#1981](https://github.com/teststuffstash/homelab/pull/1981)) |
 | 5 | `cloudflare/cloudflare` | 5.25.0 (`~> 5.0`) | `tofu/cloudflare-token/versions.tf`, `tofu/cloudflare-token/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): `tofu/cloudflare-token` is the one-shot admin-token root the box never plans — moved by hand with a jail plan | ✅ | ✅ | ✅ | ✅ | ⚠ | — never |
 | 5 | `hashicorp/helm` | 3.3.0 (`~> 3.0`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-10-02 ([#2046](https://github.com/teststuffstash/homelab/pull/2046)) |
 | 5 | `hashicorp/kubernetes` | 3.2.1 (`~> 3.0`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠ | 2026-10-04 ([#2047](https://github.com/teststuffstash/homelab/pull/2047)) |
