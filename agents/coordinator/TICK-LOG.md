@@ -12314,3 +12314,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   Failed Jobs, lastSuccessful 10-01 03:00Z → ArgoCD `registry` Degraded (the failed Job child) +
   CronJobNotSucceeding; registry image unchanged (3.0.0) — GC outgrew its hour, or the dry-run/real
   pass hangs. Needs its own dig; left for the responder/operator (noted in meta-state).
+- **20:28Z #2217 MERGED (lens APPROVED) → 20:34Z attended apply** `devbox run helm-evidence -- run
+  20261004T203336Z-972cff9d` (window seat-1791146050-3843; plan 0/1/0, `helm_release.argocd` modified in
+  27 s, baseline stamped 972cff9d). **20:35:29Z — the FU-044 chain RANG for the first time since it was
+  wired (2026-07-27):** registry's `on-health-degraded` delivered (`recipients: [agent-loop]`), the
+  agent-loop EventSource published it, `deploy-revert-hzqw7` ran — on a real Degraded app, no fixture.
+  Its verdict is the record below. #2216 drew CHANGES_REQUESTED (reviewer, correct): PIN_LINE accepted
+  only the CalVer-githash shape and refused trailing comments → the first `arc` bump would have been
+  permanently red on arc-runners.yaml. Widened to `v?M.m.p` + optional `# comment` (e3f637c4), 3
+  self-test cases (semver bump ok, non-semver refused, comment-only edit ok — line-shape rule, stated).
