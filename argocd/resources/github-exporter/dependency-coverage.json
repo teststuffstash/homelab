@@ -973,10 +973,11 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-09-28T13:29:19Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.28-gca94f4a2dd99; 27 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.28-gca94f4a2dd99; 28 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
+        "agents/coordinator/deep-dig-argo.yaml",
         "agents/coordinator/deploy-revert-argo.yaml",
         "agents/coordinator/fix-debounce-argo.yaml",
         "agents/coordinator/reflexes-argo.yaml",
