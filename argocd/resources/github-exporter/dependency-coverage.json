@@ -3,7 +3,11 @@
     {
       "complete": false,
       "gap_cells": [
+<<<<<<< HEAD
         "proposer",
+=======
+        "detector",
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
         "canary"
       ],
       "gap_rows": 14,
@@ -21,7 +25,11 @@
     {
       "complete": false,
       "gap_cells": [
+<<<<<<< HEAD
         "proposer",
+=======
+        "detector",
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
         "canary"
       ],
       "gap_rows": 16,
@@ -480,7 +488,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:argo-events",
       "last_proven": null,
@@ -494,7 +506,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:argo-workflows",
       "last_proven": null,
@@ -508,7 +524,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:cert-manager",
       "last_proven": null,
@@ -522,7 +542,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:cloudnative-pg",
       "last_proven": null,
@@ -536,7 +560,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:crossplane",
       "last_proven": null,
@@ -550,7 +578,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:external-secrets",
       "last_proven": null,
@@ -564,7 +596,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:forgejo",
       "last_proven": null,
@@ -578,7 +614,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:gateway-api",
       "last_proven": null,
@@ -592,7 +632,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:gha-runner-scale-set",
       "last_proven": null,
@@ -607,7 +651,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:gha-runner-scale-set-controller",
       "last_proven": null,
@@ -621,7 +669,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:infisical-standalone",
       "last_proven": null,
@@ -635,7 +687,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:kube-prometheus-stack",
       "last_proven": null,
@@ -649,7 +705,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:metrics-server",
       "last_proven": null,
@@ -663,7 +723,11 @@
       "class": 1,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "1:plugin-barman-cloud",
       "last_proven": null,
@@ -677,7 +741,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:alpine",
       "last_proven": null,
@@ -691,7 +759,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:cloudflare/cloudflared",
       "last_proven": null,
@@ -705,7 +777,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:docker.io/library/busybox",
       "last_proven": null,
@@ -720,7 +796,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:docker.io/prometheuscommunity/smartctl-exporter",
       "last_proven": null,
@@ -748,7 +828,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:ghcr.io/lablabs/cloudflare_exporter",
       "last_proven": null,
@@ -762,7 +846,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:grafana/alloy",
       "last_proven": null,
@@ -776,7 +864,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:grafana/loki",
       "last_proven": null,
@@ -790,7 +882,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:nginx",
       "last_proven": null,
@@ -805,7 +901,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:nginxinc/nginx-unprivileged",
       "last_proven": null,
@@ -823,7 +923,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:otel/opentelemetry-collector-contrib",
       "last_proven": null,
@@ -837,7 +941,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:prom/pushgateway",
       "last_proven": null,
@@ -851,7 +959,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:python",
       "last_proven": null,
@@ -873,7 +985,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:quay.io/brancz/kube-rbac-proxy",
       "last_proven": null,
@@ -887,7 +1003,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:quay.io/prometheus/blackbox-exporter",
       "last_proven": null,
@@ -901,7 +1021,11 @@
       "class": 2,
       "gap_columns": [
         "canary",
+<<<<<<< HEAD
         "proposer"
+=======
+        "detector"
+>>>>>>> 45b5c212 (renovate: class 1/2 proposers ON — argocd + kubernetes managers, first-party carve-out, arc group, prHourlyLimit 6 for the watched wave (S9 #1985 step 7))
       ],
       "key": "2:registry",
       "last_proven": null,
