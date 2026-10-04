@@ -594,3 +594,22 @@ and then nothing is watching.
 5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
    change reaches a *live network device* by hand or not at all.
 6. **The prober (FU-102)** is what turns "it synced" into "it works".
+7. **Turn on the class 1/2 proposers — AFTER #2047 (operator, 2026-10-04: S9's next session takes
+   #2047 first).** Neither class has a proposer: Renovate's `argocd` and `kubernetes` managers have no
+   `managerFilePatterns` in [`renovate-global.json`](../.github/renovate-global.json), so every chart
+   bump is hand-proposed (homelab#2200, Argo Workflows 1.0.20 → 1.0.24, 2026-10-03, was found by an FU
+   sweep, not by a proposer). The change: an `argocd` pattern over `argocd/platform/*.yaml` (+
+   `kubernetes` over `argocd/resources/**`), one group for the ARC controller + runners (two files,
+   one version — row 1's canary cell), and a PR cap (`prHourlyLimit`/`prConcurrentLimit` ~3) so the
+   ~30-chart backlog drains instead of landing as one wave on the reviewer and the shared App GraphQL
+   pool (FU-290 — the 2026-09-25 wave drained it). CRD-carrying charts (Argo, Crossplane, Longhorn) still
+   reach the `major` lane by update type.
+8. **agent-coordinator is the first repo through, but not done-done (read 2026-10-04).** Proven with
+   no human: base-image patch/minor, every Actions update type + the pin-revert drill, s5cmd, the
+   Monday rebuild → deploy-pin → auto-merged homelab PR (§Last proven). Open: (a) 25 manifest refs the
+   deploy-pin sweep never reaches (19 float to `:latest`, 6 stale tags — the register's class-3 row) —
+   mechanical, and the one gap that makes "deploys to prod on its own" untrue for those consumers;
+   (b) the hand `KUBECTL_VERSION` ARG (§Version SETS, kubectl row — no proposer, no skew check);
+   (c) base-image majors stay a human merge until #1988's previous-tag revert exists (§Last proven);
+   (d) the claude-code set's three mechanisms (§Version SETS). (a) and (b) are the next repo-level
+   deliverables before the next repo onboards the same way.
