@@ -36,7 +36,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: pushgateway
-          image: prom/pushgateway:v1.11.1
+          image: prom/pushgateway:v1.11.3
           args:
             - --persistence.file=/data/pushgateway.store
             - --persistence.interval=5m
