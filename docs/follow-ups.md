@@ -98,11 +98,11 @@ tracker.
 
 _Last updated: 2026-10-03 (fu-sweep over the WHOLE tracker, no-judgement scope — four parallel
 slice subagents, machine lane reconciled since 09-24, Agents classified WITHOUT the corpus load
-(operator-typed only), so design-shaped agents items were left untouched. **Archived (9):** FU-246,
-FU-212, FU-129, FU-219, FU-154, FU-148, FU-150, FU-224, FU-097 (+FU-173/149/184 expired). **Soaks FAILED:**
+(operator-typed only), so design-shaped agents items were left untouched. **Archived (10):** FU-246,
+FU-212, FU-129, FU-219, FU-154, FU-148, FU-150, FU-224, FU-097, FU-151 (+FU-173/149/184 expired). **Soaks FAILED:**
 FU-134 (both real-ride `/search` calls timed out), FU-102 (6/28 probe ticks die at max-turns inside a
-Succeeded workflow). **PRs:** #2198, #2201, sleep-tracking#168, snore-recorder#43 merged; #2199 (FU-244),
-circles#97 (FU-151) in flight; #2200 (Argo v4.0.8, FU-198/FU-260) unarmed — a live controller restart.
+Succeeded workflow). **PRs:** #2198, #2201, sleep-tracking#168, snore-recorder#43 + #2199 (FU-244),
+circles#97 (FU-151) merged; #2200 (Argo v4.0.8, FU-198/FU-260) unarmed — a live controller restart.
 Previous 2026-09-24 (fu-sweep over **Hardware & nodes + GitOps & platform**, the two fastest-growing
 sections since 08-25; the Agents block was out of scope. **Archived:** FU-215 (quiet 8 d after the do-ip6 fix),
 FU-203 (the 09-23 GC took the bucket 19.6→9.8 GiB), FU-076 (now a detector, `MgmtNodeInstallDrift`).
@@ -778,15 +778,6 @@ the block needs pruning, not more headings.
       base images, anything else pulling `docker.io/`/`ghcr.io/` by tag through either VIP) for
       ones sitting on a bounded CI/render timeout the same way `publicroute-tf-validate` was —
       those are the ones actually exposed, not every tag pull equally.
-- [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
-      `review-reflex.sh` skips `automerge`-labelled PRs, but app repos open `deploy:` PRs
-      UNLABELLED — they survive only because auto-merge beats the 15-min tick; a slow CI
-      reverses it (cost already paid: 5 reviewer sessions on 4 one-line pins,
-      homelab#102/#104/#105). Fixed where it burned (openrouter-operator#23,
-      agent-coordinator#10, oracle-fleet#173); labels exist on all -iac repos; sleep-tracking
-      DONE 2026-08-11 (`5b8c384`, meta-delivered beside goal #278). snore-recorder DONE
-      2026-10-03 (snore-recorder#43). **Next:** circles' `scripts/deploy-pin.sh` — the same block; then archive.
-      Relates [`dependency-upgrades.md`](dependency-upgrades.md) §2.
 - [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
       SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
       `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,

@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-151** *(archived 2026-10-04)* — **First-party `-iac` deploy bumps skipped LLM review by TIMING, not
+  design.** Every deploy-pin now labels its -iac PR `automerge`+`dependencies` on every run: sleep-tracking
+  (`5b8c384`), snore-recorder#43, circles#97 (+ its `specs-pr-route.sh` route PRs, the reviewer's catch).
 - **FU-097** *(archived 2026-10-03)* — **The box's capability ledger.** Ledger (#1893, [`management-box.md`](management-box.md)
   §The capability ledger), first toggle (Talos config, `no_reboot`), the intent-review instruction in
   `.agents/review.md` (c8e38675) and the generated dependency-class table (#1992/PR#2028) all live.
