@@ -187,6 +187,9 @@
       "pin-only-lint": [
         "bash scripts/pin-only-lint.sh \"$@\""
       ],
+      "pr-wait-test": [
+        "bash scripts/pr-wait-test.sh"
+      ],
       "pin-only-lint-test": [
         "bash scripts/pin-only-lint-test.sh"
       ],
