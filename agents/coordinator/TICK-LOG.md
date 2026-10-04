@@ -12240,3 +12240,42 @@ agent/error|blocked I fixed by hand this week", "goals stalled, issues took 10+ 
   wholesale, the report contract stays), NO attribution rubric and NO enumerated signal list ("strong
   model", "lists go stale"); fork (3) = board intake or INTO a covering platform Goal. #2172 rewritten
   (ADR block + §B2 "Stack series", point 2 amended), auto-merge armed. Build = FU-058's next.
+
+## 2026-10-04 night — S9 step 7: class 1/2 Renovate proposers ON, the watched first wave (second jail → seat)
+
+Operator: "S9 stint helm chart pins — 30 of them?" in a SECOND jail, then "you can take over as the
+primary seat. Work unattended — hourly limit 6 temporarily, merge the PR, document problems when
+renovate updates dependencies — watch alerts and each rollout. Document any gaps in the whole flow —
+what goes wrong, what would catch it, what should revert. End state of S9: I am not involved in
+updates or reverts as much as possible — mechanical revert or a responder."
+- **30 = 14 third-party charts (class 1) + 16 third-party images (class 2)**, the register's counts;
+  the 3 first-party `ghcr.io/teststuffstash/**` refs (agent-coordinator ×2, arc-runner) + the
+  openrouter-operator OCI chart are class 3 and excluded (operator: "those have their own flow").
+  #2047 (the ordering gate) had merged 08:51Z.
+- **PR#2216** (from the second-jail clone, un-armed until the takeover): `argocd` manager over
+  `argocd/platform/*.yaml`, `kubernetes` over `argocd/resources/**` (agents/coordinator stays out —
+  `/agents/` is codeowner-gated; no third-party ref there anyway), first-party docker-datasource
+  disable, `arc` group (3 Applications, one chart version), argocd+kubernetes patch/minor →
+  `deps-review`, `prHourlyLimit` 3 → **6 for the watched wave (operator), back to 3 after**;
+  prConcurrentLimit left 10 (a lower ceiling is eaten by human-parked PRs). Verified before merge:
+  `renovate-config-validator --strict` + a LOCAL `renovate --platform=local --dry-run=extract`
+  (Renovate 41.173.1 — 44.x needs Node 24, the jail has 22): exactly the 14 charts (helm + docker
+  datasources, multi-source kps + the gateway-api git-tags ref) and 16 images extracted.
+- **Seat gotchas, this PR:** (1) `pin-only-lint` refused the PR for a COMMENT edit on the guarded
+  `argocd/platform/arc-runners.yaml` (un-owned → pin lines only via PR) — dropped from the PR, lands
+  direct as a one-liner; the two sibling files are not guarded. (2) The lint diffs committed HEAD, not
+  the worktree — a local run before the commit "failed" and the seat's `| grep | tail` masked the
+  exit (the standing rule, re-sighted): run gates unfiltered.
+- **Per-dependency health read (operator: "how many have a health indicator?")**: all 30 under the
+  generic rollout belt (kps `KubePodCrashLooping`/`KubeContainerWaiting`/`KubeDeploymentRolloutStuck`
+  /`KubeDaemonSetRolloutStuck` + job-health `CronJobNotSucceeding`, triage dig/now) + ArgoCD Degraded
+  → `/deploy-degraded`; a FUNCTIONAL indicator on 15 (argo-workflows, cnpg, barman/pg-backup,
+  crossplane, ESO, ARC×3, kps-grafana; alpine/fstrim, registry, python, pushgateway,
+  cloudflare_exporter, smartctl); partial on 4 (argo-events, gateway-api, cloudflared, loki);
+  NONE beyond the belt on 11 (cert-manager, forgejo, infisical, metrics-server, busybox, alloy,
+  nginx, nginx-unprivileged, otel-collector, kube-rbac-proxy, blackbox-exporter itself — no
+  `absent(probe_success)`). Read from the 166 rules by expression match; lives only here so far.
+- **Baseline before the wave (19:56Z):** 13 firing — AgentAttentionStanding, AgentDispatchCronWoken,
+  CodeownerParkWaiting, CronJobNotSucceeding, HomeAssistantPowerSensorStale, HomeAssistantSensorStale,
+  InfoInhibitor, LonghornDiskBelowSchedulingFloor, MgmtBeltCheckFailing, MgmtOpnsenseDrillFailed,
+  PveGuestSwapped, PveHostSwapUsed, Watchdog; `sum(up)` 187.

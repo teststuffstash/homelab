@@ -10,6 +10,15 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-04 night — S9 step 7: class 1/2 Renovate proposers ON, FIRST WAVE UNDER WATCH; TICK-LOG 2026-10-04 night).**
+  PR#2216 (argocd + kubernetes managers, first-party carve-out, `arc` group, `deps-review` lane,
+  `prHourlyLimit` **6 TEMPORARILY** — operator; **drop to 3 once the 14-chart + 16-image backlog is
+  through**, one line in renovate-global.json). Watch per Renovate PR: review verdict → merge → ArgoCD
+  sync → alert delta vs the 19:56Z baseline (TICK-LOG). Record each class-1/2 landing in
+  `docs/dependency-upgrades.md` §Last proven (the "Helm charts / in-cluster images" row is ❌) and
+  every flow gap (what went wrong / what would catch it / what should revert) — the S9 end state is
+  the operator OUT of updates and reverts: mechanical revert or responder. Open before the wave:
+  #2200 (argo-workflows 1.0.24, hand-proposed) will be duplicated by Renovate — merge or close.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;
