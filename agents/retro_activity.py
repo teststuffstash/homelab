@@ -214,12 +214,15 @@ def compact(event):
     return out
 
 
-def _classify_cancellation(event, item):
+def _classify_cancellation(event, item, latest_sha=None):
     """Classify a cancelled check run: 'superseded', 'infra', or 'other'.
 
     superseded — a newer SHA on the PR, or the check-run output says "Canceling since a
     higher priority waiting request". These are excluded from item pain and reported as a
-    population metric (wasted CI / wall time).
+    population metric (wasted CI / wall time). The PR head comes from the item's
+    `head_sha` when the collector recorded one, else from `latest_sha` — the newest check
+    SHA seen on the item — so state collected before `head_sha` existed classifies the
+    same way (the live store had 0/958 items with it on 2026-10-04).
 
     infra — "runner has received a shutdown signal", "lost communication with the server".
     These are their own infra_failure_events signal.
@@ -228,7 +231,7 @@ def _classify_cancellation(event, item):
     """
     payload = event.get('payload', {})
     sha = payload.get('sha', '')
-    head_sha = item.get('head_sha', '')
+    head_sha = item.get('head_sha') or latest_sha or ''
     # Superseded by a newer SHA on the PR
     if head_sha and sha and sha != head_sha:
         return 'superseded'
@@ -253,6 +256,12 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     by_item = {}
     for event in selected:
         by_item.setdefault(f"{event['repo']}#{event['item']}", []).append(event)
+    # The newest check SHA per item (all collected history up to the cutoff): the superseding
+    # signal for cancellations when the item carries no `head_sha`.
+    latest_check_sha = {}
+    for event in sorted((e for e in state['events'] if e['kind'] == 'check' and e['payload'].get('sha')
+                         and timestamp(e['occurred_at']) < end), key=lambda e: e['occurred_at']):
+        latest_check_sha[f"{event['repo']}#{event['item']}"] = event['payload']['sha']
 
     # Build PR→issue links from cross-referenced events. When a PR references an issue
     # (closing reference / cross-reference), the PR's failures roll up to the issue.
@@ -267,9 +276,12 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 if src_number is not None:
                     src_key = f"{src_repo}#{src_number}"
                     tgt_key = f"{event['repo']}#{event['item']}"
-                    # Only PR→issue links: check if the source item is a PR
+                    # Only PR→issue links: the source must be a PR and the target an issue —
+                    # PRs cross-reference each other constantly (Renovate handoffs, stint
+                    # siblings), and a PR must never collect its siblings' pain.
                     src_item = state['items'].get(src_key, {})
-                    if src_item.get('is_pr'):
+                    tgt_item = state['items'].get(tgt_key, {})
+                    if src_item.get('is_pr') and not tgt_item.get('is_pr'):
                         targets = pr_to_issue.setdefault(src_key, [])
                         if tgt_key not in targets:
                             targets.append(tgt_key)
@@ -278,9 +290,15 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     # items carries real weight so blocked issues rank above cancellation-only PRs.
     # Weights chosen so a blocked issue with a week of stall (~604800s) and agent pain
     # events outranks a PR with a handful of non-superseded cancellations.
+    AGENT_PAIN_LABELS = {'agent/error', 'agent/blocked'}
     W_FAILURE = 1000
     W_INFRA = 500
-    W_AGENT_PAIN = 500
+    # A latch weighs a failed check: the week of 2026-09-28 the seat un-latched oracle-fleet
+    # #753/#798 and the S9 PRs by hand a dozen times while the rank put them at 38+.
+    W_AGENT_PAIN = 1000
+    # Every ride round after the first is a round the previous one did not finish — 9-round
+    # issues (oracle-fleet#800/#803, same week) sat at the sample's edge on event count alone.
+    W_ROUND = 500
     W_EVENT = 10
     W_STALL = 0.005
 
@@ -310,7 +328,8 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
         last = max(substantive, default=timestamp(item['created_at']))
         idle = sum(max(0, (min(b, end) - max(a, start, last)).total_seconds()) for a, b in intervals)
         # Ordinary parked feature backlog is not an active platform stall.
-        active = any(label.startswith('agent/') for label in item.get('labels', [])) or item.get('is_pr')
+        active = (any(label.startswith('agent/') or label == 'task/goal' for label in item.get('labels', []))
+                  or item.get('is_pr'))
         if not active:
             idle = 0
         if not direct and not idle:
@@ -323,7 +342,7 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
         agent_pain_events = 0
         for e in direct:
             if e['kind'] == 'check' and e['payload'].get('conclusion') == 'cancelled':
-                cls = _classify_cancellation(e, item)
+                cls = _classify_cancellation(e, item, latest_check_sha.get(key))
                 if cls == 'superseded':
                     superseded_cancellations += 1
                 elif cls == 'infra':
@@ -336,16 +355,22 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 failure_events += 1
             elif e['kind'] in ('agent-block', 'agent-strike', 'agent-arbitrate', 'agent-park'):
                 agent_pain_events += 1
+            elif e['kind'] in ('labeled', 'unlabeled') and (e['payload'].get('label') or {}).get('name') in AGENT_PAIN_LABELS:
+                # The latch itself and every manual un-latch: the week of 2026-09-28 emitted no
+                # agent-block/strike/park event at all, while oracle-fleet#753/#798 and the S9
+                # PRs flapped agent/error|blocked a dozen times under the seat's hands.
+                agent_pain_events += 1
 
+        round_count = sum(e['kind'] == 'agent-dispatch' for e in direct)
         score = (failure_events * W_FAILURE + infra_failure_events * W_INFRA
-                 + agent_pain_events * W_AGENT_PAIN
+                 + agent_pain_events * W_AGENT_PAIN + max(0, round_count - 1) * W_ROUND
                  + len(direct) * W_EVENT + idle * W_STALL)
 
         tasks.append(dict(key=key, project=item['repo'].split('/')[-1], issue=item['item'], repo=item['repo'],
                           events=evs, context=item, standing_stall_seconds=idle,
                           failure_events=failure_events, infra_failure_events=infra_failure_events,
                           superseded_cancellations=superseded_cancellations,
-                          agent_pain_events=agent_pain_events,
+                          agent_pain_events=agent_pain_events, round_count=round_count,
                           direct_event_count=len(direct), score=score))
 
     # Credit is a ranking/visibility device: the population totals below are computed from the

@@ -241,6 +241,14 @@ class ClassificationTests(unittest.TestCase):
                         output_summary='Canceling since a higher priority waiting request'))
         self.assertEqual(a._classify_cancellation(ev, item), 'superseded')
 
+    def test_no_head_sha_uses_latest_check_sha(self):
+        """Without head_sha, a cancelled check on an older SHA than the item's newest check
+        SHA is superseded; on the newest SHA it stays 'other'."""
+        item = {'is_pr': True}
+        ev = make_event('check', check_event('cancelled', sha='abc123'))
+        self.assertEqual(a._classify_cancellation(ev, item, latest_sha='def456'), 'superseded')
+        self.assertEqual(a._classify_cancellation(ev, item, latest_sha='abc123'), 'other')
+
     def test_no_output_falls_back_to_other(self):
         """Without output summary/text and matching SHA, cancellation is 'other'."""
         item = {'head_sha': 'abc123', 'is_pr': True}
@@ -310,6 +318,50 @@ class BundleClassificationTests(unittest.TestCase):
         out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z')
         self.assertEqual(out['tasks'][0]['agent_pain_events'], 4)
         self.assertEqual(out['population']['agent_pain_events'], 4)
+
+    def test_error_and_blocked_label_transitions_are_pain(self):
+        """agent/error and agent/blocked label transitions count as agent pain on the item."""
+        state = {'version': 1, 'events': [], 'collected_until': '2026-09-29T00:00:00Z',
+                 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r'],
+                 'items': {'o/r#1': {'repo': 'o/r', 'item': 1, 'title': 'Latched issue',
+                                     'url': 'https://example/issues/1', 'state': 'open',
+                                     'created_at': '2026-09-01T00:00:00Z',
+                                     'updated_at': '2026-09-28T00:00:00Z',
+                                     'labels': ['agent/blocked'], 'is_pr': False}}}
+        state['events'].append(make_event('labeled', {'label': {'name': 'agent/error'}},
+                                          occurred_at='2026-09-23T12:00:00Z'))
+        state['events'].append(make_event('unlabeled', {'label': {'name': 'agent/error'}},
+                                          occurred_at='2026-09-23T13:00:00Z'))
+        state['events'].append(make_event('labeled', {'label': {'name': 'agent/blocked'}},
+                                          occurred_at='2026-09-24T12:00:00Z'))
+        state['events'].append(make_event('labeled', {'label': {'name': 'automerge'}},
+                                          occurred_at='2026-09-24T13:00:00Z'))
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z', keep=10)
+        task = next(t for t in out['tasks'] if t['key'] == 'o/r#1')
+        self.assertEqual(task['agent_pain_events'], 3)
+        self.assertEqual(task['failure_events'], 0)
+
+    def test_rounds_beyond_the_first_weigh_and_goals_are_active(self):
+        """Each agent-dispatch after the first adds W_ROUND; a task/goal issue's stall counts."""
+        items = {'o/r#1': {'repo': 'o/r', 'item': 1, 'title': 'Nine-round issue',
+                           'url': 'https://example/issues/1', 'state': 'open',
+                           'created_at': '2026-09-01T00:00:00Z', 'updated_at': '2026-09-28T00:00:00Z',
+                           'labels': ['agent/in-progress'], 'is_pr': False},
+                 'o/r#2': {'repo': 'o/r', 'item': 2, 'title': 'Stalled goal',
+                           'url': 'https://example/issues/2', 'state': 'open',
+                           'created_at': '2026-09-01T00:00:00Z', 'updated_at': '2026-09-01T00:00:00Z',
+                           'labels': ['task/goal'], 'is_pr': False}}
+        state = {'version': 1, 'events': [], 'items': items, 'collected_until': '2026-09-29T00:00:00Z',
+                 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r']}
+        for h in range(3):
+            state['events'].append(make_event('agent-dispatch', {'round': h + 1},
+                                              occurred_at='2026-09-23T%02d:00:00Z' % (h + 1)))
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z', keep=10)
+        rounds = next(t for t in out['tasks'] if t['key'] == 'o/r#1')
+        self.assertEqual(rounds['round_count'], 3)
+        self.assertEqual(rounds['score'] - rounds['standing_stall_seconds'] * 0.005, 2 * 500 + 3 * 10)
+        goal = next(t for t in out['tasks'] if t['key'] == 'o/r#2')
+        self.assertEqual(goal['standing_stall_seconds'], 7 * 86400)
 
     def test_weighted_score_ranks_blocked_issue_above_cancellation_pr(self):
         """A blocked issue with high stall ranks above a PR with a few cancellations."""
@@ -383,6 +435,59 @@ class BundleClassificationTests(unittest.TestCase):
         issue_task = next(t for t in out['tasks'] if t['key'] == 'o/r#1')
         self.assertGreater(issue_task['failure_events'], 0)
 
+
+    def test_superseded_derived_from_later_check_without_head_sha(self):
+        """A state collected before `head_sha` existed still classifies a cancellation on
+        a SHA older than the item's newest check as superseded (live store, 2026-10-04)."""
+        pr_state = {
+            'o/r#2': {'repo': 'o/r', 'item': 2, 'title': 'Rebased PR',
+                      'url': 'https://example/issues/2', 'state': 'open',
+                      'created_at': '2026-09-20T00:00:00Z',
+                      'updated_at': '2026-09-28T00:00:00Z',
+                      'labels': [], 'is_pr': True}
+        }
+        state = {'version': 1, 'events': [], 'items': pr_state,
+                 'collected_until': '2026-09-29T00:00:00Z',
+                 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r']}
+        state['events'].append(make_event('check', check_event('cancelled', sha='old111'),
+                                          occurred_at='2026-09-23T12:00:00Z', item=2))
+        state['events'].append(make_event('check', check_event('success', sha='new222'),
+                                          occurred_at='2026-09-24T12:00:00Z', item=2))
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z', keep=10)
+        task = next(t for t in out['tasks'] if t['key'] == 'o/r#2')
+        self.assertEqual(task['superseded_cancellations'], 1)
+        self.assertEqual(task['failure_events'], 0)
+
+    def test_pr_to_pr_cross_reference_does_not_credit(self):
+        """A PR cross-referencing another PR credits nothing: only issues collect PR pain."""
+        items = {}
+        for n in (2, 3):
+            items[f'o/r#{n}'] = {'repo': 'o/r', 'item': n, 'title': f'PR {n}',
+                                 'url': f'https://example/issues/{n}', 'state': 'open',
+                                 'created_at': '2026-09-20T00:00:00Z',
+                                 'updated_at': '2026-09-28T00:00:00Z',
+                                 'labels': [], 'is_pr': True, 'head_sha': 'abc123'}
+        state = {'version': 1, 'events': [], 'items': items,
+                 'collected_until': '2026-09-29T00:00:00Z',
+                 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r']}
+        for n in (2, 3):
+            state['events'].append(make_event('check', check_event('failure', sha='abc123'),
+                                              occurred_at='2026-09-23T12:00:00Z', item=n))
+        # PR #2 references PR #3
+        state['events'].append({
+            'id': 'o/r:3:cross-referenced:x', 'kind': 'cross-referenced',
+            'occurred_at': '2026-09-25T00:00:00Z',
+            'observed_at': '2026-09-29T00:00:00Z',
+            'repo': 'o/r', 'item': 3,
+            'url': 'https://example/issues/3',
+            'payload': {'source': {'type': 'issue',
+                                   'issue': {'number': 2,
+                                             'repository': {'full_name': 'o/r'}}}}
+        })
+        out = a.bundle(state, '2026-09-21T00:00:00Z', '2026-09-28T00:00:00Z', keep=10)
+        pr3 = next(t for t in out['tasks'] if t['key'] == 'o/r#3')
+        self.assertEqual(pr3['failure_events'], 1)
+        self.assertEqual(pr3['direct_event_count'], 1)
 
     def test_issue_crediting_dedup_same_pr_issue_pair(self):
         """Duplicate cross-references for the same PR/issue pair credit only once."""
