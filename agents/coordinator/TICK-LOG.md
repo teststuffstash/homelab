@@ -12301,3 +12301,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cells classes 1–3 → ok, iac-lane dead-hop paragraph). (G3) no render gate for third-party charts;
   (G4) five autosync apps chronically OutOfSync (agent-fixer-{circles,openrouter-operator,oracle-fleet,
   sleep-tracking}, logging) — OutOfSync alert deferred; (G5) 11 belt-only deps; (G6) 3 PRs/chart.
+- **20:20Z checkpoint.** #2217's first sentinel plan ERRORED (`Error locating chart`, helm_release.argocd)
+  while master planned clean on the box a minute later (`20261004T201836Z-681b52ae`, no changes) and
+  argo-cd 9.5.21 is in the index → transient index fetch; re-pushed for a re-plan. Sentinel-headline
+  gotcha: its "plan ERRORED" block lists deprecation-WARNING positions (argocd_lb, forgejo_pg) beside
+  the one real error — reads as three failures. **G7 (the responder leg):** none of today's `triage: dig`
+  alerts (CronJobNotSucceeding since 10-02, LonghornDiskBelowSchedulingFloor, AgentDispatchCronWoken)
+  has a responder issue or workflow in 24 h — the responder is REPLACED-NOT-UNPAUSED (ADR-148/FU-249),
+  so "mechanical revert OR responder" has no second leg live for the wave: a chart/image bump that
+  crashloops fires KubePodCrashLooping(dig) to nobody. **Registry fault (pre-existing, not S9):**
+  registry-garbage-collect FAILS nightly since 10-02 — DeadlineExceeded (activeDeadlineSeconds 3600), 3
+  Failed Jobs, lastSuccessful 10-01 03:00Z → ArgoCD `registry` Degraded (the failed Job child) +
+  CronJobNotSucceeding; registry image unchanged (3.0.0) — GC outgrew its hour, or the dry-run/real
+  pass hangs. Needs its own dig; left for the responder/operator (noted in meta-state).
