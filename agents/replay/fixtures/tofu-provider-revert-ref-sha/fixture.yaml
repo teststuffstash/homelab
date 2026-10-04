@@ -1,0 +1,9 @@
+# tofu-provider-revert-ref-sha — no `(#N)` in the squash subject (a direct push): the short sha, alone.
+name: tofu-provider-revert-ref-sha
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - PRNUM=
+  - SHA=90f7bf1c56583efecc32111c19eecf825f341f34
+parts:
+  - block:tofu-provider-revert-ref

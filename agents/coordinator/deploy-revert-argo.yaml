@@ -881,6 +881,12 @@ spec:
             SHA="$(printf '%s' "$CAND" | cut -f1)"; PREV="$(printf '%s' "$CAND" | cut -f2)"
             SUBJ="$(git log -1 --format=%s "$SHA")"
             PRNUM="$(printf '%s' "$SUBJ" | grep -oE '\(#[0-9]+\)$' | tr -dc '0-9' || true)"
+            # >>>REPLAY:tofu-provider-revert-ref>>>
+            # How the body names the reverted change: `#<pr>` when the squash subject carries one, else
+            # the short sha. (The drill PR #2209 printed `#19761976` — `${PRNUM:-…}` re-expands PRNUM.)
+            REF="#$PRNUM"; [ -n "$PRNUM" ] || REF="$(printf '%s' "$SHA" | cut -c1-8)"
+            echo "→ reverted change: $REF"
+            # <<<REPLAY:tofu-provider-revert-ref<<<
             echo "→ candidate: ${SHA:0:8} \"$SUBJ\" — moved $PROV $PREV → $VER, provider-pin-only"
 
             KEY="rp-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"
@@ -897,7 +903,7 @@ spec:
             git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
             git push origin "$BR"
             BODY="$(printf '#1988 deterministic rollback (S9, 2026-10-04) — on a CORRELATION, by design. The management box'"'"'s first CHANGING apply of `%s` under **%s %s** ERRORED (`MgmtApplyErroredOnNewProvider`; the last successful changing apply ran %s). That the provider caused it is not proven — the change may have. The revert is the cheap, safe probe: %s moved it %s → %s and was provider-pin-only, and the box sentinel refuses any pin that raises a stored schema/identity version, so %s reads the state back. If the box then applies clean, the provider was the cause; if the apply still errors, it was not, and the error stays with the responder/operator (the version is re-proposable after the 30-day memory, or by editing this body). pin-only-lint check (g) refuses a re-proposal of %s %s meanwhile. Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI + `management-sentinel` gate.\n\n**Reverted:** %s\n**Errored apply:** root `%s` (journal: `journalctl -u mgmt-apply -n 80` on 192.168.2.53)\n\nreverted-providers: %s@%s' \
-              "$ROOT" "$PROV" "$VER" "${EXER:-unknown}" "${PRNUM:+#$PRNUM}${PRNUM:-${SHA:0:8}}" "$PREV" "$VER" "$PREV" "$PROV" "$VER" "${PRNUM:+#$PRNUM — }$SUBJ" "$ROOT" "$PROV" "$VER")"
+              "$ROOT" "$PROV" "$VER" "${EXER:-unknown}" "$REF" "$PREV" "$VER" "$PREV" "$PROV" "$VER" "${PRNUM:+#$PRNUM — }$SUBJ" "$ROOT" "$PROV" "$VER")"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${SUBJ} (auto-rollback — ${ROOT} apply errored on ${PROV} ${VER})" \
               --body "$BODY" \
