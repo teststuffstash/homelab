@@ -573,6 +573,9 @@ _mgmt_plan_digest() {
   # fifth side channel: every MANAGED resource type the plan carries (no-ops and deletes included —
   # i.e. every type in state or config) — what mgmt_schema_upgrades compares on a provider-pin head
   jq -r '[.resource_changes[]? | select(.mode == "managed") | .type] | unique[]' "$json" > "$out.types"
+  # sixth side channel, LOCAL ONLY: the whole `show -json` — before/after VALUES included, so it
+  # never leaves the box (the #1635 rule). mgmt_plan_default_backfill reads it on a provider-pin head.
+  cp -f "$json" "$out.json"
   jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv' "$json"
 }
 # mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
@@ -637,6 +640,57 @@ mgmt_plan_not_planned() {
 # mgmt_plan_counts <changes-lines> → "add change destroy replace"
 mgmt_plan_counts() {
   awk -F'\t' 'BEGIN{a=c=d=r=0} $2=="create"{a++} $2=="update"{c++} $2=="delete"{d++} $2~/\+/{r++} END{print a, c, d, r}'
+}
+# mgmt_plan_default_backfill <plan-out> <changes "address<TAB>actions" on stdin> → the DEFAULT-BACKFILL
+# plan shape (ADR-131 amended 2026-10-04, S9 #1988; homelab#2191): every listed change is an in-place
+# `update` of a managed resource whose only differences are attributes that are null (or absent) in
+# `before` and carry a value in `after`, under an OBJECT (never a new array element), with nothing
+# known-after-apply and no replace path — what a provider release that adds an attribute with a
+# static default plans against existing state (cloudflare 5.26.0's `include_shadow_metadata = false`
+# on six dns records, #2191: a plan its changelog never mentioned). Reads <plan-out>.json (the local
+# `show -json`; values stay on the box) and prints "address<TAB>attribute.path" per backfilled
+# attribute — NAMES only, never values. rc 0 = every listed change is a backfill; rc 1 = at least one
+# is not (offenders + why on stderr) or the list is empty; rc 2 = the JSON is unreadable. Pure —
+# the fixture tests (mgmt-policy-test.sh) feed it synthetic plans. A value change, a removed
+# attribute, a type change, a create/delete/replace, a data source, an address the plan does not
+# carry, or a NEW list/set value (an array anywhere between the anchor and the leaf, in `before` or
+# in `after`) all fail it: the shape is "the new provider wrote its defaults", nothing wider.
+mgmt_plan_default_backfill() {
+  local out="$1" lines res
+  lines="$(cat)"; [ -n "$lines" ] || return 1
+  jq -e '.resource_changes | type == "array"' "$out.json" >/dev/null 2>&1 || return 2
+  res="$(jq -c --arg L "$lines" '
+    def leafs: [paths(type != "object" and type != "array")];
+    def val($o; $p): ($o | try getpath($p) catch "\u0000unreachable");
+    def anchor($b; $p): [range(0; ($p | length) + 1) | $p[:.] | select(val($b; .) != null)] | last;
+    # a backfill lives under OBJECTS only: the nearest ancestor present in `before` is an object, and every
+    # container `after` creates between it and the leaf is an object too (a brand-new `t: ["x"]` — key
+    # absent in `before` — anchors at the root and would pass on `before` alone; review on PR#2214)
+    def under_objects($b; $a; $p): (anchor($b; $p)) as $q
+      | (($b | getpath($q) | type) == "object")
+        and ([range(($q | length); ($p | length)) | $p[:.] as $r | select($r != $q) | ($a | getpath($r) | type)] | all(. == "object"));
+    ($L | split("\n") | map(select(length > 0) | split("\t")[0]) | unique) as $want
+    | [.resource_changes[]? | select(.address as $a | ($want | index($a)) != null)] as $cs
+    | ($cs[] | .address as $addr | .change as $ch | ($ch.before) as $b | ($ch.after) as $a
+       | if .mode != "managed" then {address: $addr, ok: false, why: "not a managed resource"}
+         elif $ch.actions != ["update"] then {address: $addr, ok: false, why: ("actions " + ($ch.actions | join("+")))}
+         elif (($ch.replace_paths // []) | length) > 0 then {address: $addr, ok: false, why: "replace_paths"}
+         elif ([($ch.after_unknown // {}) | .. | select(. == true)] | length) > 0 then {address: $addr, ok: false, why: "a value known only after apply"}
+         elif ($b | type) != "object" or ($a | type) != "object" then {address: $addr, ok: false, why: "before/after not objects"}
+         else (([($a | leafs[]), ($b | leafs[])] | unique) | map(select(. as $p | val($a; $p) != val($b; $p)))) as $diff0
+           # leaves only: `s: null → {x: 1}` differs at both ["s"] and ["s","x"]; a path that prefixes another differing path is not reported twice
+           | ($diff0 | map(. as $p | select(([$diff0[] | select(. != $p and .[:($p | length)] == $p)] | length) == 0))) as $diff
+           | ($diff | map(select(. as $p | (val($b; $p) != null) or (under_objects($b; $a; $p) | not)))) as $bad
+           | if ($diff | length) == 0 then {address: $addr, ok: false, why: "an update with no attribute difference"}
+             elif ($bad | length) > 0 then {address: $addr, ok: false, why: ("not null→value under an object: " + ($bad | map(map(tostring) | join(".")) | join(", ")))}
+             else {address: $addr, ok: true, paths: ($diff | map(map(tostring) | join(".")))} end
+         end),
+      (($want - ($cs | map(.address)))[] | {address: ., ok: false, why: "not in the plan JSON"})
+  ' "$out.json")" || return 2
+  if printf '%s\n' "$res" | jq -e 'select(.ok | not)' >/dev/null 2>&1; then
+    printf '%s\n' "$res" | jq -r 'select(.ok | not) | [.address, .why] | @tsv' >&2; return 1
+  fi
+  printf '%s\n' "$res" | jq -r 'select(.ok) | .address as $a | .paths[] | [$a, .] | @tsv'
 }
 # mgmt_apply_allowed <policy> <root> <changes-lines on stdin> → prints the addresses OUTSIDE the
 # apply allowlist (empty = all allowed). apply:false roots → every address is outside.

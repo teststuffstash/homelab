@@ -2255,6 +2255,16 @@ reads RELATIVE to master's own pending plan (a pin adds nothing to it), which is
 `tofu-provider-revert` chain's revert merge while master is refused on the errored apply. The chain
 reverts on `MgmtApplyErroredOnNewProvider` (PR#2206) — a correlation, by design: the revert is the
 safe, cheap probe. Arming provider MAJORS waits for its drill. §MB3.
+**Amended 2026-10-04 (operator, the #2191 read):** a second rule-shaped plan exception beside
+"master's own pending plan" — the **default backfill** (`admit_plan_shapes` in the policy,
+`mgmt_plan_default_backfill`): the changes a pin adds are in-place updates whose only differences
+are null→value attributes under an object, nothing known-after-apply, no replace — what a provider
+that adds an attribute with a static default plans against existing state. cloudflare 5.26.0's
+`include_shadow_metadata` did exactly that on six dns records and its changelog never mentioned it:
+the plan, not the release notes, is the evidence, and this shape is read deterministically rather
+than by a reviewer (the supply-chain-gate rule, ADR-143's spirit). Attribute names reach the
+comment, never values. Considered: routing every non-empty pin plan to the migration lens — kept as
+the fallback for what this shape does not admit, not built yet. Majors armed the same day (ADR-141).
 
 ### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
 

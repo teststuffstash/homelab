@@ -443,7 +443,19 @@ attributes it does not know when it reads state. The kubernetes 3 major (#2047) 
 version moves across all three roots, so its lockfile revert is a revert even after applies. **"Empty" is relative to master's own pending plan:** when a pin head plans changes, the sentinel
 plans master alone for that root, and an identical address/action set passes (the pin adds nothing)
 — without it, the one pin that must merge while master carries residue, the provider revert below,
-would park on a human by construction. That failure is the whole human lane for this class; a human who agrees
+would park on a human by construction. **…or a default backfill (2026-10-04, #2191):** what the pin
+adds beyond master's own plan may be in-place updates whose only differences are attributes null in
+`before` and set in `after`, under an object (never a new array element), nothing known-after-apply,
+no replace — `mgmt_plan_default_backfill` over the local `show -json`, admitted by the policy's
+`admit_plan_shapes`. That is what a provider release that adds an attribute with a static default
+plans against existing state: cloudflare 5.26.0 added `include_shadow_metadata = false` to
+`cloudflare_dns_record` and six records planned `~6`; its changelog never mentioned the attribute,
+so no release-notes reader — the reflex's "CI is the gate" approval had already landed — would have
+caught it, and the PR sat 30 h on a human read while the updater re-planned it 32 times. The old
+provider ignores attributes it does not know when it reads state and the schema check still guards
+the version, so the revert stays a revert; the comment names address + attribute, never a value. A
+value change, a removed attribute, a create/delete/replace or an address master's plan does not
+explain all remain the human read. That failure is the whole human lane for this class; a human who agrees
 with the change orders `mgmt-human-plan` as before. The Renovate side — the terraform rule moving from
 `major/awaiting-human` to the `automerge` lane, and the infisical / cloudflare-token roots
 (`foreign_roots`, no box plan) excluded from the manager rather than merged unplanned (#1984 merged

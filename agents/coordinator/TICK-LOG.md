@@ -12163,3 +12163,29 @@ Operator: "#2047 needs the usual what would it take for an automated deploy + re
 - **Process:** chained `pr-wait A; pr-wait B | tail` hid #2207's red and #2206's conflict (operator
   caught it) → #2208 multi-PR + exit 6; my direct ci.yaml step lacked its diff-ci MAP row and red every
   PR (c2186192 fix, 14de8b4d pre-push runs the belt). Open: arming terraform provider MAJORS (operator).
+
+## 2026-10-04 evening — provider MAJORS armed; the default-backfill plan shape (seat, operator in the loop)
+
+Operator walked the arming scenarios, then pointed at #2191 (cloudflare provider 5.25→5.26, a MINOR):
+"it does not get a reviewer although renovate gives us release notes which nobody would read if
+management sentinel had not caught it". Grounded on the box (a non-posting `--human-plan`, nothing
+written): `+0 ~6 -0` = `+ include_shadow_metadata = false` on six `cloudflare_dns_record`s — a new
+Computed+Optional attribute with a static default, absent from the 5.26.0 changelog. The reflex had
+approved 36 s after open ("CI is the gate"); the PR sat 30 h on `human read` while the updater merged
+master in 29× and the box re-planned 32× (same verdict).
+- **Armed provider MAJORS** (operator yes): rule after the Deployment-image one in
+  `.github/renovate-global.json`, `major` kept, no `automerge` label, lens APPROVED merges — direct
+  e1748261 (governance file; Renovate reads master → pushed at once). ADR-141 amended; class 5 cells;
+  the "human-ordered only" Last-proven row was stale (#2075/#2096 merged on the sentinel's own green
+  2026-09-28, #2213 today) — fixed.
+- **Default-backfill shape** (operator "do 1" over routing non-empty plans to the lens): #2214 merged
+  18:50Z — `mgmt_plan_default_backfill` (pure, over the local `show -json`; every change the pin ADDS
+  beyond master's own plan = managed update, null→value leaves under objects only, nothing
+  after-unknown, no replace), `admit_plan_shapes` in the policy, ADR-131 amended (second 10-04 line),
+  16→19 fixtures. Review round 1 caught a real gap (a NEW list with its key absent in `before` anchored
+  at the root and passed) → d5bb1a2a. Box pulled 2461b0cb by hand (`systemctl start mgmt-pull`); the
+  engine hash re-judged #2191 on the next tick: `cloudflare: +0 ~6 -0 (3 not planned) (default
+  backfill)` = success, attribute table in the comment, no push needed. **#2191 merged 19:00:20Z by
+  Renovate** on the standing reflex approval — no human click; cloudflare is plan-only on the box, so
+  the six `include_shadow_metadata = false` writes land with the jail's next cloudflare apply.
+- Memory: renovate-after-attended-bumps (plan is the evidence; deterministic shape over an LLM read).
