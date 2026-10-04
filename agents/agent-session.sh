@@ -1942,6 +1942,27 @@ if [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode
   fi
 fi
 # <<<REPLAY:cred-inject<<<
+# homelab#2171: the platform retro ride's git identity IS the fleet-wide READ-ONLY retro token
+# (agents/coordinator/retro-git.yaml), not this namespace's worker token. The agent-base
+# entrypoint's ~/bin/gh wrapper re-resolves GH_TOKEN on EVERY call (broker → mounted file → env),
+# so the brief's `GH_TOKEN="$RETRO_GH_TOKEN" gh …` was silently overridden by the broker's
+# agent-git-<ns> token (repos=[openrouter-operator] only): r4–r6 read sleep-tracking and
+# oracle-fleet as "Could not resolve to a Repository" with the var SET and minutes old. Fix: no
+# broker URL for this ride (it writes nothing — the report lands via the harvest step's own
+# coordinator-git identity) and the in-ns mirror Secret mounted at the entrypoint's default
+# GIT_TOKEN_FILE path, so git's credential helper AND the gh wrapper re-read the live token per
+# call (kubelet rewrites the projected file on the mirror's 5m copy — no stale-token window).
+# optional: true keeps the FU-080 (a) degrade: absent mirror = no file = anonymous reads, and
+# the brief's "name the unreachable repos" clause still applies.
+# >>>REPLAY:retro-gh-mount>>>
+RETRO_GH_MOUNT=""; RETRO_GH_VOLUME=""
+if [ -n "${RETRO_GH_SECRET:-}" ]; then
+  echo "→ retro ride: git identity = Secret ${RETRO_GH_SECRET} file-mounted (fleet-wide read-only, re-read per call); broker URL not rendered (homelab#2171)"
+  CRED_BROKER_ENV=""
+  RETRO_GH_MOUNT=$'\n        - { name: retro-git, mountPath: /secrets/git, readOnly: true }'
+  RETRO_GH_VOLUME=$'\n    - name: retro-git\n      secret: { secretName: "'"$RETRO_GH_SECRET"'", optional: true, items: [ { key: GH_TOKEN, path: token } ] }'
+fi
+# <<<REPLAY:retro-gh-mount<<<
 # Git credentials are broker-only (FU-089): every ride sets GIT_CRED_BROKER_URL and the pod holds
 # no standing git Secret at all — the in-ns agent-git-token fallback was deleted with FU-089 (a
 # standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
@@ -2823,8 +2844,8 @@ ${CLAUDE_ENV}
       resources:
         requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}${RETRO_GH_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}${RETRO_GH_VOLUME}
 EOF
 
 PF_POD_CREATED="1"
