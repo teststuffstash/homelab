@@ -12144,3 +12144,22 @@ everybody… the 'oops the Longhorn upgrade broke everything'."
   points/h). Un-wedged 07:10:44Z by backfilling `Base: master` (true: master-lane children); the scan
   transitioned it itself at 07:12:48Z (`goal/post-launch`, comment), no further dispatch. Last Base-less
   goal in the fleet. Belt: `GoalCheckpointStorm` (PR#2204; replay true from 05:26Z).
+
+## 2026-10-04 — S9: kubernetes provider 3.x merged; provider pins get a deploy + revert path, drilled (seat)
+
+Operator: "#2047 needs the usual what would it take for an automated deploy + revert" → merge + continue.
+- **#2047 merged** (8be319e7) after a fresh human plan vs current master (`main: +0 ~0 -0`); the box
+  applied it 08:52Z `no changes`. Schema diff 2.38.0 vs 3.2.1: zero version moves, additive attrs only.
+  kubernetes 3.2.1 has NOT run a changing apply yet — the box's exercised record holds 2.38.0.
+- **Built (machine lane):** #2205 sentinel state-compatibility gate (a pin may not raise a stored
+  schema/identity version — review found excluded types unchecked); #2206 `MgmtApplyErroredOnNewProvider`
+  (exercised-version record per root; review: describe the correlation, not a cause); #2207
+  `tofu-provider-revert` chain + sentinel "plan relative to master's own pending plan" + pin-only-lint (g)
+  (CI: ADR-103 ratchet wanted replay fixtures); ADR-131 amended.
+- **Drill (synthetic alert, random 3.9.1):** injected 11:20:20Z → #2209 11:20:51Z → merged 13:03:05Z →
+  box applied 13:03:54Z, no human click. Findings: #2210 (body ref `#19761976`), #2211 (judged-types read
+  rc 1 on main's empty state list under pipefail → check failed closed; pr-wait blind to commit
+  statuses). Memory line removed from #2209 by hand. Box seeded `exercised-main.tsv` (kubernetes 2.38.0).
+- **Process:** chained `pr-wait A; pr-wait B | tail` hid #2207's red and #2206's conflict (operator
+  caught it) → #2208 multi-PR + exit 6; my direct ci.yaml step lacked its diff-ci MAP row and red every
+  PR (c2186192 fix, 14de8b4d pre-push runs the belt). Open: arming terraform provider MAJORS (operator).

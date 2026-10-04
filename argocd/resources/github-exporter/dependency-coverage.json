@@ -80,9 +80,7 @@
         "canary"
       ],
       "gap_rows": 14,
-      "human_cells": [
-        "revert"
-      ],
+      "human_cells": [],
       "human_rows": 0,
       "id": 5,
       "last_proven": "2026-10-04T08:51:42Z",

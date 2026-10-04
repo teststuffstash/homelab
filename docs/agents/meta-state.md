@@ -10,6 +10,12 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-04 — S9 provider-pin deploy + revert path DRILLED; TICK-LOG 2026-10-04).**
+  (1) **Operator call:** arm terraform provider MAJORS (`.github/renovate-global.json`, operator-direct) —
+  the gate (#2205), detector (#2206), chain (#2207) and drill (#2209) are done. (2) First real proof owed:
+  the next CHANGING main apply runs kubernetes 3.2.1 — the box's `exercised-main.tsv` moves 2.38.0→3.2.1
+  on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047. (3) Then S9 next step
+  7 (class 1/2 proposers, `docs/dependency-upgrades.md`).
 - **⚑ PICKUP (2026-10-02 night — helm provider 3.x applied under evidence; TICK-LOG 2026-10-02 evening).**
   (1) **#2183 merged unread by the operator** (author==codeowner waiver) — the box apply loop now DEFERS
   inside [declared windows](../glossary.md); operator to read its three calls: `MgmtApplyDeferredByWindow` at 6 h, the
