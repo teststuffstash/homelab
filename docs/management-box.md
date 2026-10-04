@@ -451,6 +451,18 @@ that way on 2026-09-27 and was reconciled from the jail after the fact) — is a
 operator-direct edit of `.github/renovate-global.json`; until it lands the sentinel side here admits
 and plans, and the PRs still wait for a human merge.
 
+**A provider bump's first real test is a LATER apply (S9 #1988, 2026-10-04).** A pin plans empty,
+so the new provider's create/update/delete code first runs on some unrelated change, days after any
+merge-time window. `mgmt-apply.sh` therefore keeps, per root, the provider versions the last
+successful CHANGING apply ran (`$ADIR/exercised-<root>.tsv`, written by `mgmt_record_exercised` for
+the providers owning a changed address). When an apply ERRORS and a provider owning one of its
+addresses is locked at a version that record does not hold (`mgmt_unexercised`), the refusal names
+it (`apply errored on a provider no apply had run yet: kubernetes 2.38.0→3.2.1`) and the box
+publishes `mgmt_apply_errored_unexercised{root,provider,exercised,locked}` →
+**`MgmtApplyErroredOnNewProvider`** (`argocd/resources/mgmt-metrics/`, promtool-fixtured) — the
+signal the provider revert chain keys on. With no record file yet nothing is attributed (fail
+closed); a fresh box is seeded by hand with the versions its applies have demonstrably run.
+
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried

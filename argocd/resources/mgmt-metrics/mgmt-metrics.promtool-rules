@@ -36,6 +36,13 @@ groups:
         labels:
           severity: warning
           triage: none
+      - alert: MgmtApplyErroredOnNewProvider
+        expr: |
+          mgmt_apply_errored_unexercised == 1
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
   - name: mgmt-node
     rules:
       - alert: MgmtBoxDown

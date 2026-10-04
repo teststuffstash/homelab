@@ -91,6 +91,30 @@ spec:
               `bash agents/seat-window.sh list` (the DEFERRED line in `journalctl -u mgmt-apply -n 20`
               on 192.168.2.53 names it). Close it if the work is done (`seat-window.sh close --id <id>`);
               re-open with `--admit-apply` if the box may apply during it.
+        # S9 #1988 (2026-10-04) — the provider-bump failure signal. A provider pin plans EMPTY at
+        # merge (the sentinel's gate), so its create/update/delete code first runs on a LATER,
+        # unrelated apply; when that apply errors and a provider owning one of its addresses is at a
+        # version no successful changing apply has run, the box names it (mgmt-apply.sh,
+        # mgmt_unexercised). The state-compatibility gate keeps the lockfile revert a real revert.
+        - alert: MgmtApplyErroredOnNewProvider
+          expr: |
+            mgmt_apply_errored_unexercised == 1
+          for: 5m
+          # triage now: a box apply errored on a provider version no apply had run; the journal says whether the provider or the change caused it
+          labels: { severity: warning, triage: now }
+          annotations:
+            summary: "The box's apply of {{ $labels.root }} errored while {{ $labels.provider }} {{ $labels.locked }} was on its first changing apply"
+            description: >-
+              mgmt-apply's apply of root {{ $labels.root }} ERRORED (master stays refused, the
+              `management-apply` status says so). What the box verified: provider
+              {{ $labels.provider }} owns an address this apply changed, at {{ $labels.locked }}, while
+              the last successful changing apply ran {{ $labels.exercised }} — so this was the first
+              time {{ $labels.locked }}'s create/update/delete code ran here. That is a CORRELATION,
+              not a cause: the error may equally come from the change itself. Read the error first —
+              `journalctl -u mgmt-apply -n 80` on 192.168.2.53 (the failing resource and the
+              provider's message). If it is the provider's, the provider-pin PR that moved it to
+              {{ $labels.locked }} is lockfile-revertable (the sentinel refuses pins that raise a stored
+              schema version, docs/management-box.md §MB3). Clears when a new master sha is evaluated.
     - name: mgmt-node
       rules:
         - alert: MgmtBoxDown
