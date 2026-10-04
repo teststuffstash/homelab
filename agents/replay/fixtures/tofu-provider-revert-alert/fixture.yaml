@@ -1,0 +1,13 @@
+# tofu-provider-revert-alert — the provider chain's alert read (S9 #1988, 2026-10-04): of an
+# Alertmanager group, only a FIRING MgmtApplyErroredOnNewProvider counts (a resolved one in the same
+# POST is ignored); root/provider/locked/exercised come from ITS labels; root `main` maps to the
+# lockfile the box applies with. The values the walk keys on are what the post part prints.
+name: tofu-provider-revert-alert
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - REPO_SLUG=teststuffstash/homelab
+parts:
+  - file:bridge.sh
+  - block:tofu-provider-revert-alert
+  - file:post.sh

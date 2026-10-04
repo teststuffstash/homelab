@@ -846,6 +846,7 @@ spec:
         args:
           - |
             set -euo pipefail
+            # >>>REPLAY:tofu-provider-revert-alert>>>
             printf '%s' "$PAYLOAD" > /tmp/alert.json
             ALERT="$(jq -c '.alerts[] | select(.status == "firing") | select(.labels.alertname == "MgmtApplyErroredOnNewProvider") | .labels' /tmp/alert.json 2>/dev/null | head -1)"
             [ -n "$ALERT" ] || { echo "→ no firing MgmtApplyErroredOnNewProvider in payload — nothing to do"; exit 0; }
@@ -857,6 +858,7 @@ spec:
             # Only the box's apply root. Others plan only (policy/mgmt/plan-input.yaml `apply`), so an
             # apply error cannot come from them; an unexpected root is report-only, never guessed.
             case "$ROOT" in main) LOCK=tofu/.terraform.lock.hcl ;; *) echo "→ root '$ROOT' is not the box's apply root — report-only"; exit 0 ;; esac
+            # <<<REPLAY:tofu-provider-revert-alert<<<
             SLUG="${REPO_SLUG:-teststuffstash/homelab}"
             echo "→ $ROOT: apply errored on $PROV $VER (last exercised: ${EXER:-?}) — looking for the provider-pin merge that introduced $VER"
             rm -rf /work/repo
@@ -900,11 +902,13 @@ spec:
               --title "revert: ${SUBJ} (auto-rollback — ${ROOT} apply errored on ${PROV} ${VER})" \
               --body "$BODY" \
               | grep -oE '[0-9]+$')"
+            # >>>REPLAY:tofu-provider-revert-merge-lane>>>
             # The MECHANICAL lane: labels BEFORE arming — the `labeled` event fires the reflex.
             gh pr edit "$PR" --repo "$SLUG" --add-label automerge --add-label dependencies \
               || { echo "FATAL: could not label $SLUG#$PR — the reflex will not approve it (a human must)"; exit 1; }
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR labelled automerge+dependencies and armed (reflex approves, auto-merges on green; the box applies on its next pull)"
+            # <<<REPLAY:tofu-provider-revert-merge-lane<<<
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }
