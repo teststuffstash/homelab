@@ -2534,6 +2534,14 @@ the old pods serve throughout a stuck roll; an RWO singleton never enters this l
 a human read of every image bump (rejected — the operator's time; #2037 sat a day for a tag
 change); reverting on `KubePodCrashLooping` too (rejected for now — a crash loop inside a
 readiness-gated roll IS a stuck rollout, one detector is enough until evidence says otherwise).
+**Amended 2026-10-04 (operator, S9 #1988):** terraform PROVIDER majors are ARMED the same way
+(`major` kept, no `automerge` label, the lens's APPROVED completes the merge) — the gate (ADR-131 as
+amended 2026-10-04: empty plan relative to master's own pending plan, no stored schema/identity
+version raised), the detector (`MgmtApplyErroredOnNewProvider`) and the `tofu-provider-revert`
+chain were all built and drilled first (#2205/#2206/#2207, drill #2209). A non-empty or errored plan
+stays red and never auto-merges, so the in-PR-adaptation class (#2046) keeps its human by
+construction. Residual, accepted: a bump that plans empty, applies clean and is still wrong later —
+the lens's upstream read is the only defence, as for Actions and Deployment images.
 
 ### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
 **Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
