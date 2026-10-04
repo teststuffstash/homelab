@@ -200,7 +200,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/trim.sh"]
               env:
                 - name: NODE_NAME
@@ -252,7 +252,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/trim.sh"]
               env:
                 - name: NODE_NAME
@@ -304,7 +304,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/trim.sh"]
               env:
                 - name: NODE_NAME
@@ -356,7 +356,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/trim.sh"]
               env:
                 - name: NODE_NAME
@@ -408,7 +408,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/reactive-trim.sh"]
               env:
                 - name: NODE_NAME
@@ -451,7 +451,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/reactive-trim.sh"]
               env:
                 - name: NODE_NAME
@@ -493,7 +493,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/reactive-trim.sh"]
               env:
                 - name: NODE_NAME
@@ -535,7 +535,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/reactive-trim.sh"]
               env:
                 - name: NODE_NAME
@@ -581,7 +581,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/trim.sh"]
               env:
                 - name: NODE_NAME
@@ -622,7 +622,7 @@ spec:
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
-              image: alpine:3.20
+              image: alpine:3.24
               command: ["/bin/sh", "/script/reactive-trim.sh"]
               env:
                 - name: NODE_NAME
