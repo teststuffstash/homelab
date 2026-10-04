@@ -18,9 +18,10 @@ metadata:
     # content-addressed: the LAN mirror serves it from its own cache with NO live check, same as
     # every other @sha256-pinned image in this repo. Keyed by targetRevision so a version bump
     # with no matching key here fails the gate loudly instead of silently rendering a stale
-    # engine. Renovate moves this WITH the chart (regex customManager + the `crossplane` group in
-    # renovate-global.json — one PR, both lines); by hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.
-    crossplane.io/engine-image-digest.2.3.2: "sha256:884a235ea0fac77cb87870e282c05bc9814ebaded89bcc46e97a7c1967060d20"
+    # engine. Keyed by the engine image TAG (v<targetRevision>) so Renovate's regex customManager can move
+    # it WITH the chart (the `crossplane` group — one PR, both lines; a bare-version key broke the digest
+    # lookup, #2228); by hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.
+    crossplane.io/engine-image-digest.v2.3.2: "sha256:884a235ea0fac77cb87870e282c05bc9814ebaded89bcc46e97a7c1967060d20"
 spec:
   project: default
   source:
