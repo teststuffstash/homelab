@@ -342,9 +342,23 @@ while IFS=$'\t' read -r pr sha; do
     os=""; oh=""; [ "$o" -gt 0 ] && { os=" ⇢$o output$op"; oh=", $o output value$op to save"; }
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
     if [ $PIN = 1 ] && [ -n "$changes" ]; then
-      state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
-      { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}) — human read"; } >>"$bodyf"
-      log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) — failing the context"
+      # RELATIVE TO MASTER'S OWN PENDING PLAN (S9 #1988, 2026-10-04): a pin head merged onto a master
+      # that carries unapplied residue plans that residue too — and the one pin that MUST merge then,
+      # the tofu-provider-revert chain's revert (master is refused on the errored apply), would park
+      # on a human by construction. So plan master alone: a pin that adds NOTHING (identical
+      # address/action set) passes; anything it adds, drops or alters is still the human read.
+      mout="$wtb/.mgmt-plan-$root.bin"; same=0
+      if [ -n "$wtb" ] && { mgmt_plan_root "$wtb" "$POL" "$root" "$mout" false; mrc=$?; [ $mrc != 1 ]; } \
+         && mchanges="$(mgmt_plan_changes "$wtb" "$POL" "$root" "$mout")" \
+         && [ "$(printf '%s\n' "$changes" | sort)" = "$(printf '%s\n' "$mchanges" | sort)" ]; then same=1; fi
+      if [ $same = 1 ]; then
+        { echo; echo "Provider-pin head: the plan is master's OWN pending plan (+$a ~$c -$d, identical address/action set planned on master@${m8} alone) — the pin adds nothing to it."; } >>"$bodyf"
+        log "[#$pr] provider-pin head: $root plan (+$a ~$c -$d) = master's own pending plan — the pin adds nothing"
+      else
+        state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
+        { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}; master's own pending plan differs or could not be read) — human read"; } >>"$bodyf"
+        log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) and differs from master's own — failing the context"
+      fi
     fi
     if [ $PIN = 1 ]; then
       # a bump may ride only if reverting the lockfile stays a revert after the box applies under it:
