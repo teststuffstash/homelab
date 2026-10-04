@@ -261,5 +261,52 @@ win_case unreadable-kubectl 1 fail ''
 win_case unreadable-json    1 ok 'Warning: something devbox printed{'
 win_case unreadable-empty   1 ok ''
 
+# --- state compatibility of a provider-pin head (S9 #1988, 2026-10-04): mgmt_schema_upgrades over
+# synthetic `tofu providers schema -json`, and the plan's managed-type side channel it reads ---
+sch() {  # <file> <jq object of resource schema versions> [<jq object of identity versions>]
+  jq -n --argjson r "$2" --argjson i "${3:-{\}}" '{provider_schemas:{"registry.opentofu.org/x/k":{
+    resource_schemas:($r | with_entries(.value = {version:.value})),
+    resource_identity_schemas:($i | with_entries(.value = {version:.value}))}}}' >"$1"
+}
+printf '%s\n' k_svc k_secret k_old >"$T/types"
+sch "$T/sb.json" '{"k_svc":1,"k_secret":0,"k_old":0,"k_unused":0}' '{"k_secret":1}'
+schema_case() {  # <name> <head resources> <head identities> <want lines ('|' for TAB, ';' between lines)>
+  local got want
+  sch "$T/sh.json" "$2" "$3"
+  got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/types" | tr '\t\n' '|;')"
+  want="$4"; [ -n "$want" ] && want="$want;"
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "PASS schema:$1"
+  else fail=$((fail+1)); echo "FAIL schema:$1 — want '$want', got '$got'"; fi
+}
+schema_case same            '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":1}' ''
+schema_case additive-type   '{"k_svc":1,"k_secret":0,"k_old":0,"k_new":3}'  '{"k_secret":1,"k_new":1}' ''
+schema_case unused-raised   '{"k_svc":1,"k_secret":0,"k_old":0,"k_unused":4}' '{"k_secret":1}' ''
+schema_case schema-raised   '{"k_svc":2,"k_secret":0,"k_old":0}'            '{"k_secret":1}' 'k_svc|schema 1|schema 2'
+schema_case identity-raised '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":2}' 'k_secret|identity 1|identity 2'
+schema_case identity-added  '{"k_svc":1,"k_secret":0,"k_old":0}'            '{"k_secret":1,"k_svc":0}' 'k_svc|identity none|identity 0'
+schema_case removed         '{"k_svc":1,"k_secret":0}'                      '{"k_secret":1}' 'k_old|schema 0|removed'
+schema_case lowered         '{"k_svc":0,"k_secret":0,"k_old":0}'            '{"k_secret":1}' ''
+echo '{}' >"$T/sbad.json"
+if out="$(mgmt_schema_upgrades "$T/sbad.json" "$T/sb.json" "$T/types")"; then fail=$((fail+1)); echo "FAIL schema:unreadable — rc 0 (must fail closed), out '$out'"
+else pass=$((pass+1)); echo "PASS schema:unreadable (rc≠0)"; fi
+jq -n '{resource_changes:[{address:"k_svc.a",mode:"managed",type:"k_svc",change:{actions:["no-op"]}},
+  {address:"module.m.k_secret.b[\"x\"]",mode:"managed",type:"k_secret",change:{actions:["update"]}},
+  {address:"data.k_svc.c",mode:"data",type:"k_data",change:{actions:["read"]}},
+  {address:"k_old.d",mode:"managed",type:"k_old",change:{actions:["delete"]}}]}' | mgmt_plan_digest "$T/tp" >/dev/null
+if [ "$(tr '\n' ' ' <"$T/tp.types")" = "k_old k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:plan-types-side-channel"
+else fail=$((fail+1)); echo "FAIL schema:plan-types-side-channel — got '$(tr '\n' ' ' <"$T/tp.types")'"; fi
+
+# the excluded-types path (review finding on PR#2205): a type the plan never carried — excluded by
+# policy, so absent from resource_changes — still reaches the compare via the state / exclusion lists
+printf '%s\n' 'module.m.k_old.x["a.b"]' 'data.k_data.y' >"$T/tp.excluded"
+mgmt_judged_types "$T/tp" 'k_policy' >"$T/tp.types-all"
+if [ "$(tr '\n' ' ' <"$T/tp.types-all")" = "k_old k_policy k_secret k_svc " ]; then pass=$((pass+1)); echo "PASS schema:excluded-types-reach-the-compare"
+else fail=$((fail+1)); echo "FAIL schema:excluded-types-reach-the-compare — got '$(tr '\n' ' ' <"$T/tp.types-all")'"; fi
+sch "$T/sh.json" '{"k_svc":1,"k_secret":0}' '{"k_secret":1}'
+printf 'k_svc\n' >"$T/tq.types"; printf 'k_old.x\n' >"$T/tq.state"; mgmt_judged_types "$T/tq" '' >"$T/tp-union"
+got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/tp-union" | tr '\t\n' '|;')"
+if [ "$got" = "k_old|schema 0|removed;" ]; then pass=$((pass+1)); echo "PASS schema:excluded-type-removal-caught"
+else fail=$((fail+1)); echo "FAIL schema:excluded-type-removal-caught — got '$got'"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]
