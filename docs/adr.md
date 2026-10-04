@@ -2639,6 +2639,28 @@ MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sy
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
 becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
 
+### ADR-146 — Every stack runs its own retro; it escalates platform faults as ADR-119 filings; the platform retro stops deep-diving stack repos (2026-10-02, accepted 2026-10-04)
+**Status:** Accepted (operator, 2026-10-04, wording read on #2172). Mechanism:
+[observability-and-retro.md](agents/observability-and-retro.md) §B2 "Stack series".
+**Decision:** (1) EVERY stack runs its own retro by default — the same `retro-session` workflow with
+`stack=<name>`, in the stack's fixer namespace on its own worker token, bundle scoped to the claim's
+repos, its own weekly slot; the knob is an opt-out, and the guard's event floor is what makes
+default-on safe. (2) Context = the platform brief template rendered for the stack + what the stack
+repo gives every ride (CLAUDE.md, `.agents/`); a stack may replace the brief wholesale with its own
+`.agents/retro.md` — only the placeholders and the report contract stay the platform's. The brief
+asks for attribution with evidence (platform cause vs the stack's own; unseen-from-the-stack =
+platform), nothing more prescriptive. (3) A platform cause is a finding targeting homelab with
+`Origin:` = the stack item; filing is the acceptance act's — inert, dedup by the canonical check,
+plus the cross-repo `blockedBy` edge; board intake, or INTO a covering platform Goal (ADR-122 (4)).
+(4) The platform series keeps the fleet-wide population counters and narrows its deep-dive set to
+the platform claim's repos.
+**Considered:** two overlapping retros with a cross-dedup rule (a judge nobody can author); dedup at
+a container checkpoint (rejected 2026-10-02); a platform-only retro (r4–r6 could not attribute;
+"unreachable" was #2171); an attribution rubric and an enumerated signal list (both go stale).
+**Why:** oracle-fleet#780 split 12 rounds into causes only the stack can see and three platform ones
+(#2162, agent-runtime#162, #2168). **Consequences:** §B2 point 2 amended (escalate, never fix);
+build = FU-058's next; #2167 is the duplicate-close gate defect; oracle first, hand-fired after
+platform r7.
 ### ADR-147 — Every CNPG Cluster is backed up by default: the Barman Cloud plugin, wired at admission, one bucket per namespace (2026-10-03)
 **Status:** Accepted (operator, 2026-10-03: "some backups by default for everybody makes sense…
 I need something for the 'oops the Longhorn upgrade broke everything'"). **Decision:** (1) CNPG
