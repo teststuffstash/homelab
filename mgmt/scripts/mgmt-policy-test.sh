@@ -326,5 +326,29 @@ pc introducer-not-pin-only random 3.9.2 rc1
 sed -i "s/3.9.2/3.9.3/" "$R/tofu/.terraform.lock.hcl"; sed -i 's/~> 3.6/~> 3.9/' "$R/tofu/versions.tf"; git -C "$R" commit -q -am "random 3.9.3 + constraint (#14)"; PIN4="$(git -C "$R" rev-parse HEAD)"
 pc lock-plus-versions-tf random 3.9.3 "$PIN4|3.9.2"
 
+# --- unexercised providers (S9 #1988, 2026-10-04): which provider an apply error lands on, and the
+# record a successful changing apply leaves (mgmt_lock_versions / mgmt_unexercised / mgmt_record_exercised) ---
+printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "3.2.1"\n  constraints = "~> 3.0"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n\nprovider "registry.opentofu.org/siderolabs/talos" {\n  version = "0.9.0"\n}\n' >"$T/ulock.hcl"
+ux() {  # <name> <want ('|' TAB, ';' lines)> <got>
+  if [ "$3" = "$2" ]; then pass=$((pass+1)); echo "PASS unex:$1"; else fail=$((fail+1)); echo "FAIL unex:$1 — want '$2', got '$3'"; fi
+}
+mgmt_lock_versions "$T/ulock.hcl" >"$T/uv"
+ux lock-versions 'kubernetes|3.2.1;helm|3.0.2;talos|0.9.0;' "$(tr '\t\n' '|;' <"$T/uv")"
+if mgmt_lock_versions "$T/nonexistent.hcl" >/dev/null; then ux lock-unreadable 'rc1' 'rc0'; else ux lock-unreadable 'rc1' 'rc1'; fi
+printf 'kubernetes\t2.38.0\nhelm\t3.0.2\n' >"$T/uex"
+printf 'kubernetes_deployment.a\tupdate\nmodule.m["x"].helm_release.b\tupdate\n' >"$T/uch"
+ux new-kubernetes 'kubernetes|2.38.0|3.2.1;' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch" | tr '\t\n' '|;')"
+printf 'helm_release.b\tupdate\n' >"$T/uch2"
+ux only-exercised-touched '' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch2" | tr '\t\n' '|;')"
+printf 'talos_machine_configuration_apply.w\tupdate\ndata.kubernetes_secret.s\tread\n' >"$T/uch3"
+ux never-recorded-and-data-skipped 'talos|unknown|0.9.0;' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch3" | tr '\t\n' '|;')"
+printf 'random_password.p\tcreate\n' >"$T/uch4"
+ux provider-not-in-lock '' "$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch4" | tr '\t\n' '|;')"
+cp "$T/uex" "$T/uex2"; mgmt_record_exercised "$T/uv" "$T/uex2" "$T/uch"
+ux record-merges 'helm|3.0.2;kubernetes|3.2.1;' "$(tr '\t\n' '|;' <"$T/uex2")"
+mgmt_record_exercised "$T/uv" "$T/uex-fresh" "$T/uch3"
+ux record-from-nothing 'talos|0.9.0;' "$(tr '\t\n' '|;' <"$T/uex-fresh")"
+ux after-record-clean '' "$(mgmt_unexercised "$T/uv" "$T/uex2" "$T/uch" | tr '\t\n' '|;')"
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]
