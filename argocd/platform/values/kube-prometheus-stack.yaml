@@ -332,6 +332,13 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/rollout-stuck
+      # S9 #1988 (2026-10-04): the box's first changing apply under a new provider version errored —
+      # the provider-pin merge is reverted deterministically (deploy-revert-argo.yaml
+      # `tofu-provider-revert`). Same composition: the responder still triages.
+      - name: deploy-provider-revert
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/provider-errored
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -366,6 +373,12 @@ alertmanager:
           matchers:
             - alertname = "KubeDeploymentRolloutStuck"
           receiver: deploy-rollout-revert
+        # S9 #1988: MgmtApplyErroredOnNewProvider goes to BOTH deploy-provider-revert AND the
+        # responder. The revert only fires when a provider-pin-only merge introduced the version.
+        - continue: true
+          matchers:
+            - alertname = "MgmtApplyErroredOnNewProvider"
+          receiver: deploy-provider-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts

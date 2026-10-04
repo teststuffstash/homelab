@@ -54,6 +54,11 @@
 #       `tofu-image-revert`). Same reason as (e): a merged-then-reverted version is re-proposed by
 #       Renovate, and without this the lane loops merge → stuck rollout → revert → re-propose.
 #       Runs only when the diff touches tofu/*.tf AND adds an image line; fail-closed on the read.
+#   (g) 2026-10-04 (S9 #1988): the provider-pin memory. A `.terraform.lock.hcl` diff that moves a
+#       provider TO a version a merged `revert-prov-*` PR rolled back in the last REVERT_MEMORY_DAYS
+#       (its `reverted-providers: <name>@<version>` body line, agents/coordinator/deploy-revert-argo.yaml
+#       `tofu-provider-revert`) is refused — name = the source's last segment. Same loop as (e)/(f):
+#       Renovate re-proposes a merged-then-reverted version. Fail-closed on the read.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -108,7 +113,18 @@ if [ -n "$tofu_changed" ]; then
   # shellcheck disable=SC2086  # word-splitting the newline list is the point
   added_images="$(git diff "$BASE" HEAD -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
 fi
-if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ]; then
+# (g): the lockfiles' ADDED provider versions, as "<name>@<version>" — read from the head's file per
+# provider block (a version line alone does not say whose it is), kept only where the base differs.
+lock_pairs() { awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); name = p[n] }
+                    /^[[:space:]]*version[[:space:]]*=/ && name != "" { v = $3; gsub(/"/, "", v); print name "@" v; name = "" }'; }
+added_providers=""
+for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)\.terraform\.lock\.hcl$' || true); do
+  new_pairs="$(git show "HEAD:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+  old_pairs="$(git show "$BASE:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+  added_providers="$added_providers $(comm -23 <(printf '%s\n' "$new_pairs") <(printf '%s\n' "$old_pairs") | tr '\n' ' ')"
+done
+added_providers="$(printf '%s\n' $added_providers | grep . | sort -u || true)"
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
@@ -138,6 +154,25 @@ if [ -n "$added_images" ]; then
       rc=1
     fi
   done <<< "$added_images"
+fi
+# (g) the reverted-provider memory — read once, fail-closed like (e)/(f).
+if [ -n "$added_providers" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_providers="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-prov-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-providers:\")) | ltrimstr(\"reverted-providers:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-prov-* PRs of ${slug:-<no repo slug>} (the reverted-provider memory, check (g)): ${reverted_providers:-}; refusing to report success." >&2
+    rc=2; reverted_providers=""
+  fi
+  while read -r pv; do
+    [ -n "$pv" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_providers | grep -qxF "$pv"; then
+      echo "pin-only-lint: FAIL — provider $pv is a REVERTED provider version — the tofu-provider-revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-prov-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1
+    fi
+  done <<< "$added_providers"
 fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
