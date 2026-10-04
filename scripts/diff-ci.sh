@@ -76,6 +76,8 @@ MAP=(
   "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^machines/"
   "maint-self-test:^scripts/maintenance-window"
+  # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
+  "pr-wait-test:^scripts/pr-wait"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"
