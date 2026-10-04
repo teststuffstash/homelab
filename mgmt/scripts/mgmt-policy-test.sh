@@ -307,6 +307,24 @@ printf 'k_svc\n' >"$T/tq.types"; printf 'k_old.x\n' >"$T/tq.state"; mgmt_judged_
 got="$(mgmt_schema_upgrades "$T/sb.json" "$T/sh.json" "$T/tp-union" | tr '\t\n' '|;')"
 if [ "$got" = "k_old|schema 0|removed;" ]; then pass=$((pass+1)); echo "PASS schema:excluded-type-removal-caught"
 else fail=$((fail+1)); echo "FAIL schema:excluded-type-removal-caught — got '$got'"; fi
+# --- the tofu-provider-revert candidate (S9 #1988): mgmt_provider_pin_commit over a synthetic history ---
+R="$T/pinhist"; git init -q -b master "$R"; mkdir -p "$R/tofu"
+cp "$T/tofu/.terraform.lock.hcl" "$R/tofu/"; cp "$T/tofu/versions.tf" "$R/tofu/"; echo 'x' >"$R/tofu/main.tf"
+git -C "$R" add -A && git -C "$R" commit -q -m base
+sed -i "s/3.9.0/3.9.1/" "$R/tofu/.terraform.lock.hcl"; git -C "$R" commit -q -am "random 3.9.1 (#11)"; PIN1="$(git -C "$R" rev-parse HEAD)"
+echo 'y' >>"$R/tofu/main.tf"; git -C "$R" commit -q -am "unrelated tofu edit (#12)"
+pc() {  # <name> <provider> <version> <want: sha|before or 'rc1'>
+  local got
+  got="$(mgmt_provider_pin_commit "$R" HEAD tofu/.terraform.lock.hcl "$2" "$3" 2>/dev/null | tr '\t' '|')" || got=rc1
+  if [ "$got" = "$4" ]; then pass=$((pass+1)); echo "PASS pincommit:$1"; else fail=$((fail+1)); echo "FAIL pincommit:$1 — want '$4', got '$got'"; fi
+}
+pc found-past-unrelated random 3.9.1 "$PIN1|3.9.0"
+pc version-never-set   random 3.9.7 rc1
+pc unknown-provider    kubernetes 3.2.1 rc1
+sed -i "s/3.9.1/3.9.2/" "$R/tofu/.terraform.lock.hcl"; echo 'z' >>"$R/tofu/main.tf"; git -C "$R" commit -q -am "random 3.9.2 + a tf edit (#13)"
+pc introducer-not-pin-only random 3.9.2 rc1
+sed -i "s/3.9.2/3.9.3/" "$R/tofu/.terraform.lock.hcl"; sed -i 's/~> 3.6/~> 3.9/' "$R/tofu/versions.tf"; git -C "$R" commit -q -am "random 3.9.3 + constraint (#14)"; PIN4="$(git -C "$R" rev-parse HEAD)"
+pc lock-plus-versions-tf random 3.9.3 "$PIN4|3.9.2"
 
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

@@ -440,7 +440,10 @@ over every managed type in the plan, the state and the plan exclusions (`mgmt_ju
 or newly added identity version, or a removed type fails the context with `provider bump changes
 stored state: <root>(<types>) — human read`. Additive attributes pass — the old provider drops
 attributes it does not know when it reads state. The kubernetes 3 major (#2047) passed it: zero
-version moves across all three roots, so its lockfile revert is a revert even after applies. That failure is the whole human lane for this class; a human who agrees
+version moves across all three roots, so its lockfile revert is a revert even after applies. **"Empty" is relative to master's own pending plan:** when a pin head plans changes, the sentinel
+plans master alone for that root, and an identical address/action set passes (the pin adds nothing)
+— without it, the one pin that must merge while master carries residue, the provider revert below,
+would park on a human by construction. That failure is the whole human lane for this class; a human who agrees
 with the change orders `mgmt-human-plan` as before. The Renovate side — the terraform rule moving from
 `major/awaiting-human` to the `automerge` lane, and the infisical / cloudflare-token roots
 (`foreign_roots`, no box plan) excluded from the manager rather than merged unplanned (#1984 merged
