@@ -87,6 +87,26 @@ tests:
         alertname: MgmtApplyPostCheckFailed
         exp_alerts: []
 
+  # ── S9 #1988: an apply errors on a provider version no apply had run ───────────────────────────
+  # The box publishes the series only while the refusal stands (absent otherwise): a blip shorter
+  # than `for` stays quiet; a standing one fires with the provider attribution the revert chain keys on.
+  - interval: 1m
+    name: "an apply error on an unexercised provider fires after 5m, with its attribution"
+    input_series:
+      - series: 'mgmt_apply_errored_unexercised{job="mgmt-node",instance="192.168.2.53:9100",root="main",provider="kubernetes",exercised="2.38.0",locked="3.2.1"}'
+        values: "_x5 1x3 _x5 1x20"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: MgmtApplyErroredOnNewProvider
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: MgmtApplyErroredOnNewProvider
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: MgmtApplyErroredOnNewProvider
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: now, job: mgmt-node, instance: "192.168.2.53:9100", root: main, provider: kubernetes, exercised: "2.38.0", locked: "3.2.1" }
+
   # ── FU-300: a declared window holds the apply loop ────────────────────────────────────────────
   # A 3 h window (seat-window's default) deferring and then closing never fires; a forgotten one
   # (8 h of deferral) fires after 6 h — and the converse: a deferring loop is a LIVE loop, so the

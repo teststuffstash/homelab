@@ -18,6 +18,11 @@
 #               exit 0, mgmt_apply_deferred_window 1. A window opened with --admit-apply does not hold
 #               it. An unreadable registry defers too, as a PROBE-FAIL (exit 1). A span touching no
 #               apply root still stamps: it changes nothing a window could be watching.
+#   providers  a successful apply that CHANGED addresses records, per root, the locked version of each
+#               provider owning one ($ADIR/exercised-<root>.tsv); an apply that ERRORS while such a
+#               provider's locked version is not the exercised one publishes
+#               mgmt_apply_errored_unexercised{root,provider,exercised,locked} (S9 #1988) — a provider
+#               bump plans empty, so this is the first moment its apply path runs
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
@@ -104,7 +109,10 @@ mgmt_apply_deferred_windows $deferred_n
 # HELP mgmt_apply_deferred_window_unreadable 1 while the last tick deferred because the declared-window registry could not be read.
 # TYPE mgmt_apply_deferred_window_unreadable gauge
 mgmt_apply_deferred_window_unreadable $deferred_unreadable
+# HELP mgmt_apply_errored_unexercised 1 per provider while master's standing refusal is an apply ERROR in <root> and that provider owns a changed address at a version no successful changing apply has run yet (exercised = the last one that did, or unknown).
+# TYPE mgmt_apply_errored_unexercised gauge
 PROM
+  [ -s "$ADIR/apply-unexercised" ] && [ -n "$r" ] && awk -F'\t' '{printf "mgmt_apply_errored_unexercised{root=\"%s\",provider=\"%s\",exercised=\"%s\",locked=\"%s\"} 1\n", $1, $2, $3, $4}' "$ADIR/apply-unexercised" >>"$tmp"
   chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
 
@@ -114,6 +122,7 @@ fi
 [ "$sha" = "$last" ] && { log "master at ${sha:0:8} = applied — nothing to do"; exit 0; }
 [ "$sha" = "$refused" ] && { log "master at ${sha:0:8} was REFUSED — waiting for a new commit or a human apply"; exit 0; }
 
+[ "${MGMT_SHADOW:-0}" = 1 ] || rm -f "$ADIR/apply-unexercised"   # a new master sha re-judges; the old verdict's attribution goes with it
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master
 trap 'rc=$?; rm -f "$POL"; emit_metrics $rc' EXIT
 # FAIL CLOSED, no stamp (the #1631 third round): a failed diff or classifier read must never look
@@ -236,6 +245,11 @@ for root in "${apply_roots[@]}"; do
   # shellcheck disable=SC2086
   if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
     log "$root: APPLIED (+$a ~$c -$d${osuf})"
+    # the providers this apply EXERCISED (their create/update/delete code ran) — see mgmt_unexercised
+    if [ -n "$changes" ] && locks="$(mgmt_lock_versions "$REPO/$rel/.terraform.lock.hcl")"; then
+      printf '%s\n' "$locks" >"$ADIR/locks.tmp"; printf '%s\n' "$changes" >"$ADIR/changes.tmp"
+      mgmt_record_exercised "$ADIR/locks.tmp" "$ADIR/exercised-$root.tsv" "$ADIR/changes.tmp" || log "$root: WARN could not record the exercised provider versions"
+    fi
     # A dated, verified snapshot of the state this apply just wrote (docs/tofu-state.md
     # §Snapshots). Still inside this loop's lock (fd 9), hence --lock-held. A failed snapshot is
     # logged, never allowed to turn a successful apply into a refusal.
@@ -259,6 +273,18 @@ for root in "${apply_roots[@]}"; do
     fi
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'
+    # Was a provider in this apply NEW to applies? (S9 #1988) — the attribution the revert chain
+    # keys on. Unreadable lock, or no record yet (a box that has not completed a changing apply
+    # since this landed — seed it by hand, §MB3), = no attribution: never a guessed one.
+    unex=""
+    if [ -n "$changes" ] && [ -f "$ADIR/exercised-$root.tsv" ] && locks="$(mgmt_lock_versions "$REPO/$rel/.terraform.lock.hcl")"; then
+      printf '%s\n' "$locks" >"$ADIR/locks.tmp"; printf '%s\n' "$changes" >"$ADIR/changes.tmp"
+      unex="$(mgmt_unexercised "$ADIR/locks.tmp" "$ADIR/exercised-$root.tsv" "$ADIR/changes.tmp")" || unex=""
+    fi
+    if [ -n "$unex" ]; then
+      awk -F'\t' -v r="$root" '{printf "%s\t%s\t%s\t%s\n", r, $1, $2, $3}' <<<"$unex" >"$ADIR/apply-unexercised"
+      refuse "$sha" "$root: apply errored on a provider no apply had run yet: $(awk -F'\t' '{printf "%s%s %s→%s", (NR>1?", ":""), $1, $2, $3}' <<<"$unex") — see the box journal (half-applied? human)"; exit 0
+    fi
     refuse "$sha" "$root: apply errored — see the box journal (half-applied? human)"; exit 0
   fi
 done

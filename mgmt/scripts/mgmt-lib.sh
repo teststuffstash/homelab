@@ -260,6 +260,43 @@ mgmt_provider_pin_commit() {
   echo "no commit on $ref moved $name to $ver in $lock (within the history this clone holds)" >&2; return 1
 }
 
+# mgmt_lock_versions <lockfile> → "name<TAB>version" per provider in a .terraform.lock.hcl, where
+# name is the source's last segment (`registry.opentofu.org/hashicorp/kubernetes` → kubernetes) —
+# the prefix its resource types carry. rc 1 when the file is unreadable or pins nothing.
+mgmt_lock_versions() {
+  [ -s "$1" ] || return 1
+  awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); name = p[n] }
+       /^[[:space:]]*version[[:space:]]*=/ && name != "" { v = $3; gsub(/"/, "", v); printf "%s\t%s\n", name, v; name = "" }' "$1" | grep . 
+}
+
+# mgmt_unexercised <lock-versions> <exercised-tsv> <changed-addresses> → "name<TAB>exercised<TAB>locked"
+# for every provider that OWNS a changed address (type == name or type starts with name_, longest
+# name wins) and whose locked version differs from the one the last successful CHANGING apply ran
+# (`exercised`, "unknown" when never recorded). Why (S9 #1988, 2026-10-04): a provider bump plans
+# empty, so its create/update/delete code first runs on a later, unrelated apply — the only moment a
+# broken provider shows, and long after any merge-time window. Pure: the fixtures feed it files.
+mgmt_unexercised() {
+  local locks="$1" ex="$2" addrs="$3"
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' "$addrs" | grep -v '^data\.' | sed -E 's/^([^.]+)\..*/\1/' | sort -u \
+    | awk -F'\t' -v locks="$locks" -v ex="$ex" '
+        BEGIN { while ((getline l < locks) > 0) { split(l, a, "\t"); ver[a[1]] = a[2] }
+                while ((getline l < ex) > 0) { split(l, a, "\t"); done[a[1]] = a[2] } }
+        { best = ""; for (n in ver) if (($0 == n || index($0, n "_") == 1) && length(n) > length(best)) best = n
+          if (best != "") own[best] = 1 }
+        END { for (n in own) { e = (n in done) ? done[n] : "unknown"; if (e != ver[n]) printf "%s\t%s\t%s\n", n, e, ver[n] } }' | sort
+}
+
+# mgmt_record_exercised <lock-versions> <exercised-tsv> <changed-addresses> → rewrites <exercised-tsv>
+# with the locked version of every provider owning a changed address (a successful apply EXERCISED
+# them); other providers keep their entry.
+mgmt_record_exercised() {
+  local locks="$1" ex="$2" addrs="$3" tmp
+  tmp="$(mktemp)"
+  mgmt_unexercised "$locks" /dev/null "$addrs" | cut -f1,3 >"$tmp.new"
+  { [ -f "$ex" ] && awk -F'\t' 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' "$tmp.new" "$ex"; cat "$tmp.new"; } | sort >"$tmp"
+  mv -f "$tmp" "$ex"; rm -f "$tmp.new"
+}
+
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
 # root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
