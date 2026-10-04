@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://argoproj.github.io/argo-helm
     chart: argo-events
-    targetRevision: 2.4.23 # app v1.9.11
+    targetRevision: 2.4.27 # app v1.9.11
     helm:
       valuesObject:
         crds:
