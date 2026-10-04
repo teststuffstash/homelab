@@ -2248,6 +2248,13 @@ under human orders on 2026-09-27; the human added nothing. Not an author-based r
 shape is judged, not who wrote it). The Renovate half — the terraform manager moving to the mechanical
 `automerge` lane, roots the box does not plan (`foreign_roots`) excluded from the manager — is a
 separate operator-direct edit of `.github/renovate-global.json` (`docs/renovate.md`).
+**Amended 2026-10-04 (S9 #1988, the kubernetes 3 read on #2047):** a provider pin is in IAC-G09's
+REVERSIBLE class only if its lockfile revert stays a revert after the box applies under it — so a
+pin head must also keep every stored schema/identity version (PR#2205), and the "plan empty" rule
+reads RELATIVE to master's own pending plan (a pin adds nothing to it), which is what lets the
+`tofu-provider-revert` chain's revert merge while master is refused on the errored apply. The chain
+reverts on `MgmtApplyErroredOnNewProvider` (PR#2206) — a correlation, by design: the revert is the
+safe, cheap probe. Arming provider MAJORS waits for its drill. §MB3.
 
 ### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
 

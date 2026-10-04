@@ -229,6 +229,37 @@ mgmt_provider_schema() {
   rm -rf "$tmp"; return $rc
 }
 
+# mgmt_provider_pin_commit <repo> <ref> <lockfile> <provider-name> <version> → the sha of the commit on
+# <ref>'s first-parent line that moved <provider-name> (the source's last segment) TO <version> in
+# <lockfile>, IF that commit is provider-pin-only (every file it touches is a lockfile / versions.tf in
+# mgmt_provider_pin_shape against its parent). The tofu-provider-revert chain's candidate (S9 #1988,
+# agents/coordinator/deploy-revert-argo.yaml). rc 1 + a reason on stderr when the introducing commit
+# is not pin-only (the walk STOPS there — an older commit cannot have introduced the current
+# version) or none is found in the history the repo holds.
+_mgmt_lock_version_of() {  # <name>, the lockfile on stdin → its version (empty when absent)
+  awk -v want="$1" '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); hit = (p[n] == want) }
+       hit && /^[[:space:]]*version[[:space:]]*=/ { v = $3; gsub(/"/, "", v); print v; exit }'
+}
+mgmt_provider_pin_commit() {
+  local repo="$1" ref="$2" lock="$3" name="$4" ver="$5" c before after f files
+  for c in $(git -C "$repo" log --first-parent --format=%H "$ref" -- "$lock"); do
+    after="$(git -C "$repo" show "$c:$lock" 2>/dev/null | _mgmt_lock_version_of "$name")"
+    before="$(git -C "$repo" show "$c^:$lock" 2>/dev/null | _mgmt_lock_version_of "$name")"
+    [ "$after" = "$ver" ] && [ "$before" != "$ver" ] || continue
+    [ -n "$before" ] || { echo "${c:0:8} ADDS provider $name — not a pin bump" >&2; return 1; }
+    files="$(git -C "$repo" diff --name-only "$c^" "$c" --)" || { echo "${c:0:8}: diff unreadable" >&2; return 1; }
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case "${f##*/}" in
+        .terraform.lock.hcl|versions.tf) mgmt_provider_pin_shape "$repo" "$c^" "$c" "$f" || { echo "${c:0:8} moved $name $before→$ver but $f is not in pin shape — not provider-pin-only" >&2; return 1; } ;;
+        *) echo "${c:0:8} moved $name $before→$ver but also touches $f — not provider-pin-only" >&2; return 1 ;;
+      esac
+    done <<<"$files"
+    printf '%s\t%s\n' "$c" "$before"; return 0
+  done
+  echo "no commit on $ref moved $name to $ver in $lock (within the history this clone holds)" >&2; return 1
+}
+
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
 # root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
