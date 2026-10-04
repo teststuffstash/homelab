@@ -17,9 +17,12 @@ never the session's arc — that is TICK-LOG's.)
   ArgoCD belt: `ArgoCDAppDegraded` FIRING on `registry` since 21:18Z — the registry-garbage-collect
   CronJob exceeds its 3600 s deadline nightly since 10-02; a real fault, nobody's yet: G7), #2226 (crossplane
   version SET). **Gap register** = `docs/dependency-upgrades.md` §Gap register (G1–G12; G12/G12b written in
-  TICK-LOG, doc rows owed). **Next session:** (1) read Renovate's run after #2226 — the grouped
-  `renovate/crossplane` PR must carry targetRevision + annotation and pass `publicroute-tf-validate`
-  (G11 proof); #2224 superseded; (2) wave 2+ PRs — watch each merge → sync → alert delta (baseline =
+  TICK-LOG, doc rows owed). **Next session:** (1) G11 second cut = **#2234** (the annotation key carries the image TAG; #2226's
+  cut failed the digest lookup — #2228 shipped the chart alone, red by design): after it merges, the next
+  Renovate run's `renovate/patch-crossplane` must carry targetRevision 2.3.6 + `engine-image-digest.v2.3.6:
+  sha256:3213f5…` and pass `publicroute-tf-validate`; #2224 superseded ✓. **Wave 2 open 22:24Z:** #2229
+  pushgateway, #2230 alpine 3.24, #2231 arc 0.15.0 (3 files — G9 proof), #2232 cloudflared, #2233 busybox;
+  **#2227** docs/proofs — all armed; (2) wave 2+ PRs — watch each merge → sync → alert delta (baseline =
   `maintenance-window snapshot`); kps 86.1.1 sync was Running at 22:21Z; (3) docs owed as ONE PR:
   §Last proven rows (class 2 image digest = #2220 21:32Z; class 1 chart = #2223 argo-events 21:46Z),
   register regen (G8 — every merge stales it), G12/G12b rows; (4) decisions for the operator:

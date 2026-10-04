@@ -12407,5 +12407,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   proof pending CI)**, #2232 cloudflared 2026.9.3, #2233 busybox 1.38.0. G11 second cut: the
   annotation KEY carries the image TAG (`engine-image-digest.v2.3.2`), the gate reads `xp_version`
   (it already computed it), the regex captures `v<semver>`, no extractVersion → PR opened + armed
-  (see the next line for its number). Proof = the NEXT run's grouped PR carries both lines.
+  (**PR#2234**, armed; `scripts/` touched → ADR-142 lens). Proof = the NEXT run's grouped PR carries both lines.
   **#2227** (docs: §Last proven rows, G12/G12b, register regen) opened + armed 22:30Z.
+- **22:40Z WIND-DOWN (ctx ~520k).** Open + armed, merging on their own: #2227 (docs/proofs), #2234 (G11
+  second cut), wave 2's #2229–#2233 (#2228 red by design until #2234 lands and the next run re-groups).
+  Direct-lane bookkeeping pushed once here. Hand-over = meta-state's 2026-10-04 night pickup.
