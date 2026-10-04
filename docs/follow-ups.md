@@ -412,7 +412,8 @@ six OVERSIZE items pointer-ized into
       apply, unflag = delete + targeted destroy; the box's provisioning plan shows a live flag as drift until
       unflagged (the belt); a lint refuses `matchbox_group` in TRACKED provisioning files; provisioning.md
       steps 1/6 + the onboarding skill rewritten around it. (`nx_01_diag` is gone — #1822 dropped it,
-      2026-09-21; no flag stands in git.) **Next:** the `flags.local.tf` shape + the lint. End state: the reconciler sets and clears flags inside one sync. Relates FU-235.
+      2026-09-21; no flag stands in git.) Shape + lint LIVE (PR#2199, 2026-10-04: matchbox.tf header, `machines-lint`
+      check 3). **Next / end state:** the reconciler sets and clears flags inside one sync. Relates FU-235.
 - [ ] **FU-239** — **`homelab-jail-read-all` plans as a standing group-order permutation (2026-09-13).**
       The API's read-back order for its 146 + 45 filtered groups is arbitrary (not catalog/id/name
       order — measured), provider 5.x compares positionally, and 5.25.0 (#1636) did not fix it.
