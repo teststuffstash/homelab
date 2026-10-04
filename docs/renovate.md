@@ -79,8 +79,10 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
-  (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
-  `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
+  (registry-signed, hash-verified), and **a bump must plan empty** — relative to master's own pending
+  plan, or be a default backfill (null→default attributes a release adds, #2191; ADR-131 amended
+  2026-10-04): `management-sentinel` is green on those and red — `provider bump changes the plan:
+  <root>(…) — human read` — otherwise. With
   `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
   ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
