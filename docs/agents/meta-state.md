@@ -27,11 +27,21 @@ never the session's arc — that is TICK-LOG's.)
   `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: daily Longhorn job + UniFi
   `.unf` LIVE (PR#2196/#2197: schedule as code + UnifiAutobackupStale) — glance at the 10-04 01:00Z `.unf` +
   02:00Z run; off-site PARKED by the operator.
-- **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
-  `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
-  reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**
-  if the rank fix #2170 (queued) hasn't merged, decide whether r7 runs on the old rank (it samples
-  PRs on cancellations only and misses blocked issues). PR#2172 = ADR-146 Proposed, awaiting the operator's read.
+- **⚑ PICKUP (2026-10-04 evening — retro r7 prep; TICK-LOG 2026-10-04 evening).** Before the
+  **Mon 10-05 05:00Z** fire, three PRs wait on the codeowner click (none merged by this session —
+  no corpus loaded, ADR-110): **#2173** (rank fix, head e96446e7: the worker's head would have
+  ranked the S9 Renovate PRs first; the seat's rounds fix the SHA fallback, issue-only credit,
+  latches/rounds as pain — oracle-fleet#753 samples on the live store), **#2215** (#2171: the
+  in-pod `gh` wrapper overrode `RETRO_GH_TOKEN` with the one-repo broker token; file mount,
+  no broker; e2e unverified — r7's ride log is the test: `gh repo view teststuffstash/oracle-fleet`
+  must resolve), **#2172** (ADR-146, rebased, operator read). r7 on the OLD rank = the S9 PRs
+  as the deep-dive set. **#2174** = merge as a conservative hold, then fix forward (GitHub emits
+  no `marked_as_duplicate` timeline event; the canonical is GraphQL `duplicateOf` — the
+  canonical-follow path never fires live; a GraphQL replay stub has no precedent). The
+  reconcile ran 10-03/10-04 with nothing to reconcile (store holds only `activity.json`).
+  **ADR-142 re-read 10-05:** data pack in TICK-LOG 2026-10-04 evening (46 scripts PRs, 0
+  worker-authored, 3 DIFFERS all lens-justified, no weakened gate; D2 never ran; FU-296 ci step
+  unwired) — suggested: keep to 10-28.
 - **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
   from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
   LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.

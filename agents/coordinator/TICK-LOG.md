@@ -12189,3 +12189,47 @@ master in 29× and the box re-planned 32× (same verdict).
   Renovate** on the standing reflex approval — no human click; cloudflare is plan-only on the box, so
   the six `include_shadow_metadata = false` writes land with the jail's next cloudflare apply.
 - Memory: renovate-after-attended-bumps (plan is the evidence; deterministic shape over an LLM read).
+
+## 2026-10-04 evening — retro r7 prep (second jail → took over the seat when the primary wound down)
+
+Operator: "tomorrow is retro — what needs doing; start if easy", then "oracle-fleet had multiple
+agent/error|blocked I fixed by hand this week", "goals stalled, issues took 10+ rounds".
+- **#2173 (rank fix #2170) rehearsed on the LIVE store** (`_retro/activity.json`, 09-28 → 10-04): the
+  worker's head would have put homelab#2046/#2047/#2037/#2033 first (3000–4250 "direct" events, 83
+  "failures") and classified 0/139 cancellations superseded — `head_sha` is on 0/958 live items (only the
+  new collector writes it) and the PR→issue roll-up never checked the TARGET (PRs collected 14 sibling
+  PRs' pain). Seat rounds d86e462c + e96446e7: newest-check-SHA fallback, issue-only credit,
+  `agent/error|blocked` label transitions as pain at W 1000 (the week emitted no agent-block/strike/park
+  event), `W_ROUND` 500 per round after the first (round = dispatch marker OR stats marker, max not sum),
+  `task/goal` active. Result: oracle-fleet#753 samples (23), #735 at 4, 9-round #800/#803 at 12/9; 95
+  superseded. Reviewer's round-5 block ("agent-dispatch never produced") was false — 303 live events,
+  `machine-comment.sh:90` builds the marker from the caller's kind, `goal_graph.round_evidence` reads them;
+  answered inline with the evidence. Residual: "higher priority" cancel text lives in check-run
+  ANNOTATIONS (output null), so same-SHA concurrency reruns (~45/139) still count as pain.
+- **#2171 → PR#2215:** both leads in the issue were dead; the agent-base entrypoint's `~/bin/gh` wrapper
+  resolves broker → file → env per call, so `GH_TOKEN="$RETRO_GH_TOKEN" gh` was replaced by the broker's
+  `agent-git-openrouter-operator` token (repos=[openrouter-operator]); r4/r5's one-repo
+  `/installation/repositories` listing is that token's shape. Fix: retro rides render no broker URL and
+  mount the mirror at `/secrets/git/token`; fixtures mount-set/mount-unset; e2e = r7's ride log.
+  Loose ends (NOT filed): r6 deepseek cell echoed the raw token into run.log (expired); the gh-wrapper
+  contract is undocumented under docs/agents/; r4–r6 reports' "repos do not exist" conclusion is wrong.
+- **#2172 (ADR-146)** conflict with ADR-147/148 resolved (pure append order), rebased, mergeable.
+- **#2174 codeowner brief (subagent):** safe conservative hold; GitHub emits no `marked_as_duplicate`
+  timeline event — canonical = GraphQL `duplicateOf` — so "canonical closes → S released" never fires live;
+  follow-up round, needs a GraphQL replay stub (no precedent). Zero DUPLICATE-closed issues exist today.
+- **ADR-142 re-read data pack (subagent, for 10-05):** 46 `scripts/` PRs since 09-28 (44 seat, 2 Renovate,
+  0 worker-App); lens read on 44/46 (#2097 automerge shortcut, #2100 red by design); 3 DIFFERS lines
+  (#2095 drill, #2207, #2211) all lens-justified; no weakened gate after merge; D2 (gate+test loosened
+  together) never ran; FU-296's ci.yaml step unwired; the one PR the trial let flow bot-alone = #2097.
+  Blind spots: Renovate automerge bypasses the lens; gate-drift calls `scripts/mermaid-lint/` lockfiles
+  non-gates; a NEW test file replays nothing in leg B. Suggested: keep to 10-28 (the un-gated thing untested).
+- **Reconcile** ran 10-03/10-04 (7–10 s): store holds only `activity.json`, nothing to reconcile until r7.
+- **ADR-146 sized** (reads: ADR-119, §B2 THE SPLIT, retro-argo/retro-project/retro_pipeline, BRIEF.md):
+  (1) bundle + ledger guard take a per-series repo scope (`bundle()` has none; the platform series stays
+  fleet-wide for population, deep-dive set narrowed to platform repos), (2) a `retro-session-oracle`
+  CronWorkflow (param copy; ride ns = oracle-fleet via retro-project.sh — the broker's stack token reads its
+  own repos, so `RETRO_GH_SECRET` becomes platform-only), (3) BRIEF.md escalation clause for stack series
+  (platform-side cause → file on homelab, ADR-119 (3), `Origin:` = stack item; `retro_queue.py` already takes
+  a per-finding repo; the `blockedBy` edge stays the seat's act). No `retro.enabled` claim knob exists —
+  not needed for v1. ~100–150 lines, agents/ + fixtures; an evening. Fork (3) = a ruling, no code.
+- Process: second-jail work ran in scratchpad clones (kept for PR rounds, removed at wind-down).

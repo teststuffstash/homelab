@@ -1023,9 +1023,11 @@ the block needs pruning, not more headings.
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
       2026-10-02: activity windows LIVE (#2130 + #2165; collector 51 min cold, ~2 min warm).
-      **Next:** the rank fix #2170 (queued; cancellations classified, issues credited) before the
-      Mon 10-05 05:00Z fire; ride token #2171; then the stack-retro split — ADR-146 PR#2172
-      (Proposed, operator read; fork = platform intake container).
+      **Next:** PR#2173 (rank fix #2170 + the seat's round 5: SHA fallback, issue-only credit,
+      latches/rounds weigh — rehearsed on the live store, #753 samples) and PR#2215 (#2171: the
+      gh wrapper overrode the retro token — file mount, no broker) both need the codeowner click
+      before the Mon 10-05 05:00Z fire; then the stack-retro split — ADR-146 PR#2172 (Proposed,
+      rebased, operator read; sized 2026-10-04 in TICK-LOG: ~3 pieces, an evening).
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
