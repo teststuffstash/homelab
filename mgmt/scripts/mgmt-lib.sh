@@ -652,8 +652,9 @@ mgmt_plan_counts() {
 # attribute — NAMES only, never values. rc 0 = every listed change is a backfill; rc 1 = at least one
 # is not (offenders + why on stderr) or the list is empty; rc 2 = the JSON is unreadable. Pure —
 # the fixture tests (mgmt-policy-test.sh) feed it synthetic plans. A value change, a removed
-# attribute, a type change, a create/delete/replace, a data source or an address the plan does not
-# carry all fail it: the shape is "the new provider wrote its defaults", nothing wider.
+# attribute, a type change, a create/delete/replace, a data source, an address the plan does not
+# carry, or a NEW list/set value (an array anywhere between the anchor and the leaf, in `before` or
+# in `after`) all fail it: the shape is "the new provider wrote its defaults", nothing wider.
 mgmt_plan_default_backfill() {
   local out="$1" lines res
   lines="$(cat)"; [ -n "$lines" ] || return 1
@@ -662,6 +663,12 @@ mgmt_plan_default_backfill() {
     def leafs: [paths(type != "object" and type != "array")];
     def val($o; $p): ($o | try getpath($p) catch "\u0000unreachable");
     def anchor($b; $p): [range(0; ($p | length) + 1) | $p[:.] | select(val($b; .) != null)] | last;
+    # a backfill lives under OBJECTS only: the nearest ancestor present in `before` is an object, and every
+    # container `after` creates between it and the leaf is an object too (a brand-new `t: ["x"]` — key
+    # absent in `before` — anchors at the root and would pass on `before` alone; review on PR#2214)
+    def under_objects($b; $a; $p): (anchor($b; $p)) as $q
+      | (($b | getpath($q) | type) == "object")
+        and ([range(($q | length); ($p | length)) | $p[:.] as $r | select($r != $q) | ($a | getpath($r) | type)] | all(. == "object"));
     ($L | split("\n") | map(select(length > 0) | split("\t")[0]) | unique) as $want
     | [.resource_changes[]? | select(.address as $a | ($want | index($a)) != null)] as $cs
     | ($cs[] | .address as $addr | .change as $ch | ($ch.before) as $b | ($ch.after) as $a
@@ -673,7 +680,7 @@ mgmt_plan_default_backfill() {
          else (([($a | leafs[]), ($b | leafs[])] | unique) | map(select(. as $p | val($a; $p) != val($b; $p)))) as $diff0
            # leaves only: `s: null → {x: 1}` differs at both ["s"] and ["s","x"]; a path that prefixes another differing path is not reported twice
            | ($diff0 | map(. as $p | select(([$diff0[] | select(. != $p and .[:($p | length)] == $p)] | length) == 0))) as $diff
-           | ($diff | map(select(. as $p | (val($b; $p) != null) or ((anchor($b; $p)) as $q | ($b | getpath($q) | type) != "object")))) as $bad
+           | ($diff | map(select(. as $p | (val($b; $p) != null) or (under_objects($b; $a; $p) | not)))) as $bad
            | if ($diff | length) == 0 then {address: $addr, ok: false, why: "an update with no attribute difference"}
              elif ($bad | length) > 0 then {address: $addr, ok: false, why: ("not null→value under an object: " + ($bad | map(map(tostring) | join(".")) | join(", ")))}
              else {address: $addr, ok: true, paths: ($diff | map(map(tostring) | join(".")))} end

@@ -368,6 +368,9 @@ jq -n '{resource_changes: [
   {address:"a.n",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"4", s:{x:null}},       after:{id:"4", s:{x:1}}}},
   {address:"a.nn",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"5", s:null},           after:{id:"5", s:{x:1}}}},
   {address:"a.arr", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6", t:[]},             after:{id:"6", t:["x"]}}},
+  {address:"a.arrnew", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6b"},                after:{id:"6b", t:["x"]}}},
+  {address:"a.arrobj", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6c"},                after:{id:"6c", t:[{x:1}]}}},
+  {address:"a.arrnest", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6d", s:{}},         after:{id:"6d", s:{t:["x"]}}}},
   {address:"a.unk", mode:"managed", type:"a", change:{actions:["update"], before:{id:"7", f:null},           after:{id:"7", f:null}, after_unknown:{f:true}}},
   {address:"a.cr",  mode:"managed", type:"a", change:{actions:["create"], before:null,                       after:{id:"8", f:false}}},
   {address:"a.rm",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"9", f:true},           after:{id:"9"}}},
@@ -388,6 +391,9 @@ bfcase nested-ok       'a.n|update;a.nn|update'   0 'a.n|s.x;a.nn|s.x;'
 bfcase value-change    'a.v|update'               1 ''
 bfcase mixed           'a.x|update;a.v|update'    1 ''
 bfcase array-element   'a.arr|update'             1 ''
+bfcase array-new-key   'a.arrnew|update'          1 ''
+bfcase array-of-objects 'a.arrobj|update'         1 ''
+bfcase array-nested    'a.arrnest|update'         1 ''
 bfcase after-unknown   'a.unk|update'             1 ''
 bfcase create          'a.cr|create'              1 ''
 bfcase removed-attr    'a.rm|update'              1 ''
