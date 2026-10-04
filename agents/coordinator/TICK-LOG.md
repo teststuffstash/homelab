@@ -12373,3 +12373,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   in-cluster images" row moves from ❌ to this (docs land with the wave report). Baseline re-taken
   21:33Z: 16 names (new vs 19:56Z: `ArgoCDAppDegraded` — ours, G1; `DeepDigStale` — the never-run lane;
   `PveNumaNodeMemoryLow` — nx-02 NUMA, the FU-289 class, unrelated), 190 targets.
+- **21:34–21:40Z two of the five chart PRs are CI-RED, both on SIBLING ARTIFACTS a chart pin drags along
+  (the wave's first real gaps):** (G11) **#2224 crossplane 2.3.2→2.3.6** — `publicroute-tf-validate`
+  requires `crossplane.io/engine-image-digest.<chart version>` beside the pin (render by digest,
+  #1779); a hand `crane digest` step on every bump → no path to green for a Renovate PR. Fix = a regex
+  customManager moving the annotation (version in KEY, digest in VALUE; Docker Hub v2.3.6 =
+  sha256:3213f5…) + `groupName: crossplane` → one PR, deps-review only (custom.regex automerge rule
+  excludes it): **PR#2226**, armed. (G12) **#2225 kps 86.1.0→86.1.1** — `prometheus-rules-lint`
+  reds until `scripts/upstream-alerts-refresh.sh` re-renders the upstream alert-name list for the
+  pinned chart and any NEW name gets a triage entry (needs network, so the lint never runs it). This
+  one has a judgment inside (now|dig|none per new name) — the designed owner is the deps-review
+  worker-adapts leg (FU-046, never yet drawn). **G12b: a CI-RED armed Renovate PR has NO actor** —
+  the reflex reviews only green heads, the orphan backstop treats `deps-review` as owned, the
+  coordinator's "investigate while red" covers un-armed majors only. Seat hand-fixes #2225 tonight
+  (refresh + classify, pushed to the Renovate branch — Renovate then leaves the branch alone) and
+  records the hand step as the gap.
