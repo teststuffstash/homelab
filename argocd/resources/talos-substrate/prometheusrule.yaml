@@ -38,7 +38,8 @@ spec:
             count by (os_image) (kube_node_info{os_image=~"Talos.*"})
               unless topk(1, count by (os_image) (kube_node_info{os_image=~"Talos.*"}))
           for: 24h
-          labels: { severity: warning }
+          # triage none: rollout state; the reconciler alerts (Parked, InstallDrift) carry the cause
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $value }} node(s) have run {{ $labels.os_image }} for 24 h while the rest of the fleet is on another version"
             description: >-

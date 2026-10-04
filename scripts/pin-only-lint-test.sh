@@ -36,6 +36,9 @@ CLOSED='pulls?state=closed&sort=updated&direction=desc&per_page=100'
 reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf '[]\n'; else printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; fi >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 # reverts_img_ <image ref …>: the closed-PR list with ONE merged revert-img-* PR naming those
 # image refs (check (f), the tofu-image-revert chain's memory).
+# reverts_prov_ <name@version …>: ONE merged revert-prov-* PR naming those provider versions
+# (check (g), the tofu-provider-revert chain's memory).
+reverts_prov_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-prov-abcd1234"},"body":"#1988 rollback\\n\\nreverted-providers: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-img-abcd1234"},"body":"#1988 rollback\\n\\nreverted-images: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
@@ -76,6 +79,8 @@ printf 'spec:\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homel
 printf 'spec:\n  source:\n    targetRevision: 2026.9.1-gaaaa\n    chart: x\n' >"$R/argocd/platform/openrouter-operator.yaml"
 # the fourth shape's home: a tofu Deployment with the dind sidecar's image line (check (f)).
 mkdir -p "$R/tofu"
+# check (g)'s home: a lockfile with two providers (the version line alone does not say whose it is).
+printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "2.38.0"\n  constraints = "~> 2.31"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n' >"$R/tofu/.terraform.lock.hcl"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
@@ -187,6 +192,16 @@ case_ tofu-image-other-reverted ok "reverts_img_ docker:28-dind" \
   "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
 case_ tofu-image-memory-unreadable 'cannot read the merged revert-img-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
+# (g) the reverted-provider memory: a lockfile bump passes on an empty memory, is REFUSED when a
+# merged revert-prov-* PR names that provider@version, passes when the memory names ANOTHER
+# provider at the same version (the name is part of the key), and an unreadable memory is a FAIL.
+case_ provider-bump ok "" "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-reverted-refused 'is a REVERTED provider version' "reverts_prov_ kubernetes@3.2.1" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-other-name-same-version ok "reverts_prov_ helm@3.2.1" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-memory-unreadable 'cannot read the merged revert-prov-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
 
 # ── the initial-pin scenario: a repo whose workflows were NEVER pinned before. Renovate's first
 # pass removes unpinned refs (`@v4`) and adds pinned ones (`@sha # v4`). The removed lines are

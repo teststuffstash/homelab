@@ -18,6 +18,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage {{ $labels.volume }} volume is {{ $value | humanizePercentage }} full on {{ $labels.pod }}
           description: >-
@@ -28,6 +29,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: now
         annotations:
           summary: Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}
           description: 'A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage''s health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly.'
@@ -37,6 +39,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage admin-metrics families are absent — the disk/table belts are blind
           description: The garage-admin-metrics belts (GarageDiskFillingUp, GarageTableEmpty) read garage_local_disk_total and table_size, and at least one family is absent from Prometheus — the scrape is not working (ServiceMonitor selector, metrics token, or a metric-name drift), so those belts cannot fire regardless of Garage's state. Fix the scrape; do not silence this without confirming both families exist.
@@ -48,6 +51,7 @@ groups:
         for: 10m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage cluster degraded as seen from {{ $labels.instance }}
       - alert: GarageClusterFlapping
@@ -57,6 +61,7 @@ groups:
         for: 0m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage cluster degraded ≥5 min in the last hour as seen from {{ $labels.instance }}
       - alert: GarageZoneDegraded
@@ -65,6 +70,7 @@ groups:
         for: 5m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage is running with a zone down — one more zone loss stops writes
       - alert: GarageTableGcBacklog
@@ -73,6 +79,7 @@ groups:
         for: 26h
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 26h
       - alert: GaragePeerRpcTimeouts
@@ -81,6 +88,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage {{ $labels.pod }} is timing out RPCs to a peer ({{ $value | humanize }}/s)
   - name: garage-availability
@@ -91,6 +99,7 @@ groups:
         for: 0m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Garage S3 returned {{ $value | humanize }} × HTTP {{ $labels.status_code }} in 5m
       - alert: GarageQuorumMembersRestarted
@@ -99,5 +108,6 @@ groups:
         for: 0m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: "{{ $value }} Garage quorum members started within the last 5 minutes"

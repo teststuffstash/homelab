@@ -1,7 +1,7 @@
 # The management box (R12) — the out-of-band applier
 
-**Decision:** [`adr.md`](adr.md) ADR-129 (the OS + update shape). **Tracked by:** FU-097 (which
-surfaces it may reconcile — its ruling table gates the box's first real job) and FU-012 (the state
+**Decision:** [`adr.md`](adr.md) ADR-129 (the OS + update shape). Which surfaces it may reconcile: §The capability ledger
+(FU-097, archived 2026-10-03). **Tracked by:** FU-012 (the state
 and credentials that move here). **End-state it serves:**
 [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md) — recovery path 5, and this doc
 is the build for the pilot that path's §The pilot's build order sequences.
@@ -92,7 +92,7 @@ target device BEFORE building the flake's `installerIso`, so a wrong device cost
   to boot at all — the inversion this box exists to remove.
 - *PXE as the install path is deferred, not rejected*: it needs a non-Talos asset class in Matchbox
   (whose ansible role syncs Talos assets only) plus the flag→install→**unflag** discipline, or a
-  PXE-first box with a live group sits in a reinstall loop (`tofu/provisioning/matchbox.tf`). It
+  PXE-first box with a live group sits in a reinstall loop (a transient flag in the gitignored `tofu/provisioning/flags.local.tf`, FU-244). It
   earns its keep at the **second** install of a config that has stopped churning — i.e. when the
   role moves to the permanent Tiny. Until then the stick has a property PXE cannot have: it works
   with Matchbox, dnsmasq and OPNsense all down, which is the recovery-root property anyway.
@@ -171,13 +171,19 @@ reinstall window), `MgmtNodeLiveStateDrift` (labels/taints, 1 h — applied live
 belt's own VERDICTS** — `mgmt_probe_check{check,status}`, published since the beginning with no
 rule consuming it, so a check could fail on every tick and say so to nobody: the `talos` skew
 check did exactly that from the 2026-09-22 move to v1.14.1 until a seat ran the unit by hand
-([FU-286](follow-ups.md)). The **version** axis has no box-side alert:
+([FU-286](follow-ups.md)). Since 2026-10-03 each series also carries a **`reason`** — one word
+from the probe's fixed vocabulary (`REASONS` in `mgmt/scripts/mgmt-probe.sh`: `drift`, `skew`,
+`unreachable`, `toolchain`, `failed`, …), never free text — which the alert's summary prints, so
+a cluster-side reader can say *why* without ssh; the full verdict line stays in journald. The
+`ansible` check judges per router NODE: a node that does not answer reads `unreachable`, not an
+opaque run failure. The **version** axis has no box-side alert:
 `TalosFleetVersionSplit` (`argocd/resources/talos-substrate/`, `for: 24h`) already owns the
 stalled-rollout case from `kube_node_info`, with no transport at all.
 
 ⚠ **Known hole:** Prometheus is in-cluster, so a cluster-down event blinds the detector. Acceptable
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
-work), but the spike's "alerts leave by two independent paths" has no second path yet.
+work). The spike's "alerts leave by two independent paths" was reframed 2026-10-02: no human
+notification, the box's own Prometheus-free view instead (FU-302, §Open, and deliberately not built yet).
 
 ### A standing refusal is a THIRD verdict shape, and nothing detects it
 
@@ -424,13 +430,38 @@ master already trusts and tofu verifies the zip against the head's h1 hash and t
 signature, so a hostile hash fails `init` and never runs. What the shape cannot vouch for is the new
 version's behaviour — the plan does: **a pin head must plan empty**; a non-empty plan fails
 `management-sentinel` with `provider bump changes the plan: <root>(+a ~c -d) — human read`, and the
-comment names the root. That failure is the whole human lane for this class; a human who agrees
+comment names the root. **And the revert must stay a revert (S9 #1988, 2026-10-04):** an empty plan says nothing
+about what the NEXT apply writes — under the head's provider it rewrites state at that provider's
+schema versions, and the old provider cannot read a newer version back, so after one apply a
+lockfile revert would need a state restore. Stage 2 therefore also compares, per root, the
+`tofu providers schema -json` of master's lockfile against the head's (`mgmt_provider_schema` — a
+scratch root built from the lockfile alone, since `providers schema` wants an initialised backend)
+over every managed type in the plan, the state and the plan exclusions (`mgmt_judged_types` → `mgmt_schema_upgrades`): a raised schema version, a raised
+or newly added identity version, or a removed type fails the context with `provider bump changes
+stored state: <root>(<types>) — human read`. Additive attributes pass — the old provider drops
+attributes it does not know when it reads state. The kubernetes 3 major (#2047) passed it: zero
+version moves across all three roots, so its lockfile revert is a revert even after applies. **"Empty" is relative to master's own pending plan:** when a pin head plans changes, the sentinel
+plans master alone for that root, and an identical address/action set passes (the pin adds nothing)
+— without it, the one pin that must merge while master carries residue, the provider revert below,
+would park on a human by construction. That failure is the whole human lane for this class; a human who agrees
 with the change orders `mgmt-human-plan` as before. The Renovate side — the terraform rule moving from
 `major/awaiting-human` to the `automerge` lane, and the infisical / cloudflare-token roots
 (`foreign_roots`, no box plan) excluded from the manager rather than merged unplanned (#1984 merged
 that way on 2026-09-27 and was reconciled from the jail after the fact) — is a separate
 operator-direct edit of `.github/renovate-global.json`; until it lands the sentinel side here admits
 and plans, and the PRs still wait for a human merge.
+
+**A provider bump's first real test is a LATER apply (S9 #1988, 2026-10-04).** A pin plans empty,
+so the new provider's create/update/delete code first runs on some unrelated change, days after any
+merge-time window. `mgmt-apply.sh` therefore keeps, per root, the provider versions the last
+successful CHANGING apply ran (`$ADIR/exercised-<root>.tsv`, written by `mgmt_record_exercised` for
+the providers owning a changed address). When an apply ERRORS and a provider owning one of its
+addresses is locked at a version that record does not hold (`mgmt_unexercised`), the refusal names
+it (`apply errored on a provider no apply had run yet: kubernetes 2.38.0→3.2.1`) and the box
+publishes `mgmt_apply_errored_unexercised{root,provider,exercised,locked}` →
+**`MgmtApplyErroredOnNewProvider`** (`argocd/resources/mgmt-metrics/`, promtool-fixtured) — the
+signal the provider revert chain keys on. With no record file yet nothing is attributed (fail
+closed); a fresh box is seeded by hand with the versions its applies have demonstrably run.
 
 The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` refuses a master span
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
@@ -505,6 +536,23 @@ allowed, create/delete/replace refused, an unknown role refused, seed images all
 outside, and the post-check polling (clean, transient, still regressed at the deadline).
 `maint-self-test` pins the `snapshot`/`compare` verbs.
 
+### Declared windows hold the apply loop (FU-300, 2026-10-02)
+
+Operator ruling 2026-10-02: the box must not apply in the middle of someone else's maintenance (a
+router move), whatever the class. So a span that would plan first reads the live
+[declared windows](glossary.md) — the same record and the same rule as the reconciler's WIP 1
+(§MB4), applied to a root instead of a node — and while any holds it the tick **defers**: no plan,
+no apply, no stamp, no status, one `DEFERRED` journal line naming the window ids, exit 0. A window
+opened with `--admit-apply` (`agents/seat-window.sh`, `scripts/maintenance-window.sh`) does not
+hold it; `--admit-reconciler` does not admit the apply. The loop opens no window itself (its
+Talos bracket above is `snapshot`/`compare`), so it never holds itself; the reconciler's sync
+windows do hold it. An unreadable record defers as a PROBE-FAIL. A span touching no `apply: true`
+root still stamps. Mechanism and fixtures: `mgmt_apply_window_gate` in `mgmt/scripts/mgmt-lib.sh`,
+`mgmt-policy-test`. Visibility: `mgmt_apply_deferred_window{,s,_unreadable}` →
+**`MgmtApplyDeferredByWindow`** after 6 h (`argocd/resources/mgmt-metrics/`) — a deferral posts no
+status and completes its tick, so neither `MgmtApplyResidueStanding` nor `MgmtApplyLoopStale` sees
+it; an unreadable record also trips `MgmtApplyLoopStale`.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -512,7 +560,9 @@ toggle. A surface enters with its first unattended success, never with a belief 
 do. Anchors (2026-09-13): the router, the control planes' substrate and Proxmox stay human; the
 raw-k8s residue belongs to the box; `provisioning` is the canary. On a box-applied surface the
 codeowner read becomes an **intent review** (does the plan + install-impact line do what the issue
-asked, given what the fleet and the box already run?). That reviewer instruction is not written yet.
+asked, given what the fleet and the box already run?). The reviewer instruction is in
+[`.agents/review.md`](../.agents/review.md) since 2026-09-28: intent and plan disagreeing is BLOCKING
+even when every check is green.
 
 | Surface | Toggle | Tested on its own | Evidence |
 |---|---|---|---|
@@ -973,10 +1023,10 @@ this section.
 
 | Question | Why it waits |
 |---|---|
-| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review reviewer instruction is still unwritten |
+| Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review instruction is live in `.agents/review.md` (2026-09-28) |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
-| The second alert path | the spike asks for two independent paths out; today there is one, and it is in-cluster |
+| The second alert path | **Reframed by the operator 2026-10-02: no out-of-band human notification** ("if I am home I will notice, otherwise it burns until I get home"). The box needs its OWN verdict on the cluster for its gates, one that bypasses Prometheus (whose reads ride a Cilium BGP VIP): Talos API, kube API via the CP VIP, `kubectl exec` into cilium for BGP, LAN HTTP to the BGP VIPs, Prometheus/Alertmanager `/-/ready`. Most reads exist (the maintenance-window probes, the belt's node diff); the missing piece is one verdict function that `mgmt-apply` and `mgmt-reconcile` call — FU-302 |
 | The management network | designed (§MB4 item 7: range, static addressing, the two access verbs); built in the WAN-switch visit — the box's second NIC stanza, the BMC re-address, the verbs, FU-288's rotation |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 

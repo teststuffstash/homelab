@@ -116,10 +116,14 @@ KEY_ENTRY="${OPN_TEST_KEY_ENTRY:-opnsense-test-api-key}"
 SECRET_ENTRY="${OPN_TEST_SECRET_ENTRY:-opnsense-test-api-secret}"
 
 echo "$OPN_TEST_HOST" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "OPN_TEST_HOST must be an IPv4 literal"
-PROD_HOST="$(yq -r '.all.children.opnsense.hosts[].ansible_host' "$ROOT/ansible/inventory.yml")"
-[ -n "$PROD_HOST" ] || die "could not read the prod router address from ansible/inventory.yml"
+# The live router (docs/router-move.md (B): Big Data before window 1, the nx-02 node after) and every
+# router node, live or standing — the test VM is none of them.
+PROD_HOST="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml" | head -1)"
+[ -n "$PROD_HOST" ] || die "could not read the prod router address from the ansible inventories"
+NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
 [ "$OPN_TEST_HOST" != "$PROD_HOST" ] && [ "$OPN_TEST_HOST" != 192.168.2.1 ] \
   || die "REFUSING: OPN_TEST_HOST=$OPN_TEST_HOST is the production router"
+case " $NODES " in *" $OPN_TEST_HOST "*) die "REFUSING: OPN_TEST_HOST=$OPN_TEST_HOST is a router node" ;; esac
 case "$KEY_ENTRY$SECRET_ENTRY" in *opnsense-api-key*|*opnsense-api-secret*)
   die "REFUSING: the test harness never reads the router's wallet entries" ;; esac
 

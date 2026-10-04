@@ -74,6 +74,7 @@ tests:
               namespace: platform-agents
               pod: coordinate-perstack-h1
               uid: u1
+              triage: dig
       # 7m after the roll: the bridge is exhausted and the exclusion is gone for good. THIS row is
       # the generation guard alone — remove it and the shipped expr becomes the raw one here.
       - eval_time: 27m
@@ -116,6 +117,7 @@ tests:
               namespace: platform-agents
               pod: coordinate-perstack-h2
               uid: u2
+              triage: dig
       # the markers are back since 23m, so even the raw form recovers — the false page was a blip
       # it could not have known was a blip.
       - eval_time: 24m
@@ -154,6 +156,7 @@ tests:
               job: agent_scan_phase
               namespace: agent-coordinator
               pod: coordinate-perstack-w3
+              triage: dig
       - eval_time: 19m
         alertname: AgentCoordinateScanWedgedPgwRaw
         exp_alerts: *wedge_arm2_w3
@@ -170,6 +173,7 @@ tests:
               namespace: agent-coordinator
               pod: coordinate-perstack-w3
               uid: u3
+              triage: dig
       # markers back since 23m. The raw form's arm 2 is only PENDING again (re-armed at 23m, fires
       # at 25m), so its wedge is unalerted here; the bridged one never stopped.
       - eval_time: 24m
@@ -222,6 +226,7 @@ tests:
               job: agent_scan_phase
               namespace: agent-coordinator
               pod: coordinate-perstack-w4
+              triage: dig
       # past it: silent, and it stays silent for as long as this pod lives. THE CEILING.
       - eval_time: 26m
         alertname: AgentCoordinateScanWedged
@@ -238,6 +243,7 @@ tests:
               namespace: agent-coordinator
               pod: coordinate-perstack-w4
               uid: u4
+              triage: dig
 
   # ══ 5. THE GUARD DEFAULTS OPEN — positive evidence only ══════════════════════════════════════
   # No `process_start_time_seconds` series at all (the metric renamed, relabelled away, or a test
@@ -262,6 +268,7 @@ tests:
               namespace: agent-coordinator
               pod: coordinate-perstack-n5
               uid: u5
+              triage: dig
       # unchanged from the pre-#353 expr, which is the point.
       - eval_time: 19m
         alertname: AgentCoordinateScanWedgedPgwRaw
@@ -295,3 +302,4 @@ tests:
               namespace: platform-agents
               pod: coordinate-perstack-s6
               uid: u6
+              triage: dig

@@ -27,8 +27,9 @@ drain, delete, BGP, doc rows); do not re-derive it here.
 
 ## Steps
 
-1. **Flag the MAC** in `tofu/provisioning/matchbox.tf` (a `matchbox_group` → `talos-worker`
-   profile), then apply it:
+1. **Flag the MAC** in `tofu/provisioning/flags.local.tf` — gitignored, never committed (FU-244;
+   the resource shape is in `matchbox.tf`'s header): a `matchbox_group` → `talos-worker` profile,
+   then apply it:
    ```bash
    export NIX_CONFIG="experimental-features = nix-command flakes"
    export KP_DIR="$HOME/.claude/homelab-keepass"
@@ -67,7 +68,8 @@ drain, delete, BGP, doc rows); do not re-derive it here.
    ```bash
    devbox run -- tofu -chdir=tofu/provisioning destroy -target=matchbox_group.<x>
    ```
-   Remove the group from `matchbox.tf` too (committed file holds no per-node groups).
+   Then delete the group from `flags.local.tf`. A flag never reaches git — `devbox run
+   machines-lint` fails on a `matchbox_group` in any tracked provisioning file.
 
 ## Post-install registrations — the steps `Ready` does not gate
 

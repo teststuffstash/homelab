@@ -23,7 +23,7 @@ tests:
       - eval_time: 1625m
         alertname: OpnsenseConfigBackupStale
         exp_alerts:
-          - exp_labels: { severity: warning }
+          - exp_labels: { severity: warning , triage: dig}
 
   # FRESH: success pushed every 24 h (1440 min) → never older than 26 h → never fires.
   - interval: 5m
@@ -54,7 +54,7 @@ tests:
       - eval_time: 65m
         alertname: OpnsenseConfigBackupStale
         exp_alerts:
-          - exp_labels: { severity: warning }
+          - exp_labels: { severity: warning , triage: dig}
 
   # SUSPENDED (pre-mint): no success series, suspend=1 → Stale silent. Created at t=0 (series
   # value 0), so Suspended needs time() > 7 d = 10080 min, then for: 1h → firing at 10145m, not

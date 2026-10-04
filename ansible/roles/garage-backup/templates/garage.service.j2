@@ -1,0 +1,18 @@
+# Managed by ansible/roles/garage-backup.
+[Unit]
+Description=Garage S3 — Longhorn backup target (FU-299)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=RUST_LOG=garage=info
+Environment=GARAGE_CONFIG_FILE=/etc/garage/garage.toml
+ExecStart=/usr/local/bin/garage server
+User=garage
+Group=garage
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

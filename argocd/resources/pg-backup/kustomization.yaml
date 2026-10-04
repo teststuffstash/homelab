@@ -1,0 +1,22 @@
+# Postgres backups by default (ADR-147, docs/postgres.md §Backups). One store-<ns>.yaml per
+# namespace that holds CNPG Clusters — keep it equal to the admission policy's namespace list and
+# ansible/group_vars/garage_backup.yml's cnpg-<ns> buckets.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - admission-policy.yaml
+  - cronjob.yaml
+  - prometheusrule.yaml
+  - store-infisical.yaml
+  - store-forgejo.yaml
+  - store-monitoring.yaml
+  - store-oracle-fleet.yaml
+
+configMapGenerator:
+  - name: pg-backup-job
+    namespace: cnpg-system
+    files:
+      - pg-backup.py
+    options:
+      disableNameSuffixHash: true

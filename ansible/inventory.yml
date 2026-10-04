@@ -1,21 +1,24 @@
 # Inventory for the homelab control targets. Group names (opnsense, matchbox) drive
 # group_vars/*.yml; host names are distinct from the groups to avoid Ansible's
 # "group and host with same name" warning. Playbooks target the GROUPS.
-#   - opnsense : the router @ .1, driven via its REST API *from the controller*
-#               (connection: local — the oxlorg.opnsense modules POST to the API).
+#   - opnsense : the router, driven via its REST API *from the controller* (connection: local —
+#               the oxlorg.opnsense modules POST to the API). Since window 1 (ADR-145) its hosts are
+#               the CARP pair's nodes in router-nodes/inventory.yml, which ansible.cfg loads beside
+#               this file — Big Data (`opnsense-fw` @ .1) left; the fallback re-adds it here.
 #   - matchbox : the PXE provisioning LXC @ .30, configured over SSH.
+#   - garage_backup : the Longhorn backup-target Garage LXC @ .73 on nx-02, configured over SSH.
 # Per-group connection + config values live in group_vars/{opnsense,matchbox}.yml.
 all:
   children:
-    opnsense:
-      hosts:
-        opnsense-fw:
-          ansible_host: 192.168.2.1
-          ansible_connection: local
     matchbox:
       hosts:
         matchbox-lxc:
           ansible_host: 192.168.2.30
+    garage_backup:
+      # Longhorn's backup target — single-node Garage in CT 220 on nx-02 (FU-299, tofu/provisioning).
+      hosts:
+        backup-garage-lxc:
+          ansible_host: 192.168.2.73
     pve:
       # The group is "Proxmox hypervisor hosts", not the box named pve — nx-02 (the SECOND
       # hypervisor, 2026-09-15) is one too, and every play here is per-host work: the thin-pool

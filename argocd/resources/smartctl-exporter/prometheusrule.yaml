@@ -39,7 +39,8 @@ spec:
         - alert: DiskSmartFailing
           expr: smartctl_device_smart_status{job=~"smartctl-exporter|pve-node"} == 0
           for: 15m
-          labels: { severity: critical }
+          # triage dig: map what sits on the failing drive (replicas, Garage zone) before eviction
+          labels: { severity: critical, triage: dig }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: SMART overall-health says FAILING"
             description: >-
@@ -58,7 +59,8 @@ spec:
               min_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector|Reported_Uncorrect|Offline_Uncorrectable"}[7d])
             ) > 0
           for: 1h
-          labels: { severity: warning }
+          # triage dig: growth vs disclosed baseline plus what sits on the drive is readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: {{ $labels.attribute_name }} grew by {{ $value }} in 7 d"
             description: >-
@@ -76,7 +78,8 @@ spec:
               min_over_time(smartctl_device_attribute{job=~"smartctl-exporter|pve-node", attribute_value_type="raw", attribute_name="UDMA_CRC_Error_Count"}[1h])
             ) > 0
           for: 0m
-          labels: { severity: warning }
+          # triage none: CRC errors mean the cable; reseat or replace is physical
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }} new SATA interface CRC error(s) in 1 h"
             description: >-
@@ -91,7 +94,8 @@ spec:
               < ignoring(speed_type)
             smartctl_device_interface_speed{job=~"smartctl-exporter|pve-node", speed_type="max"}
           for: 30m
-          labels: { severity: warning }
+          # triage none: negotiated link speed is a cable or port fact; remedy is physical
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: SATA link negotiated below its rating"
             description: >-
@@ -105,7 +109,8 @@ spec:
         - alert: NvmeCriticalWarning
           expr: smartctl_device_critical_warning{job=~"smartctl-exporter|pve-node"} > 0
           for: 5m
-          labels: { severity: critical }
+          # triage dig: which warning bit and what data sits on the drive are readable in-cluster
+          labels: { severity: critical, triage: dig }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: NVMe critical warning bitfield = {{ $value }}"
             description: >-
@@ -116,7 +121,8 @@ spec:
         - alert: NvmeSpareBelowThreshold
           expr: smartctl_device_available_spare{job=~"smartctl-exporter|pve-node"} < smartctl_device_available_spare_threshold{job=~"smartctl-exporter|pve-node"}
           for: 15m
-          labels: { severity: critical }
+          # triage dig: map replicas and Garage zone on the drive to plan eviction before read-only
+          labels: { severity: critical, triage: dig }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: NVMe available spare {{ $value }}% is below the drive's own threshold"
             description: >-
@@ -126,7 +132,8 @@ spec:
         - alert: DiskWearHigh
           expr: smartctl_device_percentage_used{job=~"smartctl-exporter|pve-node"} >= 80
           for: 1h
-          labels: { severity: warning }
+          # triage none: wear is a planning fact for the hardware register, not an incident
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }}% of rated endurance used"
             description: >-
@@ -143,7 +150,8 @@ spec:
               min_over_time(smartctl_device_media_errors{job=~"smartctl-exporter|pve-node"}[24h])
             ) > 0
           for: 0m
-          labels: { severity: warning }
+          # triage dig: what sits on the drive is readable; informs the evict decision
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.node }} {{ $labels.device }}: {{ $value }} new NVMe media/data-integrity error(s) in 24 h"
             description: >-
@@ -156,7 +164,8 @@ spec:
         - alert: DiskHealthMetricsAbsent
           expr: absent(smartctl_devices{job="smartctl-exporter"}) or absent(smartctl_devices{job="pve-node"})
           for: 15m
-          labels: { severity: warning }
+          # triage dig: smartctl DaemonSet or ServiceMonitor faults are readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "No disk-health metrics from {{ $labels.job }} for 15m — those drives are unwatched"
             description: >-

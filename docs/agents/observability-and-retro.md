@@ -32,6 +32,7 @@ Two needs, one substrate:
 | worker (goose) | `/tmp/run.log` (tee'd stdout → Loki) + goose's own session file | **no** (Loki keeps stdout only; goose session lost) |
 | reviewer | `--output-format json` single result; its `~/.claude` transcript | **no** |
 | responder (2026-09-17) | per firing alert: `alert.json` + `triage.log` + the `*.jsonl` + an A1 manifest + a typed `finding.json`, under `homelab/alert-<fp>/responder-r1-<ts>/` (FU-210 / FU-231, `agents/coordinator/responder-argo.yaml`) | **yes** (bucket) — before 2026-09-17 it was the one role with NO capture at all, and a triage that filed no issue therefore left nothing: the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed nothing, and the probe lane deferred to it as COVERED while the alert stood 8 h |
+| deep dig (2026-10-04) | per daily run: `digest.json` + `brief.md` + `dig.log` + the `*.jsonl` + an A1 manifest + one `finding-N.json` (`dig-finding/v1`) PER GROUP, under `homelab/dig-<date>/dig-r1-<ts>/` (ADR-148, `agents/coordinator/deep-dig-argo.yaml`) | **yes** (bucket) — and, unlike the responder, the pod READS the bucket back with the reader key: a finding for the same (alert, subject) within 7 d is what stops a daily re-dig |
 | jail seat (2026-08-19) | Claude Code JSONL on the host bind-mount (`.claude-data/`), pushed by `scripts/jail-transcripts-sync.sh` (heartbeat + wind-down) to the **separate `jail-transcripts` bucket** | host + bucket — and the bucket is deliberately OUTSIDE the viewer/retro read set: jail transcripts can carry wallet VALUES, so no cluster role reads them (`agents/coordinator/jail-transcripts-workspace.yaml`) |
 
 The irreplaceable artifact is the transcript. Everything else (dashboards, retros) can be built
@@ -109,6 +110,14 @@ Hook points (all existing seams, small diffs):
   filed issue are known. The key is the same WRITE-ONLY bucket key the worker holds, which is
   also the ceiling on what the record may become — the pod cannot read its own findings back, so
   the lane's dedup state stays in GitHub + the `responder-seen` ConfigMap (FU-231).
+- **deep dig** (ADR-148, 2026-10-04): the CronWorkflow uploads once per run from launcher-owned
+  shell — the digest and brief BEFORE the session, the transcript + manifest + per-group
+  `dig-finding/v1` records straight after it (`agents/deep-dig-select.sh harvest` extracts the
+  `BEGIN-DIG-FINDING`/`END-DIG-FINDING` blocks and validates each one; an invalid block is
+  dropped loudly, never uploaded as a record). This is FU-231's consumer leg: findings are the
+  deliverable, issues are not written at all, and the bucket is READ by the next run (reader
+  key, `agent-transcripts-s3`) for the "already dug" gate — the one lane whose state may live
+  in the bucket, because its key can read.
 
 ### A2. Browse (P1)
 

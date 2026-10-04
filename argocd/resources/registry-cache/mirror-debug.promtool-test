@@ -62,6 +62,7 @@ tests:
               code: "500"
               instance: http://192.168.40.20:5001
               job: mirror-debug
+              triage: dig
       # mid-hole, past the staleness marker: rate() still sees samples from before and after
       # the hole in the [5m] range, so the rate is still > 0 and the alert keeps firing.
       - eval_time: 31m
@@ -131,12 +132,14 @@ tests:
               code: "500"
               instance: http://192.168.40.20:5001
               job: mirror-debug
+              triage: dig
           - exp_labels:
               severity: warning
               handler: blob
               code: "500"
               instance: http://192.168.40.31:5001
               job: mirror-debug
+              triage: dig
       - eval_time: 30m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts:
@@ -146,9 +149,11 @@ tests:
               code: "500"
               instance: http://192.168.40.20:5001
               job: mirror-debug
+              triage: dig
           - exp_labels:
               severity: warning
               handler: blob
               code: "500"
               instance: http://192.168.40.31:5001
               job: mirror-debug
+              triage: dig

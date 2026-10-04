@@ -16,7 +16,8 @@ spec:
           expr: |
             garage_meta_rotation_last_result == 1
           for: 5m
-          labels: { severity: warning }
+          # triage dig: controller Job and init-container logs name the skip reason in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage metadata rotation of {{ $labels.pod }} failed"
             description: >-
@@ -31,7 +32,8 @@ spec:
             (time() - max(garage_meta_rotation_controller_last_run_timestamp) > 3600)
               or absent(garage_meta_rotation_controller_last_run_timestamp)
           for: 15m
-          labels: { severity: warning }
+          # triage dig: CronJob, last Job, image pull and RBAC are readable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "Garage metadata rotation controller has not run for over an hour"
             description: >-
@@ -45,7 +47,8 @@ spec:
           expr: |
             1 - garage_local_disk_avail{volume="metadata"} / garage_local_disk_total{volume="metadata"} > 0.8
           for: 6h30m
-          labels: { severity: warning }
+          # triage dig: rotation gate refusal or seed skip is readable from controller state and logs
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "GarageDiskFillingUp on {{ $labels.pod }} metadata has fired for 6h — the rotation loop did not clear it"
             description: >-

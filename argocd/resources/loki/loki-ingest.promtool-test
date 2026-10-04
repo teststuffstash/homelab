@@ -54,12 +54,14 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
       # ramp (for: 2h) fires by +2h35m — 8x the 7d avg is ~120KB/s, flood is 600KB/s
       - eval_time: 7d2h35m
         alertname: LokiIngestVolumeRamp
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
   # ── 2. THE FLOOR: a quiet system's first real workload is a 200x ramp and stays silent ────────
   - interval: 5m
     name: a 200x ramp under the 25KB/s floor never fires the ramp strap
@@ -98,6 +100,7 @@ tests:
           - exp_labels:
               severity: warning
               tenant: agent-coordinator
+              triage: dig
       # the aggregate absolute strap (for: 1h) has NOT fired yet at that point — the namespace
       # strap is the earlier signal as well as the attributing one
       - eval_time: 1h5m
@@ -109,3 +112,4 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig

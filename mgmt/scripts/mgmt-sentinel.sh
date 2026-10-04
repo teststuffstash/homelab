@@ -274,7 +274,14 @@ while IFS=$'\t' read -r pr sha; do
     post_verdict "$sha" failure "head does not merge onto master@${m8} — rebase/update the branch; nothing planned"
     continue
   fi
-  bodyf="$(mktemp)"; desc=""; state=success; failed_roots=""; pin_changed=""
+  # STATE COMPATIBILITY of a provider-pin head (S9 #1988, 2026-10-04): master's lockfiles (this
+  # worktree) vs the head's, each root's provider schemas compared per root below
+  wtb=""
+  if [ $PIN = 1 ]; then
+    wtb="$SDIR/wtb-${sha:0:8}"; rm -rf "$wtb"
+    git -C "$REPO" worktree add --quiet --detach "$wtb" origin/master || wtb=""
+  fi
+  bodyf="$(mktemp)"; desc=""; state=success; failed_roots=""; pin_changed=""; pin_state=""
   if [ $HUMAN = 1 ]; then
     { echo "**management-sentinel: HUMAN PLAN** — \`tofu plan\` of ${sha:0:8} merged onto master@${m8} (what would land) on the management box, ordered from the jail by a human who read the diff (ADR-131's escape hatch, §MB3 \"When the box refuses\"). Addresses and counts only; the plan text stays on the box."
       if [ -n "$overridden" ]; then
@@ -335,9 +342,51 @@ while IFS=$'\t' read -r pr sha; do
     os=""; oh=""; [ "$o" -gt 0 ] && { os=" ⇢$o output$op"; oh=", $o output value$op to save"; }
     read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
     if [ $PIN = 1 ] && [ -n "$changes" ]; then
-      state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
-      { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}) — human read"; } >>"$bodyf"
-      log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) — failing the context"
+      # RELATIVE TO MASTER'S OWN PENDING PLAN (S9 #1988, 2026-10-04): a pin head merged onto a master
+      # that carries unapplied residue plans that residue too — and the one pin that MUST merge then,
+      # the tofu-provider-revert chain's revert (master is refused on the errored apply), would park
+      # on a human by construction. So plan master alone: a pin that adds NOTHING (identical
+      # address/action set) passes; anything it adds, drops or alters is still the human read.
+      mout="$wtb/.mgmt-plan-$root.bin"; same=0
+      if [ -n "$wtb" ] && { mgmt_plan_root "$wtb" "$POL" "$root" "$mout" false; mrc=$?; [ $mrc != 1 ]; } \
+         && mchanges="$(mgmt_plan_changes "$wtb" "$POL" "$root" "$mout")" \
+         && [ "$(printf '%s\n' "$changes" | sort)" = "$(printf '%s\n' "$mchanges" | sort)" ]; then same=1; fi
+      if [ $same = 1 ]; then
+        { echo; echo "Provider-pin head: the plan is master's OWN pending plan (+$a ~$c -$d, identical address/action set planned on master@${m8} alone) — the pin adds nothing to it."; } >>"$bodyf"
+        log "[#$pr] provider-pin head: $root plan (+$a ~$c -$d) = master's own pending plan — the pin adds nothing"
+      else
+        state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
+        { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}; master's own pending plan differs or could not be read) — human read"; } >>"$bodyf"
+        log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) and differs from master's own — failing the context"
+      fi
+    fi
+    if [ $PIN = 1 ]; then
+      # a bump may ride only if reverting the lockfile stays a revert after the box applies under it:
+      # no type in this root's state may move to a schema (or identity) version master's provider
+      # cannot read back (mgmt_schema_upgrades). Unreadable = failure — never a vacuous pass.
+      rel="$(mgmt_root_dir "$POL" "$root")"
+      # the types to judge: plan + state + plan exclusions (mgmt_judged_types; PR#2205's review)
+      types_ok=0
+      if xt="$(mgmt_policy_get "$POL" ".roots.\"$root\".plan_exclude_types[]?")" && mgmt_judged_types "$out" "$xt" >"$out.types-all"; then types_ok=1; fi
+      if [ -n "$wtb" ] && [ $types_ok = 1 ] \
+         && mgmt_provider_schema "$wtb/$rel" "$out.schema-base.json" \
+         && mgmt_provider_schema "$wt/$rel" "$out.schema-head.json" \
+         && ups="$(mgmt_schema_upgrades "$out.schema-base.json" "$out.schema-head.json" "$out.types-all")"; then
+        if [ -n "$ups" ]; then
+          state=failure; pin_state="${pin_state:-} $root($(awk -F'\t' '{printf "%s%s", (NR>1?",":""), $1}' <<<"$ups"))"
+          { echo; echo "### ⚠ \`$root\` — the provider bump changes what STATE stores — human read"
+            echo; echo "The next apply under the head's provider rewrites these types at the new version; master's provider cannot read them back, so reverting the lockfile would no longer be a revert (a state restore would). A bump that keeps every stored version stays lockfile-revertable even after applies."
+            echo; echo "| type | master | head |"; echo "|---|---|---|"
+            awk -F'\t' -v bt='`' '{printf "| %s%s%s | %s | %s |\n", bt, $1, bt, $2, $3}' <<<"$ups"; } >>"$bodyf"
+          log "[#$pr] provider-pin head: $root state shape changes ($(tr '\n' ' ' <<<"$ups")) — failing the context"
+        else
+          { echo; echo "State compatibility: every managed resource type in \`$root\` (plan, state and plan exclusions: $(grep -c . "$out.types-all") types) keeps its schema and identity version under the head's providers — the lockfile revert stays a revert."; } >>"$bodyf"
+        fi
+      else
+        state=failure; failed_roots="$failed_roots $root"
+        { echo; echo "### \`$root\` — state-compatibility check FAILED to run (provider schemas or the plan's type list unreadable — see the box journal)"; } >>"$bodyf"
+        log "[#$pr] $root: provider schema compare could not run — failing the context"
+      fi
     fi
     excl_n=0; excl_types=""
     notplanned="$(mgmt_plan_not_planned "$out")"
@@ -375,10 +424,12 @@ while IFS=$'\t' read -r pr sha; do
     log "[#$pr] $root: +$a ~$c -$d ${rs}${os}${impact_desc}"
   done
   if [ "$state" = failure ]; then
-    if [ -n "${pin_changed:-}" ] && [ -z "$failed_roots" ]; then desc="provider bump changes the plan:${pin_changed} — human read (see the PR comment)"
+    if [ -n "${pin_changed:-}${pin_state:-}" ] && [ -z "$failed_roots" ]; then
+      desc="provider bump${pin_changed:+ changes the plan:${pin_changed}}${pin_changed:+${pin_state:+;}}${pin_state:+ changes stored state:${pin_state}} — human read (see the PR comment)"
     else desc="plan errored:$failed_roots — see the PR comment"; [ $HUMAN = 1 ] && desc="human plan: $desc"; fi
   fi
-  pin_changed=""
+  pin_changed=""; pin_state=""
+  [ -n "$wtb" ] && { git -C "$REPO" worktree remove --force "$wtb" 2>/dev/null || rm -rf "$wtb"; }
   if [ -n "$overridden" ] && [ "$state" = success ]; then
     desc="${desc% } — stage 1 overridden: $(awk -F'\t' 'NR==1{f=$2; sub(".*/","",f); printf "%s %s", $1, f}' <<<"$overridden")"
   fi

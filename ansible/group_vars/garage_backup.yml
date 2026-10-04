@@ -1,0 +1,29 @@
+# The Longhorn backup-target Garage LXC (group `garage_backup`, CT 220 on nx-02 — FU-299).
+# Logic in roles/garage-backup; values here. See docs/longhorn-backup.md.
+
+# --- SSH connection (root via the Proxmox seed key, outside the repo — as Matchbox) ---
+ansible_user: root
+ansible_ssh_private_key_file: /home/node/.claude/homelab-pve-ssh/id_ed25519
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# --- garage ---
+# Kept in lockstep with the in-cluster Garage (argocd/charts/garage, v2.3.0) so one CLI and one
+# set of operational notes (docs/garage.md) covers both. The musl build is a static binary.
+garage_version: v2.3.0
+garage_sha256: f98d317942bb341151a2775162016bb50cf86b865d0108de03eb5db16e2120cd
+garage_url: "https://garagehq.deuxfleurs.fr/_releases/{{ garage_version }}/x86_64-unknown-linux-musl/garage"
+garage_dir: /var/lib/garage
+# Layout capacity: what Garage may promise, below the LXC's 400 G thin rootfs (OS + LMDB headroom).
+garage_capacity: 360G
+garage_zone: nx-02
+# One bucket + one key of the SAME name per consumer — isolation is by bucket (ADR-031/ADR-073), so a
+# stack's key can never read another tenant's backups (Infisical's database among them).
+#   longhorn-backup    Longhorn's BackupTarget (docs/longhorn-backup.md)
+#   cnpg-<namespace>   CNPG backups of every Cluster in that namespace (docs/postgres.md §Backups) —
+#                      the list must match argocd/resources/pg-backup/ (one file per namespace)
+garage_buckets:
+  - longhorn-backup
+  - cnpg-infisical
+  - cnpg-forgejo
+  - cnpg-monitoring
+  - cnpg-oracle-fleet

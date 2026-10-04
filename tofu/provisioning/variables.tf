@@ -127,3 +127,51 @@ variable "matchbox_disk_gb" {
   type        = number
   default     = 8
 }
+
+# ---- Longhorn backup target (backup-target.tf, FU-299) ---------------------
+variable "nx02_endpoint" {
+  description = "nx-02 (the second hypervisor) Proxmox API endpoint — same value as the main root's."
+  type        = string
+  default     = "https://192.168.2.59:8006/"
+}
+
+variable "nx02_api_token" {
+  description = "nx-02 Proxmox API token (KeePass `nx-02-api-token-tofu`). Set via TF_VAR_nx02_api_token — scripts/keepass-env.sh exports it."
+  type        = string
+  sensitive   = true
+}
+
+variable "nx02_node" {
+  description = "nx-02's Proxmox node name."
+  type        = string
+  default     = "nx-02"
+}
+
+variable "nx02_datastore_rootfs" {
+  description = "nx-02 datastore for the backup container's rootfs — the SA400 thin pool, NOT nvme-thin (that one carries the VMs)."
+  type        = string
+  default     = "local-lvm"
+}
+
+variable "backup_garage_vmid" {
+  description = "Proxmox CTID for the backup Garage container (Matchbox is 210; VMs use 81xx/9xxx)."
+  type        = number
+  default     = 220
+}
+
+variable "backup_garage_ip_cidr" {
+  description = "Static IP/CIDR — machines.yaml row `backup-garage`; cleared by git grep + nmap 2026-10-03."
+  type        = string
+  default     = "192.168.2.73/24"
+}
+
+variable "backup_garage_memory_mb" {
+  type    = number
+  default = 1024
+}
+
+variable "backup_garage_disk_gb" {
+  description = "Rootfs size (thin) on nx-02's 700 G SA400 pool — sizing in docs/longhorn-backup.md."
+  type        = number
+  default     = 400
+}

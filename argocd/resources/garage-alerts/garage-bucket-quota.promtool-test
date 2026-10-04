@@ -34,6 +34,7 @@ tests:
           - exp_labels:
               severity: warning
               bucket: ert-snapshots
+              triage: dig
             exp_annotations:
               summary: "Garage bucket ert-snapshots is at 84.54% of its size quota"
               description: "The bucket's size counter is over 80% of its max_size (ADR-089: every bucket claim states one). The next object that does not fit is refused by Garage with AccessDenied \"Bucket size quota is reached\" — at COMMIT for multipart uploads, so a consumer can spend a whole upload before learning it. Either the owner prunes (its own retention) or the claim's max_size grows — per-zone headroom is `garage stats` DataAvail, and every zone holds a full copy at rf=3."
@@ -63,6 +64,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
               description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."
@@ -80,6 +82,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
             exp_annotations:
               summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
               description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."

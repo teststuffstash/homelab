@@ -58,6 +58,8 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: what holds the mirror PVC (legit blobs vs leak) is readable in-cluster
+            triage: dig
           annotations:
             summary: "Registry mirror PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
             description: "{{ $labels.persistentvolumeclaim }} has under 15% free. At 100% the mirror truncates in-flight pull-through writes and nodes see digest mismatches/500s instead of a loud failure. Check what's big: legit blobs (capacity/TTL decision — argocd/resources/registry-cache/) vs _uploads debris (should self-reap within ~1h via uploadpurging; if it isn't, that mechanism is broken)."
@@ -111,6 +113,8 @@ spec:
           for: 5m
           labels:
             severity: warning
+            # triage: repaired at restart; why links dangled is readable from mirror logs
+            triage: dig
           annotations:
             summary: "{{ $labels.mirror }} had {{ $value }} dangling layer link(s) repaired at last restart"
             description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so counts of 1–9 here are now EXPECTED HOUSEKEEPING rather than an outage and stay silent — this alert fires only at ≥10 (the order-of-magnitude jump #241 reserved for a new investigation), and even then check first whether it is paired with actual pull failures. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
@@ -122,6 +126,8 @@ spec:
           expr: sum_over_time(registry_mirror_store_wiped[14d]) >= 3
           labels:
             severity: warning
+            # triage: sizing signal; a session can measure and PR the PVC growth
+            triage: dig
           annotations:
             summary: "{{ $labels.mirror }} has wiped its cache {{ $value }} times in 14 days"
             description: "The capacity valve is firing often enough to hurt: every wipe costs a full cold re-warm from upstream. This is a SIZING signal — grow the PVC (bulk tier has headroom since wk-metal-04 joined, see docs/storage-ledger.md) rather than lowering the threshold."
@@ -234,6 +240,8 @@ spec:
           for: 10m
           labels:
             severity: warning
+            # triage: mirror pod and blob errors readable in-cluster; nodes fall back to upstream
+            triage: dig
           annotations:
             summary: "Registry mirror probe failing: {{ $labels.instance }}"
             description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). The mirror is returning 5xx or not answering at all. ⚠ Since homelab#1282 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down. Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
@@ -256,6 +264,8 @@ spec:
           for: 10m
           labels:
             severity: warning
+            # triage: poison blob identifiable from mirror metrics and logs
+            triage: dig
           annotations:
             summary: "Registry mirror {{ $labels.instance }} has sustained 5xx on blob requests"
             description: "{{ $labels.instance }} has had a non-zero 5xx rate on blob (layer) requests for 10m. This is the per-blob poison signature #1282 documents — a specific blob is consistently failing while /v2/ may still answer 200. Check which blob codes are 5xx-ing: increase(registry_http_requests_total{instance=\"{{ $labels.instance }}\",handler=\"blob\",code=~\"5..\"}[10m]). Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."

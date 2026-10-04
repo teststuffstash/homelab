@@ -1,8 +1,10 @@
 # `ansible/` — OPNsense + Matchbox as code (roles layout)
 
 Three control targets, each driven by **thin playbooks that call roles**:
-- **`opnsense`** — the router @ `192.168.2.1`, configured via its REST API *from the controller*
-  (`connection: local`, the `oxlorg.opnsense` collection).
+- **`opnsense`** — the router, configured via its REST API *from the controller*
+  (`connection: local`, the `oxlorg.opnsense` collection). Since window 1 (ADR-145) its hosts are the
+  CARP pair's nodes, each at its own address (`router-nodes/inventory.yml`, loaded by `ansible.cfg`
+  beside `inventory.yml`); `.1` is their CARP VIP — [`docs/router-move.md`](../docs/router-move.md) (B).
 - **`matchbox`** — the PXE provisioning LXC @ `192.168.2.30`, configured over SSH.
 
 There is no `site.yml`-style "apply everything" — each concern is its own playbook.
@@ -12,7 +14,7 @@ There is no `site.yml`-style "apply everything" — each concern is its own play
 ```
 ansible/
   ansible.cfg            # inventory + roles_path (paths relative to this dir)
-  inventory.yml          # the opnsense + matchbox hosts
+  inventory.yml          # the matchbox + pve hosts (the router nodes: router-nodes/inventory.yml)
   group_vars/
     opnsense.yml         # CONFIG values: API conn, BGP/ACME/HAProxy/Unbound settings
     matchbox.yml         # CONFIG values: SSH conn, matchbox + Talos-asset settings

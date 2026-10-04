@@ -1,2 +1,2 @@
-OUT → KubePodNotReady (c0bb40a7032f4b58): subject=workload:loki/alloy
+OUT → KubePodNotReady (c0bb40a7032f4b58): subject=workload:agent-coordinator/coordinator-sensor-kfmcv
 RC 0

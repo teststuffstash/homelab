@@ -1,0 +1,17 @@
+# FU-249 step 2 (ADR-148) — `cronjob` is an object label, the daemonset arm's sibling.
+#
+# CONDITION UNDER REPLAY. CronJobNotSucceeding, live shape (ALERTS, 2026-10-04): kube_cronjob_*
+# carries `cronjob` and the object's `namespace`, has no pod dimension, so the kube-state-metrics
+# target set (pod, instance, container, service) rides along.
+#
+# WHAT IT REDS ON. The cascade read daemonset/statefulset/deployment/job_name and not `cronjob`,
+# so this fell through the pod arm (reporter) to `instance:10.244.6.51:8080` — the exporter's
+# address, shared with every other object-level kube-state-metrics alert.
+#
+# THE CONTRACT: `cronjob` wins; the subject is the schedule, RC 0.
+name: responder-subject-cronjob
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

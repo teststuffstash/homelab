@@ -45,6 +45,7 @@ tests:
               severity: warning
               platform_machinery: "true"
               exported_namespace: platform-agents
+              triage: dig
             exp_annotations: {}
 
   # ── 2. QUIET — one Failed per loop home, three homes: three fleet-wide, never three in one ────
@@ -89,4 +90,5 @@ tests:
               severity: warning
               platform_machinery: "true"
               exported_namespace: agent-coordinator
+              triage: dig
             exp_annotations: {}

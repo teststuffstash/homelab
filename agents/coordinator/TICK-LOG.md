@@ -11924,3 +11924,242 @@ behind-base-branch for deno; no config reaches it). Finding on #1985; upstream r
   silenced 3 h, #2159 interim `> 1`. #2160 BGP alert per peer; #2161 draft Cilium peer (window 1).
 - Operator cabled the WAN switch: with nx-02 + pve ports on it, 7–20 % WAN loss (connect 1.3–2.9 s);
   both pulled → 0 %. Big Data em0 clean, taps dark. Hunt next session (meta-state).
+- 2026-10-01 ~19:19Z CI flake: master + #2160 CI red — two ARC runners on nx-01 (nm47c, 7shlb) sat
+  14 min in devbox "Ensuring packages" then `promtool: command not found` (prom-lint + scan-wedge
+  replay). Same image digest everywhere; nx-01 ran 27 runners/24h clean. Rerun green, #2160 merged
+  20:03Z. One sighting — no FU; a second one on nx-01 → probe that node's runner store/containerd.
+- #2130 (retro activity windows, FU-058): misbehaviour re-validated on the live ledger (all-time
+  rank == r6's Jul/Aug deep-dive set; 42 in-window rows incl. oracle-fleet#753 never ranked); the
+  seven review blockers fixed + ledger window restored + compact events + 5xx retry (fb849d93,
+  84e5c0c9). Awaits the codeowner read (new machinery). Open in PR: collector state ~8 MB/repo-week.
+
+## 2026-10-02 morning — oracle-fleet PR#780 (#774) rounds 4–5 no-op autopsy (seat)
+- r4 (3625s, `no-op`): the bundle carried a line-numbered `arbitration.md` plus `ci-failure.md`. The ride
+  read `issue.md` only (the card says "index.txt, then issue.md FIRST"), ran local `devbox run ci`
+  (no e2e leg), saw green, and exited. Fix: the card names the optional items (homelab#2162).
+- r5: the coordinator (01:36Z tick) posted its ruling, then PATCHed it with `gh api -f body=@file`.
+  `-f` is a raw string, so the directive became the literal `@/tmp/current-comment.md`. With no
+  directive, the ride rebased and polled `gh pr view` to goose's turn cap. The run was recorded
+  `clean` because the cap sentence was glued to JSON output (agent-runtime#162). The same tick's
+  sm→md bump changed only the cap, not the model (both flash models are `cheap`; homelab#2163).
+- Seat: ruling on PR + issue, cleared `agent/arbitrate` + `agent/blocked`, dispatched r6 by hand on
+  `deepseek-v4.1-flash:exacto` (key oracle-fleet-issue-774-round-6). r6 applied the fix (18801a04),
+  page-overflow 68 → 0. Residue: `clipped article.walk`, caused by L208 `@media (max-width:900px)
+  .beat{grid-template-columns:1fr}`, which reintroduces the min-content blowout → r7 directive.
+- r7 (v4.1-flash, one-line L208 `minmax(0,1fr)`, b8ba91d5): layout findings 180 → 4, all at the
+  390px@200%-text run: `clipped div.essentials` + `crushed strong` (2 lines for 1 word). Probable next
+  edit, same class: L213 `.clients,.trust,.essentials{grid-template-columns:1fr}` → `minmax(0,1fr)`.
+  Not dispatched: goal #773 cap-sum was $5.0/$6 at r7 preflight (ledger unreachable from the jail),
+  so an r8 $2 reservation likely refuses → operator call (budget / hand-fix / let arbitrate rule).
+
+## 2026-10-02 afternoon — #2130 merged + live verification (seat)
+- #2130 r3 blockers fixed (TimeoutExpired retry, url on compact context) → approved, merged 14:28Z
+  (operator auto-merge from 09-30). First live collect FAILED 14:30Z: s5cmd 2.3/Garage says
+  `given object … not found` for an absent key → #2165 (one `missing()` predicate), merged.
+- Cold collect (12 repos, 09-21→now, cron suspended meanwhile to avoid a bootstrap race): 51 min,
+  ~4–5k serial `gh api` spawns, state 28.7 MB, 8204 in-window events / 635 tasks. Warm run 2 min.
+- Offline bundle 09-21→09-28: none of the recycled Jul/Aug set (#913/#1041/#625/oracle-fleet#304);
+  top = oracle-fleet PRs by red checks. But blocked oracle-fleet#753 ranks 174/635 and only 27 fit
+  the 60 KB cap → rank fix tracked on FU-058, before the Mon 10-05 fire.
+- Second jail input recorded: WAN loss likely the cable (meta-state, FU-297); its accept-new
+  pve/nx-02 keys checked against the box pins — every pinned key matches the live host.
+- Retro rank anatomy (09-21 bundle, top 27 all PRs): cancelled 94 / failed 53 / CR 36 points; of
+  242 cancels, 142 superseded by a newer sha, 100 same-sha reruns (sampled: `approve` concurrency
+  group). Operator: superseded/master cancels = wasted-CI metric, never item pain; Renovate no
+  special rule yet. Filed + queued #2170 (rank fix, deadline Mon 05:00Z).
+- "No oracle access" in r4–r6: the ride-ns `retro-git` covers all 12 repos (probe pod read
+  oracle-fleet REST+GraphQL) → the failure is in the ride → #2171 (inert, transcript read next).
+- Retro split (slice-grounded): stack retros attribute + file platform faults as ADR-119
+  escalations; dedup-first stays the filer's, best effort (operator ruling); ADR-146 PR#2172
+  Proposed, NOT armed (operator read). From oracle-fleet#780's stack analysis: #2167 (queued —
+  DUPLICATE-closed blocker releases the parked issue), #2168 (body-only fix never re-reviewed),
+  #2169 ("line N, nothing else" directives) — the latter two inert.
+
+## 2026-10-02 afternoon — router move WINDOW 1: nx-02 takes `.1` (seat, took over from the primary)
+- Second jail first: WAN loss probed clean after the operator swapped the WAN cable (old one flapped
+  its link lights; 0.17 %/120 s with both node ports on the switch, nothing out of them) → the
+  window-1 change set #2166 (live mode for router-node.sh, kill-switch retire list, prod inventory
+  → the nodes, Kea default, RouterPairMasterCount `!= 1`); bot APPROVED r1.
+- Seat, pre-window: found the standing seed's `LAN_GW` (prio 1 → `.1`) would make a live node route to
+  itself → carp role deletes it on a live node (#2166 r2; `gateway state=absent` needs interface +
+  gateway, name alone is a silent no-op — proven on the test VM). #2161 re-planned SCOPED (the full
+  plan also stripped wk-03's live memory-pressure taint) → 20261002T163905Z-f06b997d.
+- Window seat-1790960221-62 16:57Z: #2166 merged (admin, approved + green), kill switch retired, an
+  unattended cutover script (the jail's own internet rides `.1`): API halt of Big Data 16:57:40 →
+  `.1` silent +25 s → carp play +55 s → internet back +79 s. Converge then died at ddclient
+  (`core/firmware/info` timeout) → Kea never enabled; `mgmt-tf apply` aborted on its `y` prompt.
+- **Big Data came back** (answered `.1` from `a0:36:9f:09:8d:38` on eno1 beside nx-02's CARP MAC by
+  ~17:02; the API showed no CARP rows) — the halt did not keep it down. Operator pulled both its
+  cables (left running for a quick replug). Then: Kea enabled by hand-run scripts, Cilium apply
+  (13/13 Established to .70), stuck `pkg update` killed on the node (started in the double-`.1`
+  minutes) → ddclient converged, full converge changed=0, `check nx02`/`pve` green.
+- `opnsense.teststuff.net` NXDOMAIN after the cutover (Big Data answered it from its hostname) →
+  static Unbound override, direct 3cf5bd16. Checks: WG HANDSHAKE_OK at .1, backup job 5 s, Kea 7
+  leases, six HAProxy names OK, maint check clean (186 targets). New alert:
+  OpnsenseConfigUnattributedRevision = the converge's root-key writes (FU-013 class).
+- Post-window read (~17:45Z): WAN 0/600 (pve) + 1/600 (nx-02) to 1.1.1.1, 0/300 to 8.8.8.8, TCP
+  connect ~31 ms; blackbox dips (grafana, transcripts, mcp.oracle) ONLY 16:58–17:09Z (the double-`.1`
+  + pre-peer minutes), green since; probe latency = yesterday's; the fleet-wide ~1.16/s LAN rx-drop
+  rate is yesterday's baseline too, not the cutover. Windows closed (this one --force on the
+  root-key alert; the 09-30 stale slot). #2161 merged 5121a682 (git == live).
+- 17:14:43Z pve's STANDBY router node (9171) emitted a DHCP reply sourced `192.168.2.1` to the mower
+  (.150) → its kill switch TRIPPED: VM stopped, onboot 0. Found ~18:00Z answering "any drill VM left?"
+  (none — 9199/.68 gone; 9110 test VM stays). Cause not investigated (operator: log it) → meta-state.
+
+## 2026-10-02 evening — S9 residue read (#2037/#2046), helm provider 3.x applied under evidence (seat; started as a second jail, took over)
+
+Operator: explain #2037 / #2046 in the S9 frame → the box-autonomy design thread → rulings → build.
+- **#2037 closed** (operator): the agents App's merge commit had made Renovate treat it as edited, so
+  it could never ride the ADR-141-amended armed lane; retitled + branch deleted so Renovate re-proposed.
+  **#2176** (the fresh docker v29 PR) merged on the lens alone 17:57Z — the lane works from scratch.
+- **The box refused every master since 6fd4ee62** on `opnsense_router_pve on_boot false→true` (the
+  17:14Z kill-switch latch). docker v29 applied by a scoped plan excluding the router VM (19:30Z,
+  runner 2/2 on 29-dind); #2180 (operator's other session) declared `on_boot=false`; the box then
+  planned `no changes` and stamped adfa17b0. Class → `router-move.md` §kill switch (FU-297).
+- **Rulings (operator):** no box action / revert / agent autonomy on a Cilium/Longhorn/ArgoCD failure
+  until breakage data exists — data gathering first (FU-301); the second alert path is the BOX seeing
+  the cluster without Prometheus, not a human notification (FU-302); the box's apply loop should respect
+  maintenance windows (FU-300). Found: Longhorn has NO backup (target URL empty, 0 jobs) → FU-299
+  (target outside Longhorn: Garage LXC on nx-02's 700 G SA400 pool; a VM won't fit, 60.5/62 GiB).
+- **PR#2179** `scripts/helm-release-evidence.sh` (`devbox run helm-evidence`): per-release snapshot /
+  timeline / diff + `run <plan-id>` that opens its OWN window (refuses inside another), applies via
+  mgmt-tf, settles, checks, closes only clean. Review round 1 found the fixed 1 h window; the round-2
+  verdict raced my push and attached to the fixed head (dismissed by hand → APPROVED) → **#2182**.
+- **#2046** brought current by two seat `Merge remote-tracking branch` commits — `major-handoff.sh`
+  counts those as content while the lens does not → wedged handoff, coordinator filed **#2181**; merged
+  directly (route 1) e7627b89 after the operator read the `+0 ~4` plan. Applied 19:56Z through
+  `helm-evidence run` (window seat-1790970971-5257): 4 new revisions (argocd 8, apps 6, cilium 14,
+  longhorn 12), manifests UNCHANGED, 0 pods replaced, 0 restarts, 13/13 BGP no resets, no Secret
+  rotated, Longhorn/ArgoCD unchanged; applies parallel, longest 29 s. Window closed `--force` on one
+  unrelated item: `AgentWorkerEgressDropped{oracle-fleet}` from 20:05Z = ride issue-774-r14's browser
+  egress (google/segment) denied by policy. Box stamped e7627b89 (full apply), loop clean.
+- **Close (21:15Z).** FU-300 built by a background subagent → **PR#2183 merged 21:08Z** (defer while a
+  declared window holds the apply loop; `--admit-apply`; 97/97 policy tests; archived). Operator on the
+  four mints: the bar lived in the tracker + memory and fired at no moment of filing → **`fu-mint-gate`**
+  (`.claude/hooks/`, trial): a new FU id is denied once per session with the tracker's three tests, the
+  retry passes; no clicks, no tracker text (both rejected). FU-301/302 stay ("700 ids to go"). Bookkeeping
+  pushed early (1df91cf3) because #2183's CI read FU-300 as dangling. `mgmt-state-pull` done.
+
+## 2026-10-03 morning — FU-299: Longhorn backup target built, applied, restore drill PASSED (seat, unattended by operator order)
+
+Operator: "Do it unattended — the apply + restore drill also."
+- **Target**: CT 220 `backup-garage` @ .73 on nx-02 `local-lvm` (SA400, 400 G thin) in `tofu/provisioning`
+  (survives a cluster wipe), Garage v2.3.0 rf=1 by `ansible/garage-backup.yml` (rerun changed=0).
+  Key in the wallet (`longhorn-backup-{key-id,secret}`) + Infisical → ExternalSecret. **PR#2188** merged
+  08:22Z (bot approve). The box sentinel refused the PR on a `provider` block (deny pattern) and then
+  could not plan provisioning (no `nx02_api_token` in the box's provisioning.tfvars) → fixed in
+  `mgmt-provision-secrets.sh` + `--push`, `mgmt-human-plan -- 2188 --yes` posted success (main ~1, prov 0).
+- **Apply** via `helm-evidence run 20261003T082230Z-e2a552ed`: longhorn rev 12→13, 0 pods replaced,
+  0 restarts, BGP 13/13 no resets, window closed clean. BackupTarget available 08:23:50Z.
+- **Drill** (window seat-1791016796-9107): 50 MB + sha256 → Snapshot → Backup Completed (36 objects) →
+  PVC deleted → Volume `fromBackup` (diskSelector std) → PV/PVC → `sha256sum -c` OK. Residue deleted,
+  bucket 0 objects. Window closed `--force` on two unrelated alerts (oracle-fleet ride egress; InfoInhibitor).
+  Recipe → PR#2189. Metric unit for `LonghornBackupStale` still unverified (volume deleted too early).
+
+## 2026-10-03 midday — ADR-147: CNPG backups by default (spike → build → rollout → drill), seat
+
+Operator: "Go and do a spike on cnpg now, if it is successful then build it… backups by default for
+everybody… the 'oops the Longhorn upgrade broke everything'."
+- **Spike** (throwaway ns): in-tree barman → backup Garage OK (`AWS_DEFAULT_REGION=garage`), restore 62 s
+  checksum-identical; but CNPG 1.29.1 warns in-tree "completely removed in 1.30.0" → plugin + cert-manager.
+- **PR#2190** merged (bot approve): cert-manager, plugin-barman-cloud 0.8.1, per-ns bucket+key (ansible,
+  wallet → Infisical → ExternalSecret) + ObjectStore 14d, MutatingAdmissionPolicy (CEL needs `dyn()` for
+  mixed map values — caught by the live dry-run), daily `pg-backup` CronJob. CI red first on the
+  iac-sentinel baseline → policy/iac direct commit 8b48d369 (pg-backup names + the admission-policy kinds
+  the fence was missing).
+- **Rollout (window seat-1791022866-8424):** wiring a RUNNING cluster deadlocks the switchover →
+  grafana-pg 10:23–10:33Z, forgejo-pg 10:35–10:45Z with no writable primary, nothing alerted → incident
+  `2026-10-03-cnpg-wire-switchover-deadlock`. LSN-checked forced failovers, then oracle-pg/infisical-pg
+  with 17 s/16 s gaps. `pg-backup-now`: 4/4 completed.
+- **Drill:** the first (standby) backup was unrestorable ("unexpected timeline ID 20"; WAL not yet
+  archived). A primary-target backup restored infisical-pg in 85 s, 704/704 tables identical.
+- **PR#2192** (fixes): wire = explicit verb (`pg-backup-wire`), backups `target: primary`,
+  `CNPGNoWritablePrimary` (replay = exactly the two windows).
+
+## 2026-10-03 afternoon — responder audit → ADR-148 (started as a second jail, took over the seat)
+
+- **Audit** (operator: "alerts over the last week that were not silenced; what would the responder
+  have done, old vs new"): the responder has been paused since 09-16 (FU-249 filter still live). Replay
+  of the week's 218 firing series through the pre-#1733 and current gates: 92 vs 62–85 sessions, the
+  12/day budget binding either way. Evidence: `spikes/responder-week-audit.md` §2026-10-03.
+- **Per-alert digs** with the responder's reach: 3 of 10 currently-firing classes paid, all standing
+  for days — dispatch defects A–D (FU-168), the docker.io mirror refusing sleep-tracking's pinned MinIO
+  image (root cause commented on sleep-tracking#150), a 57 GB stuck snapshot under hp-01's floor
+  (FU-093). nx-02 swap read as cold pages, no harm (FU-289 (4)). A nightly Garage I/O saturation since
+  09-30 (FU-229 resight). Loki in-cluster bypass = already accepted (`loki-tenancy.md` §Tightening).
+- **Rulings (operator):** responder narrows to `triage=now`, grouped deep dig for the rest; option B
+  (alert relabelling) for the stock rules; `KubePodNotReady` = now; `KubeAPIDown` + `*FailedToSendAlerts`
+  accepted as dig; the Pve capacity trio stays warning with `triage: none`. → **ADR-148**, PR#2193
+  (183 own rules + 134 upstream classified by two subagents, 1 upstream question left to the operator,
+  answered). FU-303 minted (etcd/scheduler/controller-manager scrape gaps). The fu-mint gate refused two
+  more mints → seat subagents building them as PRs instead (egress-drop benign exclusion; mgmt belt
+  `reason` label). stack-lint run from a clone reds on live state unrelated to this work (REG-04
+  OutOfSync fixer apps ×3, REPO-03 agent-coordinator recipe files, GH-02 allure-behavior-snippets
+  unprotected) — not chased.
+- **Landed + live (afternoon):** #2194 (egress-drop benign exclusion; oracle backtest 67→42 episodes; the
+  remaining :31 drop = ride `agent-oracle-fleet-issue-778-r1` → `192.168.40.31:443`, a client defaulting to
+  https against the HTTP-only mcr mirror — commented on oracle-fleet#778), #2195 (belt `reason` label;
+  SKIP-by-intent left open — no clean "down on purpose" signal, question in the PR), #2193 (ADR-148 step 1;
+  one review round: `CiliumBGPAllSessionsDown` now→dig, per-peer). Live check: Alertmanager shows the
+  relabelled upstream labels (Watchdog/InfoInhibitor `none`) and ours; Prometheus serves every platform
+  rule labelled except oracle-fleet's five (stack lane).
+- **Orphan removed (window seat-1791039391-4150, closed clean):** a hand-applied PrometheusRule
+  `argocd/registry-cache` (60 d, no Argo tracking) duplicated `RegistryMirrorCacheAlmostFull` — found
+  because it was the only platform rule still label-less after the sync. YAML saved before delete; the
+  managed copy in ns `registry-cache` is the one left.
+
+## 2026-10-03 evening — FU-299: daily Longhorn job + UniFi settings-only `.unf` (seat, unattended)
+
+- **Operator call:** UniFi = settings-only export; off-site copy later.
+- **Found:** UniFi autobackup existed (monthly, settings-only) but had never produced a file — its
+  10-01 run panicked `mongod` on a WiredTiger checksum error in `unifi.network_heartbeat` (Loki:
+  `potential hardware corruption … WT_PANIC`), the cause of unifi-mongo's 6 restarts.
+- **Window seat-1791047885-4910 (closed clean):** Longhorn snapshots `pre-fu299-unifi-{mongo,config}`
+  → validated every collection (all clean but the one) → dropped the 1-doc collection → schedule set in
+  `unifi.scheduletask` (the `super_mgmt` cron is only the UI copy — first restart proved it ignored) →
+  test run wrote `autobackup_10.3.58_20261003_1729….unf` (44 KB) → daily 01:00Z, scheduler log confirms.
+  Three controller restarts.
+- **PR#2196** (auto-merge armed): RecurringJob `daily-backup` 02:00Z retain 14; PVC labels on HA config,
+  unifi-config, forgejo storage; unifi-mongo + coordinator-transcripts out of the daily class.
+- **#2196 merged 17:44Z, live:** ArgoCD synced the RecurringJob + forgejo label; the box plan
+  (3 in-place: 2 PVC labels + the unifi restartedAt drift) applied in window seat-1791049534-1587
+  (`echo y |` — mgmt-tf apply prompts). Job run once by hand (`create job --from=cronjob/daily-backup`):
+  3/3 backups Completed; `longhorn_volume_last_backup_at` = epoch s (rule stands). Safety snapshots deleted.
+- **#2197 merged 18:38Z, live (window seat-1791052703-5074, closed clean):** `backup-schedule` init
+  container converges `unifi.scheduletask` + `super_mgmt` every start (proved first against live Mongo:
+  idempotent + corrected a planted drift); `backup-age` sidecar → Pushgateway → `UnifiAutobackupStale`
+  / `UnifiAutobackupAgeMissing`. Post-apply: init log `matched=1 modified=0`, pushed age 4260 s (the
+  17:29Z file), both rules inactive. Off-site PARKED by the operator (IAM + billing limits first).
+
+## 2026-10-03 night → 10-04 morning — fu-sweep (whole tracker, no-judgement scope) + GithubRateLimitLow
+
+- **fu-sweep:** four slice subagents, the agents block classified without the corpus. 10 archived, ~35
+  advanced on live evidence, soaks FAILED: FU-134, FU-102. PRs #2198 #2199 #2201, sleep-tracking#168,
+  snore-recorder#43, circles#97 merged; #2200 (Argo v4.0.8) left unarmed for an attended merge.
+  STALL: the gitops subagent's bespoke Monitor misread #2199's round-3 CHANGES_REQUESTED as stale and
+  idled overnight; the seat took the interim "waiting" at face value (memory: pr-waits-run-in-background).
+- **GithubRateLimitLow{coordinator-git,graphql} 06:08Z:** cause = sleep-tracking#121, a legacy goal with
+  no `Base:` line — tree empty since 04:20Z, the tree-empty key only fires for `Base: master`, so trigger
+  (b) re-dispatched a Sonnet goal-checkpoint every ~3 min (wake-clause changes 4→21→20/h; ~4.1k/5k
+  points/h). Un-wedged 07:10:44Z by backfilling `Base: master` (true: master-lane children); the scan
+  transitioned it itself at 07:12:48Z (`goal/post-launch`, comment), no further dispatch. Last Base-less
+  goal in the fleet. Belt: `GoalCheckpointStorm` (PR#2204; replay true from 05:26Z).
+
+## 2026-10-04 — S9: kubernetes provider 3.x merged; provider pins get a deploy + revert path, drilled (seat)
+
+Operator: "#2047 needs the usual what would it take for an automated deploy + revert" → merge + continue.
+- **#2047 merged** (8be319e7) after a fresh human plan vs current master (`main: +0 ~0 -0`); the box
+  applied it 08:52Z `no changes`. Schema diff 2.38.0 vs 3.2.1: zero version moves, additive attrs only.
+  kubernetes 3.2.1 has NOT run a changing apply yet — the box's exercised record holds 2.38.0.
+- **Built (machine lane):** #2205 sentinel state-compatibility gate (a pin may not raise a stored
+  schema/identity version — review found excluded types unchecked); #2206 `MgmtApplyErroredOnNewProvider`
+  (exercised-version record per root; review: describe the correlation, not a cause); #2207
+  `tofu-provider-revert` chain + sentinel "plan relative to master's own pending plan" + pin-only-lint (g)
+  (CI: ADR-103 ratchet wanted replay fixtures); ADR-131 amended.
+- **Drill (synthetic alert, random 3.9.1):** injected 11:20:20Z → #2209 11:20:51Z → merged 13:03:05Z →
+  box applied 13:03:54Z, no human click. Findings: #2210 (body ref `#19761976`), #2211 (judged-types read
+  rc 1 on main's empty state list under pipefail → check failed closed; pr-wait blind to commit
+  statuses). Memory line removed from #2209 by hand. Box seeded `exercised-main.tsv` (kubernetes 2.38.0).
+- **Process:** chained `pr-wait A; pr-wait B | tail` hid #2207's red and #2206's conflict (operator
+  caught it) → #2208 multi-PR + exit 6; my direct ci.yaml step lacked its diff-ci MAP row and red every
+  PR (c2186192 fix, 14de8b4d pre-push runs the belt). Open: arming terraform provider MAJORS (operator).

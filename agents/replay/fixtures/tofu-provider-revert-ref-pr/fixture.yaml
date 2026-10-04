@@ -1,0 +1,10 @@
+# tofu-provider-revert-ref-pr — the revert PR body names the reverted change as `#<pr>` when the squash
+# subject carries one (drill PR #2209, 2026-10-04, printed `#19761976`: the PR number twice).
+name: tofu-provider-revert-ref-pr
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - PRNUM=1976
+  - SHA=90f7bf1c56583efecc32111c19eecf825f341f34
+parts:
+  - block:tofu-provider-revert-ref

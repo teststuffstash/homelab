@@ -166,6 +166,141 @@ mgmt_provider_pin_shape() {
   return 0
 }
 
+# mgmt_addr_types → the MANAGED resource types of the addresses on stdin (one per line; anything
+# after a TAB ignored), deduped — module prefixes stripped, `data.` addresses skipped.
+mgmt_addr_types() {
+  # awk filters, never `grep -v`: on an EMPTY input (main's state list — its state is local and
+  # `state list` without -state= reads nothing) grep exits 1, and under the callers' pipefail the
+  # whole read failed CLOSED — drill PR #2209: "state-compatibility check FAILED to run" on an
+  # empty plan (2026-10-04)
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' | awk '!/^data\./' | sed -E 's/^([^.]+)\..*/\1/' | awk 'NF' | sort -u
+}
+
+# mgmt_judged_types <plan-out> <policy exclude types, one per line> → the types a provider-pin head's
+# state-compatibility check must judge: the plan's ($out.types), PLUS every type in state ($out.state)
+# and in the plan exclusions ($out.excluded + the policy's plan_exclude_types) — an excluded type never
+# reaches resource_changes, and a type the check never saw must not pass as compatible (review
+# finding on PR#2205). rc 1 when the plan's type list was never written.
+mgmt_judged_types() {
+  [ -f "$1.types" ] || return 1
+  { cat "$1.types"; { cat "$1.state" "$1.excluded" 2>/dev/null; printf '%s\n' "$2" | awk 'NF { print $0 ".x" }'; } | mgmt_addr_types; } | sort -u
+}
+
+# mgmt_schema_upgrades <base-schema.json> <head-schema.json> <types-file> → lines
+# "type<TAB>before<TAB>after" for every type in <types-file> (the plan's `$out.types` side channel) whose STORED shape the head's providers
+# would change: a raised resource schema version, a raised (or newly added) identity schema version,
+# or a type the head no longer has. Inputs are `tofu providers schema -json` of master and of the head.
+# Why (S9 #1988, 2026-10-04 — the kubernetes 3 read on #2047): the next apply under the head's
+# provider rewrites state at the new version, and the old provider cannot read a newer schema
+# version back — after that, reverting the lockfile is no longer a revert (it needs a state restore).
+# A bump that keeps every stored version is lockfile-revertable even after applies; this is the
+# deterministic half of "may a provider pin ride without a human" (ADR-131 amended). A type master's
+# providers do not know is skipped (not a bump of anything in state). rc 1 = a schema unreadable.
+mgmt_schema_upgrades() {
+  jq -e '.provider_schemas | type == "object"' "$1" >/dev/null 2>&1 && jq -e '.provider_schemas | type == "object"' "$2" >/dev/null 2>&1 || return 1
+  jq -rn --slurpfile b "$1" --slurpfile h "$2" --rawfile t "$3" '
+    def vers(s; k): [s[0].provider_schemas[] | (.[k] // {}) | to_entries[] | {(.key): .value.version}] | add // {};
+    vers($b; "resource_schemas") as $bv | vers($h; "resource_schemas") as $hv |
+    vers($b; "resource_identity_schemas") as $bi | vers($h; "resource_identity_schemas") as $hi |
+    ($t | split("\n") | map(select(length > 0)) | unique)[] as $ty |
+    if $bv[$ty] == null then empty
+    elif $hv[$ty] == null then "\($ty)\tschema \($bv[$ty])\tremoved"
+    elif $hv[$ty] > $bv[$ty] then "\($ty)\tschema \($bv[$ty])\tschema \($hv[$ty])"
+    elif ($hi[$ty] // -1) > ($bi[$ty] // -1) then "\($ty)\tidentity \($bi[$ty] // "none")\tidentity \($hi[$ty])"
+    else empty end'
+}
+
+# mgmt_provider_schema <dir> <out.json> → `tofu providers schema -json` of the providers <dir>'s
+# LOCKFILE pins, nothing else: a scratch root whose required_providers names exactly the lockfile's
+# provider/version pairs, the lockfile copied beside it (readonly — the hashes still verify).
+# The real root cannot answer this: `providers schema` insists on an initialised BACKEND (S3 +
+# encryption env on cloudflare/provisioning), and the schema is the providers', not the state's.
+# Run from the TRUSTED tree like mgmt_plan_root. rc 1 = no lockfile, or no schema came back.
+mgmt_provider_schema() {
+  local dir="$1" out="$2" tmp rc
+  [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] && [ -s "$dir/.terraform.lock.hcl" ] || return 1
+  tmp="$(mktemp -d)"
+  cp "$dir/.terraform.lock.hcl" "$tmp/"
+  awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/") }
+       /^[[:space:]]*version[[:space:]]*=/ && src != "" { v = $3; gsub(/"/, "", v); printf "    %s = { source = \"%s/%s\", version = \"= %s\" }\n", p[n], p[n-1], p[n], v; src = "" }' \
+    "$tmp/.terraform.lock.hcl" | { echo 'terraform {'; echo '  required_providers {'; cat; echo '  }'; echo '}'; } >"$tmp/main.tf"
+  export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"
+  (
+    cd "$REPO" || exit 1
+    devbox run --quiet -- tofu -chdir="$tmp" init -input=false -lockfile=readonly >/dev/null 2>&1 || exit 1
+    devbox run --quiet -- tofu -chdir="$tmp" providers schema -json >"$out" 2>/dev/null
+  ) && jq -e '.provider_schemas | type == "object"' "$out" >/dev/null 2>&1; rc=$?
+  rm -rf "$tmp"; return $rc
+}
+
+# mgmt_provider_pin_commit <repo> <ref> <lockfile> <provider-name> <version> → the sha of the commit on
+# <ref>'s first-parent line that moved <provider-name> (the source's last segment) TO <version> in
+# <lockfile>, IF that commit is provider-pin-only (every file it touches is a lockfile / versions.tf in
+# mgmt_provider_pin_shape against its parent). The tofu-provider-revert chain's candidate (S9 #1988,
+# agents/coordinator/deploy-revert-argo.yaml). rc 1 + a reason on stderr when the introducing commit
+# is not pin-only (the walk STOPS there — an older commit cannot have introduced the current
+# version) or none is found in the history the repo holds.
+_mgmt_lock_version_of() {  # <name>, the lockfile on stdin → its version (empty when absent)
+  awk -v want="$1" '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); hit = (p[n] == want) }
+       hit && /^[[:space:]]*version[[:space:]]*=/ { v = $3; gsub(/"/, "", v); print v; exit }'
+}
+mgmt_provider_pin_commit() {
+  local repo="$1" ref="$2" lock="$3" name="$4" ver="$5" c before after f files
+  for c in $(git -C "$repo" log --first-parent --format=%H "$ref" -- "$lock"); do
+    after="$(git -C "$repo" show "$c:$lock" 2>/dev/null | _mgmt_lock_version_of "$name")"
+    before="$(git -C "$repo" show "$c^:$lock" 2>/dev/null | _mgmt_lock_version_of "$name")"
+    [ "$after" = "$ver" ] && [ "$before" != "$ver" ] || continue
+    [ -n "$before" ] || { echo "${c:0:8} ADDS provider $name — not a pin bump" >&2; return 1; }
+    files="$(git -C "$repo" diff --name-only "$c^" "$c" --)" || { echo "${c:0:8}: diff unreadable" >&2; return 1; }
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case "${f##*/}" in
+        .terraform.lock.hcl|versions.tf) mgmt_provider_pin_shape "$repo" "$c^" "$c" "$f" || { echo "${c:0:8} moved $name $before→$ver but $f is not in pin shape — not provider-pin-only" >&2; return 1; } ;;
+        *) echo "${c:0:8} moved $name $before→$ver but also touches $f — not provider-pin-only" >&2; return 1 ;;
+      esac
+    done <<<"$files"
+    printf '%s\t%s\n' "$c" "$before"; return 0
+  done
+  echo "no commit on $ref moved $name to $ver in $lock (within the history this clone holds)" >&2; return 1
+}
+
+# mgmt_lock_versions <lockfile> → "name<TAB>version" per provider in a .terraform.lock.hcl, where
+# name is the source's last segment (`registry.opentofu.org/hashicorp/kubernetes` → kubernetes) —
+# the prefix its resource types carry. rc 1 when the file is unreadable or pins nothing.
+mgmt_lock_versions() {
+  [ -s "$1" ] || return 1
+  awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); name = p[n] }
+       /^[[:space:]]*version[[:space:]]*=/ && name != "" { v = $3; gsub(/"/, "", v); printf "%s\t%s\n", name, v; name = "" }' "$1" | grep . 
+}
+
+# mgmt_unexercised <lock-versions> <exercised-tsv> <changed-addresses> → "name<TAB>exercised<TAB>locked"
+# for every provider that OWNS a changed address (type == name or type starts with name_, longest
+# name wins) and whose locked version differs from the one the last successful CHANGING apply ran
+# (`exercised`, "unknown" when never recorded). Why (S9 #1988, 2026-10-04): a provider bump plans
+# empty, so its create/update/delete code first runs on a later, unrelated apply — the only moment a
+# broken provider shows, and long after any merge-time window. Pure: the fixtures feed it files.
+mgmt_unexercised() {
+  local locks="$1" ex="$2" addrs="$3"
+  sed -E 's/\t.*//; s/^(module\.[^.[]+(\[[^]]*\])?\.)*//' "$addrs" | awk '!/^data\./' | sed -E 's/^([^.]+)\..*/\1/' | sort -u \
+    | awk -F'\t' -v locks="$locks" -v ex="$ex" '
+        BEGIN { while ((getline l < locks) > 0) { split(l, a, "\t"); ver[a[1]] = a[2] }
+                while ((getline l < ex) > 0) { split(l, a, "\t"); done[a[1]] = a[2] } }
+        { best = ""; for (n in ver) if (($0 == n || index($0, n "_") == 1) && length(n) > length(best)) best = n
+          if (best != "") own[best] = 1 }
+        END { for (n in own) { e = (n in done) ? done[n] : "unknown"; if (e != ver[n]) printf "%s\t%s\t%s\n", n, e, ver[n] } }' | sort
+}
+
+# mgmt_record_exercised <lock-versions> <exercised-tsv> <changed-addresses> → rewrites <exercised-tsv>
+# with the locked version of every provider owning a changed address (a successful apply EXERCISED
+# them); other providers keep their entry.
+mgmt_record_exercised() {
+  local locks="$1" ex="$2" addrs="$3" tmp
+  tmp="$(mktemp)"
+  mgmt_unexercised "$locks" /dev/null "$addrs" | cut -f1,3 >"$tmp.new"
+  { [ -f "$ex" ] && awk -F'\t' 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' "$tmp.new" "$ex"; cat "$tmp.new"; } | sort >"$tmp"
+  mv -f "$tmp" "$ex"; rm -f "$tmp.new"
+}
+
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
 # root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
@@ -435,6 +570,9 @@ _mgmt_plan_digest() {
     | [.address, (.change.actions | join("+")), ((.index // "") | tostring),
        (if ((.change.after_unknown // {}) | if type == "object" then .apply_mode else false end) == true then "(unknown)"
         else ((.change.after // {}).apply_mode // "(unset)") end)] | @tsv' "$json" > "$out.talos"
+  # fifth side channel: every MANAGED resource type the plan carries (no-ops and deletes included —
+  # i.e. every type in state or config) — what mgmt_schema_upgrades compares on a provider-pin head
+  jq -r '[.resource_changes[]? | select(.mode == "managed") | .type] | unique[]' "$json" > "$out.types"
   jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv' "$json"
 }
 # mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
@@ -554,6 +692,47 @@ mgmt_talos_gate() {
     esac
   done <"$out.talos"
   return 0
+}
+
+# ── the declared-window gate (FU-300) ──────────────────────────────────────────────────────────
+# The apply loop's WIP 1 across windows it did not open — the reconciler's rule (mgmt-reconcile.sh
+# §6, docs/management-box.md §MB4) applied to the root instead of a node: ANY live declared window
+# (agents/seat-window.sh's `responder-window` ConfigMap) holds the apply, unless it was opened with
+# `--admit-apply` ("I am watching, the box may apply inside my window"). Not node-scoped: an apply
+# acts on the whole root. `--admit-reconciler` does NOT admit it — that flag admits a sync of ONE
+# node, and the apply loop is a different actor with a wider reach. The loop opens no window of its
+# own (its Talos bracket is `maintenance-window.sh snapshot`/`compare`, which declare nothing), so it
+# can never hold itself; the reconciler's sync windows DO hold it — a post-check read mid-upgrade
+# would see the reboot as a regression.
+#
+# mgmt_windows_live → the LIVE windows (`until` in the future) as a JSON array. rc 1 = unreadable —
+# never `[]`: "we could not look" is not "nothing is open". A missing ConfigMap IS empty (nobody has
+# declared one yet), the reconciler's reading too.
+_mgmt_windows_get() {  # raw ConfigMap JSON on stdout; the fixture test stubs this
+  local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
+  ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json )
+}
+mgmt_windows_live() {
+  local cm err rc
+  err="$(mktemp)" || return 1
+  cm="$(_mgmt_windows_get 2>"$err")"; rc=$?
+  if [ "$rc" != 0 ]; then
+    if grep -q NotFound "$err"; then rm -f "$err"; printf '[]\n'; return 0; fi
+    rm -f "$err"; return 1
+  fi
+  rm -f "$err"
+  jq -ce --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '[(.data // {}) | to_entries[] | (.value | fromjson?) // empty | select((.until // "") > $now)]' <<<"$cm"
+}
+# mgmt_apply_window_gate → rc 0 = nothing holds the apply; rc 2 = held, one `<id> (<by>): <reason>`
+# line per holding window on stdout; rc 1 = the registry is unreadable (the caller defers on it too).
+mgmt_apply_window_gate() {
+  local live held
+  live="$(mgmt_windows_live)" || return 1
+  held="$(jq -r '.[] | select((.admit_apply // false) != true)
+                 | "\(.id // "?") (\(.by // "?")): \(.reason // "")"' <<<"$live")" || return 1
+  [ -z "$held" ] && return 0
+  printf '%s\n' "$held"; return 2
 }
 
 # ── the post-apply health gate (the unattended /maintenance-window check) ───────────────────────

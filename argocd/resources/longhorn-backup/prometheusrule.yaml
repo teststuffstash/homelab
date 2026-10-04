@@ -1,0 +1,79 @@
+# Longhorn backup belts (FU-299, docs/longhorn-backup.md). Behaviour pinned by
+# longhorn-backup.promtool-test — re-copy longhorn-backup.promtool-rules after editing an expr.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-backup
+  namespace: monitoring
+  labels:
+    app: longhorn-backup
+spec:
+  groups:
+    - name: longhorn-backup
+      rules:
+        # max_over_time: one good probe in the window holds it off, so a blackbox-exporter roll
+        # (replicas: 1 — the EndpointProbeFailing restart-gap class) never pages on its own.
+        - alert: LonghornBackupTargetDown
+          expr: max_over_time(probe_success{job="blackbox-longhorn-backup-target"}[10m]) == 0
+          for: 5m
+          labels:
+            severity: warning
+            # triage: BackupTarget CR message separates in-cluster credential or URL faults from LXC-down
+            triage: dig
+          annotations:
+            summary: "Longhorn's backup target (Garage LXC 220 on nx-02) has failed every health probe for 15m"
+            description: >-
+              Every backup and restore fails while this fires. Check the LXC (`pct status 220` on
+              nx-02), then `systemctl status garage` + `garage status` inside it
+              (ssh root@192.168.2.73). Re-converge: ansible/garage-backup.yml. docs/longhorn-backup.md.
+        # Only volumes that HAVE a backup (`> 0`): a volume nobody backs up exports 0 and is a
+        # class decision (docs/longhorn-backup.md §Classes), not a stale backup. 36 h = a daily
+        # job missed once plus slack.
+        - alert: LonghornBackupStale
+          expr: (time() - longhorn_volume_last_backup_at) > 36 * 3600 and longhorn_volume_last_backup_at > 0
+          for: 1h
+          labels:
+            severity: warning
+            # triage: recurring job runs and backup CRs are readable in-cluster
+            triage: dig
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} ({{ $labels.pvc_namespace }}/{{ $labels.pvc }}) has had no backup for 36h+"
+            description: >-
+              Its newest backup is older than a daily RecurringJob allows. Look at the volume's
+              backups and the recurring job's last run in the Longhorn UI, and at
+              LonghornBackupTargetDown. docs/longhorn-backup.md.
+    # UniFi's settings-only .unf (docs/longhorn-backup.md §UniFi). The controller writes it daily at
+    # 01:00Z; the `backup-age` sidecar in tofu/unifi.tf pushes the newest file's mtime (0 = no file)
+    # to the Pushgateway every 5 min. Stale = the export stopped, whatever the cause — a schedule
+    # that did not converge, a Mongo fault (the 2026-10-01 corrupt collection failed it silently),
+    # or the sidecar itself dead (its last value freezes and ages into this alert).
+    - name: unifi-backup
+      rules:
+        - alert: UnifiAutobackupStale
+          expr: (time() - unifi_autobackup_last_file_timestamp_seconds) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            # triage: the controller's server.log and the sidecar/init logs say which link broke
+            triage: dig
+          annotations:
+            summary: "UniFi's settings-only autobackup (.unf) is {{ $value | humanizeDuration }} old"
+            description: >-
+              The newest .unf on unifi-config is older than a daily export allows (0 = there is
+              none). Read `grep backup /config/logs/server.log` in the unifi container (a Mongo
+              exception means a database fault — the 2026-10-01 class), the `backup-schedule` init
+              container's log (did the cron converge?), and the `backup-age` sidecar's log (is it
+              pushing?). docs/longhorn-backup.md §UniFi.
+        # Nothing has been pushed at all: the sidecar never ran, or the Pushgateway lost its store.
+        - alert: UnifiAutobackupAgeMissing
+          expr: absent(unifi_autobackup_last_file_timestamp_seconds)
+          for: 1h
+          labels:
+            severity: warning
+            # triage: sidecar log + pushgateway state are readable in-cluster
+            triage: dig
+          annotations:
+            summary: "No UniFi autobackup age is being reported"
+            description: >-
+              UnifiAutobackupStale cannot fire without this series. Check the `backup-age` sidecar
+              of deploy/unifi in ns unifi, then the Pushgateway (ns monitoring). docs/longhorn-backup.md §UniFi.

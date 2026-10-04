@@ -15,6 +15,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in 3 scheduled runs
           description: 'Three consecutive scheduled runs produced no successful completion ({{ $value | humanizeDuration }} since the last success). SYMPTOM ONLY, and the per-CronJob belt usually says more: check that one first if it exists (Garage*, NodeFstrim*, RegistryGCMirrors*). Then `kubectl -n {{ $labels.namespace }} get jobs -l batch.kubernetes.io/cronjob-name={{ $labels.cronjob }}` and the newest pod''s log. Unlike the stock KubeJobFailed this replaced, the alert CLEARS on the next success — deleting failed Job objects is never the remedy.'
@@ -25,6 +26,7 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has never completed successfully
           description: 'This CronJob was created over a day ago and has no recorded successful completion — it may have never run, or every run so far has failed. Existing is not running: check `kubectl -n {{ $labels.namespace }} describe cronjob {{ $labels.cronjob }}` for a suspend flag, a schedule that has not come round, or jobs failing at admission (image pull, RBAC, quota).'
@@ -35,6 +37,7 @@ groups:
         for: 15m
         labels:
           severity: warning
+          triage: dig
         annotations:
           summary: Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete
           description: 'A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed condition. Read the pod''s log, then decide: re-run it, or delete the Job once the outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert — their schedule''s health is CronJobNotSucceeding, which self-clears.'

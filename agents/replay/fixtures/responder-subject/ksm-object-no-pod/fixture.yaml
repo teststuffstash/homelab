@@ -1,0 +1,21 @@
+# FU-249 step 2 (ADR-148) — a reporter's own `instance` is never a subject.
+#
+# CONDITION UNDER REPLAY. GithubTokenMintStale, live shape (ALERTS, 2026-10-04): derived from a
+# kube_* metric with NO pod dimension and no object label this cascade reads (it is about a
+# Secret's age), so the kube-state-metrics target set rides along whole — `pod` is the exporter's,
+# `instance=10.244.6.51:8080` is the exporter's address, `namespace` is the OBJECT's (every kube_*
+# metric carries one).
+#
+# WHAT IT REDS ON. Before 2026-10-04 the `instance:` arm took any instance once `pod` was skipped,
+# so this keyed to `instance:10.244.6.51:8080` — the same subject as every other object-level
+# kube-state-metrics alert that carries no object label (the second residual of the 2026-10-03
+# replay). An exporter's address identifies the exporter, never the thing it reports on.
+#
+# THE CONTRACT: the pod is the reporter's (no uid, target set present), the instance is the
+# reporter's own, the namespace arm stays guarded on a reporter target ⇒ the per-class key, RC 0.
+name: responder-subject-ksm-object-no-pod
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-subject

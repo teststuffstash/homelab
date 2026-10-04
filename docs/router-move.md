@@ -47,6 +47,13 @@ Cilium peer list gets one entry per node (BGP to a VIP breaks on failover), each
 own router-id, and `CiliumBGPAllSessionsDown` changes meaning with two peers. Since ADR-144 the
 inventory half starts at sub-step 2 (each standing node is its own host from day one); the Cilium
 peers, router-ids and the alert's meaning land with the CARP trial and the window (sub-steps 2–3).
+**At window 1 the prod inventory flips** (ADR-145): `opnsense-fw` leaves `ansible/inventory.yml`
+and `ansible/ansible.cfg` loads `router-nodes/inventory.yml` beside it, so a plain
+`scripts/opnsense-playbook.sh` run converges each node with its own host vars — never the `.1`
+VIP with prod's defaults (router-id `.1`, HAProxy VIPs on `lan`, which would break the live node).
+The inventory consumers (the drill's `PROD`, the test VM's guard, `scripts/wireguard-client.sh`)
+read the one host without `opnsense_standby: true` across both files; the guards also refuse
+every node. The literals above stay right: each reaches the router at `.1`, now the CARP VIP.
 
 **(C) identity — must come across, or a consumer breaks.** The next section.
 
@@ -127,7 +134,10 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    a `3.0/24` VIP, a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6
    RA — no exemptions: under the `/24` no `3.x` is ever legitimate from a node) and
    `qm stop`s the VM, then latches `onboot 0` so a host reboot does not bring it back (drift
-   against tofu's `on_boot = true` — re-enabling is a reviewed apply); proven by injecting an ARP
+   against tofu's `on_boot = true` — re-enabling is a reviewed apply. That drift also WEDGES the box's
+   apply loop: every master plans `on_boot false → true` and is refused, until git declares `false` —
+   #2180 did it by hand after the 2026-10-02 trip; the class is open, FU-297: the trip proposes that
+   PR, or `lifecycle { ignore_changes = [on_boot] }`); proven by injecting an ARP
    claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
    `router-killswitch@<vmid>` unit (`ansible/pve-router-killswitch.yml`, the vmid in the host's
    `host_vars`), enabled at every host boot and ordered before `pve-guests`, so it keeps working
@@ -200,7 +210,8 @@ fakeisp.py`: one reserved lease `100.64.0.10` for the shared MAC, a router optio
 automatic outbound NAT covers only interfaces with a gateway — and a counter-streaming TCP server
 on `100.64.0.1:9000`); `router-node.sh probe <secs>` runs `flowprobe.py` on the pve host with
 `100.64.0.1` routed via the trial VIP: one held NAT'd flow + a fresh connect every 0.1 s. The
-nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP). Measured:
+nodes' default route stays on the LAN throughout (the LAN gateway outranks WAN_DHCP) — which is why a
+node going LIVE drops its `LAN_GW` (the carp role, window 1): holding `.1`, that route is itself. Measured:
 
 | Drill | Held NAT'd flow | Fresh connects |
 |---|---|---|
@@ -294,7 +305,10 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   so pve joins as BACKUP instead of preempting. **Done 2026-10-01**, with the per-node router-ids
   (`bgp_router_id` per inventory host) and `.72` retired (`state: absent` in `router_carp_vips` —
   the carp role deletes it; `check` reads it gone); both nodes converged, `check` green, both WAN
-  gates dark.
+  gates dark. **Lesson: retire a CARP VIP on the BACKUP first** (or with both nodes in
+  maintenance) — retiring it on the MASTER first promotes the BACKUP: pve went first and nx-02
+  held `.72` as MASTER 18:45:52–18:47:57Z, its gate raising the WAN (harmless only because that
+  cable went to pve's dark port).
 - **Per-node BGP, staged** — router-id per node (the node's LAN address; `bgp_router_id` moves to
   host vars), the Cilium peer change `.1` → `.70` on a branch with its plan read, and the
   per-peer rework of `CiliumBGPAllSessionsDown` ([`bgp.md`](bgp.md) §With the router pair).
@@ -308,26 +322,42 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   trial VIP `.72` comes off both nodes, and the fake-ISP cable (nx-02 `eno2` ↔ pve `enp6s0`) comes
   out — else pve, `.72`'s MASTER, raises its WAN beside nx-02 on the shared MAC.
 
-**Window 1 — nx-02 takes `.1`** (Big Data still cabled, powered off at its start):
+**Window 1 — nx-02 takes `.1`** (Big Data still cabled, powered off at its start). The change set is
+one PR, merged IN the window: nx-02 `opnsense_standby: false` with `.1` (vhid 1) in its host
+`router_carp_vips`, its kill switch retired (`pve_router_live_vmids`), the prod inventory flip (§(B)
+above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back to `!= 1`.
 
 1. `maint open`; Big Data powered off (its LAN link drops; `.1` is free).
-2. nx-02 converged out of standby (and `RouterPairMasterCount` back to `!= 1` — interim `> 1`
-   while no CARP VIP exists): `.1` as its CARP VIP, Kea on, BGP neighbours on, ACME renewal
-   and ddclient on; the Cilium peer change applied (`mgmt-tf apply <plan-id>`); ONT → the WAN
-   switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link as the sole
-   advertiser; a powered-off Big Data emits nothing). pve's node stays inert, its WAN uncabled.
-3. Checks: WAN lease on the spoofed MAC (same public IP → ddclient no-op), BGP 13/13
-   Established to `.70`, a LAN DHCP lease from Kea, Unbound answering, every HAProxy name over
-   TLS, the WireGuard handshake probe, the backup CronJob run by hand, the box's belts green.
+2. Merge the change-set PR; then, **in this order**:
+   1. `devbox run -- ansible-playbook ansible/pve-router-killswitch.yml --limit nx-02-host` —
+      nx-02's kill switch stopped + disabled, its WAN gate kept. **Before anything converges**: a
+      live node emits exactly what the switch trips on, and the trip latches `onboot 0`.
+      `router-node.sh converge` refuses a live node whose switch is armed or enabled;
+   2. `bash scripts/opnsense-router-node.sh converge nx02` — `.1` as its CARP VIP, Kea on (dnsmasq
+      off), BGP neighbours on, ACME renewal and ddclient on, the standing `LAN_GW` deleted (its
+      default route would be its own `.1`; WAN_GW takes over once the gate gives it link);
+   3. the Cilium peer change applied (`mgmt-tf apply <plan-id>`, re-planned if stale).
+
+   Cabling: ONT → the WAN switch → nx-02's WAN **and Big Data's `em0`** (the gate gives nx-02 link
+   as the sole advertiser; a powered-off Big Data emits nothing). pve's node stays inert; its WAN
+   may stay on the switch — with no CARP VIP it never advertises, so its gate holds the WAN dark
+   (2026-10-02: both node ports on the switch, no frame out of either in 15 s, WAN loss 1/600).
+3. Checks: `router-node.sh check nx02` (the LIVE rules — Kea/BGP/ACME/ddclient on, kill switch
+   retired, `.1` MASTER at vhid 1's MAC, WAN gate UP) and `check pve` (still inert); WAN lease on
+   the spoofed MAC (same public IP → ddclient no-op), BGP 13/13 Established to `.70`, a LAN DHCP
+   lease from Kea, Unbound answering, every HAProxy name over TLS, the WireGuard handshake probe,
+   the backup CronJob run by hand, the box's belts green.
 4. Fallback at any failed check, **in this order** (one MAC, one live WAN): stop nx-02's VM (`qm stop` +
    `onboot 0` — the gate drops its WAN, a host reboot cannot revive it), the Cilium peer back to `.1`, then
-   Big Data on — no recabling, it never lost its config.
+   Big Data on — no recabling, it never lost its config. Then revert the change-set PR (the inventory
+   points at Big Data again, the DHCP default back to `dnsmasq`) and re-run the kill-switch play.
 
 **Window 2 — pve joins as BACKUP** (no client-visible change):
 
-1. pve's node converged out of standby at advskew 100 — its kill switch disarmed first (a live
-   node emits exactly what the switch trips on); its WAN cabled to the WAN switch (the gate keeps
-   it dark while BACKUP).
+1. pve's node converged out of standby at advskew 100 — its kill switch retired first (9171 into
+   `pve_router_live_vmids`, the play — as nx-02's in window 1); `.1` moves from nx-02's host var
+   back to the group `router_carp_vips` for both; its WAN on the WAN switch (the gate keeps it
+   dark while BACKUP).
 2. Kea HA on, both nodes (nx-02 primary); the Cilium peer `.71` added.
 3. Checks: CARP MASTER/BACKUP as expected, the lease DB synced, BGP 26/26, the belts green.
 4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out.

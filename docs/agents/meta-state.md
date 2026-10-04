@@ -10,6 +10,25 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-04 — S9 provider-pin deploy + revert path DRILLED; TICK-LOG 2026-10-04).**
+  (1) **Operator call:** arm terraform provider MAJORS (`.github/renovate-global.json`, operator-direct) —
+  the gate (#2205), detector (#2206), chain (#2207) and drill (#2209) are done. (2) First real proof owed:
+  the next CHANGING main apply runs kubernetes 3.2.1 — the box's `exercised-main.tsv` moves 2.38.0→3.2.1
+  on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047. (3) Then S9 next step
+  7 (class 1/2 proposers, `docs/dependency-upgrades.md`).
+- **⚑ PICKUP (2026-10-02 night — helm provider 3.x applied under evidence; TICK-LOG 2026-10-02 evening).**
+  (1) **#2183 merged unread by the operator** (author==codeowner waiver) — the box apply loop now DEFERS
+  inside [declared windows](../glossary.md); operator to read its three calls: `MgmtApplyDeferredByWindow` at 6 h, the
+  reconciler's node windows hold the apply loop, `--admit-apply` separate from `--admit-reconciler`.
+  Confirm the box's next pull runs it (a `DEFERRED` line the first time a window is open). (2) The
+  `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: daily Longhorn job + UniFi
+  `.unf` LIVE (PR#2196/#2197: schedule as code + UnifiAutobackupStale) — glance at the 10-04 01:00Z `.unf` +
+  02:00Z run; off-site PARKED by the operator.
+- **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
+  `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
+  reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**
+  if the rank fix #2170 (queued) hasn't merged, decide whether r7 runs on the old rank (it samples
+  PRs on cancellations only and misses blocked issues). PR#2172 = ADR-146 Proposed, awaiting the operator's read.
 - **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
   from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
   LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.
@@ -75,20 +94,24 @@ never the session's arc — that is TICK-LOG's.)
   #2157 nx-02 host reboot, #2158 .72 retired + skews + router-ids, #2159 RouterPairMasterCount
   interim `> 1`, #2160 BGP alert per peer — auto-merge pending re-review; #2161 DRAFT = the
   Cilium peer .1→.70, apply IN window 1, plan id 20261001T190057Z-f06b997d, re-plan if stale).
-  **⚠ BLOCKER — WAN-switch packet loss:** cabling now ONT → WAN switch → Big Data, node cables
-  OUT. With nx-02 `eno2` + pve `enp6s0` on the switch: 7–20 % loss past Big Data at every packet
-  size, TCP connect 1.3–2.9 s; both pulled → 0 % / 6–19 ms. LAN clean; Big Data `em0` 0 errors;
-  hypervisor WAN taps DOWN, gates dark. Suspects: a frame with em0's MAC leaking from a node
-  (switch MAC flap), PAUSE frames (both NICs flow-control RX/TX on), other bridge chatter.
-  **Next session (operator in the basement with a laptop):** ONT → Big Data DIRECT, nodes alone
-  on the switch → `tcpdump -e -Q out` on eno2/enp6s0 (src = Big Data's em0 MAC?) + `ethtool -S`
-  pause counters + flow control off; operator replaces the WAN cable regardless.
-  **Window-1 change set still to write:** `.1` VIP (nx-02 host vars only), nx-02 out of standby +
-  `OPN_DHCP_SERVER=kea`, **disarm nx-02's kill switch first** (missing from the doc), prod's
-  management address → the node (router-move §B), RouterPairMasterCount back to `!= 1`.
-  **Lesson to write into router-move:** retiring a CARP VIP on the MASTER first promotes the
-  BACKUP — the 18:45–18:48Z .72 retirement raised nx-02's WAN for 2 min (harmless only because
-  its cable went to pve's dark port); remove from the BACKUP first / both in maintenance.
+  **⚑ WINDOW 1 DONE 2026-10-02 (window seat-1790960221-62) — nx-02 IS THE ROUTER.** #2166 (change set
+  + LAN_GW drop) merged, #2161 (Cilium peer `.70`) applied; `.1` = CARP MASTER on nx-02, WAN
+  `176.46.101.184`, BGP 13/13, Kea leasing, WG handshake, backup, HAProxy names, `check nx02/pve` green.
+  The WAN loss was the old cable. **Big Data: RUNNING with BOTH cables OUT** — the API `core/system/halt`
+  did NOT keep it down (it answered `.1` again within ~4 min → double `.1` until the operator pulled
+  its cables). Fallback = router-move §Window 1 step 4 (stop nx-02's VM FIRST, then replug Big Data).
+  **Next:** soak 1–2 weeks → window 2 (pve joins as BACKUP; its WAN already on the switch, gate dark);
+  write the window's lessons into router-move §Status (halt ≠ off; the ddclient play hung on a
+  `pkg update` stuck from the double-`.1` minutes; `mgmt-tf apply` prompts `y`; Kea served only
+  after a re-run; `opnsense.teststuff.net` came from Big Data's hostname → static override 3cf5bd16).
+  `OpnsenseConfigUnattributedRevision` fires on every jail converge (root key) — FU-013's class.
+  **⚠ WINDOW-2 BLOCKER — pve's STANDBY node served DHCP as `.1`:** kill switch tripped 17:14:43Z on
+  `02:00:c0:a8:02:47 > mower  192.168.2.1.67 > 192.168.2.150.68 BOOTP Reply` → VM 9171 stopped,
+  onboot latched 0 (WAN gate still active). `check pve` was green at 17:02 (DHCP off, switch armed).
+  Cause unknown: the seat's 17:02–17:14 acts all targeted nx-02 (`--limit`/`OPN_HOST=.70`); suspect
+  the #2166 inventory flip (plain playbook runs now hit BOTH nodes — the box's `--check` belt is the
+  routine one) or a pfsync/Kea interaction. **Next:** `killswitch-arm pve` FIRST, boot 9171, read its
+  Kea + dnsmasq config and config history 17:02–17:14Z; do NOT reset onboot until understood.
   Open beside it:
   `PveNumaNodeMemoryLow` fired 15:22Z on nx-02 node 0 (wk-04 16 GB pinned + ci-runner-02
   8.9 GB + cp-02 6.6 GB; the router VM sits on node 1) — FU-289's class. Read 2026-09-30 late: no swap, but nx-02 is fully booked (~60/62.5 GiB) → **budget the pve node and any further nx-02 VM against that**; fix = RAM (FU-289 item 3, operator watching for a lot). #2130
@@ -149,17 +172,11 @@ never the session's arc — that is TICK-LOG's.)
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
-- **⚑ RESPONDER UN-PAUSE (FU-249, due 2026-09-23 — on the operator list).** When it is re-enabled, run
-  this read-list in order. First delete the never-matching `alert-dep` filter in
-  `agents/coordinator/responder-argo.yaml`, which reverts #1746. Then:
-  (a) `responder_triage_sessions_today` for a day should sit well under the 09-11→16 ceiling of
-  11–12/day.
-  (b) `responder-seen` should gain `none-`/`window-`/`humandecided-`/`decided-` markers.
-  (c) The `agent-transcripts/homelab/` prefix should exist (FU-210's acceptance: a report-only session
-  still leaves a readable decision).
-  (d) One real `node-maintenance` window should cost no session (FU-230 leg b).
-  Known one-time cost: the FU-232 re-key files ONE fresh issue per affected (alert, object). That burst
-  is not a regression.
+- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Step (1)
+  LIVE (PR#2193: every rule carries `triage`, upstream via the relabel map). Next: the subject-key residuals
+  (FU-249 (2)) → route `triage="now"` with the crosscheck and §routing test, then delete the filter → the
+  grouped deep dig. oracle-fleet's own rules (ert-pipeline ×2, oracle-gateway ×3) still carry no `triage` —
+  the stack's lane (`patterns/observability.md` §3).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.
   Theme #1907's assembly (`goal/1906-scan → master`) is the one codeowner read, and it has not been
@@ -170,16 +187,8 @@ never the session's arc — that is TICK-LOG's.)
   and that is **FU-250**. #1640 router Goal. #1769 rails Goal. #1418 S8 [stint](chainless-redesign.md): #1649 landed 09-14, so it
   is due to close at a sweep.
 - **⚑ OPERATOR-OWED (one list, verified open 2026-09-24):**
-  (1) **FU-097's intent-review instruction** for `.agents/review.md` is operator-direct. Draft, proposed
-  under "Judge these carefully": *"On a surface the box
-  applies on its own (management-box.md §The capability ledger: the main-root allowlist, Talos
-  versions, Talos config), your read replaces the codeowner read, so review INTENT: does the plan +
-  install-impact line do what the linked issue asked, given what the fleet and the box already run
-  (a version skipping the canary type, a config that needs a reboot under `no_reboot`, a CP change
-  while the CP toggle is off)? Intent and plan disagreeing is BLOCKING even when every check is green."*
-  (1b) Same file, a second operator-direct fix: `.agents/review.md` ~L92 still frames ADR-128's narrowed gate as
-  "the trial week (2026-09-11 → 09-18)"; FU-233 ruled it standing. A live reviewer brief with a lapsed range can
-  mislead the reviewer. Its path list also omits `/scripts/` + `/nixos/`, which are in CODEOWNERS.
+  ((1)/(1b) DONE — `.agents/review.md` carries the intent-review rule (c8e38675) and the standing-gate
+  wording; verified by the 2026-10-03 fu-sweep.)
   (2) claude-jail `6f90815` (`DEVBOX_USE_VERSION=0.18.3`, FU-240) is still unpushed in `/workspace`.
   It needs your push + a jail rebuild, and the host profile wants the same export.
   (3) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).

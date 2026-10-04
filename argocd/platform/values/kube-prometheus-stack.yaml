@@ -42,6 +42,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: warning
+              # triage: cilium agent pod, node readiness and logs are readable in-cluster
+              triage: dig
           - alert: CiliumUnreachableNodes
             annotations:
               description: A Cilium agent ({{ $labels.instance }}) can't reach {{ $value }} other node(s) in the mesh for 10m — cross-node pod networking is degraded.
@@ -50,6 +52,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: warning
+              # triage: standing mesh unreachability; cilium status, node health and kmsg readable
+              triage: dig
   cilium-bgp:
     groups:
       - name: cilium-bgp
@@ -62,6 +66,8 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: critical
+              # triage: per router peer — a standby-only loss is reduced redundancy; a MASTER loss also trips the endpoint probes
+              triage: dig
           - alert: CiliumBGPNodeSessionDown
             annotations:
               description: '{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (reduced redundancy/ECMP). A new node must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml.'
@@ -70,6 +76,8 @@ additionalPrometheusRulesMap:
             for: 15m
             labels:
               severity: warning
+              # triage: per-node peering loss; cilium BGP status readable, router side out of reach
+              triage: dig
   cnpg:
     groups:
       - name: cnpg
@@ -82,6 +90,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: warning
+              # triage: replica stuck on pg_rewind or primary alone; CNPG cluster status readable
+              triage: dig
           - alert: CNPGInstanceCrashLooping
             annotations:
               description: '{{ $labels.pod }} ({{ $labels.namespace }}) restarted >3 times in 15m — likely a replica stuck on pg_rewind (no common timeline ancestor). Re-clone it: delete the replica''s PVC + pod.'
@@ -90,6 +100,8 @@ additionalPrometheusRulesMap:
             for: 0m
             labels:
               severity: warning
+              # triage: crash-looping replica; CNPG status and pod logs readable
+              triage: dig
           - alert: CNPGReplicationLagHigh
             annotations:
               description: Streaming lag on {{ $labels.pod }} is {{ $value | humanizeDuration }} (>5m) for 5m — the standby is falling behind the primary.
@@ -98,6 +110,10 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: warning
+              # triage: standby lag cause readable from CNPG metrics and logs
+              triage: dig
+          # CNPGNoWritablePrimary (the -rw Service has no endpoint) lives in argocd/resources/pg-backup/
+          # prometheusrule.yaml — a CR, so its fixture is drift-pinned (values-defined rules are not).
           - alert: CNPGInstanceExporterDown
             annotations:
               description: The CNPG collector on {{ $labels.pod }} can't reach Postgres for 5m — the instance is unhealthy or the exporter is failing.
@@ -106,6 +122,8 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: warning
+              # triage: collector or instance fault readable from pod and CNPG status
+              triage: dig
   longhorn:
     groups:
       - name: longhorn
@@ -118,6 +136,8 @@ additionalPrometheusRulesMap:
             for: 5m
             labels:
               severity: critical
+              # triage: volume has no healthy replica: data unavailable; Longhorn CRs and events readable
+              triage: now
           - alert: LonghornVolumeDegraded
             annotations:
               description: Volume {{ $labels.volume }} has been degraded (a replica missing/rebuilding) for 20m — running below the desired replica count.
@@ -126,6 +146,8 @@ additionalPrometheusRulesMap:
             for: 20m
             labels:
               severity: warning
+              # triage: missing or rebuilding replica; Longhorn CRs show why it does not settle
+              triage: dig
           - alert: LonghornNodeStorageLow
             annotations:
               description: '{{ $labels.node }} Longhorn storage is over 85% used for 30m — volumes may fail to schedule or rebuild.'
@@ -134,6 +156,8 @@ additionalPrometheusRulesMap:
             for: 30m
             labels:
               severity: warning
+              # triage: node storage use readable from Longhorn CRs and the storage ledger
+              triage: dig
   node-health:
     groups:
       - name: node-health
@@ -146,6 +170,8 @@ additionalPrometheusRulesMap:
             for: 0m
             labels:
               severity: warning
+              # triage: an unexpected reboot; boot time, pre-boot metrics and kmsg in Loki are readable
+              triage: dig
           - alert: PodSigkilled
             annotations:
               description: 'Container {{ $labels.container }} restarted with exit 137 (SIGKILL). SYMPTOM ONLY — three unrelated causes share this exit code, so read the pod before assuming any. `kubectl -n {{ $labels.namespace }} get pod {{ $labels.pod }} -o json` → `.status.containerStatuses[].lastState.terminated.reason`, plus the QoS class and each container''s own memory limit. (1) `OOMKilled` = the container hit ITS OWN limit (raise it) — the common case, node memory can be perfectly healthy. (2) Kubelet node-pressure eviction of a BestEffort victim — the node is genuinely under Memory/DiskPressure. (3) The Talos OOMController (FU-155, docs/spikes/talos-psi-thresholds.md): a userspace killer that SIGKILLs the WHOLE pod cgroup atomically via cgroup.kill — every container dies at the same instant with `reason: "Error"` (never `OOMKilled`), preferentially targeting pods with NO memory limit (BestEffort 1.0, unlimited Burstable 0.5). In-cluster corroboration (an agent lane CAN establish this): `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}` shows the `SandboxChanged` event ("Pod sandbox changed, it will be killed and re-created") with the pod typically back Ready in ~10s and a climbing cumulative `restartCount`. Node-level confirmation — now PLATFORM-SHIPPED via Loki (homelab#541): every node''s kernel log flows in as `{container="kmsg-reader", node="<node>"}` (see argocd/resources/loki/kmsg-reader.yaml) — any session with LogQL access runs the query directly, no talosctl needed. The Talos OOMController''s own line (`OOM controller triggered`, FU-082''s confirmation string) appears in the kernel log because Talos redirects the std logger into /dev/kmsg, so the LogQL line `{container="kmsg-reader", node="<node>"} |~ "OOM controller"` confirms branch 3 the same way `talosctl dmesg | grep ''OOM controller''` used to. For the authoritative record (score, trigger context, victim cmdlines) `talosctl -n <node> get oomactions -o yaml` remains — OPERATOR / NODE-ACCESS ONLY.'
@@ -154,6 +180,8 @@ additionalPrometheusRulesMap:
             for: 0m
             labels:
               severity: warning
+              # triage: exit 137 has three causes; the pod status separates them
+              triage: dig
           - alert: ContainerMemoryNearLimit
             annotations:
               description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a platform daemon (cilium-agent — Burstable since FU-267, 1Gi limit; longhorn-manager / longhorn-csi-plugin and its CSI sidecars — FU-112(b) Guaranteed), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node — cilium-agent and longhorn-manager via their own `resources` keys, the CSI components via `defaultSettings.systemManagedCSIComponentsResourceLimits` (the old `longhornDriver.resources` key was inert — no chart template consumed it — and is gone).
@@ -162,6 +190,8 @@ additionalPrometheusRulesMap:
             for: 15m
             labels:
               severity: warning
+              # triage: usage trend vs limit readable; a limit or leak fix lands by PR
+              triage: dig
           # THE 2026-09-10 07:15Z CLASS (oracle handoff): a runner pod on wk-03 untarred a 10.6 GB
           # image into an emptyDir on the node's 36 GB root disk and the kubelet evicted it at the
           # nodefs threshold, 20 min into the job; nothing here said so (NodeFilesystem* are
@@ -179,6 +209,8 @@ additionalPrometheusRulesMap:
             for: 0m
             labels:
               severity: warning
+              # triage: node pressure class readable from events and node metrics
+              triage: dig
           - alert: EphemeralNodeScratchLow
             annotations:
               description: 'Ephemeral-pool node {{ $labels.instance }} has {{ $value | printf "%.1f" }} GB free on /var — below the 16 GB a 10 GB CI job needs before the kubelet''s nodefs eviction floor. A runner landing here for such a job is evicted mid-run (2026-09-10 07:15Z, wk-03). The image store shares this disk: `crictl rmi --prune` / kubelet imageGC clears it, or the node simply must not take large-scratch jobs (arc-runners-large.yaml pins those to metal). On a pool VM every GB written here is also pve thin-pool growth (memory: read the pool first).'
@@ -192,6 +224,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: warning
+              # triage: what holds node scratch (images, emptyDirs) is readable in-cluster
+              triage: dig
           # homelab#477: the stock NodeSystemSaturation (disabled above) re-added with the
           # ephemeral/kata pool excluded. The exclusion joins on the TAINT that defines the pool
           # (kube_node_spec_taint key=homelab.io/ephemeral) rather than the homelab.io/kata label:
@@ -215,6 +249,8 @@ additionalPrometheusRulesMap:
             for: 15m
             labels:
               severity: warning
+              # triage: load source readable from node and pod metrics
+              triage: dig
   office-plants:
     groups:
       - name: office-plants
@@ -227,6 +263,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: critical
+              # triage: HA runs in-cluster; pod status, logs and the token Secret are readable
+              triage: dig
           - alert: DropletOffline
             annotations:
               description: The Droplet ({{ $labels.entity }}) has been disconnected for 10m — no watering and no soil readings.
@@ -235,6 +273,8 @@ additionalPrometheusRulesMap:
             for: 10m
             labels:
               severity: critical
+              # triage: ESP32 device offline; physical or wifi, out of reach
+              triage: none
           - alert: SoilSensorSuspectZero
             annotations:
               description: '{{ $labels.friendly_name }} has read 0% for 2h — check the sensor wiring/calibration.'
@@ -243,6 +283,8 @@ additionalPrometheusRulesMap:
             for: 2h
             labels:
               severity: warning
+              # triage: sensor wiring or calibration; physical remedy
+              triage: none
 alertmanager:
   # FU-195: the operator's default is a bare emptyDir for the `…-alertmanager-db` volume, so
   # EVERY Alertmanager pod restart wipes every open silence and the whole notification log. A
@@ -290,6 +332,13 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/rollout-stuck
+      # S9 #1988 (2026-10-04): the box's first changing apply under a new provider version errored —
+      # the provider-pin merge is reverted deterministically (deploy-revert-argo.yaml
+      # `tofu-provider-revert`). Same composition: the responder still triages.
+      - name: deploy-provider-revert
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/provider-errored
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -324,6 +373,12 @@ alertmanager:
           matchers:
             - alertname = "KubeDeploymentRolloutStuck"
           receiver: deploy-rollout-revert
+        # S9 #1988: MgmtApplyErroredOnNewProvider goes to BOTH deploy-provider-revert AND the
+        # responder. The revert only fires when a provider-pin-only merge introduced the version.
+        - continue: true
+          matchers:
+            - alertname = "MgmtApplyErroredOnNewProvider"
+          receiver: deploy-provider-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts
@@ -339,28 +394,29 @@ alertmanager:
         # deliberate — distinct subjects that share an alertname (three degraded Longhorn volumes)
         # are distinct problems and must keep their own issues. Grouping reduces deliveries and
         # workflow spawns; the ledgers reduce sessions and issues.
-        # ── THE TRIAGE-ROUTING FILTER (2026-09-17) — what the responder never sees ──────────
+        # ── THE TRIAGE-ROUTING FILTER (2026-09-17; `now`-only since 2026-10-04, ADR-148) ─────
         # Three tiers, cheapest first, and this route is tier 0:
-        #   0. NOT ROUTED — the matchers below. Costs nothing: no Sensor trigger, no Argo
+        #   0. NOT ROUTED — the matcher below. Costs nothing: no Sensor trigger, no Argo
         #      workflow, no pod, no clone. The alert still reaches ha-webhook and Grafana.
-        #   1. ROUTED, NEVER A SESSION — the in-pod `triage:none` belt in
+        #   1. ROUTED, NEVER A SESSION — the in-pod `triage: none|dig` belt in
         #      agents/coordinator/responder-argo.yaml (ledger marker, no LLM, no daily-cap spend).
-        #      It stays as the belt under matcher 2, not as the mechanism.
-        #   2. A SESSION — everything else.
-        # Matcher 1 — `severity != info`. An `info` alert is by definition not actionable now
-        # (the stock InfoInhibitor already mutes it whenever a warning is up in the same
-        # namespace, so it was only ever routed on quiet namespaces). Named classes today:
-        # KubeNodeEviction, KubeNodePressure, CPUThrottlingHigh, HomeAssistantSensorStale.
-        # Matcher 2 — `triage != none`, the RULE AUTHOR's own do-not-investigate declaration
-        # (roles.md §responder; the pairing with platform_machinery is asserted in
-        # responder-behaviour-test.sh §#239). It was honoured only INSIDE the pod, so a
-        # self-describing alert still bought a workflow + a git clone — 154 of the ledger's
-        # entries are that marker. Honouring it here makes the declaration free.
-        # ⚠ Both matchers are also read by agents/meta-alert-crosscheck.sh, which must not
-        # report a deliberately-unrouted alert as UNTRIAGED machinery. Change one, change both.
-        # ⚠ A stock chart rule cannot carry `triage` (no per-alert label hook; `defaultRules`
-        # only offers disable + fleet-wide labels). The escape hatch for one of those is an
-        # `alertname!~` matcher HERE, with its reason — but prefer scoping or replacing the rule.
+        #      It stays as the belt under the matcher, not as the mechanism.
+        #   2. A SESSION — `triage = "now"`, and nothing else.
+        # The matcher is the RULE AUTHOR's `triage` declaration (patterns/observability.md §3;
+        # every rule carries one — prometheus-rules-lint holds ours, the relabel map in
+        # kube-prometheus-stack-triage.yaml fills the stock chart's on the way here). `now` =
+        # acute, a real-time per-fingerprint session can change what happens next. `dig` goes
+        # to the scheduled GROUPED deep dig (agents/coordinator/deep-dig-argo.yaml): the
+        # 2026-10-03 audit found every one of the paused week's real wins was a STANDING alert
+        # the seat had seen for days and that needed 20–50 tool calls — a shape a per-fire
+        # session cannot pay for and a 12/day budget cannot afford. `none` goes to nobody.
+        # ⚠ The old `severity != "info"` matcher is SUBSUMED: severity says how bad, triage says
+        # whether looking can help, and an `info` rule that wants a session says `now` itself.
+        # ⚠ The matcher is also read by agents/meta-alert-crosscheck.sh, which must not report
+        # a deliberately-unrouted alert as UNTRIAGED machinery. Change one, change both — the
+        # pairing is asserted in responder-behaviour-test.sh §routing.
+        # Reclassify a stock rule in the relabel map; still prefer scoping or replacing a rule
+        # that misleads.
         # KubeJobFailed is the worked example and it ended in a REPLACEMENT (defaultRules.disabled
         # above + argocd/resources/job-health/, 2026-09-17): its 48 firing series in 7d were name
         # churn, and underneath them the rule read a Job OBJECT rather than a schedule, so it could
@@ -370,8 +426,7 @@ alertmanager:
           group_by:
             - alertname
           matchers:
-            - severity != "info"
-            - triage != "none"
+            - triage = "now"
           receiver: agent-responder
         - receiver: ha-webhook
   service:

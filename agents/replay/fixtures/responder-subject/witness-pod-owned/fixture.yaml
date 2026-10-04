@@ -1,18 +1,20 @@
-# FU-232 (homelab#1733) — the WITNESS. A pod that really IS the object still wins.
+# FU-232 / FU-249 step 2 (ADR-148) — the WITNESS. A pod that really IS the object still wins.
 #
 # WHY A GREEN-PATH FIXTURE. The re-key can be misread as "a pod label is never trustworthy", and
-# that misreading would be a worse bug than the one it fixes: kube-state-metrics is scraped with
-# honorLabels, so a metric that HAS a pod dimension (KubePodNotReady, KubeContainerWaiting,
-# PodSigkilled) carries the FAILING pod and the reporter's is overwritten. Two things must hold for
-# this fixture to stay green, and each is a separate way the rule could be widened wrongly:
+# that misreading is exactly what the first cut shipped (homelab#1733): rule 2 skipped `pod` on
+# EVERY kube-state-metrics alert, so every KubePodNotReady in the cluster keyed to the per-class
+# `alert:KubePodNotReady` and DECIDED-ONCE then muted them all — the 2026-10-03 replay's first
+# residual. This fixture used to send `job=kubelet`, a shape that never occurs live, so it was
+# green while the live shape was broken. The payload below is the live one, read off Prometheus's
+# ALERTS 2026-10-04: KubePodNotReady arrives with `job=kube-state-metrics`, `namespace`, `pod` —
+# and NOTHING else, because the rule aggregates the target labels away. Two things must hold:
 #   1. `pod` is still consulted when no object label is present — the arm was not deleted;
-#   2. the reporter test keys on the SCRAPE JOB, not on the pod's name. `job=kubelet` here is not a
-#      monitoring job, so the pod stands. A pod-name regex (`*kube-state*`, `*exporter*`) would rot
-#      one workload at a time and would also wrongly skip a genuine PodSigkilled on an exporter —
-#      the shape homelab#153 was, correctly, filed under.
+#   2. the reporter test is STRUCTURAL: a reporter's pod never travels without its target set
+#      (instance/container/service/endpoint), so a bare `pod` kept by the rule's by-clause is the
+#      object even on a reporter job. A pod-name regex would rot one workload at a time.
 #
-# THE CONTRACT: subject = workload:loki/alloy (the live homelab#1686 subject, unchanged by the
-# re-key), RC 0.
+# THE CONTRACT: subject = workload:agent-coordinator/coordinator-sensor-kfmcv (the generated
+# suffixes stripped), RC 0.
 name: responder-subject-witness-pod-owned
 mode: actions
 source: agents/coordinator/responder-argo.yaml

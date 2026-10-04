@@ -65,3 +65,18 @@
     preempt: true
     synchronize_to_ip: ""
     reload: true
+
+# A LIVE node's egress is its own WAN (ADR-145 window 1). The standing seed gave it `LAN_GW` — the
+# default route to prod's `.1` at priority 1 (opnsense/test-vm/seed-shape.py), which outranks the
+# WAN's dynamic gateway — so once the node HOLDS `.1` that route points at itself and nothing
+# leaves. Live: delete it, so WAN_GW is the default. A standing node keeps it (its only egress).
+- name: Live node — LAN_GW removed (its default route would be its own .1)
+  when: router_carp_vips | default([]) | length > 0 and not (opnsense_standby | bool)
+  # absent matches on name AND interface + gateway: with the name alone the module reports
+  # ok and deletes nothing (proven on the test VM, 2026-10-02).
+  oxlorg.opnsense.gateway:
+    name: LAN_GW
+    interface: lan
+    gateway: 192.168.2.1
+    state: absent
+    reload: true

@@ -109,6 +109,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-lvsmt
               uid: u2
@@ -137,6 +138,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               job: agent_scan_phase
               namespace: oracle-agents
               pod: coordinate-oracle-2
@@ -199,6 +201,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-r8k4n
               uid: u5
@@ -208,6 +211,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-r8k4n
               uid: u5
@@ -218,6 +222,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-r8k4n
               uid: u5
@@ -241,6 +246,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-t2w7j
               uid: u6
@@ -259,6 +265,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-t2w7j
               uid: u6
@@ -293,6 +300,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-m5q9d
               uid: u7
@@ -303,6 +311,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-m5q9d
               uid: u7
@@ -312,6 +321,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
+              triage: dig
               namespace: agent-coordinator
               pod: coordinate-perstack-m5q9d
               uid: u7

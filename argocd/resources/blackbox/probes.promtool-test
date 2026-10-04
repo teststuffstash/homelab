@@ -69,6 +69,7 @@ tests:
               instance: https://grafana.teststuff.net
               job: blackbox-lan
               namespace: monitoring
+              triage: dig
       # mid-hole, past the staleness marker: the raw selector is EMPTY here. The bridged one is
       # not — the range still reaches the samples at t=19,20.
       - eval_time: 21m
@@ -280,6 +281,7 @@ tests:
               instance: https://mcp.oracle.teststuff.net/mcp
               job: slo-oracle
               namespace: monitoring
+              triage: dig
       - eval_time: 23m
         alertname: EndpointProbeFailing
         exp_alerts: *mcp_alert
@@ -329,6 +331,7 @@ tests:
               instance: 192.168.2.1:53
               job: blackbox-unbound-github
               namespace: monitoring
+              triage: none
       # still firing
       - eval_time: 7m
         alertname: UnboundGithubServfail
@@ -338,6 +341,7 @@ tests:
               instance: 192.168.2.1:53
               job: blackbox-unbound-github
               namespace: monitoring
+              triage: none
       # recovered — probe_success == 1 at t=8
       - eval_time: 9m
         alertname: UnboundGithubServfail
@@ -365,6 +369,7 @@ tests:
               instance: https://specs.oracle.teststuff.net
               job: blackbox-lan
               namespace: monitoring
+              triage: dig
       - eval_time: 23m
         alertname: EndpointProbeFailing
         exp_alerts: *specs_alert

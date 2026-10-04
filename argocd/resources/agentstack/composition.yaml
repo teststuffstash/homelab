@@ -199,6 +199,8 @@ spec:
                       labels:
                         severity: warning
                         stack: {{ $sloStack }}
+                        # triage: stack SLO endpoint failing; serving pods readable in the stack namespace
+                        triage: dig
                       annotations:
                         summary: "Synthetic probe failing: {{ "{{" }} $labels.instance {{ "}}" }}"
                         description: "SLO endpoint has failed its blackbox probe for 10m. Symptom only. ⚠ homelab#336: the expr reads a 5m range, so this is at least one failure in every 5m window across those ten minutes and up to 5m may have passed since the last — check probe_success before concluding it is still down."

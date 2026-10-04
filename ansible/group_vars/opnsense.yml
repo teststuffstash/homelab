@@ -184,6 +184,7 @@ ddclient_account_description: "wg endpoint (ansible)"
 # which creates the VIP they point at. Listing a name in both made the two roles rewrite the same
 # record's description on every run (neither ever idempotent) — found by the FU-297 test VM.
 unbound_hosts:
+  - { hostname: opnsense, domain: teststuff.net, value: 192.168.2.1, description: "the router GUI at the .1 CARP VIP — Big Data answered it from its system hostname, the nodes do not (window 1, ADR-145)" }
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
   - { hostname: npm-cache, domain: teststuff.net, value: 192.168.40.35, description: "npm pull-through cache (BGP VIP) — Deno needs a hostname registry, an IP URL breaks its cache (ADR-143, FU-294)" }
 

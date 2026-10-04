@@ -12,5 +12,7 @@ pve_serial_console_unit: 1
 pve_serial_console_baud: 115200
 
 # --- pve-router-killswitch (ADR-144) ---
-# opnsense-nx02 (tofu/opnsense-router.tf, vmid 9170) — the standing router node.
+# opnsense-nx02 (tofu/opnsense-router.tf, vmid 9170) — the router node, LIVE since window 1
+# (ADR-145): its WAN gate runs, its kill switch is retired.
 pve_router_killswitch_vmids: [9170]
+pve_router_live_vmids: [9170]

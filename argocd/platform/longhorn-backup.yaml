@@ -1,0 +1,24 @@
+# Longhorn's backup wiring that is NOT the chart (FU-299, docs/longhorn-backup.md): the target's
+# credential Secret, the target's health Probe and the backup alerts. A separate app for the same
+# reason as longhorn-alerts — Longhorn itself is tofu-managed (helm_release), and none of this
+# should wait on a tofu apply. The target itself (the nx-02 Garage LXC) is tofu/provisioning.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn-backup
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/longhorn-backup
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false]

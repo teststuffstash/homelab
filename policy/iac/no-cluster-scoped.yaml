@@ -24,6 +24,12 @@ spec:
                 - Namespace
                 - MutatingWebhookConfiguration
                 - ValidatingWebhookConfiguration
+                # The native admission-policy kinds are the same power as a webhook (ADR-147 shipped
+                # the first one, 2026-10-03, and found them missing here).
+                - MutatingAdmissionPolicy
+                - MutatingAdmissionPolicyBinding
+                - ValidatingAdmissionPolicy
+                - ValidatingAdmissionPolicyBinding
                 - APIService
                 - PriorityClass
       validate:

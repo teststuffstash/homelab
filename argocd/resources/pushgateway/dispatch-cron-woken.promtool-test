@@ -53,6 +53,7 @@ tests:
               platform_machinery: "true"
               project: homelab
               base: goal-278
+              triage: dig
             exp_annotations: {}
 
   # ══ 2. THE FALSE PAGE THE SPLIT REMOVES ══════════════════════════════════════════════════════
@@ -88,6 +89,7 @@ tests:
               platform_machinery: "true"
               project: circles
               base: master
+              triage: dig
             exp_annotations: {}
 
   # ══ 4. MIGRATION RESIDUE IS INERT ════════════════════════════════════════════════════════════
