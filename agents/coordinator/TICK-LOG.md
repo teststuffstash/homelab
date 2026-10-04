@@ -12233,3 +12233,10 @@ agent/error|blocked I fixed by hand this week", "goals stalled, issues took 10+ 
   a per-finding repo; the `blockedBy` edge stays the seat's act). No `retro.enabled` claim knob exists —
   not needed for v1. ~100–150 lines, agents/ + fixtures; an evening. Fork (3) = a ruling, no code.
 - Process: second-jail work ran in scratchpad clones (kept for PR rounds, removed at wind-down).
+- **Later (operator present):** #2215 merged 19:08Z and #2173 merged 19:24Z (operator's codeowner click) —
+  r7 runs on the new rank + the file-mounted token. **ADR-146 ACCEPTED** on a wording read: rulings —
+  every stack retros by DEFAULT (knob = opt-out; the guard's event floor gates the fire), the ride's
+  context named (brief template + the stack repo's CLAUDE.md/.agents; a stack may replace the brief
+  wholesale, the report contract stays), NO attribution rubric and NO enumerated signal list ("strong
+  model", "lists go stale"); fork (3) = board intake or INTO a covering platform Goal. #2172 rewritten
+  (ADR block + §B2 "Stack series", point 2 amended), auto-merge armed. Build = FU-058's next.

@@ -27,15 +27,15 @@ never the session's arc — that is TICK-LOG's.)
   `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: daily Longhorn job + UniFi
   `.unf` LIVE (PR#2196/#2197: schedule as code + UnifiAutobackupStale) — glance at the 10-04 01:00Z `.unf` +
   02:00Z run; off-site PARKED by the operator.
-- **⚑ PICKUP (2026-10-04 evening — retro r7 prep; TICK-LOG 2026-10-04 evening).** Before the
-  **Mon 10-05 05:00Z** fire, three PRs wait on the codeowner click (none merged by this session —
-  no corpus loaded, ADR-110): **#2173** (rank fix, head e96446e7: the worker's head would have
-  ranked the S9 Renovate PRs first; the seat's rounds fix the SHA fallback, issue-only credit,
-  latches/rounds as pain — oracle-fleet#753 samples on the live store), **#2215** (#2171: the
-  in-pod `gh` wrapper overrode `RETRO_GH_TOKEN` with the one-repo broker token; file mount,
-  no broker; e2e unverified — r7's ride log is the test: `gh repo view teststuffstash/oracle-fleet`
-  must resolve), **#2172** (ADR-146, rebased, operator read). r7 on the OLD rank = the S9 PRs
-  as the deep-dive set. **#2174** = merge as a conservative hold, then fix forward (GitHub emits
+- **⚑ PICKUP (2026-10-04 evening — retro r7 prep; TICK-LOG 2026-10-04 evening).** **#2173** (rank
+  fix: SHA fallback, issue-only credit, latches/rounds as pain — oracle-fleet#753 samples on the
+  live store) and **#2215** (#2171: the in-pod `gh` wrapper overrode `RETRO_GH_TOKEN` with the
+  one-repo broker token; file mount, no broker) MERGED 19:08/19:24Z — **r7 (Mon 10-05 05:00Z) is
+  their first live test**: read the ride log for `gh repo view teststuffstash/oracle-fleet`
+  resolving and the deep-dive set NOT being the S9 Renovate PRs. **ADR-146 ACCEPTED** (wording
+  read; #2172 auto-merge armed) — build = FU-058's next: bundle + guard repo scope, per-stack
+  CronWorkflow, the brief's escalation clause, the opt-out knob; oracle first, hand-fired AFTER
+  r7 publishes. **#2174** = merge as a conservative hold, then fix forward (GitHub emits
   no `marked_as_duplicate` timeline event; the canonical is GraphQL `duplicateOf` — the
   canonical-follow path never fires live; a GraphQL replay stub has no precedent). The
   reconcile ran 10-03/10-04 with nothing to reconcile (store holds only `activity.json`).
