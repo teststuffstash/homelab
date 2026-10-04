@@ -51,6 +51,17 @@ admit_shapes:               # rule-shaped exceptions INSIDE a denied file (ADR-1
   # context and is what a human reads. Why: six such PRs (2026-09-25..27) all planned +0 ~0 -0
   # under a human order; the human added nothing (operator: "I don't want to see these PRs").
   - provider-pin
+admit_plan_shapes:          # rule-shaped exceptions to "a pin head must plan EMPTY" (ADR-131 amended 2026-10-04, S9 #1988)
+  # default-backfill: every change the pin adds beyond master's own pending plan is an in-place
+  # update whose only differences are attributes null (or absent) in `before` and set in `after`,
+  # under an object (never a new array element), nothing known-after-apply, no replace
+  # (mgmt_plan_default_backfill over the local `show -json`). What a provider release that adds an
+  # attribute with a static default plans against existing state — cloudflare 5.26.0's
+  # `include_shadow_metadata = false` on six dns records (homelab#2191), a plan its changelog never
+  # mentioned. The old provider ignores attributes it does not know and the state-compatibility
+  # check still guards the schema version, so the lockfile revert stays a revert. Attribute NAMES
+  # reach the verdict comment, never values.
+  - default-backfill
 deny_paths:                 # basename globs a PR may not touch inside a root (stage 1) — provider/backend/CLI surface
   - ".terraform.lock.hcl"
   - "versions.tf"

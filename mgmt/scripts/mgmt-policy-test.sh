@@ -359,5 +359,57 @@ printf 'data.k_x.a\tread\n' >"$T/uch-data"
 if got="$(mgmt_unexercised "$T/uv" "$T/uex" "$T/uch-data")" && [ -z "$got" ]; then pass=$((pass+1)); echo "PASS unex:data-only-rc0"
 else fail=$((fail+1)); echo "FAIL unex:data-only-rc0 — rc≠0 or got '$got'"; fi
 
+# --- the default-backfill plan shape (ADR-131 amended 2026-10-04, homelab#2191): mgmt_plan_default_backfill
+# over a synthetic `show -json` — every listed change must be null→value under an object, nothing else ---
+jq -n '{resource_changes: [
+  {address:"a.x",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"1", f:null, tags:[]},  after:{id:"1", f:false, tags:[]}}},
+  {address:"a.y",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"2"},                   after:{id:"2", f:false}}},
+  {address:"a.v",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"3", f:true},           after:{id:"3", f:false}}},
+  {address:"a.n",   mode:"managed", type:"a", change:{actions:["update"], before:{id:"4", s:{x:null}},       after:{id:"4", s:{x:1}}}},
+  {address:"a.nn",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"5", s:null},           after:{id:"5", s:{x:1}}}},
+  {address:"a.arr", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6", t:[]},             after:{id:"6", t:["x"]}}},
+  {address:"a.arrnew", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6b"},                after:{id:"6b", t:["x"]}}},
+  {address:"a.arrobj", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6c"},                after:{id:"6c", t:[{x:1}]}}},
+  {address:"a.arrnest", mode:"managed", type:"a", change:{actions:["update"], before:{id:"6d", s:{}},         after:{id:"6d", s:{t:["x"]}}}},
+  {address:"a.unk", mode:"managed", type:"a", change:{actions:["update"], before:{id:"7", f:null},           after:{id:"7", f:null}, after_unknown:{f:true}}},
+  {address:"a.cr",  mode:"managed", type:"a", change:{actions:["create"], before:null,                       after:{id:"8", f:false}}},
+  {address:"a.rm",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"9", f:true},           after:{id:"9"}}},
+  {address:"a.noop",mode:"managed", type:"a", change:{actions:["update"], before:{id:"10", f:false},         after:{id:"10", f:false}}},
+  {address:"a.rp",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"11", f:null},          after:{id:"11", f:false}, replace_paths:[["f"]]}},
+  {address:"a.ty",  mode:"managed", type:"a", change:{actions:["update"], before:{id:"12", s:"str"},         after:{id:"12", s:{x:1}}}},
+  {address:"data.d.x", mode:"data", type:"d", change:{actions:["read"],   before:null,                       after:{id:"13"}}}
+]}' >"$T/bf.json"
+bfcase() {  # <name> <changes-lines ('|' TAB, ';' lines)> <want rc> <want stdout ('|' TAB, ';' lines)>
+  local got rc
+  if printf '%s\n' "$2" | tr ';|' '\n\t' | mgmt_plan_default_backfill "$T/bf" >"$T/bf.out" 2>"$T/bf.err"; then rc=0; else rc=$?; fi
+  got="$(tr '\t\n' '|;' <"$T/bf.out")"
+  if [ "$rc" = "$3" ] && [ "$got" = "$4" ]; then pass=$((pass+1)); echo "PASS backfill:$1"
+  else fail=$((fail+1)); echo "FAIL backfill:$1 — want rc $3 '$4', got rc $rc '$got' (stderr: $(tr '\t\n' '|;' <"$T/bf.err"))"; fi
+}
+bfcase two-ok          'a.x|update;a.y|update'    0 'a.x|f;a.y|f;'
+bfcase nested-ok       'a.n|update;a.nn|update'   0 'a.n|s.x;a.nn|s.x;'
+bfcase value-change    'a.v|update'               1 ''
+bfcase mixed           'a.x|update;a.v|update'    1 ''
+bfcase array-element   'a.arr|update'             1 ''
+bfcase array-new-key   'a.arrnew|update'          1 ''
+bfcase array-of-objects 'a.arrobj|update'         1 ''
+bfcase array-nested    'a.arrnest|update'         1 ''
+bfcase after-unknown   'a.unk|update'             1 ''
+bfcase create          'a.cr|create'              1 ''
+bfcase removed-attr    'a.rm|update'              1 ''
+bfcase noop-update     'a.noop|update'            1 ''
+bfcase replace-path    'a.rp|update'              1 ''
+bfcase type-change     'a.ty|update'              1 ''
+bfcase data-source     'data.d.x|read'            1 ''
+bfcase missing-address 'a.zz|update'              1 ''
+bfcase empty-list      ''                         1 ''
+cp "$T/bf.json" "$T/bf.good.json"; echo '{}' >"$T/bf.json"
+bfcase unreadable      'a.x|update'               2 ''
+cp "$T/bf.good.json" "$T/bf.json"
+# the offenders are named on stderr, address + why, never a value
+printf 'a.v\tupdate\n' | mgmt_plan_default_backfill "$T/bf" >/dev/null 2>"$T/bf.err" || true
+if grep -q $'^a.v\t' "$T/bf.err" && ! grep -q 'true\|false' "$T/bf.err"; then pass=$((pass+1)); echo "PASS backfill:offender-named-no-values"
+else fail=$((fail+1)); echo "FAIL backfill:offender-named-no-values — stderr: $(cat "$T/bf.err")"; fi
+
 echo "mgmt-policy-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

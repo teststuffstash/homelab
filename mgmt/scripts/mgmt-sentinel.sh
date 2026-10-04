@@ -294,10 +294,11 @@ while IFS=$'\t' read -r pr sha; do
   else
     echo "**management-sentinel** — \`tofu plan\` of ${sha:0:8} merged onto master@${m8} (what would land) on the management box (ADR-131). Addresses and counts only; the plan text stays on the box." >"$bodyf"
     if [ $PIN = 1 ]; then
-      { echo; echo "**Provider-pin head** — stage 1 admitted the \`provider-pin\` shape (only version / constraint / hash lines change, every provider source unchanged; ADR-131 amended 2026-09-27) in: $(awk -F'\t' -v bt='`' '{printf "%s%s%s ", bt, $2, bt}' <<<"$admitted"). The plan ran with the head's providers, verified against its lockfile hashes and the registry's signatures. **A bump must plan empty** — any change below fails this context and is the evidence a human reads."; } >>"$bodyf"
+      { echo; echo "**Provider-pin head** — stage 1 admitted the \`provider-pin\` shape (only version / constraint / hash lines change, every provider source unchanged; ADR-131 amended 2026-09-27) in: $(awk -F'\t' -v bt='`' '{printf "%s%s%s ", bt, $2, bt}' <<<"$admitted"). The plan ran with the head's providers, verified against its lockfile hashes and the registry's signatures. **A bump must plan empty** — relative to master's own pending plan, or be a default backfill (attributes the new provider introduced with a static default, null → default and nothing else; ADR-131 amended 2026-10-04) — anything else below fails this context and is the evidence a human reads."; } >>"$bodyf"
     fi
   fi
   for root in "${roots[@]}"; do
+    backfill_desc=""
     out="$wt/.mgmt-plan-$root.bin"
     mgmt_plan_root "$wt" "$POL" "$root" "$out" false; rc=$?
     if [ $HUMAN = 1 ]; then   # the human READS the plan — terminal only (stderr), never the comment
@@ -347,7 +348,7 @@ while IFS=$'\t' read -r pr sha; do
       # the tofu-provider-revert chain's revert (master is refused on the errored apply), would park
       # on a human by construction. So plan master alone: a pin that adds NOTHING (identical
       # address/action set) passes; anything it adds, drops or alters is still the human read.
-      mout="$wtb/.mgmt-plan-$root.bin"; same=0
+      mout="$wtb/.mgmt-plan-$root.bin"; same=0; mchanges=""   # reset per root: a failed master plan must not leave the previous root's set behind
       if [ -n "$wtb" ] && { mgmt_plan_root "$wtb" "$POL" "$root" "$mout" false; mrc=$?; [ $mrc != 1 ]; } \
          && mchanges="$(mgmt_plan_changes "$wtb" "$POL" "$root" "$mout")" \
          && [ "$(printf '%s\n' "$changes" | sort)" = "$(printf '%s\n' "$mchanges" | sort)" ]; then same=1; fi
@@ -355,9 +356,33 @@ while IFS=$'\t' read -r pr sha; do
         { echo; echo "Provider-pin head: the plan is master's OWN pending plan (+$a ~$c -$d, identical address/action set planned on master@${m8} alone) — the pin adds nothing to it."; } >>"$bodyf"
         log "[#$pr] provider-pin head: $root plan (+$a ~$c -$d) = master's own pending plan — the pin adds nothing"
       else
-        state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
-        { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}; master's own pending plan differs or could not be read) — human read"; } >>"$bodyf"
-        log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d) and differs from master's own — failing the context"
+        # DEFAULT BACKFILL (ADR-131 amended 2026-10-04, homelab#2191): what the pin ADDS to master's own
+        # pending plan may be in-place updates writing only attributes the new provider introduced
+        # with a static default (null → default, nothing else differs, nothing known-after-apply —
+        # cloudflare 5.26.0's `include_shadow_metadata = false` on six dns records; its changelog never
+        # mentioned the attribute, so no release-notes reader would have caught it: the plan is the
+        # evidence). The old provider drops attributes it does not know when it reads state, and the
+        # state-compatibility check below still guards the schema version, so the revert stays a
+        # revert. Policy-admitted (`admit_plan_shapes`, read from master), judged by
+        # mgmt_plan_default_backfill from the local `show -json`; attribute NAMES reach the comment,
+        # never values. Anything else the pin adds, drops or alters is still the human read. When
+        # master's own plan could not be read, EVERY change must be backfill-shaped — residue is not.
+        extra="$changes"; [ -n "$mchanges" ] && extra="$(comm -23 <(printf '%s\n' "$changes" | sort) <(printf '%s\n' "$mchanges" | sort))"
+        bf=""; : >"$out.backfill-why"
+        if mgmt_policy_get "$POL" '.admit_plan_shapes[]?' 2>/dev/null | grep -qx default-backfill \
+           && bf="$(printf '%s\n' "$extra" | mgmt_plan_default_backfill "$out" 2>"$out.backfill-why")"; then
+          nbf=$(grep -c . <<<"$bf"); nx=$(grep -c . <<<"$extra"); nres=""; [ -n "$mchanges" ] && nres=" (master's own: $(grep -c . <<<"$mchanges"))"
+          backfill_desc=" (default backfill)"
+          { echo; echo "Provider-pin head: **default backfill** — the $nx change(s) the pin adds beyond master's own pending plan$nres are in-place updates writing only attributes the new provider introduced with a static default (null → default; nothing else differs; nothing known only after apply). The old provider ignores attributes it does not know when it reads state, so the lockfile revert stays a revert (state compatibility below). Attribute names only (\`admit_plan_shapes: default-backfill\`, ADR-131 amended 2026-10-04):"
+            echo; echo "| address | backfilled attribute |"; echo "|---|---|"; awk -F'\t' '{printf "| `%s` | `%s` |\n", $1, $2}' <<<"$bf"; } >>"$bodyf"
+          log "[#$pr] provider-pin head: $root plan (+$a ~$c -$d) = master's own + a default backfill ($nbf attribute(s) on $nx address(es)) — admitted"
+        else
+          state=failure; pin_changed="${pin_changed:-} $root(+$a ~$c -$d)"
+          why=""; [ -s "$out.backfill-why" ] && why="; not a default backfill: $(head -3 "$out.backfill-why" | awk -F'\t' '{printf "%s\`%s\` (%s)", (NR>1?"; ":""), $1, $2}')"
+          { echo; echo "### ⚠ \`$root\` — the provider bump CHANGES the plan (+$a ~$c -$d${rs:+, $r to replace}; master's own pending plan differs or could not be read$why) — human read"; } >>"$bodyf"
+          log "[#$pr] provider-pin head: $root plan is NOT empty (+$a ~$c -$d), differs from master's own and is not a default backfill — failing the context"
+        fi
+        rm -f "$out.backfill-why"
       fi
     fi
     if [ $PIN = 1 ]; then
@@ -396,7 +421,7 @@ while IFS=$'\t' read -r pr sha; do
       excl_types="$(sed -E 's/^((data\.)?[^.]+)\..*/\1/' <<<"$notplanned" | sort | uniq -c | awk '{printf "%s%s `%s`", (NR>1?", ":""), $1, $2}')"
     fi
     excl_note=""; [ "$excl_n" -gt 0 ] && excl_note=" ($excl_n not planned)"
-    desc="$desc$root: +$a ~$c -$d ${rs}${os}${excl_note} "
+    desc="$desc$root: +$a ~$c -$d ${rs}${os}${excl_note}${backfill_desc} "
     { echo; echo "### \`$root\` — +$a to add, ~$c to change, -$d to destroy${rs:+, $r to replace}${oh}"
       if [ "$excl_n" -gt 0 ]; then
         note="$(mgmt_root_exclude_note "$POL" "$root")" || note="(reason unreadable this run)"
