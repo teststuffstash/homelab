@@ -12362,3 +12362,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cloudflare_exporter (current, or inside the 7-day cooldown). Dry run shows no PR-limit lines (it
   commits branches, never opens PRs) — the real run is where `prHourlyLimit: 6` bites. **21:24Z real
   run dispatched** rather than waiting for 00:00Z (operator: speed this up).
+- **21:27–21:29Z WAVE 1 OPENED by the real run (37235990303): exactly 6 PRs — `prHourlyLimit: 6`
+  held.** Order Renovate chose: python-3.13-slim (digest → `automerge` lane), then five `deps-review`:
+  #2221 forgejo chart 17.1.1→17.1.7 (OCI, titled "Docker tag" — the docker datasource), #2222 loki
+  3.4.2→3.4.6, #2223 argo-events 2.4.23→2.4.27, #2224 crossplane 2.3.2→2.3.6, #2225 kps 86.1.0→86.1.1.
+  Labels correct on all (no `automerge` leak onto a chart PR). Watching the five through review →
+  merge → sync → alert delta (baseline re-taken at 21:31Z).
