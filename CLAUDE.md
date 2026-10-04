@@ -126,17 +126,10 @@ as if at home; recipe in `docs/runbook.md`.
 - `esphome/` — ESPHome device configs (`config/office-plants-irrigation.yaml`); flash with
   `devbox run flash-irrigation` (logs: `devbox run irrigation-logs`).
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
-- `scripts/` — wrappers + one-shots: `tf.sh` / `keepass-{env,init}.sh` (secret vars for tofu),
-  `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`,
-  `github-runner-bootstrap.sh` + `github-app-bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
-  `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
-  `ghcr-mirror-pat-bootstrap.sh` (upstream PAT for the ghcr mirror's private images, FU-196),
-  `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
-  `longhorn-register-optane.sh`, `node-maintenance.sh` (single-worker cordon→drain→shutdown→wake window, runbook §Storage), `helm-release-evidence.sh` (`devbox run helm-evidence -- run <plan-id>`: a `helm_release` apply recorded before/during/after — report-only data gathering), `pg-backup.sh` (`devbox run pg-backup-now` — every CNPG cluster's restore point, before a Longhorn upgrade; `pg-backup-wire` — ADR-147), `make-client-p12.sh` (phone mTLS cert, pinned openssl),
-  `coordinator-logs.sh`/`render-transcript.py` (+ `--dialogue`), `follow-ups-lint.sh`,
-  `claude-model-shim.py` + `claude-go.sh` (jail sessions with OpenCode Go models on the
-  subagent slots — the claude-or pattern through a local model-splitting proxy),
-  `prometheus-rules-lint.sh`, `skill-retro-scan.sh`, `doc-heat.py`, `aws-*.sh` (one-shot audit/cleanup).
+- `scripts/` — wrappers + one-shots, flat (FU-293). Each script's header comment is its doc;
+  `ls scripts/` is the index. The non-obvious entry points: `tf.sh` / `keepass-env.sh` (secret
+  vars for tofu), `opnsense-playbook.sh` (the only way to run OPNsense plays), `session-ctx.sh`
+  (a running session's real context/spend numbers; `--startup` = the static per-session budget).
 - `.claude/skills/` — the jail skills, the GAPS ledger + improvement contract (ADR-105):
   [`.claude/skills/README.md`](.claude/skills/README.md).
 - `machines/` — **the one machine inventory** (`machines.yaml`): consumed by `tofu/locals.tf`
@@ -154,9 +147,7 @@ as if at home; recipe in `docs/runbook.md`.
 `scripts/keepass-env.sh` exports string secrets, `scripts/wallet-files.sh` regenerates the file
 caches; read one ad-hoc with `keepassxc-cli show -q --no-password -k …/homelab.keyx …/homelab.kdbx
 <entry> -a Password`). File caches live under `~/.claude/<service>/` — **never `~/.ssh`**; a
-missing cache means "re-run wallet-files.sh", not "host-side only" (a jail session concluded
-exactly that about Forgejo, 2026-08-08, while `homelab-forgejo/id_ed25519` sat valid two
-directories over). Current cache dirs: `homelab-pve-ssh/` (Proxmox+VM SSH), `homelab-matchbox/`
+missing cache means "re-run wallet-files.sh", never "host-side only". Current cache dirs: `homelab-pve-ssh/` (Proxmox+VM SSH), `homelab-matchbox/`
 (gRPC certs), `homelab-forgejo/` (SSH + GPG keypairs; API token is a wallet STRING),
 `cloudflare/` (read/write/acme/ingress tokens + the phone `.p12`), `tuya/` (device keys),
 `homelab-garage/`, `homelab-github-{merge,reviewer}/`, `homelab-runner-app/`,
@@ -214,10 +205,8 @@ Two rules make the table hold:
 routing, the FU tracker discipline, apply safety, and how changes land (PR lane vs the
 bookkeeping class) — lives in **[`agents/jail-seat-card.md`](agents/jail-seat-card.md)**,
 composed by the MONO jail's entrypoint into `CLAUDE.local.md` in THIS checkout at container
-start (gitignored, auto-loaded — homelab-scoped, so it never reaches a session seated in
-another stack; mechanism live since 2026-08-23, teststuffstash/claude-jail#1). A seat session
-missing that file is in a stale container (started pre-merge) or outside the jail — the card
-is one read away. Stack jails and fixer-lane agents get no seat card by design: a stack jail's
-homelab context is this file's facts via its shallow clone, and a worker's contract is its
-recipe + the launcher's environment card (`agents/ground-rules.md`) — open a PR and let the
-reviewer gate it, exactly as in a stack repo.
+start (gitignored, auto-loaded; homelab-scoped, so it never reaches a session seated in another
+stack — teststuffstash/claude-jail#1). No `CLAUDE.local.md` here = a stale container or outside
+the jail; read the card. Stack jails and fixer-lane agents get no seat card by design: a stack
+jail's homelab context is this file via its shallow clone, a worker's contract is its recipe +
+`agents/ground-rules.md` — open a PR and let the reviewer gate it, exactly as in a stack repo.

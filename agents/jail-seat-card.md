@@ -1,23 +1,14 @@
 # Jail seat card — session procedure for the homelab seat
 
-> The SEAT's procedure card (FU-117 third context, S4 #764) — the sibling of
-> [`jail-subagent-card.md`](jail-subagent-card.md) (subagents) and
-> `ground-rules.md` (pod workers — shipped PR#768, 2026-08-23). Composed into the seat's session context
-> by the MONO jail's bootstrap: claude-jail cats its shared container card + THIS file into
-> **`/workspace/homelab/CLAUDE.local.md`** (gitignored here; auto-loaded by Claude Code) — the
-> homelab-scoped target, so the seat card loads ONLY for sessions actually seated in this repo,
-> never for a mono-jail session working another stack (claude-jail#1, design 2026-08-23).
-> **STACK jails deliberately get NO seat card**: their homelab token is branch+PR-only by
-> identity — this card's authority (direct-to-master bookkeeping, the ADR-110 gate read, the
-> tracker's single writer) is structurally not theirs, and catting it in would recreate the
-> wrong-context failure this split exists to fix. A stack jail's homelab context is the
-> shallow-cloned `CLAUDE.md` — pure repo facts — which is the right amount.
-> The mechanism is LIVE (claude-jail, 2026-08-23): the entrypoint composes at container start,
-> so the card snapshot refreshes on container restart, not per session — after editing this
-> file, running mono containers serve the previous composition until restarted. A worker
-> riding this repo from the fixer lane never auto-loads this file, which makes the jail/worker
-> split structural instead of banner-enforced. Paths below are written relative to the REPO
-> ROOT (the seat's cwd), not this file.
+> The SEAT's procedure card — the sibling of [`jail-subagent-card.md`](jail-subagent-card.md)
+> (subagents) and `ground-rules.md` (pod workers). The MONO jail's entrypoint composes the shared
+> container card + THIS file into **`/workspace/homelab/CLAUDE.local.md`** at container start
+> (gitignored; auto-loaded; refreshes on container RESTART, not per session), so it loads only
+> for a session seated in this repo. **STACK jails and fixer-lane workers get NO seat card by
+> design** — this card's authority (direct-to-master bookkeeping, the ADR-110 gate read, the
+> tracker's single writer) is structurally not theirs; their homelab context is the
+> shallow-cloned `CLAUDE.md`. Design + history: teststuffstash/claude-jail#1 (2026-08-23). Paths
+> below are relative to the REPO ROOT (the seat's cwd).
 
 ## Design questions run full-context
 
@@ -110,12 +101,10 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 > "work directly on master" is the one instruction here that would be actively wrong for them —
 > this banner keeps the scope explicit.
 
-**The default REVERSED 2026-08-12 (operator): jail sessions ship substantive changes as PRs —
-PR + watch + fix.** The old direct-to-master default predates the bot reviewer on the platform
-stack; measured on its first day (six PRs, ~5-min cycles), the PR lane caught three latent
-defects direct pushes would have shipped, ran the required checks on every change (a direct push
-BYPASSES them as OrgAdmin), and cost zero codeowner touches (the author==sole-codeowner waiver:
-bot approval completes the merge). The seat drives the whole cycle itself: branch `fix/<slug>`,
+**Substantive changes ship as PRs — PR + watch + fix (operator, 2026-08-12).** A direct push
+BYPASSES the required checks as OrgAdmin and skips the bot review that catches latent defects;
+the PR lane costs no codeowner touch (author==sole-codeowner waiver: bot approval completes the
+merge). The seat drives the whole cycle itself: branch `fix/<slug>`,
 arm auto-merge at open, the meta-events watcher surfaces the verdict, findings are fixed IN the
 PR (the review rubric blocks in-diff findings on this repo — nits never accumulate for a goal or
 land as issues), merge lands, back to master.
@@ -136,9 +125,8 @@ is pure ceremony:
 
 **Direct commits BATCH; the push is a separate, deliberate act (operator direction,
 2026-08-30).** Every master push resets the open-PR field (strict checks → BEHIND → updater
-churn; a lint break reds every PR, the #953 class — shipped live by this session's own
-wind-down push), so: COMMIT bookkeeping freely, push it **once per session at wind-down**, not
-per commit. Only the jail reads the bookkeeping set (meta-state, TICK-LOG, GAPS, the tracker),
+churn; a lint break reds every PR), so: COMMIT bookkeeping freely, push it **once per session
+at wind-down**, not per commit. Only the jail reads the bookkeeping set (meta-state, TICK-LOG, GAPS, the tracker),
 and the next session reads the same on-disk tree — origin adds durability, not continuity.
 The exception keeps the old rule: **anything a CLUSTER consumer clones master for — quickfixes,
 incident pins (the FU-188 shape), agents/ script fixes — still pushes immediately.** The class

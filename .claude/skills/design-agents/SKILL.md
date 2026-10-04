@@ -1,15 +1,11 @@
 ---
 name: design-agents
 description: >
-  Full-corpus design mode for the AGENT PLATFORM — the /design variant for anything under
-  docs/agents/ or agents/. Reads the ENTIRE agents corpus upfront (~300–350k tokens), because
-  the subsystem is tightly coupled enough that any major change needs full context anyway
-  (operator ruling 2026-08-10). OPERATOR-TYPED ONLY (operator rule 2026-09-27): runs when the
-  operator types "/design-agents <question>" — NEVER self-invoke it, and never pick it for a
-  question that merely touches the agent platform. If a task looks like it needs the corpus
-  and the operator did not type it: stop and ask (full corpus / a named slice / none); a
-  model-initiated Skill(design-agents) call is denied by the .claude/hooks/design-agents-gate.sh
-  PreToolUse hook.
+  Full-corpus design mode for the AGENT PLATFORM (docs/agents/ + agents/): reads the ENTIRE
+  agents corpus (~300–350k tokens) before answering. OPERATOR-TYPED ONLY — runs when the
+  operator types "/design-agents <question>"; never self-invoke it, never pick it for a question
+  that merely touches the agent platform (a hook denies model-initiated calls). If a task seems
+  to need the corpus and the operator did not type it: stop and ask (full / a named slice / none).
 ---
 
 # design-agents — read the whole damn thing first
@@ -30,9 +26,10 @@ Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly 
 major change requires the full context anyway — selective closure kept under-reading (the FSM
 `replay:` fields, `model-routing.md` §M1a: both misses were claims about files not read), and the
 per-file grounding list had grown into an audit burden the operator had to verify by memory.
-Fixed cost beats itemized honesty here: **~300–350k tokens measured** (session-ctx `--big` on the 2026-09-03/04 corpus loads; the "~110k" this line carried since the 2026-08-18 trim was never re-measured), paid ONCE per session
-(prompt caching amortizes every follow-up question) — and since 2026-09-27 paid only when the
-operator types the command (the box above).
+Fixed cost beats itemized honesty here: **~300–350k tokens measured** (the measurement and its
+history: [`docs/spikes/doc-heat.md`](../../../docs/spikes/doc-heat.md); the static read-plan size
+is `bash scripts/session-ctx.sh --startup`), paid ONCE per session (prompt caching amortizes every
+follow-up question) — and since 2026-09-27 paid only when the operator types the command.
 
 ## The read plan
 

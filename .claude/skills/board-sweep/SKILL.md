@@ -22,12 +22,15 @@ deliberately deferred (§Graduation).
 
 ## Hard rules
 
-- **Corpus preload.** Run the [`design-agents`](../design-agents/SKILL.md) read plan first
-  (skip if already read this session). The core judgment here — STUCK-MACHINE vs HANDLED — is
-  "did the machinery behave as *intended*", and intent lives in the corpus; classifying
-  homelab#237's `queued`+`blocked`+`error` pile required breaker #1, the fix-debounce contract
-  and the self-referential gate. Guessing instead is actively harmful (clearing `agent/error`
-  un-latches a breaker).
+- **Intent, not guesswork — read the SLICE that owns the item.** The core judgment here —
+  STUCK-MACHINE vs HANDLED — is "did the machinery behave as *intended*", and intent lives in
+  the corpus. The full corpus load is operator-typed only (`/design-agents`, 2026-09-27 — see
+  the seat card §Design questions); do NOT read `docs/agents/` wholesale. For each unclear item
+  grep the corpus for its label/clause name and read that section (the coordinator brief
+  §State machine owns the label semantics; `docs/agents/issue-lifecycle-fsm.md` the
+  transitions). Guessing is actively harmful (clearing `agent/error` un-latches a breaker); so
+  is a 300k-token preload for a sweep — an item you cannot classify from its slice goes to the
+  OPERATOR bucket with the question written down.
 - **Live-verify every status claim** (GAPS design-agents-G1): transient docs — `meta-state.md`,
   the tracker, TICK-LOG — state what was true at their stamp. The board is the truth; `gh`/
   `kubectl` before repeating anything. The corpus prevents comprehension errors, live probes
@@ -69,7 +72,7 @@ deliberately deferred (§Graduation).
 **board-sweep → [`fu-sweep`](../fu-sweep/SKILL.md) → [`docs-cleanup`](../docs-cleanup/SKILL.md).**
 This pass establishes machine truth; fu-sweep's step-2 machine-lane reconcile consumes the
 HANDLED bucket instead of re-deriving it; docs-cleanup propagates what both changed. One session
-running all three amortizes the corpus preload across the pipeline.
+running all three shares the slices already read.
 
 ## Graduation (deliberately not built)
 

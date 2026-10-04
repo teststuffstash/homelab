@@ -1,17 +1,10 @@
 ---
 name: fu-sweep
 description: >
-  Triage every OPEN follow-up and act on it — not a closing spree. FIRST reconciles the tracker
-  with what the machine lane (responder flow + fixer PRs) has shipped since the last sweep —
-  synced by substance, never by a PR's own FU-label — then sorts each item into DO-NOW
-  (it fails the 5-minute rule), SOAK-DUE (a "let it soak" whose window has long passed, so the
-  question is answerable today), UNBLOCKED (it waits on an FU since archived, or an issue the
-  machine lane closed), OPERATOR (needs a decision only the operator can make), or STILL VALID —
-  then DOES the do-now ones, VERIFIES the soaks against live evidence, and re-reads the
-  unblocked ones as if filed today. Use on "sweep the
+  Triage every OPEN follow-up and ACT on it (reconcile with what the machine lane shipped, then
+  do / verify / unblock / escalate / keep each item) — not a closing spree. Use on "sweep the
   follow-ups", "FU cleanup", "triage the tracker", "what follow-ups are still relevant", or when
-  the open count / a section has grown out of control. Run BEFORE docs-cleanup, which propagates
-  what this pass changes.
+  the open count / a section has grown out of control. Run BEFORE docs-cleanup.
 ---
 
 # fu-sweep — decide, then act
@@ -21,18 +14,20 @@ description: >
 
 `docs-cleanup` runs tracker→outward: it takes ids already archived or rewritten and repairs every
 doc that still describes the old status. It assumes the deciding already happened. **This skill is
-that deciding**, and it is the missing half — measured 2026-08-07: creation ran **2.4 ids/day over
-FU-050→100 and 4.4/day over FU-100→153**, the Agents block reached **34 of 57 open items**, and
-**7 open items carried a soak/verify-later clause that nothing re-checks.**
+that deciding**, and it is the missing half: items get filed at several a day and nothing
+re-checks their soaks (the tracker header carries the measured rates; `devbox run follow-ups-lint`
+prints the live open count and the oversize items — read those, never a remembered figure).
 
 ## Hard rules
 
-- **Agents-dominated tracker ⇒ corpus preload.** When the open items are mostly agent-platform
-  (the standing state: 92% for ids ≥100), run the [`design-agents`](../design-agents/SKILL.md)
-  read plan first (skip if already read this session) — classifying agents items without the
-  corpus under-reads, per the ruling that created that skill. If a
-  [`board-sweep`](../board-sweep/SKILL.md) ran this session, its HANDLED bucket IS step 2's
-  machine-lane delta — verify by substance and move on.
+- **Agents items: slice, never the whole corpus.** Most open items are agent-platform. The full
+  [`design-agents`](../design-agents/SKILL.md) read is operator-typed only (2026-09-27); do NOT
+  read `docs/agents/` wholesale as the workaround. Classify each agents item from the section
+  its text links or names (grep the corpus by the item's keywords); an item whose verdict needs
+  a design judgment you cannot ground from its slice is **OPERATOR** — write the question into
+  the sweep report, leave the item unchanged. If a [`board-sweep`](../board-sweep/SKILL.md) ran
+  this session, its HANDLED bucket IS step 2's machine-lane delta — verify by substance and
+  move on.
 - **This is not a closing spree.** "Close the stale ones" produces a small tracker and a large
   amount of silently-dropped work. Every item leaves the pass with a REASON, and the default for
   anything you cannot evidence is **leave it open, unchanged**.
