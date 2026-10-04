@@ -71,13 +71,17 @@ own. The routing tree it enters (`alertmanager.config.route`, live today):
 |---|---|---|---|
 | root | — (`group_by: [alertname]`, `repeat_interval: 3h`) | `ha-webhook` | every firing alert reaches the operator via Home Assistant (ADR-042) |
 | child | `alertname = Watchdog` / `InfoInhibitor` | `null` | dropped |
-| child, `continue: true` | every alert | `agent-responder` | **the responder sees every alert**, grouped by alertname (one webhook per storm, FU-133) |
+| child, `continue: true` | `triage = "now"` | `agent-responder` | **the responder sees the acute alerts only** (ADR-148, 2026-10-04), grouped by alertname (one webhook per storm, FU-133) |
+| — (a schedule, not a route) | `triage = "dig"`, standing or recurring, unexplained | the **deep dig** (`docs/agents/roles.md` §deep dig) | read off Alertmanager + Prometheus on a cron, grouped by onset and host — never a per-fire session |
 
 The **responder** (`docs/agents/roles.md` §responder) opens ONE triage session per new
-fingerprint and files at most one **inert** issue — **on the repo of the stack that owns the
-alert's `namespace`** (a claim lookup; `platform_machinery: "true"` or a platform namespace
+`now` fingerprint and files at most one **inert** issue — **on the repo of the stack that owns
+the alert's `namespace`** (a claim lookup; `platform_machinery: "true"` or a platform namespace
 routes to homelab instead). So a stack-shipped alert is answered in the stack's own board, by
-its own loop: write the rule so a fixer could act on it from that repo.
+its own loop: write the rule so a fixer could act on it from that repo. A `dig` alert is picked
+up by the deep dig only once it has STOOD (≥ 6 h) or RECURRED (≥ 3 of the last 7 days) and no
+open issue, declared window, follow-up or meta-state entry explains it; an unlabelled stack rule
+reaches neither lane — the label is the stack's to declare.
 
 Rule-author conventions the platform reads:
 

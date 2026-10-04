@@ -33,6 +33,7 @@ resources:
   - rbac.yaml
   - reflexes-argo.yaml
   - responder-argo.yaml
+  - deep-dig-argo.yaml
   - sentinel-argo.yaml
   - responder-budget-alerts.yaml
   - responder-budget-dashboard.yaml
