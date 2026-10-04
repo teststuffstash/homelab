@@ -430,7 +430,17 @@ master already trusts and tofu verifies the zip against the head's h1 hash and t
 signature, so a hostile hash fails `init` and never runs. What the shape cannot vouch for is the new
 version's behaviour — the plan does: **a pin head must plan empty**; a non-empty plan fails
 `management-sentinel` with `provider bump changes the plan: <root>(+a ~c -d) — human read`, and the
-comment names the root. That failure is the whole human lane for this class; a human who agrees
+comment names the root. **And the revert must stay a revert (S9 #1988, 2026-10-04):** an empty plan says nothing
+about what the NEXT apply writes — under the head's provider it rewrites state at that provider's
+schema versions, and the old provider cannot read a newer version back, so after one apply a
+lockfile revert would need a state restore. Stage 2 therefore also compares, per root, the
+`tofu providers schema -json` of master's lockfile against the head's (`mgmt_provider_schema` — a
+scratch root built from the lockfile alone, since `providers schema` wants an initialised backend)
+over every managed type the plan carries (`mgmt_schema_upgrades`): a raised schema version, a raised
+or newly added identity version, or a removed type fails the context with `provider bump changes
+stored state: <root>(<types>) — human read`. Additive attributes pass — the old provider drops
+attributes it does not know when it reads state. The kubernetes 3 major (#2047) passed it: zero
+version moves across all three roots, so its lockfile revert is a revert even after applies. That failure is the whole human lane for this class; a human who agrees
 with the change orders `mgmt-human-plan` as before. The Renovate side — the terraform rule moving from
 `major/awaiting-human` to the `automerge` lane, and the infisical / cloudflare-token roots
 (`foreign_roots`, no box plan) excluded from the manager rather than merged unplanned (#1984 merged

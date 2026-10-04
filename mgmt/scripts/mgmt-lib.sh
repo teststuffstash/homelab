@@ -166,6 +166,53 @@ mgmt_provider_pin_shape() {
   return 0
 }
 
+# mgmt_schema_upgrades <base-schema.json> <head-schema.json> <types-file> → lines
+# "type<TAB>before<TAB>after" for every type in <types-file> (the plan's `$out.types` side channel) whose STORED shape the head's providers
+# would change: a raised resource schema version, a raised (or newly added) identity schema version,
+# or a type the head no longer has. Inputs are `tofu providers schema -json` of master and of the head.
+# Why (S9 #1988, 2026-10-04 — the kubernetes 3 read on #2047): the next apply under the head's
+# provider rewrites state at the new version, and the old provider cannot read a newer schema
+# version back — after that, reverting the lockfile is no longer a revert (it needs a state restore).
+# A bump that keeps every stored version is lockfile-revertable even after applies; this is the
+# deterministic half of "may a provider pin ride without a human" (ADR-131 amended). A type master's
+# providers do not know is skipped (not a bump of anything in state). rc 1 = a schema unreadable.
+mgmt_schema_upgrades() {
+  jq -e '.provider_schemas | type == "object"' "$1" >/dev/null 2>&1 && jq -e '.provider_schemas | type == "object"' "$2" >/dev/null 2>&1 || return 1
+  jq -rn --slurpfile b "$1" --slurpfile h "$2" --rawfile t "$3" '
+    def vers(s; k): [s[0].provider_schemas[] | (.[k] // {}) | to_entries[] | {(.key): .value.version}] | add // {};
+    vers($b; "resource_schemas") as $bv | vers($h; "resource_schemas") as $hv |
+    vers($b; "resource_identity_schemas") as $bi | vers($h; "resource_identity_schemas") as $hi |
+    ($t | split("\n") | map(select(length > 0)) | unique)[] as $ty |
+    if $bv[$ty] == null then empty
+    elif $hv[$ty] == null then "\($ty)\tschema \($bv[$ty])\tremoved"
+    elif $hv[$ty] > $bv[$ty] then "\($ty)\tschema \($bv[$ty])\tschema \($hv[$ty])"
+    elif ($hi[$ty] // -1) > ($bi[$ty] // -1) then "\($ty)\tidentity \($bi[$ty] // "none")\tidentity \($hi[$ty])"
+    else empty end'
+}
+
+# mgmt_provider_schema <dir> <out.json> → `tofu providers schema -json` of the providers <dir>'s
+# LOCKFILE pins, nothing else: a scratch root whose required_providers names exactly the lockfile's
+# provider/version pairs, the lockfile copied beside it (readonly — the hashes still verify).
+# The real root cannot answer this: `providers schema` insists on an initialised BACKEND (S3 +
+# encryption env on cloudflare/provisioning), and the schema is the providers', not the state's.
+# Run from the TRUSTED tree like mgmt_plan_root. rc 1 = no lockfile, or no schema came back.
+mgmt_provider_schema() {
+  local dir="$1" out="$2" tmp rc
+  [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] && [ -s "$dir/.terraform.lock.hcl" ] || return 1
+  tmp="$(mktemp -d)"
+  cp "$dir/.terraform.lock.hcl" "$tmp/"
+  awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/") }
+       /^[[:space:]]*version[[:space:]]*=/ && src != "" { v = $3; gsub(/"/, "", v); printf "    %s = { source = \"%s/%s\", version = \"= %s\" }\n", p[n], p[n-1], p[n], v; src = "" }' \
+    "$tmp/.terraform.lock.hcl" | { echo 'terraform {'; echo '  required_providers {'; cat; echo '  }'; echo '}'; } >"$tmp/main.tf"
+  export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"
+  (
+    cd "$REPO" || exit 1
+    devbox run --quiet -- tofu -chdir="$tmp" init -input=false -lockfile=readonly >/dev/null 2>&1 || exit 1
+    devbox run --quiet -- tofu -chdir="$tmp" providers schema -json >"$out" 2>/dev/null
+  ) && jq -e '.provider_schemas | type == "object"' "$out" >/dev/null 2>&1; rc=$?
+  rm -rf "$tmp"; return $rc
+}
+
 # mgmt_roots_touched <policy> <files…via stdin, one per line> → root names, one per line (deduped)
 # A path under roots[X].dir/ (longest dir wins) → X; a path listed in roots[X].inputs (a file the
 # root reads from outside its dir — main's machines/machines.yaml) → X as well; a path under a
@@ -435,6 +482,9 @@ _mgmt_plan_digest() {
     | [.address, (.change.actions | join("+")), ((.index // "") | tostring),
        (if ((.change.after_unknown // {}) | if type == "object" then .apply_mode else false end) == true then "(unknown)"
         else ((.change.after // {}).apply_mode // "(unset)") end)] | @tsv' "$json" > "$out.talos"
+  # fifth side channel: every MANAGED resource type the plan carries (no-ops and deletes included —
+  # i.e. every type in state or config) — what mgmt_schema_upgrades compares on a provider-pin head
+  jq -r '[.resource_changes[]? | select(.mode == "managed") | .type] | unique[]' "$json" > "$out.types"
   jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | [.address, (.change.actions | join("+"))] | @tsv' "$json"
 }
 # mgmt_plan_outputs <plan-out> → lines "output<TAB>actions" for every output whose value the plan
