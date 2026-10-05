@@ -198,6 +198,15 @@
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "argo-workflows chart MAJORS — ARMED (operator 2026-10-05, ADR-149; the chain was drilled the same day: #2276 bump → synthetic ArgoControllerSilent → #2279 revert merged + synced in 10 min, no human). Same shape as the provider-major rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. The lens READS APPVERSION FROM THE CHART INDEX: chart semver is not app semver (1.0.24→1.1.1 was the app major 4.0→4.1 and rode deps-review unlensed, #2238; #2254, two lens rounds, was packaging). Behind the merge: ArgoControllerSilent (triage now, fails closed) is the post-deploy verdict; the chart-revert webhook receiver (argocd/resources/chart-revert/, OUTSIDE Argo Workflows' cone) reverts the pin-only merge as revert-chart-<sha8> with a `reverted-charts:` line; scripts/pin-only-lint.sh check (h) refuses the re-proposal for 30 days. Scoped to ONE chart — a second chart joins only on its own evidence (a drilled chain for the thing it breaks). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["argocd"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["argo-workflows"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
     }
   ],
 

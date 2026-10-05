@@ -5,8 +5,9 @@ judgment IS the verdict. It is the one stated exception to the advisory steady s
 other lenses, and it is selected deterministically by `reviewer-session.sh` (label `major` or
 `deps-review`, or a lockfile-only diff that crosses a major).
 
-**Semver decides that this lens runs; blast class decides the lane.** An ARMED major (a GitHub
-Actions bump — the CI-exercised class) merges on your `--approve`: your review is the gate, and
+**Semver decides that this lens runs; blast class decides the lane.** An ARMED major (GitHub Actions;
+tofu Deployment images and terraform providers — ADR-141 as amended; the `argo-workflows` chart —
+ADR-149) merges on your `--approve`: your review is the gate, and
 the FU-1990 revert chain rolls a post-merge failure back. An UN-ARMED major is human-gated: the
 launcher-owned handoff (`agents/major-handoff.sh`) accepts your APPROVED only when it carries the
 four headings below, and a human merges. The procedure is the same in both lanes.
@@ -36,11 +37,34 @@ handoff gate matches them literally):
      vs the Runner version above) + CI on the bumped head (a `pull_request` workflow runs the
      PR's own file, so a green `ci` at head IS the runner-compat proof for the workflows it ran;
      name the push-only workflows it did not run — the revert chain covers them).
-   - **Providers / charts:** notes + known issues + the sentinel plan or the rendered diff.
+   - **Providers / charts:** notes + known issues + the sentinel plan or the rendered diff — and for a
+     chart, the **appVersion delta** (the section below), stated before anything else.
    - **Substrate (Talos, Kubernetes, Cilium, Longhorn, Garage):** notes + known issues + the
      management box's canary; these never self-merge.
 4. **`## Evidence`** — what you ran and what it showed: the CI run at head, the grep results, the
    upstream URLs, the issue numbers. A claim without a line here is an inference, and you say so.
+
+## Charts: chart semver is not app semver — state the appVersion delta first
+
+A Helm chart's version and the application it ships move independently, and Renovate labels on the
+CHART's semver. Read the chart index for BOTH pins before the four headings — `helm show chart
+<chart> --repo <url> --version <v>` for the current and the target (or the repo's `index.yaml`,
+`appVersion`) — and open `## Upstream` with one line: `chart X → Y, app A → B`. Then review the
+delta that is actually crossing:
+
+- **An app major inside a chart minor or patch** is the real migration: `--request-changes` naming
+  the app's release notes read it needs. The `deps-review` lane does not run this lens, so say in
+  the body that the bump is an app major so the coordinator routes it as one.
+- **A chart major with the app on a patch** is a packaging change (CRD delivery, value renames,
+  hook jobs): review exactly those against this repo's values and nothing more.
+- **For an ARMED chart major (ADR-149) your APPROVED merges.** Approve only when the app delta stays
+  inside a minor: `crds.keep: true` means the mechanical revert (`chart-revert`, on
+  `ArgoControllerSilent`) does not downgrade CRDs, which is what makes it safe. An app major stays
+  `--request-changes` however clean the packaging read is — the lens is the one human-shaped gate
+  that lane has.
+
+Origin: ADR-149 (2026-10-05) — the app major rode a chart minor unlensed, and both lens rounds on
+the chart major misstated the app's starting version.
 
 ## Renovate is the author — what that changes
 
