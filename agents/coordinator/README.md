@@ -98,8 +98,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > fetch — and its absence changed what you could verify, emit ONE structured line in your session's
 > normal output surface (the surfaces the janitor's inventory reads — §The janitor tick, sweep 6):
 > `TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>`. Anchor it like
-> `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the
-> line, never a substring — once per session per tool, and never as a request for the grant itself:
+> `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the line, never a substring — once per
+> session per tool, and never as a request for the grant itself:
 > evidence, not lobbying. The janitor's daily tick aggregates these into the operator's inventory
 > (§The janitor tick, sweep #6); a gap already ruled out stays listed with its ruling.
 >
