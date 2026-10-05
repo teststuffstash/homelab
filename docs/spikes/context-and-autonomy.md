@@ -1,176 +1,209 @@
-# Spike — context engineering × loop autonomy: why the platform stalls
+# Spike — why the platform stalls: the defect census, the factory shape, the island cut
 
-_Opened 2026-10-04 (operator ask, second-jail session, PR lane). Status: **findings + ranked
-proposals, no decision** — every proposal below is an operator call; the quickfixes rode the
-opening PR. Relates: [`doc-heat.md`](doc-heat.md) (FU-164 — the measured corpus loads),
-[`no-human-in-the-loop.md`](no-human-in-the-loop.md) (the recovery-path end state),
-[`codeowner-catches.md`](codeowner-catches.md) (the gate census), ADR-110 / ADR-122 / ADR-128 /
-ADR-141 / ADR-146 / ADR-148, ROADMAP §"The platform lane sheds the meta crutch"._
+_Opened 2026-10-04 (operator ask, second-jail session, PR lane); re-framed 2026-10-05 after the
+operator's correction. Status: **findings + an ordered plan proposal, no decision taken here** —
+the direction recorded in §Direction is the operator's, the plan steps are proposals. Relates:
+[`doc-heat.md`](doc-heat.md) (FU-164 — the measured corpus loads),
+[`change-hotspots.md`](change-hotspots.md) (the proxy's separability),
+[`codeowner-catches.md`](codeowner-catches.md) (the gate census),
+[`no-human-in-the-loop.md`](no-human-in-the-loop.md), ADR-086 / ADR-103 / ADR-110 / ADR-122 /
+ADR-126 / ADR-139, ROADMAP §"The platform lane sheds the meta crutch"._
 
-## The question (operator, verbatim shape)
+## The question, and the correction
 
-"The whole platform is stalled due to low autonomy in the loop + context explosion. Why do I have
-76 open issues and an FU counter over 300 with old ones not getting done?" — read as one system:
-the loop's **admission** is human, the human's **session** is where the context lives, and the
-**records** that carry the human's context grow by narrative. Each feeds the next.
+The first draft (2026-10-04) read "76 open issues, an FU counter over 300, nothing moves" as an
+admission-and-context problem and proposed ways for the seat to **fix bugs faster** (machine
+admission, a cheaper codeowner read, context lints, a smaller tracker). The operator's correction
+(2026-10-05): *the 76 open issues are a symptom; the question is why the platform creates them.*
+Shift every quality problem left — specs, tests, analysis — then deal with production quality
+through guards and self-healing. And ground the answer in software-factory practice, not in
+skill tuning. This revision does that; the first draft's measurements stay below because they
+are still true, they are just not the lever.
 
-## Measured (2026-10-04, deterministic reads; commands in the PR that opened this)
+## Measured
 
-### A. Context the human pays
+### A. The open issues, by what would have prevented them (77 open, read 2026-10-05)
 
-| What | Size | Note |
+| Class | n | Issues | Prevented by |
+|---|---|---|---|
+| Containers (Goals, post-launch buckets, stints, themes, retro batches) | 17 | #1985 #1918 #1907 #1906 #1771 #1769 #1680 #1640 #1418 #1311 #1302 #1243 #1170 #1101 #840 #818 #628 | — |
+| Reports (weekly model scout) | 4 | #2242 #2053 #1821 #1647 | — |
+| Work items with a parent (stint children, Goal reads, experiments, consequence work) | 12 | #2071 #2014 #1991 #1988 #1930 #1910 #1669 #1621 #1334 #1238 #1237 #1224 | — |
+| **S1 — a guard missing a case, or a state no clause owns** | **16** | #2203 #2168 #2167 #2164 #2152 #1940 #1897 #1896 #1797 #1793 #1714 #1627 #1572 #1569 #1563 #1544 | a decision table per guard, with the state axes enumerated (label set × close reason × repo shape × event) |
+| **S2 — two readers disagree on one grammar or channel** | **8** | #2181 #2163 #1923 #1776 #1775 #1720 #1567 #1566 | one parser per grammar + a producer→consumer round-trip row |
+| **S3 — hardcoded scope / a missing enumeration arm** | **3** | #1939 #1855 #1682 | table-driven config + an exhaustiveness lint |
+| S4 — environment semantics misread (git, GitHub API, RBAC, shell, ESO) | 9 | #2182 #1973 #1941 #1935 #1898 #1736 #1713 #1517 #1370 | a drill against the real environment; "fail loud, never silently fall back" |
+| S5 — brief / rubric / directive design | 3 | #2169 #1794 #1280 | the rubric as a table (author × path → verdict) + reviewer drills |
+| S6 — shipped, never observed firing | 2 | #1651 #2178 | a live acceptance probe per transition; a drill per chain |
+| S7 — flake / external | 2 | #168 #1707 | — |
+| S8 — a test, literally missing | 1 | #1571 | the test |
+
+**44 defects; 28 (S1–S3, S8) are row-shaped** — a visible table with the missing row would have
+caught them before merge. 9 are drill-shaped (S4). The open set is biased toward what stays open,
+so the 120 issues closed since 2026-09-05 were sampled for the location only: 46 of 120 carry a
+`Touches:` under `agents/`, 22 of those the scan — the same place.
+
+### B. Where the defects live vs where the tests are
+
+- The three FSMs (`merge-path-fsm.yaml` 14 transitions, `issue-lifecycle-fsm.yaml` ~30,
+  `iac-lane-fsm.yaml` 7) model **transitions**. **Zero of the 44 defects is a wrong transition.**
+  All 16 S1 defects sit inside a guard's **input space** — which label combination, which close
+  reason, which repo shape — axes the FSM does not enumerate.
+- The ADR-103 ratchet pins a changed transition with a replay fixture: **one world, one row.**
+  `agents/replay/`: 201 fixtures, **31 tabular** (`rows:`), **1 shared world**; the harness's own
+  2026-08-12 cleanup contract says the same ("a family IS a decision table, stored as N copied
+  directories"). #1224 (a changed clause line must be *reached* by a fixture) is open.
+- `agents/coordinator-scan.sh`: 6,107 lines, **69 distinct clause markers**, 15 jq predicates
+  reading `labels[].name`, 15 machine-meaningful labels. The interfaces between pieces are 11
+  line-anchored body grammars parsed in up to **18 files each** (`Touches:` 18, `Base:` 9,
+  `Budget:` 8, `TOOL_GAP` 8, `AGENT_STRIKE` 8) — S2 is what that many parsers cost.
+- The retro's weekly platform-logic count (ADR-103 bucket-A) ran **15 → 28 → 38** across August
+  (r1, r4, r2 reports); the series has not been scored since.
+
+### C. The island cut — doc→component co-change (1,899 commits since 2026-07-01)
+
+Component self-containment (commits touching the component's code, share that also touched
+another component's code, top partner):
+
+| Component | commits | cross-component | top partner |
+|---|---|---|---|
+| gateway (`argocd/resources/openrouter-proxy/` + `model_id.py`) | 71 | **39 %** | scan 21 |
+| scan (+ footprint, replay, goal graph) | 276 | 63 % | launcher 72 |
+| launcher (`agent-session.sh`, recipes, ground rules) | 127 | 66 % | scan 72 |
+| reviewer (`reviewer-session.sh`, lenses, `review.md`) | 46 | 78 % | scan 34 |
+| reflexes (`coordinator/*-argo.yaml`) | 88 | 82 % | scan 47 |
+| updater | 11 | 90 % | scan 10 |
+| responder | 14 | 100 % | scan 11 |
+| agentstack (XRD/Composition, `stacks.json`) | 157 | 57 % | infra 55 |
+| exporters | 90 | 57 % | infra 35 |
+
+**Two islands, not nine.** The gateway separates today (ADR-139's own 30-of-44 count agrees); its
+consumer surface is six endpoints (`/route` 39 refs, `/router-status` 24, `/metrics` 14,
+`/git-token` 10, `/opencode-limit` 9, `/loop-git-token` 7) across 83 files. Scan, launcher,
+reviewer, updater, reflexes and responder co-change as **one thing with the scan at its centre**
+— the coordinator — and that one thing holds 27 of the 44 defects. Agentstack and the exporters
+co-change with infra: they are homelab's integration surface and stay.
+
+The corpus follows the islands. Under a gateway + coordinator cut, of the 836 KB design-agents
+read plan: the coordinator brief (139 KB) moves except its 11 KB label state machine and the 3 KB
+ADR-119 filing contract; `issue-authoring.md` + the lifecycle FSM (119 KB) keep ~30 KB of grammar
+and YAML; `observability-and-retro.md` (60) keeps the ~15 KB of emit channels; `model-routing.md`
+(47) keeps the ~12 KB launcher/scan half; `chainless-redesign.md` (46) is rails design plus
+build-order history (spikes); `merge-path.md` narrative (42) is incident history; `roles.md` +
+`workflow.md` (82) become a ~25 KB index to island contracts; the generated `*-fsm.md` (83 KB)
+leave the read plan since the YAML is the source. **≈520 KB leaves; ≈250–300 KB stays** —
+about 70k tokens, a routine load instead of a 300k exception.
+
+### D. Context the human pays (first draft, still true)
+
+| What | Size |
+|---|---|
+| Static startup context, every seat session | ≈56–70 KB ≈ 14–17k tokens (`scripts/session-ctx.sh --startup`) |
+| `/meta-coordinate` bootstrap adds | meta-state 32 KB ("tiny, transient") + TICK-LOG tail + 17 KB skill body |
+| `/design-agents` read plan | 836 KB static → 299k/346k tokens measured; doc-heat run 2: 72 % of lines never read |
+| Records | TICK-LOG 1.09 MB · adr.md 235 KB (54 of 111 ADRs over the 20-line rule) · follow-ups.md 133 KB (132 open, 74 in the Agents block the routing table assigns to issues) |
+| Coordinator pod | the 139 KB brief as `--append-system-prompt-file`, every clause, every ride |
+
+### E. Where the human is (first draft, still true)
+
+The scan's one dispatch precondition is a human-applied `agent/queued`: 0 of 77 carry it, 44 are
+bot-filed, 49 have no comment. Eleven human gates inventoried; the TICK-LOG's last four days read
+"operator / by hand / codeowner click" ~40 times and "unattended" six. ADR-128 census: 273
+codeowner reads → 38 findings (13.9 %).
+
+## Reading it against the factory literature
+
+| Practice | Source | Here |
 |---|---|---|
-| Static startup context, every seat session | **≈56–70 KB ≈ 14–17k tokens** | `scripts/session-ctx.sh --startup`: CLAUDE.md 18 KB, seat+jail cards 17 KB, MEMORY.md 25 KB (96 entries, lines up to 489 chars — an index that became content), 13 skill descriptions 6.9 KB |
-| `/meta-coordinate` bootstrap adds | meta-state 32 KB + TICK-LOG tail + skill body 17 KB | meta-state.md's own contract says "tiny, transient"; it carries 18 ⚑ pickups, 3 older than two weeks, plus an OPERATOR-OWED list of 7 |
-| `/design-agents` read plan | **836 KB static → 299k/346k tokens measured** | 18 `docs/agents/*.md` (625 KB) + the coordinator brief (143 KB) + glossary + CONTEXT/ARCHITECTURE; doc-heat run 2: 72 % of the plan's lines never targeted by any read or grep |
-| Records | TICK-LOG 1.09 MB · adr.md 235 KB (111 ADRs, **54 over the ≤20-line rule**, median 20, max 169) · follow-ups.md 133 KB (1,408 lines, preamble 142 lines; the "Next free id" counter is one 1,748-char line) · GAPS.md 30 KB (one entry 85 lines) | the routing table's size rules exist and are not held: only the FU 10-line cap has a lint |
-| Skills | 82 KB of SKILL.md, 12 of 13 open with "glance GAPS.md" (30 KB) | fu-sweep's description was 903 chars of procedure; board-sweep + fu-sweep still ordered the corpus preload the 09-27 rule forbids (fixed in the opening PR) |
+| Research → design → plan → implement, as separate sessions; the human reviews the **design**, not the code — "leverage planning, skip code review" is the 2–3× option; "no review" failed within months | Horthy, *Context engineering* (Pragmatic Engineer, 2026) | The codeowner read is on diffs (273 reads, 13.9 % yield). Goals carry a design pin, but the reviewed artifact is still the PR. |
+| Frequent intentional compaction: distil the trajectory into a document, start fresh from it; stay under ~40 % of the window | Horthy | meta-state.md is the compaction doc at 32 KB prose; the corpus read starts at the window's "dumb zone". |
+| Own your context window; small, focused agents; stateless reducer; pre-fetch the context you might need | *12-factor agents* (factors 3, 10, 12, 13) | Workers: yes (≈42 KB, pre-fetched). Coordinator: one 139 KB brief for every clause. |
+| Decision tables, not N near-duplicate tests; the reviewer reads the table and sees the missing row | NTD 2024 talk → `docs/agents/README.md` §Testing doctrine | Stated as doctrine; the replay harness is 31 tables in 201 fixtures. |
+| Rows are the contract: requirement IDs as headings, test ids, error codes; ⚖ marks judgment rows; evidence stamped per row; schema ⇄ requirement coupling checked by a gate; use-case first; incompleteness rendered (`🚧 WIP`, `⚑ gap`) | oracle-fleet `docs/process/README.md`, ADR-086 | Exists for one stack. The platform has FSM YAML + fixtures, no `specs/`. |
+| Humans review the result, not the diff; specs are the human gate (CODEOWNERS) | oracle-fleet rule 1 | **Rejected for the platform by the operator (2026-10-05)** — the operator reads specs but is not a blocker: a full-context reviewer gates spec changes; guards revert, responders heal. |
 
-### B. Context the machine pays
+## Diagnosis
 
-| Role | Injected | Shape |
-|---|---|---|
-| Coordinator pod | `agents/coordinator/README.md` **143 KB (~36k tokens) as `--append-system-prompt-file`** + item prompt + CLAUDE.md | one brief for every clause; no clause reads a slice |
-| Worker | env card ~6.6 KB + ground-rules 3.9 KB + recipe 10–13 KB + issue + CLAUDE.md 18 KB | ≈42 KB — the right order of magnitude |
-| Reviewer | prompt 19 KB + `.agents/review.md` 9 KB + lenses up to 21 KB + card | 30–51 KB |
-| The scan | `agents/coordinator-scan.sh` **6,107 lines**; launchers 256 / 106 / 55 KB | the deterministic gate is itself a corpus — any edit is a design read |
+The stall is upstream of admission. The platform writes guards by hand, one reading of the
+labels per clause, and pins each with a single replayed world; the bugs are the rows nobody
+wrote. The admission backlog and the record growth of the first draft are what that looks like
+from the seat: every row-shaped defect becomes an issue the seat must admit, a ride, a review, a
+TICK-LOG line and often an FU. The human gates (E) are the belt that compensates for the missing
+tables, and the corpus (D) is what a human needs in order to be that belt.
 
-### C. The backlog, by why it is open
+## Direction (operator, 2026-10-05 — recorded, not decided here)
 
-- **homelab: 76 open issues, 0 `agent/queued`.** The scan's ONE dispatch precondition is
-  `agent/queued` (ADR-122 (2), `coordinator-scan.sh` header). 44 are bot-filed; 42 carry no label
-  at all; 49 have zero comments; 22 of 28 `agent-fix` issues were never queued (#1370 logged nine
-  recurrences and was never dispatched). 18 of 76 are containers by construction (Goals,
-  post-launch buckets, stints, scout digests) that close only when their tree empties. Three are
-  done-but-open (#1621 `agent/done` since 09-14, #168, #1988). oracle-fleet (24 open, 2 queued,
-  17 touched this week) shows the same three shapes but moves.
-- **FU tracker: 132 open, median id 199, 35 below FU-150 (≥ 2 months), oldest FU-005 /
-  FU-051 (07-05).** 74 of 132 (56 %) sit in the Agents block, although the routing table says
-  agent-loop work items are GitHub issues. ~100 items carry a "Next:" — a next action exists,
-  the actor does not: every one of them is the seat. 27 items exceed the 10-line cap. Minting ran
-  ~3 ids/day (FU-246 → FU-303, 09-16 → 10-03); archiving ran 47 entries in five weeks
-  — the set shrinks only in fu-sweeps, which are seat sessions.
-- **ADR-128 census (08-04 → 09-11):** 273 human codeowner reads, 38 findings (13.9 %), 18 of
-  them in-diff defects — the gate pays off at about one catch per seven reads, and ~6.7 reads a
-  day before the narrowing.
+1. **Monorepo stays; pieces move to islands** — a directory with its own build, specs, tests and
+   context; the seams become shared libraries/files. Homelab keeps the consumer contracts, the
+   integration and the big picture.
+2. **Specs are reviewer-gated, not codeowner-gated.** The operator reads specs and does not block
+   on them. A full-context reviewer (the island's specs + the consumer contracts it touches, small
+   enough per island) reviews spec changes; ⚖ rows reach the operator as a digest to read.
+3. **Guards revert; the loop self-heals.** Production quality is detectors + a revert path +
+   responders, proven by drills — not a human read.
 
-### D. Where the human is (the gate inventory, from the loop diagnosis)
+## The plan (ordered; each step one session + one PR + a settle number)
 
-Codeowner read = corpus-loaded session (ADR-110) · `major/awaiting-human` (shrinking: Actions
-and provider majors moved to the lens, ADR-141 + 10-04) · attended applies (FU-301, evidence
-gated on purpose) · `agent/error` / `agent/blocked` breakers (a human removes the label) · the
-arbitrate ceiling's "escalate" branch · Goal queueing (breaker #1) and verdicts · research/retro
-PRs un-armed · governance files direct-to-master · App / console clicks · `/design-agents` typed
-only · FU single writer · the `blockedBy` edge. Eleven gates; the TICK-LOG's last four days read
-"operator", "by hand" or "codeowner click" ~40 times in 400 lines and "unattended" six.
+**P0 — Un-wedge the theme lane.** #1935: the `goal/**` ruleset has no bypass actor and strict
+checks make BEHIND terminal, so every theme assembly parks until an OrgAdmin pushes. Fix in
+`tofu/github` (operator lane). *Settles:* an assembly PR brought current by the updater.
 
-## Reading it against the guidance
+**P1 — One themed Goal over the row-shaped defects, fix rule "table first, then the row".**
+The 24 S1–S3 defects in two themes by fix surface (ADR-126 membership = `Touches:` ⊆ theme
+surface): *guard tables* (the 16 S1 — scan + fixtures) and *one parser* (the 8 S2 — footprint,
+ledger, reviewer, handoff). Each child converts the guard it fixes into a decision table (fixture
+`rows:` over a named world) and adds its row. S4 becomes drills, not rides; S5 becomes rubric
+rows. The 33 non-defects stay out (containers in a container break the lineage rules). One human
+click admits the tree; one human read per theme assembly. *Settles:* the Goal's two assemblies
+merged; the 24 issues closed; bucket-A scored for the two weeks after.
 
-Anthropic's published guidance (the context-engineering post, Claude Code's CLAUDE.md and
-subagent docs, the Agent Skills spec, the long-running-harness post) reduces to a few rules this
-repo states for itself and then breaks:
+**P2 — The gateway island** (ADR-139 step 3 done *inside* the monorepo). A directory holding the
+proxy code, `specs/` in the oracle shape (six endpoint pages with schema coupling; `/route` first
+— #2163 is a router row nobody read), its tests and image CI; `argocd/resources/openrouter-proxy/`
+keeps the deploy manifests and the mounted `model-classes.json`; the consumer contract (what the
+launcher and the scan send and adopt) is the only gateway text left in `docs/agents/`. A later
+`git subtree split` keeps history. Does not wait on FU-269/FU-127 — nothing leaves the repo.
+*Settles:* `model-routing.md` ≤ 12 KB; the gateway's spec pages carry evidence for every row.
 
-1. **Smallest high-signal token set; "would removing this line cause a mistake?"** The seat card
-   and CLAUDE.md are ~11–12 % long parentheticals retelling incidents. The operator's own
-   2026-09-11 rule ("briefs are rules-only, history lives in the ADR/incidents") is the same
-   rule; it was applied to pod briefs and not to the human's.
-2. **Progressive disclosure: metadata always, instructions on trigger, references on demand.**
-   Skills do the first two and then point at 97 KB and 838 KB documents instead of skill-owned
-   excerpts; the coordinator gets its whole brief for every clause; `/design-agents` is the
-   anti-pattern made policy — and doc-heat run 4 already showed the codeowner-read stream works
-   on a topic slice at half the cost with zero misses.
-3. **Just-in-time retrieval over pre-loading; an index of pointers beats the content.** The
-   tracker is the hottest doc (grep 8× read) and it is read as a whole for every sweep; MEMORY.md
-   is an index whose lines are the memories.
-4. **Subagents isolate context; the orchestrator keeps the conclusion, not the file dumps.** The
-   seat does this for reads but not for its own session shape: one session = board + tracker +
-   corpus + infra windows + bookkeeping, and the wind-down writes 32 KB of prose for the next one.
-5. **Long-running harness: a machine-readable task list with explicit pass/fail, one unit per
-   session, leave the environment clean, the agent must not declare "done" without a test.**
-   meta-state.md is that task list written as prose; "done-but-open" issues are "declared done
-   without the acceptance observation".
-6. **Workflows before agents; a deterministic step wherever one suffices.** The scan is the right
-   instinct (no LLM wakes for a no-op) — and it has grown to 6k lines because every rule became a
-   clause in one file.
+**P3 — Shared parsers.** One library for the 11 body grammars and one file for the 15-label
+vocabulary (ADR-122 (3) already rules "one machine block, one parser"); every reader imports it.
+*Settles:* `grep -l 'Touches:'` over `agents/ scripts/ .agents/` returns the library and the
+authoring writer only.
 
-## Diagnosis — three loops, one actor
+**P4 — The spec gate as a reviewer lens + a revert guard, per island.** (a) a lens that loads
+the island's `specs/` and the consumer contracts the diff touches, grades spec rows (a row
+changed without its ⚖ flag, a row removed with evidence green, a schema change without its page),
+and posts the verdict; (b) a weekly ⚖ digest — rows changed, by island — for the operator to
+read, never to approve; (c) each island ships a detector from its own evidence, a revert path
+(pinned image for the gateway; a revert PR for the coordinator, whose pods clone master), and a
+drill that drives the chain end to end (#2178's revert chain was unproven; the responder's
+fix-verdict path is the self-heal half). *Settles:* a deceptive spec PR (row says X, code does Y)
+blocked by the lens on a throwaway base; one drill per island green.
 
-- **Admission loop.** The machine files (44 bot issues) faster than the one human admits (0
-  queued). Filing without admission is what "inert" (ADR-122) means, so the backlog is the design
-  working — on a repo whose only admitter is a session that also does everything else.
-- **Session loop.** The admitter's session starts at ~15k tokens of rules, adds 32 KB of pickup
-  prose, and either pays 300k for the corpus or is told it may not judge agents items. Fewer
-  decisions per session → more pickups → longer meta-state → fewer decisions.
-- **Record loop.** Every decision becomes 20+ lines of ADR, every loose end 10 lines of FU,
-  every session a TICK-LOG entry and a GAPS sighting — and the human reads all of it because the
-  records are the human's context. The tracker's own header diagnosed this on 2026-08-07 ("the
-  block grew because every finding became an entry") and then grew another 150 ids.
+**P5 — Guard tables as the ratchet.** #1224 lands: a changed clause line must be reached by a
+registered fixture row, or be FSM-declared unreplayed. Tables backfill in fix-density order
+(ADR-103: never big-bang) — P1 is the first batch. *Settles:* tabular fixtures ≥ 69 (one per
+clause marker); bucket-A falling across four scored weeks.
 
-The operator's stated boundary (ROADMAP: "autonomy grows on the INTAKE and FIX sides, never the
-approval side") is consistent with everything below: nothing here lets a cluster identity approve
-or merge. What moves is **admission, context shape, and record size**.
+**P6 — Machine admission for `agent-fix` filings** (the first draft's P1), now safe: the lens is
+the gate, the guard is the net. Goals and governance-core paths stay human (ROADMAP: autonomy
+grows on the intake and fix sides, never the approval side). *Settles:* days from bot filing to
+`agent/queued` ≈ 0 without a seat touch.
 
-## Proposals, ranked by operator-minutes saved (the platform's cost function)
+**P7 — Context follows the islands.** The corpus split of §C; the coordinator brief becomes the
+coordinator island's own context, loaded per clause; the first draft's hygiene items ride along
+as one-liners — `session-ctx --startup` thresholds as lints, the Agents block of the tracker back
+to issues, containers and `agent/done` issues closing on date predicates, meta-state as a
+machine-readable pickup list. *Settles:* `--startup` ≤ 40 KB; the design-agents read plan
+≤ 300 KB.
 
-**P1 — Machine admission for the `agent-fix` class (intake side).** The filer that produces a
-finding with a recipe, a budget label and a repo claim applies `agent/queued` itself; breaker #1
-(a human must authorise a GOAL) stays; a human-only admission remains for issues touching the
-governance core paths (the ADR-128 set) and for anything without a budget label. Dedup stays
-best-effort on the filer (the 10-02 ruling). Evidence it is safe: oracle-fleet runs this shape;
-the worst case of a bad admission is a bounded ride that fails review. *Settles:* homelab
-`agent/queued` count > 0 without a seat touch for a week; the 42 unlabelled filings get a label
-or a close reason from the filer.
-
-**P2 — The codeowner read becomes a sliced, rubric-graded machine read; the human keeps the
-governance core.** ADR-128 already narrowed the paths; doc-heat run 4 showed the topic-slice
-selector works for this stream. Build: a `codeowner-read` reviewer lens that loads the owning
-sections by path→doc map (the codeowner-queue audit's CORPUS-SUBSET map), grades the PR against
-the ADR-110 escalation rubric (small = merge, big = `major/awaiting-human` with the fork named),
-and posts the verdict; the seat reads only what it parks. The 13.9 % catch rate is the baseline a
-drill must beat or match (reviewer-drill shape: deceptive PRs + an honest control). *Settles:*
-`CodeownerParkWaiting` fires on the big only; catch rate on a two-week census ≥ 13.9 %.
-
-**P3 — Context budgets become lints, and the briefs become sliced.** (a) `session-ctx --startup`
-grows thresholds the pre-push hook enforces: CLAUDE.md ≤ 12 KB, seat card ≤ 8 KB, MEMORY.md
-index lines ≤ 120 chars, meta-state ≤ 8 KB, an ADR block ≤ 20 lines (54 fail today — a one-time
-distil, then the lint), GAPS entry ≤ 15 lines. (b) The coordinator brief splits into a ≤ 15 KB
-always-on core (state machine, invariants, dispatch params) + per-clause sections the launcher
-appends by `--item` clause — the same progressive disclosure skills already use. (c)
-`/design-agents` keeps the full read as the exception and gains a default **slice mode**: the
-path→doc map picks the sections, the grounding statement names them, and "a claim about a file
-not read" (the 08-10 miss class) is caught by the reviewer, not pre-empted by a 300k load.
-*Settles:* `--startup` total ≤ 40 KB; a design sitting on a slice produces a PR the bot reviewer
-accepts without a corpus-miss finding across five sittings.
-
-**P4 — The tracker returns to its contract: pointer-only, issues for agent work, expiry for the
-rest.** The 74 Agents items move to homelab issues (labels carry section + state; the FU keeps a
-one-line pointer until the issue closes, then archives) — the routing table already says so.
-Open items older than 60 days whose "Next:" has not changed in 30 days expire to the archive
-with `(expired YYYY-MM-DD — no actor)`; expiry is reversible by re-filing with a new actor. The
-counter line shrinks to the id + the burned list; its minting history moves to the archive's
-head. The lint gains the expiry report. *Settles:* open count ≤ 60 and falling; a sweep takes one
-subagent round, not four.
-
-**P5 — Containers and done-states close themselves.** `agent/done` + merged PR + acceptance
-probe green (or no probe declared) → closed by the scan after a 48 h window; a post-launch bucket
-with no open member for 7 days → closed; a stint container whose last PR merged 14 days ago →
-closed with a summary comment. These are label-and-date predicates, i.e. scan clauses, i.e. the
-machinery that already exists. *Settles:* the 18 container issues reach ≤ 5 without a seat click.
-
-**P6 — The seat session becomes a harness, not a shift.** meta-state.md becomes a machine-readable
-pickup list (one JSON or YAML row per item: id, owner, due, state, acceptance) rendered to prose
-on demand; a session picks ONE unit (a codeowner batch, a window, a sweep) and ends; subagents
-carry the reads (already the rule) AND the per-item write-ups (the PR body, the issue comment),
-so the seat's own context holds verdicts only. *Settles:* seat sessions end under 150k tokens
-with no `bookkeeping:` commit larger than 40 lines.
-
-**Order.** P1 and P5 are scan clauses and can land in a week; P3(a) and P4's lint half are
-scripts; P2 and P3(b/c) are the design forks and want an ADR each; P6 follows P3.
+**Order.** P0 is a ruleset edit; P1 and P3 are the backlog itself; P2 is the first island and the
+template for the coordinator's; P4 and P5 are what make P6 safe; P7 falls out of P2.
 
 ## Quickfixes that rode the opening PR
 
 - `scripts/session-ctx.sh --startup` — the static startup-context meter + the design-agents
-  read-plan size (bytes and a 4-chars/token estimate), so trims are measured, not felt.
+  read-plan size, so trims are measured, not felt.
 - `CLAUDE.md` — three history passages reduced to their rules (18.0 → 16.8 KB).
 - `agents/jail-seat-card.md` — the mechanism-history blockquote and two measured-history
   paragraphs reduced to their rules; every rule kept.
@@ -180,18 +213,21 @@ scripts; P2 and P3(b/c) are the design forks and want an ADR each; P6 follows P3
 
 ## Loose ends found, not filed (second jail — the primary mints)
 
+- "Island" is the operator's word for the unit of §Direction (1); the glossary has no row, and a
+  name for platform functionality clears the glossary in its coining commit (FU-163).
+- The coordinator has no pinned ref: pods clone master, so its revert class is a revert PR, not an
+  image pin — P4(c) must say so per island.
+- The retro's bucket-A series stopped at 38 (2026-08-31); P1/P5 settle on it, so it needs scoring
+  again first.
 - GAPS.md has no §second-jail, §board-sweep, §fu-sweep, §docs-cleanup, §opnsense-as-code,
-  §skill-retro sections although 12 of 13 skills demand the glance; 9 open GAPS entries carry
-  ≥ 2 dates and none is promoted (the improvement contract's trigger is not running).
-- MEMORY.md (auto-memory index) is 25 KB with 300–489-char lines: the index holds content,
-  against its own rule; a one-pass re-index to ≤ 120-char hooks would cut ~5k tokens per session.
-- meta-state.md carries three pickups older than two weeks and an OPERATOR-OWED list of seven
-  items with no due dates.
+  §skill-retro although 12 of 13 skills demand the glance; 9 open GAPS entries carry ≥ 2 dates and
+  none is promoted.
+- MEMORY.md (auto-memory index) is 25 KB with 300–489-char lines: an index holding content.
 - `fu-sweep` and `board-sweep` had not been edited since 2026-08-19 while the rules they encode
   changed twice.
 
 ## What would settle it
 
-One number per proposal above, plus the system one: **seat-minutes per merged machine PR** and
-**days from bot filing to `agent/queued`**, both derivable from GitHub timestamps and the
-TICK-LOG session headers, measured on the two weeks before and after each change lands.
+The weekly platform-logic count (ADR-103 bucket-A), scored again and falling; days from bot
+filing to `agent/queued`; tabular fixtures over clause markers; seat-minutes per merged machine
+PR. Each measured on the two weeks before and after a step lands.
