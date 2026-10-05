@@ -1,0 +1,31 @@
+# chart-revert — the chart-pin revert receiver: ArgoControllerSilent → a plain Deployment OUTSIDE
+# Argo Workflows' dependency cone reverts the argo-workflows chart bump that silenced the controller
+# (operator ruling 2026-10-05, ADR-141 as amended; docs/designs/fu-1990-workflow-pin-revert.md
+# Part 4). Kustomize app (configMapGenerator hash-rolls the pod on script edits). Wave 6, after
+# kube-prometheus-stack (wave 1: the ServiceMonitor CRD + the Alertmanager that routes to it) and
+# beside github-exporter; the agent-coordinator namespace and its coordinator-git Secret are
+# kubectl-applied infra (agents/coordinator/rbac.yaml, git-token.yaml), outside ArgoCD. Deliberately
+# NOT its own repo: the deployable unit is a ConfigMap, so this repo's sync IS the deploy pipeline.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chart-revert
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/chart-revert
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-coordinator
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,17 @@
+# The webhook target Alertmanager's `chart-revert` receiver POSTs to
+# (http://chart-revert.agent-coordinator.svc.cluster.local:8080/alert) and the scrape target of the
+# ServiceMonitor next to this file; the Service name becomes the Prometheus job label ("chart-revert").
+apiVersion: v1
+kind: Service
+metadata:
+  name: chart-revert
+  labels:
+    app: chart-revert
+spec:
+  type: ClusterIP
+  selector:
+    app: chart-revert
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
