@@ -1,0 +1,4 @@
+OUT JOB_STEP ci/manifest-lint
+OUT CLASS environment
+OUT BASIS observed
+RC 0

@@ -1716,7 +1716,10 @@ start of a line (at most one per ruling):
 ci-cause: <job>/<step> class=<timing|environment|content|infra|unknown> basis=<observed|prior|hypothesis>
 ```
 `<job>/<step>` from `gh run view --json jobs` (the fleet-fault rule's stable identifier — never a
-log excerpt). `class` is the ruling's own diagnosis category; `unknown` is legal and honest.
+log excerpt). Write it VERBATIM: real step names contain spaces (`e2e/kind e2e (chart + image +
+test Garage)`), and the ledger's reader captures the whole string up to the ` class=` field
+(homelab#1775 — a no-space capture silently dropped 40% of production markers). `class` is the
+ruling's own diagnosis category; `unknown` is legal and honest.
 `basis`: `observed` = probed/read THIS instance's evidence; `prior` = pattern refs (name them);
 `hypothesis` = untested. **The tag is DATA — it changes no routing, no play behavior.** (#1280's
 rule waits for the distribution; do not implement any basis-keyed branching.)

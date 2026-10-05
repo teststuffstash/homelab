@@ -31,6 +31,7 @@ c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
 c4c5-infeasible-quoted-inert	c4c5-infeasible
+ci-cause-grammar	ci-cause-grammar
 ci-red-deferred-then-debounced	ci-red-rounds-two-channels
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
