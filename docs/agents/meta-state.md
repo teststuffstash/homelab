@@ -10,6 +10,27 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-04 night — S9 step 7 DONE: class 1/2 proposers ON, wave 1 = 6/6 Renovate merges
+  with no human; TICK-LOG 2026-10-04 night has the arc).** Landed: #2216 (proposers, `prHourlyLimit` **6
+  TEMPORARILY — drop to 3 when the ~30-dep backlog is through**, one line in renovate-global.json),
+  #2217 + attended apply (FU-044's dead webhook hop — fixed, chain rang live on `registry`), #2218 (the
+  ArgoCD belt: `ArgoCDAppDegraded` FIRING on `registry` since 21:18Z — the registry-garbage-collect
+  CronJob exceeds its 3600 s deadline nightly since 10-02; a real fault, nobody's yet: G7), #2226 (crossplane
+  version SET). **Gap register** = `docs/dependency-upgrades.md` §Gap register (G1–G12; G12/G12b written in
+  TICK-LOG, doc rows owed). **Next session:** (1) G11 second cut = **#2234** (the annotation key carries the image TAG; #2226's
+  cut failed the digest lookup — #2228 shipped the chart alone, red by design): after it merges, the next
+  Renovate run's `renovate/patch-crossplane` must carry targetRevision 2.3.6 + `engine-image-digest.v2.3.6:
+  sha256:3213f5…` and pass `publicroute-tf-validate`; #2224 superseded ✓. **Wave 2 open 22:24Z:** #2229
+  pushgateway, #2230 alpine 3.24, #2231 arc 0.15.0 (3 files — G9 proof), #2232 cloudflared, #2233 busybox;
+  **#2227** docs/proofs — all armed; (2) wave 2+ PRs — watch each merge → sync → alert delta (baseline =
+  `maintenance-window snapshot`); kps 86.1.1 sync was Running at 22:21Z; (3) docs owed as ONE PR:
+  §Last proven rows (class 2 image digest = #2220 21:32Z; class 1 chart = #2223 argo-events 21:46Z),
+  register regen (G8 — every merge stales it), G12/G12b rows; (4) decisions for the operator:
+  G7 (no reader for `dig` alerts while the responder is paused — the second leg of "mechanical revert
+  or responder"), G12b (a CI-red armed Renovate PR has no actor — the FU-046 worker-adapts leg's
+  trigger), G8 (regen that rides the merge), updater skip/`rebaseWhen` for Renovate branches (measure
+  the master-merge churn on wave 2 first). Responder-paused + `registry` Degraded = the one live
+  fault to hand someone.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;

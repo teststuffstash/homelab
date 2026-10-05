@@ -19,7 +19,7 @@ spec:
   source:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
     chart: gha-runner-scale-set-controller
-    targetRevision: 0.14.2 # lockstep with arc-runners*.yaml — Renovate bumps all three in one grouped PR (`arc`, renovate-global.json)
+    targetRevision: 0.15.0 # lockstep with arc-runners*.yaml — Renovate bumps all three in one grouped PR (`arc`, renovate-global.json)
     helm:
       valuesObject:
         # FU-082: the ARC controller reconciles runner scale sets — ~44Mi steady, was BestEffort.
