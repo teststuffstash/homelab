@@ -12513,3 +12513,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
   belt needed. The ruling left for the operator is only the dispatch line (three serial hand-dispatches
   under the hourly cap vs the 09-25 preference); the memory file is corrected and says so.
 - Bookkeeping: FU-052's archive entry expired (36 d; refs are all provenance-shaped, nothing scrubbed).
+- **PR#2264 MERGED 14:52Z, rules LIVE 14:53Z** (`control-plane-health` group, both `health=ok`). Round 1
+  CHANGES_REQUESTED on two real findings, fixed in-PR: the `kube_node_info` join needed `max by
+  (internal_ip, node)` (a node mid-upgrade emits two series → many-to-many; the mgmt-metrics shape) and
+  the restart alert's description asserted a cause from a correlated alert (rubric: symptom only) —
+  fixture gained the two-series case. Non-blocking: the incident narrative sits in the rule comment and
+  FU-304 with no `docs/incidents/` postmortem. **A master-side lint break reds every PR (the #953 class):**
+  #2264's first CI run went red on `follow-ups-lint` because FU-052's archive entry crossed the 35-day
+  line TODAY — pushed the already-committed deletion mid-session (the un-wedging class), rebased past two
+  auto-bumps, update-branch ×2. State at 14:55Z: wk-metal-02 47 % available, apiserver WSS 2.38 GiB and
+  climbing (3.5–3.8 before the kill) — `ControlPlaneNodeMemoryLow` is expected to stand within hours;
+  that firing is FU-304's acceptance and the operator's cue to pick the lever.
