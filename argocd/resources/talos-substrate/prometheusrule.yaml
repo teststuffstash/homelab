@@ -82,7 +82,10 @@ spec:
     #
     # Node identity: node-exporter speaks `instance=<ip>:9100`, kube-state-metrics speaks `node`;
     # kube_node_info carries both (internal_ip), so the join rewrites its instance to node-exporter's
-    # form and the role filter is kube_node_role. The join fails CLOSED (no kube_node_info → no
+    # form and the role filter is kube_node_role. `max by (internal_ip, node)` first, the repo's
+    # established shape for this join (mgmt-metrics `mgmt:node_rollout_settled:since`): kube_node_info
+    # carries os_image, and a node mid-upgrade emits two series — unreduced, the group_left is
+    # many-to-many and the rule errors out exactly during a rollout. The join fails CLOSED (no kube_node_info → no
     # alert) — acceptable here because a role filter is what keeps this off the 8 GB worker laptops,
     # and kube-state-metrics' own absence has its own stock belts (KubeStateMetrics*, TargetDown).
     #
@@ -98,7 +101,7 @@ spec:
               node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} < 0.35
             )
               * on (instance) group_left (node)
-                label_replace(kube_node_info{job="kube-state-metrics"}, "instance", "$1:9100", "internal_ip", "(.*)")
+                label_replace(max by (internal_ip, node) (kube_node_info{job="kube-state-metrics"}), "instance", "$1:9100", "internal_ip", "(.*)")
               and on (node) kube_node_role{job="kube-state-metrics", role="control-plane"}
           for: 30m
           # triage dig: a standing headroom condition — the fix is a sizing/role decision by PR
@@ -128,5 +131,8 @@ spec:
               2026-10-05 this was Talos's OOMController taking the apiserver on wk-metal-02, with
               controller-manager and scheduler following; the node was NotReady for 5 minutes —
               under every stock node belt's `for: 15m`. Read the pod's `lastState.terminated`
-              (PodSigkilled's description separates the three exit-137 causes) and the node's
-              memory; if ControlPlaneNodeMemoryLow is standing on the same node, that is the cause.
+              (PodSigkilled's description separates the three exit-137 causes), the kernel log for the node
+              in Loki (`{container="kmsg-reader", node="<node>"} |~ "OOM controller"`), and the node's
+              memory (`container_memory_working_set_bytes{container="kube-apiserver"}` against
+              `node_memory_MemTotal_bytes`) — a restart with none of those is a config push, a cert
+              rotation or a hand kill, whatever else happens to be standing on the node.

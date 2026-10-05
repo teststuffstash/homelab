@@ -65,6 +65,34 @@ tests:
             exp_annotations:
               summary: "control plane wk-metal-02 has 27% of its memory available (30 m under 35 %)"
 
+  # ── a node mid-upgrade emits TWO kube_node_info series (two os_image values overlap for a scrape
+  #    or two — the shape mgmt-rollout.promtool-test models). Without the `max by` the group_left is
+  #    many-to-many and the whole rule errors; with it, still exactly one alert.
+  - interval: 5m
+    input_series:
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '8000000000x20'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '2160000000x20'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183",os_image="Talos (v1.14.1)"}'
+        values: '1x20'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183",os_image="Talos (v1.14.2)"}'
+        values: '1x20'
+      - series: 'kube_node_role{job="kube-state-metrics",node="wk-metal-02",role="control-plane"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              instance: "192.168.2.183:9100"
+              job: node-exporter
+              node: wk-metal-02
+            exp_annotations:
+              summary: "control plane wk-metal-02 has 27% of its memory available (30 m under 35 %)"
+
   # ── a 15-minute dip under the line recovers → never fires. The belt is for the standing shape;
   #    a transient (an etcd compaction, a burst of list calls) is PodSigkilled's territory if it
   #    ends in a kill, and nobody's if it does not.
