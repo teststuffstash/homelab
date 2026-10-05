@@ -12560,3 +12560,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   **Lesson for the lens:** chart 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was the APP major 4.0→4.1 and
   the trigger of the kill; #2254 (two lens rounds) moved the app 4.1.0→4.1.4 — both reviews wrote "v4.0.8→v4.1.4";
   chart semver ≠ app semver, the lens must read appVersion from the index.
+- **`max_history` apply DONE** (`helm-evidence run 20261005T165435Z-4bb522d3 --label max-history`, window
+  `seat-1791219310-4154` 16:55Z, clean close): the four releases took one no-op `helm upgrade` each — manifests
+  UNCHANGED, 0 of 40 pods replaced, 0 restarts, BGP 13/13 with 0 session resets, Longhorn robustness unchanged —
+  and Helm trimmed every history to **3 revisions** (cilium 14→3, longhorn 13→3, argocd 9→3, argocd-apps 6→3).
+  Helm release Secrets 81 → 14. Evidence: `~/.claude/helm-evidence/*-max-history/`.
