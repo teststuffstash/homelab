@@ -1,0 +1,4 @@
+CALL git push origin HEAD:retro/2026-10-05-platform-r7
+CALL gh pr create --repo teststuffstash/homelab --base master --head retro/2026-10-05-platform-r7 --title retros: platform r7 (2 report(s), scheduled retro) --body FU-058 scheduled retro output — HUMAN-GATED, read before merging. Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run `agents/retro-session.sh platform --cell <other-cell> --review docs/agents/retros/<report>.md` per report.
+OUT REPORT_PR: <empty>
+RC 0
