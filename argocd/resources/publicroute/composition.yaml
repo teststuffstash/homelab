@@ -471,7 +471,7 @@ spec:
                   containers:
                     - name: cloudflared
                       # same pin as tofu/cloudflare (the proven one-off)
-                      image: cloudflare/cloudflared:2026.5.2@sha256:12ff5c6992a9863db4da270746af7c244bcaee49353039af8104268a18d6c4f0
+                      image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
                       args: ["tunnel", "--no-autoupdate", "run", "--token", "$(TUNNEL_TOKEN)"]
                       env:
                         - name: TUNNEL_TOKEN
