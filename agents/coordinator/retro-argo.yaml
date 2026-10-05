@@ -449,6 +449,7 @@ spec:
               fi
               git add docs/agents/retros/
               git diff --cached --quiet || git commit -m "retros: ${STACK} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
+              # >>>REPLAY:retro-harvest-push>>>
               PR_BODY="FU-058 scheduled retro output — HUMAN-GATED, read before merging. Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
               if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
                 REPORT_PR="$MERGED_PR"
@@ -461,6 +462,7 @@ spec:
                 [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
                   --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" --body "$PR_BODY")
               fi
+              # <<<REPLAY:retro-harvest-push<<<
               REPORT_ARGS=()
               for report in docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md; do
                 REPORT_ARGS+=(--report "$(basename "$report")=$report")

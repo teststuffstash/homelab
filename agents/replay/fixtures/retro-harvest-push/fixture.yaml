@@ -1,0 +1,24 @@
+# retro-harvest-push — the report PR's push/create decision in the harvest step (FU-058).
+#
+# THE CONTRACT: the harvest clone persists the auth header (`clone -c http.extraHeader`), so the
+# push rides it as a plain `git push origin` — a second `-c http.extraHeader` on the push sends
+# Authorization twice and GitHub answers 400 "Duplicate header" (r7, 2026-10-05: both reports
+# committed, the push died, no PR). An open report PR is pushed to, never re-created; a merged
+# one whose reports already match master is reused and nothing is pushed.
+#
+# Rows: `new-pr` (no PR yet → push + create) · `open-pr` (push onto it, no create) ·
+# `merged-identical` (reuse the merged URL, no push).
+name: retro-harvest-push
+mode: table
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-harvest-push
+  - file:post.sh
+env:
+  - STACK=platform
+  - RUN=r7
+  - N=2
+  - BR=retro/2026-10-05-platform-r7
+  - DEAD_NOTE=
+rows: rows.psv
