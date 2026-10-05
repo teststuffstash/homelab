@@ -198,15 +198,14 @@
 
   "customManagers": [
     {
-      "description": "Crossplane engine image digest annotation in argocd/platform/crossplane.yaml — the chart's VERSION SET partner (the `crossplane` group rule above). publicroute-tf-validate reads `crossplane.io/engine-image-digest.<chart targetRevision>` and pulls the engine by that digest; a bump with no matching key fails the gate (homelab#1779). The version lives in the annotation KEY and the digest in its VALUE — both captured, both rewritten. docker datasource on crossplane/crossplane (Docker Hub), tags v<version> → extractVersion strips the v so the key stays `2.3.6`, not `v2.3.6`. If Renovate ever wrote a wrong digest the gate's digest pull fails and the PR is red — never a bad merge. By hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.",
+      "description": "Crossplane engine image digest annotation in argocd/platform/crossplane.yaml — the chart's VERSION SET partner (the `crossplane` group rule above). publicroute-tf-validate reads `crossplane.io/engine-image-digest.<chart targetRevision>` and pulls the engine by that digest; a bump with no matching key fails the gate (homelab#1779). The engine image TAG (v<chart version>) lives in the annotation KEY and the digest in its VALUE — both captured, both rewritten; the gate derives the same key from the chart pin. The key carries the TAG, not the bare version: with extractVersionTemplate stripping the v, Renovate looked the digest up for tag `2.3.6` and dropped the update (\"Could not determine new digest\", #2228 shipped the chart alone). If Renovate ever wrote a wrong digest the gate's digest pull fails and the PR is red — never a bad merge. By hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.",
       "customType": "regex",
       "managerFilePatterns": ["/^argocd\\/platform\\/crossplane\\.yaml$/"],
       "matchStrings": [
-        "crossplane\\.io/engine-image-digest\\.(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+): \"(?<currentDigest>sha256:[0-9a-f]{64})\""
+        "crossplane\\.io/engine-image-digest\\.(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+): \"(?<currentDigest>sha256:[0-9a-f]{64})\""
       ],
       "depNameTemplate": "crossplane/crossplane",
-      "datasourceTemplate": "docker",
-      "extractVersionTemplate": "^v(?<version>.*)$"
+      "datasourceTemplate": "docker"
     },
     {
       "description": "arc-runner image toolchain ARGs (FU-015 residual): DEVBOX_VERSION / NIX_VERSION in docker/arc-runner/Dockerfile — pinned binaries outside any stock manager. github-releases datasource; patch/minor ride the normal lanes, majors hit the human gate like everything else.",
