@@ -37,6 +37,9 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   version          = var.argocd_chart_version
   timeout          = 900
+  # Release history capped at 3 (FU-304, 2026-10-05: 9 revisions / 5.9 MiB of release Secrets on
+  # the apiserver; the provider default 0 = unbounded) — see cilium.tf.
+  max_history = 3
 
   values = [yamlencode({
     global = { domain = "argocd.teststuff.net" }
@@ -335,6 +338,9 @@ resource "helm_release" "argocd_apps" {
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argocd-apps"
   version    = var.argocd_apps_chart_version
+  # Release history capped at 3 (FU-304, 2026-10-05: 6 revisions; the provider default 0 =
+  # unbounded) — see cilium.tf.
+  max_history = 3
 
   values = [yamlencode({
     applications = {
