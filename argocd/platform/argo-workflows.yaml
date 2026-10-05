@@ -22,7 +22,7 @@ spec:
     # 2026-09-20 apiserver-restart storm and the 2026-08-31 lock-plane wedge asked for: configmap
     # watchers replaced by informers (#16516 — FU-260's never-re-established watch, 96% of Loki
     # ingest) and semaphore slots no longer leaked when the limit fetch fails on release (#16471 — FU-198).
-    targetRevision: 1.1.1
+    targetRevision: 2.0.8
     helm:
       valuesObject:
         crds:
