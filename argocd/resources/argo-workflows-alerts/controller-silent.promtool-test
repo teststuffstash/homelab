@@ -1,0 +1,111 @@
+# Behaviour fixture for ArgoControllerSilent (the heartbeat belt — ADR-141's "detector first" for
+# arming argo-workflows chart majors; docs/dependency-upgrades.md §Rollout).
+#
+#   devbox run -- promtool test rules argocd/resources/argo-workflows-alerts/controller-silent.promtool-test
+#
+# WHAT IS BEING PINNED:
+#   1. STEADY CADENCE NEVER FIRES: a terminal-phase counter that keeps climbing in agent-coordinator
+#      — at any rate, across phases — is a controller doing its job (case 1).
+#   2. SILENCE WITH THE CONTROLLER UP FIRES ONCE: the 2026-09-20 12:04–12:54Z shape — `up` 1, crons
+#      still being TRIGGERED (`argo_workflows_cronworkflows_triggered_total` climbing), and the
+#      completion counter flat for 30 m — fires one label-free alert carrying the rule's labels
+#      (case 2). The cron counter in the input documents that the rule deliberately ignores it:
+#      an inert controller zeroes that counter too. The #449 crash-loop class (every fresh pod dies
+#      before completing anything) is the same series shape and is covered here.
+#   3. ABSENT FAILS CLOSED: no `argo_workflows_total_count` sample for agent-coordinator at all
+#      (controller unscraped, ServiceMonitor renamed by a chart bump) FIRES, even while another
+#      loop home's series is alive and climbing — a missing heartbeat is a missing heartbeat, and
+#      the scope is agent-coordinator alone (case 3).
+#   4. A PLAIN RESTART IS NOT A SILENCE: the old pod's series stops, the new pod's series starts at
+#      0 and resumes completions 10 m later — the 30 m range selector keeps seeing the old samples
+#      until the new ones move, so the rule stays quiet throughout (case 4).
+#
+# CLOCK: promtool starts at 0, one sample per minute; range selectors are left-open, so at eval
+# time T the window is (T-30m, T]. In case 2 the counter goes flat at 30m, the last climbing sample
+# leaves the window at 59m, pending starts there and `for: 5m` fires at 64m — evals at 55m (quiet)
+# and 70m (firing) sit on either side.
+rule_files:
+  - controller-silent.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. STEADY CADENCE — the counter moves, nothing fires ─────────────────────────────────────
+  - interval: 1m
+    name: "a climbing terminal-phase counter in agent-coordinator never fires"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",phase="Succeeded"}'
+        values: "100+1x90"
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",phase="Failed"}'
+        values: "7+0x90"
+      - series: 'up{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a"}'
+        values: "1+0x90"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
+
+  # ── 2. THE FIRE ARM — controller up, crons triggering, nothing completes for 30 m ─────────────
+  - interval: 1m
+    name: "30m of zero completions with the controller up fires once"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",phase="Succeeded"}'
+        values: "100+1x30 130+0x60"
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",phase="Failed"}'
+        values: "7+0x90"
+      - series: 'argo_workflows_cronworkflows_triggered_total{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",name="update-pr-branch-cron"}'
+        values: "50+1x90"
+      - series: 'up{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a"}'
+        values: "1+0x90"
+    alert_rule_test:
+      - eval_time: 55m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: ArgoControllerSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: now
+            exp_annotations: {}
+
+  # ── 3. ABSENT FAILS CLOSED — no agent-coordinator sample, another loop home alive ────────────
+  - interval: 1m
+    name: "a missing agent-coordinator counter fires while platform-agents keeps completing"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="platform-agents",phase="Succeeded"}'
+        values: "40+1x60"
+      - series: 'up{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ArgoControllerSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: now
+            exp_annotations: {}
+
+  # ── 4. A PLAIN RESTART — old series ends, new series starts at 0 and resumes: quiet ──────────
+  - interval: 1m
+    name: "a controller restart that resumes completions within 10m never fires"
+    input_series:
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-a",exported_namespace="agent-coordinator",phase="Succeeded"}'
+        values: "100+1x30 _x60"
+      - series: 'argo_workflows_total_count{job="argo-workflows-workflow-controller",namespace="argo",pod="argo-workflows-workflow-controller-b",exported_namespace="agent-coordinator",phase="Succeeded"}'
+        values: "_x31 0+0x9 1+1x50"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
+      - eval_time: 62m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: ArgoControllerSilent
+        exp_alerts: []
