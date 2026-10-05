@@ -1,0 +1,42 @@
+# fu143-goal-child-closeout — the FU-143 goal-child closeout's predicates, as one decision table
+# (homelab#1720, Goal #2273 table-first rule).
+#
+# THE CONTRACT. An OPEN goal child (`Base: goal/**`) whose PR merged into that base is finished
+# work the closing keyword could not close (keywords fire on default-branch merges only). The
+# block admits it into `c6g` (the closeout set) iff:
+#   (1) a merged PR into the goal base STRONGLY links it (`implements|closes|fixes|resolves #N`
+#       or the line-anchored `Issue: #N` trailer), AND
+#   (2) NO open PR still holds it — where "holds" is the SAME strong-link predicate, scoped to the
+#       goal base (homelab#1720 defect 1: the old test was a bare `#<n>` substring over EVERY open
+#       PR body, so a prose sibling citation in an unrelated master-lane PR held a finished child
+#       open indefinitely — live: #1693 held ~38h by PR #1698's prose), AND
+#   (3) if the child is `agent/blocked`, the escalation's `blocked-on:` predicate is RESOLVED
+#       (homelab#1720 defect 2: the selector accepted only in-progress/review, so a child parked
+#       `agent/blocked` by an arbitrate escalation was a terminal sink once its PR merged — live:
+#       #1781, theme #1768's last member, unparked by hand).
+#
+# ROWS (one per value of each input axis the defect missed):
+#   in-progress        baseline: in-progress child, merged strong link, no open PR → closeout
+#   strong-goal        an open PR on the goal base STRONGLY links it → HELD (live work)
+#   bare-goal          an open PR on the goal base only MENTIONS it → closeout (defect 1)
+#   strong-master      an open PR on MASTER strongly links it → closeout (base scope, defect 1)
+#   cross-repo         an open PR carries the cross-repo spelling `homelab#100` → closeout (defect 1)
+#   blocked-resolved   agent/blocked child, blocked-on resolved → closeout (defect 2)
+#   blocked-unresolved agent/blocked child, blocked-on unresolved → HELD (defect 2)
+name: fu143-goal-child-closeout
+mode: table
+source: agents/coordinator-scan.sh
+# Its composition reaches `agents/issue_body.py` — the ONE body parser is Python (ADR-113),
+# so the interpreter is DECLARED rather than discovered as a mystery red (homelab#1460 leg 6;
+# the hermeticity contract, agents/replay/README.md cleanup-contract move 6).
+requires:
+  - python3
+parts:
+  - block:strong-link-count
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - file:bridge.sh
+  - block:fu143-goal-child
+  - file:post.sh
+world: base
+rows: rows.psv
