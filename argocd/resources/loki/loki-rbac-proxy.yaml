@@ -149,7 +149,7 @@ spec:
           # active fork, and the failure mode is "jail log reads stop", never a cluster fault.
           # The SAR-rewrite feature this design rests on SURVIVES the rework — it is promoted to a
           # first-class pkg/authorization/rewrite package on that branch, not deprecated.
-          image: quay.io/brancz/kube-rbac-proxy:v0.22.1
+          image: quay.io/brancz/kube-rbac-proxy:v0.23.0
           args:
             - --secure-listen-address=:8443
             - --upstream=http://loki.loki.svc.cluster.local:3100/
