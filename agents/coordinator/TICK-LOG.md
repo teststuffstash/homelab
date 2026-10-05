@@ -12240,3 +12240,175 @@ agent/error|blocked I fixed by hand this week", "goals stalled, issues took 10+ 
   wholesale, the report contract stays), NO attribution rubric and NO enumerated signal list ("strong
   model", "lists go stale"); fork (3) = board intake or INTO a covering platform Goal. #2172 rewritten
   (ADR block + §B2 "Stack series", point 2 amended), auto-merge armed. Build = FU-058's next.
+
+## 2026-10-04 night — S9 step 7: class 1/2 Renovate proposers ON, the watched first wave (second jail → seat)
+
+Operator: "S9 stint helm chart pins — 30 of them?" in a SECOND jail, then "you can take over as the
+primary seat. Work unattended — hourly limit 6 temporarily, merge the PR, document problems when
+renovate updates dependencies — watch alerts and each rollout. Document any gaps in the whole flow —
+what goes wrong, what would catch it, what should revert. End state of S9: I am not involved in
+updates or reverts as much as possible — mechanical revert or a responder."
+- **30 = 14 third-party charts (class 1) + 16 third-party images (class 2)**, the register's counts;
+  the 3 first-party `ghcr.io/teststuffstash/**` refs (agent-coordinator ×2, arc-runner) + the
+  openrouter-operator OCI chart are class 3 and excluded (operator: "those have their own flow").
+  #2047 (the ordering gate) had merged 08:51Z.
+- **PR#2216** (from the second-jail clone, un-armed until the takeover): `argocd` manager over
+  `argocd/platform/*.yaml`, `kubernetes` over `argocd/resources/**` (agents/coordinator stays out —
+  `/agents/` is codeowner-gated; no third-party ref there anyway), first-party docker-datasource
+  disable, `arc` group (3 Applications, one chart version), argocd+kubernetes patch/minor →
+  `deps-review`, `prHourlyLimit` 3 → **6 for the watched wave (operator), back to 3 after**;
+  prConcurrentLimit left 10 (a lower ceiling is eaten by human-parked PRs). Verified before merge:
+  `renovate-config-validator --strict` + a LOCAL `renovate --platform=local --dry-run=extract`
+  (Renovate 41.173.1 — 44.x needs Node 24, the jail has 22): exactly the 14 charts (helm + docker
+  datasources, multi-source kps + the gateway-api git-tags ref) and 16 images extracted.
+- **Seat gotchas, this PR:** (1) `pin-only-lint` refused the PR for a COMMENT edit on the guarded
+  `argocd/platform/arc-runners.yaml` (un-owned → pin lines only via PR) — dropped from the PR, lands
+  direct as a one-liner; the two sibling files are not guarded. (2) The lint diffs committed HEAD, not
+  the worktree — a local run before the commit "failed" and the seat's `| grep | tail` masked the
+  exit (the standing rule, re-sighted): run gates unfiltered.
+- **Per-dependency health read (operator: "how many have a health indicator?")**: all 30 under the
+  generic rollout belt (kps `KubePodCrashLooping`/`KubeContainerWaiting`/`KubeDeploymentRolloutStuck`
+  /`KubeDaemonSetRolloutStuck` + job-health `CronJobNotSucceeding`, triage dig/now) + ArgoCD Degraded
+  → `/deploy-degraded`; a FUNCTIONAL indicator on 15 (argo-workflows, cnpg, barman/pg-backup,
+  crossplane, ESO, ARC×3, kps-grafana; alpine/fstrim, registry, python, pushgateway,
+  cloudflare_exporter, smartctl); partial on 4 (argo-events, gateway-api, cloudflared, loki);
+  NONE beyond the belt on 11 (cert-manager, forgejo, infisical, metrics-server, busybox, alloy,
+  nginx, nginx-unprivileged, otel-collector, kube-rbac-proxy, blackbox-exporter itself — no
+  `absent(probe_success)`). Read from the 166 rules by expression match; lives only here so far.
+- **Baseline before the wave (19:56Z):** 13 firing — AgentAttentionStanding, AgentDispatchCronWoken,
+  CodeownerParkWaiting, CronJobNotSucceeding, HomeAssistantPowerSensorStale, HomeAssistantSensorStale,
+  InfoInhibitor, LonghornDiskBelowSchedulingFloor, MgmtBeltCheckFailing, MgmtOpnsenseDrillFailed,
+  PveGuestSwapped, PveHostSwapUsed, Watchdog; `sum(up)` 187.
+- **Takeover 20:05Z (operator: "work unattended — hourly limit 6 temporarily, merge the PR, document problems
+  as renovate updates, watch alerts + each rollout; S9 end state = operator out of updates/reverts").**
+  #2216 rebuilt on master after #2200 merged (generated register conflicted; one squashed commit, 175f94b2).
+- **#2200 (argo-workflows chart 1.0.20 → 1.0.24, hand-proposed, rebased + armed by the seat) MERGED
+  20:13:49Z** → ArgoCD sync Succeeded 20:14:38Z, controller + server on v4.0.8 by 20:16Z, baseline
+  compare clean (13 nodes, 188 targets, no new alert). The first class-1 landing of the wave — NOT a
+  Renovate proof (hand-proposed); upstream chart is at **2.0.11**, so Renovate will open a patch AND an
+  un-armed major for it. Hand vs machine: the hand PR sat DIRTY+un-armed 19 h; nobody owned it.
+- **Detection-first finds while probing "what would catch a bad chart merge" (→ §Gap register in
+  dependency-upgrades.md, G1–G6):** (G1) ArgoCD's controller metrics NEVER scraped in 109 days —
+  `registry` Degraded since 04:00Z today (a failed registry-garbage-collect Job; health aggregates
+  over children) and nothing said so; (G2) **FU-044's first hop was DEAD since 2026-07-27** —
+  subscription recipient `webhook:agent-loop` → `notification service 'webhook' is not supported`;
+  the notifications controller's counter: 150 failed / 0 succeeded deliveries, 7240 trigger
+  evaluations. "Never fired by a real Degraded app" was this hop, not the predicate. **PR#2217** (one
+  line in tofu/argocd.tf: `recipients = ["agent-loop"]`; a helm_release apply → helm-evidence run
+  after merge). **PR#2218** (argocd/resources/argocd-metrics/: PodMonitors on both controllers,
+  `ArgoCDAppDegraded` 15m / `ArgoCDAppSyncFailed` 10m / `ArgoCDNotificationDeliveryFailing` /
+  `ArgoCDMetricsAbsent`, promtool fixture drift-pinned; docs: §5 row, gap register, register detector
+  cells classes 1–3 → ok, iac-lane dead-hop paragraph). (G3) no render gate for third-party charts;
+  (G4) five autosync apps chronically OutOfSync (agent-fixer-{circles,openrouter-operator,oracle-fleet,
+  sleep-tracking}, logging) — OutOfSync alert deferred; (G5) 11 belt-only deps; (G6) 3 PRs/chart.
+- **20:20Z checkpoint.** #2217's first sentinel plan ERRORED (`Error locating chart`, helm_release.argocd)
+  while master planned clean on the box a minute later (`20261004T201836Z-681b52ae`, no changes) and
+  argo-cd 9.5.21 is in the index → transient index fetch; re-pushed for a re-plan. Sentinel-headline
+  gotcha: its "plan ERRORED" block lists deprecation-WARNING positions (argocd_lb, forgejo_pg) beside
+  the one real error — reads as three failures. **G7 (the responder leg):** none of today's `triage: dig`
+  alerts (CronJobNotSucceeding since 10-02, LonghornDiskBelowSchedulingFloor, AgentDispatchCronWoken)
+  has a responder issue or workflow in 24 h — the responder is REPLACED-NOT-UNPAUSED (ADR-148/FU-249),
+  so "mechanical revert OR responder" has no second leg live for the wave: a chart/image bump that
+  crashloops fires KubePodCrashLooping(dig) to nobody. **Registry fault (pre-existing, not S9):**
+  registry-garbage-collect FAILS nightly since 10-02 — DeadlineExceeded (activeDeadlineSeconds 3600), 3
+  Failed Jobs, lastSuccessful 10-01 03:00Z → ArgoCD `registry` Degraded (the failed Job child) +
+  CronJobNotSucceeding; registry image unchanged (3.0.0) — GC outgrew its hour, or the dry-run/real
+  pass hangs. Needs its own dig; left for the responder/operator (noted in meta-state).
+- **20:28Z #2217 MERGED (lens APPROVED) → 20:34Z attended apply** `devbox run helm-evidence -- run
+  20261004T203336Z-972cff9d` (window seat-1791146050-3843; plan 0/1/0, `helm_release.argocd` modified in
+  27 s, baseline stamped 972cff9d). **20:35:29Z — the FU-044 chain RANG for the first time since it was
+  wired (2026-07-27):** registry's `on-health-degraded` delivered (`recipients: [agent-loop]`), the
+  agent-loop EventSource published it, `deploy-revert-hzqw7` ran — on a real Degraded app, no fixture.
+  Its verdict is the record below. #2216 drew CHANGES_REQUESTED (reviewer, correct): PIN_LINE accepted
+  only the CalVer-githash shape and refused trailing comments → the first `arc` bump would have been
+  permanently red on arc-runners.yaml. Widened to `v?M.m.p` + optional `# comment` (e3f637c4), 3
+  self-test cases (semver bump ok, non-semver refused, comment-only edit ok — line-shape rule, stated).
+- **20:50Z helm-evidence run complete** (`~/.claude/helm-evidence/20261004T203407Z-argocd-notifications-recipient`:
+  before/after per-release snapshots identical — argocd {Degraded/Synced 1, Healthy/OutOfSync 5,
+  Healthy/Synced 68}, longhorn robustness unchanged; 187 targets, 13 nodes, cilium 13/13). The close
+  check found two NEW firing names and LEFT THE WINDOW OPEN: `InfoInhibitor` (stock, severity none,
+  flaps with any info alert) and **`DeepDigStale`** (the daily 03:30Z grouped deep dig has not completed
+  in >2 days; `for: 6h` crossed inside the window by coincidence — a notifications-cm change cannot
+  cause it). Both unrelated to the apply → window FORCE-closed by the seat, said here. DeepDigStale is
+  G7's own evidence: the dig lane that would read `dig` alerts is itself stale, and its alert is
+  `triage: none`.
+- **20:57Z #2218 MERGED (lens APPROVED after one round: G2's status said open after #2217 had merged —
+  fixed, plus G4 detail and G7–G10 added).** ArgoCD synced it by 21:00Z: both PodMonitors + the rule
+  live, **75 `argocd_app_info` series in Prometheus, `ArgoCDAppDegraded{name="registry"}` PENDING** —
+  the first scrape saw the Degraded app the UI had shown alone for 17 h; fires at the 15 m mark. #2216
+  drew a SECOND round (ADR-142 gate-change lens, correct again): the SemVer widening also admitted a
+  CalVer pin with its -g<sha> dropped and a comment on the CalVer shape → branches made disjoint (1–3
+  leading digits vs the 4-digit year), comment scoped to SemVer, 3 more self-test cases (37/37). Then
+  #2216 went DIRTY a THIRD time (G8: the generated register conflicts with every concurrent pin PR —
+  #2200, #2218, now its own rebase). Seat gotcha, owned: the conflict-file loop was `for f in $U` in
+  zsh (the known no-split, memory jail-ops-gotchas) → checkout silently failed and a head WITH conflict
+  markers was pushed (1e6bf2fe) — caught by `dependency-coverage --check` red in the same chain,
+  repaired and re-pushed within 4 min (9d36a431). Lesson restated: never pipe-filter a gate, and
+  never loop over an unsplit zsh variable in a chain that pushes.
+- **21:17:30Z #2216 MERGED (0394e6a7) — class 1/2 proposers ON, `prHourlyLimit` 6.** Dry run dispatched
+  21:17:55Z (`renovate.yaml` run 37235526289, dryRun=true) to read the wave before the 00:00Z scheduled
+  run opens it (the 20:44Z scheduled run ran on the OLD config). **G1 LIVE PROOF: `ArgoCDAppDegraded
+  {name="registry"}` FIRING by 21:18Z** — 15 m after the first scrape, on the app that sat Degraded
+  unseen since 04:00Z; `triage: dig` → reaches nobody today (G7). Decision (2) of the 2026-10-04 pickup
+  (updater skip + `rebaseWhen` for Renovate branches beyond Actions) deliberately NOT taken yet:
+  the first wave is the measurement — count the updater's master-merges per Renovate PR, then rule.
+- **21:21Z dry run read (run 37235526289): homelab would commit 30 branches** — charts: kps 86.1.x
+  (patch) / 86.x (minor) / 91.x (MAJOR), argo-workflows 1.x + 2.x (MAJOR), crossplane 2.3.x + 2.x,
+  argo-events 2.4.x, cloudnative-pg 0.x, external-secrets 2.x, infisical-standalone 1.x, metrics-server
+  3.x, forgejo 17.1.x, `arc` (the group); images: alpine 3.x, busybox 1.x, cloudflared 2026.x, alloy
+  1.x, loki 3.4.x + 3.x, nginx 1.x, nginx-unprivileged 1.x, otel 0.x, python 3.x + python-3.13-slim
+  (digest), kube-rbac-proxy 0.x, blackbox 0.x, registry 3.x, pushgateway 1.11.x; plus the standing
+  mermaid-12.x (#2100). Not proposed: cert-manager, plugin-barman-cloud, gateway-api, smartctl,
+  cloudflare_exporter (current, or inside the 7-day cooldown). Dry run shows no PR-limit lines (it
+  commits branches, never opens PRs) — the real run is where `prHourlyLimit: 6` bites. **21:24Z real
+  run dispatched** rather than waiting for 00:00Z (operator: speed this up).
+- **21:27–21:29Z WAVE 1 OPENED by the real run (37235990303): exactly 6 PRs — `prHourlyLimit: 6`
+  held.** Order Renovate chose: python-3.13-slim (digest → `automerge` lane), then five `deps-review`:
+  #2221 forgejo chart 17.1.1→17.1.7 (OCI, titled "Docker tag" — the docker datasource), #2222 loki
+  3.4.2→3.4.6, #2223 argo-events 2.4.23→2.4.27, #2224 crossplane 2.3.2→2.3.6, #2225 kps 86.1.0→86.1.1.
+  Labels correct on all (no `automerge` leak onto a chart PR). Watching the five through review →
+  merge → sync → alert delta (baseline re-taken at 21:31Z).
+- **21:32:25Z #2220 MERGED — the FIRST Renovate-proposed class-2 merge (python:3.13-slim digest →
+  `automerge` lane: reflex approval + CI, no human, ~5 min open→merged).** §Last proven's "Helm charts /
+  in-cluster images" row moves from ❌ to this (docs land with the wave report). Baseline re-taken
+  21:33Z: 16 names (new vs 19:56Z: `ArgoCDAppDegraded` — ours, G1; `DeepDigStale` — the never-run lane;
+  `PveNumaNodeMemoryLow` — nx-02 NUMA, the FU-289 class, unrelated), 190 targets.
+- **21:34–21:40Z two of the five chart PRs are CI-RED, both on SIBLING ARTIFACTS a chart pin drags along
+  (the wave's first real gaps):** (G11) **#2224 crossplane 2.3.2→2.3.6** — `publicroute-tf-validate`
+  requires `crossplane.io/engine-image-digest.<chart version>` beside the pin (render by digest,
+  #1779); a hand `crane digest` step on every bump → no path to green for a Renovate PR. Fix = a regex
+  customManager moving the annotation (version in KEY, digest in VALUE; Docker Hub v2.3.6 =
+  sha256:3213f5…) + `groupName: crossplane` → one PR, deps-review only (custom.regex automerge rule
+  excludes it): **PR#2226**, armed. (G12) **#2225 kps 86.1.0→86.1.1** — `prometheus-rules-lint`
+  reds until `scripts/upstream-alerts-refresh.sh` re-renders the upstream alert-name list for the
+  pinned chart and any NEW name gets a triage entry (needs network, so the lint never runs it). This
+  one has a judgment inside (now|dig|none per new name) — the designed owner is the deps-review
+  worker-adapts leg (FU-046, never yet drawn). **G12b: a CI-RED armed Renovate PR has NO actor** —
+  the reflex reviews only green heads, the orphan backstop treats `deps-review` as owned, the
+  coordinator's "investigate while red" covers un-armed majors only. Seat hand-fixes #2225 tonight
+  (refresh + classify, pushed to the Renovate branch — Renovate then leaves the branch alone) and
+  records the hand step as the gap.
+- **WAVE 1 RESULT (by 22:21Z): 6 of 6 Renovate PRs merged, no human in any merge.** #2220 python
+  digest (automerge, 21:32), #2223 argo-events 2.4.27 (21:46), #2222 loki 3.4.6 (21:54), #2221 forgejo
+  chart 17.1.7 (22:02), #2225 kps 86.1.1 (22:19 — after the seat's hand refresh of the upstream alert
+  list, G12), plus #2226 (the crossplane version-set fix, 22:12). #2224 (crossplane) stays red until
+  Renovate's next run supersedes it with the grouped branch. Rollouts: forgejo 17.1.7 + argo-events
+  2.4.27 Healthy/Synced; loki StatefulSet on 3.4.6 (app `logging` still OutOfSync — G4, pre-existing);
+  kps 86.1.1 sync Running/Progressing at 22:21Z (the big one — watched below). Baseline compare: no
+  new alert names; scrape targets 190→189 during the kps roll. The five `deps-review` PRs each took
+  the reflex ~8–15 min open→merged with the reviewer approving on the first read — ZERO
+  CHANGES_REQUESTED on a Renovate bump so far (the FU-046 worker-adapts leg still unproven; G12b).
+- **22:24Z WAVE 2 OPENED by the second dispatched run (37239701308): 6 PRs again (limit held) — #2228
+  `renovate/patch-crossplane` (the group — but the ANNOTATION DID NOT MOVE: "Could not determine new
+  digest for update (docker package crossplane/crossplane)": with extractVersionTemplate stripping the
+  v, Renovate looked the digest up for tag `2.3.6`, which does not exist, dropped the regex update and
+  shipped the chart alone → red on publicroute-tf-validate, as designed; #2224 CLOSED/superseded ✓),
+  #2229 pushgateway 1.11.3, #2230 alpine 3.24, #2231 **arc 0.15.0 — three files, one version (G9
+  proof pending CI)**, #2232 cloudflared 2026.9.3, #2233 busybox 1.38.0. G11 second cut: the
+  annotation KEY carries the image TAG (`engine-image-digest.v2.3.2`), the gate reads `xp_version`
+  (it already computed it), the regex captures `v<semver>`, no extractVersion → PR opened + armed
+  (**PR#2234**, armed; `scripts/` touched → ADR-142 lens). Proof = the NEXT run's grouped PR carries both lines.
+  **#2227** (docs: §Last proven rows, G12/G12b, register regen) opened + armed 22:30Z.
+- **22:40Z WIND-DOWN (ctx ~520k).** Open + armed, merging on their own: #2227 (docs/proofs), #2234 (G11
+  second cut), wave 2's #2229–#2233 (#2228 red by design until #2234 lands and the next run re-groups).
+  Direct-lane bookkeeping pushed once here. Hand-over = meta-state's 2026-10-04 night pickup.
