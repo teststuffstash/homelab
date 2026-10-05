@@ -2703,3 +2703,27 @@ three wins were all standing alerts the seat had seen for days, each needing 20�
 together in the next step; the dig needs in-cluster Loki reads, which triggers `loki-tenancy.md`
 §Tightening; stack responders inherit the label. Evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
 §2026-10-03. Tracked: FU-249.
+
+### ADR-149 — argo-workflows chart majors merge on their own; the revert actor leaves Argo's cone (2026-10-05)
+**Status:** Accepted (operator, 2026-10-05, after the seat's read of PR#2254). **Decision:** (1) argo-workflows
+chart majors are ARMED the ADR-141 way — `major` kept, no `automerge` label, the lens's APPROVED completes
+the merge — once the chain below has passed a drill; (2) the post-deploy verdict is `ArgoControllerSilent`
+(agent-coordinator completes no workflow for 30 m, fails closed, `triage: now`, #2269); (3) the revert actor
+is **`chart-revert`**, an in-cluster webhook receiver (a Deployment in `agent-coordinator`, fed by an
+Alertmanager route) — NOT the `deploy-revert` Sensor, which runs ON Argo Workflows and dies with the
+controller it would revert (the dependency-cone rule, `dependency-upgrades.md` §4); (4) pin-only = only
+`targetRevision:` and comment lines of `argocd/platform/argo-workflows.yaml` changed; the revert PR's
+`reverted-charts: <chart>@<version>` line is `pin-only-lint` check (h)'s 30-day refusal memory; (5) the
+lens reads **appVersion from the chart index** — chart semver is not app semver: chart 1.0.24→1.1.1 (#2238,
+`deps-review`, no lens) was the app major 4.0→4.1 and the trigger of the FU-304 apiserver kill, while #2254
+(two lens rounds) moved the app 4.1.0→4.1.4. **Considered:** the management box as actor (rejected — no
+PR-writing credential; an App widening is operator-only); a GitHub Actions workflow on ARC (rejected —
+`schedule` lag 1–5 h without a webhook trigger); keeping the human merge (rejected — operator minutes:
+#2254 sat 9 h for a comment rewrite); extending the Argo Sensor (rejected — inside its own cone). **Why:**
+the change itself is a 2-s sync plus a CRD hook Job; the risk is a controller that runs but processes
+nothing, which only a heartbeat sees and only an actor outside Argo can answer. **Consequences:** with
+`crds.keep: true` a chart revert does not downgrade CRDs — safe while the app delta stays inside a minor,
+so an app-major is the lens's CHANGES_REQUESTED, never an auto-merge; a CRD-carrying chart sync is a
+control-plane memory event (FU-304, GOMEMLIMIT); the receiver is chart-agnostic but argo-workflows is its
+only consumer until a second chart earns the same evidence. Design: [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md)
+§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Next steps 9.

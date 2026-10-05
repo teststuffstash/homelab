@@ -59,6 +59,15 @@
 #       (its `reverted-providers: <name>@<version>` body line, agents/coordinator/deploy-revert-argo.yaml
 #       `tofu-provider-revert`) is refused — name = the source's last segment. Same loop as (e)/(f):
 #       Renovate re-proposes a merged-then-reverted version. Fail-closed on the read.
+#   (h) 2026-10-05 (FU-304's class row — the #2254 read, ADR-141's pattern on the argocd chart
+#       lane): the chart-pin memory. An `argocd/platform/*.yaml` diff that ADDS a `targetRevision:`
+#       line is keyed `<chart>@<version>` (chart = the head file's `spec.source.chart`; a file with
+#       no `chart:` — a `path:` source — has no key; a trailing `# comment` is not part of the
+#       version) and refused when a merged `revert-chart-*` PR of the last REVERT_MEMORY_DAYS names
+#       that pair on its `reverted-charts: <chart>@<version> …` body line (the chart revert actor,
+#       driven by `ArgoControllerSilent`, records the version it reverted AWAY from). Same loop as
+#       (e)/(f)/(g): Renovate's `argocd` manager re-proposes a merged-then-reverted chart version.
+#       Runs only when such a line is added; fail-closed on the read.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -130,7 +139,23 @@ for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)\.terraform\.lock\
   added_providers="$added_providers $(comm -23 <(printf '%s\n' "$new_pairs") <(printf '%s\n' "$old_pairs") | tr '\n' ' ')"
 done
 added_providers="$(printf '%s\n' $added_providers | grep . | sort -u || true)"
-if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ]; then
+# (h): the ADDED chart pins under argocd/platform/, one "<file> <chart>@<version>" per line — the
+# version from the diff's `+ targetRevision:` lines (quotes and an optional trailing `# comment`
+# dropped), the chart from the head file's first `chart:` line (one chart per Application here; the
+# `sources:` form's other source is a `master` values repo). A file without a `chart:` line (a
+# `path:` source) contributes nothing, so a raw-manifest Application never reads the memory.
+TARGET_REVISION_ADDED='^\+[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?([[:space:]]+#.*)?[[:space:]]*$'
+added_charts=""
+for pf in $(git diff --name-only "$BASE" HEAD | grep -E '^argocd/platform/[^/]+\.ya?ml$' || true); do
+  chart="$(git show "HEAD:$pf" 2>/dev/null | awk '/^[[:space:]]*chart:[[:space:]]*[^[:space:]]/ { print $2; exit }' | tr -d "\"'" || true)"
+  [ -n "$chart" ] || continue
+  while read -r ver; do
+    [ -n "$ver" ] || continue
+    added_charts="${added_charts}${pf} ${chart}@${ver}"$'\n'
+  done <<< "$(git diff -U0 "$BASE" HEAD -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
+done
+added_charts="$(printf '%s' "$added_charts" | grep . | sort -u || true)"
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
@@ -179,6 +204,25 @@ if [ -n "$added_providers" ]; then
       rc=1
     fi
   done <<< "$added_providers"
+fi
+# (h) the reverted-chart memory — read once, fail-closed like (e)/(f)/(g).
+if [ -n "$added_charts" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_charts="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-chart-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-charts:\")) | ltrimstr(\"reverted-charts:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-chart-* PRs of ${slug:-<no repo slug>} (the reverted-chart memory, check (h)): ${reverted_charts:-}; refusing to report success." >&2
+    rc=2; reverted_charts=""
+  fi
+  while read -r pf cv; do
+    [ -n "$cv" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_charts | grep -qxF "$cv"; then
+      echo "pin-only-lint: FAIL — $pf: chart $cv is a REVERTED chart version — the chart revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-chart-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1
+    fi
+  done <<< "$added_charts"
 fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
@@ -327,4 +371,4 @@ if [ "$rc" != 0 ]; then
 EOF
   exit "$rc"
 fi
-echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image not in the reverted memory)."
+echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image, provider, chart version not in the reverted memory)."
