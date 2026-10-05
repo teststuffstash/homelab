@@ -5311,12 +5311,81 @@ EOF_GTHEMES_OPEN
             ci_red_should_arbitrate=0 # Can't verify sha, fail-safe to not escalate
           fi
         fi
+        # <<<REPLAY:ci-red-stale-sha<<<
+        # >>>REPLAY:ci-red-arbitrate-belt>>>
+        # FU-115 dispatch-gate belt (homelab#1627): the rounds-exhausted escalation fires on
+        # (rounds >= cap AND red now) without asking whether the red is the PR's round to spend.
+        # Two questions the state already answers, both FAIL-OPEN (an unreadable probe proceeds
+        # to escalate — the belt can only ADD a skip, never suppress a real red on a bad read,
+        # rule #6):
+        #   (1) FOOTPRINT — is the failing job/step inside the PR's declared `Touches:` footprint?
+        #       A red inherited from master in a file the PR does not touch is not the PR's round.
+        #   (2) GREEN+APPROVED HEAD — does the red postdate a head that was green and approved?
+        #       A converged, approved PR is not re-escalated by a later, unrelated red.
+        # The footprint read is the ONE parser (`ib_get Touches`, ADR-122 (3)) and the ONE
+        # intersection predicate (`fp_conflict`, agents/footprint.sh) — no second regex here.
+        ci_red_belt_skip=0
+        ci_red_belt_reason=""
+        if [ "$ci_red_should_arbitrate" = 1 ]; then
+          # (2) green + approved head: the head was approved as-is and the red came after it.
+          belt_pr="$(gh pr view "$u" --repo "$slug" \
+              --json reviewDecision,reviews,commits,statusCheckRollup 2>/dev/null)" || belt_pr=''
+          if [ -n "$belt_pr" ] && jq -e . >/dev/null 2>&1 <<<"$belt_pr"; then
+            belt_appr="$(printf '%s' "$belt_pr" | jq -r '
+              select((.reviewDecision // "") == "APPROVED")
+              | ([.reviews[]? | select((.state // "") == "APPROVED") | (.submittedAt // "")] | max // "") as $a
+              | ([.commits[]? | select(((.messageHeadline // "") | startswith("Merge ")) | not) | (.committedDate // "")] | max // "") as $p
+              | select($a != "" and $p != "" and $a > $p) | $a')" || belt_appr=""
+            if [ -n "$belt_appr" ]; then
+              belt_red_ts="$(printf '%s' "$belt_pr" | jq -r '[.statusCheckRollup[]? | select((.conclusion // "") == "FAILURE" or (.conclusion // "") == "TIMED_OUT") | (.completedAt // "")] | max // ""')" || belt_red_ts=""
+              if [ -n "$belt_red_ts" ] && [ "$belt_red_ts" \> "$belt_appr" ]; then
+                ci_red_belt_skip=1
+                ci_red_belt_reason="red ${belt_red_ts} postdates a green+approved head (approved ${belt_appr})"
+              fi
+            fi
+          fi
+          # (1) footprint: the failing check's annotated paths vs the issue's declared Touches.
+          if [ "$ci_red_belt_skip" = 0 ] && [ -n "$red_issue" ]; then
+            belt_body="$(gh issue view "$red_issue" --repo "$slug" --json body --jq .body 2>/dev/null)" || belt_body=''
+            if [ -n "$belt_body" ]; then
+              belt_touches="$(ib_get Touches "${slug}#${red_issue}" "$belt_body")" || belt_touches=""
+              if [ -n "$belt_touches" ] && [ "$belt_touches" != "*" ]; then
+                belt_ids="$(gh api repos/"${slug}"/commits/"${pr_head_oid}"/check-runs \
+                    --jq '[.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out") | .id] | .[]' 2>/dev/null)" || belt_ids=''
+                belt_paths=""
+                for _bid in $belt_ids; do
+                  _bp="$(gh api repos/"${slug}"/check-runs/"${_bid}"/annotations \
+                      --jq '[.[]? | (.path // "")] | .[]' 2>/dev/null)" || _bp=""
+                  [ -n "$_bp" ] && belt_paths="${belt_paths}${_bp}
+"
+                done
+                if [ -n "$belt_paths" ]; then
+                  belt_in=0
+                  while IFS= read -r _bp; do
+                    [ -n "$_bp" ] || continue
+                    if fp_conflict "$belt_touches" "$_bp"; then belt_in=1; break; fi
+                  done <<EOF_BELT
+$belt_paths
+EOF_BELT
+                  if [ "$belt_in" = 0 ]; then
+                    ci_red_belt_skip=1
+                    ci_red_belt_reason="failing paths outside the declared Touches footprint (${belt_touches})"
+                  fi
+                fi
+              fi
+            fi
+          fi
+        fi
+        # <<<REPLAY:ci-red-arbitrate-belt<<<
+        # >>>REPLAY:ci-red-arbitrate>>>
         if [ -n "$noop_round" ]; then
-          if [ "$ci_red_should_arbitrate" = 1 ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
             orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — no completed red run on current head ${head8} (FU-1529 stale-sha): PR #${u}\n"
           fi
@@ -5387,16 +5456,18 @@ EOF_GTHEMES_OPEN
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
 # Apply the same sha check as the noop case (FU-1529).
-          if [ "$ci_red_should_arbitrate" = 1 ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
             orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — no completed red run on current head (FU-1529 stale-sha): PR #${u}\n"
           fi
         fi
-        # <<<REPLAY:ci-red-stale-sha<<<
+        # <<<REPLAY:ci-red-arbitrate<<<
       done
     else
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
