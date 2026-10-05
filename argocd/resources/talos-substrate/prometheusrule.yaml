@@ -50,3 +50,83 @@ spec:
               `mgmt_node_drift` series) and whichever tracker item owns the rollout. Upgrade
               recipe: docs/provisioning.md §"Upgrading a node's Talos" (control planes via
               `devbox run cp-upgrade`).
+    # ── control-plane-health: can this chassis hold a control-plane member? ──────────────────────
+    #
+    # THE 2026-10-05 04:28Z CLASS. wk-metal-02 (ThinkPad X250, 7.45 GiB, a control plane under
+    # ADR-133's one-CP-per-chassis) ran its kube-apiserver at a 3.5–3.8 GiB working set for the whole
+    # night (cp-01 3.9, cp-02 3.4 — the apiserver's size is the object set, 7.3k objects over 289
+    # resource types / 234 CRDs, the #1687 class that grew cp-01 to 12 GiB). MemAvailable sat at
+    # 25–29 % of the node for 17+ h, then Talos's userspace OOMController (docs/spikes/talos-psi-
+    # thresholds.md, FU-155) SIGKILLed the apiserver cgroup; controller-manager and scheduler fell
+    # with it, the node was NotReady 04:24:30–04:29:00Z and the CP VIP left it. What fired:
+    # PodSigkilled (triage dig — unread while the responder is paused, dependency-upgrades.md G7).
+    # What did not: every node-level belt — KubeNodeNotReady/KubeletDown/KubeAPIDown are `for: 15m`
+    # and the member was back in 5. Two belts, both replayed on the event:
+    #
+    #   ControlPlaneNodeMemoryLow     the standing condition BEFORE the kill. Available memory on a
+    #                                 control-plane node under 35 % for 30 m. Replay 10-04 12:00Z →
+    #                                 10-05 04:00Z: wk-metal-02 25–29 % every hour (fires), cp-01
+    #                                 58–63 %, cp-02 68–72 % (silent). 35 % is headroom, not the
+    #                                 OOMController's trigger (that is PSI, which showed ~0 until the
+    #                                 kill): the apiserver's set only grows, and a member must also
+    #                                 absorb the restart burst of the other two components.
+    #   ControlPlaneComponentRestarted the event itself — a kube-system static pod of the control
+    #                                 plane (apiserver / controller-manager / scheduler) restarted in
+    #                                 the last 30 m. Replay at 04:35Z: all three wk-metal-02 pods
+    #                                 (apiserver 1, controller-manager 2, scheduler 1); silent at
+    #                                 04:20Z and 05:05Z. `now`, not `dig`: a control-plane member
+    #                                 going dark is the one restart class where the second one within
+    #                                 the hour decides etcd quorum, and the restart counter resets on
+    #                                 a config re-render (new mirror pod), so a planned Talos apply
+    #                                 does not trip it — only a crash or a kill does.
+    #
+    # Node identity: node-exporter speaks `instance=<ip>:9100`, kube-state-metrics speaks `node`;
+    # kube_node_info carries both (internal_ip), so the join rewrites its instance to node-exporter's
+    # form and the role filter is kube_node_role. The join fails CLOSED (no kube_node_info → no
+    # alert) — acceptable here because a role filter is what keeps this off the 8 GB worker laptops,
+    # and kube-state-metrics' own absence has its own stock belts (KubeStateMetrics*, TargetDown).
+    #
+    # It lives in this CR because the fact it watches is a SUBSTRATE sizing fact — which chassis
+    # can be a member — and this directory already carries the fixture + drift-pin harness that the
+    # values-embedded node-health group (kube-prometheus-stack.yaml) does not. The sizing decision
+    # the first alert drives is FU-304.
+    - name: control-plane-health
+      rules:
+        - alert: ControlPlaneNodeMemoryLow
+          expr: |
+            (
+              node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} < 0.35
+            )
+              * on (instance) group_left (node)
+                label_replace(kube_node_info{job="kube-state-metrics"}, "instance", "$1:9100", "internal_ip", "(.*)")
+              and on (node) kube_node_role{job="kube-state-metrics", role="control-plane"}
+          for: 30m
+          # triage dig: a standing headroom condition — the fix is a sizing/role decision by PR
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "control plane {{ $labels.node }} has {{ $value | humanizePercentage }} of its memory available (30 m under 35 %)"
+            description: >-
+              A control-plane node has had under 35 % of its memory available for 30 minutes. On this
+              fleet that is the kube-apiserver's working set (the object set: 3.5–4 GiB on every
+              member, growing with CRDs and objects) against the chassis — on 2026-10-05 wk-metal-02
+              (7.45 GiB) sat at 27 % for 17 h and then Talos's OOMController killed the apiserver.
+              Read `container_memory_working_set_bytes{container="kube-apiserver",node="{{ $labels.node }}"}`
+              against `node_memory_MemTotal_bytes`; the levers are the apiserver's size (object set,
+              `cluster.apiServer.env` GOMEMLIMIT / `resources`), the member's RAM, or the member role
+              (ADR-133). Tracked: FU-304.
+        - alert: ControlPlaneComponentRestarted
+          expr: |
+            increase(kube_pod_container_status_restarts_total{job="kube-state-metrics", namespace="kube-system", container=~"kube-apiserver|kube-controller-manager|kube-scheduler"}[30m]) > 0
+          for: 0m
+          # triage now: a member went dark; a second one inside the hour is an etcd-quorum question
+          labels: { severity: warning, triage: now }
+          annotations:
+            summary: "{{ $labels.pod }} restarted {{ $value | printf \"%.0f\" }}× in 30 m — a control-plane member went dark"
+            description: >-
+              A control-plane static pod in kube-system restarted. A crash or a kill, not a config
+              apply (a re-rendered static pod is a new mirror pod with a fresh counter). On
+              2026-10-05 this was Talos's OOMController taking the apiserver on wk-metal-02, with
+              controller-manager and scheduler following; the node was NotReady for 5 minutes —
+              under every stock node belt's `for: 15m`. Read the pod's `lastState.terminated`
+              (PodSigkilled's description separates the three exit-137 causes) and the node's
+              memory; if ControlPlaneNodeMemoryLow is standing on the same node, that is the cause.
