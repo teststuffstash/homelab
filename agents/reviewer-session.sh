@@ -505,6 +505,32 @@ NO CONTAINER RULE (ADR-127 — the epic-container line above reads none: this PR
 LENS_MAP="$(bash "$HERE/reviewer-optout.sh" --lens-map "$PROJECT" 2>/dev/null || echo "{}")"
 # <<<REPLAY:lens-posture-gate<<<
 
+# ── TOOL_GAP CHANNEL SET (homelab#1776) ─────────────────────────────────────────────────────────
+# The TOOL_GAP marker's channel set is declared ONCE — on the `TOOL_GAP_SURFACES:` line of the
+# janitor's brief (agents/coordinator/README.md §The janitor tick, sweep 6), which is the READER.
+# The emitter contract in the PROMPT below interpolates that declaration instead of restating it,
+# so the two surfaces can never disagree again (the ADR-122 (3) class one layer down: one grammar,
+# two surfaces, an emitter and a reader that never agreed which surface counts). Before this the
+# emitter said "your review body or a PR comment" while the reader read "issue comments + PR
+# bodies" — 13 real filings per ~30d landed in review bodies and were never read.
+# >>>REPLAY:tool-gap-surfaces>>>
+tool_gap_surfaces() {
+  # Args: <janitor brief path>  → stdout: the declared surfaces, one per line
+  # Returns: 0 when the brief declares the set; 1 when it does not (the caller fails LOUD)
+  local brief="$1" line
+  line="$(sed -n 's/^[[:space:]]*TOOL_GAP_SURFACES:[[:space:]]*//p' "$brief" 2>/dev/null | head -1)"
+  [ -n "$line" ] || return 1
+  printf '%s\n' "$line" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$'
+}
+# <<<REPLAY:tool-gap-surfaces<<<
+# A brief that lost the line is a broken contract, not an empty surface set: fail LOUD at dispatch
+# rather than ship a reviewer whose declared channel is nothing.
+TOOL_GAP_BRIEF="${HERE}/coordinator/README.md"
+TOOL_GAP_SURFACES="$(tool_gap_surfaces "$TOOL_GAP_BRIEF" | tr '\n' ',' | sed 's/,$//; s/,/, /g')" || {
+  echo "FATAL: ${TOOL_GAP_BRIEF} declares no TOOL_GAP_SURFACES line — the emitter/reader channel contract is broken (homelab#1776)" >&2
+  exit 1
+}
+
 # ── CAPABILITY CARD (homelab#1055) ──────────────────────────────────────────
 # Generate the reviewer's capability card from the mint sources, prepended to
 # the system prompt so the LLM knows its own identity, permissions, and failure
@@ -712,7 +738,7 @@ THE REQUIRED CHECKS ARE ALREADY GREEN — NEVER ASK A HUMAN TO RE-RUN THE GATE. 
   ⚠ PRECISION: what is guaranteed is that the checks PASSED — NOT what they COVER. Most stacks make CI run  devbox run ci  (the same gate you would run locally), but a repo whose .github/workflows/ defines CI as something narrower makes "green" a weaker statement. You have the repo CHECKED OUT: if a finding of yours turns on whether CI actually exercises something, READ  .github/workflows/  and say what you found — no API call, no permission needed. For check-level detail your token also carries checks/statuses/actions:read (operator grant 2026-07-10):  gh pr checks ${PR} . The project rubric (.agents/review*.md) is what says how much the local gate is worth in THIS repo; it wins over this paragraph.
   What you must still state plainly is which of YOUR OWN judgments are unverified — "I did not trace this caller", "I could not tell whether X regresses under concurrency". Those are honest limits. "Please run the tests" is not.
 
-  TOOL GAPS (homelab#536) — when a NAMED diagnostic or tool is unavailable and its absence changed what you could verify (an egress-blocked WebFetch, a gh verb your token 403s on, a read you could not take), emit ONE line in your review body or a PR comment whose first characters are exactly "TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>", once per session per tool. Evidence, not lobbying — never a request for the grant, and never the deliberate devbox/network absence in this sandbox (that is the design above, not a gap): name one only where the absence actually changed your verdict.
+  TOOL GAPS (homelab#536) — when a NAMED diagnostic or tool is unavailable and its absence changed what you could verify (an egress-blocked WebFetch, a gh verb your token 403s on, a read you could not take), emit ONE line in any surface the janitor's inventory reads (${TOOL_GAP_SURFACES}) whose first characters are exactly "TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>", once per session per tool. Evidence, not lobbying — never a request for the grant, and never the deliberate devbox/network absence in this sandbox (that is the design above, not a gap): name one only where the absence actually changed your verdict.
 
 Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments — then apply the MERGE-FORWARD VERDICT DOCTRINE:
   The verdict question is NOT "is this perfect?" — it is "is master better off WITH this PR than without it?" Classify every finding you made:
