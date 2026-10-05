@@ -12565,3 +12565,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   UNCHANGED, 0 of 40 pods replaced, 0 restarts, BGP 13/13 with 0 session resets, Longhorn robustness unchanged —
   and Helm trimmed every history to **3 revisions** (cilium 14→3, longhorn 13→3, argocd 9→3, argocd-apps 6→3).
   Helm release Secrets 81 → 14. Evidence: `~/.claude/helm-evidence/*-max-history/`.
+- **ADR-149 — argo-workflows chart majors ARMED; the whole chain built and drilled in one evening
+  (operator ruling 18:0xZ: "webhook receiver").** (1) `ArgoControllerSilent` live 16:40Z (#2269). (2) **the
+  `chart-revert` receiver** (#2271, merged 18:35Z): a Deployment in agent-coordinator OUTSIDE Argo Workflows'
+  cone, Alertmanager route `alertname=ArgoControllerSilent` (`continue: true`, 10 s group_wait), pin-only
+  predicate on `argocd/platform/argo-workflows.yaml`, ledger = branch `revert-chart-<sha8>`, metrics
+  `chart_revert_alerts_total{outcome}` + `chart_revert_webhooks_total{result}` (G10's "report-only reports to
+  nobody" answered by a counter), credential = the chain's `coordinator-git`, no RBAC. (3) `pin-only-lint`
+  check (h) `reverted-charts:` memory (#2272, 46 self-test cases). (4) **THE DRILL** inside window
+  `seat-1791225520-6262`: #2276 (2.0.8→2.0.11, app unchanged, the seat's pin-only PR — Renovate's 7-day
+  cooldown had not reached 2.0.11) merged 18:45:52Z, synced 18:47:07Z (hook Job 18:46:17→18:46:30Z, apiserver
+  2.75→2.89 GiB on the laptop); synthetic `ArgoControllerSilent{drill=true,drill_pr=2276,triage=dig}` injected
+  18:47:08Z → webhook 18:47:18Z → **#2279 opened 18:47:34Z (15.9 s)**, `automerge`+`dependencies`,
+  `reverted-charts: argo-workflows@2.0.11`; renovate-approve reflex APPROVED, CI green, merged 18:55:33Z,
+  ArgoCD back on 2.0.8 **18:57:20Z — 10 min 12 s, no human.** (5) **`.github/renovate-global.json`
+  rule 24** (operator-direct per ADR-141): argocd manager + helm datasource + `argo-workflows` + major,
+  armed, no `automerge` label. Decision record: **ADR-149** (#2270), glossary `chart-revert`,
+  dependency-upgrades G14 + Next steps 9. Window noise, none drill-caused: the coordinator Sensor's
+  cgroup OOM at its 128Mi limit (one restart; all 8 Sensors sit at 21–36 MiB), `KernelOopsCaptured`
+  matching that cgroup-OOM stack dump as a kernel fault (a precision gap next to FU-287, unminted —
+  one sighting), `AgentWorkerEgressDropped` on `channels.nixos.org` from homelab rides (the known
+  phone-home class). Consequence accepted: Renovate's own 2.0.11 proposal (cooldown ends 10-10) sits
+  red on check (h) until 2.0.12+.
