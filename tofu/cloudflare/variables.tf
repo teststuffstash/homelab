@@ -33,7 +33,7 @@ variable "ha_service" {
 
 variable "cloudflared_image" {
   type        = string
-  description = "Pinned by digest (repo convention). cloudflared 2026.9.3 — the SAME pin as argocd/resources/publicroute/composition.yaml (a version set; move both)."
+  description = "Pinned by digest (repo convention). The SAME pin as argocd/resources/publicroute/composition.yaml — a version set, moved together by Renovate (the cloudflared regex customManager + group in .github/renovate-global.json); apply this root after a merge (docs/runbook.md §Cloudflare)."
   default     = "cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c"
 }
 
