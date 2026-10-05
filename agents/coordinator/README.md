@@ -692,7 +692,8 @@ the product:
    **review body** counts: the reviewer lane's filings land there, and reading only issue comments
    and PR bodies left 13 real filings per ~30d unread (the ADR-122 (3) class one layer down — one
    grammar, two surfaces, an emitter and a reader that never agreed which surface counts). Any
-   other restatement of the surfaces is a summary this line supersedes.
+   other restatement of the surfaces — including the launcher's janitor `RUN_CMD` summary in
+   `agents/coordinator-session.sh` — is a summary this line supersedes.
 
    TOOL_GAP_SURFACES: issue comments, PR bodies, PR review bodies
    - `talosctl` — the PodSigkilled family (#63/#65/#68/#100/#101/#153/#472) — **ruled
