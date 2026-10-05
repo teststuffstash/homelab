@@ -1239,15 +1239,15 @@ the block needs pruning, not more headings.
 
 
 - [ ] **FU-304** — **wk-metal-02 (X250, 7.45 GiB) cannot hold the apiserver: the sizing/role lever is the operator's.**
-      2026-10-05 04:28Z: Talos's OOMController (FU-155's mechanism) SIGKILLed the kube-apiserver cgroup on the
-      laptop CP — 3.5–3.8 GiB working set all night (cp-01 3.9, cp-02 3.4: the object set, 7.3k objects over 289
-      resource types / 234 CRDs, the #1687 class that grew cp-01 to 12 GiB), MemAvailable 25–29 % for 17 h before,
-      node NotReady 5 min, VIP moved; only PodSigkilled (dig) fired. Detector first (PR#2264: `ControlPlaneNodeMemoryLow`
-      + `ControlPlaneComponentRestarted`, `argocd/resources/talos-substrate/`); the fix waits on a lever: shrink the
-      apiserver (`cluster.apiServer.env` GOMEMLIMIT and/or `resources` — both Talos v1.14 fields; the set: 1.8k events,
-      551 configmaps, 368 replicasets), more RAM in the chassis, or a different laptop role (ADR-133's one-CP-per-chassis).
-      **Next:** operator picks the lever; `ControlPlaneNodeMemoryLow` standing on wk-metal-02 is the acceptance — it
-      clears when the chassis holds the member.
+      2026-10-05 04:28Z: Talos's OOMController (FU-155's mechanism) SIGKILLed the kube-apiserver cgroup on the laptop CP —
+      3.5–3.8 GiB working set all night (cp-01 3.9, cp-02 3.4: 7.3k objects / 289 resource types / 234 CRDs, the #1687
+      class), MemAvailable 25–29 % for 17 h, NotReady 5 min; only PodSigkilled (dig) fired. **Trigger:** the argo-workflows
+      chart sync 1.0.24→1.1.1 (deployedAt 04:24:25Z, the large Workflow CRDs re-applied) — 3.75→5.51 GiB in six minutes,
+      cp-01 3.3→3.95 and survived: a chart sync of that app is a control-plane memory event. Detector first (PR#2264:
+      `ControlPlaneNodeMemoryLow` + `ControlPlaneComponentRestarted`, `argocd/resources/talos-substrate/`). Levers: shrink
+      the apiserver (`cluster.apiServer.env` GOMEMLIMIT / `resources`, Talos v1.14 fields; 1.8k events, 551 configmaps),
+      more RAM, or another role for the laptop (ADR-133). **Next:** operator picks the lever; `ControlPlaneNodeMemoryLow`
+      standing on wk-metal-02 is the acceptance — it clears when the chassis holds the member.
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
       [diagnosis, counters, placement, detectors, the boot-disk move](spikes/nx-02-numa-placement.md).
       DONE 2026-09-27: detectors live (#2040/#2042); wk-04 `numa_pin` 16.0/16.0 GiB on both restarts;
