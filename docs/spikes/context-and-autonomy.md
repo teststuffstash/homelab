@@ -142,6 +142,36 @@ tables, and the corpus (D) is what a human needs in order to be that belt.
 3. **Guards revert; the loop self-heals.** Production quality is detectors + a revert path +
    responders, proven by drills — not a human read.
 
+### Interfaces are redrawn at the cut (operator, 2026-10-05)
+
+An island exposes what its consumer needs to act, not what the island holds; the move to
+islands is the moment to shrink every seam. Measured on master (the component page
+[Islands and Seams](https://claude.ai/artifact/XpxnjfA4WTg1As18eTQHUK) carries the per-seam
+table):
+
+- **Gateway.** The caller computes half the routing before it asks: it reads the stack row,
+  filters the chain by harness, fetches the issue's labels, copies the claim's deny list, sends
+  9 fields (`stack, task, role, session, key_ref, chain, deny, labels, urgency`), consumes 7,
+  then runs its own ladder — **84 self-routing sites** across six scripts (launcher 33,
+  subscription latch 12, session 10, scan 9, resolve-model 7, reviewer 6), two capacity
+  booleans polled, 12 harness env vars hand-assembled, 7 model literals. The consumer's real
+  question is "may this unit run now, with which harness, and what goes in the pod's env".
+  Proposed: `POST /sessions {stack, repo, role, task, round, tier, surface}` →
+  `{decision, retry_after_s, session, harness, env{…}, context_tokens}`; the proxy resolves the
+  model **per request** from the session identity (every LLM call already passes through it
+  with an opaque auth ref), so no caller names a model and the two limit endpoints fold into
+  the defer. Six endpoints become two plus the evidence surface.
+- **Claim.** 14 fields; the 5 model knobs (`coordinatorModel, workerModel,
+  workerModelFallbacks, routerMode, modelDeny`) are read by the Composition **0 times** — only
+  scripts read them. With a routing gateway they leave the claim; `modelDeny` stays as the one
+  legitimate routing policy, projected by the Composition into the gateway's mount so it has
+  one reader. 14 → 9 fields.
+- **Coordinator ↔ GitHub.** 15 labels (8 `agent/*` states + 7 class/verdict) and 11 body keys
+  carry five facts: admission, class, budget, one state, a Goal verdict. ADR-122 (3) already
+  rules one machine block + one parser; the island work is executing it.
+- **Observability.** `ci-cause:` / `TOOL_GAP:` markers in comments and review bodies become one
+  typed event per ride outcome (ADR-103 (2) already rules machine residue out of timelines).
+
 ## The plan (ordered; each step one session + one PR + a settle number)
 
 **P0 — Un-wedge the theme lane.** #1935: the `goal/**` ruleset has no bypass actor and strict
@@ -160,10 +190,12 @@ merged; the 24 issues closed; bucket-A scored for the two weeks after.
 **P2 — The gateway island** (ADR-139 step 3 done *inside* the monorepo). A directory holding the
 proxy code, `specs/` in the oracle shape (six endpoint pages with schema coupling; `/route` first
 — #2163 is a router row nobody read), its tests and image CI; `argocd/resources/openrouter-proxy/`
-keeps the deploy manifests and the mounted `model-classes.json`; the consumer contract (what the
-launcher and the scan send and adopt) is the only gateway text left in `docs/agents/`. A later
-`git subtree split` keeps history. Does not wait on FU-269/FU-127 — nothing leaves the repo.
-*Settles:* `model-routing.md` ≤ 12 KB; the gateway's spec pages carry evidence for every row.
+keeps the deploy manifests and the mounted `model-classes.json`; the consumer contract is the
+redrawn one (§Interfaces: `/sessions` + per-request model resolution), and it is the only
+gateway text left in `docs/agents/`. A later `git subtree split` keeps history. Does not wait
+on FU-269/FU-127 — nothing leaves the repo. *Settles:* `model-routing.md` ≤ 12 KB; zero model
+literals in `agents/*.sh`; the gateway's spec pages carry evidence for every row; the claim's
+five model knobs gone from the XRD.
 
 **P3 — Shared parsers.** One library for the 11 body grammars and one file for the 15-label
 vocabulary (ADR-122 (3) already rules "one machine block, one parser"); every reader imports it.
