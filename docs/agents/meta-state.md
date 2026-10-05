@@ -10,6 +10,23 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
+  arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
+  merged mechanically, Renovate rebased #2240 itself); #2232 cloudflared + the seat's `tofu/cloudflare`
+  apply (window clean, state converged); **#2241 = G13** (cloudflared is a version set — regex manager +
+  group); waves 3/4/5 all merged and live (eso 2.11.0, infisical 1.11.0, kps 86.3.2, nginx 1.31 ×2, otel
+  0.161.0, python 3.14, kube-rbac-proxy 0.23.0, blackbox 0.28.0, registry 3.1.1). **#2257** drops
+  `prHourlyLimit` 6 → 3 (MERGED 08:22Z); the status-rows docs PR **#2258** was in review at wind-down. **Operator reads:** (1) three MAJORS parked on the
+  human lane — **#2254 argo-workflows chart 2.x** (lens APPROVED after a WORKER adapted it in-PR — the
+  first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
+  kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
+  unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
+  503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week; the arming chain's step 2 (an out-of-cone revert actor — the deploy-revert Sensor runs ON Argo Workflows) needs the operator's ruling on WHERE it runs (management box / ARC-hosted Actions workflow / in-cluster webhook receiver outside Argo) before steps 3–5 (pin-lint `reverted-charts` memory, bad-pin drill, one `matchPackageNames` line). (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
+  `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
+  Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
+  rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
+  no actor — but see #2254: the worker-adapts leg DID fire on CHANGES_REQUESTED), updater skip /
+  `rebaseWhen` for Renovate branches.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;

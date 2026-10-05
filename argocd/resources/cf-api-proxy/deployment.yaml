@@ -16,7 +16,7 @@ spec:
         - name: nginx
           # same pin as ert-egress-proxy (oracle-iac) — the unprivileged image reads
           # /etc/nginx/templates/*.template and envsubsts ${CF_TOKEN} at start.
-          image: nginxinc/nginx-unprivileged:1.27-alpine
+          image: nginxinc/nginx-unprivileged:1.31-alpine
           ports: [{ containerPort: 8080 }]
           env:
             - name: CF_TOKEN

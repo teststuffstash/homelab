@@ -1,4 +1,5 @@
-# Workflow-controller memory early-warning (homelab#492). A tiny app for the same reason
+# The argo-workflows alert belts (controller memory #492, outcomes FU-188, lock plane FU-198,
+# heartbeat ADR-141). A tiny app for the same reason
 # longhorn-alerts and homeassistant-alerts are tiny apps: the rules must live somewhere ArgoCD
 # syncs, while argo-workflows itself is a Helm chart (argocd/platform/argo-workflows.yaml). Landing
 # this in the chart's values map would have no PrometheusRule CR beside the fixtures — the

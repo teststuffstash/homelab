@@ -139,6 +139,9 @@ resource "helm_release" "longhorn" {
   repository = "https://charts.longhorn.io"
   chart      = "longhorn"
   version    = var.longhorn_version
+  # Release history capped at 3 (FU-304, 2026-10-05: 13 revisions / 2.7 MiB of release Secrets on
+  # the apiserver; the provider default 0 = unbounded) — see cilium.tf.
+  max_history = 3
 
   # Wait for the storage nodes to be labelled first so default disks land on them only.
   depends_on = [kubernetes_labels.longhorn_storage]

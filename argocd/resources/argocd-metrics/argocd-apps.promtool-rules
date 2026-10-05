@@ -1,0 +1,36 @@
+# The argocd-apps group lifted out of prometheusrule.yaml (annotations stripped — the CR is their one
+# home) — the rules file argocd-apps.promtool-test loads. Not a manifest; drift-pinned against the CR
+# by prometheus-rules-lint (expr + for). Re-copy an expr after editing it there.
+groups:
+  - name: argocd-apps
+    rules:
+      - alert: ArgoCDAppDegraded
+        expr: |
+          max by (name, dest_namespace) (argocd_app_info{health_status="Degraded"}) == 1
+        for: 15m
+        labels:
+          severity: warning
+          triage: dig
+      - alert: ArgoCDAppSyncFailed
+        expr: |
+          sum by (name) (increase(argocd_app_sync_total{phase=~"Error|Failed"}[30m])) > 0
+            and on (name)
+          max by (name) (argocd_app_info{sync_status!="Synced"}) == 1
+        for: 10m
+        labels:
+          severity: warning
+          triage: dig
+      - alert: ArgoCDNotificationDeliveryFailing
+        expr: |
+          sum by (service, trigger) (increase(argocd_notifications_deliveries_total{succeeded="false"}[1h])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
+      - alert: ArgoCDMetricsAbsent
+        expr: |
+          absent(argocd_app_info)
+        for: 15m
+        labels:
+          severity: warning
+          triage: dig

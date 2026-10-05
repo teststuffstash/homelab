@@ -37,6 +37,9 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   version          = var.argocd_chart_version
   timeout          = 900
+  # Release history capped at 3 (FU-304, 2026-10-05: 9 revisions / 5.9 MiB of release Secrets on
+  # the apiserver; the provider default 0 = unbounded) — see cilium.tf.
+  max_history = 3
 
   values = [yamlencode({
     global = { domain = "argocd.teststuff.net" }
@@ -120,8 +123,15 @@ resource "helm_release" "argocd" {
             send: [deploy-degraded]
         EOT
       }
+      # The recipient is the webhook SERVICE'S NAME (`service.webhook.agent-loop` → `agent-loop`), not
+      # `webhook:agent-loop`: with the latter the controller looked for a service called "webhook"
+      # ("notification service 'webhook' is not supported") and EVERY delivery since 2026-07-27 failed —
+      # argocd_notifications_deliveries_total{succeeded="false"} 150 / succeeded 0 on 2026-10-04, found
+      # when the controllers were first scraped (argocd/resources/argocd-metrics/). The chain below this
+      # hop was unit-exercised and replay-pinned; the hop itself was dead. ArgoCDNotificationDeliveryFailing
+      # now alerts on this class.
       subscriptions = [
-        { recipients = ["webhook:agent-loop"], triggers = ["on-health-degraded"] },
+        { recipients = ["agent-loop"], triggers = ["on-health-degraded"] },
       ]
     }
     dex   = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } } # ~25Mi
@@ -328,6 +338,9 @@ resource "helm_release" "argocd_apps" {
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argocd-apps"
   version    = var.argocd_apps_chart_version
+  # Release history capped at 3 (FU-304, 2026-10-05: 6 revisions; the provider default 0 =
+  # unbounded) — see cilium.tf.
+  max_history = 3
 
   values = [yamlencode({
     applications = {

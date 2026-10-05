@@ -1,0 +1,171 @@
+# Behaviour fixture for control-plane-health.promtool-rules — `devbox run prometheus-rules-lint` runs it.
+# The series are the 2026-10-05 shape read from Prometheus the day the rules were written: the
+# X250 control plane wk-metal-02 (7.45 GiB) at 27 % available for hours, cp-01 (11.66 GiB) at ~52 %,
+# a tainted 8 GB WORKER laptop far lower still — and at 04:28Z the apiserver, controller-manager and
+# scheduler on wk-metal-02 all restarting at once. Clock: one sample per 5 minutes.
+rule_files:
+  - control-plane-health.promtool-rules
+evaluation_interval: 5m
+
+tests:
+  # ── the real shape: the member with no headroom fires, the roomy member and the starved WORKER
+  #    do not. The worker proves the role join — 7.5 % available on a worker is that pool's normal
+  #    (the kata/ephemeral tier runs hot by design) and must never trip a control-plane belt.
+  - interval: 5m
+    input_series:
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '8000000000x60'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '2160000000x60'
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.51:9100"}'
+        values: '12000000000x60'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.51:9100"}'
+        values: '6240000000x60'
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.182:9100"}'
+        values: '8000000000x60'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.182:9100"}'
+        values: '600000000x60'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183"}'
+        values: '1x60'
+      - series: 'kube_node_info{job="kube-state-metrics",node="cp-01",internal_ip="192.168.2.51"}'
+        values: '1x60'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-01",internal_ip="192.168.2.182"}'
+        values: '1x60'
+      - series: 'kube_node_role{job="kube-state-metrics",node="wk-metal-02",role="control-plane"}'
+        values: '1x60'
+      - series: 'kube_node_role{job="kube-state-metrics",node="cp-01",role="control-plane"}'
+        values: '1x60'
+    alert_rule_test:
+      # 20 m in: the condition holds but `for: 30m` has not — quiet.
+      - eval_time: 20m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts: []
+      # 35 m in: wk-metal-02 alone, carrying the node name and the ratio.
+      - eval_time: 35m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              instance: "192.168.2.183:9100"
+              job: node-exporter
+              node: wk-metal-02
+            exp_annotations:
+              summary: "control plane wk-metal-02 has 27% of its memory available (30 m under 35 %)"
+      # …and still exactly that one series four hours later: a standing condition, not a pulse.
+      - eval_time: 4h
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              instance: "192.168.2.183:9100"
+              job: node-exporter
+              node: wk-metal-02
+            exp_annotations:
+              summary: "control plane wk-metal-02 has 27% of its memory available (30 m under 35 %)"
+
+  # ── a node mid-upgrade emits TWO kube_node_info series (two os_image values overlap for a scrape
+  #    or two — the shape mgmt-rollout.promtool-test models). Without the `max by` the group_left is
+  #    many-to-many and the whole rule errors; with it, still exactly one alert.
+  - interval: 5m
+    input_series:
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '8000000000x20'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '2160000000x20'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183",os_image="Talos (v1.14.1)"}'
+        values: '1x20'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183",os_image="Talos (v1.14.2)"}'
+        values: '1x20'
+      - series: 'kube_node_role{job="kube-state-metrics",node="wk-metal-02",role="control-plane"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              instance: "192.168.2.183:9100"
+              job: node-exporter
+              node: wk-metal-02
+            exp_annotations:
+              summary: "control plane wk-metal-02 has 27% of its memory available (30 m under 35 %)"
+
+  # ── a 15-minute dip under the line recovers → never fires. The belt is for the standing shape;
+  #    a transient (an etcd compaction, a burst of list calls) is PodSigkilled's territory if it
+  #    ends in a kill, and nobody's if it does not.
+  - interval: 5m
+    input_series:
+      - series: 'node_memory_MemTotal_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '8000000000x20'
+      - series: 'node_memory_MemAvailable_bytes{job="node-exporter",instance="192.168.2.183:9100"}'
+        values: '4000000000x4 2000000000x3 4000000000x13'
+      - series: 'kube_node_info{job="kube-state-metrics",node="wk-metal-02",internal_ip="192.168.2.183"}'
+        values: '1x20'
+      - series: 'kube_node_role{job="kube-state-metrics",node="wk-metal-02",role="control-plane"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: ControlPlaneNodeMemoryLow
+        exp_alerts: []
+
+  # ── the kill, as kube-state-metrics saw it at 04:28Z: three restart counters step at once. Each
+  #    pod is its own alert (Alertmanager groups them by alertname — one webhook); a coredns restart
+  #    in the same namespace at the same moment is NOT a control-plane component and stays silent;
+  #    and 30 m later the window has slid past the step, so the alert self-clears.
+  - interval: 5m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="kube-system",pod="kube-apiserver-wk-metal-02",container="kube-apiserver"}'
+        values: '0x6 1x20'
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="kube-system",pod="kube-controller-manager-wk-metal-02",container="kube-controller-manager"}'
+        values: '0x6 2x20'
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="kube-system",pod="kube-scheduler-wk-metal-02",container="kube-scheduler"}'
+        values: '0x6 1x20'
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="kube-system",pod="coredns-6dc87b5c58-m5cxr",container="coredns"}'
+        values: '0x6 1x20'
+      # a healthy member's apiserver, never restarting
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics",namespace="kube-system",pod="kube-apiserver-cp-01",container="kube-apiserver"}'
+        values: '0x26'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ControlPlaneComponentRestarted
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: ControlPlaneComponentRestarted
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+              job: kube-state-metrics
+              namespace: kube-system
+              pod: kube-apiserver-wk-metal-02
+              container: kube-apiserver
+            exp_annotations:
+              summary: "kube-apiserver-wk-metal-02 restarted 1× in 30 m — a control-plane member went dark"
+          - exp_labels:
+              severity: warning
+              triage: now
+              job: kube-state-metrics
+              namespace: kube-system
+              pod: kube-controller-manager-wk-metal-02
+              container: kube-controller-manager
+            exp_annotations:
+              summary: "kube-controller-manager-wk-metal-02 restarted 2× in 30 m — a control-plane member went dark"
+          - exp_labels:
+              severity: warning
+              triage: now
+              job: kube-state-metrics
+              namespace: kube-system
+              pod: kube-scheduler-wk-metal-02
+              container: kube-scheduler
+            exp_annotations:
+              summary: "kube-scheduler-wk-metal-02 restarted 1× in 30 m — a control-plane member went dark"
+      # 70 m: the step left the 30 m window at ~65 m — self-cleared.
+      - eval_time: 70m
+        alertname: ControlPlaneComponentRestarted
+        exp_alerts: []

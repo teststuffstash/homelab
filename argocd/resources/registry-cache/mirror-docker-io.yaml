@@ -51,7 +51,7 @@ spec:
       # CronJob triggers it weekly by deleting the pod.
       initContainers:
         - name: store-maintenance
-          image: registry:3.0.0
+          image: registry:3.1.1
           command: ["/bin/sh", "/maintenance/maintain.sh"]
           env:
             - { name: MIRROR_NAME, value: "mirror-docker-io" }
@@ -67,7 +67,7 @@ spec:
             limits:   { cpu: "1",   memory: "512Mi" }
       containers:
         - name: registry
-          image: registry:3.0.0
+          image: registry:3.1.1
           env:
             - { name: REGISTRY_PROXY_REMOTEURL, value: "https://registry-1.docker.io" }
             # cache semantics: blobs unreferenced for a week get evicted by the proxy scheduler

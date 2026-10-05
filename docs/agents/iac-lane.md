@@ -492,6 +492,15 @@ it reverts the newest `deploy/*` bump merged ≤120m that touches the app's path
 PR (branch + cm-ledger idempotency). Non-`-iac`, no-recent-bump and revert-conflict all fail closed
 to report-only.
 
+**⚠ The first hop never delivered until 2026-10-04.** The subscription named the recipient
+`webhook:agent-loop`; a webhook service is addressed by its own name, so every delivery since
+2026-07-27 failed (`notification service 'webhook' is not supported` — 150 failed / 0 succeeded on
+the controller's counter, read the day the controllers were first scraped). "Never fired by a real
+Degraded homelab app" was this hop, not the predicate. Fixed in #2217; the hop is now watched by
+`ArgoCDNotificationDeliveryFailing`, and app health/sync state is a Prometheus alert in its own
+right (`ArgoCDAppDegraded`, `ArgoCDAppSyncFailed` — `argocd/resources/argocd-metrics/`,
+[`dependency-upgrades.md`](../dependency-upgrades.md) §Gap register G1/G2).
+
 **Roll-FORWARD — dispatch a worker against the app repo to fix the breakage — is the remaining LLM
 half.** Direction is settled: do it **in-cluster off ArgoCD app-health events, NOT in the GitHub
 Actions deploy run**, since the deploy job now ends at "auto-merge armed" (`deploy-pin.sh`) and

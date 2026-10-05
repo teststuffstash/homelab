@@ -1,0 +1,22 @@
+# ArgoCD's own metrics into Prometheus + the alerts on them (argocd/resources/argocd-metrics/): the
+# mechanical "did the merge break the app" read for every GitOps dependency bump (classes 1–3,
+# docs/dependency-upgrades.md §5 Monitoring). GitOps-managed on purpose — the ArgoCD release itself
+# is tofu (class 4), but its belt should not need a human apply to change.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-metrics
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/argocd-metrics
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false

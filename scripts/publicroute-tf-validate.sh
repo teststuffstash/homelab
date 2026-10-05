@@ -62,8 +62,11 @@ xp_version="v${xp_ver_raw}"
 # against docker.io (mutable by definition) with no bounded mirror timeout, which intermittently
 # hung/timed out the render's 3m budget. Digest pulls are content-addressed — pure LAN-mirror
 # cache serve, no live check. Keyed by version so a bump with no matching annotation fails loud.
-xp_digest="$(yq -r ".metadata.annotations[\"crossplane.io/engine-image-digest.${xp_ver_raw}\"]" argocd/platform/crossplane.yaml)"
-[ -n "$xp_digest" ] && [ "$xp_digest" != "null" ] || { echo "publicroute-tf-validate: FAIL — no crossplane.io/engine-image-digest.${xp_ver_raw} annotation in argocd/platform/crossplane.yaml (homelab#1739 — the render must pull the crossplane engine by digest, never a floating tag). Resolve: crane digest docker.io/crossplane/crossplane:${xp_version}, add it as that annotation." >&2; exit 1; }
+# Keyed by the engine image TAG (v<chart version>) since 2026-10-04: Renovate's regex manager writes the
+# tag it looked the digest up for, and a bare-version key made that lookup fail ("Could not determine new
+# digest", #2228) — the chart bump then shipped alone and this gate went red with no path to green.
+xp_digest="$(yq -r ".metadata.annotations[\"crossplane.io/engine-image-digest.${xp_version}\"]" argocd/platform/crossplane.yaml)"
+[ -n "$xp_digest" ] && [ "$xp_digest" != "null" ] || { echo "publicroute-tf-validate: FAIL — no crossplane.io/engine-image-digest.${xp_version} annotation in argocd/platform/crossplane.yaml (homelab#1739 — the render must pull the crossplane engine by digest, never a floating tag). Resolve: crane digest docker.io/crossplane/crossplane:${xp_version}, add it as that annotation." >&2; exit 1; }
 cf_pin="$(yq -r '.spec.configuration' "$PROVIDERCONFIG" | awk '/cloudflare = \{/,/\}/' | sed -n 's/.*version *= *"\([^"]*\)".*/\1/p')"
 [ -n "$cf_pin" ] || { echo "publicroute-tf-validate: FAIL — no cloudflare provider version pin in $PROVIDERCONFIG (required_providers.cloudflare.version)" >&2; exit 1; }
 # the nix-packaged provider (devbox profile) — must be the SAME version the cluster pins, or the

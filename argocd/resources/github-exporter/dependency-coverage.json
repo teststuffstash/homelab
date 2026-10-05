@@ -3,8 +3,6 @@
     {
       "complete": false,
       "gap_cells": [
-        "proposer",
-        "detector",
         "canary"
       ],
       "gap_rows": 14,
@@ -13,8 +11,8 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-10-05T07:12:33Z",
+      "last_proven_pr": 2240,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
       "rows": 14
@@ -22,8 +20,6 @@
     {
       "complete": false,
       "gap_cells": [
-        "proposer",
-        "detector",
         "canary"
       ],
       "gap_rows": 16,
@@ -32,8 +28,8 @@
       ],
       "human_rows": 0,
       "id": 2,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-10-05T07:58:26Z",
+      "last_proven_pr": 2253,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
       "rows": 16
@@ -41,7 +37,6 @@
     {
       "complete": false,
       "gap_cells": [
-        "detector",
         "canary"
       ],
       "gap_rows": 4,
@@ -83,8 +78,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 5,
-      "last_proven": "2026-10-04T08:51:42Z",
-      "last_proven_pr": 2047,
+      "last_proven": "2026-10-04T19:00:20Z",
+      "last_proven_pr": 2191,
       "name": "Tofu providers",
       "owner_may_leave": false,
       "rows": 14
@@ -129,8 +124,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 8,
-      "last_proven": "2026-10-02T17:31:33Z",
-      "last_proven_pr": 2175,
+      "last_proven": "2026-10-05T03:36:53Z",
+      "last_proven_pr": 2235,
       "name": "GitHub Actions",
       "owner_may_leave": true,
       "rows": 5
@@ -204,10 +199,20 @@
   "proof_recent_days": 90,
   "proofs": {
     "classes": {
+      "1": {
+        "merged_at": "2026-10-05T07:12:33Z",
+        "pr": 2240,
+        "title": "chore(deps): update crossplane to v2.4.2"
+      },
       "10": {
         "merged_at": "2026-10-02T21:45:42Z",
         "pr": 2186,
         "title": "Update dependency jetify-com/devbox to v0.18.4"
+      },
+      "2": {
+        "merged_at": "2026-10-05T07:58:26Z",
+        "pr": 2253,
+        "title": "chore(deps): update registry docker tag to v3.1.1"
       },
       "3": {
         "merged_at": "2026-10-02T21:59:33Z",
@@ -215,9 +220,9 @@
         "title": "arc-runners: pin runner image 2026.10.2-gd0b15ed85110"
       },
       "5": {
-        "merged_at": "2026-10-04T08:51:42Z",
-        "pr": 2047,
-        "title": "chore(deps): update terraform kubernetes to v3"
+        "merged_at": "2026-10-04T19:00:20Z",
+        "pr": 2191,
+        "title": "Update Terraform cloudflare to v5.26.0"
       },
       "6": {
         "merged_at": "2026-09-22T00:00:00Z",
@@ -230,9 +235,9 @@
         "title": "chore: devbox update (align toolchain lock)"
       },
       "8": {
-        "merged_at": "2026-10-02T17:31:33Z",
-        "pr": 2175,
-        "title": "Update renovatebot/github-action action to v46.3.4"
+        "merged_at": "2026-10-05T03:36:53Z",
+        "pr": 2235,
+        "title": "chore(deps): update renovatebot/github-action action to v46.3.5"
       }
     },
     "rows": {
@@ -245,6 +250,111 @@
         "merged_at": "2026-10-02T21:45:42Z",
         "pr": 2186,
         "title": "Update dependency jetify-com/devbox to v0.18.4"
+      },
+      "1:argo-events": {
+        "merged_at": "2026-10-04T21:46:07Z",
+        "pr": 2223,
+        "title": "Update Helm release argo-events to v2.4.27"
+      },
+      "1:argo-workflows": {
+        "merged_at": "2026-10-05T04:21:26Z",
+        "pr": 2238,
+        "title": "chore(deps): update helm release argo-workflows to v1.1.1"
+      },
+      "1:cloudnative-pg": {
+        "merged_at": "2026-10-05T03:59:42Z",
+        "pr": 2239,
+        "title": "chore(deps): update helm release cloudnative-pg to v0.29.1"
+      },
+      "1:crossplane": {
+        "merged_at": "2026-10-05T07:12:33Z",
+        "pr": 2240,
+        "title": "chore(deps): update crossplane to v2.4.2"
+      },
+      "1:external-secrets": {
+        "merged_at": "2026-10-05T06:28:00Z",
+        "pr": 2243,
+        "title": "chore(deps): update helm release external-secrets to v2.11.0"
+      },
+      "1:forgejo": {
+        "merged_at": "2026-10-04T22:02:16Z",
+        "pr": 2221,
+        "title": "Update code.forgejo.org/forgejo-helm/forgejo Docker tag to v17.1.7"
+      },
+      "1:infisical-standalone": {
+        "merged_at": "2026-10-05T07:00:22Z",
+        "pr": 2244,
+        "title": "chore(deps): update helm release infisical-standalone to v1.11.0"
+      },
+      "1:kube-prometheus-stack": {
+        "merged_at": "2026-10-05T06:41:36Z",
+        "pr": 2245,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v86.3.2"
+      },
+      "2:alpine": {
+        "merged_at": "2026-10-04T22:50:54Z",
+        "pr": 2230,
+        "title": "Update alpine Docker tag to v3.24"
+      },
+      "2:cloudflare/cloudflared": {
+        "merged_at": "2026-10-05T05:16:18Z",
+        "pr": 2232,
+        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.9.3"
+      },
+      "2:docker.io/library/busybox": {
+        "merged_at": "2026-10-04T22:57:06Z",
+        "pr": 2233,
+        "title": "Update docker.io/library/busybox Docker tag to v1.38.0"
+      },
+      "2:grafana/alloy": {
+        "merged_at": "2026-10-05T04:12:48Z",
+        "pr": 2236,
+        "title": "chore(deps): update grafana/alloy docker tag to v1.20.0"
+      },
+      "2:grafana/loki": {
+        "merged_at": "2026-10-05T03:52:17Z",
+        "pr": 2237,
+        "title": "chore(deps): update grafana/loki docker tag to v3.7.8"
+      },
+      "2:nginx": {
+        "merged_at": "2026-10-05T06:48:50Z",
+        "pr": 2247,
+        "title": "chore(deps): update nginx docker tag to v1.31"
+      },
+      "2:nginxinc/nginx-unprivileged": {
+        "merged_at": "2026-10-05T06:34:03Z",
+        "pr": 2248,
+        "title": "chore(deps): update nginxinc/nginx-unprivileged docker tag to v1.31"
+      },
+      "2:otel/opentelemetry-collector-contrib": {
+        "merged_at": "2026-10-05T07:32:58Z",
+        "pr": 2249,
+        "title": "chore(deps): update otel/opentelemetry-collector-contrib docker tag to v0.161.0"
+      },
+      "2:prom/pushgateway": {
+        "merged_at": "2026-10-04T22:43:22Z",
+        "pr": 2229,
+        "title": "Update prom/pushgateway Docker tag to v1.11.3"
+      },
+      "2:python": {
+        "merged_at": "2026-10-05T07:27:28Z",
+        "pr": 2250,
+        "title": "chore(deps): update python docker tag to v3.14"
+      },
+      "2:quay.io/brancz/kube-rbac-proxy": {
+        "merged_at": "2026-10-05T07:20:40Z",
+        "pr": 2251,
+        "title": "chore(deps): update quay.io/brancz/kube-rbac-proxy docker tag to v0.23.0"
+      },
+      "2:quay.io/prometheus/blackbox-exporter": {
+        "merged_at": "2026-10-05T07:42:47Z",
+        "pr": 2252,
+        "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.28.0"
+      },
+      "2:registry": {
+        "merged_at": "2026-10-05T07:58:26Z",
+        "pr": 2253,
+        "title": "chore(deps): update registry docker tag to v3.1.1"
       },
       "3:agent-base": {
         "merged_at": "2026-09-28T13:49:47Z",
@@ -277,9 +387,9 @@
         "title": "Update Terraform proxmox to ~> 0.114"
       },
       "5:cloudflare/cloudflare@tofu/cloudflare": {
-        "merged_at": "2026-09-27T12:31:17Z",
-        "pr": 1981,
-        "title": "chore(deps): update terraform cloudflare to v5.25.0"
+        "merged_at": "2026-10-04T19:00:20Z",
+        "pr": 2191,
+        "title": "Update Terraform cloudflare to v5.26.0"
       },
       "5:hashicorp/helm@tofu": {
         "merged_at": "2026-10-02T19:55:23Z",
@@ -297,9 +407,9 @@
         "title": "chore(deps): update terraform kubernetes to v3"
       },
       "5:hashicorp/random@tofu": {
-        "merged_at": "2026-09-27T12:32:16Z",
-        "pr": 1976,
-        "title": "chore(deps): update terraform random to v3.9.1"
+        "merged_at": "2026-10-04T16:23:38Z",
+        "pr": 2213,
+        "title": "Update Terraform random to v3.9.1"
       },
       "5:hashicorp/tls@tofu/cloudflare": {
         "merged_at": "2026-09-27T12:26:36Z",
@@ -472,9 +582,9 @@
         "title": "Update github-actions (major)"
       },
       "8:renovatebot/github-action": {
-        "merged_at": "2026-10-02T17:31:33Z",
-        "pr": 2175,
-        "title": "Update renovatebot/github-action action to v46.3.4"
+        "merged_at": "2026-10-05T03:36:53Z",
+        "pr": 2235,
+        "title": "chore(deps): update renovatebot/github-action action to v46.3.5"
       }
     }
   },
@@ -482,14 +592,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:argo-events",
-      "last_proven": null,
+      "last_proven": "2026-10-04T21:46:07Z",
       "name": "argo-events",
-      "version": "2.4.23",
+      "version": "2.4.27",
       "where": [
         "argocd/platform/argo-events.yaml"
       ]
@@ -497,14 +605,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:argo-workflows",
-      "last_proven": null,
+      "last_proven": "2026-10-05T04:21:26Z",
       "name": "argo-workflows",
-      "version": "1.0.24",
+      "version": "1.1.1",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -512,9 +618,7 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:cert-manager",
       "last_proven": null,
@@ -527,14 +631,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:cloudnative-pg",
-      "last_proven": null,
+      "last_proven": "2026-10-05T03:59:42Z",
       "name": "cloudnative-pg",
-      "version": "0.28.3",
+      "version": "0.29.1",
       "where": [
         "argocd/platform/cnpg-operator.yaml"
       ]
@@ -542,14 +644,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:crossplane",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:12:33Z",
       "name": "crossplane",
-      "version": "2.3.2",
+      "version": "2.4.2",
       "where": [
         "argocd/platform/crossplane.yaml"
       ]
@@ -557,14 +657,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:external-secrets",
-      "last_proven": null,
+      "last_proven": "2026-10-05T06:28:00Z",
       "name": "external-secrets",
-      "version": "2.6.0",
+      "version": "2.11.0",
       "where": [
         "argocd/platform/eso-operator.yaml"
       ]
@@ -572,14 +670,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:forgejo",
-      "last_proven": null,
+      "last_proven": "2026-10-04T22:02:16Z",
       "name": "forgejo",
-      "version": "17.1.1",
+      "version": "17.1.7",
       "where": [
         "argocd/platform/forgejo.yaml"
       ]
@@ -587,9 +683,7 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:gateway-api",
       "last_proven": null,
@@ -602,14 +696,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:gha-runner-scale-set",
       "last_proven": null,
       "name": "gha-runner-scale-set",
-      "version": "0.14.2",
+      "version": "0.15.0",
       "where": [
         "argocd/platform/arc-runners-large.yaml",
         "argocd/platform/arc-runners.yaml"
@@ -618,14 +710,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:gha-runner-scale-set-controller",
       "last_proven": null,
       "name": "gha-runner-scale-set-controller",
-      "version": "0.14.2",
+      "version": "0.15.0",
       "where": [
         "argocd/platform/arc-controller.yaml"
       ]
@@ -633,14 +723,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:infisical-standalone",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:00:22Z",
       "name": "infisical-standalone",
-      "version": "1.9.0",
+      "version": "1.11.0",
       "where": [
         "argocd/platform/infisical.yaml"
       ]
@@ -648,14 +736,12 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:kube-prometheus-stack",
-      "last_proven": null,
+      "last_proven": "2026-10-05T06:41:36Z",
       "name": "kube-prometheus-stack",
-      "version": "86.1.0",
+      "version": "86.3.2",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -663,9 +749,7 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:metrics-server",
       "last_proven": null,
@@ -678,9 +762,7 @@
     {
       "class": 1,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "1:plugin-barman-cloud",
       "last_proven": null,
@@ -693,14 +775,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:alpine",
-      "last_proven": null,
+      "last_proven": "2026-10-04T22:50:54Z",
       "name": "alpine",
-      "version": "3.20",
+      "version": "3.24",
       "where": [
         "argocd/resources/node-fstrim/fstrim.yaml"
       ]
@@ -708,14 +788,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:cloudflare/cloudflared",
-      "last_proven": null,
+      "last_proven": "2026-10-05T05:16:18Z",
       "name": "cloudflare/cloudflared",
-      "version": "2026.5.2@sha256:12ff5c6992a9",
+      "version": "2026.9.3@sha256:072c067d25cc",
       "where": [
         "argocd/resources/publicroute/composition.yaml"
       ]
@@ -723,14 +801,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:docker.io/library/busybox",
-      "last_proven": null,
+      "last_proven": "2026-10-04T22:57:06Z",
       "name": "docker.io/library/busybox",
-      "version": "1.36.1@sha256:73aaf090f3d8",
+      "version": "1.38.0@sha256:fd7dc98638c8",
       "where": [
         "argocd/resources/loki/kmsg-reader.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -739,9 +815,7 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:docker.io/prometheuscommunity/smartctl-exporter",
       "last_proven": null,
@@ -755,7 +829,6 @@
       "class": 2,
       "gap_columns": [
         "canary",
-        "detector",
         "proposer"
       ],
       "key": "2:ghcr.io/k3d-io/k3d",
@@ -769,9 +842,7 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:ghcr.io/lablabs/cloudflare_exporter",
       "last_proven": null,
@@ -784,14 +855,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:grafana/alloy",
-      "last_proven": null,
+      "last_proven": "2026-10-05T04:12:48Z",
       "name": "grafana/alloy",
-      "version": "v1.5.1",
+      "version": "v1.20.0",
       "where": [
         "argocd/resources/loki/alloy.yaml"
       ]
@@ -799,14 +868,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:grafana/loki",
-      "last_proven": null,
+      "last_proven": "2026-10-05T03:52:17Z",
       "name": "grafana/loki",
-      "version": "3.4.2",
+      "version": "3.7.8",
       "where": [
         "argocd/resources/loki/loki.yaml"
       ]
@@ -814,14 +881,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:nginx",
-      "last_proven": null,
+      "last_proven": "2026-10-05T06:48:50Z",
       "name": "nginx",
-      "version": "1.27-alpine",
+      "version": "1.31-alpine",
       "where": [
         "argocd/resources/registry/registry-fs.yaml",
         "argocd/resources/registry/registry.yaml"
@@ -830,14 +895,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:nginxinc/nginx-unprivileged",
-      "last_proven": null,
+      "last_proven": "2026-10-05T06:34:03Z",
       "name": "nginxinc/nginx-unprivileged",
-      "version": "1.27-alpine",
+      "version": "1.31-alpine",
       "where": [
         "argocd/resources/cf-api-proxy/deployment.yaml",
         "argocd/resources/devbox-search/deployment.yaml",
@@ -849,14 +912,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:otel/opentelemetry-collector-contrib",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:32:58Z",
       "name": "otel/opentelemetry-collector-contrib",
-      "version": "0.116.1",
+      "version": "0.161.0",
       "where": [
         "argocd/resources/otel-collector/deployment.yaml"
       ]
@@ -864,14 +925,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:prom/pushgateway",
-      "last_proven": null,
+      "last_proven": "2026-10-04T22:43:22Z",
       "name": "prom/pushgateway",
-      "version": "v1.11.1",
+      "version": "v1.11.3",
       "where": [
         "argocd/resources/pushgateway/deployment.yaml"
       ]
@@ -879,14 +938,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:python",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:27:28Z",
       "name": "python",
-      "version": "3.13-slim, 3.13-slim@sha256:cc9dffa47c82",
+      "version": "3.14-slim, 3.14-slim@sha256:65a94bb37b63",
       "where": [
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml",
@@ -902,14 +959,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:quay.io/brancz/kube-rbac-proxy",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:20:40Z",
       "name": "quay.io/brancz/kube-rbac-proxy",
-      "version": "v0.22.1",
+      "version": "v0.23.0",
       "where": [
         "argocd/resources/loki/loki-rbac-proxy.yaml"
       ]
@@ -917,14 +972,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:quay.io/prometheus/blackbox-exporter",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:42:47Z",
       "name": "quay.io/prometheus/blackbox-exporter",
-      "version": "v0.27.0",
+      "version": "v0.28.0",
       "where": [
         "argocd/resources/blackbox/blackbox.yaml"
       ]
@@ -932,14 +985,12 @@
     {
       "class": 2,
       "gap_columns": [
-        "canary",
-        "detector",
-        "proposer"
+        "canary"
       ],
       "key": "2:registry",
-      "last_proven": null,
+      "last_proven": "2026-10-05T07:58:26Z",
       "name": "registry",
-      "version": "3.0.0",
+      "version": "3.1.1",
       "where": [
         "argocd/resources/registry-cache/mirror-docker-io.yaml",
         "argocd/resources/registry-cache/mirror-ghcr.yaml",
@@ -952,8 +1003,7 @@
     {
       "class": 3,
       "gap_columns": [
-        "canary",
-        "detector"
+        "canary"
       ],
       "key": "3:agent-base",
       "last_proven": "2026-09-28T13:49:47Z",
@@ -967,8 +1017,7 @@
       "class": 3,
       "gap_columns": [
         "canary",
-        "deploy_edge",
-        "detector"
+        "deploy_edge"
       ],
       "key": "3:agent-coordinator",
       "last_proven": "2026-09-28T13:29:19Z",
@@ -997,7 +1046,6 @@
       "class": 3,
       "gap_columns": [
         "canary",
-        "detector",
         "proposer"
       ],
       "key": "3:cchv-server",
@@ -1011,8 +1059,7 @@
     {
       "class": 3,
       "gap_columns": [
-        "canary",
-        "detector"
+        "canary"
       ],
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-02T21:59:33Z",
@@ -1101,7 +1148,7 @@
         "canary"
       ],
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
-      "last_proven": "2026-09-27T12:31:17Z",
+      "last_proven": "2026-10-04T19:00:20Z",
       "name": "cloudflare/cloudflare",
       "version": "5.26.0 (`~> 5.0`)",
       "where": [
@@ -1187,7 +1234,7 @@
         "canary"
       ],
       "key": "5:hashicorp/random@tofu",
-      "last_proven": "2026-09-27T12:32:16Z",
+      "last_proven": "2026-10-04T16:23:38Z",
       "name": "hashicorp/random",
       "version": "3.9.1 (`~> 3.6`)",
       "where": [
@@ -1885,9 +1932,9 @@
       "class": 8,
       "gap_columns": [],
       "key": "8:renovatebot/github-action",
-      "last_proven": "2026-10-02T17:31:33Z",
+      "last_proven": "2026-10-05T03:36:53Z",
       "name": "renovatebot/github-action",
-      "version": "f3a31a786096ba6b40d0f0ffe11a494ef73bfa7c (v46.3.4)",
+      "version": "1cd96b855fee0da6f230617e89dbff0e06ea393a (v46.3.5)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]

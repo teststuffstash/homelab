@@ -63,7 +63,7 @@ spec:
             - name: controller
               # Stdlib-only Python — no apk/pip at run time (local-first; the image is already
               # pulled for other platform jobs and rides the docker.io pull-through mirror).
-              image: python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+              image: python:3.14-slim@sha256:65a94bb37b630c482dfd31e5fb9b449cb26c31eab1b7a125cd6bd624acfe3b30
               command: ["python3", "-u", "/controller/controller.py"]
               env:
                 - name: NAMESPACE
