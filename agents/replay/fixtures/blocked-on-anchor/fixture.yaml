@@ -1,0 +1,48 @@
+# blocked-on-anchor — the marker's ANCHOR, as one decision table (homelab#1566).
+#
+# THE CONTRACT. The `blocked-on:` marker is read by TWO readers in this lane: the suppression
+# predicate (`pr_blocked_on_check`, reached by the arbitrate gate) and the arbitrate ordinary-path
+# belt. Before this fixture they disagreed on the anchor — the predicate matched only at the START
+# OF A COMMENT, the belt at the START OF ANY LINE — so a ruling that put the marker under its own
+# heading was read as "has a marker" by the belt (label kept) and "no marker" by the predicate
+# (dispatch anyway). Live on PR #1542: the 16:20Z ci-red ruling recorded `blocked-on: human` on
+# line 3, the predicate missed it, and the clause re-dispatched 18 minutes later — two paid rides
+# on byte-identical judgment. Both readers now read through the ONE grammar (`blocked_on_kind`,
+# line-anchored, matching every sibling marker in the lane: `ci-cause:`, `AGENT_STRIKE:`,
+# `AGENT_INFEASIBLE:`, `state-fp:`), and this table pins them from both sides.
+#
+# THE WORLD. Two PRs, one per reader, so a single pass exercises both:
+#   #240  the GATE leg — `agent/arbitrate`, unarmed (no autoMergeRequest), CHANGES_REQUESTED, so
+#         the gate's selector takes it. Its ruling comment carries the marker shape under test.
+#   #241  the BELT leg — `agent/arbitrate`, armed + APPROVED, so the belt's selector takes it. Its
+#         ruling comment carries the same marker shape plus the `ci-cause:` line the belt keys on.
+#
+# THE ROWS (the input axis is the marker's LINE POSITION):
+#   line1   the marker is the first line of the ruling — the shape both readers always agreed on.
+#   mid     the marker sits on line 3, under a `🤖 **ci-red ruling …**` heading — the shape the
+#           predicate missed. THE FIXED ROW: red on the base tree (the predicate dispatches #240
+#           and the belt still keeps #241's label — the two halves disagree), green after (both
+#           hold). This is the producer→consumer round-trip: one comment, both readers, one answer.
+#   absent  no marker at all — the negative control. The gate dispatches #240 and the belt removes
+#           #241's label, so the two held rows above are not green for the wrong reason.
+#   quoted  the ruling QUOTES a past marker (`> blocked-on: …`) and names it mid-sentence. The line
+#           anchor latches nothing, so both readers treat it as ordinary-path — the quote-immunity
+#           the comment-start anchor used to buy is kept by the line anchor (IL-T26, the
+#           `c4c5-infeasible` lesson one lane over).
+name: blocked-on-anchor
+mode: table
+source: agents/coordinator-scan.sh
+world: line1
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - block:arbitrate-ordinary-path-belt
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+rows: rows.psv
