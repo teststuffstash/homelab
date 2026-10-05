@@ -1,0 +1,78 @@
+# chart-revert — the chart-pin revert receiver (docs/designs/fu-1990-workflow-pin-revert.md Part 4).
+# A plain Deployment OUTSIDE Argo Workflows' dependency cone: Alertmanager POSTs ArgoControllerSilent
+# straight here, and the revert runs in this pod on the chain's own image (git + gh + python3 —
+# ghcr.io/teststuffstash/agent-coordinator, tag pinned in kustomization.yaml) and credential (the
+# coordinator-git Secret of THIS namespace, mounted as a file: ESO refreshes the ~1h App token and
+# the image's `gh` wrapper + the script re-read $GH_TOKEN_FILE per run, never an env snapshot).
+# Root filesystem read-only; the clone, HOME and TMPDIR live on the emptyDir at /work.
+# Resources per FU-082 (nothing BestEffort): the clone is `--filter=blob:none` over the full
+# history, memory is the knob that matters. securityContext = the restricted profile's fields, the
+# repo's current shape (cf-api-proxy, garage-write-probe); uid 1000 = the image's `node` user.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chart-revert
+  labels:
+    app: chart-revert
+spec:
+  replicas: 1
+  # One actor at a time: the ledger (branch name) makes a second instance a no-op, but two racing
+  # clones of the same merge are waste — Recreate keeps it to one pod across script rolls.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chart-revert
+  template:
+    metadata:
+      labels:
+        app: chart-revert
+    spec:
+      automountServiceAccountToken: false # no kubectl: the ledger is the branch name, not a ConfigMap
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: receiver
+          image: ghcr.io/teststuffstash/agent-coordinator
+          command: ["python3", "-u", "/app/chart_revert.py"]
+          env:
+            - { name: REPO_SLUG, value: "teststuffstash/homelab" }
+            # Only bumps merged within this window are revert candidates — the same window as the
+            # chain's workflow-pin-revert; a controller silent a day after a merge is an incident.
+            - { name: REVERT_WINDOW_MIN, value: "120" }
+            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+            - { name: WORKDIR, value: "/work" }
+            - { name: HOME, value: "/work/home" }
+            - { name: PORT, value: "8080" }
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "50m", memory: "256Mi" }
+            limits: { memory: "1Gi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: script, mountPath: /app, readOnly: true }
+            - { name: work, mountPath: /work }
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+      volumes:
+        - name: script
+          configMap:
+            name: chart-revert-script # kustomize rewrites to the hashed name
+        - name: work
+          emptyDir: { sizeLimit: 2Gi }
+        # NOT optional: a missing credential is a config defect that should show at the pod
+        # (ContainerCreating → the rollout/pod alerts), not inside a counter read at the first alert.
+        - name: coordinator-git
+          secret:
+            secretName: coordinator-git

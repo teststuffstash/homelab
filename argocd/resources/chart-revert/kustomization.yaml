@@ -1,0 +1,27 @@
+# chart-revert — the chart-pin revert receiver outside Argo Workflows' cone (operator ruling
+# 2026-10-05; docs/designs/fu-1990-workflow-pin-revert.md Part 4). Kustomize app in the
+# agent-coordinator namespace so the chain's `coordinator-git` Secret is mountable — no new
+# credential. configMapGenerator hash-names roll the pod on script edits (the github-exporter
+# pattern). Unit tests (test_chart_revert.py, `devbox run chart-revert-self-test`) sit beside the
+# script and are deliberately NOT in the ConfigMap.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agent-coordinator
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+
+configMapGenerator:
+  - name: chart-revert-script
+    files:
+      - chart_revert.py
+
+# The chain's image, pinned to the tag agents/coordinator/kustomization.yaml pins TODAY. The
+# agent-coordinator repo's deploy-pin job bumps THAT file on every weekly image rebuild and does
+# not know about this one — a stable tool image (git, gh, python3) makes the drift harmless, and
+# the seat decides whether the deploy-pin job grows a second file or this stays hand-bumped.
+images:
+  - name: ghcr.io/teststuffstash/agent-coordinator
+    newTag: 2026.10.5-gca94f4a2dd99

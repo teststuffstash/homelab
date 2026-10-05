@@ -247,6 +247,9 @@
       "exporter-self-test": [
         "python3 argocd/resources/github-exporter/github-exporter.py --self-test"
       ],
+      "chart-revert-self-test": [
+        "python3 -m unittest discover -s argocd/resources/chart-revert -p 'test_*.py'"
+      ],
       "edge-probe-self-test": [
         "python3 argocd/resources/cloudflare-exporter/edge-probe.py --self-test"
       ],
