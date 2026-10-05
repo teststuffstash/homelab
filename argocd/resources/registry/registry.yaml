@@ -91,7 +91,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: registry
-          image: registry:3.0.0
+          image: registry:3.1.1
           env:
             - { name: REGISTRY_STORAGE, value: "s3" }
             - { name: REGISTRY_STORAGE_S3_REGIONENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
