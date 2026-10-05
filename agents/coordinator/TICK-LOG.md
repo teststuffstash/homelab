@@ -12538,3 +12538,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   still Synced/Healthy). In flight: `max_history = 3` PR on the four tofu releases; GOMEMLIMIT=3200MiB on
   all three CPs (PR + windowed apply); `ArgoControllerSilent` heartbeat PR (step 1 of arming
   argo-workflows chart majors); #2254 merges by hand in a window after the GOMEMLIMIT lands.
+- **FU-304 lever + the operator's chain, executed (evening, four subagents + two seat windows):** (1) orphaned
+  helm history deleted — 37 Secrets / 13.6 MiB (kps 25 revs, forgejo 6, garage 5, metrics-server 1), apps all
+  Synced/Healthy. (2) **PR#2267** `max_history = 3` on cilium/longhorn/argocd/argocd-apps, merged 15:55Z; the plan
+  `+0 ~4 -0` (helm_release is OUTSIDE the box's apply allowlist → seat apply through `helm-evidence run`, plan
+  `20261005T165435Z-4bb522d3`, in flight at wind-down). (3) **PR#2268 GOMEMLIMIT=3200MiB** on `cluster.apiServer.env`
+  of `cp_cluster_patch`, merged 15:47Z, applied 15:49:46–15:50:02Z inside window `seat-1791214674-8468` (the box's
+  loop deferred by design); apiservers restarted staggered (~135 s API gap each, cp-02 never missed a scrape);
+  `ControlPlaneComponentRestarted` fired 15:52Z on the planned restart — the morning's belt proving itself; WSS
+  cp-01 3.80→2.54, cp-02 3.56→1.86, wk-metal-02 2.38→2.09 GiB; next_gc ≤2.2 GiB everywhere (fresh-process numbers;
+  the limit is exercised only as the heaps warm back toward 2.9). Gotcha: `mgmt-tf apply` prompts `[y/N]` and
+  aborts non-interactively — `MGMT_YES=1`. (4) **#2254 argo-workflows chart 2.0.8 MERGED 16:47:54Z by the seat**
+  inside window `seat-1791217458-1497`: ArgoCD PreSync hook Job `argo-workflows-crd-install` 16:48:24→16:48:45Z
+  (deleted on success — invisible in `syncResult`, visible in Job events), sync 16:48:48→16:48:50Z, controller +
+  server on v4.1.4, heartbeat 12–13 completions/15 m, zero Failed/Error, apiserver +0.58 GiB on the laptop
+  (2.19→2.77) vs +1.8 this morning — GOMEMLIMIT absorbed the CRD re-apply. Controller logs 4.1.4 tracing noise
+  ("didn't find a workflow span for ending workflow") for workflows started before the restart. Window
+  force-closed on `InfoInhibitor` alone (flaps every ~30 min all day; GAPS maintenance-window-G4 resight).
+  (5) **PR#2269 `ArgoControllerSilent`** (argo-workflows-heartbeat group, `now`, fails closed via `or vector(0)`,
+  replayed on the 2026-09-20 12:04–12:54Z FU-260 storm — the ONE real silence in 30 d) merged 16:39:54Z, live 16:40Z.
+  **Lesson for the lens:** chart 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was the APP major 4.0→4.1 and
+  the trigger of the kill; #2254 (two lens rounds) moved the app 4.1.0→4.1.4 — both reviews wrote "v4.0.8→v4.1.4";
+  chart semver ≠ app semver, the lens must read appVersion from the index.
