@@ -30,7 +30,7 @@ spec:
         fsGroup: 65534 # the PVC must be writable by the nobody uid the container runs as
       containers:
         - name: proxy
-          image: python:3.13-slim
+          image: python:3.14-slim
           command: ["python3", "/app/openrouter-proxy.py"]
           env:
             # FU-088 per-window thresholds (operator direction 2026-07-28): 5h stays at the base
