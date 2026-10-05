@@ -12524,3 +12524,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   auto-bumps, update-branch ×2. State at 14:55Z: wk-metal-02 47 % available, apiserver WSS 2.38 GiB and
   climbing (3.5–3.8 before the kill) — `ControlPlaneNodeMemoryLow` is expected to stand within hours;
   that firing is FU-304's acceptance and the operator's cue to pick the lever.
+- **FU-304 hygiene, operator-ordered (evening):** what the apiserver holds, measured — 81 helm release
+  Secrets = 31 MiB (kps 25 revisions orphaned since the 2026-08-04 ArgoCD migration; cilium 14 / longhorn
+  13 / argocd 9 uncapped — tofu's `max_history` default is 0), 234 CRDs = 15 MiB, 551 ConfigMaps = 12 MiB
+  of which **370 ride-context bundles = 7.4 MiB, ZERO with an ownerReference, every pod gone** (oldest
+  09-05; the launcher's ownerRef patch is not landing — mechanism unread), scripts ≈ 1 MiB; 287 of 368
+  ReplicaSets at zero replicas. The September prune (#1690) did NOT hold: cp-01's weekly apiserver avg
+  3.92 → 3.89 → 2.08 → 3.22 → 3.38 GiB with the Workflow count flat at ~240 — the live heap grows
+  1.7 → 2.9 GiB regardless of objects; `/debug/pprof/heap` is not served. Talos cgroups on wk-metal-02:
+  etcd 705 MiB (peak 901), kubelet 275, cilium 520, cm 272, scheduler 81; burstable tier peaked 6.3 GiB
+  → ~4.7 GiB left for an apiserver that spikes to 5.5. **Done by subagent:** the four ArgoCD-managed
+  releases' orphaned helm history deleted (37 Secrets, 13.6 MiB; kps/forgejo/garage/metrics-server all
+  still Synced/Healthy). In flight: `max_history = 3` PR on the four tofu releases; GOMEMLIMIT=3200MiB on
+  all three CPs (PR + windowed apply); `ArgoControllerSilent` heartbeat PR (step 1 of arming
+  argo-workflows chart majors); #2254 merges by hand in a window after the GOMEMLIMIT lands.
