@@ -21,18 +21,7 @@ never the session's arc — that is TICK-LOG's.)
   first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
   kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
   unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
-  503, no fix); Renovate re-proposes the next chart only; (3) **SIZING: wk-metal-02 (X250, 7.6 GB) cannot
-  hold the apiserver** — Talos OOMController SIGKILLed it at 04:28Z (3.8 GB working set, the #1687
-  class; cp-01 was grown to 12 GiB for the same), node NotReady 5 min, VIP moved, NO node alert fired;
-  decide: shrink the apiserver's object set / a memory limit + a `NodeMemoryPressure`-class belt / a
-  different laptop role (ADR-133's one-CP-per-chassis) — no FU/ADR covers it (grep `wk-metal-02.*memory`,
-  `apiserver.*GiB`: only #1687 in TICK-LOG); (4) the Renovate **cron is not firing** (`0 */6`: no 00:00Z
-  or 06:00Z run — every run since 10-04 was a dispatch); the seat dispatched THREE runs on 10-05, each
-  only after the previous batch had fully merged and with the hourly cap holding — against the recorded
-  2026-09-25 preference "don't hand-dispatch extra Renovate runs during a wave" (that wave drained the
-  GraphQL pool; this one did not: reviews in minutes, no pool alarm); decide: accept serialized
-  dispatch-on-demand (the operator's own 10-02 precedent) or a belt on "no Renovate run in 7 h", and
-  say which so the memory settles. **Gap register** =
+  503, no fix); Renovate re-proposes the next chart only; (3) **wk-metal-02 cannot hold the apiserver → FU-304** (afternoon session): the detector shipped first — **PR#2264** `ControlPlaneNodeMemoryLow` (dig, replayed: wk-metal-02 25–29 % for 17 h, cp-01/cp-02 silent) + `ControlPlaneComponentRestarted` (now, replayed at 04:35Z: all three CP pods) in `argocd/resources/talos-substrate/`, auto-merge armed; **operator picks the lever** (apiserver GOMEMLIMIT/`resources` via `cluster.apiServer`, RAM, or the laptop's role — ADR-133); the alert standing on wk-metal-02 after merge is the acceptance. (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
   `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
   Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
   rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has

@@ -12483,3 +12483,33 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Health at wind-down:** all apps Synced/Healthy except `logging` (G4, pre-existing) and the four
   agent-fixer apps (G4); alert set = the standing names only; one oracle-fleet pod still on
   nginx-unprivileged 1.27 (a stack repo, not the seat's). Direct-lane bookkeeping pushed once here.
+
+## 2026-10-05 afternoon — the morning's three operator reads, re-read (seat, unattended)
+
+- **The three majors, state at 13:30Z:** #2254 argo-workflows 2.x and #2256 kube-prometheus-stack 91.x are
+  both **APPROVED by the lens** (#2256's second round closed its one gap — the worker re-rendered
+  `kube-prometheus-stack-upstream-alerts.txt` for 91.8.0 and classified the one new name,
+  `AlertmanagerClusterFailedPeers` → `none`), both `major/awaiting-human`, un-armed, BEHIND master —
+  Renovate will not rebase them (a worker commit sits on each branch), so the operator's merge includes an
+  update-branch. #2100 mermaid 12 is **not a human read**: red on `lock-intake-lint` (lodash-es@4.17.23,
+  GHSA-f23m-r3pf-42rh / GHSA-r5fr-rjxr-66jc — ADR-143, never pin past it), a version hold until mermaid
+  ships a clean lodash-es; FU-294's archive entry already says so.
+- **wk-metal-02 / the apiserver kill → detector first, FU-304 for the lever.** Re-read from Prometheus:
+  the X250's apiserver sat at 3.5–3.8 GiB from 20:00Z on (cp-01 3.9, cp-02 3.4 — 7.3k objects over 289
+  resource types, 234 CRDs), MemAvailable 25–29 % of 7.45 GiB for 17 h, PSI `full` ≈ 0 until the kill
+  (so the OOMController's trigger, not exhaustion — FU-155's mechanism), NotReady 04:25–04:29Z. The
+  morning's "no node alert fired" was half right: **PodSigkilled DID fire** on `kube-apiserver-wk-metal-02`
+  (dig — unread while the responder is paused, G7); every node-level belt is `for: 15m`. **PR#2264**
+  (`argocd/resources/talos-substrate/`, second group `control-plane-health`): `ControlPlaneNodeMemoryLow`
+  (<35 % available on a CP node for 30 m, dig — replay 10-04 12:00Z→10-05 04:00Z fires wk-metal-02 every
+  hour, cp-01 58–63 % / cp-02 68–72 % silent) + `ControlPlaneComponentRestarted` (a kube-system CP static
+  pod restarted in 30 m, now — replay 04:35Z: apiserver 1, controller-manager 2, scheduler 1; silent
+  04:20Z/05:05Z). Fixture + drift pin, lint 59/59, auto-merge armed. Talos v1.14 exposes
+  `cluster.apiServer.env` (GOMEMLIMIT) and `cluster.apiServer.resources` — the levers FU-304 lists with
+  RAM and ADR-133's role question; the operator picks.
+- **The Renovate cron IS firing** — the morning read ("no 00:00Z/06:00Z run") was wrong: GitHub lands
+  `schedule` events 1–5 h late and drops the odd slot (10-04: 03:45/11:38/16:16/20:44Z; 10-05: 03:29Z
+  `schedule` — the morning log called it a dispatch — the 06:00 slot dropped, 12:00 ran at 13:16Z). No
+  belt needed. The ruling left for the operator is only the dispatch line (three serial hand-dispatches
+  under the hourly cap vs the 09-25 preference); the memory file is corrected and says so.
+- Bookkeeping: FU-052's archive entry expired (36 d; refs are all provenance-shaped, nothing scrubbed).

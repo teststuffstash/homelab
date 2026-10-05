@@ -275,9 +275,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   FU-203 (retention), #1297 (per-blob detection), ingester-image migration = optional later
   (ADR-121 notes it). Gotcha trail in the ADR + the registry manifest headers (debug-port
   collision, ping-must-challenge, RELATIVEURLS, s3 redirect-disable).
-- **FU-052** *(archived 2026-08-30)* — **Onboard the remaining app repos: nothing remains.**
-  agent-runtime onboarded 2026-08-07/08 (PR#37 — recipes, tests, CODEOWNERS; the claim's fixer
-  flip); snore-recorder 2026-08-02 (FU-051's leg — #15 recipes/CalVer/deploy-pin, sleep-iac#57
-  fixer block); agent-coordinator stays CONTEXT-ONLY by the kept 2026-07-16 ruling (tier-3 loop
-  machinery, no repo-side lane — recorded in the platform claim). New repos enter via
-  `new-stack --from` (FU-070). ROADMAP §Onboard reflects the same state.
