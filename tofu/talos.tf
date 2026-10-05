@@ -64,6 +64,19 @@ locals {
       # ("Duplicate value: kube-system", learned live 2026-07-16 — list merge concatenates).
       # Applied in-place: brief apiserver static-pod restart, one control plane at a time.
       apiServer = {
+        # FU-304: a soft heap ceiling for the apiserver's Go runtime. 2026-10-05 04:28Z Talos's
+        # OOMController killed kube-apiserver on wk-metal-02 (the X250, 7.45 GiB) after the 04:24Z
+        # argo-workflows chart sync (CRD re-apply) added 1.8 GiB in six minutes. At steady state
+        # every member's apiserver carries a 3.5–3.9 GiB working set, and cp-01's runtime read
+        # heap_inuse 2.88 GiB / heap_idle 1.81 (1.16 released) / next_gc 3.33 / sys 5.04 — about
+        # a gigabyte of GC headroom above the live heap. GOMEMLIMIT makes the GC reclaim that
+        # headroom and turns an allocation burst into extra GC work instead of growth. SOFT: Go
+        # never fails an allocation over it, so a genuinely larger live heap still grows (and the
+        # OOMController is still the backstop). Same value on all three — the laptop's fresh heap
+        # (1.7 GiB) converges to the same ~2.9 GiB live heap as the VMs. Applied in-place; a
+        # static-pod env change restarts the apiserver on EVERY member together (~2 min of API
+        # unreachability — docs/controlplane-ha.md §CP4), so it lands inside a window.
+        env = { GOMEMLIMIT = "3200MiB" }
         admissionControl = [{
           name = "PodSecurity"
           configuration = {

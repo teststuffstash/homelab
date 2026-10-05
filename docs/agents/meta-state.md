@@ -10,27 +10,23 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-04 night — S9 step 7 DONE: class 1/2 proposers ON, wave 1 = 6/6 Renovate merges
-  with no human; TICK-LOG 2026-10-04 night has the arc).** Landed: #2216 (proposers, `prHourlyLimit` **6
-  TEMPORARILY — drop to 3 when the ~30-dep backlog is through**, one line in renovate-global.json),
-  #2217 + attended apply (FU-044's dead webhook hop — fixed, chain rang live on `registry`), #2218 (the
-  ArgoCD belt: `ArgoCDAppDegraded` FIRING on `registry` since 21:18Z — the registry-garbage-collect
-  CronJob exceeds its 3600 s deadline nightly since 10-02; a real fault, nobody's yet: G7), #2226 (crossplane
-  version SET). **Gap register** = `docs/dependency-upgrades.md` §Gap register (G1–G12; G12/G12b written in
-  TICK-LOG, doc rows owed). **Next session:** (1) G11 second cut = **#2234** (the annotation key carries the image TAG; #2226's
-  cut failed the digest lookup — #2228 shipped the chart alone, red by design): after it merges, the next
-  Renovate run's `renovate/patch-crossplane` must carry targetRevision 2.3.6 + `engine-image-digest.v2.3.6:
-  sha256:3213f5…` and pass `publicroute-tf-validate`; #2224 superseded ✓. **Wave 2 open 22:24Z:** #2229
-  pushgateway, #2230 alpine 3.24, #2231 arc 0.15.0 (3 files — G9 proof), #2232 cloudflared, #2233 busybox;
-  **#2227** docs/proofs — all armed; (2) wave 2+ PRs — watch each merge → sync → alert delta (baseline =
-  `maintenance-window snapshot`); kps 86.1.1 sync was Running at 22:21Z; (3) docs owed as ONE PR:
-  §Last proven rows (class 2 image digest = #2220 21:32Z; class 1 chart = #2223 argo-events 21:46Z),
-  register regen (G8 — every merge stales it), G12/G12b rows; (4) decisions for the operator:
-  G7 (no reader for `dig` alerts while the responder is paused — the second leg of "mechanical revert
-  or responder"), G12b (a CI-red armed Renovate PR has no actor — the FU-046 worker-adapts leg's
-  trigger), G8 (regen that rides the merge), updater skip/`rebaseWhen` for Renovate branches (measure
-  the master-merge churn on wave 2 first). Responder-paused + `registry` Degraded = the one live
-  fault to hand someone.
+- **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
+  arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
+  merged mechanically, Renovate rebased #2240 itself); #2232 cloudflared + the seat's `tofu/cloudflare`
+  apply (window clean, state converged); **#2241 = G13** (cloudflared is a version set — regex manager +
+  group); waves 3/4/5 all merged and live (eso 2.11.0, infisical 1.11.0, kps 86.3.2, nginx 1.31 ×2, otel
+  0.161.0, python 3.14, kube-rbac-proxy 0.23.0, blackbox 0.28.0, registry 3.1.1). **#2257** drops
+  `prHourlyLimit` 6 → 3 (MERGED 08:22Z); the status-rows docs PR **#2258** was in review at wind-down. **Operator reads:** (1) three MAJORS parked on the
+  human lane — **#2254 argo-workflows chart 2.x** (lens APPROVED after a WORKER adapted it in-PR — the
+  first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
+  kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
+  unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
+  503, no fix); Renovate re-proposes the next chart only; (3) **wk-metal-02 cannot hold the apiserver → FU-304** (afternoon session): the detector shipped first — **PR#2264** `ControlPlaneNodeMemoryLow` (dig, replayed: wk-metal-02 25–29 % for 17 h, cp-01/cp-02 silent) + `ControlPlaneComponentRestarted` (now, replayed at 04:35Z: all three CP pods) in `argocd/resources/talos-substrate/`, auto-merge armed; **operator picks the lever** (apiserver GOMEMLIMIT/`resources` via `cluster.apiServer`, RAM, or the laptop's role — ADR-133); the alert standing on wk-metal-02 after merge is the acceptance. (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
+  `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
+  Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
+  rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
+  no actor — but see #2254: the worker-adapts leg DID fire on CHANGES_REQUESTED), updater skip /
+  `rebaseWhen` for Renovate branches.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;

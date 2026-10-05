@@ -1,0 +1,17 @@
+# ArgoControllerSilent, lifted VERBATIM out of prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file controller-silent.promtool-test loads. Not a
+# manifest and applied to nothing (see loop-workflows-failing.promtool-rules for why this file
+# exists and why it is not *.yaml). DRIFT-PINNED, both directions, by `devbox run
+# prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "argo-workflows-heartbeat", "rules": [.spec.groups[].rules[] | select(.alert == "ArgoControllerSilent") | del(.annotations)]}]}' argocd/resources/argo-workflows-alerts/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: argo-workflows-heartbeat
+    rules:
+      - alert: ArgoControllerSilent
+        expr: (sum(increase(argo_workflows_total_count{exported_namespace="agent-coordinator"}[30m])) or vector(0)) == 0
+        for: 5m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: now
