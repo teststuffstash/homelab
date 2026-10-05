@@ -34,7 +34,7 @@ spec:
     # 1) the chart, pinned. Renovate targets this `targetRevision` (class 1 — plain YAML).
     - repoURL: https://prometheus-community.github.io/helm-charts
       chart: kube-prometheus-stack
-      targetRevision: 86.3.2
+      targetRevision: 91.8.0
       helm:
         skipCrds: true
         valueFiles:
