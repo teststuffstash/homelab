@@ -1,0 +1,9 @@
+# footprint-entry-split — the decision table (family contract in fixture.yaml). Row state
+# (DECLARED, CHANGED) lives in rows/<id>/vars.sh, not in this table.
+# id                              | world | patch | env | expect | params
+annotated-exact                   |       |       |     | hold   |
+annotated-among-many              |       |       |     | hold   |
+annotated-glob                    |       |       |     | hold   |
+annotated-escape-still-reported   |       |       |     | escape | path=mcps/riigiteataja/ingest/other.py
+plain-entry                       |       |       |     | hold   |
+whitespace-padded                 |       |       |     | hold   |

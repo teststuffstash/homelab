@@ -1,0 +1,4 @@
+OUT HOLD no
+OUT STRICT no
+OUT ESCAPES [{{path}}]
+RC 0

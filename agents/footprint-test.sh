@@ -34,6 +34,18 @@ expect 1 "multi-entry fully disjoint"                 "docs/**, chart/**"     "s
 expect 1 "empty list never conflicts"                 ""                      "chassis/**"
 expect 1 "prefix-similar files are disjoint"          "chart/values.yaml"     "chart/values.schema.json"
 
+# ── the annotated-entry split (homelab#1567) ──────────────────────────────────────────────────
+# A `Touches:` entry may carry a trailing ` (...)` annotation scoping a broad path to a narrower
+# intent (docs/agents/issue-authoring.md §Touches). The old splitter was `tr -d ' \t'`, which
+# deleted EVERY space: `path (comment)` became `path(comment)` — one token with no `/` boundary,
+# so it prefix-matched nothing and the changed path read as an escape (oracle-fleet#543). The
+# splitter now strips the trailing annotation and trims only leading/trailing whitespace.
+expect 0 "annotated entry conflicts with its bare path"   "mcps/x/ingest/delta.py (log fields only)" "mcps/x/ingest/delta.py"
+expect 0 "annotated entry among plain siblings"           "a.py, mcps/x/ingest/delta.py (log fields only), b.py" "mcps/x/ingest/delta.py"
+expect 0 "annotated glob conflicts with a file under it"  "mcps/x/ingest/** (ingest only)" "mcps/x/ingest/delta.py"
+expect 1 "annotation does not widen the entry"            "mcps/x/ingest/delta.py (log fields only)" "mcps/x/ingest/other.py"
+expect 0 "whitespace-padded entries still conflict"       "  chassis/build.py  ,  tests/t.py  " "chassis/build.py"
+
 # fp_conflict_multi: any line holds; no lines never holds
 multi_busy="$(printf 'chassis/**\ndocs/**')"
 if ! fp_conflict_multi "docs/adr.md" "$multi_busy"; then
@@ -154,6 +166,9 @@ expect_classify "machine-merge"    "kustomization"           "agents/coordinator
 # Mixed footprint — highest tier wins
 expect_classify "codeowner-author" "mixed-author-wins"       "docs/agents/, .github/workflows/"
 expect_classify "codeowner-merge"  "mixed-merge-wins"        "argocd/resources/, agents/coordinator-scan.sh"
+# homelab#1567: classify_touches routes through the same splitter, so an annotated entry
+# classifies as its bare path (the annotation is a comment, never part of the path).
+expect_classify "codeowner-merge"  "annotated-entry"         "agents/coordinator-scan.sh (the scan)"
 
 # Undeclared / sentinel — empty footprint returns machine-merge (no paths to classify)
 expect_classify "machine-merge"    "empty-footprint"         ""

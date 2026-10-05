@@ -17,6 +17,22 @@ fp_norm_entry() {
   printf '%s' "$_e"
 }
 
+# fp_split_entries <footprint> → one normalized entry per line. THE one entry-splitter for a
+# `Touches:` footprint (ADR-122): comma-split, trim leading/trailing whitespace per entry, and
+# strip a trailing ` (...)` annotation — the authoring-side comment syntax that scopes a broad
+# path to a narrower intent (docs/agents/issue-authoring.md §Touches). Every reader routes
+# through here (fp_conflict, fp_conflict_strict, classify_touches, fp_theme_member,
+# fp_theme_groups), so the grammar has ONE home; a second copy is the drift ADR-122 collapsed.
+# The old `tr -d ' \t'` deleted EVERY space, so `path (comment)` became `path(comment)` — one
+# token with no `/` boundary, which prefix-matches nothing and read as an escape (homelab#1567).
+# The annotation strip requires whitespace before `(` so a path that legitimately contains
+# parentheses is never truncated; only a trailing `(...)` group is removed.
+fp_split_entries() {
+  printf '%s' "$1" | tr ',' '\n' \
+    | sed -e 's/[[:space:]][[:space:]]*([^()]*)[[:space:]]*$//' \
+          -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
 # fp_replay_exempt <entry-or-path> → 0 iff it is a COMPELLED COUNTERPART of clause work —
 # a file some required lint forces the PR to touch alongside the change it declares. ADR-097
 # addendum (2026-08-18, the FU-167/FU-168 joint call, operator-ruled; WIDENED 2026-08-19,
@@ -95,7 +111,7 @@ classify_touches() (
     esac
   }
 
-  _entries="$(printf '%s' "$footprint" | tr ',' '\n' | tr -d ' \t')"
+  _entries="$(fp_split_entries "$footprint")"
 
   for path in $_entries; do
     [ -n "$path" ] || continue
@@ -181,8 +197,8 @@ fp_pair_conflict() {
 # footprint-test strict rows so it stays a tested property, not a comment).
 fp_conflict_strict() (
   set -f
-  _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
-  _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
+  _la="$(fp_split_entries "$1")"
+  _lb="$(fp_split_entries "$2")"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
   for _a in $_la; do
     for _b in $_lb; do
@@ -198,8 +214,8 @@ fp_conflict_strict() (
 # footprint-test on first run — an expanded `*` silently compared FILENAMES, not the sentinel).
 fp_conflict() (
   set -f
-  _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
-  _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
+  _la="$(fp_split_entries "$1")"
+  _lb="$(fp_split_entries "$2")"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
   # ADR-097 addendum: replay-tree entries are stripped BEFORE pairing — a list that was
   # replay-only becomes empty and conflicts with nothing (a replay-only issue dispatches beside
@@ -257,7 +273,10 @@ fp_theme_groups() (
   while IFS='|' read -r _tg_n _tg_l; do
     _tg_n="$(printf '%s' "$_tg_n" | tr -d ' \t')"
     case "$_tg_n" in ''|*[!0-9]*) continue ;; esac
-    _tg_l="$(printf '%s' "$_tg_l" | tr -d ' \t\r')"
+    # Normalize through the ONE splitter, then re-join comma-separated: the list is stored and
+    # re-split by comma below, so an annotated entry must be stripped here too (homelab#1567).
+    _tg_l="$(fp_split_entries "$_tg_l" | tr '\n' ',')"
+    _tg_l="${_tg_l%,}"
     [ -n "$_tg_l" ] || continue
     [ "$_tg_l" != "*" ] || continue
     _tg_members="${_tg_members}${_tg_n}|${_tg_l}
@@ -356,8 +375,8 @@ EOF_TG_G
 # not a surface) → it is ignored.
 fp_theme_member() (
   set -f
-  _tm_la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t\r')"
-  _tm_lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t\r')"
+  _tm_la="$(fp_split_entries "$1")"
+  _tm_lb="$(fp_split_entries "$2")"
   [ -n "$_tm_la" ] || return 1
   [ "$_tm_la" != "*" ] || return 1
   for _tm_a in $_tm_la; do
