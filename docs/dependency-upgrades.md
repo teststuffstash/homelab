@@ -592,7 +592,7 @@ mechanism lives in the linked places.
 | G12 | A kube-prometheus-stack chart bump reds `prometheus-rules-lint` until `scripts/upstream-alerts-refresh.sh` re-renders the upstream alert-name list for the pinned chart (network — the lint never runs it) and any NEW name gets a `triage` entry; #2225 (86.1.0 → 86.1.1) sat red until the seat ran it by hand (header-only change, no new name) | the lint (CI red, by design) | for a patch/minor with no new names the refresh is mechanical and could ride the PR (a `pull_request` job on `renovate/kube-prometheus-stack-*` that commits the re-render); a new name needs the judgment the `deps-review` worker-adapts leg is for (FU-046) | ⚠ open — hand step twice now (#2225 10-04, #2245 10-05 — both header-only, no new names) |
 | G12b | A CI-RED **armed** Renovate PR has NO actor: the review reflex reviews green heads only, the orphan backstop counts `deps-review` as owned, the coordinator's investigate-while-red covers un-armed majors — #2224 and #2225 would have sat red until a human looked | a scan clause: armed Renovate PR ∧ CI red at head ∧ older than N h → dispatch the fixer with the failing step's log as the brief (the FU-046 worker-adapts trigger, red CI instead of CHANGES_REQUESTED) | the worker adapts in-PR; a hopeless one is closed and the gap filed | ⚠ open for CI-RED heads — but the CHANGES_REQUESTED leg FIRED: #2254 (argo-workflows 2.x, 2026-10-05) got a worker commit after the lens's request and the lens approved; red-CI armed PRs still have no actor |
 | G13 | A pin whose SIBLING lives in a terraform variable DEFAULT is invisible to Renovate: `tofu/cloudflare/variables.tf` `cloudflared_image` is declared "the same pin" as the publicroute composition's connector image, but the terraform manager extracts only `image = "…"` literals — #2232 (cloudflared 2026.5.2 → 2026.9.3) moved the composition alone, Renovate never touched the variable (git log) | the `deps-review` reviewer's version-set read (CHANGES_REQUESTED on #2232 — a read, not a gate: nothing mechanical would have refused the half-bump) | a regex customManager over the variable default + a `cloudflared` group rule, the G11 shape; the seat adapted #2232 in-PR (the FU-046 worker-adapts leg, done by hand) | ✅ fixed 2026-10-05 (this PR); proof = the next cloudflared bump's diff carries both files |
-| G14 | An Argo chart bump can break the ENGINE the revert chain runs on (`deploy-revert` is an Argo Events Sensor + WorkflowTemplates), and chart semver hid the app major: 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was app 4.0→4.1 — its CRD re-apply triggered the wk-metal-02 apiserver kill (FU-304) — while #2254 (two lens rounds, 9 h on the human lane) was packaging + a patch | `ArgoControllerSilent` (`now`, fails closed, #2269) + `ControlPlaneNodeMemoryLow` (#2264); the lens reading appVersion from the chart index | the `chart-revert` webhook receiver outside Argo's cone (ADR-149), `reverted-charts:` memory in `pin-only-lint` (h), then one armed `matchPackageNames` rule | ⚠ building — §Next steps 9 |
+| G14 | An Argo chart bump can break the ENGINE the revert chain runs on (`deploy-revert` is an Argo Events Sensor + WorkflowTemplates), and chart semver hid the app major: 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was app 4.0→4.1 — its CRD re-apply triggered the wk-metal-02 apiserver kill (FU-304) — while #2254 (two lens rounds, 9 h on the human lane) was packaging + a patch | `ArgoControllerSilent` (`now`, fails closed, #2269) + `ControlPlaneNodeMemoryLow` (#2264); the lens reading appVersion from the chart index | the `chart-revert` webhook receiver outside Argo's cone (ADR-149), `reverted-charts:` memory in `pin-only-lint` (h), then one armed `matchPackageNames` rule | ✅ live + DRILLED 2026-10-05 (#2271/#2272/#2276→#2279, 10 min 12 s, no human) — §Next steps 9; residue: the lens reads appVersion |
 
 ---
 
@@ -650,12 +650,16 @@ mechanism lives in the linked places.
    (c) base-image majors stay a human merge until #1988's previous-tag revert exists (§Last proven);
    (d) the claude-code set's three mechanisms (§Version SETS). (a) and (b) are the next repo-level
    deliverables before the next repo onboards the same way.
-9. **argo-workflows chart majors ARMED (ADR-149, operator 2026-10-05), in this order:** ✅ (1) the
-   heartbeat `ArgoControllerSilent` (#2269, replayed on the 2026-09-20 storm, live 16:40Z); (2) the
-   `chart-revert` receiver — a Deployment outside Argo's cone, Alertmanager route on the heartbeat, a
-   `revert-chart-<sha8>` PR with `reverted-charts:`; (3) `pin-only-lint` check (h), the 30-day memory;
-   (4) the drill — a REAL patch bump (2.0.8 → the next 2.0.x) merged on the ordinary lane, then a synthetic
-   `ArgoControllerSilent{drill="true", drill_pr=<n>}` must land a merged + synced revert with no human;
-   (5) only then the one `matchPackageNames: [argo-workflows]` helm-datasource major rule in
-   [`renovate-global.json`](../.github/renovate-global.json) — armed, `major` kept, no `automerge` label.
-   Lens fix riding along: the migration lens states the **appVersion** delta from the chart index.
+9. ✅ **argo-workflows chart majors ARMED (ADR-149, operator 2026-10-05) — all five steps landed and
+   drilled the same evening:** (1) `ArgoControllerSilent` (#2269, replayed on the 2026-09-20 storm, live
+   16:40Z); (2) the `chart-revert` receiver (#2271) — a Deployment in agent-coordinator outside Argo's
+   cone, Alertmanager route on the heartbeat, metrics `chart_revert_alerts_total{outcome}`; (3)
+   `pin-only-lint` check (h), the 30-day `reverted-charts:` memory (#2272); (4) **the drill**: #2276
+   (2.0.8 → 2.0.11, pin-only) merged 18:45Z, synthetic `ArgoControllerSilent{drill="true", drill_pr=2276}`
+   injected 18:47:08Z → the receiver opened #2279 in 16 s → reflex-approved, merged 18:55:33Z → ArgoCD back
+   on 2.0.8 at 18:57:20Z — **10 min 12 s, no human**; (5) rule 24 in
+   [`renovate-global.json`](../.github/renovate-global.json) (argocd + helm + `argo-workflows` + major,
+   armed, `major` kept, no `automerge` label). Residue: Renovate's own 2.0.11 proposal (cooldown ends
+   2026-10-10) will sit red on check (h) until 2.0.12+; the lens brief still has to state the
+   **appVersion** delta from the chart index (the #2238 miss) — one paragraph in
+   `agents/lenses/migration.md`, operator-lane.
