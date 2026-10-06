@@ -1676,9 +1676,17 @@ The **image-build CI needs no token** — it pushes to ghcr with the job's built
 
 ## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
 
-A coordinator terminal ruling may record what it waits on via a `blocked-on:` marker anchored at
-the **start** of a comment (like every other marker in this lane — `AGENT_STRIKE:`,
+A coordinator terminal ruling may record what it waits on via a `blocked-on:` marker on its own
+**line** (like every other marker in this lane — `ci-cause:`, `AGENT_STRIKE:`,
 `AGENT_INFEASIBLE:`, `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+
+The anchor is the start of a **line**, not the start of the comment (homelab#1566): a ruling is a
+human-readable document with a heading, and every sibling marker it embeds is line-anchored, so a
+comment-start anchor silently disarmed the hold whenever the marker sat under a heading (live on
+PR #1542). Both readers of this marker — the suppression predicate and the arbitrate ordinary-path
+belt — read it through the one grammar, so they can never disagree about the same bytes. A
+blockquote (`> blocked-on: …`) or a mid-sentence mention does not match, so talking *about* a past
+ruling latches nothing.
 
 ### Grammar
 

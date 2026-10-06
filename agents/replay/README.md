@@ -189,6 +189,7 @@ is stale, so it cannot drift the way the prose register did.
 | `base-arm-nonprotected` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-goal` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-master` | actions | - | `agents/agent-session.sh` | - |
+| `blocked-on-anchor` | table | line1 | `agents/coordinator-scan.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |

@@ -1,0 +1,6 @@
+CALL gh pr view 240 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh pr view 241 --repo teststuffstash/oracle-fleet --json comments,createdAt
+CALL gh api --paginate repos/teststuffstash/oracle-fleet/issues/241/events
+OUT ORPHAN [oracle-fleet] ⏳ arbitrate BLOCKED-ON — PR #240: a terminal ruling recorded `blocked-on: human` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.
+OUT REACHED: end
+RC 0

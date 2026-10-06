@@ -716,9 +716,9 @@ pr_state_fp_pair() {
 # <<<REPLAY:state-fp-pair<<<
 
 # ── BLOCKED-ON PREDICATE (homelab#1188) ────────────────────────────────────────────────────────
-# A terminal ruling may record what it waits on via a `blocked-on:` marker anchored at the start
-# of a comment (like every other marker in this lane — `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`,
-# `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+# A terminal ruling may record what it waits on via a `blocked-on:` marker on its own LINE (like
+# every other marker in this lane — `ci-cause:`, `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`, `state-fp:`).
+# The scan suppresses re-dispatch while that predicate holds.
 #
 # Grammar: `blocked-on: <kind>=<ref>` with `kind ∈ {human, issue, pr}`.
 #   - `blocked-on: human`              → waiting on a human (no new review/comment since marker)
@@ -729,11 +729,21 @@ pr_state_fp_pair() {
 # AND its named blocker is still unresolved, the clause reports instead of dispatching — the same
 # report-vs-dispatch shape the `state-fp:` debounce already has.
 #
+# ONE GRAMMAR, ONE READER (homelab#1566). The suppression predicate here and the arbitrate
+# ordinary-path belt both read the marker through `blocked_on_kind` below — never a second regex.
+# The anchor is the START OF A LINE, not the start of the comment: a ruling is a human-readable
+# document with a heading, and every sibling marker it embeds is line-anchored, so a comment-start
+# anchor silently disarmed the hold whenever the marker sat under a heading (live on PR #1542).
+#
 # >>>REPLAY:blocked-on-jq>>>
-# Extract the newest blocked-on marker from PR comments (anchored at start of comment body).
-BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)")) ]
+# The ONE marker grammar: given a comment body, yield the marker kind (`human` / `issue=<n>` /
+# `pr=<n>`) or the empty string. Line-anchored; a blockquote (`> blocked-on: …`) or a mid-sentence
+# mention does not match, so talking ABOUT a past ruling latches nothing (IL-T26).
+BLOCKED_ON_DEF='def blocked_on_kind: [ split("\n")[] | select(startswith("blocked-on: ")) ] | last // "" | if test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)") then (capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind) else "" end;'
+# Extract the newest blocked-on marker from PR comments (line-anchored, via blocked_on_kind).
+BLOCKED_ON_JQ="$BLOCKED_ON_DEF"'([ .comments[]? | select((.body // "") | blocked_on_kind != "") ]
   | sort_by(.createdAt) | last // {})
-  | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
+  | ((.body // "") | blocked_on_kind)'
 # <<<REPLAY:blocked-on-jq<<<
 
 # pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
@@ -777,13 +787,13 @@ pr_blocked_on_check() {
       local marker_ts newest_ts wa_login rv_login
       wa_login="${WORKER_AUTHOR:-app/homelab-agents-1234}"; wa_login="${wa_login#app/}"; wa_login="${wa_login%\[bot\]}"
       rv_login="${REVIEWER_AUTHOR:-homelab-reviewer}"; rv_login="${rv_login%\[bot\]}"
-      marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
+      marker_ts="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_DEF"'[.comments[]? | select((.body // "") | blocked_on_kind == "human") | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
       [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
       # A HUMAN review or a HUMAN non-marker comment clears the block — the README's own
       # Resolution rule. Reviews carry `submittedAt`, comments `createdAt`; an entry with no
       # resolvable author does not count as human engagement.
-      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" '
-        [ (.comments[]? | select(((.body // "") | test("^blocked-on: human")) | not)
+      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" "$BLOCKED_ON_DEF"'
+        [ (.comments[]? | select(((.body // "") | blocked_on_kind == "human") | not)
                         | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
                         | .createdAt),
           (.reviews[]?  | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
@@ -5139,8 +5149,10 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⏳ arbitrate belt — PR #${u}: ruling predates label event (homelab#1507). No label write.\n"
         continue
       fi
-      # If the ruling has no line-anchored blocked-on marker, it's ordinary-path — remove the label
-      if ! printf '%s' "$ruling_body" | grep -qE '^blocked-on:'; then
+      # If the ruling has no blocked-on marker, it's ordinary-path — remove the label. The marker
+      # is read through the SAME grammar as the suppression predicate (homelab#1566): one reader,
+      # never a second regex.
+      if [ -z "$(printf '%s' "$ruling_body" | jq -Rsr "$BLOCKED_ON_DEF"'blocked_on_kind' 2>/dev/null)" ]; then
         gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
           || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"

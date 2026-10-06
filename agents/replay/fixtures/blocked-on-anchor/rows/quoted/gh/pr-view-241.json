@@ -1,0 +1,5 @@
+{
+  "comments": [
+    {"author":{"login":"homelab-agents-1234"},"body":"🤖 **ci-red ruling — PR #241**\nci-cause: ci/fmt class=content basis=observed\nThe earlier ruling said `> blocked-on: human` and the ruling wrote blocked-on: human mid-sentence.","createdAt":"2026-09-09T16:20:00Z"}
+  ]
+}
