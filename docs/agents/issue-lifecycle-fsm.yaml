@@ -353,6 +353,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/review-phantom-belt
+      - agents/replay/fixtures/review-only-label-combinations
     guards:
       - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
