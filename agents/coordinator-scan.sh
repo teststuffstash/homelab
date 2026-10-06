@@ -125,7 +125,7 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # format's ONE home; the coordinator session uses the same file's CLI verbs.
 . "${HERE}/goal-findings.sh"
 
-# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
+# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309, repo-general #1855) ─────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
 # files. So a queued issue whose DECLARED footprint lands on one of them cannot be delivered by a
 # PR at all: the required `ci` check is structurally red before the worker writes a line, and the
@@ -137,29 +137,91 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # same predicate against a second, static set, so the routing decision costs a report line instead
 # of a session.
 #
+# REPO-GENERAL (homelab#1855). The same guard exists per repo — agent-runtime's `deps-pin-guard.sh`
+# runs inside its required `ci` check and admits only a pure `agent-base/devbox.{json,lock}` diff —
+# and a footprint landing on it is just as undeliverable. The check was scoped to homelab, so that
+# repo's guard was invisible to dispatch and the constraint was rediscovered by a ride
+# (agent-runtime#145). The set is now read from the repo the issue belongs to.
+#
 # READ THE SET, NEVER RE-DECLARE IT. A second copy is the drift bug in the direction that hurts:
-# the lint widens, the scan keeps dispatching into the widened set. This is the same one-home read
-# the ADR-103 ratchet step already makes in `.github/workflows/ci.yaml` — grep the one line, eval
-# it — so there is exactly one definition of GUARDED in the repo and two readers of it.
+# the lint widens, the scan keeps dispatching into the widened set. Each repo's declaration is the
+# one home; the scan is the reader. Two declaration shapes exist on the platform:
+#   • a `GUARDED=` line in `scripts/pin-only-lint.sh` (homelab's pin-only-lint);
+#   • a `GUARD_SET:` env in the `ci` job of `.github/workflows/ci.yaml` (agent-runtime's
+#     deps-pin-guard).
+# The checkout's own repo is read from disk (no API call, no second copy); every other repo's
+# declaration is read from the repo itself through the API, because the scan clones only this repo.
 # >>>REPLAY:guarded-set>>>
 PIN_ONLY_LINT="${PIN_ONLY_LINT:-${HERE}/../scripts/pin-only-lint.sh}"
-# The set is THIS repo's CI's. A stack repo's `argocd/platform/` footprint is not touching this
-# repo's `arc-runners.yaml`, and holding it would be a category error — so the check is scoped to
-# the repo the checkout is, overridable for the same reason STACKS_FILE is.
+# The repo whose checkout this scan runs in — its declaration is the local file above. Overridable
+# for the same reason STACKS_FILE is.
 GUARDED_REPO="${GUARDED_REPO:-homelab}"
-guarded_paths() {   # → one guarded PATH per line. NO output = could not read (never "none guarded")
+
+# _guarded_from_sh <text> → one guarded PATH per line from a `GUARDED=` line; rc 1 = no such line.
+_guarded_from_sh() {
   local line="" GUARDED=""
-  [ -r "$PIN_ONLY_LINT" ] && line="$(grep -m1 '^GUARDED=' "$PIN_ONLY_LINT" || true)"
+  line="$(printf '%s\n' "$1" | grep -m1 '^GUARDED=' || true)"
   [ -n "$line" ] || return 1
   eval "$line" || return 1
   [ -n "$GUARDED" ] || return 1
   # The lint holds its set as a grep alternation (`a\.yaml|b\.yaml`); the footprint predicate wants
   # plain paths, so split on `|` and drop the regex escapes.
-  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$' || return 1
 }
-# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
-# work rather than releasing it (rule #6 — never fail INTO a dispatch).
-GUARDED_PATHS="$(guarded_paths || true)"
+
+# _guarded_from_workflow <text> → one guarded PATH per line from a `GUARD_SET:` env; rc 1 = none.
+# GUARD_SET is a whitespace-separated list (agent-runtime's deps-pin-guard reads it the same way).
+_guarded_from_workflow() {
+  local line="" GUARD_SET=""
+  line="$(printf '%s\n' "$1" | grep -m1 -E '^[[:space:]]*GUARD_SET:' || true)"
+  [ -n "$line" ] || return 1
+  GUARD_SET="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "$GUARD_SET" ] || return 1
+  printf '%s\n' "$GUARD_SET" | tr ' ' '\n' | grep -v '^[[:space:]]*$' || return 1
+}
+
+# _repo_file <slug> <path> → the file's text on stdout.
+#   rc 0 = present; rc 1 = the repo has no such file (404); rc 2 = unreadable (any other failure).
+# The absent/unreadable split is the "unknown, not false" posture: absent = the repo declares
+# nothing here; unreadable = we cannot tell, so the caller holds rather than dispatching blind.
+_repo_file() {
+  local slug="$1" path="$2" body="" rc=0
+  body="$(gh api "repos/${slug}/contents/${path}" 2>/dev/null)" || rc=$?
+  # A 404 body is the API's own "no such file": the live API returns it with a non-zero exit, the
+  # replay stub serves it as a world file with exit 0 — read the body, not the exit code.
+  if printf '%s' "$body" | jq -e '.status == "404"' >/dev/null 2>&1; then return 1; fi
+  if [ "$rc" != 0 ] || ! printf '%s' "$body" | jq -e '.content' >/dev/null 2>&1; then return 2; fi
+  printf '%s' "$body" | jq -r '.content' | base64 -d
+}
+
+# guarded_paths <repo> → one guarded PATH per line.
+#   rc 0 = read OK; rc 1 = the repo declares a guarded set but it could not be read (PROBE-FAILED
+#   → hold); rc 2 = the repo declares no guarded set (nothing to guard → dispatch).
+guarded_paths() {
+  local repo="$1" text="" rc=0
+  if [ "$repo" = "$GUARDED_REPO" ]; then
+    # The checkout's own repo: the one definition on disk. `pin-only-lint.sh` IS the declaration,
+    # so its presence with no `GUARDED=` line is a broken declaration (hold), not "none guarded".
+    [ -r "$PIN_ONLY_LINT" ] || return 1
+    text="$(cat "$PIN_ONLY_LINT" 2>/dev/null)" || return 1
+    _guarded_from_sh "$text" || return 1
+    return 0
+  fi
+  # A stack repo: read the declaration the repo itself carries, via the API. Probe the two shapes
+  # in order; a present-but-unparseable declaration is unreadable (hold), never "none guarded".
+  local slug="${ORG}/${repo}" text="" rc=0
+  # Shape 1: the CI workflow's GUARD_SET env. A workflow with no GUARD_SET is not a declaration —
+  # the file exists for every repo — so it falls through to shape 2.
+  rc=0; text="$(_repo_file "$slug" ".github/workflows/ci.yaml")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ] && _guarded_from_workflow "$text"; then return 0; fi
+  # Shape 2: a pin-only-lint.sh GUARDED= line. This file IS the declaration, so its presence with
+  # no GUARDED line is a broken declaration (hold), not "none guarded".
+  rc=0; text="$(_repo_file "$slug" "scripts/pin-only-lint.sh")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ]; then _guarded_from_sh "$text" || return 1; return 0; fi
+  return 2
+}
 # <<<REPLAY:guarded-set<<<
 
 # ── OPERATOR-LANE PATHS — a pre-dispatch routing check (homelab#1151) ────────────────────────────
@@ -716,9 +778,9 @@ pr_state_fp_pair() {
 # <<<REPLAY:state-fp-pair<<<
 
 # ── BLOCKED-ON PREDICATE (homelab#1188) ────────────────────────────────────────────────────────
-# A terminal ruling may record what it waits on via a `blocked-on:` marker anchored at the start
-# of a comment (like every other marker in this lane — `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`,
-# `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+# A terminal ruling may record what it waits on via a `blocked-on:` marker on its own LINE (like
+# every other marker in this lane — `ci-cause:`, `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`, `state-fp:`).
+# The scan suppresses re-dispatch while that predicate holds.
 #
 # Grammar: `blocked-on: <kind>=<ref>` with `kind ∈ {human, issue, pr}`.
 #   - `blocked-on: human`              → waiting on a human (no new review/comment since marker)
@@ -729,11 +791,21 @@ pr_state_fp_pair() {
 # AND its named blocker is still unresolved, the clause reports instead of dispatching — the same
 # report-vs-dispatch shape the `state-fp:` debounce already has.
 #
+# ONE GRAMMAR, ONE READER (homelab#1566). The suppression predicate here and the arbitrate
+# ordinary-path belt both read the marker through `blocked_on_kind` below — never a second regex.
+# The anchor is the START OF A LINE, not the start of the comment: a ruling is a human-readable
+# document with a heading, and every sibling marker it embeds is line-anchored, so a comment-start
+# anchor silently disarmed the hold whenever the marker sat under a heading (live on PR #1542).
+#
 # >>>REPLAY:blocked-on-jq>>>
-# Extract the newest blocked-on marker from PR comments (anchored at start of comment body).
-BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)")) ]
+# The ONE marker grammar: given a comment body, yield the marker kind (`human` / `issue=<n>` /
+# `pr=<n>`) or the empty string. Line-anchored; a blockquote (`> blocked-on: …`) or a mid-sentence
+# mention does not match, so talking ABOUT a past ruling latches nothing (IL-T26).
+BLOCKED_ON_DEF='def blocked_on_kind: [ split("\n")[] | select(startswith("blocked-on: ")) ] | last // "" | if test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)") then (capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind) else "" end;'
+# Extract the newest blocked-on marker from PR comments (line-anchored, via blocked_on_kind).
+BLOCKED_ON_JQ="$BLOCKED_ON_DEF"'([ .comments[]? | select((.body // "") | blocked_on_kind != "") ]
   | sort_by(.createdAt) | last // {})
-  | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
+  | ((.body // "") | blocked_on_kind)'
 # <<<REPLAY:blocked-on-jq<<<
 
 # pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
@@ -777,13 +849,13 @@ pr_blocked_on_check() {
       local marker_ts newest_ts wa_login rv_login
       wa_login="${WORKER_AUTHOR:-app/homelab-agents-1234}"; wa_login="${wa_login#app/}"; wa_login="${wa_login%\[bot\]}"
       rv_login="${REVIEWER_AUTHOR:-homelab-reviewer}"; rv_login="${rv_login%\[bot\]}"
-      marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
+      marker_ts="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_DEF"'[.comments[]? | select((.body // "") | blocked_on_kind == "human") | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
       [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
       # A HUMAN review or a HUMAN non-marker comment clears the block — the README's own
       # Resolution rule. Reviews carry `submittedAt`, comments `createdAt`; an entry with no
       # resolvable author does not count as human engagement.
-      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" '
-        [ (.comments[]? | select(((.body // "") | test("^blocked-on: human")) | not)
+      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" "$BLOCKED_ON_DEF"'
+        [ (.comments[]? | select(((.body // "") | blocked_on_kind == "human") | not)
                         | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
                         | .createdAt),
           (.reviews[]?  | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
@@ -2564,14 +2636,21 @@ EOF
       # be only PART of the issue's scope (#299: one manifest was landable, one env line was not)
       # — so the line names the file and the route, and a human re-scopes or splits it.
       # >>>REPLAY:guarded-hold>>>
-      if [ "$repo" = "$GUARDED_REPO" ]; then
-        if [ -z "$GUARDED_PATHS" ]; then
-          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
-          # `GUARDED=` line changed shape), so "not guarded" is unknown, not false. Loud and
-          # level-triggered — it clears itself on the scan after the read works again.
-          orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — no \`GUARDED=\` line readable at ${PIN_ONLY_LINT} (homelab#309). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
-          continue
-        fi
+      # The set is per REPO, not per issue — read it once per repo and reuse it across the repo's
+      # queue (the API read is not free). `_gp_rc`: 0 = read, 1 = unreadable (hold), 2 = none.
+      if [ "${_gp_repo:-}" != "$repo" ]; then
+        _gp_repo="$repo"; _gp_rc=0
+        GUARDED_PATHS="$(guarded_paths "$repo")" || _gp_rc=$?
+      fi
+      if [ "$_gp_rc" = 1 ]; then
+        # Rule #6: never fail INTO a dispatch. The repo declares a guarded set but it could not be
+        # read (the file moved, its line changed shape, the API read failed), so "not guarded" is
+        # unknown, not false. Loud and level-triggered — it clears itself on the scan after the
+        # read works again.
+        orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — ${repo}'s declared guarded set could not be read (homelab#309/#1855). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      if [ "$_gp_rc" = 0 ]; then
         # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
         # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
         # normalize to the empty prefix and are dropped here: reading them as guarded would stop
@@ -5182,8 +5261,10 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⏳ arbitrate belt — PR #${u}: ruling predates label event (homelab#1507). No label write.\n"
         continue
       fi
-      # If the ruling has no line-anchored blocked-on marker, it's ordinary-path — remove the label
-      if ! printf '%s' "$ruling_body" | grep -qE '^blocked-on:'; then
+      # If the ruling has no blocked-on marker, it's ordinary-path — remove the label. The marker
+      # is read through the SAME grammar as the suppression predicate (homelab#1566): one reader,
+      # never a second regex.
+      if [ -z "$(printf '%s' "$ruling_body" | jq -Rsr "$BLOCKED_ON_DEF"'blocked_on_kind' 2>/dev/null)" ]; then
         gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
           || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"
@@ -5460,12 +5541,103 @@ EOF_GTHEMES_OPEN
             fi
           fi
         fi
+        # <<<REPLAY:ci-red-stale-sha<<<
+        # >>>REPLAY:ci-red-arbitrate-belt>>>
+        # FU-115 dispatch-gate belt (homelab#1627): the rounds-exhausted escalation fires on
+        # (rounds >= cap AND red now) without asking whether the red is the PR's round to spend.
+        # Two questions the state already answers, both FAIL-OPEN (an unreadable probe proceeds
+        # to escalate — the belt can only ADD a skip, never suppress a real red on a bad read,
+        # rule #6):
+        #   (1) FOOTPRINT — is the failing job/step inside the PR's declared `Touches:` footprint?
+        #       A red inherited from master in a file the PR does not touch is not the PR's round.
+        #   (2) GREEN+APPROVED HEAD — does the red postdate a head that was green and approved?
+        #       A converged, approved PR is not re-escalated by a later, unrelated red.
+        # The footprint read is the ONE parser (`ib_get Touches`, ADR-122 (3)) and the ONE
+        # intersection predicate (`fp_conflict_strict`, agents/footprint.sh) — no second regex
+        # here. STRICT, not the exempting `fp_conflict`: that variant strips the ADR-097
+        # replay-exempt classes from BOTH lists, so an annotation on `agents/replay/**` (the usual
+        # ci red in this lane) became an empty list, read "no conflict", and HELD a red that IS in
+        # the footprint. The exemption exists for dispatch disjointness, not for this question.
+        ci_red_belt_skip=0
+        ci_red_belt_reason=""
+        if [ "$ci_red_should_arbitrate" = 1 ]; then
+          # (2) green + approved head: the head was approved as-is and the red came after it.
+          belt_pr="$(gh pr view "$u" --repo "$slug" \
+              --json reviewDecision,reviews,commits,statusCheckRollup 2>/dev/null)" || belt_pr=''
+          if [ -n "$belt_pr" ] && jq -e . >/dev/null 2>&1 <<<"$belt_pr"; then
+            belt_appr="$(printf '%s' "$belt_pr" | jq -r '
+              select((.reviewDecision // "") == "APPROVED")
+              | ([.reviews[]? | select((.state // "") == "APPROVED") | (.submittedAt // "")] | max // "") as $a
+              | ([.commits[]? | select(((.messageHeadline // "") | startswith("Merge ")) | not) | (.committedDate // "")] | max // "") as $p
+              | select($a != "" and $p != "" and $a > $p) | $a')" || belt_appr=""
+            if [ -n "$belt_appr" ]; then
+              belt_red_ts="$(printf '%s' "$belt_pr" | jq -r '[.statusCheckRollup[]? | select((.conclusion // "") == "FAILURE" or (.conclusion // "") == "TIMED_OUT") | (.completedAt // "")] | max // ""')" || belt_red_ts=""
+              if [ -n "$belt_red_ts" ] && [ "$belt_red_ts" \> "$belt_appr" ]; then
+                ci_red_belt_skip=1
+                ci_red_belt_reason="red ${belt_red_ts} postdates a green+approved head (approved ${belt_appr})"
+              fi
+            fi
+          fi
+          # (1) footprint: the failing check's annotated paths vs the issue's declared Touches.
+          if [ "$ci_red_belt_skip" = 0 ] && [ -n "$red_issue" ]; then
+            belt_body="$(gh issue view "$red_issue" --repo "$slug" --json body --jq .body 2>/dev/null)" || belt_body=''
+            if [ -n "$belt_body" ]; then
+              belt_touches="$(ib_get Touches "${slug}#${red_issue}" "$belt_body")" || belt_touches=""
+              if [ -n "$belt_touches" ] && [ "$belt_touches" != "*" ]; then
+                belt_ids="$(gh api repos/"${slug}"/commits/"${pr_head_oid}"/check-runs \
+                    --jq '[.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out") | .id] | .[]' 2>/dev/null)" || belt_ids=''
+                belt_paths=""
+                for _bid in $belt_ids; do
+                  _bp="$(gh api repos/"${slug}"/check-runs/"${_bid}"/annotations \
+                      --jq '[.[]? | (.path // "")] | .[]' 2>/dev/null)" || _bp=""
+                  # Only FILE-LEVEL annotations are evidence. GitHub Actions attaches a generic
+                  # failure annotation to every failed job (`Process completed with exit code 1`,
+                  # `path: .github`) and the API also returns empty paths; neither names a file,
+                  # so neither says which file failed. Counting them made `belt_paths` non-empty
+                  # on nearly every red, `belt_in` 0, and the belt HELD a real in-footprint red —
+                  # the fail-open contract inverted. Dropping them is what makes the "no evidence
+                  # ⇒ fail open" branch below reachable.
+                  #
+                  # A path the PR does NOT change is deliberately KEPT: that IS the belt's signal
+                  # (a red inherited from master in a file the PR does not touch is not the PR's
+                  # round — the origin, PR#1543). Filtering on the PR's changed files would drop
+                  # exactly that annotation and turn the hold into a fail-open escalate, so the
+                  # test below stays the declared-`Touches:` intersection.
+                  while IFS= read -r _bpp; do
+                    case "$_bpp" in ''|.github) continue ;; esac
+                    belt_paths="${belt_paths}${_bpp}
+"
+                  done <<EOF_BELT_ANN
+$_bp
+EOF_BELT_ANN
+                done
+                if [ -n "$belt_paths" ]; then
+                  belt_in=0
+                  while IFS= read -r _bp; do
+                    [ -n "$_bp" ] || continue
+                    if fp_conflict_strict "$belt_touches" "$_bp"; then belt_in=1; break; fi
+                  done <<EOF_BELT
+$belt_paths
+EOF_BELT
+                  if [ "$belt_in" = 0 ]; then
+                    ci_red_belt_skip=1
+                    ci_red_belt_reason="failing paths outside the declared Touches footprint (${belt_touches})"
+                  fi
+                fi
+              fi
+            fi
+          fi
+        fi
+        # <<<REPLAY:ci-red-arbitrate-belt<<<
+        # >>>REPLAY:ci-red-arbitrate>>>
         if [ -n "$noop_round" ]; then
-          if [ "$ci_red_should_arbitrate" = 1 ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
             orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_hold_reason:-no completed red run on current head ${head8} (FU-1529 stale-sha)}: PR #${u}\n"
           fi
@@ -5536,16 +5708,18 @@ EOF_GTHEMES_OPEN
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
 # Apply the same sha check as the noop case (FU-1529).
-          if [ "$ci_red_should_arbitrate" = 1 ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
             orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_hold_reason:-no completed red run on current head (FU-1529 stale-sha)}: PR #${u}\n"
           fi
         fi
-        # <<<REPLAY:ci-red-stale-sha<<<
+        # <<<REPLAY:ci-red-arbitrate<<<
       done
     else
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2

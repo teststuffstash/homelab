@@ -1,0 +1,52 @@
+# ci-red-arbitrate-belt — the FU-115 dispatch-gate belt (homelab#1627), as one decision table.
+#
+# THE CONTRACT. The rounds-exhausted ci-red escalation fires on (rounds >= cap AND red now)
+# without asking whether the red is the PR's round to spend. Two questions the state already
+# answers, both FAIL-OPEN (an unreadable probe proceeds to escalate — the belt can only ADD a
+# skip, never suppress a real red on a bad read, rule #6):
+#   (1) FOOTPRINT — is the failing job/step inside the PR's declared `Touches:` footprint?
+#       A red inherited from master in a file the PR does not touch is not the PR's round.
+#   (2) GREEN+APPROVED HEAD — does the red postdate a head that was green and approved?
+#       A converged, approved PR is not re-escalated by a later, unrelated red.
+# Either true ⇒ the escalation is HELD (an orphan line, no label write).
+#
+# ROWS. `red-in-footprint-unapproved` is the clean base — the failing check's annotation is
+# inside the declared Touches and the head is not approved, so the escalation fires. Each other
+# row adds ONE axis value and expects the hold: `red-outside-footprint-unapproved` (the
+# annotation names `tofu/main.tf`, outside the Touches), `red-in-footprint-approved` (the head
+# was approved as-is and the red came after), and `red-outside-footprint-approved` (both).
+#
+# The last two rows are the FAIL-OPEN half of the footprint axis (reviewer findings 1 and 2,
+# round 2) — the shapes that must NOT hold:
+#   `red-generic-annotation-escalates` — the only annotation is Actions' generic failure
+#     annotation (`path: .github`), which names no file. It is attached to every failed job, so
+#     counting it made `belt_paths` non-empty on nearly every red and HELD a real in-footprint
+#     red. Only FILE-LEVEL annotations are evidence; with none, the belt fails open.
+#   `red-replay-annotation-escalates` — the annotation names a path under the declared Touches
+#     that is also an ADR-097 replay-exempt class (`agents/replay/**`). `fp_conflict` strips
+#     exempt entries from BOTH lists, so the belt read "outside footprint" and held a red that is
+#     inside it; the strict predicate (no dispatch-disjointness exemption) escalates.
+#
+# WORLDS. worlds/base (constructed — see its provenance.yaml).
+pins:
+  - MP-T13
+name: ci-red-arbitrate-belt
+mode: table
+source: agents/coordinator-scan.sh
+# The belt reads the issue body through agents/issue_body.py (the ONE parser, ADR-122 (3)) —
+# declare the interpreter rather than discover it as a mystery red (hermeticity contract).
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:ci-red-stale-sha
+  - block:ci-red-arbitrate-belt
+  - block:ci-red-arbitrate
+  - file:post.sh
+world: base
+rows: rows.psv
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=1515
+  - MC_NOW=2026-09-12T14:23:00Z

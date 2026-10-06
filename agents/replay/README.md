@@ -189,6 +189,7 @@ is stale, so it cannot drift the way the prose register did.
 | `base-arm-nonprotected` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-goal` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-master` | actions | - | `agents/agent-session.sh` | - |
+| `blocked-on-anchor` | table | line1 | `agents/coordinator-scan.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -203,6 +204,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-failure-run-select/ci-failure-run-select` | actions | - | `agents/agent-session.sh` | MP-T12 |
+| `ci-red-arbitrate-belt` | table | base | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -464,8 +466,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scan-governance/non-dot-meta` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
-| `scan-guarded/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
-| `scan-guarded/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-guarded` | table | - | `agents/coordinator-scan.sh` | - |
 | `scan-lane-walk` | table | - | `agents/coordinator-scan.sh` | IL-T05 |
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-touches-footprint-hold/scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |

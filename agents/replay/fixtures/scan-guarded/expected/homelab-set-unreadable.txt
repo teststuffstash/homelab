@@ -1,0 +1,4 @@
+OUT ORPHAN [homelab] ⛔ GUARDED-SET PROBE-FAILED — homelab's declared guarded set could not be read (homelab#309/#1855). Holding rather than dispatching blind:
+OUT ORPHAN   issue #401 — loki-retention
+OUT REACHED: end
+RC 0

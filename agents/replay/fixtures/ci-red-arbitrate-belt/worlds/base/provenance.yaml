@@ -1,0 +1,20 @@
+# provenance — family world `base` (agents/replay/fixtures/ci-red-arbitrate-belt)
+#
+# WHAT THIS WORLD IS. One red armed PR (#1515, branch fix/issue-1515-something) at the
+# rounds-exhausted edge, as the ci-red clause holds it: the per-sha check-runs query returns one
+# completed red check (`ci`, id 9001) whose annotation names `agents/coordinator-scan.sh` — a path
+# INSIDE the linked issue's declared `Touches:` (`agents/coordinator-scan.sh,
+# agents/replay/fixtures/goal`). The head is NOT approved (CHANGES_REQUESTED), so neither belt
+# condition fires and the escalation proceeds. Each row patches ONE axis value.
+#
+# PROVENANCE CLASS: constructed (README §S6). The shape is the ci-red clause's own reads
+# (`gh pr view --json reviewDecision,reviews,commits,statusCheckRollup`, `gh issue view --json
+# body`, `gh api .../check-runs`, `gh api .../check-runs/<id>/annotations`); the numbers are
+# homelab#1543-style evidence (the origin: a converged, approved PR re-escalated 18h later on a
+# master-inherited `tofu-fmt` red in a file it does not touch); the payload is authored for the
+# family.
+world: base
+class: constructed
+constructed: 2026-10-05
+source: agents/coordinator-scan.sh ci-red clause (the reads the belt makes); numbers after homelab#1543
+used_by: ci-red-arbitrate-belt/*   # regenerate the truth: run.sh --index
