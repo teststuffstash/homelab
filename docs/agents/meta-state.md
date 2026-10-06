@@ -10,37 +10,27 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-06 night — S9 BUILD LIST for the unattended session; the second-jail read's rulings are
-  ADRs; TICK-LOG 2026-10-06 evening).** Landed: #2335 (version-set regex members get `deps-review`+automerge — a
-  grouped branch arms only when EVERY member agrees, G15), #2336 (`devbox run renovate-lane-lint`: Renovate itself
-  over the checkout, one lane per computed branch — a SEAT verb, CI WAN stays locked down), #2338 (kps worked case
-  + **G16: the ten prometheus-operator CRDs are owned by nobody** — `skipCrds: true`, live v0.91.0), #2340 (the
-  ⚓ upgrade-lease ruling), **#2342** (G17, pending) and **#2343** (ADR-150 lease, ADR-151 CRD owner, ADR-141/149
-  amended — pending). **#2295 cloudflared armed by the seat 19:3xZ** → after merge the seat applies
-  `tofu/cloudflare` in a window (runbook §Cloudflare — the G13 set's tofu half). **Build order (all S9 #1985 —
-  operator: NO new FUs; `dependency-upgrades.md` §Worked case):** (1) **G17**: `scripts/devbox-update.sh` jq gains a
-  numeric-tuple downgrade check + a per-package `major.minor` list (python3, opentofu, kubectl, openssl) → a SECOND
-  body section; PR STAYS ARMED (ruling: rely on the lens); fixture = #2260's lock diff; the lock-bump lens brief
-  reads the whole move list (`agents/lenses/migration.md`, codeowner path). (2) **G16 / ADR-151**:
-  `prometheus-operator-crds` Application (SSA, `Delete=false`, prune off, sync-wave before kps) + one Renovate
-  group with the stack chart (`.github/renovate-global.json` — run `renovate-lane-lint` before landing); first sync
-  IN A WINDOW (FU-304 memory event); belt = CRD `operator.prometheus.io/version` vs operator image. Then **#2256**
-  may merge (update-branch, never Renovate's rebase box — worker commit on the branch). (3) **G12**: Renovate
-  `postUpgradeTasks` for kps (`bash scripts/upstream-alerts-refresh.sh`, `fileFilters` the list, `executionMode:
-  branch`, global `allowedCommands`); verify first on a dry run that the Renovate image has helm/yq/jq (`-full`
-  tag or `install-tool`) and that post-upgrade files ride `platformCommit: auto`. (4) **ADR-150 the lease**: the
-  record (sibling of `responder-window`), kps PreSync/PostSync hook Jobs as a third Application source, the box's
-  expiry loop in `mgmt/scripts/` opening the pin-only revert PR, a drill on a real patch bump (#2276→#2279 shape).
-  ⚠ the credential click (`homelab-sentinel` contents + pull_requests write) is OPERATOR-ONLY — build everything
-  up to it, the drill waits for the click. (5) only then the `matchPackageNames` line arming kps majors.
-  **Two more rulings (operator, 2026-10-06 late — in #2343):** (a) **packaging-only chart majors merge on the
-  lens alone** — the lens states the appVersion delta from the chart index; when UNCHANGED the major handoff
-  (`agents/major-handoff.sh` + the lens brief, codeowner paths) ARMS instead of parking `major/awaiting-human`
-  — build it as step (0), it is the cheapest lever; (b) **the `homelab-sentinel` write widening is APPROVED** —
-  PR the `docs/github-apps.yaml` declaration (FU-098 flow); the click itself is the operator's when back;
-  `GithubAppPermissionDrift` confirms. **Operator items:** #2260 (devbox major) read done — nothing blocks,
-  merge is the operator's. **Loose:**
-  `pr-wait-test` `multi-first-actionable` flaked once on #2336's CI (grep -q under pipefail suspected, unproven).
+- **⚑ PICKUP (2026-10-07 morning — S9 build list DONE overnight; TICK-LOG 2026-10-06 night has the arc).**
+  Landed: #2345 (0: packaging-only chart majors ARM on `appVersion: unchanged`), #2344 (1: G17 second body
+  section + fixture; ci step c757e178), #2348 (2: ADR-151 CRD owner app + group + belt), #2351 (3: G12
+  postUpgradeTasks), #2347/#2349/#2355/#2359 + #2350 (4: ADR-150 lease, cluster + box — box timer LIVE
+  21:28Z), #2346 (sentinel `contents: write` DECLARED). **kps 91.8.0 + CRDs 32.0.1 LIVE 23:34Z** (#2256; the
+  lease armed→confirmed on a real bump after a seat renew — ordering hole fixed by #2359). Cloudflared
+  2026.10.0 tofu half applied. **OPERATOR (morning):** (a) the `homelab-sentinel` permission click
+  (`contents: write`; `GithubAppPermissionDrift` had not fired by 23:46Z — expect it) → then the seat drills the
+  REVERT half: a synthetic expired lease on the next merged pin-only kps bump (`agents/upgrade-lease.sh open
+  --subject argocd/platform/kube-prometheus-stack.yaml --chart kube-prometheus-stack --sha <merged sha> --from
+  <old> --to <new> --expect-min 0`, the #2276→#2279 shape) → `mgmt-lease` opens `revert-chart-lease-<sha8>` →
+  reflex merges → ArgoCD back; only then **step (5)** the one `matchPackageNames` line arming kps majors (next
+  to the argo-workflows rule). (b) #2260 (devbox major) merge — nothing blocks. (c) **Goal #2273 production-leg
+  finding:** theme 2 (#2333) put `lastEditedAt` in `gh pr list --json` — not a gh field — every stack's review
+  ride FATAL'd 23:22–23:45Z; seat quickfix 914b2b3c drops it, the body-edit re-review leg is INERT until it reads
+  GraphQL `PullRequest.lastEditedAt` (bucket-A material; the rides are green again from 23:49Z). **Loose (S9,
+  no new FUs):** `KernelOopsCaptured` counts OOM-kill dumps (`Call Trace:` in the Alloy regex — wk-04 23:25 was
+  the PostSync Job OOM) → exclude the oom-killer dump or count it apart; `install-tool helm v4.3.0` in the G12
+  rule has no proposer; `pr-wait-test`/clause-replay flake = `scan-guarded` `printf | grep -m1` broken pipe on a
+  long body (G17 lane's read); G12's proof = the next kps bump's first CI run; #2256 was retitled "- abandoned"
+  by Renovate when the group landed (merged anyway).
 - **⚑ PICKUP (2026-10-06 evening — Goal #2273 BOTH THEMES ON MASTER; TICK-LOG 2026-10-06).** FU-295 fixed
   (#2299, box activated, archived 638095cd). Theme 1 scan-guards #2339 (f0b19f81) + theme 2 seam-parsers
   #2333 merged 19:23/19:34Z after seat codeowner reads (verdicts on the PRs). Goal now post-launch

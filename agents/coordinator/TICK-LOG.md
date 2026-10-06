@@ -12630,3 +12630,44 @@ updates or reverts as much as possible — mechanical revert or a responder."
   tofu 1.12→1.13 unflagged → **G17 (#2342)**; ruling: rely on the lens, PR stays armed.
 - **Takeover 19:2xZ** (primary exited): armed #2295 by hand; ADR PR #2343; this bookkeeping; pickup written for the
   unattended S9 build session (meta-state). Memory: `upgrade-lease-over-alert-detectors`.
+
+## 2026-10-06 night — S9 build list built unattended: G12/G16/G17, the lease (both halves), kps 91.8.0 live (seat)
+
+- **Six forked build lanes in scratchpad worktrees, PR lane, no new FUs.** (0) **#2345** packaging-only chart
+  majors ARM: `major-handoff.sh` step 5 reads `appVersion: unchanged` from the lens's APPROVED body (replay rows
+  `packaging-only-arms`/`app-moves-parks`); (1) **#2344** G17: `lock_moves` → downgrades + `LINE_PACKAGES`
+  line moves as a second body section, fixture = #2260's lock diff (12 checks; the `ci.yaml` step is the direct
+  lane — c757e178); (2) **#2348** ADR-151: `prometheus-operator-crds` Application 29.0.0 (SSA, `Delete=false`
+  via `crds.annotations`, prune off, wave 0) + the `kube-prometheus-stack` Renovate group (lane-lint OK, 12
+  branches) + box belt `check_kps_crds`; first sync in window seat-1791321377-5139 = one annotation per CRD,
+  apiserver flat; (3) **#2351** G12: `postUpgradeTasks` (`install-tool helm v4.3.0` + the refresh, `allowedCommands`)
+  — the pinned action runs the SLIM image (jq only, no helm/yq), so the refresh script went yq-free; proof =
+  the next kps bump; (4) ADR-150: cluster half **#2347/#2349/#2355/#2359** (CLI + hook Jobs as a `path:` on the
+  `ref: values` source; sentinel baseline for the ClusterRole; PostSync OOM on the 59 MB cluster-wide CRD
+  listing → projection; identity = subject+sha+from/to), box half **#2350** (`mgmt-lease.sh`, timer `*:3/5`,
+  60 test rows, four belts) — ACTIVATED on the box 21:28Z by the hourly pull (first tick failed 126: the script
+  landed 644 → quickfix c8d05cc2 +x; tick 21:31Z `0 in flight`). **#2346** declares `homelab-sentinel`
+  `contents: write` (the click is the operator's).
+- **kps 91.8.0 + CRDs 32.0.1 LIVE 23:34Z.** #2256 update-branched twice + a seat commit for the CRD pin
+  (the group's first member move), admin-merged 23:12Z (the lens approval was dismissed by the new head;
+  the operator read is on record). First automatic hook run found the ORDERING hole: the kps app synced the
+  hooks-source move with the chart still at 86.3.2 (the app-of-apps had not bumped the pin yet) → lease
+  `86.3.2→86.3.2 at fa182eb2`, PostSync stuck on check 6 (CRDs 0.94.1 vs operator 0.91.0); seat `renew` (+35
+  min) + terminated the op → the 91.8.0 sync ran, PreSync no-op'd on the same sha, PostSync 6/6 ok + confirm.
+  #2359 closes it (same sha, other `to` → replace; sha fallbacks; `HookFailed` delete policy). Prometheus 3.15.0,
+  operator v0.94.1, `up`=190, Watchdog 1, apiserver 30-min peak wk-metal-02 3109 MiB (baseline 3000).
+- **Cloudflared 2026.10.0 tofu half** applied in window seat-1791319380-7837 (plan = the image line; 2/2
+  ready; `ha.teststuff.net` 403; re-plan empty; window clean, closed).
+- **Window seat-1791321377-5139 closed `--force` with two diagnosed alerts:** `KernelOopsCaptured` wk-04
+  23:25 = the `Call Trace:` of the FIRST PostSync Job's OOM-kill dump (kubectl at 128 Mi, 22:22:59Z — the
+  #2355 bug), not a kernel fault: the Alloy regex counts OOM dumps as oopses; `ArgoWorkflowsFailing` 23:27 =
+  **every stack's review ride FATAL since 23:22Z** on `gh pr list … --json …,lastEditedAt` → `Unknown JSON
+  field` — #2333 (Goal #2273 theme 2) added a field gh does not have (jail gh 2.101 rejects it too; replay stubs
+  cannot see an invalid field). Seat quickfix **914b2b3c** drops it from the list/view calls (jq predicates keep
+  `.lastEditedAt // ""` → the body-edit re-review leg is INERT until it reads GraphQL `PullRequest.lastEditedAt`);
+  replay 713/713; pushed 23:46Z. A Goal #2273 production-leg finding for the operator's verdict.
+- Misc: Renovate retitled #2256 "- abandoned" once the group rule landed (merged anyway; the group's first PR
+  will be `renovate/major-kube-prometheus-stack`); `meta-needs-attention.sh` bash -n quickfix 83621a25 (an
+  apostrophe inside the jq string); the `pr-wait-test` flake = clause replay `scan-guarded` family,
+  `printf | grep -m1` broken pipe on a long body (G17 lane's read, unfixed); zsh `$K` word-split bit a poll loop
+  again (memory `jail-ops-gotchas`).
