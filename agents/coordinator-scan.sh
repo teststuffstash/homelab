@@ -3694,7 +3694,7 @@ EOF_GTHEMES_OPEN
       # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
       # above ran first), so a running round is never mistaken for a finished one.
       # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
-      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews,lastEditedAt 2>/dev/null)" || cr_probe=''
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch (homelab#1427).
       cr_boc="$(pr_blocked_on_check "$slug" "$u" "$cr_probe")"
@@ -3715,7 +3715,7 @@ EOF_GTHEMES_OPEN
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
           def newest_commit_at:
             ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
-          if newest_commit_at != "" and newest_commit_at > newest_review_at then "held" else "" end
+          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)) then "held" else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then

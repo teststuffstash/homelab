@@ -1,0 +1,31 @@
+# changes-requested-body-edit — the review edge's re-review decision on PR body edits
+# (homelab#2168, Goal #2273 fix rule: table first, then the row).
+#
+# THE CONTRACT. The review reflex and the coordinator both compute `reviewable_again` —
+# a predicate that decides whether a PR with CHANGES_REQUESTED can be re-reviewed. Both
+# readers must agree: reviewable when the newest non-merge commit OR the PR body's lastEditedAt
+# is newer than the newest CHANGES_REQUESTED review.
+#
+# THE DEFECT. Both readers checked ONLY the newest non-merge commit, ignoring lastEditedAt.
+# A fix that only edits the PR body (no new commits) stays invisible, and the PR never
+# escapes CHANGES_REQUESTED until a human dismisses the review.
+#
+# THE ROWS. The axis is the edit pattern:
+#   body-edit-only      — body edited after CHANGES_REQUESTED; no new commits.
+#                        THE FIXED ROW: red on base (both readers silence it), green after.
+#   control-no-changes  — neither commits nor body edited after the verdict.
+#                        Guard: must stay non-reviewable (no re-review dispatch).
+#
+# THE READERS. Both are jq predicates that must agree:
+#   - agents/review-reflex.sh:325 (the reflex's pick gate, runs every ~5 min)
+#   - agents/coordinator-scan.sh (changes-requested clause, runs every ~10 min)
+#
+# This fixture seals them into one guard: both read through ONE home (the reflex),
+# the coordinator's copy becomes a mirror to lint against (touches-check.sh rule 3).
+#
+name: changes-requested-body-edit
+mode: table
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+rows: rows.psv
