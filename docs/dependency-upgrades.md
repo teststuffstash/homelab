@@ -637,7 +637,7 @@ chart's. The design, as ruled (ADR-150; the CRD owner is ADR-151):
 | confirm | the **PostSync** hook Job runs the subject's real checks and DELETES the lease. ArgoCD `Healthy` is not the check (the shallow gate, §4). For this chart: Prometheus + Alertmanager `/-/ready`, rule-evaluation failures at zero, `Watchdog` present in the Alertmanager API, operator pod Ready, and (after G16) the CRDs' `operator.prometheus.io/version` equal to the operator image. The Job's image must not depend on the component it verifies (curl/kubectl, never a Prometheus client that needs Prometheus up) | the chart's hooks |
 | renew | a node-by-node rollout (Talos, Kubernetes — the reconciler) cannot know its end at the start: ONE lease, `expected-end` moved forward as each node comes back, never past `max-end`. The box only acts on expiry, so a renewal is invisible to it; the cap is what stops a stuck loop renewing forever | the actor |
 | revert | the box's 5-min loop (the sentinel/apply cadence — `mgmt-pull` is hourly but it is the box's OWN flake, not master) lists leases; for every record with `expected-end` in the past it opens ONE revert PR of the lease's sha — pin-only, `automerge`+`dependencies`, reflex-approved, carrying the `reverted-charts:` line so pin-only-lint's 30-day memory holds Renovate off that version — and records the branch. Not a direct push: the lane's checks still run. Lands between the deadline and the next tick | the box |
-| credential | the ONE operator click: `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab only (ADR-149 rejected the box as actor on this premise; the ruling reverses it) | operator |
+| credential | the ONE operator click: `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab only (ADR-149 rejected the box as actor on this premise; the ruling reverses it). **Approved 2026-10-06** — the `docs/github-apps.yaml` declaration PRs first (FU-098 flow), the operator clicks, `GithubAppPermissionDrift` confirms | operator |
 | windows | a declared window HOLDS the apply loop (FU-300); it must NOT hold the lease timer — a confirmed upgrade must never revert after the window closes, and an unconfirmed one must revert whether or not a seat has a window open. The lease is a sibling of the window, not a window: a seat opening a window never arms a revert | rule |
 | scope | kube-prometheus-stack first (the chart that is its own cone); the shape is generic — any chart major, any node rollout. `chart-revert` (ADR-149) stays for argo-workflows until evidence says one actor; its `TARGETS` never gains this chart | — |
 
@@ -647,8 +647,9 @@ from the operator changelog; and the grafana subchart major (a UI with sqlite-sy
 probe, G5). The one timing hole: a healthy roll that genuinely outlasts `expected-end` reverts — the
 fix is a longer deadline on that subject's record, never a smarter box.
 
-**Order that follows:** (1) the ruling with the best operator-minutes return costs nothing to build
-— chart majors where the operator minor does not move (89, 90) merge on the lens's APPROVED alone;
+**Order that follows:** (1) RULED 2026-10-06 (ADR-141 as amended): chart majors where the operator minor
+does not move (89, 90) merge on the lens's APPROVED alone — the handoff arms on the lens's "appVersion
+unchanged" verdict line (build: the handoff reads it, the brief states it);
 (2) G16, the CRD owner — without it every operator-minor crossing is unsupported skew, lens or no
 lens; (3) G12, the re-render rides the Renovate run; (4) the lease: the record + the box's expiry
 loop + the credential click, drilled on a real patch bump the way #2276 → #2279 was; (5) then the one

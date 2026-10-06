@@ -2564,6 +2564,14 @@ gate. Same read, a Renovate semantic now written down: a GROUPED branch arms onl
 `automerge: true` (labels are the union) — every version-set rule must give every member its lane (G15:
 #2295 was born un-armed; #2335 fixed the two groups; `devbox run renovate-lane-lint` runs Renovate itself
 over the checkout and asserts one lane per computed branch before a config change lands).
+**Amended 2026-10-06, later (operator): PACKAGING-ONLY chart majors merge on the lens alone.** A chart major
+whose embedded app version does not move (kube-prometheus-stack 89 and 90 both shipped prometheus-operator
+v0.93.1; the chart cuts a major per subchart major or default change) is a `major` by semver only. When the
+lens's verdict states the appVersion delta from the chart index (the ADR-149 (5) read) as UNCHANGED, the
+major handoff ARMS the PR instead of parking it `major/awaiting-human`, and the lens's APPROVED completes
+the merge — the terraform-provider-major shape. An appVersion that moves keeps the human lane until the
+chart has a lease (ADR-150) or a receiver (ADR-149). Mechanism: a structured verdict line the handoff
+reads, never a label a human sets; build = stint S9.
 
 ### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
 **Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
@@ -2766,7 +2774,9 @@ rollout renews `expected-end` per node, never past `max-end`. (4) The box's 5-mi
 cadence) opens ONE pin-only revert PR per expired lease through the reflex lane — `automerge` +
 `dependencies`, the `reverted-charts:` line for pin-only-lint's 30-day memory — never a direct push.
 (5) Credential: `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab only — the
-ONE operator click; ADR-149's "no PR-writing credential" premise is reversed (amended there). (6) A
+ONE operator click, **approved by the operator 2026-10-06** (the FU-098 flow: the `docs/github-apps.yaml`
+declaration PRs first, the click accepts it, `GithubAppPermissionDrift` confirms); ADR-149's "no PR-writing
+credential" premise is reversed (amended there). (6) A
 declared window HOLDS the apply loop and NEVER the lease timer: a confirmed upgrade must not revert after
 a window closes, an unconfirmed one must revert whether or not a seat has one open; a window arms
 nothing. (7) Scope: kube-prometheus-stack first; the shape is generic (any chart major, any node rollout);
