@@ -15,7 +15,8 @@
 #
 # upgrade-lease.sh is a VENDORED COPY of agents/upgrade-lease.sh (kustomize's root-only load
 # restriction forbids ../../../agents); agents/upgrade-lease-test.sh (`devbox run
-# upgrade-lease-test`, in ci) fails when the two copies differ.
+# upgrade-lease-test`; its ci.yaml step lands operator-direct, the guarded-file lane) fails when
+# the two copies differ.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

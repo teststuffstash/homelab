@@ -27,7 +27,9 @@ check() {  # check <name> <fn> — retry every 15 s until the shared deadline
   done
 }
 prom_ready()   { c "$PROM/-/ready" >/dev/null && echo "$PROM"; }
-rules_clean()  { local v; v="$(c "$PROM/api/v1/query" --data-urlencode 'query=sum(increase(prometheus_rule_evaluation_failures_total[5m]))' | jq -r '.data.result[0].value[1] // "0"')" && [ "${v%.*}" = 0 ] && echo "rule evaluation failures: $v"; }
+# numeric compare, never an integer-part test: increase() extrapolates, so one real failure right
+# after a bump reads 0.66 — `${v%.*}` would have confirmed on it (reviewer catch, #2347)
+rules_clean()  { local v; v="$(c "$PROM/api/v1/query" --data-urlencode 'query=sum(increase(prometheus_rule_evaluation_failures_total[5m]))' | jq -e -r '(.data.result[0].value[1] // "0") as $v | if ($v | tonumber) == 0 then $v else error("rule evaluation failures: \($v)") end')" && echo "rule evaluation failures: $v"; }
 am_ready()     { c "$AM/-/ready" >/dev/null && echo "$AM"; }
 am_watchdog()  { local n; n="$(c "$AM/api/v2/alerts?filter=alertname%3DWatchdog&active=true" | jq 'length')" && [ "$n" -ge 1 ] && echo "Watchdog active ($n)"; }
 operator_up()  { kubectl -n "$OPERATOR_NS" get deploy "$OPERATOR_DEPLOY" -o json | jq -e -r 'select((.status.availableReplicas // 0) >= .spec.replicas and (.status.updatedReplicas // 0) == .spec.replicas) | "\(.status.availableReplicas)/\(.spec.replicas) available, image \(.spec.template.spec.containers[0].image)"'; }

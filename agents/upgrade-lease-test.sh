@@ -104,5 +104,20 @@ is open-missing-flag "$($L open --subject $SUBJ 2>&1)" "upgrade-lease: open need
 # 8. the vendored copy in the hook kustomize dir is byte-identical (the ConfigMap the Jobs run)
 yes vendored-copy-identical cmp -s "$HERE/upgrade-lease.sh" "$HERE/../argocd/resources/kube-prometheus-stack-lease/upgrade-lease.sh"
 
+# 9. postsync.sh's rule-evaluation check compares NUMERICALLY (reviewer catch on #2347: increase()
+#    extrapolates, 0.66 is a real failure) — a fake curl answers the Prometheus query
+POSTSYNC="$HERE/../argocd/resources/kube-prometheus-stack-lease/postsync.sh"
+rules_with() {  # <value or "none"> → rc of rules_clean with a fake curl returning that sample
+  if [ "$1" = none ]; then body='{"status":"success","data":{"result":[]}}'
+  else body='{"status":"success","data":{"result":[{"metric":{},"value":[0,"'"$1"'"]}]}}'; fi
+  printf '#!/usr/bin/env bash\necho %s\n' "'$body'" >"$T/bin/curl"; chmod +x "$T/bin/curl"
+  ( export POSTSYNC_DEFINE_ONLY=1; source "$POSTSYNC"; rules_clean >/dev/null 2>&1 )
+}
+rules_with 0; is rules-zero-passes "$?" 0
+rules_with none; is rules-no-series-passes "$?" 0
+rules_with 0.5; rc=$?; yes rules-fraction-fails test "$rc" -ne 0
+rules_with 3; rc=$?; yes rules-integer-fails test "$rc" -ne 0
+rm -f "$T/bin/curl"
+
 echo "upgrade-lease-test: $((n-fails))/$n ok"
 [ "$fails" -eq 0 ]
