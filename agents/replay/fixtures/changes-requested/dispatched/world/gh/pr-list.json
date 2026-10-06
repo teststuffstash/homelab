@@ -1,4 +1,24 @@
 [
-  {"number":1095,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/some-thing","body":"A fix for something"},
-  {"number":1098,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/blocked-on-test","body":"A fix attempt"}
+  {
+    "number": 1095,
+    "labels": [],
+    "reviewDecision": "CHANGES_REQUESTED",
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "headRefName": "fix/some-thing",
+    "body": "A fix for something",
+    "lastEditedAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "number": 1098,
+    "labels": [],
+    "reviewDecision": "CHANGES_REQUESTED",
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "headRefName": "fix/blocked-on-test",
+    "body": "A fix attempt",
+    "lastEditedAt": "2024-01-01T00:00:00Z"
+  }
 ]

@@ -1,0 +1,39 @@
+# ci-cause-grammar — the `ci-cause:` marker GRAMMAR as one decision table (homelab#1775, Goal
+# #2273 fix rule: table first, then the row).
+#
+# THE CONTRACT. Every ci-red and arbitrate ruling comment carries ONE line-anchored marker
+# (agents/coordinator/README.md §ci-cause):
+#     ci-cause: <job>/<step> class=<class> basis=<basis>
+# `<job>/<step>` is the fleet-fault rule's STABLE identifier, taken from `gh run view --json jobs`
+# — and real step names contain SPACES. The ledger's consumer (`CI_CAUSE_RE`, agents/ledger.py)
+# harvests the marker into the row's `ci_causes: []` field.
+#
+# THE DEFECT. The capture was `(\S+)` — no-space — so a marker naming a step with a space was
+# silently DROPPED (40% of production markers on oracle-fleet, exactly the ones naming the failing
+# e2e step). #1350 fixed the ANCHOR (`^` without re.MULTILINE); this is the same clause one group
+# to the right.
+#
+# THE ROWS (rows.psv; the marker line per row in rows/<id>/vars.sh). The axis is the MARKER SHAPE:
+#   step-with-space / step-with-space-infra / step-with-space-serve — the three shapes the defect
+#     dropped (a step name with spaces, at two classes, and the second real e2e step). RED on the
+#     pre-fix tree: `(\S+)` captures only the first token, then ` class=` fails to line up, so the
+#     marker is dropped entirely.
+#   step-contains-class-literal — a step name containing the literal text ` class=`: the
+#     backtracking trap the issue names. RED on base (dropped); the non-greedy capture anchored on
+#     ` basis=` recovers the whole step name.
+#   plain-step / prose-preceded — the shapes the old capture already handled (a no-space step, and
+#     a marker preceded by prose — the #1350 anchor belt), kept so the fix is a widening, never a
+#     silent narrowing.
+#
+# The bridge imports the REAL `CI_CAUSE_RE` out of agents/ledger.py — never a copy of the pattern
+# (ADR-122, one parser).
+name: ci-cause-grammar
+mode: table
+parts:
+  - file:bridge.sh
+  - file:post.sh
+# The reader is Python (agents/ledger.py), so the interpreter is DECLARED rather than discovered
+# as a mystery red (agents/replay/README.md cleanup-contract move 6).
+requires:
+  - python3
+rows: rows.psv

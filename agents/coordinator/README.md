@@ -96,9 +96,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > **Name your tool gaps; never leave a capability demand in prose.** When a NAMED diagnostic or
 > tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked
 > fetch — and its absence changed what you could verify, emit ONE structured line in your session's
-> normal output surface (issue comment / report): `TOOL_GAP: <tool-or-verb> — <what it was needed
-> for, one clause>`. Anchor it like `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the
-> line, never a substring — once per session per tool, and never as a request for the grant itself:
+> normal output surface (the surfaces the janitor's inventory reads — §The janitor tick, sweep 6):
+> `TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>`. Anchor it like
+> `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the line, never a substring — once per
+> session per tool, and never as a request for the grant itself:
 > evidence, not lobbying. The janitor's daily tick aggregates these into the operator's inventory
 > (§The janitor tick, sweep #6); a gap already ruled out stays listed with its ruling.
 >
@@ -143,9 +144,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
 >   re-dispatch mints a fresh key.
 >   **Re-grade the budget label as escalation carrier**: when strikes suggest the
->   served model's tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
->   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
->   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
+>   served model's tier is inadequate, re-grade the issue's `agent-budget/*` label to `lg` before
+>   re-dispatch — the label is the routing verb (labels ride /route since PR#408), and `lg` is the
+>   only label that moves a deepseek ride to a stronger model (`sm`→`md` changes only the $ cap;
+>   `label_map` in `model-classes.json` is the vocabulary home — §Escalation vocabulary). Never label
 >   `agent/blocked` for a pure infra failure while the router still has an eligible candidate;
 >   only a `chain-exhausted` `/route` answer escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
@@ -275,9 +277,12 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
    `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
    burned a session until the FU-069 breaker caught it).
-   `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
-   haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
-   run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
+   `--max-turns <n>` is a LAUNCHER flag (homelab#1923), not a harness one: the arg loop exports it
+   as BOTH `GOOSE_MAX_TURNS` (goose's pod-env cap) and `CLAUDE_MAX_TURNS` (the claude run command's
+   `--max-turns`), because the harness is derived from the model AFTER the loop. Omit it and the
+   defaults apply — 200 for both (raised from 80, operator 2026-07-17 — haiku rides hit the 80
+   ceiling; 200 matches the goose belt that clears every measured legit run). Keep the default
+   unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
    `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
    work; `fixer.docker` repos ride kata as usual).
    **Parallelism is footprint-based** (ADR-097, `Touches:` intersection — the scan computes it):
@@ -679,10 +684,22 @@ the product:
    name it a BLOCKING finding in the report headline. Your write tier is unchanged — inert
    drafts only; the edge + the blocking-park surfaces carry the urgency to the human.
 6. **Tool-gap inventory (TOOL_GAP, homelab#536)** — the capability-demand reader. Aggregate the
-   session-issued `TOOL_GAP:` marker lines across the stack's repos (issue comments + PR bodies,
-   trailing ~30d) into a `tool × count × sample-need` inventory, so the operator reads demand
-   instead of prose archaeology. Seed the first report from the known prose record, and keep a gap
-   already RULED listed with its ruling — the point is visibility, not re-litigation:
+   session-issued `TOOL_GAP:` marker lines across the stack's repos (the surfaces declared on the
+   `TOOL_GAP_SURFACES:` line below, trailing ~30d) into a `tool × count × sample-need` inventory,
+   so the operator reads demand instead of prose archaeology. Seed the first report from the known
+   prose record, and keep a gap already RULED listed with its ruling — the point is visibility,
+   not re-litigation:
+
+   **The channel set is declared ONCE, on the line below** — the reviewer's emitter contract
+   (`agents/reviewer-session.sh`) reads this line at dispatch time and interpolates it, so the
+   emitter and this reader can never disagree again (homelab#1776). A marker written to a PR
+   **review body** counts: the reviewer lane's filings land there, and reading only issue comments
+   and PR bodies left 13 real filings per ~30d unread (the ADR-122 (3) class one layer down — one
+   grammar, two surfaces, an emitter and a reader that never agreed which surface counts). Any
+   other restatement of the surfaces — including the launcher's janitor `RUN_CMD` summary in
+   `agents/coordinator-session.sh` — is a summary this line supersedes.
+
+   TOOL_GAP_SURFACES: issue comments, PR bodies, PR review bodies
    - `talosctl` — the PodSigkilled family (#63/#65/#68/#100/#101/#153/#472) — **ruled
      out-of-scope by construction**: the agent image carries no devbox and node-level truth (Talos
      dmesg, machine config) is unreachable by any in-cluster agent whatever its RBAC
@@ -1064,10 +1081,14 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
-  into the worker's context. **Re-grade the budget label if needed**: if stronger models are
-  warranted, edit the issue's `agent-budget/*` label to one tier higher (the escalation carrier —
-  labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
-  home — §Escalation vocabulary, whose `tier_floor`/`never_free` keys are not yet router-enforced).
+  into the worker's context. **Re-grade the budget label if needed**: the escalation carrier is
+  the issue's `agent-budget/*` label. Say what the re-grade actually floors — the floors live in
+  `label_map` (`model-classes.json`), the vocabulary home (§Escalation vocabulary), not in this
+  advice: `sm` floors at `none` (no floor), `md` floors at `cheap`, `lg` floors at `large`
+  (`never_free`). The served flash pair (`deepseek-v4-flash`, `deepseek-v4.1-flash`) is
+  `tier: cheap`, so `sm`→`md` changes only the $ cap, not the model; only `lg` moves a deepseek
+  ride to a stronger model. To get a stronger model, re-grade to `lg` or pass `--model` on the
+  dispatch.
   This RESETS nothing — if it comes back a third time, escalate.
   Every ruling comment MUST carry ONE `ci-cause:` marker line — the grammar and its data-only
   contract live in §ci-cause below (one home; the ledger harvests it, homelab#1286).
@@ -1724,7 +1745,10 @@ start of a line (at most one per ruling):
 ci-cause: <job>/<step> class=<timing|environment|content|infra|unknown> basis=<observed|prior|hypothesis>
 ```
 `<job>/<step>` from `gh run view --json jobs` (the fleet-fault rule's stable identifier — never a
-log excerpt). `class` is the ruling's own diagnosis category; `unknown` is legal and honest.
+log excerpt). Write it VERBATIM: real step names contain spaces (`e2e/kind e2e (chart + image +
+test Garage)`), and the ledger's reader captures the whole string up to the ` class=` field
+(homelab#1775 — a no-space capture silently dropped 40% of production markers). `class` is the
+ruling's own diagnosis category; `unknown` is legal and honest.
 `basis`: `observed` = probed/read THIS instance's evidence; `prior` = pattern refs (name them);
 `hypothesis` = untested. **The tag is DATA — it changes no routing, no play behavior.** (#1280's
 rule waits for the distribution; do not implement any basis-keyed branching.)

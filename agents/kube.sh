@@ -23,3 +23,34 @@ if [ -f "${K_HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${K_HERE}/../t
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${K_HERE}/../.devbox/nix/profile/default/bin/kubectl"
 [ -x "$KUBECTL" ] || KUBECTL="kubectl"
+
+# live_worker_pod_count — count pods whose agent container has not terminated.
+# ONE predicate, ONE home (agents/kube.sh), called by both the scan's WIP ceiling
+# (coordinator-scan.sh) and the launcher's PREFLIGHT (agent-session.sh); a pod is
+# live to both or to neither. Semantics: an exited agent is not a worker, per the
+# scan's zombie reaper assumption.
+#
+# A pod is counted as live if:
+#   1. Its phase is not terminal (Succeeded or Failed)
+#   2. Its agent container HAS NOT terminated (including Pending pods, Unknown, unset phase)
+#   3. For Pending specifically: schedulable or younger than 30 seconds (the launcher's grace period)
+#
+# Usage: live_worker_pod_count <json-pod-list>
+# Returns: the count of live-agent pods, printed to stdout.
+# >>>REPLAY:live_worker_pod_count>>>
+live_worker_pod_count() {
+  printf '%s' "$1" | jq '[.items[]
+    | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+    | select(
+      .status.phase == "Running" or .status.phase == "Unknown" or
+      (.status.phase == "Pending" and (
+        ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
+        or
+        (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
+      )) or
+      (.status.phase | not)
+    )
+    | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
+               | select(. != null)] | length) == 0)] | length' 2>/dev/null || echo 0
+}
+# <<<REPLAY:live_worker_pod_count<<<

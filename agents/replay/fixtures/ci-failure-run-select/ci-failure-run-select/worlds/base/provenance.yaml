@@ -1,0 +1,20 @@
+# provenance — family world `base` (agents/replay/fixtures/ci-failure-run-select)
+#
+# WHAT THIS WORLD IS. The two `gh run list` answers the ci-red selector reads on a branch whose
+# red is real: `run-list-fix-issue-1413-pypi-cache-env-failure.json` is the run whose run-level
+# conclusion is `failure` (the selector's first pick), and
+# `run-list-fix-issue-1413-pypi-cache-env.json` is the NEWEST run on the branch — a `skipped`
+# renovate-approve run, the #1440 trap the selector must not pick. `run-view-33965268108.txt` is
+# that failing run's `--log-failed` tail. (The two files are keyed by the full call shape because
+# the stub shortens a key one word at a time: `run list <branch> failure` and `run list <branch>`
+# would otherwise both fall back to `run-list.json`.)
+#
+# PROVENANCE CLASS: constructed (README §S6). The shapes are `gh run list --json databaseId` and
+# `gh run view --log-failed`; the ids and the log are the #1440 fixture's own recording
+# (homelab PR#1448), kept so the settled-failure row still pins the #1440 behaviour. The
+# unsettled-sibling row overlays its own newest-run answer and log (rows/unsettled-sibling/).
+world: base
+class: constructed
+constructed: 2026-10-05
+source: agents/agent-session.sh ci-failure-run-select (gh run list --json databaseId; gh run view --log-failed)
+used_by: ci-failure-run-select/*   # regenerate the truth: run.sh --index

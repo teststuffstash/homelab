@@ -1,0 +1,8 @@
+# argv-max-turns — the decision table (family contract in fixture.yaml). The axis is the argv
+# form; the argv itself lives in rows/<id>/vars.sh, because it carries a space the env column
+# cannot. `documented-goose` is the row that reds on base (the catch-all refused the flag).
+# id                | world | patch | env | expect     | params
+documented-goose    |       |       |     | caps-200   |
+documented-claude   |       |       |     | caps-80    |
+unknown-flag        |       |       |     | unknown    |
+no-flag             |       |       |     | caps-unset |

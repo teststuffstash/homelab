@@ -1,0 +1,9 @@
+{
+  "commits": [
+    { "messageHeadline": "chore: the mechanical change", "committedDate": "2026-09-16T12:00:00Z" },
+    { "messageHeadline": "Merge branch 'master' into chore/x", "committedDate": "2026-09-16T12:30:00Z" }
+  ],
+  "reviews": [
+    { "author": { "login": "homelab-reviewer[bot]" }, "state": "CHANGES_REQUESTED", "submittedAt": "2026-09-16T13:00:00Z" }
+  ]
+}

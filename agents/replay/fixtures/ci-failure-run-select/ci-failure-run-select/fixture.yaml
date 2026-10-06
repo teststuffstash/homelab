@@ -1,27 +1,34 @@
-# homelab#1440 — select the failing run, not the newest run on branch
+# homelab#1440 + homelab#1940 — the ci-red run selector, as one decision table.
 #
-# CONDITION UNDER REPLAY. A PR with CI failures where the newest run on the branch is `skipped`
-# (e.g., from a `renovate-approve` workflow), while an older run is `failure` (e.g., from the main
-# `ci` workflow). The prefetch should select the failing run, not the newest one.
+# THE CONTRACT. The ci-red prefetch needs the FAILING run's log. It selects the run whose
+# run-level conclusion is `failure` (`--status failure`), never the newest run on the branch
+# (#1440: a `renovate-approve` skip sharing the CI run's createdAt sorted first and the log read
+# came back empty on every tick — a permanent defer). But a run whose failing job has already
+# completed is not yet `failure` while a SIBLING job is still running — GitHub reports the run
+# `in_progress` until every job settles — so `--status failure` is empty for as long as any
+# sibling runs, and a wedged sibling (no `timeout-minutes`) defers every ride for up to 6h
+# (#1940). The selector now falls back to the newest run on the branch when no run has settled to
+# `failure`; its failed job's log is already readable, and that log is the directive the round
+# needs.
 #
-# WHY THIS FIXTURE EXISTS. Before homelab#1440, `gh run list --limit 1` selected the newest run
-# regardless of status. On a branch where the newest run is skipped/success while an older run
-# failed, the log tail fetch would return empty, causing permanent deferral. The fix adds
-# `--status failure` to select the failing run instead.
+# ROWS. `settled-failure` is the clean base — one run concluded `failure` (the #1440 pin: the
+# newest run on the branch is a `skipped` renovate-approve, and the selector must pick the
+# concluded-failure run, not it). `unsettled-sibling` is the missed case: no run has settled to
+# `failure` (the `--status failure` list is empty) while the newest run on the branch is
+# `in_progress` with a readable failed job — the fallback selects it and the log tail lands.
 #
-# THE CONTRACT:
-#   1. The failing run (conclusion=failure) is selected, not the skipped run
-#   2. The log tail from the failing run is retrieved and included in ci-failure.md
-#   3. ci-failure.md status is OK (not PARTIAL or MISSING)
+# WORLDS. worlds/base (constructed — see its provenance.yaml).
 pins:
   - MP-T12
 name: ci-failure-run-select
-mode: actions
+mode: table
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
   - block:ci-failure-run-select
   - file:post.sh
+world: base
+rows: rows.psv
 env:
   - IN_SLUG=teststuffstash/homelab
   - IN_REPO=homelab
