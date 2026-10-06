@@ -1,25 +1,24 @@
 # homelab#2164 — the review-only selector should find `agent/review` regardless of `agent-fix` status.
 # Issues with agent/review but NOT agent/in-progress can be created with or without agent-fix
-# (e.g., via Implements keyword or carrier-issue flow). Both must be detected by the phantom belt
-# and the merged-closeout candidate set.
+# (e.g., via Implements keyword or carrier-issue flow). The selector must detect both cases.
 #
 # WORLDS (family-local):
-#   with-fix       Issue #80 has `agent/review + agent-fix` → detected by review_only selector.
-#   without-fix    Issue #80 has `agent/review` WITHOUT `agent-fix` → NOT detected on base
+#   with-fix       Issue #80 has `agent/review + agent-fix` → detected by review_only selector
+#                  on both base and after fix. Control case: the widening must not break it.
+#   without-fix    Issue #81 has `agent/review` WITHOUT `agent-fix` → NOT detected on base
 #                  (homelab#2164 defect), detected after fix to the selectors.
 #
 # THE CONTRACT:
-#   1. Both worlds have review-only issues (agent/review, no agent/in-progress).
-#   2. The "without-fix" world demonstrates the missed case: an issue with only agent/review.
-#   3. Both are detected by the phantom belt after the selector widening (row green).
-#   4. The "with-fix" row is red on base (it already works, this tests the existing behavior).
-#   5. The "without-fix" row is red on base (homelab#2164 defect), green after fix.
+#   1. with-fix    = green on base and green after (pre-existing case, control).
+#   2. without-fix = red on base (base filter requires agent-fix, selects nothing),
+#                    green after (the widening allows it to be selected).
 pins:
   - IL-T27
 name: review-only-label-combinations
 mode: table
 source: agents/coordinator-scan.sh
 parts:
+  - block:review-only-selector
   - file:bridge.sh
   - block:review-phantom-belt
   - file:post.sh
