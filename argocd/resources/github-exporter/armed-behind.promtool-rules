@@ -1,0 +1,25 @@
+# ArmedBehindNoApprovalStranded, lifted VERBATIM out of prometheusrule.yaml — the rules file that
+# armed-behind.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`. Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY
+# *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# THE COPY CANNOT DRIFT SILENTLY: `devbox run exporter-self-test` reads the alert out of both files
+# and asserts expr/for/labels/annotations are identical.
+#
+# Regenerate after editing the alert in prometheusrule.yaml:
+#   yq '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "ArmedBehindNoApprovalStranded")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+groups:
+  - name: github
+    rules:
+      - alert: ArmedBehindNoApprovalStranded
+        expr: >-
+          time() - max by (owner, repo, number) (max_over_time(github_pull_request_armed_behind_no_approval_timestamp[5m])) > 3600
+        for: 10m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: "Armed+BEHIND PR {{ $labels.repo }}#{{ $labels.number }} stranded on a no-approval repo"
+          description: "PR {{ $labels.repo }}#{{ $labels.number }} is armed and BEHIND on a repo whose ruleset requires no approval, and is over an hour old — the updater should have brought it current within a pass (the */15 cron plus the /update-pr edge). This is never a legitimate steady state. Check: (1) the updater's last pass for this repo (agents/update-pr-branch.sh, the updater-git token); (2) whether the PR carries the `automerge` label (the review reflex's skip class) or a bot approval at head — the two merge-ready arms; (3) the /update-pr edge (github-exporter UPDATE_PR_WEBHOOK_URL). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"

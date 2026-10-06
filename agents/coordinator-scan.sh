@@ -38,6 +38,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
+. "${HERE}/kube.sh"
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -2229,9 +2230,7 @@ EOF
       # = null, and [null] has length 1 — without select(.!=null) every Running ride was
       # invisible to this hold (only Pending pods held the queue), so each tick burned a
       # sonnet deferral session against the launcher belt (found 2026-08-02, issue-96 churn).
-      live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
-          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
-                     | select(. != null)] | length) == 0)] | length')"
+      live="$(live_worker_pod_count "$WIPPODS_JSON")"
       case "${live:-}" in ''|*[!0-9]*) live=0;; esac
       if [ "$live" -ge "$REPO_MAX_WIP" ]; then
         wip_busy=1
@@ -2676,7 +2675,7 @@ EOF
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
@@ -2748,7 +2747,7 @@ EOF_GUARDED
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
@@ -3851,7 +3850,7 @@ EOF_GTHEMES_OPEN
       # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
       # above ran first), so a running round is never mistaken for a finished one.
       # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
-      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews,lastEditedAt 2>/dev/null)" || cr_probe=''
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch (homelab#1427).
       cr_boc="$(pr_blocked_on_check "$slug" "$u" "$cr_probe")"
@@ -3870,13 +3869,15 @@ EOF_GTHEMES_OPEN
         cr_reviews="$(printf '%s' "$cr_probe" | jq -r '
           def newest_review_at:
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
+          def is_merge:
+            (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
-            ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
-          if newest_commit_at != "" and newest_commit_at > newest_review_at then "held" else "" end
+            ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
+          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)) then "held" else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then
-        head8="$(printf '%s' "$cr_probe" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
+        head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
         orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
         continue
       fi

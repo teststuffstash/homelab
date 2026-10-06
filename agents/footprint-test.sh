@@ -34,6 +34,18 @@ expect 1 "multi-entry fully disjoint"                 "docs/**, chart/**"     "s
 expect 1 "empty list never conflicts"                 ""                      "chassis/**"
 expect 1 "prefix-similar files are disjoint"          "chart/values.yaml"     "chart/values.schema.json"
 
+# ── the annotated-entry split (homelab#1567) ──────────────────────────────────────────────────
+# A `Touches:` entry may carry a trailing ` (...)` annotation scoping a broad path to a narrower
+# intent (docs/agents/issue-authoring.md §Touches). The old splitter was `tr -d ' \t'`, which
+# deleted EVERY space: `path (comment)` became `path(comment)` — one token with no `/` boundary,
+# so it prefix-matched nothing and the changed path read as an escape (oracle-fleet#543). The
+# splitter now strips the trailing annotation and trims only leading/trailing whitespace.
+expect 0 "annotated entry conflicts with its bare path"   "mcps/x/ingest/delta.py (log fields only)" "mcps/x/ingest/delta.py"
+expect 0 "annotated entry among plain siblings"           "a.py, mcps/x/ingest/delta.py (log fields only), b.py" "mcps/x/ingest/delta.py"
+expect 0 "annotated glob conflicts with a file under it"  "mcps/x/ingest/** (ingest only)" "mcps/x/ingest/delta.py"
+expect 1 "annotation does not widen the entry"            "mcps/x/ingest/delta.py (log fields only)" "mcps/x/ingest/other.py"
+expect 0 "whitespace-padded entries still conflict"       "  chassis/build.py  ,  tests/t.py  " "chassis/build.py"
+
 # fp_conflict_multi: any line holds; no lines never holds
 multi_busy="$(printf 'chassis/**\ndocs/**')"
 if ! fp_conflict_multi "docs/adr.md" "$multi_busy"; then
@@ -154,10 +166,53 @@ expect_classify "machine-merge"    "kustomization"           "agents/coordinator
 # Mixed footprint — highest tier wins
 expect_classify "codeowner-author" "mixed-author-wins"       "docs/agents/, .github/workflows/"
 expect_classify "codeowner-merge"  "mixed-merge-wins"        "argocd/resources/, agents/coordinator-scan.sh"
+# homelab#1567: classify_touches routes through the same splitter, so an annotated entry
+# classifies as its bare path (the annotation is a comment, never part of the path).
+expect_classify "codeowner-merge"  "annotated-entry"         "agents/coordinator-scan.sh (the scan)"
 
 # Undeclared / sentinel — empty footprint returns machine-merge (no paths to classify)
 expect_classify "machine-merge"    "empty-footprint"         ""
 expect_classify "machine-merge"    "star-sentinel"           "*"
+
+# ── classify_touches_repo — the LINTED repo's governance (homelab#1897) ──────────────────────
+# goal-lint lints ANY repo's Goal tree, but classify_touches' ❌ set is HOMELAB's platform
+# governance. classify_touches_repo applies the ❌ set only for a homelab slug and otherwise
+# classifies against the linted repo's CODEOWNERS, fetched with `gh api`. The acceptance's
+# `scripts/x.sh` example predates ADR-142 (2026-09-28), which took generic scripts/** out of
+# homelab's ❌ set; the contrast path is `.agents/probe.md` — in the set today and one of
+# oracle-fleet#563's own children. The oracle-fleet CODEOWNERS is served by a stub `gh` (this pod
+# holds homelab's token only; a live cross-repo fetch is impossible and must never be the test's
+# dependency — the same seam the classify-touches-repo replay fixture pins).
+_stub="$(mktemp -d)"
+cat > "$_stub/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *"repos/teststuffstash/oracle-fleet/contents/CODEOWNERS"*) cat "$STUB_CO_FILE" ;;
+  *) exit 1 ;;
+esac
+STUB
+chmod +x "$_stub/gh"
+STUB_CO_FILE="$(mktemp)"
+cat > "$STUB_CO_FILE" <<'CO'
+# oracle-fleet CODEOWNERS (test fixture): scripts/** is the ordinary chassis lane (unowned);
+# .agents/** is CODEOWNERS-gated but worker-proposed.
+.agents/  @teststuffstash/oracle-fleet-maintainers
+CO
+export STUB_CO_FILE
+expect_classify_repo() { # expect_classify_repo <expected> <desc> <slug> <footprint>
+  local result
+  result="$(PATH="$_stub:$PATH" classify_touches_repo "$3" "$4" 2>/dev/null || true)"
+  if [ "$result" != "$1" ]; then
+    echo "FAIL: classify_touches_repo $2 (slug='$3' footprint='$4' want=$1 got=$result)"; fails=$((fails + 1))
+  fi
+}
+# homelab: the ❌ set applies — .agents/** is operator-author; scripts/** is unowned (ADR-142).
+expect_classify_repo "codeowner-author" "homelab .agents is operator-author"   "teststuffstash/homelab"      ".agents/probe.md"
+expect_classify_repo "machine-merge"    "homelab scripts is unowned (ADR-142)" "teststuffstash/homelab"      "scripts/x.sh"
+# oracle-fleet: the ❌ set does NOT apply — its own CODEOWNERS decides (the fix).
+expect_classify_repo "codeowner-merge"  "stack .agents follows its CODEOWNERS" "teststuffstash/oracle-fleet" ".agents/probe.md"
+expect_classify_repo "machine-merge"    "stack scripts is unowned"             "teststuffstash/oracle-fleet" "scripts/x.sh"
+rm -rf "$_stub" "$STUB_CO_FILE"
 
 # ── THEME predicates (ADR-126 v1.3.1, homelab#1423 leg A) ─────────────────────────────────────
 # fp_theme_groups: stdin `<n>|<touches>` lines → `<surface>|<members>` lines for every connected

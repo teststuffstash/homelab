@@ -10,11 +10,31 @@
 # `**/x.py`) normalizes to the empty prefix and conflicts with everything. Wrong-side errors
 # here HOLD work (a deferral, absorbed by the next scan) — never release it.
 
+# This file's own directory — the anchor for the checkout's CODEOWNERS (classify_touches_repo).
+# Never `dirname $0`: footprint.sh is SOURCED, so $0 is the caller's shell.
+_FP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # fp_norm_entry <entry> → boundary prefix on stdout ("" = matches everything)
 fp_norm_entry() {
   _e="${1%%\**}"   # cut at the first glob star: chassis/** → chassis/
   _e="${_e%/}"     # drop the trailing slash: chassis/ → chassis
   printf '%s' "$_e"
+}
+
+# fp_split_entries <footprint> → one normalized entry per line. THE one entry-splitter for a
+# `Touches:` footprint (ADR-122): comma-split, trim leading/trailing whitespace per entry, and
+# strip a trailing ` (...)` annotation — the authoring-side comment syntax that scopes a broad
+# path to a narrower intent (docs/agents/issue-authoring.md §Touches). Every reader routes
+# through here (fp_conflict, fp_conflict_strict, classify_touches, fp_theme_member,
+# fp_theme_groups), so the grammar has ONE home; a second copy is the drift ADR-122 collapsed.
+# The old `tr -d ' \t'` deleted EVERY space, so `path (comment)` became `path(comment)` — one
+# token with no `/` boundary, which prefix-matches nothing and read as an escape (homelab#1567).
+# The annotation strip requires whitespace before `(` so a path that legitimately contains
+# parentheses is never truncated; only a trailing `(...)` group is removed.
+fp_split_entries() {
+  printf '%s' "$1" | tr ',' '\n' \
+    | sed -e 's/[[:space:]][[:space:]]*([^()]*)[[:space:]]*$//' \
+          -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 # fp_replay_exempt <entry-or-path> → 0 iff it is a COMPELLED COUNTERPART of clause work —
@@ -77,13 +97,50 @@ fp_goal_exempt() {
 #   codeowner-author — only codeowner may author (❌ set: .github/, .agents/, devbox.json|lock,
 #                      mgmt/scripts/ + the three box-executed scripts/ verbs — paths that take
 #                      effect BEFORE a human approves, or that the management box runs from master)
+# The ❌ set is HOMELAB's governance and applies only when CLASSIFY_PLATFORM_SET=1 (the default);
+# a caller linting ANOTHER repo's tree uses classify_touches_repo, which sets 0 and classifies
+# against that repo's CODEOWNERS (homelab#1897).
 # Callers: coordinator-scan.sh (queued-dispatch operator-lane hold), fix-debounce-argo.yaml
-# (queue-time deny), and any future reader — one definition, N readers.
+# (queue-time deny), scripts/goal-lint.sh (via classify_touches_repo), and any future reader —
+# one definition, N readers.
+
+# _co_classify <path> <codeowners-file> → "codeowner-merge" | "machine-merge" on stdout.
+# Parse CODEOWNERS at runtime: last-matching-pattern wins. A pattern with an owner makes the path
+# codeowner-merge; a carve-out (no owner) makes it machine-merge. Patterns are repo-relative
+# (leading / stripped for matching). Directory patterns (trailing /) match the dir and everything
+# under it; file patterns match exactly. Extracted from classify_touches so the ❌-set toggle and
+# the CODEOWNERS read are two named steps (homelab#1897).
+_co_classify() {
+  local _path="$1" _file="$2" _line _pat _owned _has_owner _rest
+  _owned=-1  # -1 = no match, 0 = carve-out, 1 = owned
+  while IFS= read -r _line; do
+    case "$_line" in
+      ''|'#'*) continue ;;
+    esac
+    _pat="${_line%%[[:space:]]*}"
+    # Check if this line has an owner (whitespace after pattern)
+    _has_owner=0
+    _rest="${_line#$_pat}"
+    [ -n "$_rest" ] && _has_owner=1
+    _pat="${_pat#/}"  # strip leading /
+    # Match: for directory patterns (trailing /), check if path starts with the pattern
+    # (agents/ matches agents/coordinator-scan.sh). For file patterns (no trailing /),
+    # check exact equality (agents/images.env matches only that file).
+    if [ "$_path" = "$_pat" ]; then
+      _owned="$_has_owner"
+    elif [ "${_pat%/}" != "$_pat" ] && [ "${_path#"$_pat"}" != "$_path" ]; then
+      # Directory pattern match (trailing /)
+      _owned="$_has_owner"
+    fi
+  done 2>/dev/null < "$_file" || true
+  if [ "$_owned" -eq 1 ]; then printf 'codeowner-merge'; else printf 'machine-merge'; fi
+}
+
 classify_touches() (
   set -f
   local footprint="$1" path tier="machine-merge"
   local _co_file="${CLASSIFY_CODEOWNERS:-CODEOWNERS}"
-  local _entries _co_line _co_pat _co_owned _co_has_owner _co_rest _new_tier
+  local _entries _new_tier _platform_author
 
   # Tier rank: machine-merge=1, codeowner-merge=2, codeowner-author=3
   _tier_rank() {
@@ -95,13 +152,13 @@ classify_touches() (
     esac
   }
 
-  _entries="$(printf '%s' "$footprint" | tr ',' '\n' | tr -d ' \t')"
+  _entries="$(fp_split_entries "$footprint")"
 
   for path in $_entries; do
     [ -n "$path" ] || continue
     _new_tier="machine-merge"
 
-    # ── ❌ operator-author set — NEVER agent-authored ──────────────────────────────────────
+    # ── ❌ operator-author set — NEVER agent-authored (HOMELAB's platform governance) ────────
     # These paths take effect BEFORE a human approves (iac-lane.md §The platform lane):
     #   .github/**       — PR runs its own workflow (arbitrary code on the runner)
     #   .agents/**       — next round reads its recipe from the branch
@@ -111,46 +168,27 @@ classify_touches() (
     #                      also run by the box (mgmt-reconcile / mgmt_health)
     # The rest of scripts/** LEFT this set on 2026-09-28 (ADR-142 trial): CI still executes it
     # from the branch, but the gate is now the reviewer's gate-change lens + the gate-drift report.
-    case "$path" in
-      .github/*|.github) _new_tier="codeowner-author" ;;
-      .agents/*|.agents) _new_tier="codeowner-author" ;;
-      devbox.json|devbox.lock) _new_tier="codeowner-author" ;;
-      scripts/node-maintenance.sh|scripts/maintenance-window.sh|scripts/controlplane-upgrade.sh|mgmt/scripts/*|mgmt/scripts) _new_tier="codeowner-author" ;;
-      *)
-        # ── CODEOWNERS-based classification ──────────────────────────────────────────────────
-        # Parse CODEOWNERS at runtime: last-matching-pattern wins. A pattern with an owner makes
-        # the path codeowner-merge; a carve-out (no owner) makes it machine-merge. Patterns are
-        # repo-relative (leading / stripped for matching). Directory patterns (trailing /) match
-        # the dir and everything under it; file patterns match exactly.
-        _co_owned=-1  # -1 = no match, 0 = carve-out, 1 = owned
-        while IFS= read -r _co_line; do
-          case "$_co_line" in
-            ''|'#'*) continue ;;
-          esac
-          _co_pat="${_co_line%%[[:space:]]*}"
-          # Check if this line has an owner (whitespace after pattern)
-          _co_has_owner=0
-          _co_rest="${_co_line#$_co_pat}"
-          [ -n "$_co_rest" ] && _co_has_owner=1
-          _co_pat="${_co_pat#/}"  # strip leading /
-          # Match: for directory patterns (trailing /), check if path starts with the pattern
-          # (agents/ matches agents/coordinator-scan.sh). For file patterns (no trailing /),
-          # check exact equality (agents/images.env matches only that file).
-          if [ "$path" = "$_co_pat" ]; then
-            _co_owned="$_co_has_owner"
-          elif [ "${_co_pat%/}" != "$_co_pat" ] && [ "${path#"$_co_pat"}" != "$path" ]; then
-            # Directory pattern match (trailing /)
-            _co_owned="$_co_has_owner"
-          fi
-        done 2>/dev/null < "$_co_file" || true
-
-        if [ "$_co_owned" -eq 1 ]; then
-          # Last matching pattern has an owner — codeowner-merge
-          _new_tier="codeowner-merge"
-        fi
-        # Carve-out (last match has no owner) or no match → stays as machine-merge
-        ;;
-    esac
+    #
+    # ⚠ This set is HOMELAB's shape, not a universal one (homelab#1897): on a stack repo scripts/**
+    # is the ordinary chassis lane and .agents/** is CODEOWNERS-gated but worker-proposed. So it is
+    # applied ONLY when CLASSIFY_PLATFORM_SET=1 (the default — every existing caller classifies
+    # homelab footprints). goal-lint, which lints ANY repo's Goal tree, sets 0 for a non-homelab
+    # slug via classify_touches_repo, so a stack's paths read as ITS CODEOWNERS says.
+    _platform_author=0
+    if [ "${CLASSIFY_PLATFORM_SET:-1}" = 1 ]; then
+      case "$path" in
+        .github/*|.github) _platform_author=1 ;;
+        .agents/*|.agents) _platform_author=1 ;;
+        devbox.json|devbox.lock) _platform_author=1 ;;
+        scripts/node-maintenance.sh|scripts/maintenance-window.sh|scripts/controlplane-upgrade.sh|mgmt/scripts/*|mgmt/scripts) _platform_author=1 ;;
+      esac
+    fi
+    if [ "$_platform_author" = 1 ]; then
+      _new_tier="codeowner-author"
+    else
+      # ── CODEOWNERS-based classification (the linted repo's, when CLASSIFY_CODEOWNERS names it) ──
+      _new_tier="$(_co_classify "$path" "$_co_file")"
+    fi
 
     # Only escalate tier (never downgrade)
     if [ "$(_tier_rank "$_new_tier")" -gt "$(_tier_rank "$tier")" ]; then
@@ -159,6 +197,35 @@ classify_touches() (
   done
 
   printf '%s' "$tier"
+)
+
+# classify_touches_repo <owner/repo> <footprint> → classify_touches against the LINTED repo's
+# governance (homelab#1897). goal-lint lints ANY repo's Goal tree, but classify_touches' ❌ set is
+# HOMELAB's platform governance (scripts/** are the checks and the launcher here; on a stack repo
+# scripts/** is the ordinary chassis lane). So:
+#   • slug is homelab → the ❌ set applies and CODEOWNERS is this checkout's (unchanged).
+#   • any other slug  → the ❌ set is NOT applied; CODEOWNERS is fetched from that repo
+#                       (`gh api repos/<slug>/contents/CODEOWNERS`, raw). A repo with no readable
+#                       CODEOWNERS classifies every path machine-merge — never a silent fall-back
+#                       to homelab's set (that fall-back IS the defect: oracle-fleet#562's three
+#                       deliverable children read as operator-author).
+# The scan and the fix-debouncer call classify_touches directly and are untouched: they only ever
+# classify homelab footprints.
+classify_touches_repo() (
+  set -f
+  local slug="$1" footprint="$2" co_file
+  case "$slug" in
+    homelab|*/homelab)
+      CLASSIFY_CODEOWNERS="${CLASSIFY_CODEOWNERS:-$_FP_DIR/../CODEOWNERS}" \
+      CLASSIFY_PLATFORM_SET=1 classify_touches "$footprint"
+      return ;;
+  esac
+  co_file="$(mktemp)"
+  if ! gh api -H 'Accept: application/vnd.github.raw' "repos/$slug/contents/CODEOWNERS" >"$co_file" 2>/dev/null; then
+    : > "$co_file"   # unreadable/absent → no ownership info, never homelab's set
+  fi
+  CLASSIFY_CODEOWNERS="$co_file" CLASSIFY_PLATFORM_SET=0 classify_touches "$footprint"
+  rm -f "$co_file"
 )
 
 # fp_pair_conflict <entryA> <entryB> → 0 iff the two entries overlap (path-boundary aware:
@@ -181,14 +248,20 @@ fp_pair_conflict() {
 # footprint-test strict rows so it stays a tested property, not a comment).
 fp_conflict_strict() (
   set -f
-  _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
-  _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
+  _la="$(fp_split_entries "$1")"
+  _lb="$(fp_split_entries "$2")"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
-  for _a in $_la; do
-    for _b in $_lb; do
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    while IFS= read -r _b; do
+      [ -n "$_b" ] || continue
       fp_pair_conflict "$_a" "$_b" && return 0
-    done
-  done
+    done <<EOF_B
+$_lb
+EOF_B
+  done <<EOF_A
+$_la
+EOF_A
   return 1
 )
 
@@ -198,24 +271,40 @@ fp_conflict_strict() (
 # footprint-test on first run — an expanded `*` silently compared FILENAMES, not the sentinel).
 fp_conflict() (
   set -f
-  _la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t')"
-  _lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t')"
+  _la="$(fp_split_entries "$1")"
+  _lb="$(fp_split_entries "$2")"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
   # ADR-097 addendum: replay-tree entries are stripped BEFORE pairing — a list that was
   # replay-only becomes empty and conflicts with nothing (a replay-only issue dispatches beside
   # anything, including a legacy `*` sentinel issue). The `*` sentinel itself normalizes to ""
   # and is NOT exempt — legacy-vs-legacy stays serial exactly as before.
   _fa=""; _fb=""
-  for _a in $_la; do fp_replay_exempt "$_a" || _fa="${_fa}${_a}
-"; done
-  for _b in $_lb; do fp_replay_exempt "$_b" || _fb="${_fb}${_b}
-"; done
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    fp_replay_exempt "$_a" || _fa="${_fa}${_a}
+"
+  done <<EOF_LA
+$_la
+EOF_LA
+  while IFS= read -r _b; do
+    [ -n "$_b" ] || continue
+    fp_replay_exempt "$_b" || _fb="${_fb}${_b}
+"
+  done <<EOF_LB
+$_lb
+EOF_LB
   [ -n "$_fa" ] && [ -n "$_fb" ] || return 1
-  for _a in $_fa; do
-    for _b in $_fb; do
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    while IFS= read -r _b; do
+      [ -n "$_b" ] || continue
       fp_pair_conflict "$_a" "$_b" && return 0
-    done
-  done
+    done <<EOF_B
+$_fb
+EOF_B
+  done <<EOF_A
+$_fa
+EOF_A
   return 1
 )
 
@@ -257,7 +346,10 @@ fp_theme_groups() (
   while IFS='|' read -r _tg_n _tg_l; do
     _tg_n="$(printf '%s' "$_tg_n" | tr -d ' \t')"
     case "$_tg_n" in ''|*[!0-9]*) continue ;; esac
-    _tg_l="$(printf '%s' "$_tg_l" | tr -d ' \t\r')"
+    # Normalize through the ONE splitter, then re-join comma-separated: the list is stored and
+    # re-split by comma below, so an annotated entry must be stripped here too (homelab#1567).
+    _tg_l="$(fp_split_entries "$_tg_l" | tr '\n' ',')"
+    _tg_l="${_tg_l%,}"
     [ -n "$_tg_l" ] || continue
     [ "$_tg_l" != "*" ] || continue
     _tg_members="${_tg_members}${_tg_n}|${_tg_l}
@@ -356,8 +448,8 @@ EOF_TG_G
 # not a surface) → it is ignored.
 fp_theme_member() (
   set -f
-  _tm_la="$(printf '%s' "$1" | tr ',' '\n' | tr -d ' \t\r')"
-  _tm_lb="$(printf '%s' "$2" | tr ',' '\n' | tr -d ' \t\r')"
+  _tm_la="$(fp_split_entries "$1")"
+  _tm_lb="$(fp_split_entries "$2")"
   [ -n "$_tm_la" ] || return 1
   [ "$_tm_la" != "*" ] || return 1
   for _tm_a in $_tm_la; do

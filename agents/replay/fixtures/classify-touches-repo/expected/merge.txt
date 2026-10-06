@@ -1,0 +1,3 @@
+CALL gh api -H Accept: application/vnd.github.raw repos/teststuffstash/oracle-fleet/contents/CODEOWNERS
+OUT classify: codeowner-merge
+RC 0

@@ -5,6 +5,7 @@
 homelab-guarded-dir      |                       |       | CASE_REPO=homelab CASE_NUM=299 CASE_TOUCHES=agents/coordinator/ CASE_TITLE=goal-child-openrouter                              | homelab-guarded-dir    |
 homelab-guarded-file     |                       |       | CASE_REPO=homelab CASE_NUM=400 CASE_TOUCHES=argocd/platform/openrouter-operator.yaml CASE_TITLE=openrouter-operator-retry     | homelab-guarded-file   |
 homelab-guarded-multi    |                       |       | CASE_REPO=homelab CASE_NUM=405 CASE_TOUCHES=argocd/platform/ CASE_TITLE=platform-app-of-apps                                  | homelab-guarded-multi  |
+homelab-guarded-annotated |                       |       | CASE_REPO=homelab CASE_NUM=406 CASE_TITLE=annotated-guarded-entry                                                             | homelab-guarded-annotated |
 homelab-unguarded-self   |                       |       | CASE_REPO=homelab CASE_NUM=309 CASE_TOUCHES=agents/coordinator-scan.sh,agents/replay/ CASE_TITLE=scan-guarded-check           | homelab-unguarded-self |
 homelab-sentinel         |                       |       | CASE_REPO=homelab CASE_NUM=402 CASE_TOUCHES=* CASE_TITLE=legacy-no-touches                                                    | homelab-sentinel       |
 homelab-glob             |                       |       | CASE_REPO=homelab CASE_NUM=403 CASE_TOUCHES=**/*.yaml CASE_TITLE=glob-footprint                                               | homelab-glob           |

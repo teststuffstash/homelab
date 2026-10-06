@@ -35,13 +35,15 @@
 # NO COMMENTS are posted by this script: the label IS the record, and the reviewer's approval
 # body IS the evidence trail a human reads before merging.
 #
-# ⚠ DUPLICATED DEFINITION, named on purpose. `newest_commit_at` / `bot_approved_head` below are
-# REPLICATED from agents/review-reflex.sh (the `review-pick` block: `def newest_commit_at` — updater
-# merge commits are NOT new content, oracle-fleet#57 — and `def bot_approved_head` — the `[bot]`
-# suffix sub + APPROVED + newer than the newest content commit). They are jq `def`s inside a
-# single-quoted jq program there, not a sourceable shell seam, so this file carries a copy; a change
-# to the reflex's definition must be mirrored here (the fixture family
-# agents/replay/fixtures/major-handoff pins THIS copy, `review-pick` pins the reflex's).
+# ⚠ DUPLICATED DEFINITION, named on purpose. `is_merge` / `newest_commit_at` / `bot_approved_head`
+# below are REPLICATED from agents/review-reflex.sh (the `review-pick` block: `def is_merge` — a
+# merge commit is NOT new content, oracle-fleet#57, classified by its GitHub default message shape
+# so ANY merge phrasing counts, homelab#2181 — and `def bot_approved_head` — the `[bot]` suffix sub
+# + APPROVED + newer than the newest content commit). They are jq `def`s inside a single-quoted jq
+# program there, not a sourceable shell seam, so this file carries a copy; a change to the reflex's
+# definition must be mirrored here (the fixture family agents/replay/fixtures/major-handoff pins
+# THIS copy, `review-pick` pins the reflex's). The same three-prefix merge shape is the one
+# reviewer-session.sh's exit contract uses (homelab#560 round 2) — one grammar, three readers.
 set -euo pipefail
 
 SLUG="${1:?usage: major-handoff.sh <owner/repo> <pr>}"
@@ -72,8 +74,18 @@ printf '%s' "$pr_json" | jq -e 'type == "object" and (.commits | type == "array"
 # the only exit-4 paths are above (the probe) and below (the re-read); rule #6 keeps them apart.
 verdict="$(printf '%s' "$pr_json" | jq -r --arg bot "$REVIEWER_LOGIN" --arg lane "$LANE_LABEL" --arg SLUGPR "$SLUG#$PR" '
   # ⚠ replicated from agents/review-reflex.sh `review-pick` — see the header.
+  # A MERGE is not content: it brings no PR-authored diff (oracle-fleet#57). Classified by its
+  # GitHub default message SHAPE, not by one updater phrasing (homelab#2181): the update-branch
+  # "Merge branch x", the agent-authored conflict-resolution "Merge remote-tracking branch
+  # origin/x into y" (the live #2046 case), and "Merge pull request #N". The same three-prefix
+  # set the reviewer-session exit contract uses (homelab#560 round 2) — one grammar, mirrored.
+  # gh pr view --json commits exposes no .parents[], so the message shape is the structural test
+  # available on this call.
+  def is_merge:
+    (.messageHeadline // "")
+    | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
   def newest_commit_at:
-    ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+    ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
   def bot_approvals:
     [ .reviews[]?
       | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)

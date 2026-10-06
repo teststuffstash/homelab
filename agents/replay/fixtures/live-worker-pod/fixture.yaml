@@ -1,0 +1,25 @@
+# live-worker-pod — the shared "is a worker live" predicate, as one decision table (homelab#2282,
+# Goal #2273 fix rule: table first, then the row).
+#
+# THE CONTRACT. The scan's WIP ceiling (`agents/coordinator-scan.sh`) and the launcher's PREFLIGHT
+# (`agents/agent-session.sh`) each had their own predicate for whether a pod is "live work". The scan
+# counts pods whose agent container has NOT terminated; the launcher counts pods by phase. A pod in
+# Running phase with a terminated agent but a live sidecar (pre-native-sidecar dind) was therefore
+# *not live* to the scan and *live* to the launcher, causing the launcher to refuse dispatch,
+# defer, and consume a ride (observed: oracle-fleet#735/#800). ADR-097 zombie reaper assumes the
+# scan's semantics: an exited agent is not work.
+#
+# One predicate, one home: `live_worker_pod_count()` in `agents/kube.sh`, called by both readers.
+#
+# THE ROWS (rows.psv; fixture.yaml). The axis is the pod's state at probe time: which combination of
+# .status.phase, agent container termination, and sidecar state. The sidecar-held row (Running phase
+# with terminated agent, live sidecar) is the defect this issue fixes: red on base (the launcher
+# counted it as live, the scan did not), green after (both now use the scan's semantics).
+name: live-worker-pod
+mode: table
+source: agents/kube.sh
+parts:
+  - file:pre.sh
+  - block:live_worker_pod_count
+  - file:post.sh
+rows: rows.psv

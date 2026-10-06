@@ -1,0 +1,4 @@
+# ci-failure-run-select — the decision table (family contract in fixture.yaml).
+# id                | world | patch (relpath @ patches/*.jq)              | env | expect            | params
+settled-failure     | base  |                                             |     | settled-failure   |
+unsettled-sibling   | base  | gh/run-list-fix-issue-1413-pypi-cache-env-failure.json @ patches/unsettled.jq | | unsettled-sibling |

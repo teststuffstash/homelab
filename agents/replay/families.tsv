@@ -31,6 +31,7 @@ c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
 c4c5-infeasible-quoted-inert	c4c5-infeasible
+ci-cause-grammar	ci-cause-grammar
 ci-red-deferred-then-debounced	ci-red-rounds-two-channels
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
@@ -62,6 +63,7 @@ fleet-fault-unlatch-issue-cause-closed-green	fleet-fault-unlatch
 fleet-fault-unlatch-no-marker	fleet-fault-unlatch
 fleet-fault-unlatch-probe-fail	fleet-fault-unlatch
 footprint-conflict-predicate	footprint-conflict-predicate
+footprint-entry-split	footprint-entry-split
 fu124-nudge	fu124-nudge
 goal-abandoned	goal
 goal-assembly-complete	goal

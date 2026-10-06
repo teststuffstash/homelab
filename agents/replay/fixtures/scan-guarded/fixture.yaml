@@ -19,6 +19,10 @@
 #   homelab-guarded-dir     local, a DIRECTORY footprint over a guarded file → HELD.
 #   homelab-guarded-file    local, an exact guarded file → HELD.
 #   homelab-guarded-multi   local, a directory covering TWO guarded files → HELD, both named.
+#   homelab-guarded-annotated local, `path (comment)` on a guarded file → HELD. The entry must
+#                           route through fp_split_entries (homelab#2273 theme 2): the old inline
+#                           `tr -d ' \t'` made it `path(comment)`, which prefix-matched nothing,
+#                           and the GUARDED hit was missed. Footprint rides rows/<id>/case-touches.txt.
 #   homelab-unguarded-self  local, the scan's own file + agents/replay/ → DISPATCHED. A substring
 #                           grep would hit `agents/coordinator/reflexes-argo.yaml` here and hold
 #                           the fix for the bug forever; `fp_conflict_strict` is boundary-aware.
