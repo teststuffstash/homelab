@@ -27,6 +27,7 @@ requires:
   - python3
 parts:
   - block:c4c5-selector
+  - block:infeasible-selector
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations

@@ -1,3 +1,4 @@
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 OUT RESUMABLE <empty>

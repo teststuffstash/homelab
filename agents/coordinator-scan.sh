@@ -4196,9 +4196,10 @@ EOF_GTHEMES_OPEN
             # ONLY "no open PRs" signal, nothing else (homelab#488): `gh pr list` degraded to `[]` on
             # a transient 503 made every in-progress issue read as an abandoned ride, and the belt
             # re-queued work a live PR already owned (homelab#405, the 18:00:53Z tick).
-            # ONE selector, FOUR derivations (the infeasible terminal, the belt, the report line,
-            # the unit) — this is conditions (a)+(b) of the abandoned-ride predicate and the copies
-            # MUST NOT drift.
+            # ONE selector, THREE derivations (the belt, the report line, the unit) — this is
+            # conditions (a)+(b) of the abandoned-ride predicate and the copies MUST NOT drift.
+            # The infeasible terminal used to be the fourth; it has its OWN predicate now
+            # (`INFEAS_SEL`, defined beside this one — homelab#1797).
             # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and so in
             # every derivation) or c4c5-redispatch, which outranks merged-closeout, re-rides merged
             # work every tick while the closeout unit starves. Detection block above.
@@ -4221,6 +4222,31 @@ EOF_GTHEMES_OPEN
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
             # <<<REPLAY:c4c5-selector<<<
+            # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
+            # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
+            # the C4/C5 redispatch belt (an errored ride is a human's to un-latch) and WRONG here:
+            # a ride that declares infeasible and THEN dies on the way out is the COMMON shape —
+            # the wall that made the task infeasible often kills the session too — and it is
+            # exactly the case the marker exists for. oracle-fleet#637 is the worked case: a
+            # well-formed marker at 13:34:50Z, an http-401-storm 31 s later, `agent/error` stamped
+            # by the launcher, and the issue invisible to every clause since.
+            # The predicate is the marker's own: in-progress ∧ NOT `agent/blocked` (already parked
+            # — the one label that means a human owns it). The C4/C5-specific holds
+            # (merged-into-goal, goal-based, debounced, live session, open PR) are NOT applied:
+            # they answer "should this be RE-DISPATCHED", and this read is not a redispatch
+            # decision — the marker is a VERDICT, and it wins over every hold. `agent/error` is
+            # INCLUDED for the same reason, and the park CLEARS it (the verdict supersedes the
+            # crash latch). The goal-based hold is the one that mattered most: a goal child whose
+            # worker declared infeasible was held as "merged-but-unlinked or abandoned?" and then
+            # re-ridden by the strike-driven resumable path below (oracle-fleet#636).
+            # ⚠ Kept SINGLE-quoted and expanded as `jq -r "$INFEAS_SEL"` — the same discipline
+            # `C4C5_SEL` carries, so a future edit cannot eat a backslash through double quotes.
+            # >>>REPLAY:infeasible-selector>>>
+            INFEAS_SEL='.[] | (.labels|map(.name)) as $L
+               | select((($L|index("agent/blocked"))|not))
+               | .number as $n
+               | "\($n)"'
+            # <<<REPLAY:infeasible-selector<<<
             # ── THE INFEASIBLE TERMINAL (retro r3 F4, homelab#257) ────────────────────────────────
             # A worker that correctly rules the deliverable NOT IMPLEMENTABLE AS WRITTEN — a path in
             # its recipe's ban list, a resource outside the pod (cluster, live API creds, a
@@ -4248,8 +4274,7 @@ EOF_GTHEMES_OPEN
             #     issue keeps today's behaviour, belt and unit included.
             # >>>REPLAY:infeasible-terminal>>>
             infeas_done=""
-            for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+            for icand in $(printf '%s' "$inprog" | jq -r "$INFEAS_SEL"); do
               icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
               # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
               # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
@@ -4283,13 +4308,18 @@ EOF_GTHEMES_OPEN
               # ⚠ Same non-atomic write as the belt below, same order for the same reason: ADD the
               # new lifecycle label FIRST, remove `agent/in-progress` SECOND, then RE-READ and prove
               # the end state. With neither label the issue is invisible to every clause.
+              # `agent/error` is cleared too (homelab#1797): the verdict SUPERSEDES the crash
+              # latch, and an `agent/error` left on a parked issue reads as "a human must un-latch
+              # this crash" — the wrong next-mover for a verdict. Best-effort like the in-progress
+              # removal, and the re-read below proves it.
               if gh issue edit "$icand" --repo "$slug" --add-label agent/blocked >/dev/null 2>&1; then
                 gh issue edit "$icand" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+                gh issue edit "$icand" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 || true
               fi
               iend="$(gh issue view "$icand" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
               iok=""
               case ",${iend}," in
-                *",agent/blocked,"*) case ",${iend}," in *",agent/in-progress,"*) : ;; *) iok=1;; esac;;
+                *",agent/blocked,"*) case ",${iend}," in *",agent/in-progress,"*|*",agent/error,"*) : ;; *) iok=1;; esac;;
               esac
               if [ -n "$iok" ]; then
                 gh issue comment "$icand" --repo "$slug" --body "$(printf '%s\n' \
@@ -4303,8 +4333,13 @@ EOF_GTHEMES_OPEN
                   "" \
                   "**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove \`agent/blocked\` and re-queue. Re-queueing it unchanged will simply reach the same verdict." )" >/dev/null 2>&1 || true
                 orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} parked \`agent/blocked\` (worker: ${ipay}). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).\n"
+                # The board row (homelab#1797): the class the operator's todo view renders as
+                # "AGENT_INFEASIBLE — re-scope needed" (agents/board.sh, who=operator — the same
+                # `who` the parked-infeasible alert keys on). Pushed only on a PROVEN park: a
+                # half-applied write is a broken state, reported loudly above, not a park.
+                item_class_push "$repo" "issue-${icand}" "parked-infeasible" "operator"
               else
-                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipay}\`, but the label write FAILED or landed HALF-APPLIED — labels are now [${iend}]. Fix by hand: it wants \`agent/blocked\` and NOT \`agent/in-progress\`. The redispatch is suppressed either way (a proven-impossible task is not re-ridden on the strength of a label write).\n"
+                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipay}\`, but the label write FAILED or landed HALF-APPLIED — labels are now [${iend}]. Fix by hand: it wants \`agent/blocked\` and NOT \`agent/in-progress\` (nor \`agent/error\`). The redispatch is suppressed either way (a proven-impossible task is not re-ridden on the strength of a label write).\n"
               fi
             done
             # <<<REPLAY:infeasible-terminal<<<
@@ -4535,8 +4570,16 @@ EOF_GTHEMES_OPEN
             # again with the same (model, error_class) pair follows the existing second-strike rule
             # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
             # strike→resume→strike loop.
+            # ⚠ `$done` (homelab#1797): an issue the INFEASIBLE terminal parked this tick is NOT
+            # undecidable — the worker's verdict outranks the strike's resumable branch, and
+            # re-riding it would spend a paid session to re-derive a known answer (oracle-fleet#636
+            # is what a cheaper model does with the same wall). The marker is read in ONE place
+            # (the terminal above); this derivation keys off its `infeas_done` set rather than
+            # re-reading the grammar — no second regex.
             ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              --arg done "${infeas_done:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+               | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)

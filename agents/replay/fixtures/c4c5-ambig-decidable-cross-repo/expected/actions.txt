@@ -1,5 +1,7 @@
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
+CALL gh api repos/teststuffstash/oracle-fleet/issues/329/comments?per_page=100
 CALL gh api repos/teststuffstash/oracle-fleet/issues/329/comments?per_page=100
 OUT   RESOLVED: homelab#329 → work-branch=fix/issue-329-loop
 OUT   RESOLVED: oracle-fleet#329 → work-branch=fix/issue-329-oracle
