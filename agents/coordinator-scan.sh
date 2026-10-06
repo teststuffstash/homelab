@@ -125,7 +125,7 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # format's ONE home; the coordinator session uses the same file's CLI verbs.
 . "${HERE}/goal-findings.sh"
 
-# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
+# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309, repo-general #1855) ─────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
 # files. So a queued issue whose DECLARED footprint lands on one of them cannot be delivered by a
 # PR at all: the required `ci` check is structurally red before the worker writes a line, and the
@@ -137,29 +137,91 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # same predicate against a second, static set, so the routing decision costs a report line instead
 # of a session.
 #
+# REPO-GENERAL (homelab#1855). The same guard exists per repo — agent-runtime's `deps-pin-guard.sh`
+# runs inside its required `ci` check and admits only a pure `agent-base/devbox.{json,lock}` diff —
+# and a footprint landing on it is just as undeliverable. The check was scoped to homelab, so that
+# repo's guard was invisible to dispatch and the constraint was rediscovered by a ride
+# (agent-runtime#145). The set is now read from the repo the issue belongs to.
+#
 # READ THE SET, NEVER RE-DECLARE IT. A second copy is the drift bug in the direction that hurts:
-# the lint widens, the scan keeps dispatching into the widened set. This is the same one-home read
-# the ADR-103 ratchet step already makes in `.github/workflows/ci.yaml` — grep the one line, eval
-# it — so there is exactly one definition of GUARDED in the repo and two readers of it.
+# the lint widens, the scan keeps dispatching into the widened set. Each repo's declaration is the
+# one home; the scan is the reader. Two declaration shapes exist on the platform:
+#   • a `GUARDED=` line in `scripts/pin-only-lint.sh` (homelab's pin-only-lint);
+#   • a `GUARD_SET:` env in the `ci` job of `.github/workflows/ci.yaml` (agent-runtime's
+#     deps-pin-guard).
+# The checkout's own repo is read from disk (no API call, no second copy); every other repo's
+# declaration is read from the repo itself through the API, because the scan clones only this repo.
 # >>>REPLAY:guarded-set>>>
 PIN_ONLY_LINT="${PIN_ONLY_LINT:-${HERE}/../scripts/pin-only-lint.sh}"
-# The set is THIS repo's CI's. A stack repo's `argocd/platform/` footprint is not touching this
-# repo's `arc-runners.yaml`, and holding it would be a category error — so the check is scoped to
-# the repo the checkout is, overridable for the same reason STACKS_FILE is.
+# The repo whose checkout this scan runs in — its declaration is the local file above. Overridable
+# for the same reason STACKS_FILE is.
 GUARDED_REPO="${GUARDED_REPO:-homelab}"
-guarded_paths() {   # → one guarded PATH per line. NO output = could not read (never "none guarded")
+
+# _guarded_from_sh <text> → one guarded PATH per line from a `GUARDED=` line; rc 1 = no such line.
+_guarded_from_sh() {
   local line="" GUARDED=""
-  [ -r "$PIN_ONLY_LINT" ] && line="$(grep -m1 '^GUARDED=' "$PIN_ONLY_LINT" || true)"
+  line="$(printf '%s\n' "$1" | grep -m1 '^GUARDED=' || true)"
   [ -n "$line" ] || return 1
   eval "$line" || return 1
   [ -n "$GUARDED" ] || return 1
   # The lint holds its set as a grep alternation (`a\.yaml|b\.yaml`); the footprint predicate wants
   # plain paths, so split on `|` and drop the regex escapes.
-  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$' || return 1
 }
-# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
-# work rather than releasing it (rule #6 — never fail INTO a dispatch).
-GUARDED_PATHS="$(guarded_paths || true)"
+
+# _guarded_from_workflow <text> → one guarded PATH per line from a `GUARD_SET:` env; rc 1 = none.
+# GUARD_SET is a whitespace-separated list (agent-runtime's deps-pin-guard reads it the same way).
+_guarded_from_workflow() {
+  local line="" GUARD_SET=""
+  line="$(printf '%s\n' "$1" | grep -m1 -E '^[[:space:]]*GUARD_SET:' || true)"
+  [ -n "$line" ] || return 1
+  GUARD_SET="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "$GUARD_SET" ] || return 1
+  printf '%s\n' "$GUARD_SET" | tr ' ' '\n' | grep -v '^[[:space:]]*$' || return 1
+}
+
+# _repo_file <slug> <path> → the file's text on stdout.
+#   rc 0 = present; rc 1 = the repo has no such file (404); rc 2 = unreadable (any other failure).
+# The absent/unreadable split is the "unknown, not false" posture: absent = the repo declares
+# nothing here; unreadable = we cannot tell, so the caller holds rather than dispatching blind.
+_repo_file() {
+  local slug="$1" path="$2" body="" rc=0
+  body="$(gh api "repos/${slug}/contents/${path}" 2>/dev/null)" || rc=$?
+  # A 404 body is the API's own "no such file": the live API returns it with a non-zero exit, the
+  # replay stub serves it as a world file with exit 0 — read the body, not the exit code.
+  if printf '%s' "$body" | jq -e '.status == "404"' >/dev/null 2>&1; then return 1; fi
+  if [ "$rc" != 0 ] || ! printf '%s' "$body" | jq -e '.content' >/dev/null 2>&1; then return 2; fi
+  printf '%s' "$body" | jq -r '.content' | base64 -d
+}
+
+# guarded_paths <repo> → one guarded PATH per line.
+#   rc 0 = read OK; rc 1 = the repo declares a guarded set but it could not be read (PROBE-FAILED
+#   → hold); rc 2 = the repo declares no guarded set (nothing to guard → dispatch).
+guarded_paths() {
+  local repo="$1" text="" rc=0
+  if [ "$repo" = "$GUARDED_REPO" ]; then
+    # The checkout's own repo: the one definition on disk. `pin-only-lint.sh` IS the declaration,
+    # so its presence with no `GUARDED=` line is a broken declaration (hold), not "none guarded".
+    [ -r "$PIN_ONLY_LINT" ] || return 1
+    text="$(cat "$PIN_ONLY_LINT" 2>/dev/null)" || return 1
+    _guarded_from_sh "$text" || return 1
+    return 0
+  fi
+  # A stack repo: read the declaration the repo itself carries, via the API. Probe the two shapes
+  # in order; a present-but-unparseable declaration is unreadable (hold), never "none guarded".
+  local slug="${ORG}/${repo}" text="" rc=0
+  # Shape 1: the CI workflow's GUARD_SET env. A workflow with no GUARD_SET is not a declaration —
+  # the file exists for every repo — so it falls through to shape 2.
+  rc=0; text="$(_repo_file "$slug" ".github/workflows/ci.yaml")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ] && _guarded_from_workflow "$text"; then return 0; fi
+  # Shape 2: a pin-only-lint.sh GUARDED= line. This file IS the declaration, so its presence with
+  # no GUARDED line is a broken declaration (hold), not "none guarded".
+  rc=0; text="$(_repo_file "$slug" "scripts/pin-only-lint.sh")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ]; then _guarded_from_sh "$text" || return 1; return 0; fi
+  return 2
+}
 # <<<REPLAY:guarded-set<<<
 
 # ── OPERATOR-LANE PATHS — a pre-dispatch routing check (homelab#1151) ────────────────────────────
@@ -2574,14 +2636,21 @@ EOF
       # be only PART of the issue's scope (#299: one manifest was landable, one env line was not)
       # — so the line names the file and the route, and a human re-scopes or splits it.
       # >>>REPLAY:guarded-hold>>>
-      if [ "$repo" = "$GUARDED_REPO" ]; then
-        if [ -z "$GUARDED_PATHS" ]; then
-          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
-          # `GUARDED=` line changed shape), so "not guarded" is unknown, not false. Loud and
-          # level-triggered — it clears itself on the scan after the read works again.
-          orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — no \`GUARDED=\` line readable at ${PIN_ONLY_LINT} (homelab#309). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
-          continue
-        fi
+      # The set is per REPO, not per issue — read it once per repo and reuse it across the repo's
+      # queue (the API read is not free). `_gp_rc`: 0 = read, 1 = unreadable (hold), 2 = none.
+      if [ "${_gp_repo:-}" != "$repo" ]; then
+        _gp_repo="$repo"; _gp_rc=0
+        GUARDED_PATHS="$(guarded_paths "$repo")" || _gp_rc=$?
+      fi
+      if [ "$_gp_rc" = 1 ]; then
+        # Rule #6: never fail INTO a dispatch. The repo declares a guarded set but it could not be
+        # read (the file moved, its line changed shape, the API read failed), so "not guarded" is
+        # unknown, not false. Loud and level-triggered — it clears itself on the scan after the
+        # read works again.
+        orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — ${repo}'s declared guarded set could not be read (homelab#309/#1855). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      if [ "$_gp_rc" = 0 ]; then
         # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
         # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
         # normalize to the empty prefix and are dropped here: reading them as guarded would stop

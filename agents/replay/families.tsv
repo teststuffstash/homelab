@@ -134,8 +134,6 @@ reviewer-touches-undeclared	reviewer-touches
 route-request-labels	route-request
 route-request-workbranch-tight	route-request
 run-phase-metric	run-phase-metric
-scan-guarded-pre-dispatch	scan-guarded
-scan-guarded-set-unreadable	scan-guarded
 scan-phase-marker	scan-phase-marker
 scan-touches-footprint-hold	scan-touches-footprint-hold
 scan-wedge-alert	scan-wedge-alert

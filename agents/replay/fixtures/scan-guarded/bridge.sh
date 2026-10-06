@@ -6,8 +6,8 @@
 # path: a fixture that named the guarded files itself would be the second copy the change exists to
 # prevent, and would go green while the scan and the lint drifted apart.
 HERE="$REPLAY_ROOT/agents"
-# The scan's own source line, verbatim — `fp_norm_entry`/`fp_conflict` are the ADR-097 predicate
-# and the guarded check must use the same path-boundary reasoning, not a private copy of it.
+# The scan's own source line, verbatim — `fp_norm_entry`/`fp_conflict_strict` are the ADR-097
+# predicate and the guarded check must use the same path-boundary reasoning, not a private copy.
 . "${HERE}/footprint.sh"
 orphans=""
 

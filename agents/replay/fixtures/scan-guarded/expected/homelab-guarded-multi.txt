@@ -1,0 +1,5 @@
+CALL item_class_push homelab issue-405 guarded-path operator master
+OUT ORPHAN [homelab] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so `ci` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #405 — platform-app-of-apps (declared: argocd/platform/ → guarded: argocd/platform/arc-runners.yaml argocd/platform/openrouter-operator.yaml)
+OUT REACHED: end
+RC 0
