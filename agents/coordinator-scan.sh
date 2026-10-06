@@ -4508,13 +4508,12 @@ EOF_GTHEMES_OPEN
             frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
             jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --argjson frozen_prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
-                       | select(([$frozen_prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
               [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
@@ -4579,16 +4578,17 @@ EOF_GTHEMES_OPEN
             # An open PR that is armed, bot-APPROVED at head, ci green, and BEHIND but unmoved
             # may match no scan clause: the `agent/review` phantom clause fires only when there is
             # NO open PR, so an open-but-frozen PR is a terminal sink. This belt detects issues
-            # with `agent/review` that are mentioned by a frozen open PR (already fetched above
-            # for exclusion from the existing phantom belt's candidates).
+            # with `agent/review` that are mentioned by a frozen open PR (fetched above to feed
+            # only this belt).
             #
             # CONDITION: a PR that is:
             #   - armed (autoMergeRequest != null)
             #   - bot-APPROVED (reviewDecision == "APPROVED")
-            #   - ci green (statusCheckRollup has no FAILURE/TIMED_OUT)
+            #   - ci green (every statusCheckRollup conclusion ∈ SUCCESS|NEUTRAL|SKIPPED; PENDING ≠ green)
             #   - BEHIND (mergeStateStatus)
             #   - unmoved (updatedAt unchanged past C4C5_PERSIST_S)
             # and references an issue with agent/review.
+            # NOTE: PENDING must not read as green since a frozen PR is one that stopped moving.
             #
             # The belt REPORTS and HOLDS to avoid races with the review-flip belt or ongoing PRs.
             # A hold costs a report line, guessing (reconciling without the guard) costs a duplicate
@@ -4693,9 +4693,11 @@ EOF_GTHEMES_OPEN
                         ] | first // ""
                     ')"
                     if [ -n "$branch" ]; then
-                      ambig_decidable="${ambig_decidable}${ambig_n} "
-                      # Encode the terminal type with the issue number for later lookup
-                      ambig_terminal_type="${ambig_terminal_type}${ambig_n}=${term_type}"$'\n'
+                      # repo-qualified key: issue numbers are only unique per repo
+                      # space-separated (same format as bare issue numbers above)
+                      ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                      # Encode the terminal type with the repo-qualified issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4711,7 +4713,11 @@ EOF_GTHEMES_OPEN
               ambig_filtered=""
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+                # Check for repo-qualified keys: repo#N or repo#N=…
+                case " $ambig_decidable " in
+                  *" ${repo}#${ambig_n} "*) ;;
+                  *) ambig_filtered="${ambig_filtered}${ambig_line}\n";;
+                esac
               done <<< "$ambig"
               ambig="$(printf '%b' "$ambig_filtered")"
             fi
@@ -4752,9 +4758,11 @@ EOF_GTHEMES_OPEN
             # Add resumable (decidable) goal children to dispatchable units — they were excluded
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
-              for ad_n in $ambig_decidable; do
-                # Look up which type of terminal comment was found for this issue
-                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_n}=" | cut -d= -f2)"
+              for ad_qualified in $ambig_decidable; do
+                # ad_qualified is now repo#N; extract the bare issue number for jq queries
+                ad_n="${ad_qualified#*#}"
+                # Look up which type of terminal comment was found for this issue using the qualified key
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2)"
                 ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
