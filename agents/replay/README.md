@@ -263,6 +263,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-issue-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-no-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | IL-T30 |
