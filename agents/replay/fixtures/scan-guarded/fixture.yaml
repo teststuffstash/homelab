@@ -1,0 +1,58 @@
+# scan-guarded — THE FAMILY, as one decision table (homelab#309 → repo-general homelab#1855).
+#
+# THE CONTRACT. A queued issue whose declared `Touches:` footprint lands on a repo's pin-only
+# GUARDED set cannot be delivered by any PR: the required `ci` check is structurally red before a
+# worker writes a line, and the documented route past it is an operator push to master. The scan
+# must therefore REPORT it (an orphan line, no label write) and never dispatch it. The set is read
+# from the repo the issue belongs to — never re-declared here — so the guard and the scan cannot
+# drift apart.
+#
+# REPO-GENERAL (homelab#1855). The check was scoped to homelab, so agent-runtime's `deps-pin-guard`
+# (a `GUARD_SET:` env in the `ci` job of `.github/workflows/ci.yaml`) was invisible to dispatch and
+# the constraint was rediscovered by a ride (agent-runtime#145). The set is now read per repo:
+#   • the checkout's own repo (homelab) reads `scripts/pin-only-lint.sh`'s `GUARDED=` line from
+#     disk — the one definition, no API call, no second copy;
+#   • every other repo's declaration is read from the repo itself through the API, probing the two
+#     shapes the platform uses (the workflow's `GUARD_SET`, then a `pin-only-lint.sh` `GUARDED=`).
+#
+# THE ROWS (one per axis value; per-row intent in rows.psv):
+#   homelab-guarded-dir     local, a DIRECTORY footprint over a guarded file → HELD.
+#   homelab-guarded-file    local, an exact guarded file → HELD.
+#   homelab-guarded-multi   local, a directory covering TWO guarded files → HELD, both named.
+#   homelab-unguarded-self  local, the scan's own file + agents/replay/ → DISPATCHED. A substring
+#                           grep would hit `agents/coordinator/reflexes-argo.yaml` here and hold
+#                           the fix for the bug forever; `fp_conflict_strict` is boundary-aware.
+#   homelab-sentinel        local, `*` (no `Touches:` line) → DISPATCHED. The sentinel conflicts
+#                           with everything by design; reading it as guarded would stop dispatching
+#                           every unfootprinted issue in the repo.
+#   homelab-glob            local, `**/*.yaml` → DISPATCHED. The sentinel's glob cousin normalizes
+#                           to the empty prefix exactly like `*`.
+#   homelab-set-unreadable  local, the declaration unreadable → HELD (PROBE-FAILED). Rule #6:
+#                           never fail INTO a dispatch — "not guarded" is unknown, not false.
+#   remote-guarded          agent-runtime, the workflow's `GUARD_SET` → HELD. The defect this
+#                           change exists to fix: agent-runtime#145's footprint lands on the guard.
+#   remote-unguarded        oracle-fleet, no declaration in either shape → DISPATCHED. A stack repo
+#                           that happens to own a same-named path is not touching homelab's file.
+#   remote-unreadable       agent-runtime, the API read fails → HELD (PROBE-FAILED). Same posture
+#                           as the local unreadable row, one repo over.
+#
+# NO LABEL WRITE IS ASSERTED FOR FREE: the action stream carries no `gh issue edit`/`gh issue
+# comment` call. This clause is a router, not a gate — `agent/blocked` is a human gate, and a
+# guarded overlap may be only part of an issue's scope. A future edit that "helpfully" parks the
+# issue shows up here as a new call.
+#
+# The homelab GUARDED set is read from the REAL `scripts/pin-only-lint.sh` in the checkout, not
+# recorded into `world/`: the acceptance criterion is that exactly ONE definition exists, so a
+# fixture holding a second copy would defeat the change it is pinning. The remote rows record the
+# repo's own declaration (or its absence) in `worlds/<w>/gh/`, which is the harness's normal
+# mechanism for a read the scan makes through the API.
+name: scan-guarded
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:guarded-set
+  - file:cases.sh
+  - block:guarded-hold
+  - file:post.sh
+rows: rows.psv

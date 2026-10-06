@@ -1,0 +1,4 @@
+[
+  {"number":240,"labels":[{"name":"agent/arbitrate"}],"reviewDecision":"CHANGES_REQUESTED"},
+  {"number":241,"labels":[{"name":"agent/arbitrate"}],"autoMergeRequest":{"mergeMethod":"SQUASH"},"reviewDecision":"APPROVED"}
+]

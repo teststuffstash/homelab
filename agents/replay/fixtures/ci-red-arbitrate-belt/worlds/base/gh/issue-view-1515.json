@@ -1,0 +1,3 @@
+{
+  "body": "## Deliverable\n\nSort the goal terminal-leg descendants by repo+number.\n\nTouches: agents/coordinator-scan.sh, agents/replay/fixtures/goal\n"
+}

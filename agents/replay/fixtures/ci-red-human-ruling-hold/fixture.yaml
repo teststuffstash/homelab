@@ -1,0 +1,44 @@
+# ci-red human-ruling hold (homelab#1544, MP-T13 sub-defect 2) — one decision table.
+#
+# CONDITION UNDER REPLAY. A red armed PR (#1515, branch fix/issue-1515-something) that has
+# completed RED_ROUNDS_MAX attempts, with a COMPLETED red check on the current head (so the
+# FU-1529 stale-sha guard passes and the escalation branch is actually reached — PR #1541's
+# fixture mocked `status: in_progress`, which short-circuited sub-defect 1 and left the whole
+# block dead code under replay). The PR's events carry a non-loop `unlabeled` of agent/arbitrate
+# (the operator's ruling, #1515: the fix was pushed, THEN the label removed).
+#
+# THE CONTRACT. A human's removal of agent/arbitrate is a ruling: escalation is HELD while no
+# commit on the PR is newer than that removal, and RELEASED as soon as new work lands (the
+# self-releasing key). The hold must be defeated by neither the loop's own label churn (the Bot
+# `unlabeled` at 18:20:00Z, and the Bot `labeled` at 18:16:34Z) nor an unrelated historical
+# unlabel (the human's agent/in-progress unlabel at 19:00:00Z — a different label).
+#
+# ROWS.
+#   held     — the base world: newest commit 17:00:00Z predates the removal 18:08:41Z → HOLD,
+#              no label write, `ci_red_should_arbitrate 0`.
+#   released — the same world with a commit at 19:30:00Z (patches/newer-commit.jq) → the hold
+#              self-releases and the escalation fires (`ci_red_should_arbitrate 1`).
+#   probe-fail — the events read refused (STUB_GH per-call override) → HOLD with a report line
+#              and no label write (rule #6 — never fail into a write).
+#
+# WORLDS. worlds/base (constructed — the check-runs, events and commits recordings the clause
+# reads; the events shape is the live one, verified against homelab#1515's own timeline).
+name: ci-red-human-ruling-hold
+mode: table
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:ci-red-stale-sha
+  - block:ci-red-arbitrate
+  - file:post.sh
+rows: rows.psv
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=1515
+  - MC_NOW=2026-09-12T14:23:00Z
+pins:
+  - MP-T13

@@ -1,0 +1,14 @@
+# c4c5-pod-liveness — per-issue liveness decision table (contract in fixture.yaml).
+# id          | world      | patch | env | expect
+# both-issues = #100 (in-progress WITH pod agent-session-homelab-issue-100-r1) and
+#               #101 (in-progress WITHOUT pod) both present. The selector must check
+#               per-issue pod existence. On base (buggy): `if [ -z "$PODS" ]` gate skips
+#               selector entirely when ANY pod exists, so both are invisible to C4/C5.
+#               After fix: selector runs, #100 is skipped (has pod), #101 is included (no pod).
+both-issues | both-issues |       |     | both-issues
+# probe-fail = The kubectl pods probe fails. bodies_ok is set (open PRs probe succeeds),
+#              but PODS probe fails. Expected: PROBE_FAILED (kubectl pods) message, no
+#              candidates, no belt writes. On base (buggy): entire C4/C5 block skipped due
+#              to repo-wide `if [ -z "$PODS" ]` gate, so failure is invisible.
+#              After fix: selector skipped but hold branch reached and failure reported.
+probe-fail | probe-fail | | STUB_KUBECTL=fail | probe-fail

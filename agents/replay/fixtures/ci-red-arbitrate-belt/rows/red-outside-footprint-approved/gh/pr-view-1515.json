@@ -1,0 +1,12 @@
+{
+  "reviewDecision": "APPROVED",
+  "reviews": [
+    { "state": "APPROVED", "submittedAt": "2026-09-12T14:00:00Z" }
+  ],
+  "commits": [
+    { "committedDate": "2026-09-12T13:00:00Z", "messageHeadline": "fix: sort terminal-leg descendants" }
+  ],
+  "statusCheckRollup": [
+    { "name": "ci", "conclusion": "FAILURE", "completedAt": "2026-09-12T14:10:00Z" }
+  ]
+}

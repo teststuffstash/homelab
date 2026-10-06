@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/oracle-fleet/contents/.github/workflows/ci.yaml
+CALL gh api repos/teststuffstash/oracle-fleet/contents/scripts/pin-only-lint.sh
+OUT DISPATCH #404 (oracle-fleet, declared: agents/coordinator/)
+OUT REACHED: end
+RC 0
