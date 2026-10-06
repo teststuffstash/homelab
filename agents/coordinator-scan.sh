@@ -4142,6 +4142,7 @@ EOF_GTHEMES_OPEN
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+            # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
             # the C4/C5 redispatch belt (an errored ride is a human's to un-latch) and WRONG here:
@@ -4167,7 +4168,6 @@ EOF_GTHEMES_OPEN
                | .number as $n
                | "\($n)"'
             # <<<REPLAY:infeasible-selector<<<
-            # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE TERMINAL (retro r3 F4, homelab#257) ────────────────────────────────
             # A worker that correctly rules the deliverable NOT IMPLEMENTABLE AS WRITTEN — a path in
             # its recipe's ban list, a resource outside the pod (cluster, live API creds, a

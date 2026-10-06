@@ -1,0 +1,12 @@
+[
+  {
+    "id": 10,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 11,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_STRIKE: model=deepseek/deepseek-v4.1-flash:exacto error_class=unknown\n\n**Resumable branch pushed:** `fix/issue-72-janitor-exit` — the next round can resume from it."
+  }
+]
