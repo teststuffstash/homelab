@@ -401,6 +401,11 @@ jobs:
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
         run: devbox run pin-only-lint-test
 
+      # ADR-150: the ⚓ upgrade-lease CLI against a fake kubectl (the retry no-op, the renew cap, the
+      # box's `list` shape) + the vendored hook copy staying byte-identical to agents/upgrade-lease.sh.
+      - name: upgrade-lease self-test (devbox run upgrade-lease-test)
+        run: devbox run upgrade-lease-test
+
       # ADR-143: the lockfile-intake gate's offline self-test (extractors, key parsing, fail-closed).
       - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
         run: devbox run lock-intake-lint-test
