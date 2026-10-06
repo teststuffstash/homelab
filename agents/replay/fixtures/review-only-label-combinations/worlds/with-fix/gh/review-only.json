@@ -1,0 +1,9 @@
+[
+  {
+    "number": 80,
+    "title": "scan: test issue with agent/review and agent-fix",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "A test issue with both agent/review and agent-fix labels.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  }
+]
