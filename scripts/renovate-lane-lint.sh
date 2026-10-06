@@ -73,7 +73,7 @@ python3 - "$trace" "$selftest" <<'PY'
 import json, sys
 path, selftest = sys.argv[1], sys.argv[2] == "1"
 LANE = {"automerge", "deps-review", "major", "major/awaiting-human"}
-branches, stats, depcount = [], None, None
+branches, stats, depcount, result = [], None, None, ""
 for line in open(path, encoding="utf-8", errors="replace"):
     try:
         j = json.loads(line)
@@ -85,9 +85,17 @@ for line in open(path, encoding="utf-8", errors="replace"):
     elif msg == "Dependency extraction complete":
         stats = j.get("stats") or {}
         depcount = (stats.get("total") or {}).get("depCount")
+    elif msg.startswith("Repository result:"):
+        result = msg
 
 if not selftest and not depcount:
     print("renovate-lane-lint: FAIL — no 'Dependency extraction complete' stats in the trace (renovate did not run to the lookup phase)")
+    sys.exit(1)
+if not selftest and not branches:
+    # A run that aborts between lookup and branch generation (2026-10-06: one ECONNRESET on a
+    # github-releases lookup → `Repository result: external-host-error`) leaves ZERO branches and would
+    # otherwise pass vacuously — the lookups succeeded, nothing was asserted. Fail loudly; re-run.
+    print(f"renovate-lane-lint: FAIL — zero branches computed after {depcount} extracted dependencies; nothing was asserted ({result or 'no Repository result line'}) — a lookup aborted the run, re-run")
     sys.exit(1)
 
 def lane(u):

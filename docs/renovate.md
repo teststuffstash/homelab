@@ -177,6 +177,17 @@ Safe: no duplication, no churn, nothing auto-acts on it.
   (`--platform=local --dry-run=lookup`, trace log) over the checkout and asserts one lane per branch;
   ~2 min of datasource lookups, so a seat verb, not CI (operator 2026-10-06 — CI WAN stays locked
   down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
+- **`postUpgradeTasks` run in the SLIM image, with no shell.** The pinned `renovatebot/github-action`
+  runs `ghcr.io/renovatebot/renovate:<version>` — containerbase + `jq`, no helm/yq/python — and executes
+  each command via execa (no `&&`, no pipes unless `allowShellExecutorForPostUpgradeCommands`, which we
+  do not set). Tools come from a runtime `install-tool <tool> <ver>` command (slim keeps
+  `binarySource=install`; the `-full` image sets `global`, which also disables `installTools`), every
+  command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
+  first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
+  one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). A dry run
+  (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
+  but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
   (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
   caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party
