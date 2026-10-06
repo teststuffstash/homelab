@@ -543,9 +543,10 @@ failures left the lane's two standing lessons:
   and then fired C6 falsely the other way (a `merged-closeout` dispatched at a RIDING issue —
   a false completion, the dangerous direction). The predicate now requires a STRONG link
   (`implements|closes|fixes|resolves #n` — exactly what agent-runtime#34's finalize
-  guarantees), while the `gref` (open-PR) side deliberately stays a bare mention: its failure
-  direction is *hold*, the safe one. **When a probe can err in two directions, price both —
-  the asymmetry decides the predicate.**
+  guarantees). The `gref` (open-PR) side stayed a bare mention until homelab#1720 (Goal #2273,
+  2026-10-06): its failure direction is *hold*, but a sibling PR that merely cites the child
+  held the closeout indefinitely, so both sides now read the one `STRONG_LINK_JQ` predicate.
+  **When a probe can err in two directions, price both — the asymmetry decides the predicate.**
 - **A belt is not a guard.** The item session's live-state re-read caught both stale dispatches
   ("exiting clean, no writes made") — an LLM judgement that burns a session per firing, which
   is evidence the guard was missing, never a reason to skip building it.
