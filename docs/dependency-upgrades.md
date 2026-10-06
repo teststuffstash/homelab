@@ -611,7 +611,10 @@ at +0.6 GiB on the laptop CP, which is the measured cost per operator minor.
 and kube-prometheus-stack IS Alertmanager and Prometheus: a bump that stops the Prometheus
 StatefulSet stops every alert, including the one that would name the bump. The detector has to be
 an ABSENCE read, not a firing alert. The cheap one already exists upstream: the always-firing
-`Watchdog` (routed to `null` today). Route it to `chart-revert` with a short `repeat_interval` and
+`Watchdog` — routed to `null` today, with NO consumer, while the triage map already leans on one:
+`AlertmanagerClusterDown`, `PrometheusErrorSendingAlertsToAnyAlertmanager` and
+`PrometheusNotConnectedToAlertmanagers` are classified `none` with the comment "Watchdog dead-man
+covers" (`kube-prometheus-stack-triage.yaml`). The G2 shape again: a belt assumed, never wired. Route it to `chart-revert` with a short `repeat_interval` and
 let the receiver treat "no Watchdog for N minutes ∧ a pin-only kube-prometheus-stack merge within
 the window" as the revert trigger, confirmed by its own `GET /-/ready` on the Prometheus and
 Alertmanager Services before it writes a PR (two independent reads, so a receiver restart or a
