@@ -1,0 +1,12 @@
+[
+  {
+    "id": 100,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 101,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_REPORT: deliberate stop\n\nThe worker pushed a branch and entered a deliberate stop. This is a resumable case — the next ride can resume from the pushed branch.\n\nResumable branch pushed: `fix/issue-329-loop`\n\nThis is a deliberate stop with a resumable branch: the worker pushed a branch before stopping, so the next ride can resume from it with --work-branch fix/issue-329-loop instead of starting over."
+  }
+]
