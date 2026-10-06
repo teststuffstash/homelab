@@ -34,14 +34,17 @@ am_ready()     { c "$AM/-/ready" >/dev/null && echo "$AM"; }
 am_watchdog()  { local n; n="$(c "$AM/api/v2/alerts?filter=alertname%3DWatchdog&active=true" | jq 'length')" && [ "$n" -ge 1 ] && echo "Watchdog active ($n)"; }
 operator_up()  { kubectl -n "$OPERATOR_NS" get deploy "$OPERATOR_DEPLOY" -o json | jq -e -r 'select((.status.availableReplicas // 0) >= .spec.replicas and (.status.updatedReplicas // 0) == .spec.replicas) | "\(.status.availableReplicas)/\(.spec.replicas) available, image \(.spec.template.spec.containers[0].image)"'; }
 crds_match()   {
-  local img ver
+  # NEVER `kubectl get crd -o json` over the whole cluster: 59 MB of JSON (Crossplane, Cilium, Argo…)
+  # OOM-killed the first live run under the Job's memory limit (2026-10-06, exit 137). The group's
+  # CRD names come from discovery (api-resources, a few KB), then one lean projection of just those.
+  local img ver names
   img="$(kubectl -n "$OPERATOR_NS" get deploy "$OPERATOR_DEPLOY" -o jsonpath='{.spec.template.spec.containers[0].image}')" || return 1
   ver="${img##*:}"; ver="${ver#v}"
-  kubectl get crd -o json | jq -e -r --arg v "$ver" '
-    [.items[] | select(.spec.group == "monitoring.coreos.com") | {n: .metadata.name, v: (.metadata.annotations["operator.prometheus.io/version"] // "unset")}]
-    | if length == 0 then error("no monitoring.coreos.com CRDs") else . end
-    | (map(select(.v != $v))) as $bad
-    | if ($bad | length) > 0 then error("operator \($v) vs CRDs \($bad | map("\(.n)=\(.v)") | join(", "))") else "\(length) CRDs at \($v) = operator" end'
+  names="$(kubectl api-resources --api-group=monitoring.coreos.com -o name)" || return 1
+  [ -n "$names" ] || { echo "no monitoring.coreos.com CRDs"; return 1; }
+  # shellcheck disable=SC2086
+  kubectl get crd $names -o custom-columns='NAME:.metadata.name,V:.metadata.annotations.operator\.prometheus\.io/version' --no-headers \
+    | awk -v v="$ver" '{ n++; if ($2 != v) bad = bad " " $1 "=" $2 } END { if (n == 0) { print "no CRDs read"; exit 1 } if (bad != "") { print "operator " v " vs CRDs" bad; exit 1 } print n " CRDs at " v " = operator" }'
 }
 
 [ "${POSTSYNC_DEFINE_ONLY:-0}" = 1 ] && return 0   # test seam: `source` the checks without running them (a seat probe from the jail)
