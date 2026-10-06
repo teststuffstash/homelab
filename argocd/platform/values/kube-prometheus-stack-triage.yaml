@@ -125,6 +125,7 @@ prometheus:
       - {source_labels: [triage, alertname], regex: ';AlertmanagerClusterDown', target_label: triage, replacement: none}  # single AM replica: firing means AM down, so it cannot deliver itself; Watchdog dead-man covers
       - {source_labels: [triage, alertname], regex: ';AlertmanagerConfigInconsistent', target_label: triage, replacement: none}  # cannot fire: single Alertmanager replica, no peer hash to differ
       - {source_labels: [triage, alertname], regex: ';AlertmanagerMembersInconsistent', target_label: triage, replacement: none}  # cannot fire: single Alertmanager replica, no cluster peers
+      - {source_labels: [triage, alertname], regex: ';AlertmanagerClusterFailedPeers', target_label: triage, replacement: none}  # cannot fire: single Alertmanager replica, no cluster peers (expr max_over_time(alertmanager_cluster_failed_peers[5m]) > 0)
       - {source_labels: [triage, alertname], regex: ';CPUThrottlingHigh', target_label: triage, replacement: none}  # info; self-describing limit state, noisy, no decision changes
       - {source_labels: [triage, alertname], regex: ';InfoInhibitor', target_label: triage, replacement: none}  # meta inhibitor for info alerts; routes to null
       - {source_labels: [triage, alertname], regex: ';KubeCPUOvercommit', target_label: triage, replacement: none}  # self-describing capacity; remedy is hardware or operator sizing

@@ -39,7 +39,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: prometheus-operator-crds
-    targetRevision: 32.0.1 # = operator v0.91.0, the version the live CRDs already carry (first sync: annotation only)
+    targetRevision: 32.0.1 # = operator v0.94.1 (29.0.0 = v0.91.0 → 32.0.1 = v0.94.1); the first sync is a REAL CRD change, not annotation-only
     helm:
       valuesObject:
         crds:
