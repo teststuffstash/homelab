@@ -311,6 +311,7 @@ is stale, so it cannot drift the way the prose register did.
 | `janitor-run-cmd-surfaces` | table | - | `agents/coordinator-session.sh` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `lens-posture/lens-posture` | suite | - | `-` | - |
+| `live-worker-pod` | table | - | `agents/kube.sh` | - |
 | `loop-fetch-guard/loop-fetch-guard` | actions | - | `agents/coordinator-session.sh` | - |
 | `loop-fetch-guard/reviewer-fetch-retry` | actions | - | `agents/reviewer-session.sh` | - |
 | `major-arm-guard-armed-major` | actions | - | `agents/agent-session.sh` | - |
