@@ -144,9 +144,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
 >   re-dispatch mints a fresh key.
 >   **Re-grade the budget label as escalation carrier**: when strikes suggest the
->   served model's tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
->   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
->   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
+>   served model's tier is inadequate, re-grade the issue's `agent-budget/*` label to `lg` before
+>   re-dispatch — the label is the routing verb (labels ride /route since PR#408), and `lg` is the
+>   only label that moves a deepseek ride to a stronger model (`sm`→`md` changes only the $ cap;
+>   `label_map` in `model-classes.json` is the vocabulary home — §Escalation vocabulary). Never label
 >   `agent/blocked` for a pure infra failure while the router still has an eligible candidate;
 >   only a `chain-exhausted` `/route` answer escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
@@ -1077,10 +1078,14 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
-  into the worker's context. **Re-grade the budget label if needed**: if stronger models are
-  warranted, edit the issue's `agent-budget/*` label to one tier higher (the escalation carrier —
-  labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
-  home — §Escalation vocabulary, whose `tier_floor`/`never_free` keys are not yet router-enforced).
+  into the worker's context. **Re-grade the budget label if needed**: the escalation carrier is
+  the issue's `agent-budget/*` label. Say what the re-grade actually floors — the floors live in
+  `label_map` (`model-classes.json`), the vocabulary home (§Escalation vocabulary), not in this
+  advice: `sm` floors at `none` (no floor), `md` floors at `cheap`, `lg` floors at `large`
+  (`never_free`). The served flash pair (`deepseek-v4-flash`, `deepseek-v4.1-flash`) is
+  `tier: cheap`, so `sm`→`md` changes only the $ cap, not the model; only `lg` moves a deepseek
+  ride to a stronger model. To get a stronger model, re-grade to `lg` or pass `--model` on the
+  dispatch.
   This RESETS nothing — if it comes back a third time, escalate.
   Every ruling comment MUST carry ONE `ci-cause:` marker line — the grammar and its data-only
   contract live in §ci-cause below (one home; the ledger harvests it, homelab#1286).

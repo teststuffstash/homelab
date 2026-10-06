@@ -1,0 +1,4 @@
+OUT readme-floor: {{floor}}
+OUT label-map-floor: {{floor}}
+OUT consistent: yes
+RC 0
