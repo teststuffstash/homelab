@@ -31,6 +31,9 @@
 #   two-lanes     one member carries both `automerge` and `deps-review`
 # Majors are not asserted either way: ADR-141's armed-major rules make both states legitimate.
 #
+# ⚠ COMMIT FIRST: the local platform lists the tree through git, so an UNTRACKED file is invisible
+# to it — the first #2348 run (2026-10-06) extracted 340 deps and showed the new CRD Application's
+# group with one member; the same run on the committed tree extracted 341 and showed both.
 # Usage: devbox run renovate-lane-lint            # run renovate, then assert (prints the branch table)
 #        … -- --trace FILE                        # assert on an existing trace (no renovate run)
 #        … -- --self-test                         # the fixture: one good group, one legit major, one of each violation
