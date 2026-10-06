@@ -1,5 +1,11 @@
-OUT [REPLAY] clause-coverage: testing issue label state clause coverage
-OUT CLAUSE-COVERAGE: testing issue label state clause coverage
-OUT   #2164 (agent/review only): 1 clauses match (expect 1 after fix)
-OUT   r7-F1 (agent/in-progress only): 0 clauses match — UNCOVERED (guard not landed)
+OUT STATE queued (#80): 1 clause(s) — queued-dispatch
+OUT STATE queued-goal (#81): 1 clause(s) — queued-dispatch
+OUT STATE in-progress (#82): 1 clause(s) — c4c5-redispatch
+OUT STATE review (#83): 1 clause(s) — review-phantom
+OUT STATE review-no-fix (#84): 1 clause(s) — review-phantom
+OUT STATE review-frozen (#85): 1 clause(s) — frozen-open-pr
+OUT LISTED blocked (#86): no clause owns this by design — none
+OUT LISTED error (#87): no clause owns this by design — none
+OUT LISTED done (#88): no clause owns this by design — none
+OUT CLAUSE-COVERAGE: OK — every enumerated state matches exactly one clause
 RC 0

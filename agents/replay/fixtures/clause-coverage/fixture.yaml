@@ -1,35 +1,55 @@
-# clause-coverage — enumeration of issue label states and verification that
-# each matches exactly one scan clause (Goal #2273, the clause-coverage replay gate).
+# clause-coverage — every admissible issue state is owned by EXACTLY ONE scan clause
+# (Goal #2273 acceptance row 1, homelab#2280; retro r7's proposed next gate).
 #
-# THE CONTRACT (ADR-103 / Goal #2273):
-#   The coordinator scan owns every admissible issue label state exactly once.
-#   No state can be invisible (matched by zero clauses) or ambiguous (matched by multiple).
-#   This fixture tests the two known defects from Goal #2273 acceptance:
+# THE CONTRACT. The coordinator scan owns every admissible issue state exactly once: no state
+# is invisible (matched by zero clauses) and none is ambiguous (matched by two). This case
+# enumerates the states the brief's state-machine table and the two FSM YAMLs define, runs the
+# REAL clause selectors over each (lifted from agents/coordinator-scan.sh by sentinel — never a
+# retyped copy), and exits 1 when a state matches zero clauses or more than one.
 #
-#   - #2164: agent/review without agent-fix (invisible to both IL-T27 phantom-review belt
-#     and IL-T09 merged-closeout C6 clause — both require agent-fix)
-#   - r7 F1: agent/in-progress without agent-fix (invisible to IL-T06 c4c5-redispatch,
-#     IL-T27 phantom-review belt, IL-T09 merged-closeout — all gate on agent-fix)
+# THE CLAUSE SET (issue-level; the sentinel each predicate is lifted from):
+#   queued-dispatch  ← >>>REPLAY:queued-derivation>>>     agent/queued ∧ ¬direction-change ∧ ¬agent/error
+#   c4c5-redispatch  ← >>>REPLAY:c4c5-selector>>>         agent/in-progress (abandoned), over >>>REPLAY:inprog-selector>>>
+#   review-phantom   ← >>>REPLAY:review-only-selector>>> ∧ ¬frozen   (the IL-T27 belt's candidate)
+#   frozen-open-pr   ← >>>REPLAY:frozen-pr-selector>>>    armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved (IL-T28/#2281)
 #
-#   The fixture is RED on the base tree (assertions fail) because these states match zero
-#   clauses. It GREENs once the scan's guards are widened to own these states.
-#   The pin-vacuity gate (ADR-103) records: red-on-base means the current code has the bug,
-#   green-after means the fix covers it.
+# ENUMERATED STATES (one issue each in world/gh/issue-list.json; the row names its owner):
+#   #80 queued          → queued-dispatch
+#   #81 queued-goal     → queued-dispatch (the queued lane; goal-decompose is its task/goal branch)
+#   #82 in-progress     → c4c5-redispatch
+#   #83 review          → review-phantom
+#   #84 review-no-fix   → review-phantom   (homelab#2164: agent/review WITHOUT agent-fix)
+#   #85 review-frozen   → frozen-open-pr   (r7 F1: open PR armed ∧ approved ∧ ci green ∧ BEHIND ∧ unmoved)
 #
-# The two rows each emit a diagnostic line showing how many clauses matched the state.
-# On base (unfixed), matches=0 and the line indicates the defect. After the fix,
-# matches=1 and the GREEN assertion passes.
+# LISTED STATES (no clause owns them BY DESIGN — terminal or human gate; asserted to match ZERO):
+#   #86 blocked (human gate) / #87 error (FU-069 breaker) / #88 done (terminal)
 #
+# NOT ENUMERATED (stated plainly, not sampled): the PR-level clauses (ci-red, changes-requested,
+# merge-conflict, arbitrate, unarmed-major) key on PR state, not issue labels, and each has its
+# own fixture; the goal-lane clauses (goal-decompose, goal-checkpoint, merged-closeout) are
+# replayed by the goal/merged-closeout fixtures. This case covers the ISSUE-LABEL axis plus the
+# one PR-shape state the Goal names (r7 F1).
+#
+# PIN-VACUITY. The assertion is the exit code: 0 iff every enumerated state matched exactly one
+# clause. It reds when a selector regresses — e.g. re-add the `agent-fix` requirement to
+# >>>REPLAY:review-only-selector>>> and #84 matches ZERO clauses (RC 1); drop the frozen-PR
+# predicate from >>>REPLAY:frozen-pr-selector>>> and #85's owner MOVES to review-phantom (the
+# stream moves, RC stays 0). Both reds are observed in the PR body.
 pins:
+  - IL-T05
   - IL-T06
-  - IL-T09
   - IL-T27
 name: clause-coverage
 mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:queued-derivation
+  - block:inprog-selector
+  - block:review-only-selector
+  - block:c4c5-selector
+  - block:frozen-pr-selector
   - block:clause-coverage
-  - file:post.sh
 requires:
   - bash
+  - jq
