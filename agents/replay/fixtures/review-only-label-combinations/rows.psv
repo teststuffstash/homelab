@@ -1,0 +1,10 @@
+# review-only-label-combinations — the decision table for homelab#2164 label-combination space.
+# id            | world       | patch | env | expect
+# with-fix       = Issue #80 has agent/review + agent-fix → detected by review_only selector.
+#                  This case works on the base branch (no defect here), but is included to test
+#                  that the widened selector still catches it. Red on base (existing behavior).
+with-fix       | with-fix    |       |     | with-fix
+# without-fix    = Issue #80 has agent/review WITHOUT agent-fix (homelab#2164 defect state).
+#                  On base, the issue is NOT in review_only (invisible to phantom belt).
+#                  After fix, it IS detected. Red on base (defect), green after.
+without-fix    | without-fix |       |     | without-fix

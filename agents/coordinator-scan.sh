@@ -1863,10 +1863,11 @@ EOF_BBM
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
     # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
-    # PR mentioning it, persisted past C4C5_PERSIST_S). Queried here alongside $inprog because the
-    # C4/C5 clause is gated by a pod-probe and may be skipped; the variable is cheap and consistent.
+    # PR mentioning it, persisted past C4C5_PERSIST_S). Includes both agent-fix and non-agent-fix
+    # cases (homelab#2164). Queried here alongside $inprog because the C4/C5 clause is gated by a
+    # pod-probe and may be skipped; the variable is cheap and consistent.
     review_only="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
@@ -1919,8 +1920,9 @@ EOF_BUSYFPS
     # RESOLVED first (the marker lives on the PR that implements the issue — the merged strong-link
     # PR into the goal base — and is read through the ONE `pr_blocked_on_check` reader below). An
     # unresolved predicate keeps the issue out, exactly as the C4/C5 selector excludes it.
+    # homelab#2164: includes agent/review without agent-fix.
     goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review")) or ($L|index("agent/blocked"))))]' 2>/dev/null || echo '[]')"
+      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("agent/in-progress")) or ($L|index("agent/review")) or ($L|index("agent/blocked"))))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     # ADR-122 (3): `Base:` via the ONE parser. The old capture was `goal/[^ \t\r\n]+` — it took
     # the value only when it STARTED with `goal/` and cut at the first blank; both halves are kept
