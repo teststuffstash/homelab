@@ -5,21 +5,15 @@
 
 set -euo pipefail
 
-# The jq block extracted from review-reflex.sh defines:
-# - newest_review_at: the max submittedAt from APPROVED or CHANGES_REQUESTED reviews
-# - newest_commit_at: the max committedDate from non-merge commits
-# - reviewable_again: true if CHANGES_REQUESTED AND (newest_commit > newest_review OR lastEditedAt > newest_review)
-JQ_DEFS='
-  def is_merge:
-    (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
-  def newest_review_at:
-    ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
-  def newest_commit_at:
-    ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
-  def reviewable_again:
-    (.reviewDecision == "CHANGES_REQUESTED") and
-    ((newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)));
-'
+# Extract the jq block from review-reflex.sh using the sentinel markers.
+# This ensures the fixture pins the ACTUAL predicate, not a hardcoded stub —
+# on the base tree (pre-fix), the extraction gets the old predicate without lastEditedAt,
+# so the test will RED (pin-vacuity gate).
+JQ_DEFS="$(sed -n '/# >>>REPLAY:reviewable_again>>>/,/# <<<REPLAY:reviewable_again<<</p' "${REPLAY_ROOT:?REPLAY_ROOT unset — the replay harness exports it}/agents/review-reflex.sh")"
+if [ -z "$(printf '%s' "$JQ_DEFS" | tr -d '[:space:]')" ]; then
+  echo "bridge: EMPTY reviewable_again extraction from ${REPLAY_ROOT}/agents/review-reflex.sh — sentinel block missing or moved" >&2
+  exit 1
+fi
 
 # Test data based on ${TEST_CASE} environment variable
 case "${TEST_CASE:-body-edit-only}" in

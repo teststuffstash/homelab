@@ -3713,13 +3713,15 @@ EOF_GTHEMES_OPEN
         cr_reviews="$(printf '%s' "$cr_probe" | jq -r '
           def newest_review_at:
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
+          def is_merge:
+            (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
-            ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+            ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
           if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)) then "held" else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then
-        head8="$(printf '%s' "$cr_probe" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
+        head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
         orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
         continue
       fi
