@@ -1,4 +1,5 @@
 CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json body --jq [.[].body // ""]
 CALL gh issue edit 80 --repo teststuffstash/homelab --add-label agent/queued
 CALL gh issue edit 80 --repo teststuffstash/homelab --remove-label agent/review
 CALL gh issue view 80 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")

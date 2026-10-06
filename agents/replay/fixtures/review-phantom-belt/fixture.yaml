@@ -34,3 +34,18 @@ parts:
 scrub:
   - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
   - 's/ [0-9]\{1,\}m / Nm /g'
+# TEST ROWS MATRIX (one row per axis combination: open-PR? × armed × verdict-at-head × ci × mergeStateStatus × age)
+#
+# Existing phantom rows (no open PR):
+#   #80 — no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES
+#   #81 — no open PR, mentioned by merged PR → HELD
+#
+# New frozen-open-PR row:
+#   #83 — open PR ∧ armed ∧ approved ∧ ci green ∧ behind ∧ unmoved past guard → DETECTED
+#
+# Negative rows (should NOT fire):
+#   #82 — open PR but unarmed → SKIPPED
+#   #84 — open PR, armed, but not approved → SKIPPED
+#   #85 — open PR, armed, approved, but CLEAN (not BEHIND) → SKIPPED
+#   #86 — open PR, armed, approved, behind, but CI red → SKIPPED
+#   #88 — open PR, armed, approved, behind, CI green, but recently updated (age < guard) → HELD

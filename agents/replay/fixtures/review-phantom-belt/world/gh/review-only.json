@@ -16,8 +16,29 @@
   {
     "number": 82,
     "title": "review-held issue test case",
-    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "agent/blocked"}],
-    "body": "Test case for agent/review + agent/blocked exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for unarmed PR exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 84,
+    "title": "review-test issue for armed but not approved PR",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for armed but not approved exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 85,
+    "title": "review-test issue for CLEAN not BEHIND",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for CLEAN merge state exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 86,
+    "title": "review-test issue for CI red",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for failed CI exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
     "updatedAt": "2026-08-25T06:10:00Z"
   },
   {

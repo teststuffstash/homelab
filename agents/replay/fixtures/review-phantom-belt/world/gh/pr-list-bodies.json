@@ -1,1 +1,1 @@
-["Fixes #83 — frozen armed PR", "Fixes #88 — recently moved PR, should be HELD"]
+["Fixes #83 — frozen armed PR", "Fixes #82 — unarmed PR, should be skipped", "Fixes #84 — armed but not approved, should be skipped", "Fixes #85 — CLEAN not BEHIND, should be skipped", "Fixes #86 — CI red, should be skipped", "Fixes #88 — recently moved PR, should be HELD"]

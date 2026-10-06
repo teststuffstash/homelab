@@ -4592,7 +4592,7 @@ EOF_GTHEMES_OPEN
                        | if $frozen_pr then "\($n)|\($frozen_pr.updatedAt // "")" else empty end
                 ] | .[]')"
             if [ -n "$review_frozen_cands" ]; then
-              [ -z "$now_s" ] && now_s="$(date -u +%s)"
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
               for fcand in $review_frozen_cands; do
                 fcn="${fcand%%|*}"; fpr_upd="${fcand#*|}"
                 fpr_age="$(jq -rn --arg t "$fpr_upd" --argjson now "$now_s" \
