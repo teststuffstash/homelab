@@ -5,6 +5,13 @@
 # is not listable at --limit 100: GitHub's 500k-node cap, 2026-09-08).
 armed-only-noop       | board |                                         |     | noop          |
 fifo-pick             | board | gh/pr-list.json @ patches/add-two-behind-ready.jq |  | picks-probe2 | p1=101 p2=102 n=101 oid=abc123def456
+# ── homelab#2203: the lane's OLDEST merge-ready member is WEDGED (its update-branch 422s every
+# pass, so `updatedAt` never moves and it re-enters as the pick forever) — the younger member must
+# still be picked in the SAME pass. Same world as `fifo-pick` (two merge-ready PRs on one master
+# lane, #101 older), differing only in the injected 422 on #101's PUT: the axis is the oldest
+# member's update OUTCOME (clears → `fifo-pick`; stuck → this row). RED on the pre-#2203 source,
+# which took `.[0]` per lane and stopped after the failed attempt.
+lane-hop-wedged-oldest | board | gh/pr-list.json @ patches/add-two-behind-ready.jq | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | lane-hop | p1=101 p2=102 n1=101 oid1=abc123def456 n2=102 oid2=789012ghi345
 unstrand-yes          | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-yes  | n=120 oid=jkl012mno345
 unstrand-no           | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-no   | n=120
 unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-hold | n=120
