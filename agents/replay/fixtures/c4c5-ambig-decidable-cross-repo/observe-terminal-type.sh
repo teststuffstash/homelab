@@ -1,7 +1,7 @@
-# ── observation point ── the c4c5-decidable loop resolves $ad_term_type from the repo-qualified
-# $ambig_terminal_type keys; this part makes that resolution observable in the action stream, so
-# the assertion lives in the fixture instead of in the live dispatch loop.
-ad_n="${uitem#issue-}"
-ad_qualified="${urepo}#${ad_n}"
-ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2 || true)"
-printf '  TERM_TYPE: %s#%s \xE2\x86\x92 %s\n' "$urepo" "$ad_n" "$ad_term_type"
+# ── observation point ── runs immediately after each repo's c4c5-derivations pass,
+# while $ambig_decidable/$ambig_terminal_type still hold THAT repo's scratch state
+# (both are re-initialized per repo inside the block, homelab#2326).
+for ad_qualified in $ambig_decidable; do
+  ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2 || true)"
+  printf '  TERM_TYPE: %s \xE2\x86\x92 %s\n' "$ad_qualified" "$ad_term_type"
+done

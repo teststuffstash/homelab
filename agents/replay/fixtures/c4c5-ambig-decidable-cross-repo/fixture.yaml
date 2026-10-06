@@ -15,11 +15,16 @@
 # The fu146-resumable-match block asserts each repo's dispatch resolves to its own branch.
 # The observe-terminal-type.sh scripts assert each repo's terminal-type lookup resolves to its own type.
 #
-# The fixture runs the c4c5-derivations block twice (once per repo) with the resumable_branches
-# and ambig_terminal_type variables persisting between runs, simulating a multi-repo stack tick.
+# The fixture runs the c4c5-derivations block twice (once per repo), simulating a multi-repo stack
+# tick. `resumable_branches` accumulates across both passes (it is the clause's cross-repo output);
+# `ambig_decidable` / `ambig_terminal_type` are per-repo SCRATCH state, re-initialized inside the
+# block on each pass, so each repo's terminal-type lookup is observed immediately after its own
+# pass (homelab#2326).
 #
-# Pre-fix (bare keys): repo B's dispatch wrongly inherits repo A's branch/type for issue #329.
-# Post-fix (qualified keys): repo B's dispatch finds no match — no work-branch or terminal-type leakage.
+# Pre-fix (bare keys): the terminal-type lookup for #329 matches BOTH repos' entries, so the
+# emitted type is a two-line value (garbled); repo B's dispatch also wrongly inherits repo A's
+# branch for issue #329.
+# Post-fix (qualified keys): each repo's lookup resolves to its own type and branch — no leakage.
 name: c4c5-ambig-decidable-cross-repo
 mode: actions
 source: agents/coordinator-scan.sh
@@ -34,15 +39,15 @@ parts:
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations
+  - file:observe-terminal-type.sh
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations
-  - file:bridge.sh
-  - block:fu146-resumable-match
-  - file:observe-resumable-match.sh
   - file:observe-terminal-type.sh
   - file:bridge.sh
   - block:fu146-resumable-match
   - file:observe-resumable-match.sh
-  - file:observe-terminal-type.sh
+  - file:bridge.sh
+  - block:fu146-resumable-match
+  - file:observe-resumable-match.sh
   - file:post.sh

@@ -7,6 +7,6 @@
   {
     "id": 301,
     "user": {"login": "homelab-agents-1234"},
-    "body": "AGENT_REPORT: completed\n\nThe worker completed its work and pushed changes."
+    "body": "AGENT_REPORT: completed\n\nThe worker completed its work and pushed changes.\n\nResumable branch pushed: fix/issue-329-oracle"
   }
 ]
