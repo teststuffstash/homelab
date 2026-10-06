@@ -4592,20 +4592,30 @@ EOF_GTHEMES_OPEN
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
-            # For each ambiguous issue, check if the newest AGENT_STRIKE: comment carries a
-            # Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # For each ambiguous issue, check if the newest terminal comment (AGENT_STRIKE: or
+            # AGENT_REPORT:) carries a Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # The finalizer writes the same line into both comment channels (FU-199 / homelab#1797);
+            # pick the newest terminal of either kind, as both producers use one parser below.
             ambig_decidable=""
+            ambig_terminal_type=""
             if [ -n "$ambig" ]; then
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
                 [ -n "$ambig_n" ] || continue
                 icmt="$(gh api "repos/${slug}/issues/${ambig_n}/comments?per_page=100" 2>/dev/null)" || icmt=""
                 if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
-                  # Find the NEWEST AGENT_STRIKE: comment (last in the array, which is
-                  # oldest-first). Anchored at start-of-comment, never a substring — same
-                  # discipline as AGENT_INFEASIBLE: (homelab#257).
-                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
+                  # Find the NEWEST terminal comment (AGENT_STRIKE: or AGENT_REPORT:) with
+                  # Resumable branch pushed: (last in the array, which is oldest-first).
+                  # Anchored at start-of-comment, never a substring — same discipline as
+                  # AGENT_INFEASIBLE: (homelab#257). Both producers write the same line
+                  # (one parser, ADR-103).
+                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:|^AGENT_REPORT:"))] | last // ""' <<<"$icmt")"
                   if [ -n "$strike" ]; then
+                    # Determine which type of terminal comment this is
+                    term_type="AGENT_STRIKE"
+                    case "$strike" in
+                      AGENT_REPORT:*) term_type="AGENT_REPORT" ;;
+                    esac
                     # FU-199 (folded in, 2026-09-20): the finalizer writes the line in MARKDOWN —
                     # `**Resumable branch pushed:** \`<branch>\`` + trailing prose. The old
                     # `sub(".*Resumable branch pushed:[ \t]*"; "")` was greedy up to the opening
@@ -4625,6 +4635,8 @@ EOF_GTHEMES_OPEN
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
+                      # Encode the terminal type with the issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4682,6 +4694,9 @@ EOF_GTHEMES_OPEN
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
               for ad_n in $ambig_decidable; do
+                # Look up which type of terminal comment was found for this issue
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_n}=" | cut -d= -f2)"
+                ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
                   | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
@@ -4695,7 +4710,7 @@ EOF_GTHEMES_OPEN
                   [ -n "$ad_cv" ] && ad_class="$ad_cv"
                   units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                   item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
                 else
                   orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
                   item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"
@@ -5088,53 +5103,19 @@ EOF_GTHEMES_OPEN
             gh issue edit "$fn" --repo "$slug" --add-label agent/error >/dev/null 2>&1 || true
           fi
         done
-        # ONE comment listing all affected issues
-        affected_list=""
         sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
-        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
-          [ -n "$fn" ] || continue
-          affected_list="${affected_list}- #${fn}\n"
-        done
         # Marker-based idempotency: the first line of the comment is a machine marker carrying
         # the group identity. A repeat tick against an already-actioned fleet strike finds the
         # identical marker and skips the post (same discipline as state-fp:, homelab#244/IL-T26).
         fleet_strike_marker="fleet-strike-fp: error_class=${ec} issues=${sorted_nums}"
-        comment_body="$(printf '%s\n' \
-          "${fleet_strike_marker}" \
-          "" \
-          "🤖 **Fleet strike detected** — \`error_class=${ec}\` on ≥2 distinct issues within 24h (FU-200)." \
-          "" \
-          "Affected issues:" \
-          "$(printf '%b' "$affected_list")" \
-          "Each has been labelled \`agent/error\` (human-first, report-only)." \
-          "" \
-          "**What this means.** The same error class appeared across multiple independent rides. This is a platform-level pattern, not an isolated worker fault — a human should investigate the root cause before any of these issues are re-dispatched." \
-          "" \
-          "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
-          "" \
-          "- \`error_class=${ec}\` on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') distinct issues." \
-          "- All within a 24h window." \
-          "" \
-          "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
-        # Post the comment on the FIRST affected issue only (ONE comment listing them)
-        first_fn="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | head -1)"
-        if [ -n "$first_fn" ]; then
-          # Idempotency check: skip if a comment already starts with the identical marker
-          existing_comments="$(gh api "repos/${slug}/issues/${first_fn}/comments?per_page=100" 2>/dev/null || true)"
-          already_posted=0
-          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
-            if jq -e --arg m "$fleet_strike_marker" \
-              '[.[] | (.body // "") | startswith($m)] | any' \
-              <<<"$existing_comments" >/dev/null 2>&1; then
-              already_posted=1
-            fi
-          fi
-          if [ "$already_posted" = 0 ]; then
-            gh issue comment "$first_fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
-          fi
-        fi
-        # ONE deduped inert platform filing
+        # ── THE CAUSE: resolve or create the ONE filing for this class (homelab#1714) ─────────
+        # The filing is the marker's `cause=`: closing it is the resolution signal the un-latch
+        # clause reads. Resolved BEFORE the marker comment so the comment can name it — a latch
+        # whose diagnosis cannot name its cause is not machine-un-latchable (the #1692 shape:
+        # labelled 16:47Z, silent, re-latched 18:18Z, wedged ~4.5h).
+        filing_n=""
         if [ -n "$existing_filing" ]; then
+          filing_n="$existing_filing"
           # Idempotency check: skip if the filing already has a comment with the identical marker
           filing_comments="$(gh api "repos/${slug}/issues/${existing_filing}/comments?per_page=100" 2>/dev/null || true)"
           filing_already_extended=0
@@ -5155,8 +5136,8 @@ EOF_GTHEMES_OPEN
               "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
           fi
         else
-          # Create a new inert platform filing
-          gh issue create --repo "$slug" \
+          # Create a new inert platform filing; its NUMBER is the marker's cause.
+          filing_n="$(gh issue create --repo "$slug" \
             --title "fleet-strike: error_class=${ec}" \
             --label "agent-fix" \
             --body "$(printf '%s\n' \
@@ -5170,8 +5151,59 @@ EOF_GTHEMES_OPEN
               "" \
               "This is a DEDUPED filing: one per error_class per 24h window. The affected issues carry \`agent/error\` and are human-first, report-only until the root cause is resolved." \
               "" \
-              "**What to do.** Investigate the platform-level pattern behind \`${ec}\`. Each affected issue's ride transcript is in \`s3://agent-transcripts/\`. Once the root cause is fixed, strip \`agent/error\` from each affected issue to re-enable dispatch." )" >/dev/null 2>&1 || true
+              "**What to do.** Investigate the platform-level pattern behind \`${ec}\`. Each affected issue's ride transcript is in \`s3://agent-transcripts/\`. Once the root cause is fixed, strip \`agent/error\` from each affected issue to re-enable dispatch." )" 2>/dev/null \
+            | sed -n 's#.*/\([0-9][0-9]*\)$#\1#p')" || filing_n=''
+          case "$filing_n" in ''|*[!0-9]*) filing_n="";; esac
         fi
+        # ── THE MARKER COMMENT, on EVERY affected issue (homelab#1714) ────────────────────────
+        # The latch is per-item (the breaker is per-item), so its diagnosis is per-item too: an
+        # issue that carries `agent/error` and no marker is undiagnosable AND un-clearable — the
+        # un-latch clause keys on exactly this marker. The SAME text goes on every affected issue
+        # (it lists the whole set), so the human ask still reads as one signal. The marker is
+        # written ONLY when the cause resolved: a latch that cannot name its cause stays
+        # human-first rather than carrying a marker the un-latch clause would misread.
+        affected_list=""
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          affected_list="${affected_list}- #${fn}\n"
+        done
+        fleet_fault_marker=""
+        [ -n "$filing_n" ] && fleet_fault_marker="<!-- fleet-fault cause=${slug}#${filing_n} prs=${sorted_nums} -->"
+        comment_body="$(printf '%s\n' \
+          "${fleet_strike_marker}" \
+          "${fleet_fault_marker:+$fleet_fault_marker}" \
+          "AGENT_ERROR: infra-class strike on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') issues — error_class=${ec}" \
+          "" \
+          "🤖 **Fleet strike detected** — \`error_class=${ec}\` on ≥2 distinct issues within 24h (FU-200)." \
+          "" \
+          "Affected issues:" \
+          "$(printf '%b' "$affected_list")" \
+          "Each has been labelled \`agent/error\` (human-first, report-only)." \
+          "" \
+          "**What this means.** The same error class appeared across multiple independent rides. This is a platform-level pattern, not an isolated worker fault — a human should investigate the root cause before any of these issues are re-dispatched." \
+          "" \
+          "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+          "" \
+          "- \`error_class=${ec}\` on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') distinct issues." \
+          "- All within a 24h window." \
+          "" \
+          "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          # Idempotency check: skip if a comment already starts with the identical marker
+          existing_comments="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null || true)"
+          already_posted=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$existing_comments" >/dev/null 2>&1; then
+              already_posted=1
+            fi
+          fi
+          if [ "$already_posted" = 0 ]; then
+            gh issue comment "$fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
+          fi
+        done
       done
     fi
     # <<<REPLAY:fleet-strike-reader<<<
@@ -5275,17 +5307,38 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
-    # fleet-fault un-latch (FU-069, homelab#1539): when a PR carries `agent/error` from a fleet fault
-    # and the cited cause issue is CLOSED with green CI, remove the label and post one line. Rule #6
-    # holds all unreadable probes. Human-applied latches (no marker) and anomaly latches (STEP-0,
-    # verdict-count) are untouched — those are human-first cases that stay human-first.
+    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714): when an item carries
+    # `agent/error` from a fleet fault and the cited cause issue is CLOSED with green CI, remove the
+    # label and post one line. Rule #6 holds all unreadable probes. Human-applied latches (no
+    # marker) and anomaly latches (STEP-0, verdict-count) are untouched — those are human-first
+    # cases that stay human-first.
+    #
+    # ITEM-KIND-AGNOSTIC (homelab#1714). The latch is per-item, so its route out is per-item: a PR
+    # and an ISSUE carrying `agent/error` are both latched items, and both carry the SAME marker —
+    # the fleet reader's us-case writes it, this clause reads it (one grammar, one producer, one
+    # reader; never a second regex). Before this, the clause read `prsjson` alone, so an issue-side
+    # latch had no route out at all and the only exit was a human label write (#1692: labelled
+    # 16:47Z, stripped by hand 18:15Z, re-latched 18:18Z, wedged ~4.5h).
+    #
+    # The CI leg reads the item's PR head: the PR itself for a PR, and for an issue the OPEN PR that
+    # references it (the sibling-match rule the ci-red clause already uses — branch `issue-<n>-`,
+    # else a body closing keyword, both boundary-anchored). An issue with no referencing PR has no
+    # CI to read: HOLD (rule #6), never fail INTO a write.
     # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
     # >>>REPLAY:fleet-fault-unlatch>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|.number' 2>/dev/null); do
-      # Fetch PR comments to find the fleet-fault marker
-      pr_json_ff="$(gh pr view "$u" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+    ff_items="$(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"pr \(.number)"' 2>/dev/null || true)"
+    ff_items="${ff_items}
+$(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"issue \(.number)"' 2>/dev/null || true)"
+    while read -r ff_kind ff_n; do
+      [ -n "$ff_kind" ] || continue
+      # Fetch the item's comments (and, for a PR, its own CI rollup)
+      if [ "$ff_kind" = "pr" ]; then
+        pr_json_ff="$(gh pr view "$ff_n" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+      else
+        pr_json_ff="$(gh issue view "$ff_n" --repo "$slug" --json comments 2>/dev/null)" || pr_json_ff=''
+      fi
       if [ -z "$pr_json_ff" ]; then
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read PR state (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read item state (rule #6). No label write; next tick.\n"
         continue
       fi
       # Find the newest AGENT_ERROR: comment with fleet-fault marker
@@ -5303,17 +5356,27 @@ EOF_GTHEMES_OPEN
       fi
       # Check if the cause issue is CLOSED
       if ! cause_state="$(gh issue view "$cause_issue" --repo "$cause_repo" --json state 2>/dev/null | jq -r '.state' 2>/dev/null)"; then
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
         continue
       fi
       if [ "$cause_state" != "CLOSED" ]; then
         # Cause is still open — hold the latch
         continue
       fi
-      # Check if CI is green at the PR head
-      ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      # Check if CI is green at the item's PR head
+      if [ "$ff_kind" = "pr" ]; then
+        ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      else
+        # The issue's PR head: the open PR that references it (sibling-match, boundary-anchored).
+        ff_pr="$(printf '%s' "$prsjson" | jq -r --arg n "$ff_n" '[.[] | select((((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)")) or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"))))] | first | .number // ""' 2>/dev/null)" || ff_pr=''
+        if [ -z "$ff_pr" ]; then
+          orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: no open PR references it, CI leg unverifiable (rule #6). No label write; next tick.\n"
+          continue
+        fi
+        ff_ci="$(gh pr view "$ff_pr" --repo "$slug" --json statusCheckRollup 2>/dev/null | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      fi
       case "$ff_ci" in ''|*[!0-9]*)
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read CI state (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read CI state (rule #6). No label write; next tick.\n"
         continue
       ;;esac
       if [ "$ff_ci" -ne 0 ]; then
@@ -5321,11 +5384,18 @@ EOF_GTHEMES_OPEN
         continue
       fi
       # All conditions met: remove agent/error label and post a removal comment
-      gh pr edit "$u" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
-        && gh pr comment "$u" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
-        && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${u} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
-        || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${u} — human check\n"
-    done
+      if [ "$ff_kind" = "pr" ]; then
+        gh pr edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+          && gh pr comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+          || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${ff_n} — human check\n"
+      else
+        gh issue edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+          && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+          || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on issue #${ff_n} — human check\n"
+      fi
+    done <<< "$ff_items"
     # <<<REPLAY:fleet-fault-unlatch<<<
 
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
