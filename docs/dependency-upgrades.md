@@ -293,6 +293,7 @@ each service's python set — class 11). Whether a set is in sync is a fact only
 | **kubectl / kubernetes / kind** | fleet Kubernetes: `machines/machines.yaml` + `tofu/variables.tf`, box-run rollout; kubectl in repos: devbox `@latest` weekly; kubectl in the coordinator image: hand `ARG` (v1.36.1); kind: devbox `@latest` in the e2e repos | ⚠ the skew rule (kubectl within one minor of the server) is nobody's check; the ARG only moves when someone edits it |
 | **crossplane chart + engine digest** | chart `targetRevision` in `argocd/platform/crossplane.yaml` (Renovate `argocd` manager) + the `crossplane.io/engine-image-digest.<version>` annotation beside it that `publicroute-tf-validate` keys by chart version (regex customManager, docker datasource on `crossplane/crossplane`); `groupName: crossplane` → ONE PR | ✅ since 2026-10-04 (was hand: `crane digest` on every bump — #2224, the first Renovate crossplane PR, was CI-red on the missing key) |
 | **cloudflared (connector image)** | `argocd/resources/publicroute/composition.yaml` (Renovate `kubernetes` manager) + `cloudflared_image` in `tofu/cloudflare/variables.tf` (regex customManager since 2026-10-05 — a variable DEFAULT is invisible to the terraform manager), grouped `cloudflared`; the seat applies `tofu/cloudflare` after the merge | ✅ one PR since 2026-10-05 (#2232 split them: the reviewer caught it, G13) |
+| **kube-prometheus-stack chart + prometheus-operator CRDs** | chart `targetRevision` in `argocd/platform/kube-prometheus-stack.yaml` (Renovate `argocd` manager, `skipCrds: true`); the ten `monitoring.coreos.com` CRDs installed ONCE by Helm (2026-06-02) and owned by nobody since — upstream ships them as the `prometheus-operator-crds` chart, one major per operator minor | ⚠ agrees by accident today (both v0.91.0: every 86.x release shipped the same operator); the next operator-minor crossing (#2256) breaks it — G16 |
 | **devbox / nix** | `DEVBOX_VERSION` / `NIX_VERSION` in the arc-runner image (regex-managed); devbox in the jail (`DEVBOX_USE_VERSION`, FU-240); the host `/nix` | ⚠ FU-240's pin is not the runner's |
 | **python (per service)** | image `FROM python:X.Y-slim` (Renovate `dockerfile`, `deps-review`); `devbox.json` `python@X.Y` (hand — `devbox update` re-resolves `@latest` only, a pinned major.minor never moves); `pyproject.toml` `requires-python`, ruff `target-version`, mypy `python_version` (hand) | ❌ openrouter-operator#80 (2026-09-27): image 3.11→3.14, everything else 3.11 — CI ran the old runtime, the review approved "no adaptation"; the lens now names the set (`agents/lenses/migration.md` §Version SETS) |
 
@@ -569,6 +570,72 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 → *window* → promote or revert. Today a homelab platform bump has a sync and a shallow health check,
 and then nothing is watching.
 
+### Worked case — kube-prometheus-stack: the chart that is its own detector (read 2026-10-06)
+
+The register's class-1 row reads ✅ on proposer, gate, deploy edge and detector for this chart, and
+every cell is true for the chart *release* — and still the chart cannot move without a person today.
+What the generated table cannot say, in one place:
+
+**Cadence.** 14 chart majors in the 365 days to 2026-10-06 (276 releases); the maintainers cut a
+chart major whenever the embedded prometheus-operator bumps a MINOR, a subchart (kube-state-metrics,
+grafana) bumps a major, or a default moves. Operator minors came 8 times in that year (v0.86 → v0.94),
+so about half the chart majors are packaging — 89 and 90 both shipped operator v0.93.1. Chart
+semver is not blast class here any more than it was for argo-workflows (ADR-149 (5)); the lens
+reads the operator appVersion from the chart index first.
+
+**Three lanes, three different blockers:**
+
+| lane | what happens today | what blocks the machine |
+|---|---|---|
+| patch / minor (`deps-review`, armed) | CI-red at birth: `prometheus-rules-lint` checks the committed upstream alert list against the pin; the re-render needs `helm pull` | G12 (the re-render) and, for a bump that adds a name, a classification nobody dispatches on a red armed PR (G12b) |
+| chart major, operator minor unchanged (89, 90) | lens round → `major/awaiting-human` → the seat merges in a window | a ruling only: ADR-141's "merges on the lens's APPROVED alone" is not extended to charts without a revert actor |
+| chart major crossing an operator minor (86 → 91) | as above, plus the operator runs against CRDs it did not ship | the CRD half has NO owner at all — G16 below |
+
+**The CRDs are unmanaged.** `argocd/platform/kube-prometheus-stack.yaml` syncs with `skipCrds: true`
+— deliberate at the 2026-08-04 ArgoCD adoption (one change at a time; a pruned CRD takes every
+ServiceMonitor and the Prometheus CR with it) and it mirrors Helm, which installs `crds/` once and
+never upgrades it. Live 2026-10-06: all ten `monitoring.coreos.com` CRDs carry
+`operator.prometheus.io/version: 0.91.0`, created 2026-06-02, no ArgoCD tracking id; the running
+operator is v0.91.0, so the pair agrees by the accident that every 86.x release shipped the same
+operator. #2256 (91.x) would run operator v0.94.1 against v0.91.0 CRDs — tolerated for an
+additive schema change (the lens's read of this jump), unsupported in general, and a drift that
+widens one operator minor per chart major until something owns it. Upstream publishes the CRDs as
+their own chart, `prometheus-operator-crds` (29.0.0 = v0.91.0, 32.0.1 = v0.94.1; 9 majors in the
+same year, one per operator minor), which is the standard fix: a second Application, server-side
+apply (the CRDs exceed the client-side annotation limit), `Delete=false` on the CRDs so a prune can
+never take the cone down, and ONE Renovate group with the stack chart so the pair moves in one PR —
+the G11/G13 shape. A CRD sync is the FU-304 memory event; GOMEMLIMIT absorbed argo-workflows' hook
+at +0.6 GiB on the laptop CP, which is the measured cost per operator minor.
+
+**Why the ADR-149 recipe does not apply unchanged.** The receiver is fed by an Alertmanager route,
+and kube-prometheus-stack IS Alertmanager and Prometheus: a bump that stops the Prometheus
+StatefulSet stops every alert, including the one that would name the bump. The detector has to be
+an ABSENCE read, not a firing alert. The cheap one already exists upstream: the always-firing
+`Watchdog` — routed to `null` today, with NO consumer, while the triage map already leans on one:
+`AlertmanagerClusterDown`, `PrometheusErrorSendingAlertsToAnyAlertmanager` and
+`PrometheusNotConnectedToAlertmanagers` are classified `none` with the comment "Watchdog dead-man
+covers" (`kube-prometheus-stack-triage.yaml`). The G2 shape again: a belt assumed, never wired. Route it to `chart-revert` with a short `repeat_interval` and
+let the receiver treat "no Watchdog for N minutes ∧ a pin-only kube-prometheus-stack merge within
+the window" as the revert trigger, confirmed by its own `GET /-/ready` on the Prometheus and
+Alertmanager Services before it writes a PR (two independent reads, so a receiver restart or a
+CoreDNS blip is not a revert). The receiver's runtime (agent-coordinator ns, ArgoCD, GitHub, the
+token) is outside this chart's cone; its `/metrics` scrape is inside it, which is why the counter
+is not the belt here. FU-302 (the management box's Prometheus-free view) is the SIBLING of this read
+for the box's own gates — a reuse candidate, not the prerequisite.
+
+**What stays human after all of that:** an operator minor whose CRD schema change is not additive
+(revert cannot downgrade a CRD — ADR-149's consequence holds here with `Delete=false` too), read by
+the lens from the operator changelog; and the grafana subchart major, which is a UI with sqlite-sync
+state and no probe (G5).
+
+**Order that follows:** G16 first (the CRD owner — without it every operator-minor crossing is
+unsupported skew, lens or no lens), G12 second (the re-render rides the Renovate run —
+`postUpgradeTasks` — or a PR job), the Watchdog-absence trigger third (one `TARGETS` row plus the
+absence mode in `chart_revert.py`, drilled on a real patch bump like #2276 → #2279), and only then the
+one `matchPackageNames` line. The packaging-only chart majors (operator minor unchanged) can be
+ruled onto the lens-alone lane before any of it, which is the lever with the best
+operator-minutes return.
+
 ### Gap register — what the class-1/2 wave is finding (2026-10-04 →)
 
 The operator's end state for S9 (2026-10-04): **not involved in updates or reverts** — every row
@@ -594,6 +661,7 @@ mechanism lives in the linked places.
 | G13 | A pin whose SIBLING lives in a terraform variable DEFAULT is invisible to Renovate: `tofu/cloudflare/variables.tf` `cloudflared_image` is declared "the same pin" as the publicroute composition's connector image, but the terraform manager extracts only `image = "…"` literals — #2232 (cloudflared 2026.5.2 → 2026.9.3) moved the composition alone, Renovate never touched the variable (git log) | the `deps-review` reviewer's version-set read (CHANGES_REQUESTED on #2232 — a read, not a gate: nothing mechanical would have refused the half-bump) | a regex customManager over the variable default + a `cloudflared` group rule, the G11 shape; the seat adapted #2232 in-PR (the FU-046 worker-adapts leg, done by hand) | ✅ fixed 2026-10-05 (#2241); PROVEN 2026-10-05 — #2295 (2026.10.0) carries both files; its arming is G15 |
 | G14 | An Argo chart bump can break the ENGINE the revert chain runs on (`deploy-revert` is an Argo Events Sensor + WorkflowTemplates), and chart semver hid the app major: 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was app 4.0→4.1 — its CRD re-apply triggered the wk-metal-02 apiserver kill (FU-304) — while #2254 (two lens rounds, 9 h on the human lane) was packaging + a patch | `ArgoControllerSilent` (`now`, fails closed, #2269) + `ControlPlaneNodeMemoryLow` (#2264); the lens reading appVersion from the chart index | the `chart-revert` webhook receiver outside Argo's cone (ADR-149), `reverted-charts:` memory in `pin-only-lint` (h), then one armed `matchPackageNames` rule | ✅ live + DRILLED 2026-10-05 (#2271/#2272/#2276→#2279, 10 min 12 s, no human) — §Next steps 9; lens brief updated the same evening (`agents/lenses/migration.md` §Charts) |
 | G15 | A grouped VERSION-SET PR is born UN-ARMED: Renovate arms a branch only when every upgrade in it has `automerge: true`, and the regex members of the `crossplane` / `cloudflared` groups had no automerge rule (rule 12 excludes them, rule 19 matches the argocd/kubernetes managers only) — #2295 (cloudflared 2026.10.0, the first PR born as a group) reads `Automerge: Disabled by config`, carries both files (the G13 proof) and sat 16 h green with no reader: the review reflex admits armed PRs only, the coordinator's un-armed clause admits `major` only. #2228/#2240 "proved" G11 on a branch GitHub had armed while it was still a single-member PR | nothing today — an un-armed non-major Renovate PR is invisible to every reader (the G12b shape, un-armed instead of red); a `RenovatePrUnowned`-style gauge (open `dependencies` PR ∧ no `automerge`/`major` arm ∧ > N h) would | a `deps-review` + `automerge: true` rule for the two regex members (the group then arms as every member agrees); the parked #2295 needs one hand arm (or a Renovate re-run after the rule lands, if Renovate re-enables platform automerge on an existing PR) | ⚠ rule landed (#2335); `devbox run renovate-lane-lint` now asserts the invariant on every computed branch (Renovate itself, local lookup — the config file's description points at it); proof = the next cloudflared/crossplane grouped PR's body reads `Automerge: Enabled` and the reflex reviews it |
+| G16 | The prometheus-operator CRDs have NO owner: `kube-prometheus-stack` syncs with `skipCrds: true` (the 2026-08-04 adoption, one change at a time — the Application header says why), Helm never upgrades `crds/`, and nothing else applies them — live 2026-10-06 all ten `monitoring.coreos.com` CRDs read operator `0.91.0` (created 2026-06-02, untracked by ArgoCD). The register's class-1 row shows a ✅ deploy edge for the chart while the chart's CRD half has none; #2256 (91.x, operator v0.94.1) would run the operator against CRDs three minors older — §Worked case | nothing — no alert compares the CRDs' `operator.prometheus.io/version` with the running operator image (a one-expression rule once both are scraped: kube-state-metrics does not export CRD annotations, so the read is a small exporter or a `kubectl` probe on the box belt) | a second Application for upstream's `prometheus-operator-crds` chart (server-side apply, `Delete=false`), grouped with the stack chart in Renovate so one PR moves both (the G11/G13 shape); the first sync is the FU-304 memory event, windowed | ⚠ open — design in §Worked case; needs the operator's ruling (ArgoCD-managed CRDs were deferred on purpose) |
 
 ---
 
