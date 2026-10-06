@@ -5,5 +5,6 @@ annotated-exact                   |       |       |     | hold   |
 annotated-among-many              |       |       |     | hold   |
 annotated-glob                    |       |       |     | hold   |
 annotated-escape-still-reported   |       |       |     | escape | path=mcps/riigiteataja/ingest/other.py
+internal-whitespace-prefix        |       |       |     | escape | path=docs/a
 plain-entry                       |       |       |     | hold   |
 whitespace-padded                 |       |       |     | hold   |

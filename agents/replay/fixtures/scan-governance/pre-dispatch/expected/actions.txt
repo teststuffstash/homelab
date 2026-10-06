@@ -15,5 +15,7 @@ OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored P
 OUT ORPHAN   issue #1006 — reassign ownership (declared: CODEOWNERS → governance: CODEOWNERS)
 OUT ORPHAN [homelab] ⛔ operator-lane path — NOT dispatched (a worker-authored PR diff touching ❌ paths is structurally red — CI runs from the PR branch; the route is an operator push to master). Re-scope or split the issue, or hand it to the operator:
 OUT ORPHAN   issue #1007 — update the fix recipe (declared: .agents/fix.yaml)
+OUT ORPHAN [homelab] ⛔ GOVERNANCE path — NOT dispatched (a worker-authored PR diff touching governance paths is structurally red — CI runs from the PR branch; the route is a seat/operator push). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #1010 — an annotated entry on a governance file: pre-fix the scan's inline tr mangles the annotation and the GOVERNANCE hit is missed (declared: CODEOWNERS (ownership) → governance: CODEOWNERS)
 OUT REACHED: end
 RC 0

@@ -2519,7 +2519,7 @@ EOF
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
@@ -2591,7 +2591,7 @@ EOF_GUARDED
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
