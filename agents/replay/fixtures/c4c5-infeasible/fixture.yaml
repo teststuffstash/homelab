@@ -4,7 +4,7 @@
 # intent in rows.psv). A worker's `AGENT_INFEASIBLE:` verdict — one issue COMMENT whose FIRST
 # characters are exactly `AGENT_INFEASIBLE: <path/resource>` — parks the issue on `agent/blocked`
 # and takes it out of `c4c5-redispatch`, while the issue beside it — same state, no marker —
-# keeps today's behaviour exactly. Three properties are load-bearing:
+# keeps today's behaviour exactly. Four properties are load-bearing:
 #   • ANCHORED at the start of a COMMENT body, never a substring. Talking ABOUT the terminal (a
 #     title, a `> quote`, a mid-sentence mention) latches nothing — the fix-debounce lane's
 #     `alert-fp:` lesson, one lane over (homelab#244). ISSUE COMMENTS ONLY, never the body: the
@@ -16,6 +16,22 @@
 #     failed/half-applied write is reported loudly and the issue still leaves the unit list —
 #     re-riding a task a worker has already proven impossible costs a paid session to re-derive
 #     a known answer.
+#   • THE READ HAS ITS OWN PREDICATE (`INFEAS_SEL`, homelab#1797), NOT `C4C5_SEL`. The C4/C5
+#     selector's first filter drops `agent/error`, which is right for the redispatch belt (an
+#     errored ride is a human's to un-latch) and WRONG here: a ride that declares infeasible and
+#     THEN dies on the way out is the COMMON shape — the wall that made the task infeasible often
+#     kills the session too — and it is exactly the case the marker exists for (oracle-fleet#637:
+#     a well-formed marker, an http-401-storm 31 s later, `agent/error` stamped by the launcher,
+#     and the issue invisible to every clause since). The C4/C5-specific holds (merged-into-goal,
+#     goal-based, debounced, live session, open PR) are NOT applied either: they answer "should
+#     this be RE-DISPATCHED", and the marker is a VERDICT that wins over every hold. The park
+#     CLEARS `agent/error` (the verdict supersedes the crash latch) and pushes the
+#     `parked-infeasible` board row (who=operator — the class `agents/board.sh` renders as
+#     "AGENT_INFEASIBLE — re-scope needed").
+#   • THE VERDICT OUTRANKS THE STRIKE'S RESUMABLE BRANCH (homelab#1797, oracle-fleet#636). A goal
+#     child the terminal parked this tick is NOT "undecidable" — the `c4c5-derivations` hold keys
+#     off the terminal's own `infeas_done` set, so the strike-driven resumable path cannot re-ride
+#     it in the same tick (the marker is read in ONE place; no second regex).
 #   • AN UNREADABLE PROBE is the other way round (rule #6, never fail INTO a write): an
 #     unreadable comments probe keeps today's behaviour — belt and unit included — plus one
 #     report line naming the issue. `STUB_GH=fail` is the harness's own failure-mode seam
@@ -31,7 +47,17 @@
 #   verdict  the parked leg: #66's comments carry the REAL marker (its worker named
 #            `.github/workflows/ci.yaml` and ended without pushing); #66 is read → blocked →
 #            in-progress off → re-read → audited, emits NO unit and NO report line; #70 beside it
-#            (no marker) keeps its unit + `v2` report line byte-identical.
+#            (no marker) keeps its unit + `v2` report line byte-identical. THREE rows read it, one
+#            per value of the input axis the terminal's predicate turns on:
+#              parks        — the plain shape (no `agent/error`).
+#              error-marker — the SAME world + `agent/error` on #66 (patches/add-agent-error.jq):
+#                             the oracle-fleet#637 shape. On the base tree `C4C5_SEL` dropped it
+#                             and nothing happened at all; the row is the pin.
+#              strike-marker — the SAME world, #66 a GOAL CHILD (`GOALBASED_NUMS=66`) whose thread
+#                             also carries an `AGENT_STRIKE:` + `Resumable branch pushed:` comment
+#                             (rows/strike-marker/ overlay): the down-chain half. On the base tree
+#                             the terminal never saw a goal child and the resumable path re-rode
+#                             it; the `infeas_done` hold is what stops that.
 #   inert    the near-miss leg: #66's comments QUOTE the marker and name it mid-sentence but
 #            NONE starts with it (the unanchored latch this clause must not take), and #71 is
 #            human-blocked and never even read. SHARED by the probe-fail and quoted-inert rows —
@@ -50,6 +76,7 @@ requires:
   - python3
 parts:
   - block:c4c5-selector
+  - block:infeasible-selector
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations

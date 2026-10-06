@@ -128,6 +128,12 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   at STEP 0(a)), and the coordinator scan's **stale-stamp repair** dismisses a stamp that landed
   anyway and strips the label. What a merged major then applies is the box's, inside its allowlist
   (`kubernetes_deployment.*` since the same day — the #2037 image bump was "1 address outside").
+  **Chart majors on the human lane arm themselves when they are packaging only** (ADR-141 as
+  amended 2026-10-06, later): the lens opens `## Upstream` with `appVersion: unchanged (<v>)` /
+  `appVersion: A → B` read from the chart index, and `agents/major-handoff.sh` ARMS a `major` chart
+  PR on the former (the lens's APPROVED completes the merge) and parks it `major/awaiting-human`
+  on the latter — the kube-prometheus-stack 89/90 shape ([`dependency-upgrades.md`](dependency-upgrades.md)
+  §Worked case).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
@@ -164,6 +170,24 @@ Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
+- **Validate the LANES, not just the syntax: `devbox run renovate-lane-lint`** before landing a change
+  to `renovate-global.json`. Renovate arms a grouped branch only when EVERY member has
+  `automerge: true` while labels are the UNION — a rule gap on one member produces a lane-labelled,
+  un-armed PR nobody reads (G15: #2295 sat 16 h green). The verb runs Renovate itself
+  (`--platform=local --dry-run=lookup`, trace log) over the checkout and asserts one lane per branch;
+  ~2 min of datasource lookups, so a seat verb, not CI (operator 2026-10-06 — CI WAN stays locked
+  down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
+- **`postUpgradeTasks` run in the SLIM image, with no shell.** The pinned `renovatebot/github-action`
+  runs `ghcr.io/renovatebot/renovate:<version>` — containerbase + `jq`, no helm/yq/python — and executes
+  each command via execa (no `&&`, no pipes unless `allowShellExecutorForPostUpgradeCommands`, which we
+  do not set). Tools come from a runtime `install-tool <tool> <ver>` command (slim keeps
+  `binarySource=install`; the `-full` image sets `global`, which also disables `installTools`), every
+  command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
+  first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
+  one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). A dry run
+  (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
+  but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
   (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
   caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party

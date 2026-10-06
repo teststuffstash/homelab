@@ -31,6 +31,7 @@ c4c5-bodies-probe-fail	c4c5-bodies-probe-fail
 c4c5-infeasible-parks	c4c5-infeasible
 c4c5-infeasible-probe-fail	c4c5-infeasible
 c4c5-infeasible-quoted-inert	c4c5-infeasible
+ci-cause-grammar	ci-cause-grammar
 ci-red-deferred-then-debounced	ci-red-rounds-two-channels
 ci-red-rerun-wake	ci-red-rounds-two-channels
 ci-red-rerun-wake-dispatch	ci-red-rounds-two-channels
@@ -56,7 +57,13 @@ env-card-issue-context-gate	env-card-issue-context-gate
 env-card-machine-markers-capture	env-card-machine-markers
 env-card-mcp-present	env-card-mcp-present
 env-card-mcp-present/opencode	env-card-mcp-present
+fleet-fault-unlatch-cause-closed-green	fleet-fault-unlatch
+fleet-fault-unlatch-cause-open	fleet-fault-unlatch
+fleet-fault-unlatch-issue-cause-closed-green	fleet-fault-unlatch
+fleet-fault-unlatch-no-marker	fleet-fault-unlatch
+fleet-fault-unlatch-probe-fail	fleet-fault-unlatch
 footprint-conflict-predicate	footprint-conflict-predicate
+footprint-entry-split	footprint-entry-split
 fu124-nudge	fu124-nudge
 goal-abandoned	goal
 goal-assembly-complete	goal
@@ -134,8 +141,6 @@ reviewer-touches-undeclared	reviewer-touches
 route-request-labels	route-request
 route-request-workbranch-tight	route-request
 run-phase-metric	run-phase-metric
-scan-guarded-pre-dispatch	scan-guarded
-scan-guarded-set-unreadable	scan-guarded
 scan-phase-marker	scan-phase-marker
 scan-touches-footprint-hold	scan-touches-footprint-hold
 scan-wedge-alert	scan-wedge-alert

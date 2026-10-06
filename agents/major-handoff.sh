@@ -21,9 +21,20 @@
 #      platform's add-before-remove discipline, IL-T16: the write is not atomic, and removing
 #      first would leave the PR label-less in the window), then RE-READ the labels and prove the
 #      end state.
+#   5. THE ONE EXCEPTION — a PACKAGING-ONLY CHART MAJOR ARMS instead of parking (ADR-141 as amended
+#      2026-10-06, later: a chart major whose embedded app version does not move is a `major` by
+#      semver only). The lens brief (agents/lenses/migration.md §Charts) makes the approval's
+#      `## Upstream` section open with the structured line `appVersion: unchanged (<v>)` when the
+#      chart index says the app did not move; when the approval at head carries that line
+#      (line-anchored, case-insensitive) the gate ARMS auto-merge (`gh pr merge --auto --squash` —
+#      the lens's APPROVED then completes the merge, the terraform-provider-major shape), REMOVES
+#      the claim, and proves the end state on the REST pull endpoint (`auto_merge` set, claim gone).
+#      An `appVersion: A → B` line, or no line at all, is the human lane above — the structured
+#      verdict line is what decides, never a label a human sets.
 #
 # EXIT CODES (the coordinator branches on these; the brief names them):
-#   0  handed off — one `major-handoff: <slug>#<n> → major/awaiting-human …` line
+#   0  handed off — one `major-handoff: <slug>#<n> → major/awaiting-human …` line, OR
+#                   one `major-handoff: <slug>#<n> → ARMED (packaging-only chart major …)` line
 #   3  REFUSED   — one line `major-handoff: REFUSED — <reason>`; NOTHING written. The migration
 #                  evidence is missing: dispatch the reviewer again (brief step 2), never relabel
 #                  by hand.
@@ -35,13 +46,15 @@
 # NO COMMENTS are posted by this script: the label IS the record, and the reviewer's approval
 # body IS the evidence trail a human reads before merging.
 #
-# ⚠ DUPLICATED DEFINITION, named on purpose. `newest_commit_at` / `bot_approved_head` below are
-# REPLICATED from agents/review-reflex.sh (the `review-pick` block: `def newest_commit_at` — updater
-# merge commits are NOT new content, oracle-fleet#57 — and `def bot_approved_head` — the `[bot]`
-# suffix sub + APPROVED + newer than the newest content commit). They are jq `def`s inside a
-# single-quoted jq program there, not a sourceable shell seam, so this file carries a copy; a change
-# to the reflex's definition must be mirrored here (the fixture family
-# agents/replay/fixtures/major-handoff pins THIS copy, `review-pick` pins the reflex's).
+# ⚠ DUPLICATED DEFINITION, named on purpose. `is_merge` / `newest_commit_at` / `bot_approved_head`
+# below are REPLICATED from agents/review-reflex.sh (the `review-pick` block: `def is_merge` — a
+# merge commit is NOT new content, oracle-fleet#57, classified by its GitHub default message shape
+# so ANY merge phrasing counts, homelab#2181 — and `def bot_approved_head` — the `[bot]` suffix sub
+# + APPROVED + newer than the newest content commit). They are jq `def`s inside a single-quoted jq
+# program there, not a sourceable shell seam, so this file carries a copy; a change to the reflex's
+# definition must be mirrored here (the fixture family agents/replay/fixtures/major-handoff pins
+# THIS copy, `review-pick` pins the reflex's). The same three-prefix merge shape is the one
+# reviewer-session.sh's exit contract uses (homelab#560 round 2) — one grammar, three readers.
 set -euo pipefail
 
 SLUG="${1:?usage: major-handoff.sh <owner/repo> <pr>}"
@@ -72,8 +85,18 @@ printf '%s' "$pr_json" | jq -e 'type == "object" and (.commits | type == "array"
 # the only exit-4 paths are above (the probe) and below (the re-read); rule #6 keeps them apart.
 verdict="$(printf '%s' "$pr_json" | jq -r --arg bot "$REVIEWER_LOGIN" --arg lane "$LANE_LABEL" --arg SLUGPR "$SLUG#$PR" '
   # ⚠ replicated from agents/review-reflex.sh `review-pick` — see the header.
+  # A MERGE is not content: it brings no PR-authored diff (oracle-fleet#57). Classified by its
+  # GitHub default message SHAPE, not by one updater phrasing (homelab#2181): the update-branch
+  # "Merge branch x", the agent-authored conflict-resolution "Merge remote-tracking branch
+  # origin/x into y" (the live #2046 case), and "Merge pull request #N". The same three-prefix
+  # set the reviewer-session exit contract uses (homelab#560 round 2) — one grammar, mirrored.
+  # gh pr view --json commits exposes no .parents[], so the message shape is the structural test
+  # available on this call.
+  def is_merge:
+    (.messageHeadline // "")
+    | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
   def newest_commit_at:
-    ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+    ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
   def bot_approvals:
     [ .reviews[]?
       | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
@@ -92,6 +115,11 @@ verdict="$(printf '%s' "$pr_json" | jq -r --arg bot "$REVIEWER_LOGIN" --arg lane
   # an own-verdict-at-head. After the word: whitespace, a colon, the bold close, or end of line —
   # so `## Evidenced` still fails and a suffix after a separator passes.
   def heading_re(h): "^[ \\t]*(#{1,6}[ \\t]+|\\*\\*)[ \\t]*" + h + "([ \\t]|:|\\*\\*|$)";
+  # The packaging-only verdict line (gate step 5): `appVersion: unchanged (<v>)` as the lens writes
+  # it, line-anchored like the headings. Anything else — `appVersion: A → B`, or no line — parks.
+  def packaging_only(body):
+    (body | split("\n") | map(sub("\r$"; "")))
+    | any(test("^[ \\t]*appVersion:[ \\t]*unchanged\\b"; "i"));
   def missing_headings(body):
     # LINE-anchored by construction: jq (Oniguruma) anchors ^/$ to the whole string, not per line
     # (probed 2026-09-25: "x\n## Upstream" fails `^`), so the body is split into CR-stripped
@@ -110,15 +138,43 @@ verdict="$(printf '%s' "$pr_json" | jq -r --arg bot "$REVIEWER_LOGIN" --arg lane
       | (missing_headings($a.body // "")) as $m
       | if ($m | length) > 0 then
           "REFUSE the approval at head (\($a.submittedAt)) lacks the migration heading(s): \($m | join(", ")) — re-dispatch the reviewer (brief step 2)"
-        else "OK \($a.submittedAt)" end
+        else "OK \($a.submittedAt) \(if packaging_only($a.body // "") then "arm" else "park" end)" end
     end
 ' 2>/dev/null)" || unreadable "the gate could not evaluate the $SLUG#$PR payload — nothing written"
 
 case "$verdict" in
-  OK\ *)     approved_at="${verdict#OK }" ;;
+  OK\ *)     _rest="${verdict#OK }"; approved_at="${_rest%% *}"; mode="${_rest##* }" ;;
   REFUSE\ *) refuse "${verdict#REFUSE }" ;;
   *)         unreadable "the gate produced no verdict for $SLUG#$PR — nothing written" ;;
 esac
+
+# ── 3a. the ARM branch (gate step 5): arm auto-merge, release the claim, PROVE on the pull endpoint ─
+# Order: ARM first (a refused arm stops here with the claim still held — the PR stays the
+# coordinator's, nothing parks on nobody), REMOVE second; the proof is the REST pull endpoint —
+# `auto_merge` is the arm as GitHub holds it and `labels` the claim's absence, one read keyed apart
+# from the pre-write probe (a replay world has to record the AFTER state).
+if [ "$mode" = arm ]; then
+  if ! gh pr merge "$PR" --repo "$SLUG" --auto --squash >/dev/null 2>&1; then
+    printf 'major-handoff: END STATE NOT PROVEN — arming auto-merge on %s#%s FAILED (packaging-only chart major); %s left in place\n' "$SLUG" "$PR" "$CLAIM_LABEL"
+    exit 5
+  fi
+  if ! gh pr edit "$PR" --repo "$SLUG" --remove-label "$CLAIM_LABEL" >/dev/null 2>&1; then
+    printf 'major-handoff: END STATE NOT PROVEN — auto-merge armed on %s#%s but removing %s FAILED\n' "$SLUG" "$PR" "$CLAIM_LABEL"
+    exit 5
+  fi
+  if ! after="$(gh api "repos/$SLUG/pulls/$PR" --jq '"\(.auto_merge != null) \([.labels[].name] | join(","))"' 2>/dev/null)"; then
+    printf 'major-handoff: END STATE NOT PROVEN — auto-merge armed on %s#%s and %s removed, but the pull re-read failed\n' "$SLUG" "$PR" "$CLAIM_LABEL"
+    exit 5
+  fi
+  armed="${after%% *}"; now_labels="${after#* }"
+  if [ "$armed" != true ] || printf '%s\n' "$now_labels" | tr ',' '\n' | grep -qx -- "$CLAIM_LABEL"; then
+    printf 'major-handoff: END STATE NOT PROVEN — %s#%s after the writes: auto_merge=%s labels=%s\n' "$SLUG" "$PR" "$armed" "$now_labels"
+    exit 5
+  fi
+  printf 'major-handoff: %s#%s → ARMED (packaging-only chart major: appVersion unchanged; %s removed; %s approval at head, submitted %s)\n' \
+    "$SLUG" "$PR" "$CLAIM_LABEL" "$REVIEWER_LOGIN" "$approved_at"
+  exit 0
+fi
 
 # ── 3. the writes: ADD first, REMOVE second (IL-T16), then PROVE the end state ─────────────────
 # A refused ADD stops here with nothing removed — the label-less window is the state the ordering

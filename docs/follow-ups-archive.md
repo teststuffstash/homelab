@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-295** *(archived 2026-10-06)* — **The box sentinel never reported on goal/** PRs.** PR#2299: goal/**
+  heads get an immediate base-pass `success` ("box surface judged at the assembly PR to master"); assembly PRs
+  to master are still fully planned. Verified live on Goal #2273's children (7/7 success, merges resumed).
 - **FU-151** *(archived 2026-10-04)* — **First-party `-iac` deploy bumps skipped LLM review by TIMING, not
   design.** Every deploy-pin now labels its -iac PR `automerge`+`dependencies` on every run: sleep-tracking
   (`5b8c384`), snore-recorder#43, circles#97 (+ its `specs-pr-route.sh` route PRs, the reviewer's catch).
@@ -275,9 +278,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   FU-203 (retention), #1297 (per-blob detection), ingester-image migration = optional later
   (ADR-121 notes it). Gotcha trail in the ADR + the registry manifest headers (debug-port
   collision, ping-must-challenge, RELATIVEURLS, s3 redirect-disable).
-- **FU-052** *(archived 2026-08-30)* — **Onboard the remaining app repos: nothing remains.**
-  agent-runtime onboarded 2026-08-07/08 (PR#37 — recipes, tests, CODEOWNERS; the claim's fixer
-  flip); snore-recorder 2026-08-02 (FU-051's leg — #15 recipes/CalVer/deploy-pin, sleep-iac#57
-  fixer block); agent-coordinator stays CONTEXT-ONLY by the kept 2026-07-16 ruling (tier-3 loop
-  machinery, no repo-side lane — recorded in the platform claim). New repos enter via
-  `new-stack --from` (FU-070). ROADMAP §Onboard reflects the same state.

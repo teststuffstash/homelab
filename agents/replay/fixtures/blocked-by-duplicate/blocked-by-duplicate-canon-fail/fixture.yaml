@@ -1,0 +1,25 @@
+# homelab#2167 — a blocker closed as DUPLICATE with an UNREADABLE canonical issue.
+#
+# CONDITION UNDER REPLAY. A queued issue S has a dependency E that is CLOSED with
+# stateReason=DUPLICATE. E's canonical issue C exists but its state CANNOT be read
+# (gh fails). The contract is that the clause must hold conservatively (never release)
+# and print a loud orphans line — not abort the scan pass.
+#
+# ACCEPTANCE:
+#   1. E closed as DUPLICATE, canonical state unreadable → S stays parked
+#      (blocked = " homelab#42(→CANONICAL-UNREADABLE)")
+#   2. orphans carries the loud warning line
+#   3. Exit RC 0 (the scan pass continues)
+#   4. REACHED: end is printed
+#
+name: blocked-by-duplicate-canon-fail
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:deps-resolve
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - STUB_GH_issue_view_99=fail

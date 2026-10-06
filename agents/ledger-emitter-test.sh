@@ -103,13 +103,16 @@ def fake_sh(args, env=None):
                 "a plain human comment — no strike line",
             ])
         # proj#1 PR comments (pr_url = https://github.com/org/proj/pull/1) — ci-cause markers
-        # (homelab#1286). Three markers: two at byte 0, one preceded by prose (tests that
-        # re.MULTILINE anchoring works — without it, the prose-preceded marker is missed).
+        # (homelab#1286). Four markers: two at byte 0, one preceded by prose (tests that
+        # re.MULTILINE anchoring works — without it, the prose-preceded marker is missed), and
+        # one whose `<job>/<step>` contains SPACES (homelab#1775 — the `(\S+)` capture dropped
+        # it; real step names from `gh run view --json jobs` contain spaces).
         if "issues/1/comments" in url:
             return json.dumps([
                 "ci-cause: ci/manifest-lint class=environment basis=observed\n\nReran and passed.",
                 "ci-cause: ci/argocd-validate class=infra basis=hypothesis\n\nSuspect cold cache.",
                 "Reran and passed after the infra fix.\nci-cause: ci/manifest-lint class=environment basis=observed\n\nThe second run was clean.",
+                "ci-cause: e2e/kind e2e (chart + image + test Garage) class=content basis=observed\n\nThe e2e step failed.",
                 "a plain human comment — no ci-cause line",
             ])
     raise AssertionError("fake_sh unexpected: %r" % (args,))
@@ -197,10 +200,11 @@ check(row["budget_tier"] == "sm" and row["budget_cap_usd"] == 1.0, "row budget t
 check(row["calibration_error"] == round(0.65 / (1.0 * 5), 3), "row calibration_error = 0.65/(1.0*5) — per-round utilisation against the ENFORCED cap, not cumulative")
 
 # ci_causes: harvested from both issue and PR comments (homelab#1286). proj#7 has no
-# ci-cause markers on its own issue comments, but its PR (proj#1) has three markers:
-# two at byte 0, one preceded by prose (tests re.MULTILINE anchoring).
+# ci-cause markers on its own issue comments, but its PR (proj#1) has four markers:
+# two at byte 0, one preceded by prose (tests re.MULTILINE anchoring), and one whose
+# `<job>/<step>` contains spaces (homelab#1775 — the `(\S+)` capture dropped it).
 check("ci_causes" in row, "row carries ci_causes field (never absent)")
-check(len(row["ci_causes"]) == 3, "row ci_causes has 3 entries (2 at byte 0 + 1 prose-preceded)")
+check(len(row["ci_causes"]) == 4, "row ci_causes has 4 entries (2 at byte 0 + 1 prose-preceded + 1 space-bearing step)")
 check(row["ci_causes"][0]["job_step"] == "ci/manifest-lint", "ci_causes[0] job_step = ci/manifest-lint")
 check(row["ci_causes"][0]["class"] == "environment", "ci_causes[0] class = environment")
 check(row["ci_causes"][0]["basis"] == "observed", "ci_causes[0] basis = observed")
@@ -211,6 +215,12 @@ check(row["ci_causes"][1]["basis"] == "hypothesis", "ci_causes[1] basis = hypoth
 check(row["ci_causes"][2]["job_step"] == "ci/manifest-lint", "ci_causes[2] job_step = ci/manifest-lint (prose-preceded marker)")
 check(row["ci_causes"][2]["class"] == "environment", "ci_causes[2] class = environment (prose-preceded marker)")
 check(row["ci_causes"][2]["basis"] == "observed", "ci_causes[2] basis = observed (prose-preceded marker)")
+# Fourth entry: the step name contains spaces — the whole `<job>/<step>` must survive the
+# capture (homelab#1775). Pre-fix `(\S+)` captured only `e2e/kind` and the marker was dropped.
+check(row["ci_causes"][3]["job_step"] == "e2e/kind e2e (chart + image + test Garage)",
+      "ci_causes[3] job_step keeps the spaces (homelab#1775 — the space-bearing step is not dropped)")
+check(row["ci_causes"][3]["class"] == "content", "ci_causes[3] class = content (space-bearing step)")
+check(row["ci_causes"][3]["basis"] == "observed", "ci_causes[3] basis = observed (space-bearing step)")
 
 # ── 6. _budget_from_cr() prefix-anchoring (homelab#929 r3) ──────────────────────────────
 # The prefix must be anchored with "-round-" so issue "92" does not match

@@ -1,0 +1,3 @@
+OUT reader-rc: 1
+OUT emitter-wired: yes
+RC 0

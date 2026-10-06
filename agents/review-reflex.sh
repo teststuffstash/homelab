@@ -174,7 +174,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body,lastEditedAt \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -305,16 +305,28 @@ EOF_C9
       | ($c | length) > 0
         and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0
         and ([ $required[] | select(. as $r | ($names | index($r)) == null) ] | length) == 0;
+    # >>>REPLAY:reviewable_again>>>
     def newest_review_at:
       ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
-    def newest_commit_at:
+    def is_merge:
       # UPDATER MERGE COMMITS ARE NOT NEW CONTENT (found live 2026-07-21, oracle-fleet#57: the
       # update-branch merges kept outdating a valid head approval — re-review → merge → re-review,
       # NINE reviewer sessions before STEP-0 tripped the breaker). A merge brings no PR-authored
       # diff; CI still re-runs on the new head via the required check either way.
-      ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+      # Classified by its GitHub default message SHAPE, not by one updater phrasing (homelab#2181):
+      # the update-branch "Merge branch x", the agent-authored conflict-resolution "Merge
+      # remote-tracking branch origin/x into y" (the live #2046 case), and "Merge pull request #N".
+      # The same three-prefix set the reviewer-session exit contract uses (homelab#560 round 2) —
+      # one grammar, mirrored. gh pr view/list --json commits exposes no .parents[], so the message
+      # shape is the structural test available on this call.
+      (.messageHeadline // "")
+      | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
+    def newest_commit_at:
+      ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
     def reviewable_again:
-      (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
+      (.reviewDecision == "CHANGES_REQUESTED") and
+      ((newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)));
+    # <<<REPLAY:reviewable_again<<<
     def bot_approved_head:
       ([ .reviews[]?
          | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
@@ -349,7 +361,7 @@ EOF_C9
     # A stateless level-triggered reflex turns any predicate bug into an infinite dispatcher (the
     # 2026-07-12 oracle-fleet#13 loop: 12 duplicate approvals), so the shell trips agent/error
     # instead of dispatching when the counts are impossible for a legitimate pick.
-    | ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max // "") as $head
+    | ([ .commits[]? | select(((.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "))) | not) | .committedDate ] | max // "") as $head
     | ([ .reviews[]?
          | select((.author.login // "") | startswith($bot))
          | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts

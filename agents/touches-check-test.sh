@@ -133,6 +133,21 @@ test_escapes "replay-adjacent path is not exempt" \
   "$(printf 'agents/replay-foo/file.sh\n')" \
   "agents/replay-foo/file.sh|governance"
 
+# ── CASE 13b: an annotated declared entry covers its bare path (homelab#1567) ──────────────
+# A `Touches:` entry may carry a trailing ` (...)` annotation scoping a broad path to a narrower
+# intent. The old splitter deleted every space, so `path (comment)` became `path(comment)` — no
+# `/` boundary, no conflict, and the changed path surfaced as a false-positive escape
+# (oracle-fleet#543). The splitter strips the annotation; a genuinely undeclared sibling still
+# escapes (the replacement-enumeration negative).
+test_escapes "annotated declared entry covers its bare path" \
+  "mcps/riigiteataja/ingest/delta.py (log fields only)" \
+  "$(printf 'mcps/riigiteataja/ingest/delta.py\n')" \
+  ""
+test_escapes "annotated entry does not cover a sibling path" \
+  "mcps/riigiteataja/ingest/delta.py (log fields only)" \
+  "$(printf 'mcps/riigiteataja/ingest/other.py\n')" \
+  "mcps/riigiteataja/ingest/other.py"
+
 # ── CASE 14: the sentinel-only class (ADR-097 addendum 3, homelab#944) — arg-3 skip ────────
 # test_escapes has no arg-3 slot, so these call touches_check directly.
 _sent_case() {

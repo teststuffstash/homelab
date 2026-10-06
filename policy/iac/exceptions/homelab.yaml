@@ -48,6 +48,7 @@ spec:
             - alloy-logs-reader
             - crossplane-agentstack-composed
             - eso-transcripts-reader-ssrr
+            - kps-lease-crds # ADR-150: the kube-prometheus-stack PostSync hook reads the monitoring.coreos.com CRDs' operator version (get/list only)
             - loki-rbac-proxy-authn
             - loki-tenant-reader
             - openrouter-proxy-semaphore
@@ -63,6 +64,7 @@ spec:
             - alloy-logs-reader
             - eso-retro-git-reader-ssrr
             - eso-transcripts-reader-ssrr
+            - kps-lease-crds # ADR-150 (see the ClusterRole above)
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview

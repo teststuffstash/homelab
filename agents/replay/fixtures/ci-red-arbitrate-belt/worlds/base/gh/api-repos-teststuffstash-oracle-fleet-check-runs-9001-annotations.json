@@ -1,0 +1,8 @@
+[
+  {
+    "path": "agents/coordinator-scan.sh",
+    "annotation_level": "failure",
+    "title": "clause-replay",
+    "message": "the clause fixture reds"
+  }
+]

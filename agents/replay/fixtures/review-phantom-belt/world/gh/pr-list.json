@@ -1,0 +1,69 @@
+[
+  {
+    "number": 100,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "SUCCESS", "completedAt": "2026-08-25T05:00:00Z"},
+      {"name": "ci/build", "conclusion": "SUCCESS", "completedAt": "2026-08-25T05:05:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:15:00Z",
+    "body": "Fixes #83 — frozen armed PR\n"
+  },
+  {
+    "number": 101,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": null,
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "SUCCESS", "completedAt": "2026-08-25T05:00:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:10:00Z",
+    "body": "Fixes #82 — unarmed PR, should be skipped\n"
+  },
+  {
+    "number": 102,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "SUCCESS", "completedAt": "2026-08-25T05:00:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:10:00Z",
+    "body": "Fixes #84 — armed but not approved, should be skipped\n"
+  },
+  {
+    "number": 103,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "CLEAN",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "SUCCESS", "completedAt": "2026-08-25T05:00:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:10:00Z",
+    "body": "Fixes #85 — CLEAN not BEHIND, should be skipped\n"
+  },
+  {
+    "number": 104,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "FAILURE", "completedAt": "2026-08-25T05:00:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:10:00Z",
+    "body": "Fixes #86 — CI red, should be skipped\n"
+  },
+  {
+    "number": 105,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "SUCCESS", "completedAt": "2026-08-25T19:59:30Z"}
+    ],
+    "updatedAt": "2026-08-25T19:59:30Z",
+    "body": "Fixes #88 — recently moved PR, should be HELD (< guard)\n"
+  }
+]

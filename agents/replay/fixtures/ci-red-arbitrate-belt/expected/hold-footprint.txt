@@ -1,0 +1,13 @@
+CALL gh api repos/teststuffstash/oracle-fleet/commits/5b353fe9abcdef0123456789abcdef0123456789/check-runs --jq [.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out")] | length > 0
+CALL gh api --paginate repos/teststuffstash/oracle-fleet/issues/1515/events
+CALL gh pr view 1515 --repo teststuffstash/oracle-fleet --json reviewDecision,reviews,commits,statusCheckRollup
+CALL gh issue view 1515 --repo teststuffstash/oracle-fleet --json body --jq .body
+CALL gh api repos/teststuffstash/oracle-fleet/commits/5b353fe9abcdef0123456789abcdef0123456789/check-runs --jq [.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out") | .id] | .[]
+CALL gh api repos/teststuffstash/oracle-fleet/check-runs/9001/annotations --jq [.[]? | (.path // "")] | .[]
+OUT ORPHANS [oracle-fleet] ⏳ ci-red EXHAUSTED held — failing paths outside the declared Touches footprint (agents/coordinator-scan.sh, agents/replay/fixtures/goal) (FU-115 belt, homelab#1627): PR #1515\n
+OUT UNITS 
+OUT ci_red_should_arbitrate 1
+OUT ci_red_belt_skip 1
+OUT REACHED: end
+ERR LEGACY-GRAMMAR Touches teststuffstash/oracle-fleet#1515
+RC 0

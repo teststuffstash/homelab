@@ -1,0 +1,4 @@
+OUT HOLD yes
+OUT STRICT yes
+OUT ESCAPES []
+RC 0

@@ -10,27 +10,69 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-04 night — S9 step 7 DONE: class 1/2 proposers ON, wave 1 = 6/6 Renovate merges
-  with no human; TICK-LOG 2026-10-04 night has the arc).** Landed: #2216 (proposers, `prHourlyLimit` **6
-  TEMPORARILY — drop to 3 when the ~30-dep backlog is through**, one line in renovate-global.json),
-  #2217 + attended apply (FU-044's dead webhook hop — fixed, chain rang live on `registry`), #2218 (the
-  ArgoCD belt: `ArgoCDAppDegraded` FIRING on `registry` since 21:18Z — the registry-garbage-collect
-  CronJob exceeds its 3600 s deadline nightly since 10-02; a real fault, nobody's yet: G7), #2226 (crossplane
-  version SET). **Gap register** = `docs/dependency-upgrades.md` §Gap register (G1–G12; G12/G12b written in
-  TICK-LOG, doc rows owed). **Next session:** (1) G11 second cut = **#2234** (the annotation key carries the image TAG; #2226's
-  cut failed the digest lookup — #2228 shipped the chart alone, red by design): after it merges, the next
-  Renovate run's `renovate/patch-crossplane` must carry targetRevision 2.3.6 + `engine-image-digest.v2.3.6:
-  sha256:3213f5…` and pass `publicroute-tf-validate`; #2224 superseded ✓. **Wave 2 open 22:24Z:** #2229
-  pushgateway, #2230 alpine 3.24, #2231 arc 0.15.0 (3 files — G9 proof), #2232 cloudflared, #2233 busybox;
-  **#2227** docs/proofs — all armed; (2) wave 2+ PRs — watch each merge → sync → alert delta (baseline =
-  `maintenance-window snapshot`); kps 86.1.1 sync was Running at 22:21Z; (3) docs owed as ONE PR:
-  §Last proven rows (class 2 image digest = #2220 21:32Z; class 1 chart = #2223 argo-events 21:46Z),
-  register regen (G8 — every merge stales it), G12/G12b rows; (4) decisions for the operator:
-  G7 (no reader for `dig` alerts while the responder is paused — the second leg of "mechanical revert
-  or responder"), G12b (a CI-red armed Renovate PR has no actor — the FU-046 worker-adapts leg's
-  trigger), G8 (regen that rides the merge), updater skip/`rebaseWhen` for Renovate branches (measure
-  the master-merge churn on wave 2 first). Responder-paused + `registry` Degraded = the one live
-  fault to hand someone.
+- **⚑ PICKUP (2026-10-06 night — S9 BUILD LIST for the unattended session; the second-jail read's rulings are
+  ADRs; TICK-LOG 2026-10-06 evening).** Landed: #2335 (version-set regex members get `deps-review`+automerge — a
+  grouped branch arms only when EVERY member agrees, G15), #2336 (`devbox run renovate-lane-lint`: Renovate itself
+  over the checkout, one lane per computed branch — a SEAT verb, CI WAN stays locked down), #2338 (kps worked case
+  + **G16: the ten prometheus-operator CRDs are owned by nobody** — `skipCrds: true`, live v0.91.0), #2340 (the
+  ⚓ upgrade-lease ruling), **#2342** (G17, pending) and **#2343** (ADR-150 lease, ADR-151 CRD owner, ADR-141/149
+  amended — pending). **#2295 cloudflared armed by the seat 19:3xZ** → after merge the seat applies
+  `tofu/cloudflare` in a window (runbook §Cloudflare — the G13 set's tofu half). **Build order (all S9 #1985 —
+  operator: NO new FUs; `dependency-upgrades.md` §Worked case):** (1) **G17**: `scripts/devbox-update.sh` jq gains a
+  numeric-tuple downgrade check + a per-package `major.minor` list (python3, opentofu, kubectl, openssl) → a SECOND
+  body section; PR STAYS ARMED (ruling: rely on the lens); fixture = #2260's lock diff; the lock-bump lens brief
+  reads the whole move list (`agents/lenses/migration.md`, codeowner path). (2) **G16 / ADR-151**:
+  `prometheus-operator-crds` Application (SSA, `Delete=false`, prune off, sync-wave before kps) + one Renovate
+  group with the stack chart (`.github/renovate-global.json` — run `renovate-lane-lint` before landing); first sync
+  IN A WINDOW (FU-304 memory event); belt = CRD `operator.prometheus.io/version` vs operator image. Then **#2256**
+  may merge (update-branch, never Renovate's rebase box — worker commit on the branch). (3) **G12**: Renovate
+  `postUpgradeTasks` for kps (`bash scripts/upstream-alerts-refresh.sh`, `fileFilters` the list, `executionMode:
+  branch`, global `allowedCommands`); verify first on a dry run that the Renovate image has helm/yq/jq (`-full`
+  tag or `install-tool`) and that post-upgrade files ride `platformCommit: auto`. (4) **ADR-150 the lease**: the
+  record (sibling of `responder-window`), kps PreSync/PostSync hook Jobs as a third Application source, the box's
+  expiry loop in `mgmt/scripts/` opening the pin-only revert PR, a drill on a real patch bump (#2276→#2279 shape).
+  ⚠ the credential click (`homelab-sentinel` contents + pull_requests write) is OPERATOR-ONLY — build everything
+  up to it, the drill waits for the click. (5) only then the `matchPackageNames` line arming kps majors.
+  **Two more rulings (operator, 2026-10-06 late — in #2343):** (a) **packaging-only chart majors merge on the
+  lens alone** — the lens states the appVersion delta from the chart index; when UNCHANGED the major handoff
+  (`agents/major-handoff.sh` + the lens brief, codeowner paths) ARMS instead of parking `major/awaiting-human`
+  — build it as step (0), it is the cheapest lever; (b) **the `homelab-sentinel` write widening is APPROVED** —
+  PR the `docs/github-apps.yaml` declaration (FU-098 flow); the click itself is the operator's when back;
+  `GithubAppPermissionDrift` confirms. **Operator items:** #2260 (devbox major) read done — nothing blocks,
+  merge is the operator's. **Loose:**
+  `pr-wait-test` `multi-first-actionable` flaked once on #2336's CI (grep -q under pipefail suspected, unproven).
+- **⚑ PICKUP (2026-10-06 evening — Goal #2273 BOTH THEMES ON MASTER; TICK-LOG 2026-10-06).** FU-295 fixed
+  (#2299, box activated, archived 638095cd). Theme 1 scan-guards #2339 (f0b19f81) + theme 2 seam-parsers
+  #2333 merged 19:23/19:34Z after seat codeowner reads (verdicts on the PRs). Goal now post-launch
+  (bucket #2300); **verdict is the operator's** after the Production-leg window (bucket-A count vs 38).
+  Operator reads: (1) seat raised `Budget: 30 → 36` (FU-131 full-cap charging inflated Σ; revert = re-scope);
+  (2) #2324 lets the scan CLEAR `agent/error` when an `AGENT_INFEASIBLE:` verdict parks the issue — a breaker
+  label removed by machinery for the first time; (3) `coordinatorModel` still `opencode-go/deepseek-v4-flash`
+  (the 09-25 temporary). Open, filed today: #2307 (coordinator sleep-polls to the 3600s deadline). Not filed:
+  the FU-143 goal-child closeout never fired for #2280 (strong `Fixes #2280`, PR merged 18:37Z, closed by hand
+  19:10Z) — re-check on the next goal child now that theme 1 is on master; `agents/meta-needs-attention.sh:172`
+  fails `bash -n` (jq filter, same on master).
+  #2174 merged 2026-10-06 ~20:05Z after a seat master-refresh + codeowner read: a DUPLICATE-closed blocker now
+  HOLDS (conservative — live it always takes the canonical-unreadable arm); fix-forward = #2341 (GraphQL
+  `duplicateOf`, inert, sub-issue of #2167).
+
+- **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
+  arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
+  merged mechanically, Renovate rebased #2240 itself); #2232 cloudflared + the seat's `tofu/cloudflare`
+  apply (window clean, state converged); **#2241 = G13** (cloudflared is a version set — regex manager +
+  group); waves 3/4/5 all merged and live (eso 2.11.0, infisical 1.11.0, kps 86.3.2, nginx 1.31 ×2, otel
+  0.161.0, python 3.14, kube-rbac-proxy 0.23.0, blackbox 0.28.0, registry 3.1.1). **#2257** drops
+  `prHourlyLimit` 6 → 3 (MERGED 08:22Z); the status-rows docs PR **#2258** was in review at wind-down. **Operator reads:** (1) three MAJORS parked on the
+  human lane — **#2254 argo-workflows chart 2.x** (lens APPROVED after a WORKER adapted it in-PR — the
+  first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
+  kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
+  unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
+  503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week; the arming chain's step 2 (an out-of-cone revert actor — the deploy-revert Sensor runs ON Argo Workflows) needs the operator's ruling on WHERE it runs (management box / ARC-hosted Actions workflow / in-cluster webhook receiver outside Argo) before steps 3–5 (pin-lint `reverted-charts` memory, bad-pin drill, one `matchPackageNames` line). (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
+  `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
+  Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
+  rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
+  no actor — but see #2254: the worker-adapts leg DID fire on CHANGES_REQUESTED), updater skip /
+  `rebaseWhen` for Renovate branches.
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;

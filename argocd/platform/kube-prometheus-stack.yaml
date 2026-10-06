@@ -15,8 +15,11 @@
 #
 # skipCrds mirrors what tofu did. Helm installs a chart's `crds/` directory OUTSIDE the release
 # manifest, so the Prometheus operator CRDs were never tofu-managed either (checked: 0 CRDs in the
-# release). Leaving them unmanaged keeps this migration to ONE change. Adopting them into ArgoCD is
-# a separate decision with a much worse failure mode — a pruned CRD takes every ServiceMonitor,
+# release). Leaving them unmanaged kept this migration to ONE change — and left them with NO owner
+# until ADR-151 (2026-10-06, gap G16): the sibling Application `prometheus-operator-crds.yaml`
+# (upstream's CRD chart, server-side apply, `Delete=false`, prune off, sync-wave before this one)
+# owns them now, grouped with this chart in Renovate so one PR moves both. `skipCrds: true` STAYS:
+# this Application must never own a CRD, because a pruned CRD takes every ServiceMonitor,
 # PrometheusRule and the Prometheus CR with it.
 #
 # The secrets these values reference (`grafana-admin`, `ha-token`, `sleep-db-reader`) are still

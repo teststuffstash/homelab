@@ -4,8 +4,8 @@
 # API JSON through the real `--jq` expressions via jq). `devbox run pin-only-lint-test`.
 #
 # Every expected verdict below is derived in its comment FROM the rule in pin-only-lint.sh's
-# header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA) and the two older shapes'
-# PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
+# header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA, (e)–(h) the four revert
+# memories) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
 # greps the script's stderr for the rule's own keyword, so a case that reds for the wrong reason
 # is a FAIL here too.
 set -uo pipefail
@@ -40,6 +40,9 @@ reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf 
 # (check (g), the tofu-provider-revert chain's memory).
 reverts_prov_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-prov-abcd1234"},"body":"#1988 rollback\\n\\nreverted-providers: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-img-abcd1234"},"body":"#1988 rollback\\n\\nreverted-images: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+# reverts_chart_ <chart@version …>: ONE merged revert-chart-* PR naming those chart versions
+# (check (h), the chart revert actor's memory — FU-304's class row).
+reverts_chart_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-chart-abcd1234"},"body":"FU-304 rollback\\n\\nreverted-charts: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
 OLD=1111111111111111111111111111111111111111
@@ -75,8 +78,12 @@ jobs:
     steps:
       - uses: teststuffstash/some-action@$FP_OLD # v1
 EOF
-printf 'spec:\n  source:\n    targetRevision: 0.14.2 # lockstep with arc-controller.yaml\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
+printf 'spec:\n  source:\n    chart: gha-runner-scale-set\n    targetRevision: 0.14.2 # lockstep with arc-controller.yaml\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
 printf 'spec:\n  source:\n    targetRevision: 2026.9.1-gaaaa\n    chart: x\n' >"$R/argocd/platform/openrouter-operator.yaml"
+# check (h)'s home: an UNGUARDED chart Application (the argo-workflows shape) and a raw-manifest
+# Application with no chart (a `path:` source) — its targetRevision has no key in the memory.
+printf 'spec:\n  source:\n    repoURL: https://argoproj.github.io/argo-helm\n    chart: argo-workflows\n    # a comment\n    targetRevision: 2.0.8\n    helm:\n      valuesObject:\n        crds: { install: true }\n' >"$R/argocd/platform/argo-workflows.yaml"
+printf 'spec:\n  source:\n    repoURL: https://github.com/teststuffstash/homelab\n    path: argocd/resources/raw\n    targetRevision: master\n' >"$R/argocd/platform/raw.yaml"
 # the fourth shape's home: a tofu Deployment with the dind sidecar's image line (check (f)).
 mkdir -p "$R/tofu"
 # check (g)'s home: a lockfile with two providers (the version line alone does not say whose it is).
@@ -220,6 +227,31 @@ case_ provider-other-name-same-version ok "reverts_prov_ helm@3.2.1" \
   "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
 case_ provider-memory-unreadable 'cannot read the merged revert-prov-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+# (h) the reverted-chart memory: an unguarded chart Application's targetRevision bump passes on an
+# empty memory, is REFUSED when a merged revert-chart-* PR names that chart@version, passes when
+# the memory names the same chart at ANOTHER version or ANOTHER chart at the same version (the key
+# is the pair), and an unreadable memory is a FAIL. A non-pin edit of the file and a `path:`-source
+# Application (no `chart:`) never read the memory — the unreadable stub proves it.
+case_ chart-bump ok "" "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-reverted-refused 'is a REVERTED chart version' "reverts_chart_ argo-workflows@3.0.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-other-version-reverted ok "reverts_chart_ argo-workflows@2.9.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-other-chart-same-version ok "reverts_chart_ argo-events@3.0.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-memory-unreadable 'cannot read the merged revert-chart-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-non-pin-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/install: true/install: false/' argocd/platform/argo-workflows.yaml"
+case_ chartless-target-revision ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/targetRevision: master/targetRevision: main/' argocd/platform/raw.yaml"
+# (h) composes with the two guarded shapes: a CalVer pin on openrouter-operator.yaml (chart x) and a
+# SemVer pin WITH its trailing comment on arc-runners.yaml each pass PIN_LINE and are still refused
+# when the memory names them — the comment is not part of the version the memory is keyed on.
+case_ chart-reverted-calver-guarded 'is a REVERTED chart version' "reverts_chart_ x@2026.9.25-gbbbb" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
+case_ chart-reverted-semver-commented 'is a REVERTED chart version' "reverts_chart_ gha-runner-scale-set@0.15.0" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: 0.15.0 # lockstep|' argocd/platform/arc-runners.yaml"
 
 # ── the initial-pin scenario: a repo whose workflows were NEVER pinned before. Renovate's first
 # pass removes unpinned refs (`@v4`) and adds pinned ones (`@sha # v4`). The removed lines are

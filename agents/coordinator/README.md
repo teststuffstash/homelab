@@ -45,7 +45,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/done` | merged | coordinator; the deterministic scan RECONCILES it when a CLOSED issue still carries a stale `agent/blocked` or `agent/review` label — a merged PR mentions the issue, the state persisted past `C4C5_PERSIST_S`, and the merged-closeout clause (C6) was skipped (homelab#1106) |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR — the migration-lens marker. **Un-armed** = human-gated, coordinator-owned (§Dependency major bumps); **armed** = the CI-exercised blast class (GitHub Actions majors, ADR-141) — the reflex's, not yours | `devbox-update.sh`, `renovate-global.json` |
-| `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | `agents/major-handoff.sh` ONLY (requires the bot's APPROVED at head + the four migration headings; §Dependency major bumps step 5) — never by hand |
+| `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | `agents/major-handoff.sh` ONLY (requires the bot's APPROVED at head + the four migration headings; §Dependency major bumps step 5) — never by hand. The handoff's OTHER exit: a chart major whose approval opens `## Upstream` with `appVersion: unchanged (<v>)` is ARMED instead (ADR-141 as amended 2026-10-06, later — packaging-only, the lens's APPROVED completes the merge) |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
 
@@ -96,9 +96,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > **Name your tool gaps; never leave a capability demand in prose.** When a NAMED diagnostic or
 > tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked
 > fetch — and its absence changed what you could verify, emit ONE structured line in your session's
-> normal output surface (issue comment / report): `TOOL_GAP: <tool-or-verb> — <what it was needed
-> for, one clause>`. Anchor it like `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the
-> line, never a substring — once per session per tool, and never as a request for the grant itself:
+> normal output surface (the surfaces the janitor's inventory reads — §The janitor tick, sweep 6):
+> `TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>`. Anchor it like
+> `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the line, never a substring — once per
+> session per tool, and never as a request for the grant itself:
 > evidence, not lobbying. The janitor's daily tick aggregates these into the operator's inventory
 > (§The janitor tick, sweep #6); a gap already ruled out stays listed with its ruling.
 >
@@ -143,9 +144,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
 >   re-dispatch mints a fresh key.
 >   **Re-grade the budget label as escalation carrier**: when strikes suggest the
->   served model's tier is inadequate, edit the issue's `agent-budget/*` label to one tier higher
->   before re-dispatch — the label is the routing verb (labels ride /route since PR#408), and
->   `label_map` in `model-classes.json` is the vocabulary home (§Escalation vocabulary). Never label
+>   served model's tier is inadequate, re-grade the issue's `agent-budget/*` label to `lg` before
+>   re-dispatch — the label is the routing verb (labels ride /route since PR#408), and `lg` is the
+>   only label that moves a deepseek ride to a stronger model (`sm`→`md` changes only the $ cap;
+>   `label_map` in `model-classes.json` is the vocabulary home — §Escalation vocabulary). Never label
 >   `agent/blocked` for a pure infra failure while the router still has an eligible candidate;
 >   only a `chain-exhausted` `/route` answer escalates (comment the strike list — that IS a human's problem).
 > - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
@@ -275,9 +277,12 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
    `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
    burned a session until the FU-069 breaker caught it).
-   `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
-   haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
-   run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
+   `--max-turns <n>` is a LAUNCHER flag (homelab#1923), not a harness one: the arg loop exports it
+   as BOTH `GOOSE_MAX_TURNS` (goose's pod-env cap) and `CLAUDE_MAX_TURNS` (the claude run command's
+   `--max-turns`), because the harness is derived from the model AFTER the loop. Omit it and the
+   defaults apply — 200 for both (raised from 80, operator 2026-07-17 — haiku rides hit the 80
+   ceiling; 200 matches the goose belt that clears every measured legit run). Keep the default
+   unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
    `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
    work; `fixer.docker` repos ride kata as usual).
    **Parallelism is footprint-based** (ADR-097, `Touches:` intersection — the scan computes it):
@@ -679,10 +684,22 @@ the product:
    name it a BLOCKING finding in the report headline. Your write tier is unchanged — inert
    drafts only; the edge + the blocking-park surfaces carry the urgency to the human.
 6. **Tool-gap inventory (TOOL_GAP, homelab#536)** — the capability-demand reader. Aggregate the
-   session-issued `TOOL_GAP:` marker lines across the stack's repos (issue comments + PR bodies,
-   trailing ~30d) into a `tool × count × sample-need` inventory, so the operator reads demand
-   instead of prose archaeology. Seed the first report from the known prose record, and keep a gap
-   already RULED listed with its ruling — the point is visibility, not re-litigation:
+   session-issued `TOOL_GAP:` marker lines across the stack's repos (the surfaces declared on the
+   `TOOL_GAP_SURFACES:` line below, trailing ~30d) into a `tool × count × sample-need` inventory,
+   so the operator reads demand instead of prose archaeology. Seed the first report from the known
+   prose record, and keep a gap already RULED listed with its ruling — the point is visibility,
+   not re-litigation:
+
+   **The channel set is declared ONCE, on the line below** — the reviewer's emitter contract
+   (`agents/reviewer-session.sh`) reads this line at dispatch time and interpolates it, so the
+   emitter and this reader can never disagree again (homelab#1776). A marker written to a PR
+   **review body** counts: the reviewer lane's filings land there, and reading only issue comments
+   and PR bodies left 13 real filings per ~30d unread (the ADR-122 (3) class one layer down — one
+   grammar, two surfaces, an emitter and a reader that never agreed which surface counts). Any
+   other restatement of the surfaces — including the launcher's janitor `RUN_CMD` summary in
+   `agents/coordinator-session.sh` — is a summary this line supersedes.
+
+   TOOL_GAP_SURFACES: issue comments, PR bodies, PR review bodies
    - `talosctl` — the PodSigkilled family (#63/#65/#68/#100/#101/#153/#472) — **ruled
      out-of-scope by construction**: the agent image carries no devbox and node-level truth (Talos
      dmesg, machine config) is unreachable by any in-cluster agent whatever its RBAC
@@ -1064,10 +1081,14 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
-  into the worker's context. **Re-grade the budget label if needed**: if stronger models are
-  warranted, edit the issue's `agent-budget/*` label to one tier higher (the escalation carrier —
-  labels ride /route bodies since PR#408; `label_map` in `model-classes.json` is the vocabulary
-  home — §Escalation vocabulary, whose `tier_floor`/`never_free` keys are not yet router-enforced).
+  into the worker's context. **Re-grade the budget label if needed**: the escalation carrier is
+  the issue's `agent-budget/*` label. Say what the re-grade actually floors — the floors live in
+  `label_map` (`model-classes.json`), the vocabulary home (§Escalation vocabulary), not in this
+  advice: `sm` floors at `none` (no floor), `md` floors at `cheap`, `lg` floors at `large`
+  (`never_free`). The served flash pair (`deepseek-v4-flash`, `deepseek-v4.1-flash`) is
+  `tier: cheap`, so `sm`→`md` changes only the $ cap, not the model; only `lg` moves a deepseek
+  ride to a stronger model. To get a stronger model, re-grade to `lg` or pass `--model` on the
+  dispatch.
   This RESETS nothing — if it comes back a third time, escalate.
   Every ruling comment MUST carry ONE `ci-cause:` marker line — the grammar and its data-only
   contract live in §ci-cause below (one home; the ledger harvests it, homelab#1286).
@@ -1543,6 +1564,11 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    migration evidence is missing — dispatch the reviewer again (step 2); never apply the label yourself
    (your own comment is not a review: oracle-fleet#738 / oracle-iac#1001 were relabelled with
    `reviews: []` on 2026-09-25). Exit 4 = a probe was unreadable, nothing written — retry next tick.
+   **Exit 0 has a second shape** (ADR-141 as amended 2026-10-06, later): a CHART major whose approval
+   opens `## Upstream` with the lens's structured line `appVersion: unchanged (<v>)` (the chart index
+   says the embedded app did not move — packaging only) is ARMED by the handoff
+   (`major-handoff: … → ARMED (packaging-only chart major …)`) and the bot's APPROVED completes the
+   merge; nothing for you or a human to do. An `appVersion: A → B` line parks as above.
    A human reads the documented trail and clicks merge. Optionally the reviewer's non-blocking
    follow-up comments (new major features worth adopting) become fresh `agent-fix` issues.
 
@@ -1676,9 +1702,17 @@ The **image-build CI needs no token** — it pushes to ghcr with the job's built
 
 ## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
 
-A coordinator terminal ruling may record what it waits on via a `blocked-on:` marker anchored at
-the **start** of a comment (like every other marker in this lane — `AGENT_STRIKE:`,
+A coordinator terminal ruling may record what it waits on via a `blocked-on:` marker on its own
+**line** (like every other marker in this lane — `ci-cause:`, `AGENT_STRIKE:`,
 `AGENT_INFEASIBLE:`, `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+
+The anchor is the start of a **line**, not the start of the comment (homelab#1566): a ruling is a
+human-readable document with a heading, and every sibling marker it embeds is line-anchored, so a
+comment-start anchor silently disarmed the hold whenever the marker sat under a heading (live on
+PR #1542). Both readers of this marker — the suppression predicate and the arbitrate ordinary-path
+belt — read it through the one grammar, so they can never disagree about the same bytes. A
+blockquote (`> blocked-on: …`) or a mid-sentence mention does not match, so talking *about* a past
+ruling latches nothing.
 
 ### Grammar
 
@@ -1716,7 +1750,10 @@ start of a line (at most one per ruling):
 ci-cause: <job>/<step> class=<timing|environment|content|infra|unknown> basis=<observed|prior|hypothesis>
 ```
 `<job>/<step>` from `gh run view --json jobs` (the fleet-fault rule's stable identifier — never a
-log excerpt). `class` is the ruling's own diagnosis category; `unknown` is legal and honest.
+log excerpt). Write it VERBATIM: real step names contain spaces (`e2e/kind e2e (chart + image +
+test Garage)`), and the ledger's reader captures the whole string up to the ` class=` field
+(homelab#1775 — a no-space capture silently dropped 40% of production markers). `class` is the
+ruling's own diagnosis category; `unknown` is legal and honest.
 `basis`: `observed` = probed/read THIS instance's evidence; `prior` = pattern refs (name them);
 `hypothesis` = untested. **The tag is DATA — it changes no routing, no play behavior.** (#1280's
 rule waits for the distribution; do not implement any basis-keyed branching.)

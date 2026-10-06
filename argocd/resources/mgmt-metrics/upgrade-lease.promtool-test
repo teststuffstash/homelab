@@ -1,0 +1,101 @@
+# Behaviour fixture for the management box's upgrade-lease loop belts (ADR-150).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/upgrade-lease.promtool-test
+#
+# The series are what mgmt/scripts/mgmt-lease.sh emits (mgmt-lease-test.sh pins the emitting side).
+rule_files:
+  - upgrade-lease.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── a revert the box could not open fires at once (no `for`), per outcome; a clean revert never ──
+  - interval: 5m
+    name: "an error/not_pin_only outcome fires RevertFailed; reverted/already never do"
+    input_series:
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="reverted"}'
+        values: "0x6 1x20"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="already"}'
+        values: "0x6 1 2 3 4 5 6x15"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="error"}'
+        values: "0x12 1x14"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="not_pin_only"}'
+        values: "0x26"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="conflict"}'
+        values: "0x26"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="no_policy"}'
+        values: "0x26"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: MgmtLeaseRevertFailed
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: MgmtLeaseRevertFailed
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: now, outcome: error }
+      # 30m after the increase the window has slid past it: the alert clears on its own
+      - eval_time: 1h50m
+        alertname: MgmtLeaseRevertFailed
+        exp_alerts: []
+
+  # ── a lease still expired across ticks fires after 15m and clears when the record is deleted ──
+  - interval: 5m
+    name: "an expired lease that stays fires ExpiredUnreverted after 15m; cleared when gone"
+    input_series:
+      - series: 'mgmt_lease_expired{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x4 1x5 0x4"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: MgmtLeaseExpiredUnreverted
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: MgmtLeaseExpiredUnreverted
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: mgmt-node, instance: "192.168.2.53:9100" }
+      - eval_time: 1h5m
+        alertname: MgmtLeaseExpiredUnreverted
+        exp_alerts: []
+
+  # ── the loop stops completing ticks: stale after 20m + 10m; a fresh tick clears it ──────────────
+  - interval: 5m
+    name: "a loop whose last run stops advancing fires after 20m plus 10m"
+    input_series:
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x12 3600x30"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: MgmtLeaseLoopStale
+        exp_alerts: []
+      - eval_time: 1h25m
+        alertname: MgmtLeaseLoopStale
+        exp_alerts: []
+      - eval_time: 1h35m
+        alertname: MgmtLeaseLoopStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  # ── the box is scraped but the lease textfile was never written ─────────────────────────────────
+  - interval: 5m
+    name: "node_exporter up with no lease series fires MetricsAbsent after 30m, never with the series present"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MgmtLeaseMetricsAbsent
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: MgmtLeaseMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
+  - interval: 5m
+    name: "the series present keeps MetricsAbsent quiet"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x20"
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x20"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: MgmtLeaseMetricsAbsent
+        exp_alerts: []

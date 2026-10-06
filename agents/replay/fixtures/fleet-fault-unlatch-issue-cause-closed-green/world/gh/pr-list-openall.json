@@ -1,0 +1,11 @@
+[
+  {
+    "number": 20,
+    "headRefName": "fixes-issue-100",
+    "body": "Fixes #100",
+    "labels": [],
+    "statusCheckRollup": [
+      {"conclusion": "SUCCESS"}
+    ]
+  }
+]

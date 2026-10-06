@@ -153,7 +153,9 @@ if [ -f "$tmap" ] && [ -f "$tlist" ]; then
     echo "  FAIL $tlist: rendered for chart '${listed:-?}', $tapp pins '${pinned:-?}' — run scripts/upstream-alerts-refresh.sh and classify any new name in $tmap" >&2; rc=1
   fi
   # The rendered set also moves with OUR `defaultRules` (disable/re-add, e.g. KubeJobFailed) — pin that subtree too.
-  dr_now=$(yq -o=json '.defaultRules' argocd/platform/values/kube-prometheus-stack.yaml | sha256sum | cut -c1-12)
+  # TWIN of the fingerprint in scripts/upstream-alerts-refresh.sh (yq-free so the Renovate container can
+  # compute it — G12): the `defaultRules:` subtree as TEXT, comments/blank lines stripped. Keep identical.
+  dr_now=$(awk '/^defaultRules:/{f=1; print; next} f&&/^[^[:space:]#]/{exit} f' argocd/platform/values/kube-prometheus-stack.yaml | grep -vE '^[[:space:]]*(#|$)' | sha256sum | cut -c1-12)
   dr_listed=$(sed -n 's/^# defaultRules: \([0-9a-f]*\)$/\1/p' "$tlist")
   if [ "$dr_now" != "$dr_listed" ]; then
     echo "  FAIL $tlist: rendered for defaultRules '${dr_listed:-?}', the values file now hashes '$dr_now' — run scripts/upstream-alerts-refresh.sh" >&2; rc=1

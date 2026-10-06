@@ -1,0 +1,20 @@
+# ── bridge ── the per-repo loop variables the agent/review phantom belt holds by the time the
+# block runs. Every name is a SCAN name (`slug`, `repo`, `BODIES`, `review_only`, `dispatchable`,
+# `c4c5_cleared`, `infeas_done`, `orphans`, `units`) — a bridge that invents one pins a different
+# clause. This fixture tests the review_only selector against different label combinations.
+#
+# `review_only` is derived by running the selector's jq filter against a recorded `gh issue list`
+# payload. `BODIES` is a recorded PR list. The pod probes that gate the whole C4/C5 clause are
+# the same story: this fixture's world is "no live worker pod, no open PR", which is the state
+# the block is only ever reached in.
+slug="teststuffstash/homelab"
+repo="homelab"
+dispatchable=1
+c4c5_cleared=""
+infeas_done=""
+orphans=""
+units=""
+BODIES="$(cat "$REPLAY_WORLD/gh/pr-list-bodies.json")"
+review_only="$(jq "$review_only_jq" "$REPLAY_WORLD/gh/issue-list.json")"
+# C4C5_PERSIST_S is set by the scan's own config; provide a value for replay.
+C4C5_PERSIST_S=300

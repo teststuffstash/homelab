@@ -1,0 +1,38 @@
+# The management box's ⚓ upgrade-lease subjects (ADR-150, docs/management-box.md §MB5). READ FROM
+# MASTER by the box's lease loop (`git show origin/master:policy/mgmt/upgrade-leases.yaml`), never
+# from the commit under revert — the sentinel principle, as for plan-input.yaml. Codeowner-gated
+# (/policy/): a new subject lands here FIRST, as its own change.
+#
+# What a row says: when a lease on `file` EXPIRES (its `expected-end` is in the past and nothing
+# deleted it), the box opens ONE pin-only revert PR of the lease's commit — `git revert` of that sha
+# with the `keep` files restored to the FORWARD version. The box never diagnoses: an expired lease
+# has exactly one meaning, "this upgrade was not confirmed" (ADR-150 (1)).
+#
+#   file     the Application file whose `targetRevision:` is the pin (the lease's `subject`)
+#   chart    the chart name the revert PR's `reverted-charts: <chart>@<version>` line names —
+#            pin-only-lint check (h)'s 30-day memory, so Renovate's re-proposal of the reverted
+#            version stays red until a newer one exists
+#   keep     files the revert NEVER touches even when the lease's commit changed them: a lease
+#            revert never downgrades CRDs (ADR-150 consequences, ADR-151) — the CRD Application
+#            stays at the version the bump moved it to
+#   regen    files reverted WITH the pin because they are rendered FROM it (the upstream alert-name
+#            list and its triage map move with the chart version; left forward, the old chart would
+#            red `prometheus-rules-lint` on master)
+#   cap_min  the per-subject cap on renewals (ADR-150 (2) `max-end` = `started` + cap): the ACTOR's
+#            number (the PreSync hook writes it into the record); the box only READS `expected-end`
+#            and treats one past `max-end` as `max-end`
+#
+# The pin-only predicate the box applies to the lease's commit (mgmt/scripts/mgmt-lease.sh,
+# mirroring argocd/resources/chart-revert/chart_revert.py classify_commit): the commit touched ONLY
+# `file` + `keep` + `regen`; inside `file` and `keep` every changed non-comment line is a
+# `targetRevision:` line; `file` carries exactly one removed/added pair equal to the lease's
+# from/to. Anything wider → outcome `not_pin_only`: a human reads it (MgmtLeaseRevertFailed).
+subjects:
+  - file: argocd/platform/kube-prometheus-stack.yaml
+    chart: kube-prometheus-stack
+    keep:
+      - argocd/platform/prometheus-operator-crds.yaml
+    regen:
+      - argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt
+      - argocd/platform/values/kube-prometheus-stack-triage.yaml
+    cap_min: 60

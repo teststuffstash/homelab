@@ -443,6 +443,37 @@ in
     };
   };
 
+  # ── the UPGRADE-LEASE loop (ADR-150, docs/management-box.md §MB5): expired lease → revert PR ──
+  # Commit-confirm for upgrades whose cone holds their own detector (kube-prometheus-stack IS
+  # Prometheus): the actor's PreSync hook declares a lease, its PostSync hook verifies and deletes
+  # it, and THIS loop opens ONE pin-only revert PR for every lease still declared past its
+  # deadline (the reflex approves, CI gates, never a direct push). The box never diagnoses.
+  # Same env file and App identity as the sentinel (homelab-sentinel — needs contents:write for
+  # the push, the one operator click; pre-click every revert lands as outcome `error`, alerted).
+  # Shares the sentinel/apply flock; its own clone under /var/lib/mgmt/lease. Offset from the
+  # sentinel (*:0/5) and the apply loop (*:2/5) so the three never queue on the lock at once.
+  systemd.services.mgmt-lease = {
+    description = "management upgrade-lease loop: expired lease → pin-only revert PR";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "20m";
+      Environment = [ "HOME=/root" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/mgmt/scripts/mgmt-lease.sh";
+  };
+  systemd.timers.mgmt-lease = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:3/5";
+      RandomizedDelaySec = "30s";
+      Persistent = true;
+    };
+  };
+
   # ── the NODE RECONCILER (ADR-132 §MB4 layers 3–5): reconcile:auto nodes → the upgrade verb ─────
   # For each node machines/machines.yaml declares `reconcile: auto`, diff the declared install
   # (main's applied node_install_targets) against live (mgmt-probe.sh's check_nodes) and, on a

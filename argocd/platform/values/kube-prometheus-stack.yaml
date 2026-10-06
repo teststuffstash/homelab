@@ -339,6 +339,16 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/provider-errored
+      # Operator ruling 2026-10-05 (ADR-141 as amended): ArgoControllerSilent — the Argo Workflows
+      # controller completed nothing for 30 m — goes to the chart-revert RECEIVER, a plain Deployment
+      # OUTSIDE Argo's dependency cone (argocd/resources/chart-revert/): the four chains above run ON
+      # Argo Workflows, so a chart bump that breaks the controller breaks them too. It reverts the
+      # newest pin-only argo-workflows chart merge within 120 m (docs/designs/
+      # fu-1990-workflow-pin-revert.md Part 4). Same composition: the responder still triages.
+      - name: chart-revert
+        webhook_configs:
+          - send_resolved: false
+            url: http://chart-revert.agent-coordinator.svc.cluster.local:8080/alert
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -379,6 +389,17 @@ alertmanager:
           matchers:
             - alertname = "MgmtApplyErroredOnNewProvider"
           receiver: deploy-provider-revert
+        # 2026-10-05: ArgoControllerSilent goes to BOTH chart-revert (the receiver outside Argo's
+        # cone) AND the responder. The revert only fires when the newest merge touching
+        # argocd/platform/argo-workflows.yaml within the window changed nothing but the pin; every
+        # other outcome is a counter + a log line (chart_revert_alerts_total{outcome}). group_wait
+        # is short on purpose: the rule already waited 30 m + 5 m, and the receiver's own ledger
+        # makes a re-delivery a no-op.
+        - continue: true
+          group_wait: 10s
+          matchers:
+            - alertname = "ArgoControllerSilent"
+          receiver: chart-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts

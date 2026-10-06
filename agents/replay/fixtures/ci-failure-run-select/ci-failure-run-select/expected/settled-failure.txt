@@ -1,0 +1,7 @@
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1413-pypi-cache-env --status failure --limit 1 --json databaseId --jq .[0].databaseId
+CALL gh run view 33965268108 --repo teststuffstash/homelab --log-failed
+OUT RUN 33965268108
+OUT LOG 2026-09-05T12:34:56.789Z ⚠ Error in step 5: Python package verification failed
+OUT INDEX ci-failure.md  OK
+OUT REACHED: end
+RC 0

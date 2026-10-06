@@ -1,0 +1,34 @@
+# argv-max-turns — the launcher's argv grammar, as one decision table (homelab#1923, Goal #2273
+# fix rule: table first, then the row).
+#
+# THE CONTRACT. `agents/agent-session.sh` parses its own argv; the coordinator brief
+# (`agents/coordinator/README.md`) documents the dispatch form. Those are ONE grammar with ONE
+# owner — the launcher's arg loop — so the brief must never name a flag the loop does not parse.
+#
+# THE DEFECT. The brief documented `--max-turns 200` as a dispatch step, but the loop's catch-all
+# (`*) echo "unknown arg: $1" >&2; exit 2;;`) refused it: a coordinator following the brief
+# verbatim got `unknown arg: --max-turns`, exit 2, before pre-flight (measured live 2026-09-22,
+# issue #1909 — zero pods, zero rounds consumed, key still valid). The turn cap was a pod-spec env
+# var (`GOOSE_MAX_TURNS`, default 200) and a claude run-command default (`CLAUDE_MAX_TURNS`,
+# `:-200`), never a flag.
+#
+# THE ROWS (rows.psv; the argv lives in rows/<id>/vars.sh, which `set --`s it before the loop —
+# the env column cannot carry a space). The axis is the argv form:
+#   documented-goose   — the brief's goose dispatch form, `--max-turns 200` ⇒ BOTH caps 200, RC 0.
+#                        THE FIXED ROW: red on base, where the catch-all refused it.
+#   documented-claude  — the brief's claude dispatch form, `--max-turns 80` ⇒ BOTH caps 80, RC 0.
+#                        The harness is derived from the model AFTER the loop, so the flag cannot
+#                        be harness-scoped; this row pins that both names are set.
+#   unknown-flag       — `--bogus-flag` ⇒ `unknown arg`, RC 2. The fix must not widen the
+#                        catch-all into a silent accept.
+#   no-flag            — no argv ⇒ BOTH caps UNSET, RC 0. The flag is the ONLY setter: the pod env
+#                        default (GOOSE_MAX_TURNS, agent-session.sh pod spec) and the claude run
+#                        command's `:-200` must still apply when the flag is absent.
+name: argv-max-turns
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:pre.sh
+  - block:argv-parse
+  - file:post.sh
+rows: rows.psv

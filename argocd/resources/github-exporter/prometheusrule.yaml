@@ -768,6 +768,30 @@ spec:
             summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
             description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"
 
+        # homelab#1896: an armed+BEHIND PR on a repo whose ruleset requires no approval is NEVER a
+        # legitimate steady state — the updater brings it current within a pass (the */15 cron plus
+        # the /update-pr edge). Before #1896's fix the updater's merge-ready arm required a bot
+        # approval the mechanical `automerge` classes never get (docs/agents/iac-lane.md: deploy_bump
+        # "CI-only, instant"; docs/agents/merge-path.md §Decisions/FU-046), so they stranded
+        # indefinitely — oracle-iac, 2026-09-21: 10 open PRs, all armed+BEHIND, the oldest from
+        # 09-16, ~500 updater passes over them. The series exists ONLY for reviewDecision == ""
+        # (the no-approval signal), so no filter is needed here; drafts are excluded at the source.
+        # ⚠ RESTART-GAP HARDENED (homelab#331 class): a scraped single-replica gauge under a `for:`
+        # window; `max_over_time([5m])` rides a poller roll or a raising collector. [5m] is the
+        # class's bound (item (vii) at the top of this group): the composed phantom is the 120s
+        # exposition cache + B, and the window survives iff `for:` > that — 10m > 120s + 5m = 7m.
+        # Price: a PR updated just under the threshold keeps ringing ≤7m.
+        - alert: ArmedBehindNoApprovalStranded
+          expr: >-
+            time() - max by (owner, repo, number) (max_over_time(github_pull_request_armed_behind_no_approval_timestamp[5m])) > 3600
+          for: 10m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: "Armed+BEHIND PR {{ $labels.repo }}#{{ $labels.number }} stranded on a no-approval repo"
+            description: "PR {{ $labels.repo }}#{{ $labels.number }} is armed and BEHIND on a repo whose ruleset requires no approval, and is over an hour old — the updater should have brought it current within a pass (the */15 cron plus the /update-pr edge). This is never a legitimate steady state. Check: (1) the updater's last pass for this repo (agents/update-pr-branch.sh, the updater-git token); (2) whether the PR carries the `automerge` label (the review reflex's skip class) or a bot approval at head — the two merge-ready arms; (3) the /update-pr edge (github-exporter UPDATE_PR_WEBHOOK_URL). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"
+
     # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ──────────
     # PR#407's class — every claude/haiku worker ride silently running the CLI default
     # (opus-5[1m]) for 23 days — was visible in data already collected, and nothing joined the two

@@ -152,6 +152,7 @@ mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer o
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
 | `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
+| **the prometheus-operator CRD owner check** (`check_kps_crds`, 2026-10-07 — ADR-151, gap G16) | every `monitoring.coreos.com` CRD's `operator.prometheus.io/version` equals the running `kube-prometheus-stack-operator` image tag. The pair moves in one Renovate group, but a failed CRD sync, a stack bump merged outside the group, or a lease revert of the stack pin alone (ADR-150 never downgrades CRDs) leave the operator on a schema it did not ship — kube-state-metrics exports no CRD annotations, so the read is this kubectl probe; reason `skew` names the drifted CRDs |
 | each credential it holds, read once | a rotation did not lock the box out |
 
 The metric *shape* copies the Garage write probe: the verdict **and** a `*_last_run_timestamp`, so
@@ -283,6 +284,14 @@ count-gated org secrets need, and the read-only twin of the Cloudflare write tok
 (`tofu/cloudflare-token/mgmt-read.tf`), so both plans are clean; applies stay on the host / in the
 jail); ansible plays (`--check` of a PR head — the same executes-PR-
 content class, the same allowlist) after that.
+
+**Goal children get a base-pass, not a plan (FU-295, 2026-10-06).** The `required-checks` ruleset
+requires this context on `goal/**` bases too, and a box that judged master-bound heads only left
+every approved Goal child BLOCKED (the ADR-142 control drill #2093; Goal #2273's children). Nothing
+on a goal branch reaches an apply — the goal→master assembly PR is the only road to a box-held root,
+and it is master-bound, so it gets both stages in full. A head whose base is `goal/**` therefore
+gets `success` "base goal/… — box surface judged at the assembly PR to master" in one tick, no
+stage 1, no plan; other non-master bases are not required and stay unjudged.
 
 **Privilege.** The plan runs as its own unix user with its own `EnvironmentFile`
 (`/var/lib/mgmt/sentinel.env`), never as root with the belt's file: one consumer, one token, at its
@@ -943,6 +952,66 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
   hold (snapshot, each class, the revision split, absent/already-unhealthy, unreadable read and
   baseline, the ack, the after-window read, revert exempt, the 2026-09-22 replay) and the
   `workload-health` read itself against synthetic dumps.
+
+## MB5. The upgrade lease — commit-confirm on a deadline (ADR-150)
+
+**The class.** An upgrade whose dependency cone holds the detector that would judge it — kube-prometheus-stack
+IS Prometheus + Alertmanager; a node-by-node substrate rollout — cannot be reverted by an alert: the bump
+that stops Prometheus stops the alert that would name it, and no absence read can tell a bad bump from a
+full disk. [ADR-150](adr.md) rules COMMIT-CONFIRM instead, with this box as the actor because it is
+outside every cluster cone: the actor DECLARES the upgrade with a deadline, VERIFIES and DELETES the
+declaration, and the box REVERTS whatever is still declared past its deadline. The box never diagnoses — an
+expired [⚓ upgrade lease](glossary.md) has exactly one meaning, "this upgrade was not confirmed", which is
+what makes a dumb box safe. A healthy roll that outlasts its deadline reverts; the fix is that subject's
+deadline, never a smarter box.
+
+**The record** (the cluster half, `argocd/resources/kube-prometheus-stack-lease/`): one ConfigMap per
+in-flight upgrade in ns `agent-coordinator` — a sibling of the `responder-window` registry, read on the same
+path (§The declared-window gate, FU-300) — label `homelab.teststuff.net/upgrade-lease=true`,
+`creationTimestamp` = started, data `subject` (the Application file) / `chart` / `sha` / `from` / `to` /
+`expected-end` / `max-end` / `by` / `reason`. ONE decisive field: `expected-end`; a renewal moves it, never
+past `max-end`. The Application's **PreSync** hook creates it when the sync starts (the cluster's clock, so
+ArgoCD's git-poll lag and this box's tick are both outside the window; no sync → no lease → no revert); the
+**PostSync** hook runs the subject's REAL checks and deletes it. ⛔ A declared window HOLDS the apply loop
+(§MB3) and NEVER this timer: a window arms nothing, and an unconfirmed upgrade reverts whether or not a
+seat has one open.
+
+**The loop** — `mgmt/scripts/mgmt-lease.sh`, `mgmt-lease.timer` at `*:3/5` (offset from the sentinel's
+`*:0/5` and the apply loop's `*:2/5`; the three share one flock), its own clone under `/var/lib/mgmt/lease`,
+the policy `policy/mgmt/upgrade-leases.yaml` read from MASTER (the sentinel principle). Per tick: read the
+leases (unreadable → PROBE-FAIL, `mgmt_lease_unreadable 1` — never "no leases"); for every lease with
+`expected-end` in the past: (1) the ledger — a PR for branch `revert-chart-lease-<sha8>` exists, or master's
+pin in the subject file is no longer the lease's `to` → `already`; (2) the subject must be in the policy →
+else `no_policy`; (3) the lease's commit must be **pin-only** — it touched nothing but the subject `file` +
+the policy's `keep` + `regen` files, and inside `file`/`keep` every changed non-comment line is a
+`targetRevision:` line with `file`'s one pair equal to the lease's from/to (the predicate of
+`argocd/resources/chart-revert/chart_revert.py`) → else `not_pin_only`; (4) the revert: `git revert` of the
+sha on a branch off master, the `keep` files restored to the sha's FORWARD content (**a lease revert never
+downgrades CRDs** — `argocd/platform/prometheus-operator-crds.yaml`, ADR-151) and amended into the one
+commit, the `regen` files (the upstream alert list + triage map, rendered from the pin) reverted with it;
+(5) push the branch, open the PR (`revert: <chart> chart <to> → <from> (upgrade lease expired)`, labels
+`automerge` + `dependencies`, auto-merge armed — the reflex approves, CI gates, never a direct push), its
+LAST body line `reverted-charts: <chart>@<to>` = `pin-only-lint` check (h)'s 30-day memory, so Renovate's
+re-proposal of the reverted version stays red until a newer one exists. Outcomes: `reverted` · `already` ·
+`no_policy` · `not_pin_only` · `conflict` (never forced) · `error` (push/PR/label/arm failed — the lease stays,
+and the next tick RESUMES where it stopped: a branch already on origin → the PR step, an open PR missing
+its labels or arm → labels + arm; never a rebuild, whose new sha could not be pushed over the branch). Metrics via the textfile (job `mgmt-node`): `mgmt_lease_active`,
+`mgmt_lease_expired`, `mgmt_lease_revert_total{outcome}` (every outcome pre-initialised at 0),
+`mgmt_lease_last_run_timestamp_seconds`, `mgmt_lease_unreadable`. Belts
+(`argocd/resources/mgmt-metrics/upgrade-lease.yaml`): `MgmtLeaseRevertFailed` (`now` — the box refused to
+guess, a person finishes), `MgmtLeaseExpiredUnreverted` (`dig` — the PR exists but is not landing),
+`MgmtLeaseLoopStale`, `MgmtLeaseMetricsAbsent`. Tests: `devbox run mgmt-policy-test` →
+`mgmt/scripts/mgmt-lease-test.sh` (a bare fixture origin; the real clone/revert/push path; every GitHub
+call recorded).
+
+**Credential — the one operator click (ADR-150 (5)).** The loop pushes and opens PRs as the box's own
+identity, the `homelab-sentinel` App (§Credentials), which needs `contents: write` (it has `pull_requests:
+write`); the `docs/github-apps.yaml` declaration lands first (FU-098 flow), the operator clicks,
+`GithubAppPermissionDrift` confirms. **Pre-click every revert lands as outcome `error`** with the 403 in the
+journal and `MgmtLeaseRevertFailed` firing — loud, never a crash. `MGMT_SHADOW=1` builds the revert commit
+locally and logs the would-be push + PR. Activation after the merge is the §Two pins path over ssh
+(`mgmt-pull` → `nixos-rebuild test` → stamp → `mgmt-confirm`); the first subject is kube-prometheus-stack
+(`dependency-upgrades.md` §Worked case); `chart-revert` (ADR-149) keeps argo-workflows.
 
 ## Rollback — three layers
 
