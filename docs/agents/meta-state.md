@@ -33,8 +33,13 @@ never the session's arc — that is TICK-LOG's.)
   expiry loop in `mgmt/scripts/` opening the pin-only revert PR, a drill on a real patch bump (#2276→#2279 shape).
   ⚠ the credential click (`homelab-sentinel` contents + pull_requests write) is OPERATOR-ONLY — build everything
   up to it, the drill waits for the click. (5) only then the `matchPackageNames` line arming kps majors.
-  **Operator items:** #2260 (devbox major) read done — nothing blocks, merge is the operator's; "packaging-only
-  chart majors (operator minor unchanged) merge on the lens alone" is PROPOSED, not ruled — ask. **Loose:**
+  **Two more rulings (operator, 2026-10-06 late — in #2343):** (a) **packaging-only chart majors merge on the
+  lens alone** — the lens states the appVersion delta from the chart index; when UNCHANGED the major handoff
+  (`agents/major-handoff.sh` + the lens brief, codeowner paths) ARMS instead of parking `major/awaiting-human`
+  — build it as step (0), it is the cheapest lever; (b) **the `homelab-sentinel` write widening is APPROVED** —
+  PR the `docs/github-apps.yaml` declaration (FU-098 flow); the click itself is the operator's when back;
+  `GithubAppPermissionDrift` confirms. **Operator items:** #2260 (devbox major) read done — nothing blocks,
+  merge is the operator's. **Loose:**
   `pr-wait-test` `multi-first-actionable` flaked once on #2336's CI (grep -q under pipefail suspected, unproven).
 - **⚑ PICKUP (2026-10-06 evening — Goal #2273 BOTH THEMES ON MASTER; TICK-LOG 2026-10-06).** FU-295 fixed
   (#2299, box activated, archived 638095cd). Theme 1 scan-guards #2339 (f0b19f81) + theme 2 seam-parsers
