@@ -24,7 +24,12 @@
 # patch; `no-approval` replays the LIVE oracle-fleet#738 recording — the PR the coordinator
 # relabelled by hand with `reviews: []` — and refuses it; `reviews-unreadable` injects a failed
 # probe (per-call STUB_GH_… override) and pins exit 4 with no CALL after the probe;
-# `end-state-not-proven` patches the AFTER-state read and pins exit 5.
+# `end-state-not-proven` patches the AFTER-state read and pins exit 5. `packaging-only-arms` /
+# `app-moves-parks` pin gate step 5 (ADR-141 as amended 2026-10-06, later): the lens's structured
+# `appVersion: unchanged (<v>)` line at the top of `## Upstream` ARMS auto-merge (the CALL stream
+# carries `gh pr merge --auto --squash`, the claim release, and the REST pull re-read that proves
+# `auto_merge` set + claim gone — `worlds/approved/gh/api-…-pulls-738.json` is that AFTER state);
+# `appVersion: A → B` parks exactly as `handoff` does.
 #
 # WORLDS. worlds/approved (constructed — see its provenance.yaml) · worlds/recorded-738 (recorded).
 name: major-handoff

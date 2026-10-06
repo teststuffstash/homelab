@@ -128,6 +128,12 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   at STEP 0(a)), and the coordinator scan's **stale-stamp repair** dismisses a stamp that landed
   anyway and strips the label. What a merged major then applies is the box's, inside its allowlist
   (`kubernetes_deployment.*` since the same day — the #2037 image bump was "1 address outside").
+  **Chart majors on the human lane arm themselves when they are packaging only** (ADR-141 as
+  amended 2026-10-06, later): the lens opens `## Upstream` with `appVersion: unchanged (<v>)` /
+  `appVersion: A → B` read from the chart index, and `agents/major-handoff.sh` ARMS a `major` chart
+  PR on the former (the lens's APPROVED completes the merge) and parks it `major/awaiting-human`
+  on the latter — the kube-prometheus-stack 89/90 shape ([`dependency-upgrades.md`](dependency-upgrades.md)
+  §Worked case).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
