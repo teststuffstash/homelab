@@ -133,7 +133,8 @@ label_conflict() {
 # So: update only what is MERGE-READY — nothing but currency + CI left before auto-merge fires.
 #   * reviewDecision == APPROVED — GitHub's own gate is satisfied (dismiss_stale_reviews_on_push
 #     means APPROVED already implies "at the current content"), or
-#   * bot_approved_head on a repo whose ruleset requires no approval (reviewDecision "").
+#   * reviewDecision == "" (a repo whose ruleset requires no approval) ∧ (bot_approved_head ∨ the
+#     PR carries the `automerge` label — the review reflex's skip class, homelab#1896).
 # Everything else stays BEHIND and costs nothing: an unreviewed PR is reviewed BEHIND (PR#1446), a
 # changes-requested PR gets its fix round pushed BEHIND (CI runs on the content), a codeowner park
 # waits for its human — the #887 skip is now just a special case of "not merge-ready".
@@ -195,6 +196,20 @@ while read -r pr; do
   # currency + CI left, and no reconstruction of the bot's review history may overrule that. This
   # also makes the guard probe-free — a park costs zero API calls, not just zero updates.
   if [ "$(jq -r '.reviewDecision' <<<"$pr")" = REVIEW_REQUIRED ]; then continue; fi
+  # ARM 2, THE SKIP-CLASS HALF (homelab#1896). reviewDecision == "" here means the repo's ruleset
+  # requires no approval (an approval-required repo reports REVIEW_REQUIRED/APPROVED/
+  # CHANGES_REQUESTED, never ""). On such a repo the PR is merge-ready when EITHER the reviewer bot
+  # approved at head (the #1452 arm below) OR it carries the `automerge` label — the review reflex's
+  # SKIP class (docs/agents/merge-path.md §Decisions/FU-046; docs/agents/iac-lane.md). The
+  # mechanical classes on the -iac repos are CI-only BY DESIGN, so the reflex never reviews them and
+  # the bot-approval arm can never reach them: before this they stranded armed+BEHIND forever
+  # (oracle-iac, 2026-09-21: 10 open PRs, all armed+BEHIND, the oldest from 09-16, ~500 updater
+  # passes over them). The label condition is LOAD-BEARING: without it an ordinary unreviewed PR on
+  # a no-approval repo would be updated before its review — the waste #1452 removes. Placed AFTER
+  # the park guard so the label can never bypass an approval-required repo's gate.
+  if [ "$(jq -r '[.labels[].name] | index("automerge") != null' <<<"$pr")" = "true" ]; then
+    ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; continue
+  fi
   approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
     [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
       | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"
