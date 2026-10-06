@@ -75,6 +75,19 @@ $R_NX_CH
 $R_PVE_OK" >/dev/null 2>&1
 check "rc 0 with changed=2 → fail drift" "fail drift"
 
+# 7. the CRD-owner belt (ADR-151, G16): kps_crds_verdict over captured `get crd` JSON + the image.
+CRDS='{"items":[{"metadata":{"name":"prometheuses.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"servicemonitors.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"workflows.argoproj.io"},"spec":{"group":"argoproj.io"}}]}'
+reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1
+check "CRDs equal the operator image → pass ok" "pass ok"
+reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator:v0.94.1" >/dev/null 2>&1
+check "operator a minor ahead of the CRDs → fail skew" "fail skew"
+reset; kps_crds_verdict "$(printf '%s' "$CRDS" | jq -c '.items[0].metadata.annotations = {}')" "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1
+check "one CRD without the version annotation → fail skew" "fail skew"
+reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator@sha256:abc" >/dev/null 2>&1
+check "digest-only image ref → fail unparseable" "fail unparseable"
+reset; kps_crds_verdict '{"items":[]}' "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1
+check "no monitoring.coreos.com CRD → fail missing" "fail missing"
+
 # 6. no recap: the play never ran (rc≠0) → failed; rc 0 without a recap → unparseable
 reset; ansible_verdict 1 "ERROR! couldn't resolve module/action 'oxlorg.opnsense.unbound_host'" >/dev/null 2>&1
 check "no recap, rc 1 → fail failed" "fail failed"
