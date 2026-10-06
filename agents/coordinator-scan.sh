@@ -5184,10 +5184,12 @@ EOF_GTHEMES_OPEN
             fi
           fi
           if [ "$filing_already_extended" = 0 ]; then
-            # Extend the existing filing with a comment
+            # Extend the existing filing with a comment; include the cause marker if available
+            filing_fault_marker=""
+            [ -n "$filing_n" ] && filing_fault_marker="<!-- fleet-fault cause=${slug}#${filing_n} prs=${sorted_nums} -->"
             gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
               "${fleet_strike_marker}" \
-              "" \
+              "${filing_fault_marker:+$filing_fault_marker}" \
               "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
               "" \
               "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
@@ -5247,14 +5249,28 @@ EOF_GTHEMES_OPEN
           "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
         for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
           [ -n "$fn" ] || continue
-          # Idempotency check: skip if a comment already starts with the identical marker
+          # Idempotency check: skip if a comment already starts with the identical marker.
+          # BUT: if the comment exists without a fleet-fault cause= marker and we now have a
+          # filing_n, repost to include the cause marker (homelab#2327). The marker's presence
+          # is part of the idempotency key, not an accident of the first post.
           existing_comments="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null || true)"
           already_posted=0
+          needs_cause_repost=0
           if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
             if jq -e --arg m "$fleet_strike_marker" \
               '[.[] | (.body // "") | startswith($m)] | any' \
               <<<"$existing_comments" >/dev/null 2>&1; then
               already_posted=1
+              # Check if the existing marker comment lacks the fleet-fault cause= marker.
+              # If so and filing_n is set, we need to repost with it.
+              if [ -n "$filing_n" ]; then
+                if ! jq -e --arg m "$fleet_strike_marker" \
+                  '[.[] | select((.body // "") | startswith($m)) | (.body // "") | test("fleet-fault cause=")] | any' \
+                  <<<"$existing_comments" >/dev/null 2>&1; then
+                  needs_cause_repost=1
+                  already_posted=0  # Force repost
+                fi
+              fi
             fi
           fi
           if [ "$already_posted" = 0 ]; then

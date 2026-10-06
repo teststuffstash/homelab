@@ -1,0 +1,13 @@
+[
+  {
+    "body": "AGENT_STRIKE: round=1 error_class=unknown model=opus/claude-sonnet-4-2026-08-01\n\nThe worker went terminal without pushing. The issue is still actionable — the deliverable is unchanged.\n\n**Result:** `error`\n**Duration:** 142s\n**Exit code:** 1",
+    "created_at": "2026-09-01T10:00:00Z"
+  },
+  {
+    "body": "fleet-strike-fp: error_class=unknown issues=326,327,328,329\n<!-- fleet-fault cause=teststuffstash/homelab#999 prs=326,327,328,329 -->\nAGENT_ERROR: infra-class strike on 4 issues — error_class=unknown\n\n🤖 **Fleet strike detected** — `error_class=unknown` on ≥2 distinct issues within 24h (FU-200).\n\nAffected issues:\n- #326\n- #327\n- #328\n- #329\nEach has been labelled `agent/error` (human-first, report-only).",
+    "user": {
+      "login": "homelab-agents-1234[bot]"
+    },
+    "created_at": "2026-09-01T17:00:00Z"
+  }
+]
