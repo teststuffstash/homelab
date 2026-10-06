@@ -3884,7 +3884,7 @@ EOF_GTHEMES_OPEN
       # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
       # above ran first), so a running round is never mistaken for a finished one.
       # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
-      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews,lastEditedAt 2>/dev/null)" || cr_probe=''
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch (homelab#1427).
       cr_boc="$(pr_blocked_on_check "$slug" "$u" "$cr_probe")"

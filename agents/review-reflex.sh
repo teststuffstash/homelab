@@ -174,7 +174,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body,lastEditedAt \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
