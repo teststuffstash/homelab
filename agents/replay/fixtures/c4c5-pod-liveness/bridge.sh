@@ -18,17 +18,11 @@ cg=""
 gb=""
 infeas_done=""
 c6db_nums=""
-# Read PODS from the kubectl stub. For worlds where the probe fails, this will be empty/error.
-pods_json="$(cat "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)"
-if jq -e 'type == "object"' >/dev/null 2>&1 <<<"$pods_json"; then
-  # Valid JSON - extract pod names from the response
-  PODS="$(jq -r '.items[]?.metadata.name // empty' <<<"$pods_json")"
-else
-  # Invalid JSON or error output - simulate probe failure
-  PODS=""
-fi
-# Escape PODS for safe use in jq (same as in coordinator-scan.sh line 4219)
-PODS_ESCAPED="$(printf '%s\n' "$PODS" | sed 's/[\\"\x27]/\\&/g')"
+# PODS and PODS_ESCAPED are now bound inside the sentinel region (coordinator-scan.sh),
+# not in the bridge. The sentinel reads from the kubectl world stub directly.
+# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+KUBECTL="kubectl"
+KUBE=""
 ITEM_CLASS_ROWS=""
 item_class_push() {
   local repo="${1:?}" item="${2:?}" class="${3:?}" who="${4:?}"

@@ -61,6 +61,10 @@ case "${CROSS_REPO_PASS}" in
     ;;
 esac
 CROSS_REPO_PASS=$((CROSS_REPO_PASS + 1))
+# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+# Needed for the per-issue liveness check added in homelab#2305.
+KUBECTL="kubectl"
+KUBE=""
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }

@@ -4185,10 +4185,10 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
       fi
       # <<<REPLAY:review-flip-belt<<<
-      PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-            --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)" || PODS=""
       # >>>REPLAY:c4c5-bodies-probe>>>
-      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)" && \
+         PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+               --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -4215,7 +4215,8 @@ EOF_GTHEMES_OPEN
             # issue is evaluated independently. An in-progress issue WITH a live pod for that
             # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
             # >>>REPLAY:c4c5-selector>>>
-            # Escape PODS for safe use in jq: backslash any special characters.
+            # Bind PODS and escape for jq inside the sentinel — must be scoped to this if block
+            # to avoid affecting fixture extraction with unbound variables (homelab#2305).
             PODS_ESCAPED="$(printf '%s\n' "$PODS" | sed 's/[\\"\x27]/\\&/g')"
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
@@ -4719,7 +4720,11 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:c4c5-derivations<<<
           else
-            orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)\n"
+            else
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            fi
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
       fi
