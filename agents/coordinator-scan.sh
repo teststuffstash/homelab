@@ -4687,9 +4687,11 @@ EOF_GTHEMES_OPEN
                         ] | first // ""
                     ')"
                     if [ -n "$branch" ]; then
-                      ambig_decidable="${ambig_decidable}${ambig_n} "
-                      # Encode the terminal type with the issue number for later lookup
-                      ambig_terminal_type="${ambig_terminal_type}${ambig_n}=${term_type}"$'\n'
+                      # repo-qualified key: issue numbers are only unique per repo
+                      # space-separated (same format as bare issue numbers above)
+                      ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                      # Encode the terminal type with the repo-qualified issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4705,7 +4707,11 @@ EOF_GTHEMES_OPEN
               ambig_filtered=""
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+                # Check for repo-qualified keys: repo#N or repo#N=…
+                case " $ambig_decidable " in
+                  *" ${repo}#${ambig_n} "*) ;;
+                  *) ambig_filtered="${ambig_filtered}${ambig_line}\n";;
+                esac
               done <<< "$ambig"
               ambig="$(printf '%b' "$ambig_filtered")"
             fi
@@ -4746,9 +4752,11 @@ EOF_GTHEMES_OPEN
             # Add resumable (decidable) goal children to dispatchable units — they were excluded
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
-              for ad_n in $ambig_decidable; do
-                # Look up which type of terminal comment was found for this issue
-                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_n}=" | cut -d= -f2)"
+              for ad_qualified in $ambig_decidable; do
+                # ad_qualified is now repo#N; extract the bare issue number for jq queries
+                ad_n="${ad_qualified#*#}"
+                # Look up which type of terminal comment was found for this issue using the qualified key
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2)"
                 ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
