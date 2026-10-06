@@ -7,6 +7,7 @@
 # the count of 2 (Running + Unknown counted, wedged pod excluded) passes — demonstrating that
 # a wedged pod does NOT hold a WIP slot, and that Unknown-phase pods (node-lost) are counted.
 . "$REPLAY_ROOT/agents/kube.sh"
+KUBE=""   # hermetic: kube.sh adds --kubeconfig when the gitignored tofu/kubeconfig exists (a jail checkout), never in CI
 RUN_CMD="goose run --recipe .agents/fix.yaml --params issue=937"
 TASK="issue-937"
 NS="agent-runs"

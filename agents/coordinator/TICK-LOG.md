@@ -12587,3 +12587,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   one sighting), `AgentWorkerEgressDropped` on `channels.nixos.org` from homelab rides (the known
   phone-home class). Consequence accepted: Renovate's own 2.0.11 proposal (cooldown ends 10-10) sits
   red on check (h) until 2.0.12+.
+
+## 2026-10-06 — Goal #2273 unstalled and assembled (seat, unattended, corpus-loaded)
+
+- FU-295: the box sentinel judged master-bound PRs only; goal/** children sat approved+BLOCKED. #2299 → base-pass
+  success on goal/** heads (assembly still fully judged); box pulled 05:08Z; 7 children merged within 20 min.
+- Hourly goal watch (session cron, subagent audits). Trap the operator named — loop fixes on theme branches while
+  the loop runs master — bit twice: phantom `agent/in-progress` invisible while ANY worker ran (#2305) and no resume
+  from an `AGENT_REPORT` deliberate stop (#2306). Early-landed #2312+#2320 as #2324 (d8cdb4d2); #2305 rode with
+  theme 1. Seat acts: requeues (#1714, #1797, #2168), budget re-grades, #2315 closed + re-scoped (lastEditedAt),
+  seat fix rounds on #2318/#2319/#2329 after round budgets/deferrals, Budget 30→36 (FU-131 full-cap charging).
+- Assembly: #2280 closeout never fired (closed by hand); seat opened #2339, master-refreshed both themes
+  (7087fc24, e538bb91), codeowner reads posted on #2339/#2333; merged 19:23Z / 19:34Z. Doc currency fix for
+  #1720's gref change pushed direct.
