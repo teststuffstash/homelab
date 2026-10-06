@@ -109,6 +109,9 @@
     },
     "deno": {
       "version": "latest"
+    },
+    "renovate": {
+      "version": "latest"
     }
   },
   "env": {
@@ -369,6 +372,9 @@
       ],
       "mermaid-lint": [
         "sh scripts/mermaid-lint.sh"
+      ],
+      "renovate-lane-lint": [
+        "bash scripts/renovate-lane-lint.sh \"$@\""
       ],
       "lock-intake-lint": [
         "python3 scripts/lock-intake-lint.py \"$@\""
