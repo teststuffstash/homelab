@@ -19,7 +19,7 @@ gb=""
 infeas_done=""
 c6db_nums=""
 # Bind PODS from the world's kubectl stub
-PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json")"
+PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
 KUBECTL="kubectl"
 KUBE=""
 ITEM_CLASS_ROWS=""
