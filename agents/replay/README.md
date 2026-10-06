@@ -272,6 +272,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu124-nudge` | table | board | `agents/coordinator-scan.sh` | - |
 | `fu143-fast-path-goal-head` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fu143-goal-child-closeout` | table | base | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |

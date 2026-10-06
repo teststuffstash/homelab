@@ -1,0 +1,7 @@
+{
+  "comments": [
+    { "author": { "login": "homelab-agents-1234" }, "body": "blocked-on: human\n\n**ARBITRATE ruling: escalate — the remaining red is operator-lane by construction.**", "createdAt": "2026-09-20T05:06:00Z" },
+    { "author": { "login": "RasmusSoot" }, "body": "Seat read done — CI unwedged; the repair is pushed.", "createdAt": "2026-09-22T21:35:00Z" }
+  ],
+  "reviews": []
+}
