@@ -145,7 +145,8 @@
         "bash mgmt/scripts/mgmt-policy-test.sh",
         "bash mgmt/scripts/mgmt-reconcile-test.sh",
         "bash mgmt/scripts/mgmt-rollout-evidence-test.sh",
-        "bash mgmt/scripts/mgmt-probe-test.sh"
+        "bash mgmt/scripts/mgmt-probe-test.sh",
+        "bash mgmt/scripts/mgmt-lease-test.sh"
       ],
       "mgmt-reconcile-test": [
         "bash mgmt/scripts/mgmt-reconcile-test.sh"
