@@ -1,0 +1,11 @@
+# tool-gap-surfaces — the decision table (family contract in fixture.yaml; per-row intent below).
+# One assert, five arms: the three surfaces the SHIPPED brief must declare (the review-body row is
+# the fix), the contrast row proving the guard detects the base declaration's blind spot, and the
+# fail-loud arm for a brief that lost the line. The emitter half of the round-trip is asserted on
+# every row (the PROMPT interpolates ${TOOL_GAP_SURFACES}).
+# id                             | world      | patch | env                                          | expect        | params
+reader-reads-issue-comment       |            |       | SURFACE=issue-comments                       | reader-reads  | surface=issue-comments
+reader-reads-pr-body             |            |       | SURFACE=pr-bodies                            | reader-reads  | surface=pr-bodies
+reader-reads-pr-review-body      |            |       | SURFACE=pr-review-bodies                     | reader-reads  | surface=pr-review-bodies
+base-brief-misses-review-body    | base-brief |       | SURFACE=pr-review-bodies BRIEF_NAME=README.md | reader-misses | surface=pr-review-bodies
+brief-declares-none              | no-line    |       | SURFACE=pr-review-bodies BRIEF_NAME=README.md | reader-none   | surface=pr-review-bodies

@@ -1,0 +1,32 @@
+# tool-gap-surfaces — homelab#1776: the TOOL_GAP emitter/reader channel split, as a decision table.
+#
+# THE CONTRACT. The TOOL_GAP marker's channel set is declared ONCE, on the `TOOL_GAP_SURFACES:`
+# line of the janitor's brief (agents/coordinator/README.md §The janitor tick, sweep 6) — the
+# READER. The reviewer's emitter contract (agents/reviewer-session.sh) reads that line at dispatch
+# time and interpolates it, so the two surfaces cannot disagree again. Before this the emitter said
+# "your review body or a PR comment" while the reader read "issue comments + PR bodies": 13 real
+# filings per ~30d landed in review bodies and were never read (the ADR-122 (3) class one layer
+# down — one grammar, two surfaces, an emitter and a reader that never agreed which surface counts).
+#
+# THE ROWS (the input axis is the surface a marker can land on; the world is the brief):
+#   reader-reads-issue-comment     the SHIPPED brief declares the issue-comment surface
+#   reader-reads-pr-body           the SHIPPED brief declares the PR-body surface
+#   reader-reads-pr-review-body    the SHIPPED brief declares the PR-review-body surface — THE
+#                                  FIXED ROW: red on base, where the brief declared only issue
+#                                  comments + PR bodies and the review channel went unread
+#   base-brief-misses-review-body  the CONTRAST row: a brief carrying the BASE declaration
+#                                  ("issue comments, PR bodies") still MISSES the review body, so
+#                                  the guard is proven to detect the defect it fixes
+#   brief-declares-none            a brief with no `TOOL_GAP_SURFACES:` line ⇒ rc 1, LOUD (a
+#                                  broken contract is not an empty surface set)
+#
+# The emitter half of the round-trip is asserted on every row: the PROMPT interpolates
+# `${TOOL_GAP_SURFACES}` rather than restating the surfaces (no second copy, no second regex).
+name: tool-gap-surfaces
+mode: table
+source: agents/reviewer-session.sh
+parts:
+  - block:tool-gap-surfaces
+  - file:bridge.sh
+  - file:post.sh
+rows: rows.psv
