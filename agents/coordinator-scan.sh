@@ -5510,7 +5510,11 @@ EOF_GTHEMES_OPEN
         #   (2) GREEN+APPROVED HEAD — does the red postdate a head that was green and approved?
         #       A converged, approved PR is not re-escalated by a later, unrelated red.
         # The footprint read is the ONE parser (`ib_get Touches`, ADR-122 (3)) and the ONE
-        # intersection predicate (`fp_conflict`, agents/footprint.sh) — no second regex here.
+        # intersection predicate (`fp_conflict_strict`, agents/footprint.sh) — no second regex
+        # here. STRICT, not the exempting `fp_conflict`: that variant strips the ADR-097
+        # replay-exempt classes from BOTH lists, so an annotation on `agents/replay/**` (the usual
+        # ci red in this lane) became an empty list, read "no conflict", and HELD a red that IS in
+        # the footprint. The exemption exists for dispatch disjointness, not for this question.
         ci_red_belt_skip=0
         ci_red_belt_reason=""
         if [ "$ci_red_should_arbitrate" = 1 ]; then
@@ -5543,14 +5547,32 @@ EOF_GTHEMES_OPEN
                 for _bid in $belt_ids; do
                   _bp="$(gh api repos/"${slug}"/check-runs/"${_bid}"/annotations \
                       --jq '[.[]? | (.path // "")] | .[]' 2>/dev/null)" || _bp=""
-                  [ -n "$_bp" ] && belt_paths="${belt_paths}${_bp}
+                  # Only FILE-LEVEL annotations are evidence. GitHub Actions attaches a generic
+                  # failure annotation to every failed job (`Process completed with exit code 1`,
+                  # `path: .github`) and the API also returns empty paths; neither names a file,
+                  # so neither says which file failed. Counting them made `belt_paths` non-empty
+                  # on nearly every red, `belt_in` 0, and the belt HELD a real in-footprint red —
+                  # the fail-open contract inverted. Dropping them is what makes the "no evidence
+                  # ⇒ fail open" branch below reachable.
+                  #
+                  # A path the PR does NOT change is deliberately KEPT: that IS the belt's signal
+                  # (a red inherited from master in a file the PR does not touch is not the PR's
+                  # round — the origin, PR#1543). Filtering on the PR's changed files would drop
+                  # exactly that annotation and turn the hold into a fail-open escalate, so the
+                  # test below stays the declared-`Touches:` intersection.
+                  while IFS= read -r _bpp; do
+                    case "$_bpp" in ''|.github) continue ;; esac
+                    belt_paths="${belt_paths}${_bpp}
 "
+                  done <<EOF_BELT_ANN
+$_bp
+EOF_BELT_ANN
                 done
                 if [ -n "$belt_paths" ]; then
                   belt_in=0
                   while IFS= read -r _bp; do
                     [ -n "$_bp" ] || continue
-                    if fp_conflict "$belt_touches" "$_bp"; then belt_in=1; break; fi
+                    if fp_conflict_strict "$belt_touches" "$_bp"; then belt_in=1; break; fi
                   done <<EOF_BELT
 $belt_paths
 EOF_BELT
