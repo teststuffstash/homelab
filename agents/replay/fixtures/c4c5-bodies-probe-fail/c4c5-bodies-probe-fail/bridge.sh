@@ -13,6 +13,10 @@ orphans=""
 units=""
 v2=""
 infeas_done=""
+# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+# Needed for the per-issue liveness check added in homelab#2305.
+KUBECTL="kubectl"
+KUBE=""
 
 # ── stub ── item_class_push is defined in the item-class block; the c4c5-bodies-probe block calls it
 item_class_push() {

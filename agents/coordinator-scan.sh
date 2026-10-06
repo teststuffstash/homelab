@@ -4193,11 +4193,11 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
       fi
       # <<<REPLAY:review-flip-belt<<<
-      if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+      # >>>REPLAY:c4c5-bodies-probe>>>
+      bodies_ok=""
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then bodies_ok=1; fi
+      if [ -n "$bodies_ok" ] && PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
-        if [ -z "$PODS" ]; then
-          # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -4220,6 +4220,9 @@ EOF_GTHEMES_OPEN
             # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
             # below, mid-write) can hold BOTH labels for a tick, and re-dispatching a human-gated
             # issue is the one thing C4/C5 must never do (retro r3 F4, homelab#257).
+            # homelab#2305: per-issue liveness moved from repo-wide gate into selector — each
+            # issue is evaluated independently. An in-progress issue WITH a live pod for that
+            # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
             # >>>REPLAY:c4c5-selector>>>
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
@@ -4228,7 +4231,8 @@ EOF_GTHEMES_OPEN
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select((($pods | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0))'
             # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
@@ -4385,11 +4389,13 @@ EOF_GTHEMES_OPEN
             # re-queue it to `agent/queued` and hand it straight back to dispatch, undoing the human
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
+            # >>>REPLAY:c4c5-selector-run>>>
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
+            # <<<REPLAY:c4c5-selector-run<<<
             if [ -n "$c4c5_cands" ]; then
               now_s="$(date -u +%s)"
               # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
@@ -4616,7 +4622,7 @@ EOF_GTHEMES_OPEN
             # <<<REPLAY:review-phantom-frozen-open-pr<<<
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
@@ -4735,7 +4741,7 @@ EOF_GTHEMES_OPEN
               # extra `gh` call: it rides out of the same jq row, base64'd like `ib_rows` does.
               # A body the parser REFUSES holds the issue (rule #6 — a malformed block never
               # dispatches), exactly as the queued lane's `!` column does.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))|\(.body // "" | @base64)"'); do
@@ -4780,14 +4786,14 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:c4c5-derivations<<<
           else
-            orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            if [ -n "$bodies_ok" ]; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)\n"
+            else
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            fi
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
-        fi
-      else
-        echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
-    fi
     # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
     # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
     # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
