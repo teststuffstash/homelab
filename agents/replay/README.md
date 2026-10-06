@@ -203,6 +203,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -212,6 +213,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-red-rounds-two-channels/ci-red-rounds-two-channels` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-stale-sha-escalates` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-stale-sha-hold` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
+| `classify-touches-repo` | table | - | `-` | - |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `context-prefetch-nolabels` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch` | actions | - | `agents/agent-session.sh` | - |

@@ -1,0 +1,8 @@
+# classify-touches-repo — the decision table (family contract in fixture.yaml). The axis is the
+# LINTED repo: the same footprint must classify by homelab's ❌ set for a homelab slug and by the
+# linted repo's CODEOWNERS for a stack slug. Row state (SLUG, FOOTPRINT) rides the env column.
+# id                              | world        | patch | env                                                          | expect        | params
+homelab-dotagents-author          |              |       | SLUG=teststuffstash/homelab FOOTPRINT=.agents/probe.md       | author        |
+homelab-scripts-unowned           |              |       | SLUG=teststuffstash/homelab FOOTPRINT=scripts/x.sh           | machine       |
+stack-dotagents-codeowner-merge   | oracle-fleet |       | SLUG=teststuffstash/oracle-fleet FOOTPRINT=.agents/probe.md  | merge         |
+stack-scripts-unowned             | oracle-fleet |       | SLUG=teststuffstash/oracle-fleet FOOTPRINT=scripts/x.sh      | stack-machine |
