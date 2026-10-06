@@ -1,23 +1,16 @@
-# reviewable-again-body-edit (homelab#2168) — the review edge wakes on PR-body-only fixes.
+# reviewable-again-body-edit (homelab#2168) — the review edge wakes on PR body-only fixes.
 #
-# The `reviewable_again` predicate exists in both review-reflex.sh and coordinator-scan.sh.
-# Both check `newest_commit_at > newest_review_at`, and neither reads the PR body. When a PR
-# body is edited without a new commit, the review stays CHANGES_REQUESTED forever. This family
-# tests the unified predicate with body-edit detection: the PR updatedAt timestamp.
-#
-# THE CONTRACT — one input axis per row:
-#   • no-content-after-review  new commits after the last review → reviewable (existing case).
-#   • body-only-after-review   PR body edited after the last review, no new commits → reviewable.
-#   • nothing-after-review     no commits or body edits after the last review → not reviewable.
+# The reviewable_again predicate now detects body edits: if updatedAt > newest_review_at AND
+# updatedAt > newest_commit_at, the PR is reviewable again (body was edited after the review).
+# This fixture tests all three input conditions to the unified predicate.
 #
 name: reviewable-again-body-edit
-mode: table
+mode: actions
 source: agents/coordinator-scan.sh
 requires:
   - jq
 parts:
   - block:config-defaults
   - file:bridge.sh
-  - block:changes-requested-gate
+  - file:test.sh
   - file:post.sh
-rows: rows.psv
