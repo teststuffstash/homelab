@@ -1,0 +1,65 @@
+[
+  {
+    "number": 80,
+    "title": "clause-coverage: agent/queued (the queued lane owns it)",
+    "labels": [{"name": "agent/queued"}, {"name": "agent-fix"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 81,
+    "title": "clause-coverage: agent/queued + task/goal (the queued lane owns it; goal-decompose is its branch)",
+    "labels": [{"name": "agent/queued"}, {"name": "task/goal"}],
+    "body": "Base: master\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 82,
+    "title": "clause-coverage: agent-fix + agent/in-progress (c4c5-redispatch owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 83,
+    "title": "clause-coverage: agent-fix + agent/review, no open PR (the IL-T27 belt owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 84,
+    "title": "clause-coverage: agent/review WITHOUT agent-fix, no open PR (homelab#2164; the IL-T27 belt owns it)",
+    "labels": [{"name": "agent/review"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 85,
+    "title": "clause-coverage: agent-fix + agent/review with a FROZEN open PR (r7 F1; the frozen-open-PR belt owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 86,
+    "title": "clause-coverage: agent-fix + agent/blocked (LISTED — a human gate, no clause owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/blocked"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 87,
+    "title": "clause-coverage: agent-fix + agent/error (LISTED — the FU-069 breaker, no clause owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/error"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 88,
+    "title": "clause-coverage: agent-fix + agent/done (LISTED — terminal, no clause owns it)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/done"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  }
+]

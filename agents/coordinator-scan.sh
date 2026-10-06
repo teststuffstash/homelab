@@ -1858,8 +1858,14 @@ EOF_BBM
     # `updatedAt` is fetched for the homelab#155 belt's persistence guard (condition (c)) — read
     # the mergeStateStatus warning by the PR fetch below before touching this list: a selector
     # field that is not in --json comes back absent and silently matches nothing.
+    # >>>REPLAY:inprog-selector>>>
+    # The in-progress predicate, sentinelled (homelab#2280): the clause-coverage case lifts it and
+    # runs it over its enumerated states, so a widening/narrowing of THIS selector moves that
+    # fixture. A retyped copy in the fixture would stay green while this one regressed.
+    inprog_jq='[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]'
+    # <<<REPLAY:inprog-selector<<<
     inprog="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
+      --jq "$inprog_jq" 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
     # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
@@ -4596,15 +4602,21 @@ EOF_GTHEMES_OPEN
             review_frozen_cands=""
             # A frozen armed PR is one that is APPROVED + ARMED + BEHIND + CI green + updatedAt unmoved.
             # Match it to an issue with agent/review via the PR's body.
-            [ -n "$dispatchable" ] && review_frozen_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
-                '[.[] | (.labels|map(.name)) as $L
+            # >>>REPLAY:frozen-pr-selector>>>
+            # The frozen-open-PR predicate, sentinelled (homelab#2280): the clause-coverage case
+            # lifts it and runs it over its enumerated PR states, so a change to the r7 F1
+            # detection (armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved) moves that fixture.
+            FROZEN_PR_SEL='[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | ([$prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([ .statusCheckRollup[]? | select((.conclusion | IN("SUCCESS", "NEUTRAL", "SKIPPED")) | not) ] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | .[0] // empty) as $frozen_pr
                        | if $frozen_pr then "\($n)|\($frozen_pr.updatedAt // "")" else empty end
-                ] | .[]')"
+                ] | .[]'
+            # <<<REPLAY:frozen-pr-selector<<<
+            [ -n "$dispatchable" ] && review_frozen_cands="$(printf '%s' "$review_only" \
+              | jq -r --argjson prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+                "$FROZEN_PR_SEL")"
             if [ -n "$review_frozen_cands" ]; then
               [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
               for fcand in $review_frozen_cands; do
@@ -6580,6 +6592,73 @@ EOF
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
 done
+
+# >>>REPLAY:clause-coverage>>>
+# ── CLAUSE COVERAGE (Goal #2273 acceptance row 1, homelab#2280) ────────────────────────────────
+# Every admissible issue state is owned by EXACTLY ONE scan clause. This block runs the REAL
+# clause selectors — lifted from this file by sentinel, never a retyped copy — over each
+# enumerated state and exits 1 when a state matches zero clauses or more than one.
+#
+# THE CLAUSE SET (issue-level; each entry names the sentinel its predicate is lifted from):
+#   queued-dispatch  ← >>>REPLAY:queued-derivation>>>     agent/queued ∧ ¬direction-change ∧ ¬agent/error
+#   c4c5-redispatch  ← >>>REPLAY:c4c5-selector>>>         agent/in-progress (abandoned), over >>>REPLAY:inprog-selector>>>
+#   review-phantom   ← >>>REPLAY:review-only-selector>>> ∧ ¬frozen   (the IL-T27 belt's candidate)
+#   frozen-open-pr   ← >>>REPLAY:frozen-pr-selector>>>    armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved (IL-T28/#2281)
+#
+# ENUMERATED STATES (one issue each in the fixture world; the row names the clause that owns it):
+#   queued / queued-goal / in-progress / review / review-no-fix (#2164) / review-frozen (r7 F1)
+# LISTED STATES (no clause owns them BY DESIGN — terminal or human gate; not enumerated):
+#   blocked (human gate) / error (FU-069 breaker) / done (terminal)
+#
+# The assertion is the exit code: 0 iff every enumerated state matched exactly one clause.
+if [ "${CC_RUN:-}" = "1" ]; then
+  cc_world="${REPLAY_WORLD:?clause-coverage needs REPLAY_WORLD}"
+  cc_issues="$(cat "$cc_world/gh/issue-list.json")"
+  cc_prs="$(cat "$cc_world/gh/pr-list.json")"
+  cc_bodies="$(jq -c '[.[].body // ""]' <<<"$cc_prs")"
+  # ── run the REAL selectors (lifted blocks; no retyped copy) ──
+  cc_queued="$(jq -r '.[].number' <<<"${queued:-[]}")"
+  cc_inprog="$(jq -c "$inprog_jq" <<<"$cc_issues")"
+  cc_review="$(jq -r '.[].number' <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")")"
+  # `pods` = "" — the enumerated in-progress state is the ABANDONED one (no live pod for the
+  # issue); a live-pod in-progress issue is skipped by the merged #2305 per-issue liveness and is
+  # not a phantom state, so it is not enumerated here (c4c5-pod-liveness pins that axis).
+  cc_c4c5="$(jq -r --argjson bodies "$cc_bodies" --arg cg "" --arg gb "" --arg db "" --arg sess "" \
+    --arg pods "" "$C4C5_SEL"' | .number' <<<"$cc_inprog")"
+  cc_frozen="$(jq -r --argjson prs "$cc_prs" --arg done "" "$FROZEN_PR_SEL" \
+    <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")" | cut -d'|' -f1)"
+  # ── ownership: which clauses select this issue number ──
+  cc_has() { case " $(printf '%s' "$1" | tr '\n' ' ') " in *" $2 "*) return 0;; *) return 1;; esac; }
+  cc_owners() {
+    local n="$1" out=""
+    if cc_has "$cc_queued" "$n"; then out="$out queued-dispatch"; fi
+    if cc_has "$cc_c4c5"   "$n"; then out="$out c4c5-redispatch"; fi
+    if cc_has "$cc_frozen" "$n"; then out="$out frozen-open-pr"; fi
+    if cc_has "$cc_review" "$n" && ! cc_has "$cc_frozen" "$n"; then out="$out review-phantom"; fi
+    printf '%s' "${out# }"
+  }
+  cc_fail=0
+  for cc_row in "queued:80" "queued-goal:81" "in-progress:82" "review:83" "review-no-fix:84" "review-frozen:85"; do
+    cc_name="${cc_row%%:*}"; cc_num="${cc_row#*:}"
+    cc_own="$(cc_owners "$cc_num")"
+    cc_n=0; [ -n "$cc_own" ] && cc_n="$(printf '%s\n' $cc_own | wc -l | tr -d ' ')"
+    printf 'STATE %s (#%s): %s clause(s) — %s\n' "$cc_name" "$cc_num" "$cc_n" "${cc_own:-none}"
+    [ "$cc_n" = 1 ] || cc_fail=1
+  done
+  for cc_row in "blocked:86" "error:87" "done:88"; do
+    cc_name="${cc_row%%:*}"; cc_num="${cc_row#*:}"
+    cc_own="$(cc_owners "$cc_num")"
+    printf 'LISTED %s (#%s): no clause owns this by design — %s\n' "$cc_name" "$cc_num" "${cc_own:-none}"
+    [ -z "$cc_own" ] || cc_fail=1
+  done
+  if [ "$cc_fail" = 0 ]; then
+    printf 'CLAUSE-COVERAGE: OK — every enumerated state matches exactly one clause\n'
+  else
+    printf 'CLAUSE-COVERAGE: FAIL — a state matched zero clauses or more than one\n'
+    exit 1
+  fi
+fi
+# <<<REPLAY:clause-coverage<<<
 
 # FU-176, one scope level up (PR #915 review): SCAN_PHASE_NS is process-fixed at the top of this
 # file, so a per-stack flush would POST every stack to the SAME job=agent_board,namespace=<ns>
