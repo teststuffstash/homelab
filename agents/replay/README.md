@@ -193,6 +193,7 @@ is stale, so it cannot drift the way the prose register did.
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `budget-label-floors` | table | - | `-` | - |
 | `c4c5-ambig-decidable-cross-repo` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |

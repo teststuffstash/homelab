@@ -1,0 +1,7 @@
+# budget-label-floors — the decision table (family contract in fixture.yaml; per-row intent below).
+# The axis is the budget label; the assertion is the round-trip against `label_map` (the one home).
+# id                     | world       | patch | env                            | expect       | params
+sm-floors-none           |             |       | LABEL=sm                       | consistent   | floor=none
+md-floors-cheap          |             |       | LABEL=md                       | consistent   | floor=cheap
+lg-floors-large          |             |       | LABEL=lg                       | consistent   | floor=large
+base-advice-undeclared   | base-advice |       | LABEL=md ADVICE_NAME=README.md | inconsistent | floor=cheap
