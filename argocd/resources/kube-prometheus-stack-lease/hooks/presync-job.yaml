@@ -1,0 +1,54 @@
+# PreSync — arm the lease (ADR-150 (3)). Runs before the chart's manifests on EVERY sync of the
+# kube-prometheus-stack Application (self-heal and retries included — the same-sha no-op in
+# upgrade-lease.sh is what keeps a retry from moving the deadline). backoffLimit 0: a failed arm
+# fails the sync (nothing is applied), which is the honest outcome — a sync nobody can revert must
+# not start.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kps-lease-presync
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: kps-lease
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: presync
+          image: ghcr.io/teststuffstash/agent-coordinator
+          command: ["bash", "/scripts/presync.sh"]
+          env:
+            - { name: APP, value: kube-prometheus-stack }
+            - { name: APP_NS, value: argocd }
+            - { name: SUBJECT, value: argocd/platform/kube-prometheus-stack.yaml }
+            - { name: CHART, value: kube-prometheus-stack }
+            # the per-subject caps (ADR-150 (2)): expected-end = started + EXPECT_MIN; max-end =
+            # started + MAX_MIN, which renewals never pass
+            - { name: EXPECT_MIN, value: "20" }
+            - { name: MAX_MIN, value: "60" }
+            - { name: HOME, value: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: scripts
+          configMap: { name: kps-lease-scripts }
+        - name: tmp
+          emptyDir: {}

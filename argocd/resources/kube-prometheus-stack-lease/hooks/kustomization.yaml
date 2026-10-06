@@ -1,0 +1,21 @@
+# kube-prometheus-stack-lease/hooks — the two hook Jobs of the ⚓ upgrade lease (ADR-150), a
+# source of the kube-prometheus-stack Application (argocd/platform/kube-prometheus-stack.yaml): a
+# hook runs only inside the sync of the Application it belongs to. Their ServiceAccount and script
+# ConfigMap are the parent dir's own Application (see ../kustomization.yaml for why they cannot
+# live here). hook-delete-policy BeforeHookCreation keeps the last run's Job (and its log) until
+# the next sync — the evidence a seat reads after a bump.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - presync-job.yaml
+  - postsync-job.yaml
+
+# The chain's image, pinned to the tag agents/coordinator/kustomization.yaml pins TODAY (the
+# chart-revert pattern): bash + kubectl + curl + jq, verified 2026-10-07 under the restricted
+# security context below. The deploy-pin job does not know this file; a stable tool image makes
+# the drift harmless.
+images:
+  - name: ghcr.io/teststuffstash/agent-coordinator
+    newTag: 2026.10.5-gca94f4a2dd99

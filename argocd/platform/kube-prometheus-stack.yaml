@@ -41,10 +41,18 @@ spec:
           - $values/argocd/platform/values/kube-prometheus-stack.yaml
           # the upstream rules' `triage` labels (alert relabelling) — one home, see its header
           - $values/argocd/platform/values/kube-prometheus-stack-triage.yaml
-    # 2) THIS repo, referenced as $values — supplies the values file above.
+    # 2) THIS repo, referenced as $values — supplies the values files above — AND, since ADR-150,
+    #    deployed from `path`: the ⚓ upgrade-lease hook pair (PreSync arms the lease, PostSync runs
+    #    the subject's real checks and confirms it; argocd/resources/kube-prometheus-stack-lease/).
+    #    One source carries both: a `ref` source with a `path` is referenced AND deployed, and
+    #    `$values` still means the repo root (ArgoCD docs, multiple_sources.md). Their SA + RBAC +
+    #    script ConfigMap are the `kube-prometheus-stack-lease` Application (hooks cannot depend on
+    #    their own Application's Sync-phase resources). The box reverts an unconfirmed lease at
+    #    its deadline (mgmt/scripts/mgmt-lease.sh) — this Application never sees that actor.
     - repoURL: https://github.com/teststuffstash/homelab.git
       targetRevision: master
       ref: values
+      path: argocd/resources/kube-prometheus-stack-lease/hooks
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
