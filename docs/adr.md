@@ -2552,6 +2552,26 @@ chain were all built and drilled first (#2205/#2206/#2207, drill #2209). A non-e
 stays red and never auto-merges, so the in-PR-adaptation class (#2046) keeps its human by
 construction. Residual, accepted: a bump that plans empty, applies clean and is still wrong later —
 the lens's upstream read is the only defence, as for Actions and Deployment images.
+**Amended 2026-10-06 (operator, second-jail read of #2260 — gap register G17):** the weekly `devbox-update`
+lock-bump gate (`scripts/devbox-update.sh`) flagged only the leading integer, so a same-major DOWNGRADE
+(openssl 3.6.0 → 3.5.8: nixpkgs re-pointed the default alias to the 3.5 LTS, NixOS/nixpkgs#564262) and
+compatibility-line moves (python3 3.12 → 3.14, opentofu 1.12 → 1.13) rode the mechanical bump unread. The
+gate learns both (a numeric-tuple downgrade check + a per-package `major.minor` list) and writes them as a
+SECOND body section; **the PR stays armed — the ruling is "rely on the lens"**, whose lock-bump read covers
+the whole move list, not the flagged tool. Un-arming is earned per class exactly as for Actions majors
+above: the first time the lens finds a downgrade or line move that mattered, that class joins the `major`
+gate. Same read, a Renovate semantic now written down: a GROUPED branch arms only when EVERY member has
+`automerge: true` (labels are the union) — every version-set rule must give every member its lane (G15:
+#2295 was born un-armed; #2335 fixed the two groups; `devbox run renovate-lane-lint` runs Renovate itself
+over the checkout and asserts one lane per computed branch before a config change lands).
+**Amended 2026-10-06, later (operator): PACKAGING-ONLY chart majors merge on the lens alone.** A chart major
+whose embedded app version does not move (kube-prometheus-stack 89 and 90 both shipped prometheus-operator
+v0.93.1; the chart cuts a major per subchart major or default change) is a `major` by semver only. When the
+lens's verdict states the appVersion delta from the chart index (the ADR-149 (5) read) as UNCHANGED, the
+major handoff ARMS the PR instead of parking it `major/awaiting-human`, and the lens's APPROVED completes
+the merge — the terraform-provider-major shape. An appVersion that moves keeps the human lane until the
+chart has a lease (ADR-150) or a receiver (ADR-149). Mechanism: a structured verdict line the handoff
+reads, never a label a human sets; build = stint S9.
 
 ### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
 **Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
@@ -2727,3 +2747,73 @@ so an app-major is the lens's CHANGES_REQUESTED, never an auto-merge; a CRD-carr
 control-plane memory event (FU-304, GOMEMLIMIT); the receiver is chart-agnostic but argo-workflows is its
 only consumer until a second chart earns the same evidence. Design: [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md)
 §Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Next steps 9.
+**Amended 2026-10-06 (ADR-150):** the "management box as actor — rejected, no PR-writing credential" line is
+REVERSED for one class: the box becomes the revert actor for ⚓ upgrade LEASES (commit-confirm on a
+deadline), never for alerts — `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab
+only (the one operator click). `chart-revert` keeps argo-workflows; its `TARGETS` never gains
+kube-prometheus-stack, the chart that is its own detector cone (ADR-150 (7)).
+
+### ADR-150 — The upgrade lease: an upgrade whose cone holds its own detector is confirmed or reverted by the management box on a deadline (2026-10-06)
+**Status:** Accepted (operator, 2026-10-06 — the second-jail read of the kube-prometheus-stack worked case,
+[`dependency-upgrades.md`](dependency-upgrades.md) §Worked case; written into the doc the same day, #2340).
+**Decision:** (1) an upgrade whose dependency cone contains the detector that would judge it
+(kube-prometheus-stack IS Prometheus + Alertmanager; a node-by-node substrate rollout) is judged by
+COMMIT-CONFIRM, never by an alert: the actor DECLARES the upgrade with a deadline, VERIFIES and DELETES the
+declaration, and the management box REVERTS whatever is still declared past its deadline. (2) The record
+is the **⚓ upgrade lease** (glossary): one per in-flight upgrade, a sibling of the `responder-window`
+ConfigMap on the read path the apply loop already uses (FU-300); identity = subject (chart file or node
+set) + commit sha + from/to version; ONE decisive field, `expected-end`; `started` is the record's own
+`creationTimestamp`; `max-end` = `started` + a per-subject cap that renewals may never pass. (3) Arm = the
+Application's **PreSync** hook creates the lease when the sync STARTS — the cluster's clock, so ArgoCD's
+git-poll lag and the box's tick are outside the window; no sync, no lease, no revert. Confirm = the
+**PostSync** hook runs the subject's REAL checks (for kube-prometheus-stack: Prometheus + Alertmanager
+`/-/ready`, rule-evaluation failures at zero, `Watchdog` present in the Alertmanager API, operator Ready,
+the CRDs' `operator.prometheus.io/version` equal to the operator image) and deletes the lease; ArgoCD
+`Healthy` is not the check; the hook's image never depends on the component it verifies. A node-by-node
+rollout renews `expected-end` per node, never past `max-end`. (4) The box's 5-min loop (the sentinel/apply
+cadence) opens ONE pin-only revert PR per expired lease through the reflex lane — `automerge` +
+`dependencies`, the `reverted-charts:` line for pin-only-lint's 30-day memory — never a direct push.
+(5) Credential: `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab only — the
+ONE operator click, **approved by the operator 2026-10-06** (the FU-098 flow: the `docs/github-apps.yaml`
+declaration PRs first, the click accepts it, `GithubAppPermissionDrift` confirms); ADR-149's "no PR-writing
+credential" premise is reversed (amended there). (6) A
+declared window HOLDS the apply loop and NEVER the lease timer: a confirmed upgrade must not revert after
+a window closes, an unconfirmed one must revert whether or not a seat has one open; a window arms
+nothing. (7) Scope: kube-prometheus-stack first; the shape is generic (any chart major, any node rollout);
+`chart-revert` (ADR-149) stays for argo-workflows until evidence picks one actor.
+**Considered:** a `Watchdog`-absence trigger at the chart-revert receiver (rejected — an absence read
+cannot tell a bad bump from a full disk; a dead-man fires on every outage, and the box would then have to
+diagnose); three annotations — started / expected-end / confirmed (rejected — `started` is the record's
+own timestamp and "confirmed" is the deletion: one field decides); the box deriving the arm from its own
+master read (rejected — the deadline must run on the cluster's sync clock, and a merge ArgoCD never syncs
+must not revert; the box doc's standing rule that nothing in the cluster pushes to the box still holds —
+the box READS the lease); a direct master push by the box (rejected — it bypasses the lane's checks).
+**Why:** the box is outside every cluster cone and needs no understanding of what an upgrade is; an expired
+lease has exactly one meaning, "not confirmed", which is what makes a dumb box safe. **Consequences:** the
+box is a revert actor for leases only; a healthy roll that outlasts `expected-end` reverts — fix that
+subject's deadline, never the box; the first chart to ride it waits on ADR-151 (its CRDs have no owner);
+a lease revert never downgrades CRDs (ADR-149's consequence holds). Design + fields:
+[`dependency-upgrades.md`](dependency-upgrades.md) §4 Rollout, §Worked case. Build: stint S9 (#1985).
+
+### ADR-151 — The prometheus-operator CRDs get an owner: upstream's `prometheus-operator-crds` chart as its own Application, grouped with the stack chart (2026-10-06)
+**Status:** Accepted by direction (operator, 2026-10-06 — "do the ADRs" after the worked-case read; the
+2026-08-04 deferral of ArgoCD-managed CRDs in `argocd/platform/kube-prometheus-stack.yaml` is superseded
+for this chart; reversible — a second Application with prune disabled). **Decision:** the ten
+`monitoring.coreos.com` CRDs — installed ONCE by Helm on 2026-06-02 at operator v0.91.0, owned by nobody
+since (`skipCrds: true`; Helm never upgrades `crds/`; no ArgoCD tracking id) — become a second ArgoCD
+Application on upstream's `prometheus-operator-crds` chart (one chart major per operator minor: 29.0.0 =
+v0.91.0, 32.0.1 = v0.94.1), `ServerSideApply=true` (the CRDs exceed the client-side annotation limit),
+`Delete=false` + prune off on the CRDs so a prune can never take the cone down, a sync wave before the
+stack chart; ONE Renovate group with the stack chart (the G11/G13 version-set shape) so chart and CRDs move
+in one PR, asserted by `renovate-lane-lint`. The stack Application keeps `skipCrds: true`.
+**Considered:** `skipCrds: false` on the stack chart (rejected — Helm's `crds/` is install-only, and Argo
+would own the CRDs inside the Application whose prune the 2026-08-04 header warned about); leaving them
+unmanaged (rejected — #2256 would run operator v0.94.1 against v0.91.0 CRDs, drift widening one operator
+minor per chart major, which the lens read as "additive-only" without knowing that nobody applies them).
+**Why:** a chart whose sibling artifact has no deploy edge cannot leave the human lane whatever its other
+columns say — the register's class-level ✅ hid it (G16). **Consequences:** the first CRD sync is the
+FU-304 control-plane memory event (GOMEMLIMIT absorbed +0.6 GiB for argo's hook) — windowed; a detector
+comparing the CRDs' `operator.prometheus.io/version` with the running operator image is the belt (a small
+exporter or the box belt); #2256 (91.x) waits for this; the kps lease (ADR-150) rides the stack chart, not
+the CRD app — a CRD revert never downgrades. Tracked: G16 in
+[`dependency-upgrades.md`](dependency-upgrades.md); build: stint S9 (#1985).
