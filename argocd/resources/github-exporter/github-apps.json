@@ -233,7 +233,11 @@
         },
         "pull_requests": {
           "level": "write",
-          "why": "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — the management sentinel, ADR-131 — posted FROM the box, whose copy of this key is a wallet-provisioned file (management-box.md §MB3)"
+          "why": "the management-sentinel verdict comment on the PR (changed addresses + counts, never values) — the management sentinel, ADR-131 — posted FROM the box, whose copy of this key is a wallet-provisioned file (management-box.md §MB3); since ADR-150 (2026-10-06) ALSO the box's upgrade-lease revert PR (open + arm auto-merge, mgmt/scripts/mgmt-lease.sh)"
+        },
+        "contents": {
+          "level": "write",
+          "why": "ADR-150 the ⚓ upgrade lease (operator-approved 2026-10-06): the box pushes the pin-only `revert-chart-lease-<sha8>` branch for an EXPIRED lease — a branch + PR through the reflex lane, never a direct master push (master is ruleset-protected; the App has no bypass). DECLARED ahead of the grant (FU-098 flow): GithubAppPermissionDrift rings until the operator clicks + approves the update on the homelab installation"
         }
       },
       "installs": "selected",
