@@ -595,7 +595,7 @@ reads the operator appVersion from the chart index first.
 | lane | what happens today | what blocks the machine |
 |---|---|---|
 | patch / minor (`deps-review`, armed) | CI-red at birth: `prometheus-rules-lint` checks the committed upstream alert list against the pin; the re-render needs `helm pull` | G12 (the re-render) and, for a bump that adds a name, a classification nobody dispatches on a red armed PR (G12b) |
-| chart major, operator minor unchanged (89, 90) | lens round → `major/awaiting-human` → the seat merges in a window | a ruling only: ADR-141's "merges on the lens's APPROVED alone" is not extended to charts without a revert actor |
+| chart major, operator minor unchanged (89, 90) | lens round → the handoff ARMS on the lens's `appVersion: unchanged (<v>)` line (#PRNUM, ADR-141 as amended 2026-10-06 later) → the lens's APPROVED merges | nothing — packaging-only majors ride the lens alone; proof = the first live kps 89/90-shaped PR (none yet) |
 | chart major crossing an operator minor (86 → 91) | as above, plus the operator runs against CRDs it did not ship | the CRD half has NO owner at all — G16 below |
 
 **The CRDs are unmanaged.** `argocd/platform/kube-prometheus-stack.yaml` syncs with `skipCrds: true`
@@ -647,9 +647,10 @@ from the operator changelog; and the grafana subchart major (a UI with sqlite-sy
 probe, G5). The one timing hole: a healthy roll that genuinely outlasts `expected-end` reverts — the
 fix is a longer deadline on that subject's record, never a smarter box.
 
-**Order that follows:** (1) RULED 2026-10-06 (ADR-141 as amended): chart majors where the operator minor
-does not move (89, 90) merge on the lens's APPROVED alone — the handoff arms on the lens's "appVersion
-unchanged" verdict line (build: the handoff reads it, the brief states it);
+**Order that follows:** (1) ✅ BUILT #PRNUM (ruled 2026-10-06, ADR-141 as amended): chart majors where
+the operator minor does not move (89, 90) merge on the lens's APPROVED alone — `agents/major-handoff.sh`
+gate step 5 arms on the lens's `appVersion: unchanged (<v>)` verdict line (`agents/lenses/migration.md`
+§Charts states it; replay rows `packaging-only-arms` / `app-moves-parks`);
 (2) G16, the CRD owner — without it every operator-minor crossing is unsupported skew, lens or no
 lens; (3) G12, the re-render rides the Renovate run; (4) the lease: the record + the box's expiry
 loop + the credential click, drilled on a real patch bump the way #2276 → #2279 was; (5) then the one

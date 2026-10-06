@@ -5,7 +5,8 @@
 # claim on the PR, a round-1 CHANGES_REQUESTED by the reviewer bot, a HUMAN review that quotes a
 # heading (must never count as the bot's verdict), and the bot's APPROVED at 12:00Z carrying the
 # four migration headings in the two admitted forms (`## …` and `**…:**`). The labels endpoint
-# file is the AFTER state the handoff's re-read must see.
+# file is the AFTER state the handoff's re-read must see; the pulls endpoint file (added
+# 2026-10-07) is the AFTER state of the ARM branch — `auto_merge` set, the claim label gone.
 #
 # PROVENANCE CLASS: constructed (README §S6 — a fabricated world is legitimate for pinning OUR
 # side of a contract; it is not presented as a recording of GitHub's). Only the commit is real;
