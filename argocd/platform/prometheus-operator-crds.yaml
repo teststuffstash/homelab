@@ -39,7 +39,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: prometheus-operator-crds
-    targetRevision: 29.0.0 # = operator v0.91.0, the version the live CRDs already carry (first sync: annotation only)
+    targetRevision: 32.0.1 # = operator v0.94.1 — kps 91.8.0 (#2256) ships that operator; the pair moves together (ADR-151)
     helm:
       valuesObject:
         crds:
