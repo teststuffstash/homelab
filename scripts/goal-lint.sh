@@ -21,6 +21,12 @@
 # `GUARDED=` line the same way `coordinator-scan.sh`'s `guarded_paths()` does — one home, a third
 # reader, never a second regex.
 #
+# ⚠ The classification is REPO-AWARE (homelab#1897): this lint runs over ANY repo's Goal tree, so
+# it calls `classify_touches_repo <slug> <footprint>` — the ❌ set is HOMELAB's governance and is
+# applied only for a homelab slug; a stack repo classifies against ITS OWN CODEOWNERS (fetched
+# with `gh api repos/<slug>/contents/CODEOWNERS`). Before this, homelab's set FAILed oracle-fleet
+# children touching `scripts/**` and `.agents/**` — paths that stack's workers deliver every week.
+#
 #   exit 0  — no FAIL (WARN lines are advice)
 #   exit 1  — at least one FAIL: fix the issue, never the machinery
 #   exit 2  — probe failure (unreadable goal/tree) — say so, never report clean
@@ -34,7 +40,11 @@ slug="${1:-}"; goal="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=agents/footprint.sh
 . "$HERE/../agents/footprint.sh"
-export CLASSIFY_CODEOWNERS="$HERE/../CODEOWNERS"
+# classify_touches_repo (not classify_touches) is the reader here: goal-lint lints ANY repo's Goal
+# tree, so the ❌ operator-author set — HOMELAB's platform governance — must not be applied to a
+# stack repo's paths (homelab#1897). classify_touches_repo applies it only for a homelab slug and
+# otherwise classifies against the LINTED repo's CODEOWNERS, fetched with `gh api`. The scan and
+# the fix-debouncer still call classify_touches directly and are unchanged.
 
 fails=0; warns=0; incomplete=0
 fail() { echo "FAIL: $*"; fails=$((fails+1)); }
@@ -228,7 +238,7 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
         fi
       fi
       if [ -n "$ctouches" ]; then
-        if [ "$(classify_touches "$ctouches")" = "codeowner-author" ]; then
+        if [ "$(classify_touches_repo "$slug" "$ctouches")" = "codeowner-author" ]; then
           fail "#$k Touches lands in the operator-author set ($ctouches) — no worker can deliver it; split that half out or hand it to the seat (iac-lane.md §The platform lane)"
         fi
         if [ -n "$GUARDED_PATHS" ]; then

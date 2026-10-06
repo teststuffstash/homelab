@@ -1,0 +1,6 @@
+# oracle-fleet CODEOWNERS — recorded world for the classify-touches-repo fixture (homelab#1897).
+# The shape the issue names: scripts/** is the ordinary chassis lane (unowned, worker-deliverable
+# every week — #546→PR#553, #529→PR#549, #547→PR#551); .agents/** is CODEOWNERS-gated but
+# worker-proposed (#344→PR#554). Served by the stub `gh` for
+# `gh api repos/teststuffstash/oracle-fleet/contents/CODEOWNERS`.
+.agents/  @teststuffstash/oracle-fleet-maintainers

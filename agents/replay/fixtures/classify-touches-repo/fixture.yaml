@@ -1,0 +1,43 @@
+# classify-touches-repo — the LINTED repo's governance, as one decision table (homelab#1897,
+# Goal #2273 fix rule: table first, then the row).
+#
+# THE CONTRACT. `classify_touches` (agents/footprint.sh) returns the highest tier across a
+# `Touches:` footprint: machine-merge (CI gate only) < codeowner-merge (agent authors, human
+# merges) < codeowner-author (only the codeowner may author). Its ❌ operator-author set
+# (`.github/`, `.agents/`, `devbox.json|lock`, `mgmt/scripts/` + the three box-executed
+# `scripts/` verbs) is HOMELAB's platform governance: here `scripts/**` are the checks and the
+# launcher. `classify_touches_repo <owner/repo> <footprint>` applies that set ONLY for a homelab
+# slug; for any other slug it classifies against the LINTED repo's CODEOWNERS, fetched with
+# `gh api repos/<slug>/contents/CODEOWNERS`.
+#
+# THE DEFECT. `scripts/goal-lint.sh` lints ANY repo's Goal tree but always exported HOMELAB's
+# CODEOWNERS and applied HOMELAB's ❌ set. On oracle-fleet goal #562 (2026-09-13) it reported
+# `FAIL: #563 Touches lands in the operator-author set — no worker can deliver it` for three
+# children touching `scripts/probe/**`, `scripts/census-ert-corpus.py` and `.agents/probe.md` —
+# paths that stack's workers deliver every week (#546→PR#553, #529→PR#549, #547→PR#551;
+# `.agents/**` is CODEOWNERS-gated but worker-proposed, #344→PR#554). A stack author had to read
+# the FAILs as advisory, inverting the lint's own "fix the issue, never the machinery" rule.
+#
+# THE ROWS (rows.psv; per-row state in the env column). The axis is the LINTED repo:
+#   homelab-dotagents-author        — homelab slug, `.agents/probe.md` ⇒ the ❌ set applies ⇒
+#                                     codeowner-author (unchanged homelab behaviour).
+#   homelab-scripts-unowned         — homelab slug, `scripts/x.sh` ⇒ generic scripts/** is
+#                                     UNOWNED since ADR-142 (2026-09-28) ⇒ machine-merge. (The
+#                                     issue's `scripts/x.sh` example predates ADR-142; the
+#                                     contrast path is `.agents/probe.md`, in the set today and
+#                                     one of oracle-fleet#563's own children.)
+#   stack-dotagents-codeowner-merge — oracle-fleet slug, `.agents/probe.md` ⇒ the ❌ set does NOT
+#                                     apply; oracle-fleet's CODEOWNERS owns `.agents/` ⇒
+#                                     codeowner-merge (THE FIXED ROW: red on base, where homelab's
+#                                     set read it codeowner-author and goal-lint FAILed it).
+#   stack-scripts-unowned           — oracle-fleet slug, `scripts/x.sh` ⇒ unowned in oracle-fleet's
+#                                     CODEOWNERS ⇒ machine-merge (the other two #563 children).
+#
+# The oracle-fleet CODEOWNERS is a RECORDED WORLD served by the stub `gh` (worlds/oracle-fleet/gh/
+# api-repos-teststuffstash-oracle-fleet-contents-codeowners.txt): this pod holds homelab's token
+# only, so a live cross-repo fetch is impossible and must never be the test's dependency.
+name: classify-touches-repo
+mode: table
+parts:
+  - file:bridge.sh
+rows: rows.psv
