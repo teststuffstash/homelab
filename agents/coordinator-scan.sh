@@ -837,6 +837,36 @@ pr_blocked_on_check() {
 }
 # <<<REPLAY:blocked-on-check<<<
 
+# ── THE ONE STRONG-LINK PREDICATE (ADR-122 one-parser rule) ────────────────────────────────────
+# A PR IMPLEMENTS issue #N iff its body carries a verb keyword (`implements|closes|fixes|resolves
+# #N`) or a line-anchored `Issue: #N` trailer. This is the grammar `finalize` writes and the
+# merged-closeout clauses read. `ghit` (the goal-child leg's merged-PR test) and `gref` (its
+# open-PR hold) are TWO READERS of this ONE grammar — homelab#1720 found them disagreeing: `ghit`
+# demanded a strong link while `gref` accepted a bare `#<n>` substring, so a prose sibling citation
+# in an unrelated open PR held a finished goal child open indefinitely. Both now call THIS
+# function, so they cannot drift again. `$3` (base) empty = any base; a non-empty base scopes the
+# count to PRs whose `baseRefName` equals it (an open PR on master is not live work on a goal
+# child by construction).
+# >>>REPLAY:strong-link-count>>>
+# The predicate itself, in ONE place. `$n` is the issue number (--argjson n); `$b` the base scope
+# (--arg b; empty = any base). Both readers below interpolate THIS string, so the grammar has one
+# home and the two readers cannot drift.
+STRONG_LINK_JQ='((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+  or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))'
+# strong_link_count <issue-n> <prs-json> [base] → how many PRs strongly link the issue.
+strong_link_count() {
+  local n="${1:?}" prs="${2:-[]}" base="${3:-}"
+  jq -r --argjson n "$n" --arg b "$base" \
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ)] | length" <<<"$prs"
+}
+# strong_link_pr <issue-n> <prs-json> [base] → the NEWEST strongly-linking PR number, or empty.
+strong_link_pr() {
+  local n="${1:?}" prs="${2:-[]}" base="${3:-}"
+  jq -r --argjson n "$n" --arg b "$base" \
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ) | .number] | sort | last // \"\"" <<<"$prs"
+}
+# <<<REPLAY:strong-link-count<<<
+
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */30 per-stack coordinate-<stack> cron
 # (agents/coordinator/reflexes-argo.yaml); 15 min is that plus margin for cron jitter and the
@@ -1797,6 +1827,7 @@ EOF_BBM
 $(ib_rows "$(printf '%s' "$inprog" | jq '[.[] | select(((.labels|map(.name))|index("task/goal"))|not)]' 2>/dev/null || echo '[]')")
 EOF_BUSYFPS
     # <<<REPLAY:busy-fps<<<
+    # >>>REPLAY:fu143-goal-child>>>
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
     # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
     # MERGED into exactly that base is FINISHED work the closing keyword could not close
@@ -1818,8 +1849,16 @@ EOF_BUSYFPS
     # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
     # states; this leg was the odd one out. $inprog is left ALONE on purpose: it also feeds the
     # ADR-097 footprint holds, and widening those is a different decision.
+    # ⚠ `agent/blocked` is the THIRD state (homelab#1720, the mirror defect): an arbitrate
+    # escalation parks the ISSUE `agent/blocked` while its PR merges into the goal base, and the
+    # closing keyword is inert off master — so the child is a terminal sink no clause can see
+    # (live: #1781, theme #1768's last member, unparked by hand). The label is a HUMAN gate, so it
+    # is NOT admitted on the label alone: the escalation's own `blocked-on:` predicate must be
+    # RESOLVED first (the marker lives on the PR that implements the issue — the merged strong-link
+    # PR into the goal base — and is read through the ONE `pr_blocked_on_check` reader below). An
+    # unresolved predicate keeps the issue out, exactly as the C4/C5 selector excludes it.
     goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review")) or ($L|index("agent/blocked"))))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     # ADR-122 (3): `Base:` via the ONE parser. The old capture was `goal/[^ \t\r\n]+` — it took
     # the value only when it STARTED with `goal/` and cut at the first blank; both halves are kept
@@ -1846,9 +1885,13 @@ EOF_GOALBASED
     # So C4/C5 must not guess: holding costs a meta nudge, guessing costs a duplicate ARMED PR onto
     # a protected goal branch that auto-merges. Asymmetric — hold.
     goalbased_nums="$(printf '%s' "$goalbased" | sed 's/|.*//' | tr '\n' ' ')"
+    # The `agent/blocked` subset of the candidates (homelab#1720): their admission is CONDITIONAL on
+    # the escalation's `blocked-on:` predicate being resolved, checked per-candidate below. Kept as
+    # a separate set so `goalbased` stays `number|base` (its two-field shape is read by the loop).
+    goalblocked_nums="$(printf '%s' "$goalcand" | jq -r '[.[] | (.labels|map(.name)) as $L | select($L|index("agent/blocked")) | .number] | .[]' 2>/dev/null | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
-      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
+      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,body,baseRefName 2>/dev/null)" || gopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
@@ -1873,17 +1916,36 @@ EOF_GOALBASED
           # guard exists to reject ("that is the sibling issue (#31)"); anchoring to line start is
           # what keeps the two apart. Widen HERE rather than narrowing finalize: the authoring side
           # is already deployed fleet-wide and its trailer is the recipes own convention.
-          ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
-            '[.[] | select(.baseRefName == $b)
-                  | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
-                        or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$gmerged")" || ghit=0
+          ghit="$(strong_link_count "$gn" "$gmerged" "$gbase")" || ghit=0
           # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
           gmention="$(jq -r --arg b "$gbase" --argjson n "$gn" \
             '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || gmention=0
-          gref="$(jq -r --argjson n "$gn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$gopen")" || gref=0
+          # ⚠ The open-PR hold is the SAME strong-link predicate, scoped to the goal base
+          # (homelab#1720). The old test was a bare `#<n>` substring over EVERY open PR body,
+          # unscoped by base — so a prose sibling citation in an unrelated master-lane PR held a
+          # finished goal child open indefinitely (live: #1693 held ~38h by PR #1698's prose), and
+          # the cross-repo spelling `homelab#<n>` matched too. A bare mention carries no ownership
+          # claim in either direction: treating it as live work buys no safety and costs the whole
+          # goal lane. An open PR on master is not live work on a goal child by construction.
+          gref="$(strong_link_count "$gn" "$gopen" "$gbase")" || gref=0
           # merged PR into the declared base cites the issue AND no OPEN PR still references it
           # (an open follow-up round means live work — not closeable yet)
           if [ "${ghit:-0}" -gt 0 ] && [ "${gref:-0}" -eq 0 ]; then
+            # ⚠ `agent/blocked` admission is CONDITIONAL (homelab#1720): the escalation's
+            # `blocked-on:` predicate must be RESOLVED. The marker lives on the PR that implements
+            # the issue — the merged strong-link PR into the goal base — and is read through the
+            # ONE `pr_blocked_on_check` reader (never a second regex). An unresolved predicate
+            # keeps the issue out and reports, exactly as the C4/C5 selector excludes it.
+            if case " ${goalblocked_nums:-} " in *" ${gn} "*) true;; *) false;; esac; then
+              gboc_pr="$(strong_link_pr "$gn" "$gmerged" "$gbase")" || gboc_pr=""
+              gboc="$(pr_blocked_on_check "$slug" "$gboc_pr")"
+              case "$gboc" in
+                blocked|blocked\|*)
+                  orphans="${orphans}[$repo] ⏳ issue #${gn} — goal child parked \`agent/blocked\` and its merged PR #${gboc_pr} still records \`blocked-on: ${gboc#blocked|}\` (unresolved): the closeout waits (homelab#1188).\n"
+                  continue
+                  ;;
+              esac
+            fi
             c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
           elif [ "${gmention:-0}" -gt 0 ] && [ "${ghit:-0}" -eq 0 ]; then
             orphans="${orphans}[$repo] ⛔ issue #${gn} — a merged PR into ${gbase} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close. Auto-closeout resumes once agent-runtime#34's finalize ships the \`Implements #${gn}\` line.\n"
@@ -1893,6 +1955,7 @@ EOF_GOALBASED
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # <<<REPLAY:fu143-goal-child<<<
     # Default branch: a queued issue without a `Base:` body line counts against this.
     # Hoisted above IL-G06 detection block since it's used there.
     default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
