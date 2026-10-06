@@ -198,6 +198,7 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `c4c5-pod-liveness` | table | - | `agents/coordinator-scan.sh` | IL-T16 |
 | `c9-rearm` | table | - | `agents/review-reflex.sh` | - |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
