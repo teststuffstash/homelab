@@ -1,10 +1,29 @@
 # c4c5-infeasible — the decision table (family contract in fixture.yaml; per-row intent below).
-# id           | world  | patch | env          | expect
+# id            | world   | patch                                     | env                | expect
 # parks         = the verdict leg: a REAL marker parks + audits #66, #70 beside it keeps its unit
 # probe-fail    = the same inert world, but STUB_GH=fail: the probe is ATTEMPTED (CALL line), NO
 #                 write, PROBE_FAILED reported, #66 keeps today's behaviour completely
 # quoted-inert  = the inert world read normally: the quoted marker latches NOTHING, the
 #                 human-blocked #71 is not even read — both keep today's behaviour
-parks         | verdict |       |                | parks
-probe-fail    | inert   |       | STUB_GH=fail   | probe-fail
-quoted-inert  | inert   |       |                | quoted-inert
+parks         | verdict |                                           |                    | parks
+probe-fail    | inert   |                                           | STUB_GH=fail       | probe-fail
+quoted-inert  | inert   |                                           |                    | quoted-inert
+# ── homelab#1797: the input axis the terminal's predicate turns on is the CRASH LATCH. The two
+# rows below are the pin — on the base tree the read drew its candidates through `C4C5_SEL`, whose
+# first filter drops `agent/error`, so BOTH were invisible to it and both red on base.
+# error-marker  = the oracle-fleet#637 shape: the SAME verdict world, `agent/error` added to #66
+#                 (the ride declared infeasible and THEN died on the way out). The verdict wins:
+#                 park `agent/blocked`, clear BOTH `agent/in-progress` and `agent/error`, push the
+#                 `parked-infeasible` board row. #70 beside it is untouched.
+error-marker  | verdict | gh/issue-list-inprog.json @ patches/add-agent-error.jq |          | error-marker
+# strike-marker = the down-chain half (oracle-fleet#636): the SAME verdict world, #66 a GOAL CHILD
+#                 (`GOALBASED_NUMS=66,72`) whose thread also carries an `AGENT_STRIKE:` +
+#                 `Resumable branch pushed:` comment (rows/strike-marker/ overlay), with an
+#                 UNMARKED goal child #72 beside it (patches/add-goal-child.jq) carrying the same
+#                 strike shape. The verdict outranks the strike's resumable branch: the terminal
+#                 parks #66 and the `infeas_done` hold keeps `c4c5-derivations` from re-riding it
+#                 in the same tick, while #72 is still re-ridden — the hold is SPECIFIC, not a
+#                 blanket suppression of goal children. On the base tree the terminal never saw a
+#                 goal child at all and BOTH emitted a `c4c5-redispatch` unit carrying
+#                 `--work-branch`.
+strike-marker | verdict | gh/issue-list-inprog.json @ patches/add-goal-child.jq | GOALBASED_NUMS=66,72 | strike-marker
