@@ -4503,18 +4503,24 @@ EOF_GTHEMES_OPEN
             # bridge in replay. The jq validation is the same guard $inprog uses.
             jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
             # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
-            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch
+            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch.
+            # Also exclude issues with frozen open PRs (homelab#2281 — extended belt below).
+            frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
+            jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+              | jq -r --argjson bodies "$BODIES" --argjson frozen_prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                       | select(([$frozen_prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
-              now_s="$(date -u +%s)"
-              review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
+              if [ -z "${review_merged:-}" ]; then
+                review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              fi
               if ! jq -e . >/dev/null 2>&1 <<<"${review_merged:-null}"; then
                 orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/review phantom-label belt held every candidate this tick (rule #6)\n"
               else
@@ -4568,6 +4574,52 @@ EOF_GTHEMES_OPEN
                 done
               fi
             fi
+            # >>>REPLAY:review-phantom-frozen-open-pr>>>
+            # ── THE BELT (homelab#2281): DETECT frozen OPEN PRs with agent/review label ──────────
+            # An open PR that is armed, bot-APPROVED at head, ci green, and BEHIND but unmoved
+            # may match no scan clause: the `agent/review` phantom clause fires only when there is
+            # NO open PR, so an open-but-frozen PR is a terminal sink. This belt detects issues
+            # with `agent/review` that are mentioned by a frozen open PR (already fetched above
+            # for exclusion from the existing phantom belt's candidates).
+            #
+            # CONDITION: a PR that is:
+            #   - armed (autoMergeRequest != null)
+            #   - bot-APPROVED (reviewDecision == "APPROVED")
+            #   - ci green (statusCheckRollup has no FAILURE/TIMED_OUT)
+            #   - BEHIND (mergeStateStatus)
+            #   - unmoved (updatedAt unchanged past C4C5_PERSIST_S)
+            # and references an issue with agent/review.
+            #
+            # The belt REPORTS and HOLDS to avoid races with the review-flip belt or ongoing PRs.
+            # A hold costs a report line, guessing (reconciling without the guard) costs a duplicate
+            # review session on the same code.
+            review_frozen_cands=""
+            # A frozen armed PR is one that is APPROVED + ARMED + BEHIND + CI green + updatedAt unmoved.
+            # Match it to an issue with agent/review via the PR's body.
+            [ -n "$dispatchable" ] && review_frozen_cands="$(printf '%s' "$review_only" \
+              | jq -r --argjson prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+                '[.[] | (.labels|map(.name)) as $L
+                       | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                       | (.number|tostring) as $n
+                       | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+                       | ([$prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([ .statusCheckRollup[]? | select((.conclusion | IN("SUCCESS", "NEUTRAL", "SKIPPED")) | not) ] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | .[0] // empty) as $frozen_pr
+                       | if $frozen_pr then "\($n)|\($frozen_pr.updatedAt // "")" else empty end
+                ] | .[]')"
+            if [ -n "$review_frozen_cands" ]; then
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
+              for fcand in $review_frozen_cands; do
+                fcn="${fcand%%|*}"; fpr_upd="${fcand#*|}"
+                fpr_age="$(jq -rn --arg t "$fpr_upd" --argjson now "$now_s" \
+                  '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                case "$fpr_age" in ''|*[!0-9-]*) fpr_age=-1;; esac
+                if [ "$fpr_age" -lt "$C4C5_PERSIST_S" ]; then
+                  orphans="${orphans}[$repo] ⏳ agent/review frozen-open-PR belt HELD — issue #${fcn} has an armed, approved, behind PR with CI green, touched $(( fpr_age < 0 ? 0 : fpr_age / 60 ))m ago (< the ${C4C5_PERSIST_S}s guard); re-checked next scan\n"
+                  continue
+                fi
+                orphans="${orphans}[$repo] ⚠ agent/review with FROZEN OPEN PR detected — issue #${fcn} (armed ∧ approved ∧ ci green ∧ behind ∧ unmoved $(( fpr_age / 60 ))m). The scan detected this state matches no clause — operator review-dismissal may unblock it (homelab#2281).\n"
+              done
+            fi
+            # <<<REPLAY:review-phantom-frozen-open-pr<<<
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
             v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \

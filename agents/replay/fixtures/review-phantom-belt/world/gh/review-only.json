@@ -16,8 +16,50 @@
   {
     "number": 82,
     "title": "review-held issue test case",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for unarmed PR exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 84,
+    "title": "review-test issue for armed but not approved PR",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for armed but not approved exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 85,
+    "title": "review-test issue for CLEAN not BEHIND",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for CLEAN merge state exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 86,
+    "title": "review-test issue for CI red",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "Test case for failed CI exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 87,
+    "title": "review-held issue test case (human gate)",
     "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "agent/blocked"}],
-    "body": "Test case for agent/review + agent/blocked exclusion.\n\nTouches: agents/coordinator-scan.sh\n",
+    "body": "Test case for agent/review + agent/blocked exclusion — no open PR, no merged PR, persisted; a human gate is never re-queued.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
+    "number": 83,
+    "title": "scan: frozen open PR armed ∧ approved ∧ green ∧ BEHIND",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "An open PR armed, bot-approved, green CI, but behind and unmoved; the review-phantom belt should detect. Fixes #83\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:15:00Z"
+  },
+  {
+    "number": 88,
+    "title": "scan: recently-moved PR should be HELD",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
+    "body": "PR #105 was just updated, within the C4C5_PERSIST_S guard; frozen belt should HOLD. Fixes #88\n\nTouches: agents/coordinator-scan.sh\n",
     "updatedAt": "2026-08-25T06:10:00Z"
   }
 ]
