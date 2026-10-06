@@ -174,7 +174,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
+      --json number,createdAt,updatedAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -323,7 +323,8 @@ EOF_C9
     def newest_commit_at:
       ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
     def reviewable_again:
-      (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
+      (.reviewDecision == "CHANGES_REQUESTED") and
+      ((newest_commit_at > newest_review_at) or (.updatedAt > newest_review_at and .updatedAt > newest_commit_at));
     def bot_approved_head:
       ([ .reviews[]?
          | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)

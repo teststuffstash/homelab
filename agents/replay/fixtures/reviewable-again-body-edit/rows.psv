@@ -1,0 +1,8 @@
+# reviewable-again-body-edit — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                         | world | patch | env | expect
+# no-content-after-review    = a new commit after the last review → reviewable (existing case, proves no regression)
+# body-only-after-review     = PR body edited after the last review, no new commits → reviewable (the fix)
+# nothing-after-review       = no commits or body edits after the last review → not reviewable (existing case)
+no-content-after-review    |       |       |     | held
+body-only-after-review     |       |       |     | held
+nothing-after-review       |       |       |     | not-held
