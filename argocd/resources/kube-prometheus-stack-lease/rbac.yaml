@@ -1,0 +1,93 @@
+# The hook Jobs' identity (ADR-150). One ServiceAccount in `monitoring` (where the Jobs run), with
+# exactly the reads and the one write the two scripts make:
+#   agent-coordinator  the lease ConfigMap — create cannot be scoped by resourceName (the name does
+#                      not exist yet), so `create` + the label `list` are namespace-wide; get /
+#                      patch / delete are pinned to the one record this subject owns
+#   argocd             read the kube-prometheus-stack Application (the sync's revisions → sha/from/to)
+#   monitoring         the operator Deployment's availability + image
+#   cluster            the monitoring.coreos.com CRDs' operator.prometheus.io/version annotation
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kps-lease
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kps-lease
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, list]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [upgrade-lease-kube-prometheus-stack]
+    verbs: [get, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kps-lease
+  namespace: agent-coordinator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: kps-lease }
+subjects:
+  - { kind: ServiceAccount, name: kps-lease, namespace: monitoring }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kps-lease
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [kube-prometheus-stack]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kps-lease
+  namespace: argocd
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: kps-lease }
+subjects:
+  - { kind: ServiceAccount, name: kps-lease, namespace: monitoring }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kps-lease
+  namespace: monitoring
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [kube-prometheus-stack-operator]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kps-lease
+  namespace: monitoring
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: kps-lease }
+subjects:
+  - { kind: ServiceAccount, name: kps-lease, namespace: monitoring }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kps-lease-crds
+rules:
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kps-lease-crds
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: kps-lease-crds }
+subjects:
+  - { kind: ServiceAccount, name: kps-lease, namespace: monitoring }

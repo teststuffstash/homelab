@@ -1,0 +1,31 @@
+# kube-prometheus-stack-lease — the SUPPORT half of the ⚓ upgrade lease for kube-prometheus-stack
+# (ADR-150): the hook Jobs' ServiceAccount + RBAC and their script ConfigMap, as their OWN
+# Application. The Jobs themselves are a source of the kube-prometheus-stack Application (a hook
+# belongs to the sync it runs in); they cannot carry their ConfigMap/SA in that Application because
+# a PreSync hook is applied before every Sync-phase resource of its own app — the first sync would
+# hang on a volume that does not exist yet, and every script edit would run the previous copy
+# (argocd/resources/kube-prometheus-stack-lease/kustomization.yaml). Sync-wave 0: lands before
+# the chart's wave 1 in the app-of-apps order, and nothing here is in the chart's cone.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack-lease
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/kube-prometheus-stack-lease
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
