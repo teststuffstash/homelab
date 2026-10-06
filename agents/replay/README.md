@@ -203,7 +203,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
-| `ci-failure-run-select/ci-failure-run-select` | actions | - | `agents/agent-session.sh` | MP-T12 |
+| `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-deferred-then-debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -266,6 +266,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `fleet-strike-reader` | actions | - | `agents/coordinator-scan.sh` | IL-T30 |
 | `footprint-conflict-predicate/footprint-conflict-predicate` | suite | - | `-` | - |
+| `footprint-entry-split` | table | - | `-` | - |
 | `footprint-hold-goal-exempt` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu042-guard-a/fu042-guard-a` | actions | - | `agents/agent-session.sh` | - |
 | `fu042-wip-cap` | actions | - | `agents/agent-session.sh` | - |
