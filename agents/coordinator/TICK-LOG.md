@@ -12600,3 +12600,33 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Assembly: #2280 closeout never fired (closed by hand); seat opened #2339, master-refreshed both themes
   (7087fc24, e538bb91), codeowner reads posted on #2339/#2333; merged 19:23Z / 19:34Z. Doc currency fix for
   #1720's gref change pushed direct.
+
+## 2026-10-06 evening — second jail: S9 read, G15–G17, the upgrade-lease ruling, takeover (seat)
+
+- **S9 read (operator ask: "where are we, what is next, what can be automated").** Backlog through; 62 Renovate
+  merges org-wide since 09-30, no human on a non-major. Open: #2295 cloudflared (deps-review, 16 h green, NO
+  reader), #2256 kps 91 + #2260 devbox major (lens APPROVED, human lane), #2100 mermaid (version hold).
+- **G15 found + fixed:** Renovate arms a grouped branch only when EVERY member has automerge:true; the
+  crossplane/cloudflared regex members had no rule → the first PR born as a group (#2295) read "Automerge:
+  Disabled by config" and no lane read it (reflex = armed only, un-armed clause = `major` only). #2228/#2240
+  "proved" G11 on a branch GitHub had armed while single-member. **#2335** one rule; proof = the next grouped PR.
+- **`renovate-lane-lint` (#2336):** Renovate itself (`--platform=local --dry-run=lookup`, trace) over the checkout;
+  the local platform FORCES lookup and the JSON report strips automerge, so the `generateBranchConfig` trace is the
+  input; renovate 44 needs Node 24 (jail = 22) → `renovate@latest` via devbox (bundles its node). Seat verb, not
+  CI (operator: CI WAN stays locked down). Self-test fixture; real run 13 branches / 340 deps OK. CI flaked once on
+  `pr-wait-test` (multi-first-actionable), green on rerun.
+- **kps worked case (#2338):** 14 chart majors / 8 operator minors in 365 d; **G16: `skipCrds: true` since the
+  2026-08-04 adoption — all ten monitoring.coreos.com CRDs live at operator 0.91.0 (created 2026-06-02), owned by
+  nobody; #2256 would run v0.94.1 against them**; the triage map leans on a Watchdog dead-man nothing consumes.
+- **The upgrade lease (operator ruling → #2340, ADR-150 in #2343):** Watchdog-absence rejected ("could be a full
+  disk"); an upgrade declares itself with ONE field (`expected-end`), PreSync creates, PostSync verifies + deletes,
+  the box reverts whatever is still declared past its deadline via a pin-only revert PR; `homelab-sentinel` gains
+  write (the one click); windows never hold the timer; kps first. ADR-151 = the CRD owner (prometheus-operator-crds
+  Application, grouped). ADR-141 + ADR-149 amended.
+- **Operator reads without approving (#2256, #2260):** render diff 86.3.2 vs 91.8.0 with our values (44 substantive
+  resources; grafana → distroless + readOnlyRootFilesystem, plugins via `GF_PLUGINS_PREINSTALL_SYNC` → fine; KSM
+  chart 7→8 = same app) — the human read's value = G16, structurally once. #2260 moved 18 tools, the gate flagged
+  one: **openssl 3.6.0 → 3.5.8** (nixpkgs#564262 re-pointed the default alias to the 3.5 LTS), python 3.12→3.14,
+  tofu 1.12→1.13 unflagged → **G17 (#2342)**; ruling: rely on the lens, PR stays armed.
+- **Takeover 19:2xZ** (primary exited): armed #2295 by hand; ADR PR #2343; this bookkeeping; pickup written for the
+  unattended S9 build session (meta-state). Memory: `upgrade-lease-over-alert-detectors`.
