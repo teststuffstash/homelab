@@ -42,25 +42,32 @@ case "${CROSS_REPO_PASS}" in
     inprog="$(cat "$REPLAY_WORLD/gh/issue-list-inprog-oracle-fleet.json")"
     ;;
   2)
-    # Third pass: resumable match for repo A (homelab) — both repos' resumable_branches are
-    # now populated from the two c4c5-derivations runs. Run the match logic for homelab #329.
+    # Third pass: resumable match for repo A (homelab) — both repos' resumable_branches and
+    # ambig_terminal_type are now populated from the two c4c5-derivations runs. Run the match logic
+    # for homelab #329. Both terminal-type and branch resolution must work per repo.
     slug="teststuffstash/homelab"
     repo="homelab"
     uclause="c4c5-redispatch"
     urepo="homelab"
     uitem="issue-329"
+    # ambig_terminal_type persists from the derivation passes
     ;;
   3)
     # Fourth pass: resumable match for repo B (oracle-fleet) — run the match logic for
-    # oracle-fleet #329, which should resolve to its own branch (not homelab's).
+    # oracle-fleet #329, which should resolve to its own branch and terminal type (not homelab's).
     slug="teststuffstash/oracle-fleet"
     repo="oracle-fleet"
     uclause="c4c5-redispatch"
     urepo="oracle-fleet"
     uitem="issue-329"
+    # ambig_terminal_type persists from the derivation passes
     ;;
 esac
 CROSS_REPO_PASS=$((CROSS_REPO_PASS + 1))
+# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+# Needed for the per-issue liveness check added in homelab#2305.
+KUBECTL="kubectl"
+KUBE=""
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 item_class_push() { :; }

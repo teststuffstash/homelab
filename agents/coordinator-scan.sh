@@ -4199,11 +4199,11 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
       fi
       # <<<REPLAY:review-flip-belt<<<
-      if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+      # >>>REPLAY:c4c5-bodies-probe>>>
+      bodies_ok=""
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then bodies_ok=1; fi
+      if [ -n "$bodies_ok" ] && PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
-        if [ -z "$PODS" ]; then
-          # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -4226,6 +4226,9 @@ EOF_GTHEMES_OPEN
             # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
             # below, mid-write) can hold BOTH labels for a tick, and re-dispatching a human-gated
             # issue is the one thing C4/C5 must never do (retro r3 F4, homelab#257).
+            # homelab#2305: per-issue liveness moved from repo-wide gate into selector — each
+            # issue is evaluated independently. An in-progress issue WITH a live pod for that
+            # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
             # >>>REPLAY:c4c5-selector>>>
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
@@ -4234,7 +4237,8 @@ EOF_GTHEMES_OPEN
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select((($pods | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0))'
             # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
@@ -4391,11 +4395,13 @@ EOF_GTHEMES_OPEN
             # re-queue it to `agent/queued` and hand it straight back to dispatch, undoing the human
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
+            # >>>REPLAY:c4c5-selector-run>>>
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
+            # <<<REPLAY:c4c5-selector-run<<<
             if [ -n "$c4c5_cands" ]; then
               now_s="$(date -u +%s)"
               # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
@@ -4508,13 +4514,12 @@ EOF_GTHEMES_OPEN
             frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
             jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --argjson frozen_prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
-                       | select(([$frozen_prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
               [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
@@ -4579,16 +4584,17 @@ EOF_GTHEMES_OPEN
             # An open PR that is armed, bot-APPROVED at head, ci green, and BEHIND but unmoved
             # may match no scan clause: the `agent/review` phantom clause fires only when there is
             # NO open PR, so an open-but-frozen PR is a terminal sink. This belt detects issues
-            # with `agent/review` that are mentioned by a frozen open PR (already fetched above
-            # for exclusion from the existing phantom belt's candidates).
+            # with `agent/review` that are mentioned by a frozen open PR (fetched above to feed
+            # only this belt).
             #
             # CONDITION: a PR that is:
             #   - armed (autoMergeRequest != null)
             #   - bot-APPROVED (reviewDecision == "APPROVED")
-            #   - ci green (statusCheckRollup has no FAILURE/TIMED_OUT)
+            #   - ci green (every statusCheckRollup conclusion ∈ SUCCESS|NEUTRAL|SKIPPED; PENDING ≠ green)
             #   - BEHIND (mergeStateStatus)
             #   - unmoved (updatedAt unchanged past C4C5_PERSIST_S)
             # and references an issue with agent/review.
+            # NOTE: PENDING must not read as green since a frozen PR is one that stopped moving.
             #
             # The belt REPORTS and HOLDS to avoid races with the review-flip belt or ongoing PRs.
             # A hold costs a report line, guessing (reconciling without the guard) costs a duplicate
@@ -4628,7 +4634,7 @@ EOF_GTHEMES_OPEN
             # <<<REPLAY:review-phantom-frozen-open-pr<<<
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
@@ -4699,9 +4705,11 @@ EOF_GTHEMES_OPEN
                         ] | first // ""
                     ')"
                     if [ -n "$branch" ]; then
-                      ambig_decidable="${ambig_decidable}${ambig_n} "
-                      # Encode the terminal type with the issue number for later lookup
-                      ambig_terminal_type="${ambig_terminal_type}${ambig_n}=${term_type}"$'\n'
+                      # repo-qualified key: issue numbers are only unique per repo
+                      # space-separated (same format as bare issue numbers above)
+                      ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                      # Encode the terminal type with the repo-qualified issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4717,7 +4725,11 @@ EOF_GTHEMES_OPEN
               ambig_filtered=""
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+                # Check for repo-qualified keys: repo#N or repo#N=…
+                case " $ambig_decidable " in
+                  *" ${repo}#${ambig_n} "*) ;;
+                  *) ambig_filtered="${ambig_filtered}${ambig_line}\n";;
+                esac
               done <<< "$ambig"
               ambig="$(printf '%b' "$ambig_filtered")"
             fi
@@ -4741,7 +4753,7 @@ EOF_GTHEMES_OPEN
               # extra `gh` call: it rides out of the same jq row, base64'd like `ib_rows` does.
               # A body the parser REFUSES holds the issue (rule #6 — a malformed block never
               # dispatches), exactly as the queued lane's `!` column does.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))|\(.body // "" | @base64)"'); do
@@ -4758,9 +4770,11 @@ EOF_GTHEMES_OPEN
             # Add resumable (decidable) goal children to dispatchable units — they were excluded
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
-              for ad_n in $ambig_decidable; do
-                # Look up which type of terminal comment was found for this issue
-                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_n}=" | cut -d= -f2)"
+              for ad_qualified in $ambig_decidable; do
+                # ad_qualified is now repo#N; extract the bare issue number for jq queries
+                ad_n="${ad_qualified#*#}"
+                # Look up which type of terminal comment was found for this issue using the qualified key
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2)"
                 ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
@@ -4784,14 +4798,14 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:c4c5-derivations<<<
           else
-            orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            if [ -n "$bodies_ok" ]; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)\n"
+            else
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            fi
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
-        fi
-      else
-        echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
-    fi
     # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
     # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
     # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
@@ -5196,10 +5210,12 @@ EOF_GTHEMES_OPEN
             fi
           fi
           if [ "$filing_already_extended" = 0 ]; then
-            # Extend the existing filing with a comment
+            # Extend the existing filing with a comment; include the cause marker if available
+            filing_fault_marker=""
+            [ -n "$filing_n" ] && filing_fault_marker="<!-- fleet-fault cause=${slug}#${filing_n} prs=${sorted_nums} -->"
             gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
               "${fleet_strike_marker}" \
-              "" \
+              "${filing_fault_marker:+$filing_fault_marker}" \
               "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
               "" \
               "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
@@ -5259,14 +5275,28 @@ EOF_GTHEMES_OPEN
           "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
         for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
           [ -n "$fn" ] || continue
-          # Idempotency check: skip if a comment already starts with the identical marker
+          # Idempotency check: skip if a comment already starts with the identical marker.
+          # BUT: if the comment exists without a fleet-fault cause= marker and we now have a
+          # filing_n, repost to include the cause marker (homelab#2327). The marker's presence
+          # is part of the idempotency key, not an accident of the first post.
           existing_comments="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null || true)"
           already_posted=0
+          needs_cause_repost=0
           if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
             if jq -e --arg m "$fleet_strike_marker" \
               '[.[] | (.body // "") | startswith($m)] | any' \
               <<<"$existing_comments" >/dev/null 2>&1; then
               already_posted=1
+              # Check if the existing marker comment lacks the fleet-fault cause= marker.
+              # If so and filing_n is set, we need to repost with it.
+              if [ -n "$filing_n" ]; then
+                if ! jq -e --arg m "$fleet_strike_marker" \
+                  '[.[] | select((.body // "") | startswith($m)) | (.body // "") | test("fleet-fault cause=")] | any' \
+                  <<<"$existing_comments" >/dev/null 2>&1; then
+                  needs_cause_repost=1
+                  already_posted=0  # Force repost
+                fi
+              fi
             fi
           fi
           if [ "$already_posted" = 0 ]; then
@@ -6590,8 +6620,11 @@ if [ "${CC_RUN:-}" = "1" ]; then
   cc_queued="$(jq -r '.[].number' <<<"${queued:-[]}")"
   cc_inprog="$(jq -c "$inprog_jq" <<<"$cc_issues")"
   cc_review="$(jq -r '.[].number' <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")")"
+  # `pods` = "" — the enumerated in-progress state is the ABANDONED one (no live pod for the
+  # issue); a live-pod in-progress issue is skipped by the merged #2305 per-issue liveness and is
+  # not a phantom state, so it is not enumerated here (c4c5-pod-liveness pins that axis).
   cc_c4c5="$(jq -r --argjson bodies "$cc_bodies" --arg cg "" --arg gb "" --arg db "" --arg sess "" \
-    "$C4C5_SEL"' | .number' <<<"$cc_inprog")"
+    --arg pods "" "$C4C5_SEL"' | .number' <<<"$cc_inprog")"
   cc_frozen="$(jq -r --argjson prs "$cc_prs" --arg done "" "$FROZEN_PR_SEL" \
     <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")" | cut -d'|' -f1)"
   # ── ownership: which clauses select this issue number ──
