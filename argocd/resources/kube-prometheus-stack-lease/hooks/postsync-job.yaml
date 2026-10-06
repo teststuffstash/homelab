@@ -1,0 +1,53 @@
+# PostSync — confirm the lease (ADR-150 (3)): the subject's real checks (postsync.sh), then delete
+# the record. Runs after the chart's manifests applied and every resource reads Healthy. A failing
+# check exits 1 → the sync is marked Failed, the lease STAYS, and the management box opens the
+# pin-only revert PR at `expected-end`. activeDeadlineSeconds caps the whole Job above the script's
+# own CHECK_BUDGET_S; both sit inside the 20-minute expect window so a stuck check never outlives
+# the deadline it was meant to beat.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kps-lease-postsync
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: kps-lease
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postsync
+          image: ghcr.io/teststuffstash/agent-coordinator
+          command: ["bash", "/scripts/postsync.sh"]
+          env:
+            - { name: SUBJECT, value: argocd/platform/kube-prometheus-stack.yaml }
+            - { name: PROM, value: http://kube-prometheus-stack-prometheus.monitoring.svc:9090 }
+            - { name: AM, value: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093 }
+            - { name: OPERATOR_NS, value: monitoring }
+            - { name: OPERATOR_DEPLOY, value: kube-prometheus-stack-operator }
+            - { name: CHECK_BUDGET_S, value: "600" }
+            - { name: HOME, value: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      volumes:
+        - name: scripts
+          configMap: { name: kps-lease-scripts }
+        - name: tmp
+          emptyDir: {}
