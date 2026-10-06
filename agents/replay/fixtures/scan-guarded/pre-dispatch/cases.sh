@@ -8,6 +8,7 @@ homelab|401|argocd/resources/loki/|loki: raise the retention window
 homelab|402|*|a legacy issue with no Touches: line at all
 homelab|403|**/*.yaml|a glob that defeats prefix reasoning
 oracle-fleet|404|agents/coordinator/|a stack repo that happens to own a same-named path
-homelab|405|argocd/platform/|split the platform app-of-apps directory"
+homelab|405|argocd/platform/|split the platform app-of-apps directory
+homelab|406|argocd/platform/openrouter-operator.yaml (pin bump)|an annotated entry on a guarded file: pre-fix the scan's inline tr mangles the annotation and the GUARDED hit is missed"
 while IFS='|' read -r repo qnum qtouches qtitle; do
   [ -n "$qnum" ] || continue
