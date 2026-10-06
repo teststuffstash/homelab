@@ -1,0 +1,84 @@
+# Belts on the management box's ⚓ UPGRADE-LEASE loop (ADR-150, docs/management-box.md §MB5):
+# mgmt/scripts/mgmt-lease.sh reverts, by a pin-only PR, every upgrade still declared past its
+# deadline. The box never diagnoses, so the belts here are about the LOOP, never the upgrade:
+#   - a revert it could not open (the pre-click 403, a commit wider than the pin, a conflict, a
+#     subject the policy does not name) — a person finishes what the box refused to guess at;
+#   - a lease that stays expired across ticks — the revert PR is not landing (red CI, no reflex);
+#   - the loop itself dead or its textfile missing — the two shapes every box belt carries.
+# Series: mgmt-lease.sh's emit_metrics, through the box's node_exporter textfile (job mgmt-node).
+# Deliberately NOT here: "the upgrade broke X" — that is the lease's own PostSync verdict, and an
+# alert-shaped detector is exactly what ADR-150 ruled out for this class.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-upgrade-lease
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-upgrade-lease
+      rules:
+        - alert: MgmtLeaseRevertFailed
+          expr: |
+            sum by (outcome) (increase(mgmt_lease_revert_total{outcome=~"error|not_pin_only|conflict|no_policy"}[30m])) > 0
+          # triage now: an expired upgrade lease the box could NOT revert — the upgrade is unconfirmed and
+          # nothing is rolling it back; the journal names why, a person opens the revert PR by hand
+          labels: { severity: critical, triage: now }
+          annotations:
+            summary: "An expired upgrade lease could not be reverted by the management box ({{ $labels.outcome }})"
+            description: >-
+              mgmt-lease.sh found a lease past its deadline and could not open the revert PR:
+              outcome={{ $labels.outcome }}. `error` = the push/PR/label/arm call failed (before the
+              operator's homelab-sentinel contents:write click every revert lands here — ADR-150 (5);
+              after it, read the HTTP reason in the journal); `not_pin_only` = the lease's commit
+              changed more than the pin (+ keep/regen, policy/mgmt/upgrade-leases.yaml) — a human
+              reverts it; `conflict` = git revert conflicted, nothing pushed; `no_policy` = the
+              subject is not in the policy. The upgrade stays UNCONFIRMED until someone acts.
+              `journalctl -u mgmt-lease -n 50` on 192.168.2.53; the lease records:
+              `kubectl -n agent-coordinator get cm -l homelab.teststuff.net/upgrade-lease=true`.
+              docs/management-box.md §MB5.
+        - alert: MgmtLeaseExpiredUnreverted
+          expr: |
+            mgmt_lease_expired > 0
+          for: 15m
+          # triage dig: the revert PR exists (or should) — whether it is red, un-reviewed or un-armed is
+          # readable on GitHub and in-cluster
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "{{ $value }} upgrade lease(s) still expired after the management box's tick"
+            description: >-
+              A lease has been past its `expected-end` for 15 minutes and is still declared: the box
+              opened its revert PR (outcome `reverted`/`already` in the journal) but the revert has
+              not landed and been re-synced — a red check on the revert PR, the reflex not approving,
+              an un-armed PR — or the box refused (then MgmtLeaseRevertFailed fires beside this).
+              Find the PR: branch `revert-chart-lease-<sha8>` on teststuffstash/homelab. The lease
+              clears when the reverted sync's PostSync hook deletes it. docs/management-box.md §MB5.
+        - alert: MgmtLeaseLoopStale
+          expr: |
+            (time() - mgmt_lease_last_run_timestamp_seconds) > 1200
+          for: 10m
+          # triage none: lease timer on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "Management box upgrade-lease loop has not completed a tick in over 20 minutes"
+            description: >-
+              mgmt-lease ticks every 5 minutes; none has finished for 20 minutes (a PROBE-FAIL —
+              registry unreadable, fetch, lock — does not count). While it is down an expired lease
+              reverts NOTHING. On the box: `systemctl status mgmt-lease.timer`,
+              `journalctl -u mgmt-lease -n 50`; `mgmt_lease_unreadable` says whether the cluster
+              read is what fails.
+        - alert: MgmtLeaseMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_lease_last_run_timestamp_seconds
+          for: 30m
+          # triage none: lease textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "Management box node_exporter is up but the upgrade-lease loop's metrics are missing"
+            description: >-
+              up{job="mgmt-node"} is 1 but the lease loop's textfile
+              (/var/lib/node-exporter-textfile/mgmt_lease.prom) is missing, so MgmtLeaseLoopStale
+              and MgmtLeaseExpiredUnreverted cannot fire. Check the dir exists and the unit has
+              run since it landed (mgmt-lease.timer — activated by the seat over ssh after the
+              merge, docs/management-box.md §MB5).

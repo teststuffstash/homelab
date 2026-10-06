@@ -952,6 +952,66 @@ declared key → park, the verb's exit 2 = retried refusal / 4 = parked impossib
   baseline, the ack, the after-window read, revert exempt, the 2026-09-22 replay) and the
   `workload-health` read itself against synthetic dumps.
 
+## MB5. The upgrade lease — commit-confirm on a deadline (ADR-150)
+
+**The class.** An upgrade whose dependency cone holds the detector that would judge it — kube-prometheus-stack
+IS Prometheus + Alertmanager; a node-by-node substrate rollout — cannot be reverted by an alert: the bump
+that stops Prometheus stops the alert that would name it, and no absence read can tell a bad bump from a
+full disk. [ADR-150](adr.md) rules COMMIT-CONFIRM instead, with this box as the actor because it is
+outside every cluster cone: the actor DECLARES the upgrade with a deadline, VERIFIES and DELETES the
+declaration, and the box REVERTS whatever is still declared past its deadline. The box never diagnoses — an
+expired [⚓ upgrade lease](glossary.md) has exactly one meaning, "this upgrade was not confirmed", which is
+what makes a dumb box safe. A healthy roll that outlasts its deadline reverts; the fix is that subject's
+deadline, never a smarter box.
+
+**The record** (the cluster half, `argocd/resources/kube-prometheus-stack-lease/`): one ConfigMap per
+in-flight upgrade in ns `agent-coordinator` — a sibling of the `responder-window` registry, read on the same
+path (§The declared-window gate, FU-300) — label `homelab.teststuff.net/upgrade-lease=true`,
+`creationTimestamp` = started, data `subject` (the Application file) / `chart` / `sha` / `from` / `to` /
+`expected-end` / `max-end` / `by` / `reason`. ONE decisive field: `expected-end`; a renewal moves it, never
+past `max-end`. The Application's **PreSync** hook creates it when the sync starts (the cluster's clock, so
+ArgoCD's git-poll lag and this box's tick are both outside the window; no sync → no lease → no revert); the
+**PostSync** hook runs the subject's REAL checks and deletes it. ⛔ A declared window HOLDS the apply loop
+(§MB3) and NEVER this timer: a window arms nothing, and an unconfirmed upgrade reverts whether or not a
+seat has one open.
+
+**The loop** — `mgmt/scripts/mgmt-lease.sh`, `mgmt-lease.timer` at `*:3/5` (offset from the sentinel's
+`*:0/5` and the apply loop's `*:2/5`; the three share one flock), its own clone under `/var/lib/mgmt/lease`,
+the policy `policy/mgmt/upgrade-leases.yaml` read from MASTER (the sentinel principle). Per tick: read the
+leases (unreadable → PROBE-FAIL, `mgmt_lease_unreadable 1` — never "no leases"); for every lease with
+`expected-end` in the past: (1) the ledger — a PR for branch `revert-chart-lease-<sha8>` exists, or master's
+pin in the subject file is no longer the lease's `to` → `already`; (2) the subject must be in the policy →
+else `no_policy`; (3) the lease's commit must be **pin-only** — it touched nothing but the subject `file` +
+the policy's `keep` + `regen` files, and inside `file`/`keep` every changed non-comment line is a
+`targetRevision:` line with `file`'s one pair equal to the lease's from/to (the predicate of
+`argocd/resources/chart-revert/chart_revert.py`) → else `not_pin_only`; (4) the revert: `git revert` of the
+sha on a branch off master, the `keep` files restored to the sha's FORWARD content (**a lease revert never
+downgrades CRDs** — `argocd/platform/prometheus-operator-crds.yaml`, ADR-151) and amended into the one
+commit, the `regen` files (the upstream alert list + triage map, rendered from the pin) reverted with it;
+(5) push the branch, open the PR (`revert: <chart> chart <to> → <from> (upgrade lease expired)`, labels
+`automerge` + `dependencies`, auto-merge armed — the reflex approves, CI gates, never a direct push), its
+LAST body line `reverted-charts: <chart>@<to>` = `pin-only-lint` check (h)'s 30-day memory, so Renovate's
+re-proposal of the reverted version stays red until a newer one exists. Outcomes: `reverted` · `already` ·
+`no_policy` · `not_pin_only` · `conflict` (never forced) · `error` (push/PR/label/arm failed — the lease stays,
+and the next tick RESUMES where it stopped: a branch already on origin → the PR step, an open PR missing
+its labels or arm → labels + arm; never a rebuild, whose new sha could not be pushed over the branch). Metrics via the textfile (job `mgmt-node`): `mgmt_lease_active`,
+`mgmt_lease_expired`, `mgmt_lease_revert_total{outcome}` (every outcome pre-initialised at 0),
+`mgmt_lease_last_run_timestamp_seconds`, `mgmt_lease_unreadable`. Belts
+(`argocd/resources/mgmt-metrics/upgrade-lease.yaml`): `MgmtLeaseRevertFailed` (`now` — the box refused to
+guess, a person finishes), `MgmtLeaseExpiredUnreverted` (`dig` — the PR exists but is not landing),
+`MgmtLeaseLoopStale`, `MgmtLeaseMetricsAbsent`. Tests: `devbox run mgmt-policy-test` →
+`mgmt/scripts/mgmt-lease-test.sh` (a bare fixture origin; the real clone/revert/push path; every GitHub
+call recorded).
+
+**Credential — the one operator click (ADR-150 (5)).** The loop pushes and opens PRs as the box's own
+identity, the `homelab-sentinel` App (§Credentials), which needs `contents: write` (it has `pull_requests:
+write`); the `docs/github-apps.yaml` declaration lands first (FU-098 flow), the operator clicks,
+`GithubAppPermissionDrift` confirms. **Pre-click every revert lands as outcome `error`** with the 403 in the
+journal and `MgmtLeaseRevertFailed` firing — loud, never a crash. `MGMT_SHADOW=1` builds the revert commit
+locally and logs the would-be push + PR. Activation after the merge is the §Two pins path over ssh
+(`mgmt-pull` → `nixos-rebuild test` → stamp → `mgmt-confirm`); the first subject is kube-prometheus-stack
+(`dependency-upgrades.md` §Worked case); `chart-revert` (ADR-149) keeps argo-workflows.
+
 ## Rollback — three layers
 
 1. **It boots but the closure is bad** → `mgmt-confirm.service`, started by the pull (never by a
