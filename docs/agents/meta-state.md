@@ -21,6 +21,9 @@ never the session's arc — that is TICK-LOG's.)
   the FU-143 goal-child closeout never fired for #2280 (strong `Fixes #2280`, PR merged 18:37Z, closed by hand
   19:10Z) — re-check on the next goal child now that theme 1 is on master; `agents/meta-needs-attention.sh:172`
   fails `bash -n` (jq filter, same on master).
+  #2174 merged 2026-10-06 ~20:05Z after a seat master-refresh + codeowner read: a DUPLICATE-closed blocker now
+  HOLDS (conservative — live it always takes the canonical-unreadable arm); fix-forward = #2341 (GraphQL
+  `duplicateOf`, inert, sub-issue of #2167).
 
 - **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
   arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
