@@ -1,11 +1,19 @@
-# homelab#928 — the agent/review phantom belt: an `agent-fix ∧ agent/review` issue with NO open PR
-# and NO merged PR mentioning it, persisted past C4C5_PERSIST_S, is a terminal sink invisible to
-# every scan class. This belt reconciles it back to `agent/queued`, verbatim shape of the IL-T16
-# belt (homelab#155) but for `agent/review` instead of `agent/in-progress`.
+# homelab#928/2281 — the agent/review phantom belt with frozen-open-PR detection.
 #
-# CONDITION UNDER REPLAY. Two review-only issues in one world:
-#   #80 — `agent/review`, no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES.
-#   #81 — `agent/review`, no open PR, but mentioned by a MERGED PR → HELD (may be finished work).
+# homelab#928 clause: an `agent-fix ∧ agent/review` issue with NO open PR and NO merged PR
+# mentioning it, persisted past C4C5_PERSIST_S, is a terminal sink invisible to every scan
+# class. This belt reconciles it back to `agent/queued`, verbatim shape of the IL-T16 belt
+# (homelab#155) but for `agent/review` instead of `agent/in-progress`.
+#
+# homelab#2281 clause (extended): an `agent/review` issue with an OPEN, ARMED, APPROVED,
+# BEHIND PR that has CI green and is unmoved past C4C5_PERSIST_S is also a terminal sink.
+# This belt DETECTS and REPORTS it, asking for operator review-dismissal to unblock.
+#
+# CONDITION UNDER REPLAY. Four review-only issues in one world:
+#   #80 — no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES.
+#   #81 — no open PR, but mentioned by a MERGED PR → HELD (may be finished work).
+#   #83 — frozen armed PR (#100): armed ∧ approved ∧ ci green ∧ behind ∧ unmoved → DETECTED.
+#   #88 — recently-updated frozen PR (#105, age < guard) → HELD (may still be in flight).
 #
 # THE CONTRACT:
 #   1. #80 is WRITTEN in the IL-T16 order — `--add-label agent/queued` FIRST, `--remove-label
