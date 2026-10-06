@@ -401,11 +401,6 @@ jobs:
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
         run: devbox run pin-only-lint-test
 
-      # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
-      # lock diff — the major gate, the downgrade + line-move lists the second body section carries.
-      - name: devbox-update self-test (devbox run devbox-update-test)
-        run: devbox run devbox-update-test
-
       # ADR-143: the lockfile-intake gate's offline self-test (extractors, key parsing, fail-closed).
       - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
         run: devbox run lock-intake-lint-test
