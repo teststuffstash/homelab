@@ -4502,13 +4502,12 @@ EOF_GTHEMES_OPEN
             frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
             jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --argjson frozen_prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
-                       | select(([$frozen_prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
               [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
@@ -4579,10 +4578,11 @@ EOF_GTHEMES_OPEN
             # CONDITION: a PR that is:
             #   - armed (autoMergeRequest != null)
             #   - bot-APPROVED (reviewDecision == "APPROVED")
-            #   - ci green (statusCheckRollup has no FAILURE/TIMED_OUT)
+            #   - ci green (every statusCheckRollup conclusion ∈ SUCCESS|NEUTRAL|SKIPPED; PENDING ≠ green)
             #   - BEHIND (mergeStateStatus)
             #   - unmoved (updatedAt unchanged past C4C5_PERSIST_S)
             # and references an issue with agent/review.
+            # NOTE: PENDING must not read as green since a frozen PR is one that stopped moving.
             #
             # The belt REPORTS and HOLDS to avoid races with the review-flip belt or ongoing PRs.
             # A hold costs a report line, guessing (reconciling without the guard) costs a duplicate

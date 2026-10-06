@@ -65,5 +65,17 @@
     ],
     "updatedAt": "2026-08-25T19:59:30Z",
     "body": "Fixes #88 — recently moved PR, should be HELD (< guard)\n"
+  },
+  {
+    "number": 106,
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [
+      {"name": "ci/test-suite", "conclusion": "FAILURE", "completedAt": "2026-08-25T05:00:00Z"},
+      {"name": "ci/build", "conclusion": "FAILURE", "completedAt": "2026-08-25T05:05:00Z"}
+    ],
+    "updatedAt": "2026-08-25T06:15:00Z",
+    "body": "Fixes #89 — frozen PR shape but CI red, should NOT be detected\n"
   }
 ]

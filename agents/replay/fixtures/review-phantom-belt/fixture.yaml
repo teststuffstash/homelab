@@ -42,8 +42,10 @@ scrub:
 #   #80 — no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES
 #   #81 — no open PR, mentioned by merged PR → HELD
 #
-# New frozen-open-PR row:
+# New frozen-open-PR rows:
 #   #83 — open PR ∧ armed ∧ approved ∧ ci green ∧ behind ∧ unmoved past guard → DETECTED
+#   #89 — open PR ∧ armed ∧ approved ∧ ci RED ∧ behind ∧ unmoved past guard → NOT DETECTED
+#         (ci-green check now strictly requires SUCCESS|NEUTRAL|SKIPPED; PENDING/CANCELLED/FAILURE/TIMED_OUT are not green)
 #
 # Negative rows (should NOT fire):
 #   #82 — open PR #101 but unarmed → SKIPPED
