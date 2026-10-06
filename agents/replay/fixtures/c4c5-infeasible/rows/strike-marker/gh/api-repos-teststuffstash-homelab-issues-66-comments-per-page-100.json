@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 2,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_INFEASIBLE: .github/workflows/ci.yaml\n\nThe issue's whole deliverable is the CI workflow, and `.agents/fix.yaml` bans `.github/**` for this worker class: CI runs `on: pull_request`, so an edit there executes my branch's code on the runner before a human looks. Ending without pushing."
+  },
+  {
+    "id": 3,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_STRIKE: model=deepseek/deepseek-v4.1-flash:exacto error_class=unknown\n\n**Resumable branch pushed:** `fix/issue-66-ci-workflow` — the next round can resume from it."
+  }
+]
