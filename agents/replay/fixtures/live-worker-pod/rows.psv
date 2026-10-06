@@ -1,0 +1,16 @@
+# live-worker-pod — the decision table (family contract in fixture.yaml). The axis is the pod's
+# state: a combination of phase, agent container termination state, and sidecar state. Each row
+# constructs a pod JSON and asserts the count. The sidecar-held row (Running+agent-terminated) is
+# THE FIXED ROW: red on base (the launcher counted it; the scan did not), green after (both now use
+# scan semantics: not live).
+#
+# id                 | world | patch | env | expect                    | params
+running-agent-alive  |       |       |     | running-agent-alive       |
+running-agent-terminated-sidecar-held |  |  |  | running-agent-terminated-sidecar-held |
+pending-schedulable  |       |       |     | pending-schedulable       |
+pending-unschedulable |      |       |     | pending-unschedulable     |
+pending-young        |       |       |     | pending-young             |
+unknown-phase        |       |       |     | unknown-phase             |
+unset-phase          |       |       |     | unset-phase               |
+succeeded-phase      |       |       |     | succeeded-phase           |
+failed-phase         |       |       |     | failed-phase              |

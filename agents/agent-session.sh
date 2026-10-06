@@ -1434,21 +1434,8 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # briefly-unschedulable new pod from being discounted instantly.
     # #998: a pod whose .status.phase is absent/null is default-counted (parity with the
     # pre-#995 field-selector which matched any non-terminal phase, including empty/missing).
-    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
-      | jq '[.items[] | select(
-        .status.phase != "Succeeded" and .status.phase != "Failed" and
-        (
-          .status.phase == "Running" or .status.phase == "Unknown"
-          or
-          (.status.phase == "Pending" and (
-            ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
-            or
-            (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
-          ))
-          or
-          (.status.phase | not)  # #998: absent/unset phase — default-count (parity with pre-#995 field-selector)
-        )
-      )] | length')"
+    _PF_PODS="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null)" || _PF_PODS='{"items":[]}'
+    PF_LIVE="$(live_worker_pod_count "$_PF_PODS")"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
