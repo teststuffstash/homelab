@@ -1,0 +1,34 @@
+# c4c5-pod-liveness — homelab#2305, IL-T16: per-issue liveness check in C4/C5 selector.
+#
+# THE CONTRACT (IL-T16 guard: "probe failure holds every candidate and writes nothing"):
+#   1. When there are live worker pods for SOME issues in a repo, the C4/C5 selector must
+#      process each in-progress issue independently, checking for a pod FOR THAT ISSUE ONLY.
+#   2. An in-progress issue WITH a live pod (its own, matching "issue-$n-") is SKIPPED (not phantom).
+#   3. An in-progress issue WITHOUT a pod is INCLUDED and judged — it may be phantom and eligible
+#      for the belt (IL-T16 reconciliation).
+#   4. A failed PODS probe is REPORTED and the entire C4/C5 block is SKIPPED for that repo
+#      this tick (rule #6: never fail INTO a write; IL-T16's own guard).
+#
+# WORLDS (family-local):
+#   both-issues    #100 (in-progress WITH pod) and #101 (in-progress WITHOUT pod) both present.
+#                  The selector must SKIP #100 and INCLUDE #101 for judgment. On base (before fix),
+#                  the entire selector block is inside the PODS gate and runs the selector only when
+#                  `[ -z "$PODS" ]` (no pods anywhere). With any pod, the gate is false and selector
+#                  never executes: both issues get no line. After fix: selector checks per-issue
+#                  liveness, so #100 is skipped (has pod) and #101 is included (no pod).
+#
+pins:
+  - IL-T16
+name: c4c5-pod-liveness
+mode: table
+source: agents/coordinator-scan.sh
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:c4c5-bodies-probe
+  - block:c4c5-selector
+  - block:c4c5-selector-run
+  - block:c4c5-derivations
+  - file:post.sh
+rows: rows.psv

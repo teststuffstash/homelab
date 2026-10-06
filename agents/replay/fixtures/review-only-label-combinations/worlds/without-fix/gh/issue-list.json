@@ -1,0 +1,23 @@
+[
+  {
+    "number": 81,
+    "title": "scan: test issue with agent/review but NO agent-fix (homelab#2164 defect)",
+    "labels": [{"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "A test issue with agent/review label but NO agent-fix — the homelab#2164 defect case.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 82,
+    "title": "scan: test issue with agent/review and agent/in-progress (not selected)",
+    "labels": [{"name": "agent/review"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "A test issue with agent/review and agent/in-progress labels.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  },
+  {
+    "number": 83,
+    "title": "scan: test issue with agent-fix alone (not selected)",
+    "labels": [{"name": "agent-fix"}, {"name": "task/fix"}],
+    "body": "A test issue with only agent-fix label.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-01T06:00:00Z"
+  }
+]

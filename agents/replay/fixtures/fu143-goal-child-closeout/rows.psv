@@ -1,0 +1,19 @@
+# fu143-goal-child-closeout — the decision table (family contract in fixture.yaml; per-row intent
+# below). Columns: id | world | patch | env | expect
+# in-progress        = baseline: in-progress child, merged strong link, no open PR → closeout
+# strong-goal        = an open PR on the goal base STRONGLY links it → HELD (live work)
+# bare-goal          = an open PR on the goal base only MENTIONS it → closeout (defect 1)
+# strong-master      = an open PR on MASTER strongly links it → closeout (base scope, defect 1)
+# cross-repo         = an open PR carries the cross-repo spelling `homelab#100` → closeout (defect 1)
+# blocked-resolved   = agent/blocked child, blocked-on resolved → closeout (defect 2)
+# blocked-unresolved = agent/blocked child, blocked-on unresolved → HELD (defect 2)
+# review-no-fix      = homelab#2164: agent/review child with NO agent-fix, merged strong link,
+#                      no open PR → closeout (the widened goalcand selector finds it)
+in-progress        |  |  |  | in-progress
+strong-goal        |  |  |  | strong-goal
+bare-goal          |  |  |  | bare-goal
+strong-master      |  |  |  | strong-master
+cross-repo         |  |  |  | cross-repo
+blocked-resolved   |  |  |  | blocked-resolved
+blocked-unresolved |  |  |  | blocked-unresolved
+review-no-fix      |  |  |  | review-no-fix

@@ -1,0 +1,12 @@
+[
+  {
+    "number": 101,
+    "title": "test issue 101 - probe fails",
+    "labels": [
+      {
+        "name": "agent/in-progress"
+      }
+    ],
+    "updatedAt": "2026-10-06T09:00:00Z"
+  }
+]

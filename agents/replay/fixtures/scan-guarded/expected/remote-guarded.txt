@@ -1,0 +1,6 @@
+CALL gh api repos/teststuffstash/agent-runtime/contents/.github/workflows/ci.yaml
+CALL item_class_push agent-runtime issue-145 guarded-path operator master
+OUT ORPHAN [agent-runtime] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so `ci` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:
+OUT ORPHAN   issue #145 — agent-base-lock-pin (declared: agent-base/devbox.json,agent-base/devbox.lock,agent-base/Dockerfile → guarded: agent-base/devbox.json agent-base/devbox.lock)
+OUT REACHED: end
+RC 0
