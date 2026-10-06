@@ -56,7 +56,8 @@ bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/d
 Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode|claude` ·
 `--model <provider/model>` · `--recipe <path>` (goose + claude + opencode — the launcher-owned path, FU-114; opencode joined via ADR-112/#792) ·
 `--task issue-N|pr-N` + `--round N` (idempotency key + transcript prefix) · `--work-branch <br>`
-(resume a PR branch) · `--docker` (kata+dind; auto-derived from the claim's `fixer.docker`) ·
+(resume a PR branch) · `--max-turns <n>` (the turn cap, homelab#1923 — sets BOTH `GOOSE_MAX_TURNS`
+and `CLAUDE_MAX_TURNS`; default 200) · `--docker` (kata+dind; auto-derived from the claim's `fixer.docker`) ·
 `--openrouter-secret <name>` · `--no-arm` (human-gated PR, FU-105 researcher; auto-derived from a
 `research*` recipe) · `--no-attach`. The image must exist in ghcr first — build/push it from
 the `agent-runtime` repo.

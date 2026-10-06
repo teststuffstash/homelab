@@ -277,9 +277,12 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
    `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
    burned a session until the FU-069 breaker caught it).
-   `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
-   haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
-   run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
+   `--max-turns <n>` is a LAUNCHER flag (homelab#1923), not a harness one: the arg loop exports it
+   as BOTH `GOOSE_MAX_TURNS` (goose's pod-env cap) and `CLAUDE_MAX_TURNS` (the claude run command's
+   `--max-turns`), because the harness is derived from the model AFTER the loop. Omit it and the
+   defaults apply — 200 for both (raised from 80, operator 2026-07-17 — haiku rides hit the 80
+   ceiling; 200 matches the goose belt that clears every measured legit run). Keep the default
+   unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
    `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
    work; `fixer.docker` repos ride kata as usual).
    **Parallelism is footprint-based** (ADR-097, `Touches:` intersection — the scan computes it):

@@ -1,0 +1,2 @@
+ERR unknown arg: --bogus-flag
+RC 2
