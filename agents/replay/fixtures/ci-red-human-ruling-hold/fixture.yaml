@@ -32,6 +32,7 @@ parts:
   - block:round-evidence
   - file:bridge.sh
   - block:ci-red-stale-sha
+  - block:ci-red-arbitrate
   - file:post.sh
 rows: rows.psv
 env:

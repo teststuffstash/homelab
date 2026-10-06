@@ -1,4 +1,5 @@
 CALL gh api repos/teststuffstash/oracle-fleet/commits/5b353fe9abcdef0123456789abcdef0123456789/check-runs --jq [.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out")] | length > 0
+CALL gh api --paginate repos/teststuffstash/oracle-fleet/issues/1515/events
 CALL gh pr view 1515 --repo teststuffstash/oracle-fleet --json reviewDecision,reviews,commits,statusCheckRollup
 OUT ORPHANS [oracle-fleet] ⏳ ci-red EXHAUSTED held — red 2026-09-12T14:10:00Z postdates a green+approved head (approved 2026-09-12T14:00:00Z) (FU-115 belt, homelab#1627): PR #1515\n
 OUT UNITS 
