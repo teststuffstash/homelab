@@ -174,7 +174,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body,lastEditedAt \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -305,6 +305,7 @@ EOF_C9
       | ($c | length) > 0
         and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0
         and ([ $required[] | select(. as $r | ($names | index($r)) == null) ] | length) == 0;
+    # >>>REPLAY:reviewable_again>>>
     def newest_review_at:
       ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
     def is_merge:
@@ -323,7 +324,9 @@ EOF_C9
     def newest_commit_at:
       ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
     def reviewable_again:
-      (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
+      (.reviewDecision == "CHANGES_REQUESTED") and
+      ((newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)));
+    # <<<REPLAY:reviewable_again<<<
     def bot_approved_head:
       ([ .reviews[]?
          | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
