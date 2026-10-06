@@ -1,0 +1,5 @@
+# ci-red-human-ruling-hold — the decision table (family contract in fixture.yaml).
+# id       | world | patch (relpath @ patches/*.jq)                | env | expect   | params
+held       | base  |                                                |     | held     |
+released   | base  | gh/pr-view-1515.json @ patches/newer-commit.jq |     | released |
+probe-fail | base  |                                                | STUB_GH_api_repos_teststuffstash_oracle_fleet_issues_1515_events=fail | probe-fail |

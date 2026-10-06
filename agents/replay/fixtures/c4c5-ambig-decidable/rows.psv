@@ -27,3 +27,14 @@ strike-resumable-markdown | strike-resumable-markdown |       |      | strike-re
 #                     `Resumable branch pushed:` line at all: the extraction yields an EMPTY
 #                     work-branch (no partial match, no `**`) and the issue is held as today.
 strike-no-resumable | strike-no-resumable |       |      | no-strike
+# report-resumable   = #329 has AGENT_REPORT: (deliberate stop) + Resumable branch pushed: →
+#                     decidable: emits C4/C5 unit with work-branch. Same behaviour as the
+#                     AGENT_STRIKE path — the finalizer writes the same line to both comment
+#                     channels (FU-199 / homelab#1797, one parser). #330 keeps its ordinary unit.
+report-resumable | report-resumable |       |      | report-resumable
+# report-resumable-markdown = the SAME report-resumable world, but #329's comment carries the
+#                     finalizer's LIVE markdown shape: `**Resumable branch pushed:** \`<branch>\``
+#                     + trailing prose. Same extraction as strike-resumable-markdown (one parser,
+#                     one reader for both AGENT_STRIKE and AGENT_REPORT, anchor the match, strip
+#                     backticks, cut at first whitespace). Same expected stream as report-resumable.
+report-resumable-markdown | report-resumable-markdown |       |      | report-resumable

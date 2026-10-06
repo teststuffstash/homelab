@@ -1,0 +1,15 @@
+# scan-guarded — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                     | world                 | patch | env                                                                                                                          | expect                 | params
+# homelab rows read the REAL scripts/pin-only-lint.sh from the checkout (no world, no API call).
+# remote rows read the repo's own declaration through the API, recorded in worlds/<w>/gh/.
+homelab-guarded-dir      |                       |       | CASE_REPO=homelab CASE_NUM=299 CASE_TOUCHES=agents/coordinator/ CASE_TITLE=goal-child-openrouter                              | homelab-guarded-dir    |
+homelab-guarded-file     |                       |       | CASE_REPO=homelab CASE_NUM=400 CASE_TOUCHES=argocd/platform/openrouter-operator.yaml CASE_TITLE=openrouter-operator-retry     | homelab-guarded-file   |
+homelab-guarded-multi    |                       |       | CASE_REPO=homelab CASE_NUM=405 CASE_TOUCHES=argocd/platform/ CASE_TITLE=platform-app-of-apps                                  | homelab-guarded-multi  |
+homelab-guarded-annotated |                       |       | CASE_REPO=homelab CASE_NUM=406 CASE_TITLE=annotated-guarded-entry                                                             | homelab-guarded-annotated |
+homelab-unguarded-self   |                       |       | CASE_REPO=homelab CASE_NUM=309 CASE_TOUCHES=agents/coordinator-scan.sh,agents/replay/ CASE_TITLE=scan-guarded-check           | homelab-unguarded-self |
+homelab-sentinel         |                       |       | CASE_REPO=homelab CASE_NUM=402 CASE_TOUCHES=* CASE_TITLE=legacy-no-touches                                                    | homelab-sentinel       |
+homelab-glob             |                       |       | CASE_REPO=homelab CASE_NUM=403 CASE_TOUCHES=**/*.yaml CASE_TITLE=glob-footprint                                               | homelab-glob           |
+homelab-set-unreadable   |                       |       | CASE_REPO=homelab CASE_NUM=401 CASE_TOUCHES=argocd/resources/loki/ CASE_TITLE=loki-retention PIN_ONLY_LINT=/no/such/scripts/pin-only-lint.sh | homelab-set-unreadable |
+remote-guarded           | agent-runtime-guarded  |       | CASE_REPO=agent-runtime CASE_NUM=145 CASE_TOUCHES=agent-base/devbox.json,agent-base/devbox.lock,agent-base/Dockerfile CASE_TITLE=agent-base-lock-pin | remote-guarded |
+remote-unguarded         | oracle-fleet-none      |       | CASE_REPO=oracle-fleet CASE_NUM=404 CASE_TOUCHES=agents/coordinator/ CASE_TITLE=stack-same-named-path                         | remote-unguarded       |
+remote-unreadable        |                       |       | CASE_REPO=agent-runtime CASE_NUM=145 CASE_TOUCHES=argocd/resources/loki/ CASE_TITLE=agent-base-lock-pin                       | remote-unreadable      |

@@ -190,6 +190,7 @@ is stale, so it cannot drift the way the prose register did.
 | `base-arm-nonprotected` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-goal` | actions | - | `agents/agent-session.sh` | - |
 | `base-arm-research-master` | actions | - | `agents/agent-session.sh` | - |
+| `blocked-on-anchor` | table | line1 | `agents/coordinator-scan.sh` | - |
 | `board-classification/board-classification` | suite | - | `agents/board.sh` | - |
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -199,6 +200,7 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
+| `c4c5-pod-liveness` | table | - | `agents/coordinator-scan.sh` | IL-T16 |
 | `c9-rearm` | table | - | `agents/review-reflex.sh` | - |
 | `changes-requested-body-edit` | table | - | `agents/review-reflex.sh` | - |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
@@ -207,7 +209,9 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
+| `ci-red-arbitrate-belt` | table | base | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-deferred-then-debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -216,6 +220,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-red-stale-sha-escalates` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-stale-sha-hold` | actions | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `classify-touches-repo` | table | - | `-` | - |
+| `clause-coverage` | actions | - | `agents/coordinator-scan.sh` | IL-T05 IL-T06 IL-T27 |
 | `clause-replay-pairing/clause-replay-pairing` | table | - | `agents/coordinator-scan.sh` | - |
 | `context-prefetch-nolabels` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch` | actions | - | `agents/agent-session.sh` | - |
@@ -265,6 +270,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-issue-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-no-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | IL-T30 |
@@ -277,6 +283,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu088-ladder` | table | - | `agents/agent-session.sh` | - |
 | `fu124-nudge` | table | board | `agents/coordinator-scan.sh` | - |
 | `fu143-fast-path-goal-head` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fu143-goal-child-closeout` | table | base | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
@@ -413,6 +420,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-gh-token-env/mount-unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/unset` | actions | - | `agents/agent-session.sh` | - |
+| `retro-harvest-push` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-key/minted-block-style` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/minted-labels-first` | actions | - | `agents/retro-session.sh` | - |
@@ -423,6 +431,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
+| `review-only-label-combinations` | table | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/behind-cr-remote-merge-held` | actions | - | `agents/review-reflex.sh` | - |
@@ -471,8 +480,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scan-governance/non-dot-meta` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-governance/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
-| `scan-guarded/pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
-| `scan-guarded/set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-guarded` | table | - | `agents/coordinator-scan.sh` | - |
 | `scan-lane-walk` | table | - | `agents/coordinator-scan.sh` | IL-T05 |
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-touches-footprint-hold/scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |

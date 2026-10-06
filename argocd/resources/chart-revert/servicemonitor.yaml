@@ -1,0 +1,19 @@
+# Prometheus picks up ServiceMonitors cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false).
+# The counter IS the receiver's durable report (gap G10, docs/dependency-upgrades.md): every
+# decision lands on chart_revert_alerts_total{outcome} — reverted|already|no_candidate|
+# not_pin_only|conflict|error — plus chart_revert_last_run_timestamp_seconds and the delivery
+# proof chart_revert_webhooks_total{result}. Liveness of the scrape: up{job="chart-revert"}.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: chart-revert
+  labels:
+    app: chart-revert
+spec:
+  selector:
+    matchLabels:
+      app: chart-revert
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 60s

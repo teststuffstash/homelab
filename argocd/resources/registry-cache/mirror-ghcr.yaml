@@ -79,7 +79,7 @@ spec:
       # comes from wipe-if-full instead. Script + full rationale: store-maintenance.yaml.
       initContainers:
         - name: store-maintenance
-          image: registry:3.1.1
+          image: registry:3.1.2
           command: ["/bin/sh", "/maintenance/maintain.sh"]
           env:
             - { name: MIRROR_NAME, value: "mirror-ghcr" }
@@ -95,7 +95,7 @@ spec:
             limits:   { cpu: "1",   memory: "512Mi" }
       containers:
         - name: registry
-          image: registry:3.1.1
+          image: registry:3.1.2
           env:
             - { name: REGISTRY_PROXY_REMOTEURL, value: "https://ghcr.io" }
             # 168h→720h 2026-08-30 (FU-196): this mirror now also carries the private oracle

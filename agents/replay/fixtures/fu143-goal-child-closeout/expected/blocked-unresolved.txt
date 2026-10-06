@@ -1,0 +1,9 @@
+CALL gh issue list --repo teststuffstash/homelab --state open --limit 200 --json number,title,labels,body --jq [.[]|(.labels|map(.name)) as $L|select((($L|index("agent/in-progress")) or ($L|index("agent/review")) or ($L|index("agent/blocked"))))]
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json number,body,baseRefName
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,body,baseRefName
+CALL gh pr view 200 --repo teststuffstash/homelab --json comments,reviews
+OUT C6G []
+OUT C6G_NUMS []
+OUT ORPHAN [homelab] ⏳ issue #100 — goal child parked `agent/blocked` and its merged PR #200 still records `blocked-on: human` (unresolved): the closeout waits (homelab#1188).
+OUT REACHED: end
+RC 0

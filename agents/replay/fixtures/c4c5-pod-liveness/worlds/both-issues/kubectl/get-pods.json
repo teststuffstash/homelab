@@ -1,0 +1,11 @@
+{
+  "apiVersion": "v1",
+  "kind": "PodList",
+  "metadata": { "resourceVersion": "1" },
+  "items": [
+    {
+      "metadata": { "name": "agent-session-homelab-issue-100-r1" },
+      "status": { "phase": "Running" }
+    }
+  ]
+}

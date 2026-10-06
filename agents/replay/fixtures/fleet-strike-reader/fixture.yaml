@@ -7,20 +7,26 @@
 #   2. Posts ONE comment on the first affected issue listing all of them.
 #   3. Files ONE deduped inert platform issue (or extends an existing open match).
 #
-# SIX TICKS under replay:
-#   TICK 1 — first pass against the #326 four-strike world (no prior action). 18 actions.
-#   TICK 2 — second pass against the POST-ACTION world (agent/error applied, marker present,
-#            filing exists). ZERO actions (idempotency guards fire).
-#   TICK 3 — stale world (same strikes but now_s >24h after the newest). ZERO actions
+# SEVEN TICKS under replay (each entry names the file in `parts:` that implements it):
+#   TICK 1 (bridge.sh) — first pass against the #326 four-strike world (no prior action). 18 actions.
+#   TICK 2 (tick2.sh) — second pass against the post-action world. #326's recorded marker comment
+#            predates the fleet-fault cause= line, so the fixed idempotency key reposts it;
+#            #327–#329 record no marker comment, so that row reposted them on base as well. The
+#            tick-8 row below is the sole pin of the new repost path (homelab#2327).
+#   TICK 3 (tick3.sh) — stale world (same strikes but now_s >24h after the newest). ZERO actions
 #            (live-window check fires).
-#   TICK 4 — RESOLVED inside the window (homelab#1712): a CLOSED filing for the class covers the
-#            set and its close is NEWER than the newest strike. ZERO writes (resolution
+#   TICK 4 (tick4.sh) — RESOLVED inside the window (homelab#1712): a CLOSED filing for the class
+#            covers the set and its close is NEWER than the newest strike. ZERO writes (resolution
 #            subtraction fires).
-#   TICK 5 — RE-ARMED: the same closed filing, but a NEW strike newer than the close. The normal
-#            path owns the class again (labels + comment + a new filing).
-#   TICK 6 — SPOOFED: the same closed filing whose `issues=` marker is authored by a FOREIGN user.
-#            The marker is a machine ruling, so the resolution subtraction must not honour it —
-#            the normal path owns the class. This row is the pin on the author filter.
+#   TICK 5 (tick5.sh) — RE-ARMED: the same closed filing, but a NEW strike newer than the close.
+#            The normal path owns the class again (labels + comment + a new filing).
+#   TICK 6 (tick6.sh) — SPOOFED: the same closed filing whose `issues=` marker is authored by a
+#            FOREIGN user. The marker is a machine ruling, so the resolution subtraction must not
+#            honour it — the normal path owns the class. This row is the pin on the author filter.
+#   TICK 8 (tick8.sh) — MARKER-LESS LATCH WITH REPOST (homelab#2327): the marker comment lacks the
+#            fleet-fault cause= line; the filing exists (#999). The scan detects this and reposts
+#            the marker comment with the cause marker included on issues #326–#329. Expected:
+#            repost comments on the affected issues and extend comment on the filing.
 #
 # THE #326 FOUR-STRIKE WORLD (recorded fixture). Four issues (#326, #327, #328, #329) each carry
 # an AGENT_STRIKE: comment with `error_class=unknown`, all within 24h. The scan detects the
@@ -70,6 +76,8 @@ parts:
   - file:tick5.sh
   - block:fleet-strike-reader
   - file:tick6.sh
+  - block:fleet-strike-reader
+  - file:tick8.sh
   - block:fleet-strike-reader
   - file:post.sh
 scrub:

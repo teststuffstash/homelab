@@ -36,9 +36,13 @@ spec:
         # falls through to the `or vector(0)` branch. Behaviour pinned as an executed test:
         # retro-report.promtool-test (case (b) is the restart-gap shape, verified to RED on the
         # old bare-`max` expr before this hardening — see that file's header).
+        # THRESHOLD = THE SCHEDULE (2026-10-05): every successful fire lands Mon 05:00–07:00Z (the workflow
+        # deadline), so two consecutive successes are <7d+2h apart; 7d+3h + for:30m pages ~Mon 09:15Z on a
+        # missed week. The old 8d + 6h waited until Tuesday noon (r7's failed harvest, 05:49Z, would have
+        # sat ~30h). A mid-week hand fire only moves the deadline LATER — it can delay, never false-fire.
         - alert: RetroReportOverdue
-          expr: (time() - (max(max_over_time(retro_report_last_success_timestamp[8d])) or vector(0))) > 8 * 86400
-          for: 6h
+          expr: (time() - (max(max_over_time(retro_report_last_success_timestamp[8d])) or vector(0))) > 7 * 86400 + 3 * 3600
+          for: 30m
           labels:
             severity: warning
             # homelab#239, and this alert is why the label exists. The responder's
@@ -53,8 +57,8 @@ spec:
             # triage: retro CronWorkflow runs and guard refusals are readable in Argo
             triage: dig
           annotations:
-            summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
-            description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+            summary: "No retro report landed after Monday's scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
+            description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 7d+3h — every successful fire lands by the workflow's 07:00Z deadline, so the last Monday fire produced nothing (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
         # ── the deep dig's own belt (ADR-148, FU-249 step 4, 2026-10-04) ───────────────────────
         # agents/coordinator/deep-dig-argo.yaml pushes deep_dig_last_run_timestamp_seconds on EVERY
         # exit path of a run (nothing to dig, selection failed, rails latched, session done), so a

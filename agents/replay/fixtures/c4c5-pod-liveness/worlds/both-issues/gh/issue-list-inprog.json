@@ -1,0 +1,22 @@
+[
+  {
+    "number": 100,
+    "title": "test issue 100 - has a live pod",
+    "labels": [
+      {
+        "name": "agent/in-progress"
+      }
+    ],
+    "updatedAt": "2026-10-06T10:00:00Z"
+  },
+  {
+    "number": 101,
+    "title": "test issue 101 - phantom no pod",
+    "labels": [
+      {
+        "name": "agent/in-progress"
+      }
+    ],
+    "updatedAt": "2026-10-06T09:00:00Z"
+  }
+]

@@ -7,6 +7,12 @@
 # the marker latch on" and every downstream exclusion keys off it — an empty `units` line proves
 # suppression, this proves it was suppressed for the RIGHT reason.
 printf 'INFEAS %s\n' "${infeas_done:-<empty>}"
+# CLASS: the board rows the clause pushed (the bridge's recording `item_class_push`). The
+# `parked-infeasible` row is part of the contract (homelab#1797) — the class `agents/board.sh`
+# renders as "AGENT_INFEASIBLE — re-scope needed" — so it is asserted, not assumed.
+printf '%b' "$ITEM_CLASS_ROWS" | while IFS= read -r l; do
+  if [ -n "$l" ]; then printf 'CLASS %s\n' "$l"; fi
+done
 printf '%b' "$units" | while IFS= read -r l; do
   if [ -n "$l" ]; then printf 'UNIT %s\n' "$l"; fi
 done

@@ -1,0 +1,11 @@
+[
+  {
+    "number": 100,
+    "title": "goal child",
+    "labels": [
+      { "name": "agent-fix" },
+      { "name": "agent/blocked" }
+    ],
+    "body": "---\nTouches: agents/coordinator-scan.sh\nBase: goal/x\nClass: fix\n---\n\n## Why\n\nA goal child parked agent/blocked by an arbitrate escalation.\n"
+  }
+]

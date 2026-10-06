@@ -1,0 +1,3 @@
+CALL git diff --quiet origin/master HEAD -- docs/agents/retros/
+OUT REPORT_PR: https://github.com/teststuffstash/homelab/pull/2050
+RC 0

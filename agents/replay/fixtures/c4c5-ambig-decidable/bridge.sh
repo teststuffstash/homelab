@@ -23,6 +23,10 @@ BODIES="$(cat "$REPLAY_WORLD/gh/pr-list-bodies.json")"
 inprog="$(cat "$REPLAY_WORLD/gh/issue-list-inprog.json")"
 # ITEM_CLASS_ROWS accumulator — initialized here so the extracted clause block can append to it.
 ITEM_CLASS_ROWS=""
+# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+# Needed for the per-issue liveness check added in homelab#2305.
+KUBECTL="kubectl"
+KUBE=""
 # ── stub ── the scan accumulates rows during a pass and flushes one POST per (tick, namespace),
 # so a harness running one extracted block has no flush to assert on.
 # item_class_push is NOT stubbed here — the no-strike world must verify that strike-held rows
