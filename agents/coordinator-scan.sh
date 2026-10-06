@@ -4585,20 +4585,30 @@ EOF_GTHEMES_OPEN
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
-            # For each ambiguous issue, check if the newest AGENT_STRIKE: comment carries a
-            # Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # For each ambiguous issue, check if the newest terminal comment (AGENT_STRIKE: or
+            # AGENT_REPORT:) carries a Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # The finalizer writes the same line into both comment channels (FU-199 / homelab#1797);
+            # pick the newest terminal of either kind, as both producers use one parser below.
             ambig_decidable=""
+            ambig_terminal_type=""
             if [ -n "$ambig" ]; then
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
                 [ -n "$ambig_n" ] || continue
                 icmt="$(gh api "repos/${slug}/issues/${ambig_n}/comments?per_page=100" 2>/dev/null)" || icmt=""
                 if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
-                  # Find the NEWEST AGENT_STRIKE: comment (last in the array, which is
-                  # oldest-first). Anchored at start-of-comment, never a substring — same
-                  # discipline as AGENT_INFEASIBLE: (homelab#257).
-                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
+                  # Find the NEWEST terminal comment (AGENT_STRIKE: or AGENT_REPORT:) with
+                  # Resumable branch pushed: (last in the array, which is oldest-first).
+                  # Anchored at start-of-comment, never a substring — same discipline as
+                  # AGENT_INFEASIBLE: (homelab#257). Both producers write the same line
+                  # (one parser, ADR-103).
+                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:|^AGENT_REPORT:"))] | last // ""' <<<"$icmt")"
                   if [ -n "$strike" ]; then
+                    # Determine which type of terminal comment this is
+                    term_type="AGENT_STRIKE"
+                    case "$strike" in
+                      AGENT_REPORT:*) term_type="AGENT_REPORT" ;;
+                    esac
                     # FU-199 (folded in, 2026-09-20): the finalizer writes the line in MARKDOWN —
                     # `**Resumable branch pushed:** \`<branch>\`` + trailing prose. The old
                     # `sub(".*Resumable branch pushed:[ \t]*"; "")` was greedy up to the opening
@@ -4618,6 +4628,8 @@ EOF_GTHEMES_OPEN
                     ')"
                     if [ -n "$branch" ]; then
                       ambig_decidable="${ambig_decidable}${ambig_n} "
+                      # Encode the terminal type with the issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4675,6 +4687,9 @@ EOF_GTHEMES_OPEN
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
               for ad_n in $ambig_decidable; do
+                # Look up which type of terminal comment was found for this issue
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_n}=" | cut -d= -f2)"
+                ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
                   | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
@@ -4688,7 +4703,7 @@ EOF_GTHEMES_OPEN
                   [ -n "$ad_cv" ] && ad_class="$ad_cv"
                   units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                   item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
                 else
                   orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
                   item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"

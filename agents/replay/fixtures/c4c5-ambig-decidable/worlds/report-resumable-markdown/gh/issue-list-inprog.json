@@ -1,0 +1,16 @@
+[
+  {
+    "number": 329,
+    "title": "oracle: exclusive-held behind a stale agent/in-progress (FU-199)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Base: goal/1162-scan\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-09-01T12:27:00Z"
+  },
+  {
+    "number": 330,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-09-01T12:30:00Z"
+  }
+]
