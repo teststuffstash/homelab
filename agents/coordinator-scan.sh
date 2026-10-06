@@ -4185,11 +4185,10 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
       fi
       # <<<REPLAY:review-flip-belt<<<
-      if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-            --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
-        if [ -z "$PODS" ]; then
-          # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
+      PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+            --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)" || PODS=""
+      # >>>REPLAY:c4c5-bodies-probe>>>
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -4212,6 +4211,11 @@ EOF_GTHEMES_OPEN
             # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
             # below, mid-write) can hold BOTH labels for a tick, and re-dispatching a human-gated
             # issue is the one thing C4/C5 must never do (retro r3 F4, homelab#257).
+            # homelab#2305: per-issue liveness moved from repo-wide gate into selector — each
+            # issue is evaluated independently. An in-progress issue WITH a live pod for that
+            # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
+            # Escape PODS for safe use in jq: backslash any special characters.
+            PODS_ESCAPED="$(printf '%s\n' "$PODS" | sed 's/[\\"\x27]/\\&/g')"
             # >>>REPLAY:c4c5-selector>>>
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
@@ -4220,8 +4224,9 @@ EOF_GTHEMES_OPEN
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
-            # <<<REPLAY:c4c5-selector<<<
+               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select(("'"${PODS_ESCAPED}"'" | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0)'
+            # <<<REPLAY:c4c5-selector>>>
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
             # the C4/C5 redispatch belt (an errored ride is a human's to un-latch) and WRONG here:
@@ -4700,11 +4705,7 @@ EOF_GTHEMES_OPEN
             orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
-        fi
-      else
-        echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
-    fi
     # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
     # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
     # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:

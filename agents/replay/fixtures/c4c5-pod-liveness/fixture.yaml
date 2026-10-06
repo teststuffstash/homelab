@@ -1,0 +1,34 @@
+# c4c5-pod-liveness — homelab#2305: the C4/C5 block is gated on ANY live worker pod in the
+# repo, but should check for a live pod PER ISSUE. One long ride hides every phantom
+# agent/in-progress.
+#
+# THE CONTRACT:
+#   1. When there are live worker pods in the repo FOR DIFFERENT ISSUES, the C4/C5 selector
+#      must still process each in-progress issue and evaluate its liveness independently.
+#   2. An in-progress issue WITH a live pod (for that issue) is skipped — it is not phantom.
+#   3. An in-progress issue WITHOUT a live pod (for that issue) is included — it may be phantom.
+#   4. On the base tree (buggy code), issue Y with no pod stays invisible when ANY pod runs
+#      for issue X (the whole C4/C5 block is skipped). After the fix, Y is correctly processed
+#      through the phantom-label belt.
+#
+# CONDITION UNDER REPLAY:
+#   #100 — in-progress WITH a live pod `agent-session-homelab-issue-100-r1` → LIVE, not phantom
+#   #101 — in-progress WITHOUT a live pod → PHANTOM, gets phantom-label belt + report line
+#
+# On the base tree: the repo-wide `$PODS` is non-empty (from issue #100), so the entire
+# `if [ -z "$PODS" ]` block is SKIPPED — NO unit, NO report line for #101, NO selector reads
+# ANY issue. After the fix: the selector checks per-issue liveness. #100 is SKIPPED (has a pod).
+# #101 is INCLUDED and processed through the phantom-label belt for reconciliation.
+#
+pins:
+  - IL-T16
+name: c4c5-pod-liveness
+mode: actions
+source: agents/coordinator-scan.sh
+requires:
+  - python3
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:c4c5-derivations
+  - file:post.sh
