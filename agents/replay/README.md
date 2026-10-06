@@ -193,6 +193,7 @@ is stale, so it cannot drift the way the prose register did.
 | `board-machine/board-machine` | suite | - | `agents/board.sh` | - |
 | `body-block-malformed/body-block-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `body-footprint-mismatch/body-footprint-mismatch` | actions | - | `agents/coordinator-scan.sh` | - |
+| `budget-label-floors` | table | - | `-` | - |
 | `c4c5-ambig-decidable-cross-repo` | actions | - | `agents/coordinator-scan.sh` | - |
 | `c4c5-ambig-decidable` | table | - | `agents/coordinator-scan.sh` | IL-T29 |
 | `c4c5-bodies-probe-fail/c4c5-bodies-probe-fail` | actions | circles-29-tree | `agents/coordinator-scan.sh` | - |
@@ -202,6 +203,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |

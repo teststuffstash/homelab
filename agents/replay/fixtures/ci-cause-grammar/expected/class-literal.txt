@@ -1,0 +1,4 @@
+OUT JOB_STEP e2e/foo class=bar
+OUT CLASS content
+OUT BASIS observed
+RC 0
