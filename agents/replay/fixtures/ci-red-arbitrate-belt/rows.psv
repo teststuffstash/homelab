@@ -1,0 +1,8 @@
+# ci-red-arbitrate-belt — the decision table (family contract in fixture.yaml).
+# id                             | world | patch                                                                                                    | env | expect         | params
+red-in-footprint-unapproved       |       |                                                                                                          |     | escalate       |
+red-outside-footprint-unapproved  |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-outside.jq |     | hold-footprint |
+red-in-footprint-approved         |       | gh/pr-view-1515.json @ patches/pr-approved.jq                                                            |     | hold-approved  |
+red-outside-footprint-approved    |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-outside.jq |     | hold-approved  |
+red-generic-annotation-escalates  |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-generic.jq |     | escalate       |
+red-replay-annotation-escalates   |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-replay.jq  |     | escalate       |
