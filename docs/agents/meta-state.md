@@ -10,6 +10,32 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-06 night — S9 BUILD LIST for the unattended session; the second-jail read's rulings are
+  ADRs; TICK-LOG 2026-10-06 evening).** Landed: #2335 (version-set regex members get `deps-review`+automerge — a
+  grouped branch arms only when EVERY member agrees, G15), #2336 (`devbox run renovate-lane-lint`: Renovate itself
+  over the checkout, one lane per computed branch — a SEAT verb, CI WAN stays locked down), #2338 (kps worked case
+  + **G16: the ten prometheus-operator CRDs are owned by nobody** — `skipCrds: true`, live v0.91.0), #2340 (the
+  ⚓ upgrade-lease ruling), **#2342** (G17, pending) and **#2343** (ADR-150 lease, ADR-151 CRD owner, ADR-141/149
+  amended — pending). **#2295 cloudflared armed by the seat 19:3xZ** → after merge the seat applies
+  `tofu/cloudflare` in a window (runbook §Cloudflare — the G13 set's tofu half). **Build order (all S9 #1985 —
+  operator: NO new FUs; `dependency-upgrades.md` §Worked case):** (1) **G17**: `scripts/devbox-update.sh` jq gains a
+  numeric-tuple downgrade check + a per-package `major.minor` list (python3, opentofu, kubectl, openssl) → a SECOND
+  body section; PR STAYS ARMED (ruling: rely on the lens); fixture = #2260's lock diff; the lock-bump lens brief
+  reads the whole move list (`agents/lenses/migration.md`, codeowner path). (2) **G16 / ADR-151**:
+  `prometheus-operator-crds` Application (SSA, `Delete=false`, prune off, sync-wave before kps) + one Renovate
+  group with the stack chart (`.github/renovate-global.json` — run `renovate-lane-lint` before landing); first sync
+  IN A WINDOW (FU-304 memory event); belt = CRD `operator.prometheus.io/version` vs operator image. Then **#2256**
+  may merge (update-branch, never Renovate's rebase box — worker commit on the branch). (3) **G12**: Renovate
+  `postUpgradeTasks` for kps (`bash scripts/upstream-alerts-refresh.sh`, `fileFilters` the list, `executionMode:
+  branch`, global `allowedCommands`); verify first on a dry run that the Renovate image has helm/yq/jq (`-full`
+  tag or `install-tool`) and that post-upgrade files ride `platformCommit: auto`. (4) **ADR-150 the lease**: the
+  record (sibling of `responder-window`), kps PreSync/PostSync hook Jobs as a third Application source, the box's
+  expiry loop in `mgmt/scripts/` opening the pin-only revert PR, a drill on a real patch bump (#2276→#2279 shape).
+  ⚠ the credential click (`homelab-sentinel` contents + pull_requests write) is OPERATOR-ONLY — build everything
+  up to it, the drill waits for the click. (5) only then the `matchPackageNames` line arming kps majors.
+  **Operator items:** #2260 (devbox major) read done — nothing blocks, merge is the operator's; "packaging-only
+  chart majors (operator minor unchanged) merge on the lens alone" is PROPOSED, not ruled — ask. **Loose:**
+  `pr-wait-test` `multi-first-actionable` flaked once on #2336's CI (grep -q under pipefail suspected, unproven).
 - **⚑ PICKUP (2026-10-06 evening — Goal #2273 BOTH THEMES ON MASTER; TICK-LOG 2026-10-06).** FU-295 fixed
   (#2299, box activated, archived 638095cd). Theme 1 scan-guards #2339 (f0b19f81) + theme 2 seam-parsers
   #2333 merged 19:23/19:34Z after seat codeowner reads (verdicts on the PRs). Goal now post-launch
