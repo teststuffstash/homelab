@@ -19,11 +19,11 @@ gb=""
 infeas_done=""
 c6db_nums=""
 # Bind PODS from the world's kubectl stub (probe-fail world: let scan's probe fail)
-if [ "${REPLAY_WORLD##*/}" != "probe-fail" ]; then
-  PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
-else
+if [ "${STUB_KUBECTL:-}" = "fail" ]; then
   PODS=""
   dispatchable=""
+else
+  PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
 fi
 KUBECTL="kubectl"
 KUBE=""
