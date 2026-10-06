@@ -1,0 +1,44 @@
+# Behaviour fixture for CNPGNoWritablePrimary (2026-10-03, the ADR-147 rollout's switchover deadlock).
+#
+#   devbox run -- promtool test rules argocd/resources/pg-backup/cnpg-availability.promtool-test
+#
+# Shapes taken from the live series: an EMPTY EndpointSlice exports kube_endpointslice_info but no
+# kube_endpointslice_endpoints at all, so "no writable primary" is an absence under `unless`. A series
+# KSM stops exporting gets a staleness marker, hence `stale` (a bare `_` would stay alive for the 5m lookback).
+rule_files:
+  - cnpg-availability.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: "fires 3m after the -rw slice empties; a 1-minute gap (bootstrap/failover) does not; a non-CNPG -rw service never"
+    input_series:
+      # grafana-pg: serving 5m, EMPTY 10m (the real 10:23–10:33Z gap), serving again
+      - series: 'kube_endpointslice_info{namespace="monitoring",endpointslice="grafana-pg-rw-kjctf"}'
+        values: "1x30"
+      - series: 'kube_endpointslice_endpoints{namespace="monitoring",endpointslice="grafana-pg-rw-kjctf",ready="true",address="10.0.0.1"}'
+        values: "1x4 stale _x9 1x15"
+      # infisical-pg: a 1-minute gap — a clean failover
+      - series: 'kube_endpointslice_info{namespace="infisical",endpointslice="infisical-pg-rw-w6ldk"}'
+        values: "1x30"
+      - series: 'kube_endpointslice_endpoints{namespace="infisical",endpointslice="infisical-pg-rw-w6ldk",ready="true",address="10.0.0.2"}'
+        values: "1x4 stale 1x24"
+      # some other app's "-rw-" service with no endpoints, in a namespace without CNPG
+      - series: 'kube_endpointslice_info{namespace="other",endpointslice="cache-rw-abcde"}'
+        values: "1x30"
+      - series: 'cnpg_collector_up{namespace="monitoring",pod="grafana-pg-4"}'
+        values: "1x30"
+      - series: 'cnpg_collector_up{namespace="infisical",pod="infisical-pg-5"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: CNPGNoWritablePrimary
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: CNPGNoWritablePrimary
+        exp_alerts:
+          - exp_labels: { severity: critical, namespace: monitoring, endpointslice: grafana-pg-rw-kjctf, triage: now }
+      - eval_time: 20m
+        alertname: CNPGNoWritablePrimary
+        exp_alerts: []

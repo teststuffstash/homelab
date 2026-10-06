@@ -34,7 +34,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # 0.18.1, 0.0.5 from 0.18.2), and THIS binary writes the committed locks (the Monday devbox-update).
 # Paired with claude-jail's `ENV DEVBOX_USE_VERSION` and the operator host — bump them together, and
 # commit the lock the new version writes in the same PR.
-ARG DEVBOX_VERSION=0.18.3
+ARG DEVBOX_VERSION=0.18.4
 RUN curl -fsSL "https://github.com/jetify-com/devbox/releases/download/${DEVBOX_VERSION}/devbox_${DEVBOX_VERSION}_linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin devbox \
  && chmod 0755 /usr/local/bin/devbox

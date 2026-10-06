@@ -1,0 +1,17 @@
+# CNPGNoWritablePrimary lifted out of prometheusrule.yaml (annotations stripped — the CR is their one
+# home) — the rules file cnpg-availability.promtool-test loads. Not a manifest; drift-pinned against
+# the CR by prometheus-rules-lint. Re-copy the expr after editing it there.
+groups:
+  - name: cnpg-availability
+    rules:
+      - alert: CNPGNoWritablePrimary
+        expr: |
+          (
+            kube_endpointslice_info{endpointslice=~".+-rw-[a-z0-9]{5}"}
+              unless on (namespace, endpointslice) kube_endpointslice_endpoints{ready="true"}
+          )
+          and on (namespace) count by (namespace) (cnpg_collector_up)
+        for: 3m
+        labels:
+          severity: critical
+          triage: now

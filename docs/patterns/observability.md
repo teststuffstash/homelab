@@ -71,13 +71,17 @@ own. The routing tree it enters (`alertmanager.config.route`, live today):
 |---|---|---|---|
 | root | — (`group_by: [alertname]`, `repeat_interval: 3h`) | `ha-webhook` | every firing alert reaches the operator via Home Assistant (ADR-042) |
 | child | `alertname = Watchdog` / `InfoInhibitor` | `null` | dropped |
-| child, `continue: true` | every alert | `agent-responder` | **the responder sees every alert**, grouped by alertname (one webhook per storm, FU-133) |
+| child, `continue: true` | `triage = "now"` | `agent-responder` | **the responder sees the acute alerts only** (ADR-148, 2026-10-04), grouped by alertname (one webhook per storm, FU-133) |
+| — (a schedule, not a route) | `triage = "dig"`, standing or recurring, unexplained | the **deep dig** (`docs/agents/roles.md` §deep dig) | read off Alertmanager + Prometheus on a cron, grouped by onset and host — never a per-fire session |
 
 The **responder** (`docs/agents/roles.md` §responder) opens ONE triage session per new
-fingerprint and files at most one **inert** issue — **on the repo of the stack that owns the
-alert's `namespace`** (a claim lookup; `platform_machinery: "true"` or a platform namespace
+`now` fingerprint and files at most one **inert** issue — **on the repo of the stack that owns
+the alert's `namespace`** (a claim lookup; `platform_machinery: "true"` or a platform namespace
 routes to homelab instead). So a stack-shipped alert is answered in the stack's own board, by
-its own loop: write the rule so a fixer could act on it from that repo.
+its own loop: write the rule so a fixer could act on it from that repo. A `dig` alert is picked
+up by the deep dig only once it has STOOD (≥ 6 h) or RECURRED (≥ 3 of the last 7 days) and no
+open issue, declared window, follow-up or meta-state entry explains it; an unlabelled stack rule
+reaches neither lane — the label is the stack's to declare.
 
 Rule-author conventions the platform reads:
 
@@ -88,8 +92,16 @@ Rule-author conventions the platform reads:
 - **`description` is the SYMPTOM, not a guessed cause** — the responder's job is the diagnosis;
   a description that names a cause primes a wrong fix (the `PodSigkilled` text is the worked
   example of listing the candidate causes without asserting one).
-- **`triage: none`** on the rule = "notify, do not investigate"; **`platform_machinery: "true"`**
-  = "investigate, but a human merges the fix" (routes to homelab). Both are rule-site labels.
+- **`triage: none | now | dig`** — REQUIRED on every rule (operator decision 2026-10-03). `none` =
+  no investigation from inside the cluster can change what anyone does (self-describing state,
+  operator-only remedy, meta); `now` = acute, minutes matter — a real-time session should start;
+  `dig` = the default: worth a thorough investigation if it stands or recurs unexplained. Classify
+  by what an investigator with the cluster's read access could change, never by severity.
+  homelab's `prometheus-rules-lint` reds a platform rule without it; run the same check in the
+  stack's CI. The stock kube-prometheus-stack rules get theirs from the platform's relabel map
+  (`argocd/platform/values/kube-prometheus-stack-triage.yaml`).
+- **`platform_machinery: "true"`** = "investigate, but a human merges the fix" (routes to
+  homelab). Like `triage`, a rule-site label.
 - The `namespace` label must be the app's real namespace — it is the routing key.
 
 **Testing is the stack's.** homelab's `prometheus-rules-lint` covers only homelab's manifests.

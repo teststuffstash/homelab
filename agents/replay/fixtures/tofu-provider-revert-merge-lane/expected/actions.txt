@@ -1,0 +1,4 @@
+CALL gh pr edit 2210 --repo teststuffstash/homelab --add-label automerge --add-label dependencies
+CALL gh pr merge --auto --squash 2210 --repo teststuffstash/homelab
+OUT → revert PR teststuffstash/homelab#2210 labelled automerge+dependencies and armed (reflex approves, auto-merges on green; the box applies on its next pull)
+RC 0

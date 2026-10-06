@@ -4,8 +4,8 @@
 # API JSON through the real `--jq` expressions via jq). `devbox run pin-only-lint-test`.
 #
 # Every expected verdict below is derived in its comment FROM the rule in pin-only-lint.sh's
-# header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA) and the two older shapes'
-# PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
+# header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA, (e)–(h) the four revert
+# memories) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
 # greps the script's stderr for the rule's own keyword, so a case that reds for the wrong reason
 # is a FAIL here too.
 set -uo pipefail
@@ -36,7 +36,13 @@ CLOSED='pulls?state=closed&sort=updated&direction=desc&per_page=100'
 reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf '[]\n'; else printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; fi >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 # reverts_img_ <image ref …>: the closed-PR list with ONE merged revert-img-* PR naming those
 # image refs (check (f), the tofu-image-revert chain's memory).
+# reverts_prov_ <name@version …>: ONE merged revert-prov-* PR naming those provider versions
+# (check (g), the tofu-provider-revert chain's memory).
+reverts_prov_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-prov-abcd1234"},"body":"#1988 rollback\\n\\nreverted-providers: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-img-abcd1234"},"body":"#1988 rollback\\n\\nreverted-images: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+# reverts_chart_ <chart@version …>: ONE merged revert-chart-* PR naming those chart versions
+# (check (h), the chart revert actor's memory — FU-304's class row).
+reverts_chart_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-chart-abcd1234"},"body":"FU-304 rollback\\n\\nreverted-charts: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
 OLD=1111111111111111111111111111111111111111
@@ -72,10 +78,16 @@ jobs:
     steps:
       - uses: teststuffstash/some-action@$FP_OLD # v1
 EOF
-printf 'spec:\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
+printf 'spec:\n  source:\n    chart: gha-runner-scale-set\n    targetRevision: 0.14.2 # lockstep with arc-controller.yaml\n  template:\n    spec:\n      image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.1-gaaaa\n' >"$R/argocd/platform/arc-runners.yaml"
 printf 'spec:\n  source:\n    targetRevision: 2026.9.1-gaaaa\n    chart: x\n' >"$R/argocd/platform/openrouter-operator.yaml"
+# check (h)'s home: an UNGUARDED chart Application (the argo-workflows shape) and a raw-manifest
+# Application with no chart (a `path:` source) — its targetRevision has no key in the memory.
+printf 'spec:\n  source:\n    repoURL: https://argoproj.github.io/argo-helm\n    chart: argo-workflows\n    # a comment\n    targetRevision: 2.0.8\n    helm:\n      valuesObject:\n        crds: { install: true }\n' >"$R/argocd/platform/argo-workflows.yaml"
+printf 'spec:\n  source:\n    repoURL: https://github.com/teststuffstash/homelab\n    path: argocd/resources/raw\n    targetRevision: master\n' >"$R/argocd/platform/raw.yaml"
 # the fourth shape's home: a tofu Deployment with the dind sidecar's image line (check (f)).
 mkdir -p "$R/tofu"
+# check (g)'s home: a lockfile with two providers (the version line alone does not say whose it is).
+printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "2.38.0"\n  constraints = "~> 2.31"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n' >"$R/tofu/.terraform.lock.hcl"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
@@ -169,6 +181,24 @@ case_ arc-runner-pin ok "" \
   "sed -i 's|arc-runner:2026.9.1-gaaaa|arc-runner:2026.9.25-gbbbb|' argocd/platform/arc-runners.yaml"
 case_ arc-runner-smuggled 'may only receive PIN lines' "" \
   "sed -i 's|arc-runner:2026.9.1-gaaaa|arc-runner:2026.9.25-gbbbb|' argocd/platform/arc-runners.yaml; echo '      privileged: true' >> argocd/platform/arc-runners.yaml"
+# A third-party chart pin (the Renovate `argocd` manager's `arc` group, #2216): SemVer with the
+# trailing lockstep comment kept is a pin; a non-SemVer value is not. The rule judges LINE SHAPE,
+# so a comment-only edit on the pin line is accepted too (a deliberate trade-off of allowing the
+# comment: it deploys nothing; the value is still the only thing that may move).
+case_ arc-chart-semver-bump ok "" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: 0.15.0 # lockstep|' argocd/platform/arc-runners.yaml"
+case_ arc-chart-comment-only-edit ok "" \
+  "sed -i 's|# lockstep with arc-controller.yaml|# keep in step|' argocd/platform/arc-runners.yaml"
+case_ arc-chart-non-semver 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: latest # lockstep|' argocd/platform/arc-runners.yaml"
+# The CalVer branch stays exact (reviewer, #2216): a first-party pin with its -g<sha> dropped is NOT
+# a SemVer pin (4-digit year vs 1–3 digits — disjoint), and a CalVer pin admits no trailing comment.
+case_ calver-githash-dropped 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25|' argocd/platform/openrouter-operator.yaml"
+case_ calver-with-comment 'may only receive PIN lines' "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb # note|' argocd/platform/openrouter-operator.yaml"
+case_ calver-githash-bump ok "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
 case_ target-revision-pin ok "" \
   "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
 case_ target-revision-smuggled 'may only receive PIN lines' "" \
@@ -187,6 +217,41 @@ case_ tofu-image-other-reverted ok "reverts_img_ docker:28-dind" \
   "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
 case_ tofu-image-memory-unreadable 'cannot read the merged revert-img-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/docker:27-dind/docker:29-dind/' tofu/x.tf"
+# (g) the reverted-provider memory: a lockfile bump passes on an empty memory, is REFUSED when a
+# merged revert-prov-* PR names that provider@version, passes when the memory names ANOTHER
+# provider at the same version (the name is part of the key), and an unreadable memory is a FAIL.
+case_ provider-bump ok "" "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-reverted-refused 'is a REVERTED provider version' "reverts_prov_ kubernetes@3.2.1" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-other-name-same-version ok "reverts_prov_ helm@3.2.1" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+case_ provider-memory-unreadable 'cannot read the merged revert-prov-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+# (h) the reverted-chart memory: an unguarded chart Application's targetRevision bump passes on an
+# empty memory, is REFUSED when a merged revert-chart-* PR names that chart@version, passes when
+# the memory names the same chart at ANOTHER version or ANOTHER chart at the same version (the key
+# is the pair), and an unreadable memory is a FAIL. A non-pin edit of the file and a `path:`-source
+# Application (no `chart:`) never read the memory — the unreadable stub proves it.
+case_ chart-bump ok "" "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-reverted-refused 'is a REVERTED chart version' "reverts_chart_ argo-workflows@3.0.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-other-version-reverted ok "reverts_chart_ argo-workflows@2.9.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-other-chart-same-version ok "reverts_chart_ argo-events@3.0.0" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-memory-unreadable 'cannot read the merged revert-chart-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/targetRevision: 2.0.8/targetRevision: 3.0.0/' argocd/platform/argo-workflows.yaml"
+case_ chart-non-pin-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/install: true/install: false/' argocd/platform/argo-workflows.yaml"
+case_ chartless-target-revision ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/targetRevision: master/targetRevision: main/' argocd/platform/raw.yaml"
+# (h) composes with the two guarded shapes: a CalVer pin on openrouter-operator.yaml (chart x) and a
+# SemVer pin WITH its trailing comment on arc-runners.yaml each pass PIN_LINE and are still refused
+# when the memory names them — the comment is not part of the version the memory is keyed on.
+case_ chart-reverted-calver-guarded 'is a REVERTED chart version' "reverts_chart_ x@2026.9.25-gbbbb" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
+case_ chart-reverted-semver-commented 'is a REVERTED chart version' "reverts_chart_ gha-runner-scale-set@0.15.0" \
+  "sed -i 's|targetRevision: 0.14.2 # lockstep|targetRevision: 0.15.0 # lockstep|' argocd/platform/arc-runners.yaml"
 
 # ── the initial-pin scenario: a repo whose workflows were NEVER pinned before. Renovate's first
 # pass removes unpinned refs (`@v4`) and adds pinned ones (`@sha # v4`). The removed lines are

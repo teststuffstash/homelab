@@ -81,10 +81,12 @@ surfaces across issue IDs and prior reports. Never refile work simply because it
   as contrast.
 - **Fleet-wide reads (homelab#587)**: the pain-rank spans every stack's repos, not just
   `{{MAIN_REPO}}`, so a deep-dive whose trail lives in another repo needs cross-repo access.
-  When the environment carries `RETRO_GH_TOKEN` (a ~1h READ-ONLY fleet-wide token, App-minted),
-  use it for those reads: `GH_TOKEN="$RETRO_GH_TOKEN" gh …`. When the variable is absent, do NOT
-  guess at a trail you can't reach — name which repo(s) were unreachable and why in the report's
-  Evidence confidence section instead.
+  This ride's `gh` identity IS that fleet-wide READ-ONLY token (App-minted, re-read per call —
+  homelab#2171): plain `gh … -R teststuffstash/<repo>` reaches every stack repo. Never prefix it
+  with `GH_TOKEN=…` (the in-pod `gh` wrapper resolves its own token and ignores the prefix) and
+  never print a token value. When `RETRO_GH_TOKEN` is absent from the environment the mirror was
+  missing and reads are anonymous: do NOT guess at a trail you can't reach — name which repo(s)
+  were unreachable and why in the report's Evidence confidence section instead.
 - The harness artifacts your process changes may target are excerpted below — cite and edit
   THESE texts; never invent clause or API names beyond them:
 - **Name your tool gaps, once (homelab#536)**: when a NAMED diagnostic or tool is unavailable

@@ -1,0 +1,33 @@
+# CNPG's Barman Cloud plugin (CNPG-I) — the backup/WAL-archive path for every CNPG Cluster
+# (ADR-147, docs/postgres.md §Backups). Replaces the in-tree `spec.backup.barmanObjectStore`, which
+# CNPG 1.29 warns "will be completely removed in CloudNativePG 1.30.0". MUST live in the operator's
+# namespace (cnpg-system). Its chart issues the operator↔plugin mTLS certs through cert-manager.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plugin-barman-cloud
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1" # after cert-manager + cnpg-operator (wave 0)
+spec:
+  project: default
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: plugin-barman-cloud
+    targetRevision: 0.8.1
+    helm:
+      valuesObject:
+        resources:
+          requests: { cpu: "20m", memory: "64Mi" }
+          limits: { memory: "256Mi" }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

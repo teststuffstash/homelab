@@ -20,7 +20,8 @@ spec:
           expr: |
             mgmt_opnsense_drill_success == 0
           for: 5m
-          labels: { severity: warning }
+          # triage none: failure report lives in the box journal; stage metric alone carries no reason
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The weekly OPNsense rebuild drill failed ({{ $labels.instance }})"
             description: >-
@@ -35,7 +36,8 @@ spec:
           expr: |
             (time() - mgmt_opnsense_drill_last_run_timestamp_seconds) > 9 * 86400
           for: 1h
-          labels: { severity: warning }
+          # triage none: drill timer on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The OPNsense rebuild drill has not finished a run in 9 days"
             description: >-
@@ -50,7 +52,8 @@ spec:
             up{job="mgmt-node"} == 1
               unless on (instance) mgmt_opnsense_drill_last_run_timestamp_seconds
           for: 9d
-          labels: { severity: warning }
+          # triage none: drill textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "The management box publishes no OPNsense drill metrics"
             description: >-
@@ -65,7 +68,8 @@ spec:
           expr: |
             mgmt_opnsense_drill_realism_score > mgmt_opnsense_drill_realism_score_previous
           for: 5m
-          labels: { severity: warning }
+          # triage none: audit 2026-10-03: router drift is fixed in code by the operator or a window job
+          labels: { severity: warning, triage: none }
           annotations:
             summary: "Router config drifted from code: the realism score rose to {{ $value }}"
             description: >-

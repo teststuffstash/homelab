@@ -1,0 +1,73 @@
+# The daily base backup of every CNPG Cluster (ADR-147; logic + exit codes in pg-backup.py). Also
+# the on-demand restore point: `devbox run pg-backup-now` runs a Job from this CronJob. Failure
+# (a failed/timed-out backup, or an UNCOVERED Cluster) surfaces via job-health's CronJob alerts.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pg-backup
+  namespace: cnpg-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pg-backup
+rules:
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters]
+    verbs: [get, list]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [backups]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pg-backup
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: pg-backup }
+subjects:
+  - { kind: ServiceAccount, name: pg-backup, namespace: cnpg-system }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  namespace: cnpg-system
+spec:
+  schedule: "15 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 5400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: pg-backup
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: pg-backup
+              # Stdlib-only Python, the same pinned image as garage-meta-rotation (already pulled).
+              image: python:3.14-slim@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9
+              command: ["python3", "-u", "/job/pg-backup.py"]
+              env:
+                - { name: TRIGGER, value: scheduled }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: job, mountPath: /job }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: job
+              configMap: { name: pg-backup-job }

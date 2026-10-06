@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open). dependencyDashboard is OFF by operator ruling (2026-08-18): the dashboard is an interactive click-ops surface whose approval/rebase checkboxes nothing here uses — every lane keys on labels; Renovate liveness is the exporter-gauge signal (FU-125), never dashboard-issue-exists.",
+  "description": "BEFORE LANDING A CHANGE TO THIS FILE run `devbox run renovate-lane-lint` (scripts/renovate-lane-lint.sh): Renovate itself over the checkout, asserting every branch it would open sits in ONE lane and arms as its labels say — `renovate-config-validator` checks syntax only; a grouped branch arms only when EVERY member has automerge:true, so a rule gap on one member parks the whole PR on nobody (gap register G15, #2295). GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open). dependencyDashboard is OFF by operator ruling (2026-08-18): the dashboard is an interactive click-ops surface whose approval/rebase checkboxes nothing here uses — every lane keys on labels; Renovate liveness is the exporter-gauge signal (FU-125), never dashboard-issue-exists.",
 
   "extends": ["config:recommended", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
 
@@ -23,6 +23,16 @@
   "separateMinorPatch": true,
   "platformAutomerge": true,
   "rebaseWhen": "conflicted",
+  "prHourlyLimit": 3,
+
+  "argocd": {
+    "description": "Class 1 — Helm charts, GitOps (docs/dependency-upgrades.md §The dependency inventory; S9 #1985 next step 7, 2026-10-04). The `argocd` manager has NO default file match, so until this block every chart bump in argocd/platform/*.yaml was hand-proposed (homelab#2200, found by an FU sweep). The pattern is the Application files only — `argocd/platform/values/` holds `$values` files, not pins. OCI charts (ghcr.io/… repoURLs) resolve through the docker datasource, so the docker timestamp-optional rule below covers their cooldown. `prHourlyLimit: 3` (root, above — the limits are root-only, never a packageRule; was TEMPORARILY 6 from 2026-10-04 to drain the first class-1/2 wave under watch, back to 3 on 2026-10-05 once the ~30-bump backlog was through) paces a wave: with the 6-hourly run that is ≤3 new PRs per run per repo, so a backlog drains over days instead of landing as one wave on the reviewer and the shared App GraphQL pool (FU-290 — the 2026-09-25 wave drained it). `prConcurrentLimit` stays at the default 10: a lower ceiling is eaten by PRs parked on a human (`major/awaiting-human`, a red sentinel) and would stall the drain.",
+    "managerFilePatterns": ["/^argocd\\/platform\\/[^\\/]+\\.yaml$/"]
+  },
+  "kubernetes": {
+    "description": "Class 2 — in-cluster images, GitOps: the `kubernetes` manager over the per-service manifests ArgoCD syncs (third-party `image:` refs; the first-party ghcr.io/teststuffstash/** refs are class 3 and excluded by the rule below). `agents/coordinator/*.yaml` is deliberately NOT in the pattern: `/agents/` is codeowner-gated, so a Renovate PR there parks on the human the lane exists to remove — those refs stay on the deploy-pin sweep / hand bumps until that gate moves.",
+    "managerFilePatterns": ["/^argocd\\/resources\\/.+\\.ya?ml$/"]
+  },
 
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
@@ -110,10 +120,19 @@
       "automerge": true
     },
     {
-      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float.",
+      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The two VERSION-SET partners (crossplane engine digest, cloudflared in tofu/cloudflare) are excluded so their grouped PRs ride the argocd/kubernetes lane's labels. Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float.",
       "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["!crossplane/crossplane", "!cloudflare/cloudflared"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "The two VERSION-SET partners' regex members (crossplane engine digest, cloudflared in tofu/cloudflare) ride the `deps-review` lane WITH automerge, exactly like the chart/image member they are grouped with. Renovate arms a grouped branch only when EVERY upgrade in it has `automerge: true` — the exclusion above alone left these members at the default (false), so the first PR BORN as a group (#2295, cloudflared 2026.10.0, 2026-10-05) came out `Automerge: Disabled by config`, un-armed, and parked on nobody: the review reflex reads armed PRs only, the coordinator's un-armed clause reads `major` only (gap register G15). #2228/#2240 looked proven only because the crossplane branch had been armed by GitHub while it was still a single-member PR and the group rewrite force-pushed onto it. Majors are untouched: the catch-all below sets `automerge: false` on them, so a grouped major stays un-armed as intended.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["crossplane/crossplane", "cloudflare/cloudflared"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["deps-review"],
       "automerge": true
     },
     {
@@ -126,6 +145,35 @@
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["teststuffstash/**"],
       "enabled": false
+    },
+    {
+      "description": "First-party IMAGES and CHARTS (ghcr.io/teststuffstash/**) are NOT Renovate's — class 3 (docs/dependency-upgrades.md): the image repo's deploy-pin PR moves them (ADR-084) and a `2026.<m>.<d>-g<sha>` tag does not order. Same rule as the first-party Actions one above. Datasource-scoped (not manager-scoped) so it holds wherever such a ref appears — the `kubernetes` manager's manifests, the `argocd` manager's openrouter-operator OCI chart (ghcr.io/teststuffstash/charts), a tofu Deployment image.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/teststuffstash/**"],
+      "enabled": false
+    },
+    {
+      "description": "ARC controller + runner scale sets move in LOCKSTEP (class 1's canary cell: three Applications, one chart version — arc-controller, arc-runners, arc-runners-large). One grouped PR so a merge never leaves the controller and the runners on different chart versions.",
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["ghcr.io/actions/actions-runner-controller-charts/**"],
+      "groupName": "arc"
+    },
+    {
+      "description": "Crossplane is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the chart pin in argocd/platform/crossplane.yaml AND the `crossplane.io/engine-image-digest.<version>` annotation next to it, which publicroute-tf-validate keys by chart version to render the composition with the engine pulled BY DIGEST (homelab#1779). A chart bump alone is CI-red forever — #2224 (2.3.2 → 2.3.6, 2026-10-04) was the first Renovate crossplane PR and proved it. The regex customManager below moves the annotation (version in the KEY, digest in the VALUE — crossplane's chart version equals its engine tag v<version>); this group puts both in ONE PR. Labels come from the argocd rule only (the custom.regex automerge rule excludes this dep) so the grouped PR rides `deps-review`, never the mechanical lane.",
+      "matchPackageNames": ["crossplane", "crossplane/crossplane"],
+      "groupName": "crossplane"
+    },
+    {
+      "description": "cloudflared is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the connector image in argocd/resources/publicroute/composition.yaml (`kubernetes` manager) AND `cloudflared_image` in tofu/cloudflare/variables.tf (the regex customManager below) — the repo's own comment declares them the same pin, and Renovate's first cloudflared PR (#2232, 2026.5.2 → 2026.9.3, 2026-10-04) moved the composition's half alone; the reviewer's version-set finding (G13). One group, one PR; labels come from the kubernetes rule (`deps-review`), the custom.regex automerge rule excludes this dep. The seat applies tofu/cloudflare after the merge (docs/runbook.md §Cloudflare).",
+      "matchPackageNames": ["cloudflare/cloudflared"],
+      "groupName": "cloudflared"
+    },
+    {
+      "description": "Class 1/2 (charts in argocd/platform, images in argocd/resources) patch/minor → the LLM `deps-review` lane (FU-046): armed, the merge-path review reflex reviews, APPROVED merges, ArgoCD auto-sync is the deploy edge. Not `automerge`: a chart minor re-renders manifests and an image minor runs in prod — there is something to read. Digest bumps take the mechanical rule at the top; majors take the catch-all below (un-armed, `major` — the CRD-carrying charts Argo/Crossplane/cert-manager/ESO/CNPG reach the human lane by update type, IAC-G09).",
+      "matchManagers": ["argocd", "kubernetes"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
     },
     {
       "description": "EVERY major bump (all repos, all managers) carries `major` — the MIGRATION LENS marker (semver decides whether the lens runs: the reviewer does upstream research + known issues + platform compatibility before any verdict). The LANE is decided by BLAST CLASS (S9 homelab#1985, 2026-09-25): by default a major is NOT armed = the HUMAN-GATED coordinator lane (investigate while red, worker adapts if in-budget, agents/major-handoff.sh → a human merges — docs/agents/merge-path.md §Reflexes vs judgment; un-armed = invisible to the review reflex, coordinator-scan owns it). GitHub Actions are excluded (`!github-actions`): they ride the grouped mechanical lane above until a dependency graduates into the rule after this one. Order matters: the last matching rule's automerge wins, addLabels merge.",
@@ -150,10 +198,37 @@
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "Terraform PROVIDER majors — ARMED (operator 2026-10-04, S9 #1988; ADR-131 as amended 2026-10-04). Same shape as the Deployment-image rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. What stands behind that merge, all built and drilled before this rule: the box sentinel's provider-pin gate (a pin head must plan EMPTY relative to master's own pending plan, or be a default backfill, and may not raise any stored schema/identity version — PR#2205), the empty plan IS the deploy, `MgmtApplyErroredOnNewProvider` names the provider when its first CHANGING apply errors (PR#2206), and the `tofu-provider-revert` chain reverts the introducing pin on that alert (PR#2207; drilled 2026-10-04, #2209: alert → merged + applied revert, no human). A major whose plan is not empty or whose plan ERRORS (helm 3, #2046: the `kubernetes {}` block) is red on the sentinel and never auto-merges — the worker adapts in-PR and the adaptation is no longer a pin-only diff. The two humans this lane still has: a red sentinel (`mgmt-human-plan`) and a lens that requests changes. The residual accepted here is the same as for Actions and Deployment images: a change that plans empty, applies clean and is still wrong later — the lens's upstream read is the only defence. First real acceptance: the first `MgmtApplyErroredOnNewProvider` firing on a real apply (the detector is fixture- and drill-proven only). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["terraform"],
+      "matchDatasources": ["terraform-provider"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
+    },
+    {
+      "description": "argo-workflows chart MAJORS — ARMED (operator 2026-10-05, ADR-149; the chain was drilled the same day: #2276 bump → synthetic ArgoControllerSilent → #2279 revert merged + synced in 10 min, no human). Same shape as the provider-major rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. The lens READS APPVERSION FROM THE CHART INDEX: chart semver is not app semver (1.0.24→1.1.1 was the app major 4.0→4.1 and rode deps-review unlensed, #2238; #2254, two lens rounds, was packaging). Behind the merge: ArgoControllerSilent (triage now, fails closed) is the post-deploy verdict; the chart-revert webhook receiver (argocd/resources/chart-revert/, OUTSIDE Argo Workflows' cone) reverts the pin-only merge as revert-chart-<sha8> with a `reverted-charts:` line; scripts/pin-only-lint.sh check (h) refuses the re-proposal for 30 days. Scoped to ONE chart — a second chart joins only on its own evidence (a drilled chain for the thing it breaks). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["argocd"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["argo-workflows"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
     }
   ],
 
   "customManagers": [
+    {
+      "description": "Crossplane engine image digest annotation in argocd/platform/crossplane.yaml — the chart's VERSION SET partner (the `crossplane` group rule above). publicroute-tf-validate reads `crossplane.io/engine-image-digest.<chart targetRevision>` and pulls the engine by that digest; a bump with no matching key fails the gate (homelab#1779). The engine image TAG (v<chart version>) lives in the annotation KEY and the digest in its VALUE — both captured, both rewritten; the gate derives the same key from the chart pin. The key carries the TAG, not the bare version: with extractVersionTemplate stripping the v, Renovate looked the digest up for tag `2.3.6` and dropped the update (\"Could not determine new digest\", #2228 shipped the chart alone). If Renovate ever wrote a wrong digest the gate's digest pull fails and the PR is red — never a bad merge. By hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^argocd\\/platform\\/crossplane\\.yaml$/"],
+      "matchStrings": [
+        "crossplane\\.io/engine-image-digest\\.(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+): \"(?<currentDigest>sha256:[0-9a-f]{64})\""
+      ],
+      "depNameTemplate": "crossplane/crossplane",
+      "datasourceTemplate": "docker"
+    },
     {
       "description": "arc-runner image toolchain ARGs (FU-015 residual): DEVBOX_VERSION / NIX_VERSION in docker/arc-runner/Dockerfile — pinned binaries outside any stock manager. github-releases datasource; patch/minor ride the normal lanes, majors hit the human gate like everything else.",
       "customType": "regex",
@@ -183,6 +258,14 @@
       "depNameTemplate": "peak/s5cmd",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "cloudflared in tofu/cloudflare/variables.tf — the composition's VERSION SET partner (the `cloudflared` group rule above). The one-off connector's Deployment reads `var.cloudflared_image`, so the terraform manager's kubernetes_deployment image extraction never sees the ref — it lives in a variable DEFAULT, not an `image = \"…\"` literal (git log: Renovate never touched this file). Tag and digest both captured and rewritten, the same docker datasource as the composition's pin so both classify alike and group.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^tofu\\/cloudflare\\/variables\\.tf$/"],
+      "matchStrings": ["cloudflare/cloudflared:(?<currentValue>[0-9]{4}\\.[0-9]+\\.[0-9]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
+      "depNameTemplate": "cloudflare/cloudflared",
+      "datasourceTemplate": "docker"
     }
   ]
 }

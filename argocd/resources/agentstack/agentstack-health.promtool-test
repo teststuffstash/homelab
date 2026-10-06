@@ -31,6 +31,7 @@ tests:
               name: oracle
               type: Synced
               reason: ReconcileError
+              triage: dig
             exp_annotations:
               summary: "AgentStack oracle has been Synced=False (ReconcileError) for 15m"
       - eval_time: 16m
@@ -62,5 +63,6 @@ tests:
           - exp_labels:
               severity: warning
               type: Synced # absent() carries the selector's equality labels
+              triage: dig
             exp_annotations:
               summary: "No AgentStack Synced condition series for 30m — the XR health belt is blind"

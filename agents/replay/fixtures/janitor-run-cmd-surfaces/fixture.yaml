@@ -1,0 +1,35 @@
+# janitor-run-cmd-surfaces — homelab#2286: the janitor's RUN_CMD restated the TOOL_GAP surfaces.
+#
+# THE CONTRACT. The TOOL_GAP marker's channel set is declared ONCE, on the `TOOL_GAP_SURFACES:`
+# line of the janitor's brief (agents/coordinator/README.md §The janitor tick, sweep 6) — the same
+# line agents/reviewer-session.sh interpolates into the emitter contract (homelab#1776). The
+# RUN_CMD — the prompt the `--janitor` tick actually receives — must READ that declaration, not
+# restate it. Before this it said "(issue comments + PR bodies, trailing ~30d)": the same
+# restatement #1776 removed from the brief, one layer down, so a janitor following its own prompt
+# still missed the reviewer lane's review-body filings (13 real filings per ~30d).
+#
+# THE ROWS (the input axis is the surface a TOOL_GAP marker can land on; the world is the RUN_CMD):
+#   run-cmd-reaches-issue-comment   the RUN_CMD makes the issue-comment surface reachable
+#   run-cmd-reaches-pr-body         ... the PR-body surface
+#   run-cmd-reaches-pr-review-body  ... the PR-review-body surface — THE FIXED ROW: red on base,
+#                                   where the RUN_CMD restated "issue comments + PR bodies" and
+#                                   the review channel went unread
+#   base-run-cmd-misses-pr-review-body  the CONTRAST row: the BASE RUN_CMD text still MISSES the
+#                                   review body, so the guard is proven to detect the defect it fixes
+#   run-cmd-restates-no-surface     the one-declaration half: the RUN_CMD names no surface literal
+#                                   (no second copy of the set)
+#
+# A surface is REACHABLE when the RUN_CMD's sweep-6 clause NAMES it, or when the clause DEFERS to
+# the brief's `TOOL_GAP_SURFACES:` declaration and the brief declares it — the round-trip this
+# fixture asserts (RUN_CMD → brief declaration → surface).
+name: janitor-run-cmd-surfaces
+mode: table
+source: agents/coordinator-session.sh
+parts:
+  - block:janitor-run-cmd
+  - file:bridge.sh
+  - file:post.sh
+env:
+  - JANITOR=1
+  - RUN_CMD=
+rows: rows.psv

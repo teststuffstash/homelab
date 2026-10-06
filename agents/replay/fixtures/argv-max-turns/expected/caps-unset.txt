@@ -1,0 +1,3 @@
+OUT GOOSE_MAX_TURNS=<unset>
+OUT CLAUDE_MAX_TURNS=<unset>
+RC 0

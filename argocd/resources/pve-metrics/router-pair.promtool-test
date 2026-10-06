@@ -51,7 +51,7 @@ tests:
       - eval_time: 5m
         alertname: RouterPairMasterCount
         exp_alerts:
-          - exp_labels: { severity: critical }
+          - exp_labels: { severity: critical , triage: none}
             exp_annotations:
               summary: "Router pair has 0 CARP masters (want exactly 1)"
               description: >-
@@ -82,7 +82,7 @@ tests:
       - eval_time: 4m
         alertname: RouterPairMasterCount
         exp_alerts:
-          - exp_labels: { severity: critical }
+          - exp_labels: { severity: critical , triage: none}
             exp_annotations:
               summary: "Router pair has 2 CARP masters (want exactly 1)"
               description: >-
@@ -114,7 +114,7 @@ tests:
       - eval_time: 14m
         alertname: RouterWanGateSilent
         exp_alerts:
-          - exp_labels: { severity: warning, host: nx-02, vmid: "9170" }
+          - exp_labels: { severity: warning, host: nx-02, vmid: "9170" , triage: none}
             exp_annotations:
               summary: "Router WAN gate silent on nx-02 — the pair's master count is unreadable"
               description: >-

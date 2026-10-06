@@ -69,6 +69,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -83,6 +84,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 20m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -94,6 +96,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 2h 15m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -119,6 +122,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -136,6 +140,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 2h 29m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -157,6 +162,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -171,6 +177,7 @@ tests:
           - exp_labels:
               severity: warning
               source: openrouter-daily-rankings
+              triage: dig
             exp_annotations:
               summary: "OpenRouter rankings rotation feed is stale (>3d)"
               description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 15m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
@@ -534,6 +541,7 @@ tests:
               namespace: agent-egress
               pod: openrouter-proxy-ppp-16
               service: openrouter-proxy
+              triage: dig
             exp_annotations:
               summary: "Router store is running ephemeral (:memory:)"
               description: "The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress."
@@ -557,6 +565,7 @@ tests:
               namespace: agent-egress
               pod: openrouter-proxy-qqq-17
               service: openrouter-proxy
+              triage: dig
             exp_annotations:
               summary: "Router store is running ephemeral (:memory:)"
               description: "The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress."
@@ -667,6 +676,7 @@ tests:
               role: worker
               requested: deepseek/deepseek-v4-flash
               served: moonshotai/kimi-k3
+              triage: dig
             exp_annotations:
               summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
               description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3. Check the launcher's resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
@@ -681,6 +691,7 @@ tests:
               role: worker
               requested: deepseek/deepseek-v4-flash
               served: moonshotai/kimi-k3
+              triage: dig
             exp_annotations:
               summary: "OpenRouter/Go rides served a model different from the one requested (sleep/worker)"
               description: "1 OpenRouter/Go ride(s) on sleep requested deepseek/deepseek-v4-flash but the /generation harvest (or Go ledger) shows they were SERVED as moonshotai/kimi-k3. Check the launcher's resolved model and whether `model_family()` normalizes both ids before assuming a redirect — the PR#407 class is what this belt exists to catch. Chainless alias remapping (slot maps, failover ladders) multiplies the places this can happen. The claude-harness/subscription rail has its own belt (agent_model_drift on github-exporter); rides whose served side is ABSENT are RouterRunModelUnverifiable, not this alert."
@@ -707,6 +718,7 @@ tests:
               stack: circles
               role: worker
               requested: tencent/hy3
+              triage: dig
             exp_annotations:
               summary: "OpenRouter/Go rides have NO served-side evidence (circles/worker)"
               description: "1 OpenRouter/Go ride(s) on circles requested tencent/hy3 with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome=\"missed\"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy."

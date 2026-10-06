@@ -134,7 +134,10 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    a `3.0/24` VIP, a DHCP server reply, a BGP SYN, anything sourced from `.1`/`3.0/24`, an IPv6
    RA — no exemptions: under the `/24` no `3.x` is ever legitimate from a node) and
    `qm stop`s the VM, then latches `onboot 0` so a host reboot does not bring it back (drift
-   against tofu's `on_boot = true` — re-enabling is a reviewed apply); proven by injecting an ARP
+   against tofu's `on_boot = true` — re-enabling is a reviewed apply. That drift also WEDGES the box's
+   apply loop: every master plans `on_boot false → true` and is refused, until git declares `false` —
+   #2180 did it by hand after the 2026-10-02 trip; the class is open, FU-297: the trip proposes that
+   PR, or `lifecycle { ignore_changes = [on_boot] }`); proven by injecting an ARP
    claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
    `router-killswitch@<vmid>` unit (`ansible/pve-router-killswitch.yml`, the vmid in the host's
    `host_vars`), enabled at every host boot and ordered before `pve-guests`, so it keeps working

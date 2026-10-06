@@ -34,6 +34,8 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: workflow object count vs TTL bound is countable in-cluster before an OOM
+            triage: dig
           annotations:
             summary: "argo-workflows controller at {{ $value | humanizePercentage }} of its memory limit"
             description: "The argo-workflows controller has sat at {{ $value | humanizePercentage }} of its 1Gi limit for 15m — the early warning before a #449-class OOM, not the after-the-fact PodSigkilled. The controller's memory is its informer cache, sized by the COUNT of retained Workflow objects, not by load, so diagnose the COUNT, not the pod: `kubectl get workflows -A --no-headers | wc -l` against the ~7d TTL bound (workflowDefaults, #510) of ~590 (measured 2026-08-18) — a reading well above that, or with OLD non-terminal (Running/Pending) workflows (`kubectl get workflows -A` shows age; TTL fires only after completion), is a retention leak: clear the stuck non-terminals / fix the submitter whose spec-level ttlStrategy bypasses the controller default. Legit volume growth instead means RAISE the limit (requests/limits in argocd/platform/argo-workflows.yaml, last raised to 512Mi/1Gi by #487). A restart only buys minutes — it re-lists everything and refills within minutes."
@@ -70,6 +72,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: lock-plane wedge is diagnosable in-cluster, but the responder lane itself queues behind it
+            triage: dig
           annotations:
             summary: "{{ $value | humanize }} Argo workflows Pending for 30m while the subscription pool has free slots and no rail is latched"
             description: "Argo has held {{ $value | humanize }} workflows in Pending for 30 minutes while the proxy reports free subscription slots (anthropic_subscription_semaphore_running < anthropic_subscription_semaphore_max) and neither rail is latched — the lock plane is not granting the `subscription-capacity/claude` semaphore it could grant, so the responder, reviewer and coordinate lanes are all queued (docs/incidents/2026-08-31-argo-semaphore-leak.md; three instances so far). STEP 1 — confirm the shape and find the holders: `kubectl get wf -A -o json | jq -r '.items[] | select(.status.synchronization != null) | [.metadata.namespace, .metadata.name, .status.phase, (.status.synchronization|tostring)] | @tsv'` and read one waiter's `.status.message` (`Lock status: N/5`). N larger than the real holders listed = corrupt sync-manager state. STEP 2 — a holder that is Running with its pod already Error/Completed and no retry pending (the 2026-09-15 shape: a fix-debounce-backstop whose decide pod Errored, workflow Running for two days, also holding the fix-debounce-decide mutex) is a wedged holder: `kubectl delete wf -n <ns> <name>`. STEP 3 — restart the controller so the sync manager rebuilds from live workflow status (the only reconciliation that exists): `kubectl -n argo rollout restart deploy/argo-workflows-workflow-controller`; Running workflows ride through. BEFORE the restart decide what the queue should do when it drains: hours-old `respond-*` waiters are stale triages (still-firing alerts re-notify every repeat_interval) and 130 of them draining five at a time would occupy the pool for hours and burn the 7d budget — delete the stale ones, keep `review-*`. ⚠ If `anthropic_subscription_dispatch_limited` is 1 this alert is not firing by design and a restart fixes nothing (the 2026-09-12 lesson) — never restart on the latched shape."
@@ -95,6 +99,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: template name recoverable from Argo workflows; a failing coordinate cron is a lost backstop
+            triage: dig
           annotations:
             summary: "{{ $value | humanize }} agent-loop workflows in {{ $labels.exported_namespace }} ended Failed/Error in the last hour"
             description: "Three or more Argo workflows in the loop namespace {{ $labels.exported_namespace }} reached Failed/Error inside one hour — a template failing on every tick hides under the fleet-wide ArgoWorkflowsFailing line (40/6h) for days, and if the failing one is a coordinate-<stack> cron the loop has lost its level-triggered backstop (homelab#1456). SYMPTOM ONLY: the counter carries no template name. STEP 1 — which template: `kubectl -n {{ $labels.exported_namespace }} get wf --sort-by=.metadata.creationTimestamp -o json | jq -r '.items[] | select(.status.phase==\"Failed\" or .status.phase==\"Error\") | [(.metadata.generateName // .metadata.name), (.status.message // \"-\")] | @tsv' | sort | uniq -c | sort -rn`. STEP 2 — the exit class from ONE run's main container in Loki (`{namespace=\"{{ $labels.exported_namespace }}\", container=\"main\", pod=~\"<generateName>.*\"}`, tenant = the namespace): `exit status 141` right after the homelab clone with no scan output is the homelab#1456/#1517 SIGPIPE class (an early-exiting reader under pipefail — the producer hunt is #1517's); a reviewer run ending FINAL=10 is the exit contract deliberately reddening a session that posted no terminal (merge-path-fsm MP-T03 — read the launcher log, not the reviewer); `Pod was active on the node longer than the specified deadline` = activeDeadlineSeconds, look at what hung; a Sensor-submitted workflow dying at spawn with an unparsed `--model` is the FU-127 model_id class (PR#1522). A cron whose every tick is red is not transient: fix the template, never suspend the schedule (`suspend: true` is state that rots — workflow.md §Capacity gates)."
@@ -103,7 +109,50 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: fleet-wide failure count; per-template cause readable from Argo workflows and pods
+            triage: dig
           annotations:
             summary: "{{ $value | humanize }} Argo workflows reached Failed/Error in the last 6h (fleet-wide)"
             description: "More than 40 Argo workflows across the cluster ended Failed or Error in the last 6h ({{ $value | humanize }}) — the fleet belt behind the per-lane agent alerts, because a workflow that dies before its own bookkeeping (an OOMKilled pod, a clone that never finished, a controller RBAC refusal) leaves NO ledger entry, issue, or verdict; only this counter and the argo-workflows-by-phase panel on the agents-running dashboard see it. SYMPTOM ONLY: find the class first — `kubectl get workflows -A -o json | jq -r '.items[] | select(.status.phase==\"Failed\" or .status.phase==\"Error\") | [.metadata.namespace, (.metadata.generateName // .metadata.name), (.status.message // \"-\")] | @tsv' | sort | uniq -c | sort -rn` — one namespace + generateName + message dominating (e.g. `switchboard-` / `main: OOMKilled (exit code 137)`) is a broken template; many templates with git/gh errors is the anonymous-git throttle class (docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md); reviewer runs reddening with api_error terminals is the FU-188 rail class. Then read ONE run's main-container log in Loki (`{namespace=\"<ns>\", container=\"main\", pod=~\"<generateName>.*\"}`) — the last line before the death names the step. Known silent shapes: OOMKilled = the template's memory limit vs what its script actually lists (agents/coordinator/*-argo.yaml `resources.limits`; the scan's doorbell-collapse listed a 53 MB workflow history into 512 Mi, 2026-09-06); exit 141 = a pipeline SIGPIPE under `set -o pipefail` (a writer killed by an early-exiting reader); `Pod was active on the node longer than the specified deadline` = activeDeadlineSeconds, look at what hung. A stack's OWN DAG failing (oracle-fleet `ert-*` etc.) counts here too — read the template's namespace before assuming the agent loop."
 
+    # The heartbeat belt — the post-deploy verdict for argo-workflows chart bumps (ADR-141: the
+    # revert chain is the second gate and needs a detector first; docs/dependency-upgrades.md
+    # §Rollout: "the missing piece is the post-deploy verdict"). Every belt above catches a
+    # controller that FAILS things; none catches one that processes NOTHING — the 2026-08-15
+    # OOM-crashloop (#449: each fresh pod died before completing a workflow, failing none) and a
+    # chart bump that leaves the controller up but inert look identical to all four: no Failed, no
+    # Pending pile, memory fine, ArgoCD Healthy on a tcpSocket probe.
+    # THE SIGNAL is the terminal-phase counter (`argo_workflows_total_count`, per `exported_namespace`
+    # + `phase`; all phases summed — a counter that moves at all is a controller doing its job) in
+    # agent-coordinator ONLY: its CronWorkflows (update-pr-branch-cron + iac-sentinel `*/15`,
+    # ledger-reflex + retro-activity-collect `*/30`) give it a cadence floor no other loop home has — over the 30 d ending
+    # 2026-10-05, every 30 m window completed ≥4 workflows (p10 = 10, ~35/h) except ONE: 2026-09-20
+    # 12:04–12:54Z, the FU-260 apiserver-restart storm, where the controller stayed `up`, stayed
+    # leader, kept TRIGGERING crons (`argo_workflows_cronworkflows_triggered_total` climbed ~17/30 m)
+    # and completed nothing for 55 min — exactly this rule's shape, and no sibling fired (the stack
+    # loop homes sit at p10 = 6 with the same two zeros; oracle-fleet is a product DAG, mostly 0).
+    # FAILS CLOSED — `or vector(0)`: no sample in the last 30 m (controller unscraped, ServiceMonitor
+    # renamed by a chart bump, metrics port moved) is a missing heartbeat and FIRES. A chart major
+    # that breaks the scrape is the exact failure a post-deploy verdict must not sleep through, and
+    # ArgoCD stays Healthy for it — the repo's "never let a join make us MISS a real spin" direction
+    # (NodeSystemSaturation, kube-prometheus-stack.yaml). A plain controller restart does NOT fire:
+    # the range selector still sees the old pod's samples for 30 m, so only a restart preceded AND
+    # followed by silence trips it (pinned in controller-silent.promtool-test case 4).
+    # NOT a cron-triggered term: `argo_workflows_cronworkflows_triggered_total` comes from the same
+    # controller, so an inert controller zeroes it too and the term would silence the rule on the
+    # very case it exists for; kube-state-metrics has no CronWorkflow CRD metric to join instead.
+    # The "should have fired" fact is static, in agents/coordinator/*-argo.yaml, and named above.
+    # `for: 5m` only de-flaps the boundary where the old pod's samples age out of the window.
+    - name: argo-workflows-heartbeat
+      rules:
+        - alert: ArgoControllerSilent
+          expr: (sum(increase(argo_workflows_total_count{exported_namespace="agent-coordinator"}[30m])) or vector(0)) == 0
+          for: 5m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: the acute post-deploy verdict — minutes matter, a chart revert may hang on it
+            triage: now
+          annotations:
+            summary: "Argo Workflows controller silent: no workflow in agent-coordinator reached a terminal phase in 30m"
+            description: "No Argo workflow in agent-coordinator reached Succeeded, Failed or Error for 30 minutes — or the counter itself (`argo_workflows_total_count`) has had no sample for 30 minutes. That namespace's CronWorkflows (update-pr-branch-cron and iac-sentinel every 15 min, ledger-reflex and retro-activity-collect every 30 min) completed at least 4 workflows in every half hour of the last 30 days but one, so a silent half hour is never a quiet day. SYMPTOM ONLY: three readings split the space — take them in order. (1) Is the controller alive and scheduling: `up{job=\"argo-workflows-workflow-controller\"}`, `kube_pod_container_status_restarts_total{namespace=\"argo\",container=\"controller\"}`, and `sum(increase(argo_workflows_cronworkflows_triggered_total{exported_namespace=\"agent-coordinator\"}[30m]))` — climbing means crons are being submitted and nothing finishes; flat means nothing is being scheduled either; no series means the scrape is gone (`kubectl -n argo get servicemonitor,svc`). (2) What the workflows say: `kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp | tail -20` for the phase and age of the newest, and whether their pods exist (`kubectl -n agent-coordinator get pods --sort-by=.metadata.creationTimestamp | tail`). (3) The controller log for the window in Loki (`{namespace=\"argo\", container=\"controller\"}`) — the last reconcile line before the silence names the step. When the onset coincides with an argo-workflows chart sync (the argo-workflows Application's history; argocd/platform/argo-workflows.yaml), this is the post-deploy verdict the chart lane has no other source for (docs/dependency-upgrades.md §Rollout, ADR-141) — read the sync diff before anything else."

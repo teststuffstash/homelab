@@ -1,0 +1,9 @@
+---
+# Install the Longhorn backup-target Garage onto its LXC (FU-299, docs/longhorn-backup.md).
+# Thin role-caller — logic in roles/garage-backup, config in group_vars/garage_backup.yml.
+# Run: ANSIBLE_CONFIG=ansible/ansible.cfg devbox run -- ansible-playbook ansible/garage-backup.yml
+- name: Longhorn backup-target Garage
+  hosts: garage_backup
+  gather_facts: false
+  roles:
+    - garage-backup

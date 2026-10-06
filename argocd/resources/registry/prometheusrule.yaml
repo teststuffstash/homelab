@@ -29,7 +29,8 @@ spec:
           expr: |
             garage_bucket_quota_bytes{bucket="registry"} - garage_bucket_bytes{bucket="registry"} < 2 * 11e9
           for: 10m
-          labels: { severity: warning }
+          # triage dig: which tags hold the bucket quota is readable; prune or quota PR
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "registry bucket has {{ $value | humanize1024 }}B of quota headroom — the next 10 GB layer push will fail at commit"
             description: >-
@@ -52,7 +53,8 @@ spec:
             kubelet_volume_stats_available_bytes{namespace="registry",persistentvolumeclaim="registry-data"}
               / kubelet_volume_stats_capacity_bytes{namespace="registry",persistentvolumeclaim="registry-data"} < 0.15
           for: 15m
-          labels: { severity: warning }
+          # triage dig: served vs untagged manifests readable; untag or GC fix by PR
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "registry volume has {{ $value | humanizePercentage }} free — a 10 GB layer push may not fit"
             description: >-

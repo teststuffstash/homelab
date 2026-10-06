@@ -1,0 +1,65 @@
+# BEHAVIOUR fixture for GoalCheckpointStorm — the 2026-10-04 sleep-tracking#121 storm.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/goal-checkpoint-storm.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# `agent_dispatch_wake_clause_timestamp` is an epoch gauge stamped at each dispatch, one sticky
+# series per (project, clause, unit, base) — so `changes()` over a window COUNTS dispatches. A
+# series stamped k times shows k-1 changes from its first sample.
+#
+#   - Row 1 is the event, replayed at its measured cadence: a re-dispatch every 3 min (the storm
+#     ran 20–22/h). Pending once the 1h count reaches 6, firing 15m later — on the lane's identity.
+#   - Row 2 is the baseline ceiling: 3 checkpoints in an hour (the 14-day max on any lane before
+#     the storm) stays quiet, as does a single checkpoint on a sibling clause's series.
+#   - Row 3: the clause filter — a busy NON-checkpoint clause (queued-dispatch every 3 min) never
+#     trips this alert; dispatch volume in general is not the condition.
+rule_files:
+  - goal-checkpoint-storm.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ 1. THE 2026-10-04 STORM — a goal-checkpoint every 3 minutes on sleep-tracking/master ══════
+  # Stamps at 0,3,6,…: by 15m there are 5 changes (pending only from the 6th, at 18m); firing
+  # needs 15m of continuous truth → firing by 33m, quiet at 20m (pending, not firing).
+  - interval: 1m
+    name: "a checkpoint re-dispatched every 3 min fires on its lane"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="sleep-tracking",role="coordinator-scan",clause="goal-checkpoint",base="master"}'
+        values: "1000 1000 1000 1180 1180 1180 1360 1360 1360 1540 1540 1540 1720 1720 1720 1900 1900 1900 2080 2080 2080 2260 2260 2260 2440 2440 2440 2620 2620 2620 2800 2800 2800 2980 2980 2980 3160 3160 3160 3340 3340 3340"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GoalCheckpointStorm
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: GoalCheckpointStorm
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              project: sleep-tracking
+              base: master
+              triage: dig
+            exp_annotations: {}
+
+  # ══ 2. THE BASELINE CEILING — 3 checkpoints in an hour is ordinary ═════════════════════════════
+  - interval: 1m
+    name: "three checkpoints in an hour (the 14-day max) stay quiet"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="homelab",role="coordinator-scan",clause="goal-checkpoint",base="master"}'
+        values: "1000+0x9 1600+0x19 2800+0x19 4000+0x30"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: GoalCheckpointStorm
+        exp_alerts: []
+
+  # ══ 3. THE CLAUSE FILTER — a busy queued-dispatch lane is not a checkpoint storm ═══════════════
+  - interval: 1m
+    name: "a non-checkpoint clause at storm cadence never fires"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",clause="queued-dispatch",base="master"}'
+        values: "1000 1000 1000 1180 1180 1180 1360 1360 1360 1540 1540 1540 1720 1720 1720 1900 1900 1900 2080 2080 2080 2260 2260 2260 2440 2440 2440 2620 2620 2620 2800 2800 2800 2980 2980 2980 3160 3160 3160 3340 3340 3340"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: GoalCheckpointStorm
+        exp_alerts: []

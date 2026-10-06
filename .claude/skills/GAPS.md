@@ -308,6 +308,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `node-maintenance` opens already declare exactly the right list (`KubeNodeNotReady`,
       `PodSigkilled`, `CiliumUnreachableNodes`, `NodeRebooted`, …) — `check` should honour that
       declared list rather than diffing raw firing sets past it.
+      **Resight 2026-10-05 (the #2254 window):** the blocker was not even the window's own detector —
+      the stock `InfoInhibitor` (fires whenever an `info` alert has no warning sibling in its namespace)
+      flapped every ~30 min all day, landed between `open` and `check`, and `close` refused on it as
+      a NEW name. `check` should drop the two stock meta-alerts (`Watchdog`, `InfoInhibitor`) exactly
+      as the Alertmanager route does; forced closed with this note. Second date → promote.
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's

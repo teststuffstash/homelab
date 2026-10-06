@@ -33,6 +33,7 @@ resources:
   - rbac.yaml
   - reflexes-argo.yaml
   - responder-argo.yaml
+  - deep-dig-argo.yaml
   - sentinel-argo.yaml
   - responder-budget-alerts.yaml
   - responder-budget-dashboard.yaml
@@ -60,4 +61,4 @@ configurations:
 
 images:
   - name: ghcr.io/teststuffstash/agent-coordinator
-    newTag: 2026.9.28-gca94f4a2dd99
+    newTag: 2026.10.5-gca94f4a2dd99

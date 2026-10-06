@@ -156,6 +156,7 @@ def collect(state, repos, since, until, observed=None):
             if 'pull_request' in row:
                 pr = api(f'{endpoint}/pulls/{number}')
                 items[key]['merged_at'] = pr.get('merged_at')
+                items[key]['head_sha'] = pr['head']['sha']
                 add(repo, number, 'merged', number, pr.get('merged_at'), url, {})
                 for review in (pages(f'{endpoint}/pulls/{number}/reviews') if refresh else []):
                     add(repo, number, 'review', review['id'], review.get('submitted_at'), review['html_url'],
@@ -178,9 +179,18 @@ def collect(state, repos, since, until, observed=None):
                         when = check.get('completed_at') or check.get('started_at')
                         # Identity is the check run alone: a pending→completed re-read CORRECTS
                         # the record (conclusion lives in the payload), never adds a second event.
+                        payload = {'name': check['name'], 'conclusion': check.get('conclusion'), 'sha': sha}
+                        # Store output summary/text for cancelled checks so bundle() can classify
+                        # the cancellation reason without an extra API call per cancelled run.
+                        if check.get('conclusion') == 'cancelled':
+                            output = check.get('output') or {}
+                            summary = output.get('summary') or ''
+                            text = output.get('text') or ''
+                            if summary or text:
+                                payload['output_summary'] = str(summary)[:500]
+                                payload['output_text'] = str(text)[:500]
                         add(repo, number, 'check', str(check['id']),
-                            when, check.get('html_url') or url,
-                            {'name': check['name'], 'conclusion': check.get('conclusion'), 'sha': sha})
+                            when, check.get('html_url') or url, payload)
                 items[key]['pending_check_shas'] = sorted(pending)
     result.update(version=1, events=sorted(events.values(), key=lambda e: (e['occurred_at'], e['id'])),
                   collected_until=until, observed_at=observed, repos=sorted(repos))
@@ -204,6 +214,38 @@ def compact(event):
     return out
 
 
+def _classify_cancellation(event, item, latest_sha=None):
+    """Classify a cancelled check run: 'superseded', 'infra', or 'other'.
+
+    superseded — a newer SHA on the PR, or the check-run output says "Canceling since a
+    higher priority waiting request". These are excluded from item pain and reported as a
+    population metric (wasted CI / wall time). The PR head comes from the item's
+    `head_sha` when the collector recorded one, else from `latest_sha` — the newest check
+    SHA seen on the item — so state collected before `head_sha` existed classifies the
+    same way (the live store had 0/958 items with it on 2026-10-04).
+
+    infra — "runner has received a shutdown signal", "lost communication with the server".
+    These are their own infra_failure_events signal.
+
+    other — counted as a failure event, with the message kept.
+    """
+    payload = event.get('payload', {})
+    sha = payload.get('sha', '')
+    head_sha = item.get('head_sha') or latest_sha or ''
+    # Superseded by a newer SHA on the PR
+    if head_sha and sha and sha != head_sha:
+        return 'superseded'
+    # Check the output summary/text for known cancellation reasons
+    summary = (payload.get('output_summary') or '').lower()
+    text = (payload.get('output_text') or '').lower()
+    reason = summary + '\n' + text
+    if 'higher priority' in reason or 'canceling since' in reason:
+        return 'superseded'
+    if 'shutdown signal' in reason or 'lost communication' in reason:
+        return 'infra'
+    return 'other'
+
+
 def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     start, end = timestamp(since), timestamp(until)
     if start >= end:
@@ -214,6 +256,52 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
     by_item = {}
     for event in selected:
         by_item.setdefault(f"{event['repo']}#{event['item']}", []).append(event)
+    # The newest check SHA per item (all collected history up to the cutoff): the superseding
+    # signal for cancellations when the item carries no `head_sha`.
+    latest_check_sha = {}
+    for event in sorted((e for e in state['events'] if e['kind'] == 'check' and e['payload'].get('sha')
+                         and timestamp(e['occurred_at']) < end), key=lambda e: e['occurred_at']):
+        latest_check_sha[f"{event['repo']}#{event['item']}"] = event['payload']['sha']
+
+    # Build PR→issue links from cross-referenced events. When a PR references an issue
+    # (closing reference / cross-reference), the PR's failures roll up to the issue.
+    pr_to_issue = {}
+    for event in state['events']:
+        if event['kind'] == 'cross-referenced':
+            source = event['payload'].get('source', {})
+            if isinstance(source, dict) and 'issue' in source:
+                src_issue = source['issue']
+                src_repo = src_issue.get('repository', {}).get('full_name', event['repo'])
+                src_number = src_issue.get('number')
+                if src_number is not None:
+                    src_key = f"{src_repo}#{src_number}"
+                    tgt_key = f"{event['repo']}#{event['item']}"
+                    # Only PR→issue links: the source must be a PR and the target an issue —
+                    # PRs cross-reference each other constantly (Renovate handoffs, stint
+                    # siblings), and a PR must never collect its siblings' pain.
+                    src_item = state['items'].get(src_key, {})
+                    tgt_item = state['items'].get(tgt_key, {})
+                    if src_item.get('is_pr') and not tgt_item.get('is_pr'):
+                        targets = pr_to_issue.setdefault(src_key, [])
+                        if tgt_key not in targets:
+                            targets.append(tgt_key)
+
+    # Weighted score: real failures dominate, but standing stall on agent/*-labelled
+    # items carries real weight so blocked issues rank above cancellation-only PRs.
+    # Weights chosen so a blocked issue with a week of stall (~604800s) and agent pain
+    # events outranks a PR with a handful of non-superseded cancellations.
+    AGENT_PAIN_LABELS = {'agent/error', 'agent/blocked'}
+    W_FAILURE = 1000
+    W_INFRA = 500
+    # A latch weighs a failed check: the week of 2026-09-28 the seat un-latched oracle-fleet
+    # #753/#798 and the S9 PRs by hand a dozen times while the rank put them at 38+.
+    W_AGENT_PAIN = 1000
+    # Every ride round after the first is a round the previous one did not finish — 9-round
+    # issues (oracle-fleet#800/#803, same week) sat at the sample's edge on event count alone.
+    W_ROUND = 500
+    W_EVENT = 10
+    W_STALL = 0.005
+
     tasks = []
     for key, item in state['items'].items():
         evs = by_item.get(key, [])
@@ -240,17 +328,73 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
         last = max(substantive, default=timestamp(item['created_at']))
         idle = sum(max(0, (min(b, end) - max(a, start, last)).total_seconds()) for a, b in intervals)
         # Ordinary parked feature backlog is not an active platform stall.
-        active = any(label.startswith('agent/') for label in item.get('labels', [])) or item.get('is_pr')
+        active = (any(label.startswith('agent/') or label == 'task/goal' for label in item.get('labels', []))
+                  or item.get('is_pr'))
         if not active:
             idle = 0
         if not direct and not idle:
             continue
-        failures = sum(e['kind'] == 'check' and e['payload'].get('conclusion') in {'failure', 'timed_out', 'cancelled'}
-                       or e['kind'] == 'review' and e['payload'].get('state') == 'CHANGES_REQUESTED' for e in direct)
+
+        # Classify each event into the new pain categories
+        failure_events = 0
+        infra_failure_events = 0
+        superseded_cancellations = 0
+        agent_pain_events = 0
+        for e in direct:
+            if e['kind'] == 'check' and e['payload'].get('conclusion') == 'cancelled':
+                cls = _classify_cancellation(e, item, latest_check_sha.get(key))
+                if cls == 'superseded':
+                    superseded_cancellations += 1
+                elif cls == 'infra':
+                    infra_failure_events += 1
+                else:
+                    failure_events += 1
+            elif e['kind'] == 'check' and e['payload'].get('conclusion') in {'failure', 'timed_out'}:
+                failure_events += 1
+            elif e['kind'] == 'review' and e['payload'].get('state') == 'CHANGES_REQUESTED':
+                failure_events += 1
+            elif e['kind'] in ('agent-block', 'agent-strike', 'agent-arbitrate', 'agent-park'):
+                agent_pain_events += 1
+            elif e['kind'] in ('labeled', 'unlabeled') and (e['payload'].get('label') or {}).get('name') in AGENT_PAIN_LABELS:
+                # The latch itself and every manual un-latch: the week of 2026-09-28 emitted no
+                # agent-block/strike/park event at all, while oracle-fleet#753/#798 and the S9
+                # PRs flapped agent/error|blocked a dozen times under the seat's hands.
+                agent_pain_events += 1
+
+        # A round is the launcher's `picking this up (round N)` dispatch marker (agent-dispatch —
+        # 303 in the live store on 2026-10-04, read by goal_graph.round_evidence too); a ride that
+        # emits only its completed-round stats marker (agent-stats) still counts, never both.
+        round_count = max(sum(e['kind'] == 'agent-dispatch' for e in direct),
+                          sum(e['kind'] == 'agent-stats' for e in direct))
+        score = (failure_events * W_FAILURE + infra_failure_events * W_INFRA
+                 + agent_pain_events * W_AGENT_PAIN + max(0, round_count - 1) * W_ROUND
+                 + len(direct) * W_EVENT + idle * W_STALL)
+
         tasks.append(dict(key=key, project=item['repo'].split('/')[-1], issue=item['item'], repo=item['repo'],
                           events=evs, context=item, standing_stall_seconds=idle,
-                          failure_events=failures, direct_event_count=len(direct)))
-    tasks.sort(key=lambda t: (-t['failure_events'], -t['direct_event_count'], -t['standing_stall_seconds'], t['key']))
+                          failure_events=failure_events, infra_failure_events=infra_failure_events,
+                          superseded_cancellations=superseded_cancellations,
+                          agent_pain_events=agent_pain_events, round_count=round_count,
+                          direct_event_count=len(direct), score=score))
+
+    # Credit is a ranking/visibility device: the population totals below are computed from the
+    # PRE-credit values so crediting never inflates them (acceptance: "Population-before-sampling
+    # totals unchanged except for the new metrics").
+    population_failure_events = sum(t['failure_events'] for t in tasks)
+
+    # Roll PR failures up to linked issues (credit issues)
+    for pr_key, issue_keys in pr_to_issue.items():
+        pr_task = next((t for t in tasks if t['key'] == pr_key), None)
+        if not pr_task:
+            continue
+        for issue_key in issue_keys:
+            issue_task = next((t for t in tasks if t['key'] == issue_key), None)
+            if issue_task:
+                issue_task['failure_events'] += pr_task['failure_events']
+                issue_task['direct_event_count'] += pr_task['direct_event_count']
+                issue_task['score'] += pr_task['failure_events'] * W_FAILURE + pr_task['direct_event_count'] * W_EVENT
+
+    tasks.sort(key=lambda t: (-t['score'], t['key']))
     late = [e for e in state['events'] if timestamp(e['occurred_at']) < start
             and timestamp(e['observed_at']) > timestamp(covered_at or since)]
     # Full counters are calculated before any prompt-sized sampling.
@@ -259,7 +403,10 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 collected_until=state['collected_until'], scope_source=state.get('scope_source', 'unknown'), repos=state.get('repos', []),
                 population={'event_count': len(selected), 'task_count': len(tasks),
                             'by_kind': dict(Counter(e['kind'] for e in selected)),
-                            'failure_events': sum(t['failure_events'] for t in tasks),
+                            'failure_events': population_failure_events,
+                            'infra_failure_events': sum(t['infra_failure_events'] for t in tasks),
+                            'superseded_cancellations': sum(t['superseded_cancellations'] for t in tasks),
+                            'agent_pain_events': sum(t['agent_pain_events'] for t in tasks),
                             'worker_stat_records': len(worker_stats),
                             'worker_cost_measured_records': sum('cost_usd' in e['payload'] for e in worker_stats),
                             'worker_cost_usd': (sum(e['payload'].get('cost_usd', 0) for e in worker_stats) if any('cost_usd' in e['payload'] for e in worker_stats) else None),
@@ -269,7 +416,8 @@ def bundle(state, since, until, keep=40, covered_at=None, source_revision=None):
                 late_arrivals=late,
                 limitations=['GitHub activity only; worker sessions, token cost, deployments and legacy commit statuses are not collected.',
                              'Standing stall is idle open-time exposure, not a failure verdict.',
-                             'Comment revisions use updated_at; dated agent-event markers supply stats where emitted. Stats mirrored on issue and PR may describe the same ride: records are not unique runs or full cost coverage.'])
+                             'Comment revisions use updated_at; dated agent-event markers supply stats where emitted. Stats mirrored on issue and PR may describe the same ride: records are not unique runs or full cost coverage.',
+                             'Cancelled checks are classified: superseded (newer SHA or higher-priority request) → wasted-CI metric; infra (shutdown/lost-communication) → platform signal; other → counted as failure.'])
     result['source_revision'] = source_revision or 'unknown'
     result['covered_at'] = state.get('observed_at')
     result['late_arrival_count'] = len(late)

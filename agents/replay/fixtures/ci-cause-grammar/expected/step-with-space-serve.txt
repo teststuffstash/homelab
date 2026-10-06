@@ -1,0 +1,4 @@
+OUT JOB_STEP e2e/kind serve e2e (mcpServer + deterministic UC-1 client)
+OUT CLASS content
+OUT BASIS observed
+RC 0

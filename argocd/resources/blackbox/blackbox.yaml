@@ -80,7 +80,7 @@ spec:
     spec:
       containers:
         - name: blackbox-exporter
-          image: quay.io/prometheus/blackbox-exporter:v0.27.0
+          image: quay.io/prometheus/blackbox-exporter:v0.28.0
           args: ["--config.file=/etc/blackbox/blackbox.yml"]
           ports:
             - { name: http, containerPort: 9115 }
@@ -237,6 +237,8 @@ spec:
           labels:
             severity: warning
             stack: oracle
+            # triage: specs endpoint probe; the serving pod and ingress are readable in-cluster
+            triage: dig
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
             description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
@@ -247,6 +249,8 @@ spec:
           for: 10m
           labels:
             severity: warning
+            # triage: endpoint probe symptom; serving pod, ingress and probe history readable in-cluster
+            triage: dig
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
             description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
@@ -259,6 +263,8 @@ spec:
           for: 3m
           labels:
             severity: warning
+            # triage: cached SERVFAIL lives in router Unbound; remedy is a router API restart, out of investigator reach
+            triage: none
           annotations:
             summary: "Unbound not answering for api.github.com"
             description: "SERVFAIL/no answer for api.github.com through Unbound (192.168.2.1:53) — check for a cached SERVFAIL (TICK-LOG 2026-08-26/08-31); if so, POST /api/unbound/service/restart, wallet API creds."

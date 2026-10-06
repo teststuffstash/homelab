@@ -1,11 +1,19 @@
-# homelab#928 — the agent/review phantom belt: an `agent-fix ∧ agent/review` issue with NO open PR
-# and NO merged PR mentioning it, persisted past C4C5_PERSIST_S, is a terminal sink invisible to
-# every scan class. This belt reconciles it back to `agent/queued`, verbatim shape of the IL-T16
-# belt (homelab#155) but for `agent/review` instead of `agent/in-progress`.
+# homelab#928/2281 — the agent/review phantom belt with frozen-open-PR detection.
 #
-# CONDITION UNDER REPLAY. Two review-only issues in one world:
-#   #80 — `agent/review`, no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES.
-#   #81 — `agent/review`, no open PR, but mentioned by a MERGED PR → HELD (may be finished work).
+# homelab#928 clause: an `agent-fix ∧ agent/review` issue with NO open PR and NO merged PR
+# mentioning it, persisted past C4C5_PERSIST_S, is a terminal sink invisible to every scan
+# class. This belt reconciles it back to `agent/queued`, verbatim shape of the IL-T16 belt
+# (homelab#155) but for `agent/review` instead of `agent/in-progress`.
+#
+# homelab#2281 clause (extended): an `agent/review` issue with an OPEN, ARMED, APPROVED,
+# BEHIND PR that has CI green and is unmoved past C4C5_PERSIST_S is also a terminal sink.
+# This belt DETECTS and REPORTS it, asking for operator review-dismissal to unblock.
+#
+# CONDITION UNDER REPLAY. The review-only issues that emit (the full row matrix is at the bottom):
+#   #80 — no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES.
+#   #81 — no open PR, but mentioned by a MERGED PR → HELD (may be finished work).
+#   #83 — frozen armed PR (#100): armed ∧ approved ∧ ci green ∧ behind ∧ unmoved → DETECTED.
+#   #88 — recently-updated frozen PR (#105, age < guard) → HELD (may still be in flight).
 #
 # THE CONTRACT:
 #   1. #80 is WRITTEN in the IL-T16 order — `--add-label agent/queued` FIRST, `--remove-label
@@ -13,6 +21,8 @@
 #      a single word is commented.
 #   2. The audit comment names the phantom-reconciliation semantic.
 #   3. #81 emits NO write — a merged PR mentioning it holds.
+#   3b. #87 (`agent/review` + `agent/blocked`, no open PR, persisted) emits NOTHING — a human
+#      gate is never re-queued (the belt's agent/blocked exclusion, mirrors C4C5_SEL).
 #   4. The belt runs INSIDE the C4/C5 clause, after the IL-T16 belt and before c4c5-derivations.
 pins:
   - IL-T27
@@ -26,3 +36,20 @@ parts:
 scrub:
   - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
   - 's/ [0-9]\{1,\}m / Nm /g'
+# TEST ROWS MATRIX (one row per axis combination: open-PR? × armed × verdict-at-head × ci × mergeStateStatus × age)
+#
+# Existing phantom rows (no open PR):
+#   #80 — no open PR, no merged PR, persisted past C4C5_PERSIST_S → RECONCILES
+#   #81 — no open PR, mentioned by merged PR → HELD
+#
+# New frozen-open-PR rows:
+#   #83 — open PR ∧ armed ∧ approved ∧ ci green ∧ behind ∧ unmoved past guard → DETECTED
+#
+# Negative rows (should NOT fire):
+#   #82 — open PR #101 but unarmed → SKIPPED
+#   #84 — open PR #102, armed, but not approved (REVIEW_REQUIRED) → SKIPPED
+#   #85 — open PR #103, armed, approved, CI green, but CLEAN (not BEHIND) → SKIPPED
+#   #86 — open PR #104, armed, approved, behind, but CI red (FAILURE) → SKIPPED
+#   #87 — agent/review + agent/blocked, NO open PR, no merged PR, persisted → NO OUTPUT
+#         (human-gate exclusion: without it the phantom belt would re-queue a human-held issue)
+#   #88 — open PR, armed, approved, behind, CI green, but recently updated (age < guard) → HELD

@@ -32,6 +32,7 @@ Two needs, one substrate:
 | worker (goose) | `/tmp/run.log` (tee'd stdout → Loki) + goose's own session file | **no** (Loki keeps stdout only; goose session lost) |
 | reviewer | `--output-format json` single result; its `~/.claude` transcript | **no** |
 | responder (2026-09-17) | per firing alert: `alert.json` + `triage.log` + the `*.jsonl` + an A1 manifest + a typed `finding.json`, under `homelab/alert-<fp>/responder-r1-<ts>/` (FU-210 / FU-231, `agents/coordinator/responder-argo.yaml`) | **yes** (bucket) — before 2026-09-17 it was the one role with NO capture at all, and a triage that filed no issue therefore left nothing: the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed nothing, and the probe lane deferred to it as COVERED while the alert stood 8 h |
+| deep dig (2026-10-04) | per daily run: `digest.json` + `brief.md` + `dig.log` + the `*.jsonl` + an A1 manifest + one `finding-N.json` (`dig-finding/v1`) PER GROUP, under `homelab/dig-<date>/dig-r1-<ts>/` (ADR-148, `agents/coordinator/deep-dig-argo.yaml`) | **yes** (bucket) — and, unlike the responder, the pod READS the bucket back with the reader key: a finding for the same (alert, subject) within 7 d is what stops a daily re-dig |
 | jail seat (2026-08-19) | Claude Code JSONL on the host bind-mount (`.claude-data/`), pushed by `scripts/jail-transcripts-sync.sh` (heartbeat + wind-down) to the **separate `jail-transcripts` bucket** | host + bucket — and the bucket is deliberately OUTSIDE the viewer/retro read set: jail transcripts can carry wallet VALUES, so no cluster role reads them (`agents/coordinator/jail-transcripts-workspace.yaml`) |
 
 The irreplaceable artifact is the transcript. Everything else (dashboards, retros) can be built
@@ -109,6 +110,14 @@ Hook points (all existing seams, small diffs):
   filed issue are known. The key is the same WRITE-ONLY bucket key the worker holds, which is
   also the ceiling on what the record may become — the pod cannot read its own findings back, so
   the lane's dedup state stays in GitHub + the `responder-seen` ConfigMap (FU-231).
+- **deep dig** (ADR-148, 2026-10-04): the CronWorkflow uploads once per run from launcher-owned
+  shell — the digest and brief BEFORE the session, the transcript + manifest + per-group
+  `dig-finding/v1` records straight after it (`agents/deep-dig-select.sh harvest` extracts the
+  `BEGIN-DIG-FINDING`/`END-DIG-FINDING` blocks and validates each one; an invalid block is
+  dropped loudly, never uploaded as a record). This is FU-231's consumer leg: findings are the
+  deliverable, issues are not written at all, and the bucket is READ by the next run (reader
+  key, `agent-transcripts-s3`) for the "already dug" gate — the one lane whose state may live
+  in the bucket, because its key can read.
 
 ### A2. Browse (P1)
 
@@ -566,10 +575,26 @@ PLATFORM retro and per-stack retros — built in that order.**
    on every run).
 2. **Stack retros SECOND, their briefs authored AGAINST the platform retro's coverage** —
    deliberately non-overlapping: stack-local concerns only (recipe quality, spec adherence,
-   the stack's own model cells), never the cross-cutting classes the platform retro already
-   owns. Graduation stays the AgentStack claim knob (`retro.enabled` + cadence + slice) as
-   ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
-   the first stack graduates, with the platform reports in hand.
+   the stack's own model cells); the cross-cutting classes the platform retro owns are
+   ESCALATED from a stack retro (ADR-146), never fixed there. Every stack runs one by default
+   since ADR-146 (the claim knob is an opt-out, not a graduation gate); the escalation contract
+   is authored INTO the stack brief template with the platform reports in hand.
+   **Stack series (ADR-146, accepted 2026-10-04).** The same workflow with `stack=<name>`:
+   ride ns = the stack's fixer ns (`agents/retro-project.sh`), git identity = the stack's own
+   worker token (its repos + the public platform repos — the platform series alone mounts
+   `retro-git`, #2215), bundle + ledger guard scoped to the claim's repos, its own weekly slot
+   (platform Mon 05:00Z; stacks on later days — the subscription semaphore and the ride-ns
+   busy-probe serialize them); the guard's event floor gates every fire, which is what makes
+   default-on safe. Context = `BRIEF.md` rendered for the stack + whatever the stack repo gives
+   every ride (its CLAUDE.md, `.agents/`); a stack may replace the brief wholesale with its own
+   `.agents/retro.md` — the placeholders and the report markers the harvest self-check reads
+   stay the platform's. The brief asks for attribution with evidence (platform cause vs the
+   stack's own; unseen-from-the-stack = platform), not a rubric. Platform-attributed findings
+   target homelab with `Origin:` = the stack item and ride the acceptance act (`retro_queue.py`
+   takes a per-finding repo; the seat adds the cross-repo `blockedBy` edge; board intake, or
+   INTO a covering platform Goal per ADR-122 (4)). The platform series keeps the bundle's
+   fleet-wide population counters and narrows its deep-dive set to the platform claim's repos.
+   Build = FU-058's next; oracle first, hand-fired after platform r7.
    **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
    platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
    complexity, and their dynamic differs from the platform's machinery-defect stream. The

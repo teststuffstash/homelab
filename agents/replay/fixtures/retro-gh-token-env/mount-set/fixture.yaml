@@ -1,0 +1,14 @@
+# homelab#2171: a retro ride (RETRO_GH_SECRET set by retro-argo.yaml's cell step) mounts the in-ns
+# mirror Secret at the agent-base entrypoint's GIT_TOKEN_FILE path and renders NO broker URL —
+# the entrypoint's file branch then installs a gh wrapper that re-reads the file per call, so the
+# ride's gh identity IS the fleet-wide read-only token. The env-entry fragment (the `set` sibling)
+# stays as the brief's presence signal. CRED_BROKER_ENV is pre-filled here to prove the clearing.
+name: retro-gh-token-env-mount-set
+mode: actions
+source: agents/agent-session.sh
+env:
+  - RETRO_GH_SECRET=retro-git
+  - CRED_BROKER_ENV=broker-env-rendered
+parts:
+  - block:retro-gh-mount
+  - file:post.sh

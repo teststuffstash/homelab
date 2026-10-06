@@ -248,6 +248,8 @@ spec:
             # itself. Fires in ns `monitoring` with a non-`Agent*` name, so the gate's two older
             # keys both miss it.
             platform_machinery: "true"
+            # triage: the metric already names the permission diff; the grant is an operator GitHub App click
+            triage: none
           annotations:
             summary: "GitHub App {{ $labels.app }} permissions differ from the declared state"
             description: "Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"{{ $labels.app }}\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -275,6 +277,8 @@ spec:
             > on (repo, workflow, branch) group_right () github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out"})
           labels:
             severity: warning
+            # triage: per-run CI failure; recurring failures on master are worth a grouped look at run logs
+            triage: dig
           annotations:
             summary: "GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed"
             description: "Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run, or as soon as a newer run on the same branch succeeds (vendor blip)."
@@ -427,6 +431,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: runner saturation vs breakage readable from ARC pods and runner metrics
+            triage: dig
           annotations:
             summary: "CI cannot dispatch: {{ $labels.runner }} runs queued {{ $value | humanizeDuration }}"
             description: 'The oldest {{ $labels.runner }} workflow run in {{ $labels.owner }} has waited {{ $value | humanizeDuration }} for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (the cap is maxRunners in argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
@@ -521,6 +527,8 @@ spec:
           expr: github_pull_request_reviews_recent > 3
           labels:
             severity: warning
+            # triage: a review dispatch loop burns budget per minute; one agent/error label write halts it
+            triage: now
           annotations:
             summary: "Review loop on {{ $labels.repo }}#{{ $labels.number }}"
             description: "{{ $labels.author }} has posted {{ $value }} verdict reviews in the last hour on https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }} — that cadence is a dispatch loop, not iteration. Halt it: add the agent/error label (all agent automation skips it), then check the review-reflex breaker (agents/review-reflex.sh)."
@@ -529,6 +537,8 @@ spec:
           expr: github_pull_request_label{label="agent/error"} == 1
           labels:
             severity: warning
+            # triage: audit 2026-10-03: a dig found a mirror-denied MinIO image breaking CI on 11 PRs
+            triage: dig
           annotations:
             summary: "agent/error on {{ $labels.repo }}#{{ $labels.number }} — automation halted"
             description: "A circuit breaker tripped or an agent flagged an anomaly on https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}; agent automation skips it until a human removes the label. Read the AGENT_ERROR comment(s) on the PR for what was observed."
@@ -538,6 +548,8 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # triage: pod crash or missing token Secret, both readable in-cluster
+            triage: dig
           annotations:
             summary: "github-exporter is not being scraped"
             description: "The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed."
@@ -574,6 +586,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: poll error in exporter logs separates an expired PAT (operator re-mint) from other faults
+            triage: dig
           annotations:
             summary: "github-exporter polls are failing"
             description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
@@ -596,6 +610,8 @@ spec:
           for: 5m
           labels:
             severity: warning
+            # triage: the class label routes the diagnosis; GraphQL cost or schema issues are fixable by PR
+            triage: dig
           annotations:
             summary: "github-exporter: GraphQL partial data — PR series missing"
             description: "GraphQL walk returned partial data (class: {{ $labels.class }}) in the last 15m and the entire `github_pull_request_*` series family is absent from Prometheus. The review edge, codeowner-park watcher and behind-dispatcher are dark (FU-108 class — the read succeeds with nothing in it). Check: the `class` label says which path to follow — `resource-limit` → the walk's nested `first:` fan-out against GitHub's query-cost ceiling, see github-exporter.py; `not-accessible` → the exporter PAT's repo access (scripts/github-exporter-pat-bootstrap.sh, docs/github-setup.md §Tokens); `other` → the pod log's field errors. githubstatus.com rules out a GitHub-side outage. The */15 reflex + coordinate CronWorkflow backstops own re-reviews and CI-reds meanwhile."
@@ -664,6 +680,8 @@ spec:
           for: 2h
           labels:
             severity: warning
+            # triage: coordinate ticks, WIP holds and scan reports are readable in-cluster
+            triage: dig
           annotations:
             summary: "Agent queue stalled — queued issues but a fully idle loop"
             description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
@@ -696,6 +714,8 @@ spec:
             # it (the 2026-07-17 class this alert was built for). `token`/`resource` name an
             # identity, never a file.
             platform_machinery: "true"
+            # triage: the drainer of the pool is attributable from exporter series and workflow history
+            triage: dig
           annotations:
             summary: "GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})"
             description: '{{ $labels.token }} has {{ $value | humanizePercentage }} of its {{ $labels.resource }} pool left — consumers of this installation will start erroring "API rate limit exceeded" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp.'
@@ -747,6 +767,30 @@ spec:
           annotations:
             summary: "Blocking codeowner park: {{ $labels.repo }}#{{ $labels.pr }} gates blocked work (issue #{{ $labels.issue }})"
             description: "PR {{ $labels.repo }}#{{ $labels.pr }} is codeowner-parked and its closing issue #{{ $labels.issue }} has {{ $value }} blocking dependency edge(s) — wedged work is waiting on this park. https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.pr }}"
+
+        # homelab#1896: an armed+BEHIND PR on a repo whose ruleset requires no approval is NEVER a
+        # legitimate steady state — the updater brings it current within a pass (the */15 cron plus
+        # the /update-pr edge). Before #1896's fix the updater's merge-ready arm required a bot
+        # approval the mechanical `automerge` classes never get (docs/agents/iac-lane.md: deploy_bump
+        # "CI-only, instant"; docs/agents/merge-path.md §Decisions/FU-046), so they stranded
+        # indefinitely — oracle-iac, 2026-09-21: 10 open PRs, all armed+BEHIND, the oldest from
+        # 09-16, ~500 updater passes over them. The series exists ONLY for reviewDecision == ""
+        # (the no-approval signal), so no filter is needed here; drafts are excluded at the source.
+        # ⚠ RESTART-GAP HARDENED (homelab#331 class): a scraped single-replica gauge under a `for:`
+        # window; `max_over_time([5m])` rides a poller roll or a raising collector. [5m] is the
+        # class's bound (item (vii) at the top of this group): the composed phantom is the 120s
+        # exposition cache + B, and the window survives iff `for:` > that — 10m > 120s + 5m = 7m.
+        # Price: a PR updated just under the threshold keeps ringing ≤7m.
+        - alert: ArmedBehindNoApprovalStranded
+          expr: >-
+            time() - max by (owner, repo, number) (max_over_time(github_pull_request_armed_behind_no_approval_timestamp[5m])) > 3600
+          for: 10m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: "Armed+BEHIND PR {{ $labels.repo }}#{{ $labels.number }} stranded on a no-approval repo"
+            description: "PR {{ $labels.repo }}#{{ $labels.number }} is armed and BEHIND on a repo whose ruleset requires no approval, and is over an hour old — the updater should have brought it current within a pass (the */15 cron plus the /update-pr edge). This is never a legitimate steady state. Check: (1) the updater's last pass for this repo (agents/update-pr-branch.sh, the updater-git token); (2) whether the PR carries the `automerge` label (the review reflex's skip class) or a bot approval at head — the two merge-ready arms; (3) the /update-pr edge (github-exporter UPDATE_PR_WEBHOOK_URL). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"
 
     # ── ADR-107 flip-acceptance 1: the requested≠served model drift belt (homelab#515) ──────────
     # PR#407's class — every claude/haiku worker ride silently running the CLI default
@@ -861,6 +905,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: residue is a pending human apply; addresses are in the box journal and GitHub status
+            triage: none
           annotations:
             summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
             description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
@@ -878,6 +924,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: Renovate run logs on GitHub show per-repo integration errors
+            triage: dig
           annotations:
             summary: "Renovate has not opened a PR anywhere in the org for 14 days"
             description: 'The newest `renovate/*` PR on any teststuffstash repo is over 14 days old (github_renovate_last_pr_timestamp, org-wide max). Renovate runs every 6h from .github/workflows/renovate.yaml and reports success even when it opens nothing (FU-125, docs/dependency-upgrades.md §Ground truth): read the latest run log for `integration-unauthorized` / `repository-changed` per repo, then `gh api /orgs/teststuffstash/installations` for the homelab-renovate App and its permissions (GithubAppPermissionDrift is the sibling belt). Never re-enable the dependency dashboard as the fix — liveness is this gauge by ruling.'
@@ -897,6 +945,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: rerunning dependency-coverage refreshes proofs from GitHub; a stale class needs a drill PR
+            triage: dig
           annotations:
             summary: "Dependency class {{ $labels.class }} ({{ $labels.class_name }}) is complete but its proof is over 90 days old"
             description: 'docs/dependency-upgrades.md §The dependency inventory marks class {{ $labels.class }} ({{ $labels.class_name }}) complete — no ⚠ column — but its newest end-to-end proof (a merged proposer PR, or the capability-ledger date) is older than 90 days: the owner may have left and nothing has exercised propose → gate → deploy since. Re-run `devbox run dependency-coverage` (it refreshes the proofs from GitHub); if the date does not move, the class has stalled — find why nothing proposed (docs/renovate.md) or re-add the owner in docs/dependency-classes.yaml.'
@@ -905,6 +955,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: launcher model resolution vs served family is checkable from OTLP series and code
+            triage: dig
           annotations:
             summary: "Claude-harness rides requested a model family that was NOT served ({{ $labels.project }}/{{ $labels.role }})"
             description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose family never appeared on the SERVED side (OTLP claude_code_*) for 30m. Check the launcher''s resolved model and whether `model_family()` normalizes both ids — the PR#407 class is what this belt exists to catch (a claude/haiku dispatch served claude-opus for 23 days). Offending families: agent_model_drift{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Rides whose (project, role) produced NO telemetry at all are NOT this alert — they are agent_model_unverifiable, its own count.'
@@ -913,6 +965,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: otel-collector export failures or dying rides are readable in-cluster
+            triage: dig
           annotations:
             summary: "Claude-harness rides have NO served-side telemetry ({{ $labels.project }}/{{ $labels.role }})"
             description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'

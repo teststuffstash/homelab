@@ -99,9 +99,31 @@ declare -a DRIFT=() DRIFT_OK=()
 declare -a SUBSTRATE=()
 
 log()  { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-skipped() { RESULTS+=("$1 skip"); SKIPPED=$((SKIPPED+1)); log "SKIP $1 — $2"; }
-passed()  { RESULTS+=("$1 pass"); PASS=$((PASS+1));       log "PASS $1${2:+ — $2}"; }
-failed()  { RESULTS+=("$1 fail"); FAIL=$((FAIL+1));       log "FAIL $1 — $2" >&2; }
+
+# ── the REASON vocabulary (responder audit 2026-10-03) ──────────────────────────────────────────
+# Every fail/skip carries ONE word from this fixed list as the `reason` label of mgmt_probe_check,
+# so a cluster-side reader can say WHY without ssh — the box ships no logs, and the free-text
+# verdict line stays in journald. Never free text on a label (cardinality): a word outside this
+# list is published as `other` and logged, so a typo cannot mint a series. To add a word, add it
+# HERE and to MgmtBeltCheckFailing's description (argocd/resources/mgmt-metrics/prometheusrule.yaml).
+#   ok              pass
+#   drift           declared and live disagree (a non-empty plan, a router recap with changed>0)
+#   skew            client/server version skew (talosctl a minor off the cluster)
+#   unreachable     a target did not answer (connect error / timeout) — the probe could not look
+#   toolchain       the pinned tool could not start (tofu init: providers, backend creds, egress)
+#   failed          the check's command errored for any other reason (read the journal line)
+#   unparseable     the command answered in a shape the check does not recognise
+#   missing         a declared input is gone (a renamed variable/output, no key, no route)
+#   requested       skip: SKIP= asked for it
+#   no-input        skip: a credential/file/state this check needs is not present here
+#   not-applicable  skip: the target is out of this check's scope (not cone-clean, no remote state)
+REASONS=" ok drift skew unreachable toolchain failed unparseable missing requested no-input not-applicable "
+reason_of() {
+  case "$REASONS" in *" $1 "*) printf '%s' "$1" ;; *) log "WARN reason '$1' is not in the vocabulary — published as 'other'" >&2; printf other ;; esac
+}
+skipped() { local r; r="$(reason_of "$2")"; RESULTS+=("$1 skip $r"); SKIPPED=$((SKIPPED+1)); log "SKIP $1 [$r] — $3"; }
+passed()  { RESULTS+=("$1 pass ok"); PASS=$((PASS+1));                     log "PASS $1${2:+ — $2}"; }
+failed()  { local r; r="$(reason_of "$2")"; RESULTS+=("$1 fail $r"); FAIL=$((FAIL+1));       log "FAIL $1 [$r] — $3" >&2; }
 
 skip_requested() { case " $SKIP " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -114,18 +136,18 @@ tool() { devbox run --quiet -- "$@" 2>&1; }
 # FU-097 says nothing detects today. A non-zero exit means the toolchain, the passphrase, the S3
 # credential or the network path broke, which is the toolchain canary after a devbox.lock bump.
 check_tofu() {
-  skip_requested tofu && { skipped tofu "SKIP requested"; return; }
+  skip_requested tofu && { skipped tofu requested "SKIP requested"; return; }
   if [ ! -f "$REPO/scripts/tofu-state-env.sh" ]; then
-    skipped tofu "no tofu-state-env.sh in this checkout"; return
+    skipped tofu no-input "no tofu-state-env.sh in this checkout"; return
   fi
   for root in $ROOTS; do
     if [ ! -f "$REPO/tofu/$root/backend.tf" ]; then
-      skipped "tofu:$root" "no backend.tf — root is not on remote state"; continue
+      skipped "tofu:$root" not-applicable "no backend.tf — root is not on remote state"; continue
     fi
     if [ -f "$REPO/tofu/$root/apply.sh" ]; then
       # A root with its own wrapper derives provider auth from something live (the infisical
       # shape). Skip rather than fail: its plan measures that dependency, not this box.
-      skipped "tofu:$root" "root has apply.sh — provider auth is live-derived, not cone-clean"; continue
+      skipped "tofu:$root" not-applicable "root has apply.sh — provider auth is live-derived, not cone-clean"; continue
     fi
     # ⚠ BOTH env scripts, in a SUBSHELL per root: tofu-state-env.sh is per-ROOT (it resolves the
     # S3 credential + TF_ENCRYPTION for one root at a time — docs/tofu-state.md "encryption is per
@@ -159,10 +181,10 @@ check_tofu() {
     rc=$?
     case $rc in
       0)  passed "tofu:$root" "No changes" ;;
-      2)  failed "tofu:$root" "DRIFT — plan is non-empty" ;;
-      90) skipped "tofu:$root" "no state credential reachable (wallet absent?)" ;;
-      91) failed "tofu:$root" "tofu init failed (backend creds, provider download, or egress)" ;;
-      *)  failed "tofu:$root" "plan errored (rc=$rc): $(printf '%s' "$out" | tail -3 | tr '\n' ' ')" ;;
+      2)  failed "tofu:$root" drift "DRIFT — plan is non-empty" ;;
+      90) skipped "tofu:$root" no-input "no state credential reachable (wallet absent?)" ;;
+      91) failed "tofu:$root" toolchain "tofu init failed (backend creds, provider download, or egress)" ;;
+      *)  failed "tofu:$root" failed "plan errored (rc=$rc): $(printf '%s' "$out" | tail -3 | tr '\n' ' ')" ;;
     esac
   done
 }
@@ -171,14 +193,14 @@ check_tofu() {
 # A devbox.lock bump can move talosctl past the cluster's Talos version; the client refuses or
 # misbehaves, and every recovery path through the Talos API goes with it.
 check_talos() {
-  skip_requested talos && { skipped talos "SKIP requested"; return; }
+  skip_requested talos && { skipped talos requested "SKIP requested"; return; }
   # On the box the file is /var/lib/mgmt/talosconfig (TALOSCONFIG from the env file); in the jail
   # it is the tofu-generated one in the checkout.
   local tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
-  [ -f "$tc" ] || { skipped talos "no talosconfig at $tc"; return; }
+  [ -f "$tc" ] || { skipped talos no-input "no talosconfig at $tc"; return; }
   local out
   out="$(tool talosctl --talosconfig "$tc" -n "$TALOS_NODE" version --short)" || {
-    failed talos "talosctl version failed: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"; return; }
+    failed talos failed "talosctl version failed: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"; return; }
   # `version --short` prints "Talos vX.Y.Z" under Client: and a "Tag: vX.Y.Z" line under Server:.
   # Unanchored + ANSI/CR-stripped: under the systemd unit the first run's captured output carried
   # devbox install chatter around these lines and the anchored match found nothing (2026-09-13).
@@ -186,7 +208,7 @@ check_talos() {
   clean="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
   client="$(printf '%s' "$clean" | awk '/Talos v[0-9]/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
   server="$(printf '%s' "$clean" | awk '/Tag:/{for(i=1;i<=NF;i++) if($i ~ /^v[0-9]/){print $i; exit}}')"
-  [ -n "$client" ] && [ -n "$server" ] || { failed talos "unparseable version output"; return; }
+  [ -n "$client" ] && [ -n "$server" ] || { failed talos unparseable "unparseable version output"; return; }
   # PATCH skew is fine and normal (the devbox pin moves ahead of the cluster — 2026-09-12: client
   # v1.13.8 vs server v1.13.2, which is FU-155's pin). MINOR skew is the one that breaks the API,
   # so only that fails: an equality check here would cry wolf on every toolchain bump.
@@ -196,7 +218,7 @@ check_talos() {
   if [ "$cmin" = "$smin" ]; then
     passed talos "client $client / server $server (same minor)"
   else
-    failed talos "MINOR skew: client=$client server=$server"
+    failed talos skew "MINOR skew: client=$client server=$server"
   fi
 }
 
@@ -215,18 +237,18 @@ check_talos() {
 # belongs to the alerts with a `for:` that read mgmt_node_drift (argocd/resources/mgmt-metrics/;
 # the version axis stays with the fleet-split rule in argocd/resources/talos-substrate/).
 check_nodes() {
-  skip_requested nodes && { skipped nodes "SKIP requested"; return; }
+  skip_requested nodes && { skipped nodes requested "SKIP requested"; return; }
   local statef="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}"
   local tc="${TALOSCONFIG:-$REPO/tofu/talosconfig}"
-  [ -f "$tc" ] || { skipped nodes "no talosconfig at $tc"; return; }
+  [ -f "$tc" ] || { skipped nodes no-input "no talosconfig at $tc"; return; }
   local declared
   if [ -n "${NODE_TARGETS_JSON:-}" ]; then
     # The declared half, pre-fetched. Exists so the diff can be exercised from the jail (where the
     # main state deliberately is not) against the live fleet — `devbox run mgmt-tf -- output -json
     # node_install_targets > /tmp/d.json` then NODE_TARGETS_JSON=/tmp/d.json.
-    declared="$(cat "$NODE_TARGETS_JSON")" || { failed nodes "cannot read $NODE_TARGETS_JSON"; return; }
+    declared="$(cat "$NODE_TARGETS_JSON")" || { failed nodes missing "cannot read $NODE_TARGETS_JSON"; return; }
   else
-    [ -f "$statef" ] || { skipped nodes "no main state at $statef — this check runs on the box"; return; }
+    [ -f "$statef" ] || { skipped nodes no-input "no main state at $statef — this check runs on the box"; return; }
     # ⚠ The box's OWN checkout has never had the main root initialised — only the apply clone
     # (/var/lib/mgmt/apply/homelab) is, because that is where mgmt-tf and mgmt-apply run. The
     # first real run of this check on the box therefore died with "Required plugins are not
@@ -239,10 +261,10 @@ check_nodes() {
     # removed `node_install_targets` stays a loud FAIL.
     if ! tool tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null; then
       # Visible on its own terms as mgmt_probe_check{check="nodes",status="skip"}.
-      skipped nodes "cannot initialise the main root in this checkout — declaration unreadable"; return
+      skipped nodes toolchain "cannot initialise the main root in this checkout — declaration unreadable"; return
     fi
     declared="$(tool tofu -chdir=tofu output -state="$statef" -json node_install_targets)" || {
-      failed nodes "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
+      failed nodes failed "tofu output node_install_targets failed: $(printf '%s' "$declared" | tail -2 | tr '\n' ' ')"; return; }
   fi
   # The output is a map node => {ip, class, installer, schematic, version}; anything else means the
   # output moved and this check is reading a shape that no longer exists.
@@ -263,7 +285,7 @@ check_nodes() {
   fi
   local rows
   rows="$(printf '%s' "$declared" | tool jq -r 'to_entries[] | [.key, .value.ip, .value.version, .value.schematic] | @tsv' 2>/dev/null)" || true
-  [ -n "$rows" ] || { failed nodes "node_install_targets did not parse as the expected map"; return; }
+  [ -n "$rows" ] || { failed nodes unparseable "node_install_targets did not parse as the expected map"; return; }
   local n=0 drift=0 node ip dver dsch live_v live_s clean
   while IFS=$'\t' read -r node ip dver dsch; do
     [ -n "$node" ] || continue
@@ -440,7 +462,7 @@ JQ
 # it. The judgement of "too long" belongs to the `for:` of MgmtSubstrateBehind /
 # MgmtSubstrateUnsupported (argocd/resources/mgmt-metrics/).
 check_substrate() {
-  skip_requested substrate && { skipped substrate "SKIP requested"; return; }
+  skip_requested substrate && { skipped substrate requested "SKIP requested"; return; }
 
   # ══ OPERATOR-VISIBLE CONSTANTS — the upstream support policies, encoded by hand ═══════════════
   # Nothing here discovers a policy; each number is a SUPPORTED MINOR COUNT (the current minor
@@ -464,7 +486,7 @@ check_substrate() {
     "cilium|cilium/cilium|cilium_version|3"
   )
 
-  [ -f "$REPO/tofu/variables.tf" ] || { skipped substrate "no tofu/variables.tf in this checkout"; return; }
+  [ -f "$REPO/tofu/variables.tf" ] || { skipped substrate no-input "no tofu/variables.tf in this checkout"; return; }
 
   local row comp repo var window declared ours upstream minors fetched behind supported
   local n=0 nbehind=0 neol=0 unread=() detail=""
@@ -474,7 +496,7 @@ check_substrate() {
     if [ -z "$declared" ]; then
       # A RENAMED OR DELETED variable must be loud, not silently "not checked" (the #1831
       # discrimination): the declaration this belt exists to compare has moved.
-      failed substrate "tofu/variables.tf has no readable default for var.$var"
+      failed substrate missing "tofu/variables.tf has no readable default for var.$var"
       return
     fi
     ours="$(printf '%s' "$declared" | sed 's/^v//' | cut -d. -f1,2)"
@@ -505,7 +527,7 @@ check_substrate() {
   done
 
   if [ "$n" -eq 0 ]; then
-    skipped substrate "upstream release lists unreachable and nothing cached (${unread[*]:-all})"
+    skipped substrate unreachable "upstream release lists unreachable and nothing cached (${unread[*]:-all})"
     return
   fi
   [ ${#unread[@]} -gt 0 ] && detail="$detail, not checked: ${unread[*]}"
@@ -616,33 +638,90 @@ _substrate_jq() {
 # router's drift belt too — and it catches the collection/httpx/API-credential regressions this
 # repo has already been bitten by.
 check_ansible() {
-  skip_requested ansible && { skipped ansible "SKIP requested"; return; }
-  [ -f "$REPO/scripts/opnsense-playbook.sh" ] || { skipped ansible "no opnsense-playbook.sh"; return; }
+  skip_requested ansible && { skipped ansible requested "SKIP requested"; return; }
+  [ -f "$REPO/scripts/opnsense-playbook.sh" ] || { skipped ansible no-input "no opnsense-playbook.sh"; return; }
   if [ -z "${OPN_API_KEY:-}" ] && [ ! -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ]; then
-    skipped ansible "no OPNsense credential reachable"; return
+    skipped ansible no-input "no OPNsense credential reachable"; return
   fi
-  local out changed
-  out="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)" || {
-    failed ansible "--check run failed: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"; return; }
-  # ⚠ `ansible-playbook --check` exits 0 even when tasks report `changed` — only a task ERROR is
-  # non-zero. So the exit code alone says "the collection, the httpx interpreter and the API
-  # credential work", NOT "the router matches git". The recap is where drift shows.
-  changed="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' | awk -F'changed=' '/PLAY RECAP/{f=1} f&&NF>1{split($2,a," "); print a[1]; exit}')"
-  if [ -n "$changed" ] && [ "$changed" != "0" ]; then
-    failed ansible "router DRIFT — recap says changed=$changed"
+  local out rc
+  out="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)"; rc=$?
+  ansible_verdict "$rc" "$out"
+}
+
+# The --check run's verdict, PER HOST from the recap — split out so mgmt-probe-test.sh can drive it
+# with captured output. Since window 1 the `opnsense` group is the CARP pair's NODES, so one node
+# being down must not read as "the router plumbing broke" (2026-10-02: opnsense-pve stopped, every
+# tick FAILed `--check run failed` with no word on which host or why).
+#   ⚠ `ansible-playbook --check` exits 0 even when tasks report `changed` — only a task ERROR is
+#   non-zero. So the exit code alone says "the collection, the httpx interpreter and the API
+#   credential work", NOT "the router matches git". The recap is where drift shows.
+#   ⚠ AND the recap under-reports: `oxlorg.opnsense.raw` tasks with action:post (the Unbound
+#   advanced-settings task and the reconfigure handler) return changed=False in check mode BY
+#   CONSTRUCTION, so advanced-settings drift is invisible to --check no matter how it is parsed.
+#   This check therefore covers the plumbing + the module-shaped tasks, not the whole router.
+# A host counts as UNREACHABLE when the recap says so, or when every failure line it has is a
+# connect error (the modules run `connection: local` and POST to the API, so a dead node is a
+# task failure — "Got timeout calling …" / "Unable to connect …" — not ansible's unreachable=).
+# Precedence when hosts disagree: failed (a node that answered and errored) > drift > unreachable.
+# ⚠ An unreachable node FAILS the check — the box has no clean signal for "down by intent" (a
+# tripped kill switch latches onboot 0 against tofu's on_boot = true, i.e. it is itself drift);
+# that is an open design question in the PR that added this, not something to infer here.
+ANSIBLE_CONNECT_RE='Got timeout calling|Unable to connect|Connection refused|No route to host|timed out|Name or service not known'
+ansible_verdict() {
+  local rc="$1" clean recap host line counts ch un fl
+  local unreach=() errored=() drifted=() answered=0
+  clean="$(printf '%s' "$2" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
+  recap="$(printf '%s\n' "$clean" | awk '/PLAY RECAP/{f=1; next} f && / : ok=/')"
+  if [ -z "$recap" ]; then
+    # No recap = the play never ran (collection, interpreter, inventory, credential lookup).
+    if [ "$rc" -ne 0 ]; then
+      failed ansible failed "--check run failed before any host ran: $(printf '%s' "$clean" | tail -3 | tr '\n' ' ')"
+    else
+      failed ansible unparseable "--check exited 0 with no PLAY RECAP"
+    fi
     return
   fi
-  # ⚠ AND the recap under-reports: `oxlorg.opnsense.raw` tasks with action:post (the Unbound
-  # advanced-settings task and the reconfigure handler) return changed=False in check mode BY
-  # CONSTRUCTION, so advanced-settings drift is invisible to --check no matter how it is parsed.
-  # This check therefore covers the plumbing + the module-shaped tasks, not the whole router.
-  passed ansible "opnsense-unbound --check: plumbing ok, recap changed=${changed:-?}"
+  while IFS= read -r line; do
+    host="$(printf '%s' "$line" | awk '{print $1}')"
+    counts="$(printf '%s' "$line" | sed 's/^[^:]*://')"
+    ch="$(printf '%s' "$counts" | sed -n 's/.*changed=\([0-9]*\).*/\1/p')"
+    un="$(printf '%s' "$counts" | sed -n 's/.*unreachable=\([0-9]*\).*/\1/p')"
+    fl="$(printf '%s' "$counts" | sed -n 's/.*failed=\([0-9]*\).*/\1/p')"
+    if [ "${un:-0}" -gt 0 ]; then
+      unreach+=("$host")
+    elif [ "${fl:-0}" -gt 0 ]; then
+      # the host's own failure lines: `failed: [host] …` (loop items) / `fatal: [host]: …`
+      local mine
+      mine="$(printf '%s\n' "$clean" | grep -E "^(failed|fatal): \[$host\]" || true)"
+      if [ -n "$mine" ] && ! printf '%s\n' "$mine" | grep -vqE "$ANSIBLE_CONNECT_RE"; then
+        unreach+=("$host")
+      else
+        errored+=("$host")
+      fi
+    else
+      answered=$((answered + 1))
+    fi
+    [ "${ch:-0}" -gt 0 ] && drifted+=("$host=changed:$ch")
+  done <<< "$recap"
+  local tail=""
+  [ ${#unreach[@]} -gt 0 ] && tail="; did not answer: ${unreach[*]}"
+  if [ ${#errored[@]} -gt 0 ]; then
+    failed ansible failed "task error on ${errored[*]}${tail}"
+  elif [ ${#drifted[@]} -gt 0 ]; then
+    failed ansible drift "router DRIFT — ${drifted[*]}${tail}"
+  elif [ ${#unreach[@]} -gt 0 ]; then
+    failed ansible unreachable "${unreach[*]} did not answer (connect error/timeout); $answered host(s) checked clean"
+  elif [ "$rc" -ne 0 ]; then
+    failed ansible failed "--check exited $rc with a clean recap: $(printf '%s' "$clean" | tail -2 | tr '\n' ' ')"
+  else
+    passed ansible "opnsense-unbound --check: plumbing ok on $answered host(s), recap changed=0"
+  fi
 }
 
 # ── check: every credential the box holds is readable ────────────────────────────────────────────
 # A rotation that half-landed locks the box out of its own job. Read, never print.
 check_creds() {
-  skip_requested creds && { skipped creds "SKIP requested"; return; }
+  skip_requested creds && { skipped creds requested "SKIP requested"; return; }
   local missing=() f
   for f in "${KUBECONFIG:-$REPO/tofu/kubeconfig}" "${TALOSCONFIG:-$REPO/tofu/talosconfig}"; do
     [ -s "$f" ] || missing+=("$f")
@@ -650,7 +729,7 @@ check_creds() {
   if [ ${#missing[@]} -eq 0 ]; then
     passed creds "kubeconfig + talosconfig readable"
   else
-    skipped creds "not provisioned yet: ${missing[*]}"
+    skipped creds no-input "not provisioned yet: ${missing[*]}"
   fi
 }
 
@@ -664,7 +743,7 @@ gate_sshd() {
   if printf '%s' "$out" | awk '{print $4}' | grep -qE '(^|:)22$'; then
     passed gate:sshd "listening on 22"
   else
-    failed gate:sshd "nothing listening on 22 — an update that breaks sshd is unrecoverable here"
+    failed gate:sshd failed "nothing listening on 22 — an update that breaks sshd is unrecoverable here"
   fi
 }
 
@@ -680,7 +759,7 @@ gate_keys() {
   if [ "$n" -ge 1 ]; then
     passed gate:keys "$n authorized key(s) parse"
   else
-    failed gate:keys "no parseable authorized key — locked out"
+    failed gate:keys missing "no parseable authorized key — locked out"
   fi
 }
 
@@ -688,11 +767,11 @@ gate_network() {
   local gw
   gw="$(ip route show default 2>/dev/null | awk '/default/{print $3; exit}')"
   if [ -z "$gw" ]; then
-    failed gate:network "no default route"
+    failed gate:network missing "no default route"
   elif ping -c1 -W2 "$gw" >/dev/null 2>&1; then
     passed gate:network "gateway $gw reachable"
   else
-    failed gate:network "gateway $gw unreachable"
+    failed gate:network unreachable "gateway $gw unreachable"
   fi
 }
 
@@ -701,7 +780,7 @@ gate_systemd() {
   st="$(systemctl is-system-running 2>/dev/null || true)"
   case "$st" in
     running|starting) passed gate:systemd "$st" ;;
-    *)                failed gate:systemd "system state '$st'" ;;
+    *)                failed gate:systemd failed "system state '$st'" ;;
   esac
 }
 
@@ -714,12 +793,12 @@ gate_store() {
     passed gate:store "no store (jail)"; return
   fi
   if ! nix --extra-experimental-features nix-command store info >/dev/null 2>&1; then
-    failed gate:store "nix daemon does not answer"; return
+    failed gate:store failed "nix daemon does not answer"; return
   fi
   local free_kb
   free_kb="$(df -Pk /nix/store 2>/dev/null | awk 'NR==2{print $4}')"
   if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
-    failed gate:store "only $((free_kb / 1024)) MiB free on the store — below min-free, no update can build"
+    failed gate:store failed "only $((free_kb / 1024)) MiB free on the store — below min-free, no update can build"
   else
     passed gate:store "daemon answers, $((${free_kb:-0} / 1024 / 1024)) GiB free"
   fi
@@ -755,12 +834,12 @@ publish() {
   body+="mgmt_probe_checks{$m,result=\"pass\"} $PASS"$'\n'
   body+="mgmt_probe_checks{$m,result=\"fail\"} $FAIL"$'\n'
   body+="mgmt_probe_checks{$m,result=\"skip\"} $SKIPPED"$'\n'
-  body+="# HELP mgmt_probe_check 1 per check of the last run, labelled with its status."$'\n'
+  body+="# HELP mgmt_probe_check 1 per check of the last run, labelled with its status and a bounded reason word."$'\n'
   body+="# TYPE mgmt_probe_check gauge"$'\n'
-  local r name status
+  local r name status reason
   for r in "${RESULTS[@]}"; do
-    name="${r% *}"; status="${r##* }"
-    body+="mgmt_probe_check{$m,check=\"$name\",status=\"$status\"} 1"$'\n'
+    read -r name status reason <<< "$r"
+    body+="mgmt_probe_check{$m,check=\"$name\",status=\"$status\",reason=\"$reason\"} 1"$'\n'
   done
   # One series per (node, axis), both states present: a 0 is a positive statement that the node
   # was checked and matched, which "no series" cannot make.
@@ -808,6 +887,9 @@ publish() {
     log "WARN could not write metrics (reporting only, verdict unaffected)"
   fi
 }
+
+# Sourced (mgmt-probe-test.sh drives the verdict functions and publish()): define, do not run.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 case "$MODE" in
   gate)

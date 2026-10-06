@@ -3,7 +3,7 @@
 # Provider is configured from the Talos-issued kubeconfig (known after the cluster
 # is bootstrapped).
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
     client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)
     client_key             = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_key)
@@ -17,6 +17,10 @@ resource "helm_release" "cilium" {
   repository = "https://helm.cilium.io"
   chart      = "cilium"
   version    = var.cilium_version
+  # Release history capped (2026-10-05): the provider default is 0 = unbounded, and the
+  # apiserver held 81 helm release Secrets = 31 MiB serialized (cilium 14 revisions / 8.6 MiB) —
+  # the laptop CP cannot hold that (FU-304). Three keeps a `helm rollback` target per release.
+  max_history = 3
 
   # Talos-specific: locked-down host needs explicit capabilities + a pre-mounted
   # cgroup (Talos mounts cgroup2 at /sys/fs/cgroup, so Cilium must not auto-mount).

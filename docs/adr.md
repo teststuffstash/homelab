@@ -2248,6 +2248,23 @@ under human orders on 2026-09-27; the human added nothing. Not an author-based r
 shape is judged, not who wrote it). The Renovate half — the terraform manager moving to the mechanical
 `automerge` lane, roots the box does not plan (`foreign_roots`) excluded from the manager — is a
 separate operator-direct edit of `.github/renovate-global.json` (`docs/renovate.md`).
+**Amended 2026-10-04 (S9 #1988, the kubernetes 3 read on #2047):** a provider pin is in IAC-G09's
+REVERSIBLE class only if its lockfile revert stays a revert after the box applies under it — so a
+pin head must also keep every stored schema/identity version (PR#2205), and the "plan empty" rule
+reads RELATIVE to master's own pending plan (a pin adds nothing to it), which is what lets the
+`tofu-provider-revert` chain's revert merge while master is refused on the errored apply. The chain
+reverts on `MgmtApplyErroredOnNewProvider` (PR#2206) — a correlation, by design: the revert is the
+safe, cheap probe. Arming provider MAJORS waits for its drill. §MB3.
+**Amended 2026-10-04 (operator, the #2191 read):** a second rule-shaped plan exception beside
+"master's own pending plan" — the **default backfill** (`admit_plan_shapes` in the policy,
+`mgmt_plan_default_backfill`): the changes a pin adds are in-place updates whose only differences
+are null→value attributes under an object, nothing known-after-apply, no replace — what a provider
+that adds an attribute with a static default plans against existing state. cloudflare 5.26.0's
+`include_shadow_metadata` did exactly that on six dns records and its changelog never mentioned it:
+the plan, not the release notes, is the evidence, and this shape is read deterministically rather
+than by a reviewer (the supply-chain-gate rule, ADR-143's spirit). Attribute names reach the
+comment, never values. Considered: routing every non-empty pin plan to the migration lens — kept as
+the fallback for what this shape does not admit, not built yet. Majors armed the same day (ADR-141).
 
 ### ADR-132 — The management box reconciles master: the ArgoCD model for tofu AND metal (end state, 2026-09-16)
 
@@ -2527,6 +2544,14 @@ the old pods serve throughout a stuck roll; an RWO singleton never enters this l
 a human read of every image bump (rejected — the operator's time; #2037 sat a day for a tag
 change); reverting on `KubePodCrashLooping` too (rejected for now — a crash loop inside a
 readiness-gated roll IS a stuck rollout, one detector is enough until evidence says otherwise).
+**Amended 2026-10-04 (operator, S9 #1988):** terraform PROVIDER majors are ARMED the same way
+(`major` kept, no `automerge` label, the lens's APPROVED completes the merge) — the gate (ADR-131 as
+amended 2026-10-04: empty plan relative to master's own pending plan, no stored schema/identity
+version raised), the detector (`MgmtApplyErroredOnNewProvider`) and the `tofu-provider-revert`
+chain were all built and drilled first (#2205/#2206/#2207, drill #2209). A non-empty or errored plan
+stays red and never auto-merges, so the in-PR-adaptation class (#2046) keeps its human by
+construction. Residual, accepted: a bump that plans empty, applies clean and is still wrong later —
+the lens's upstream read is the only defence, as for Actions and Deployment images.
 
 ### ADR-142 — Trial: `scripts/` leaves the codeowner gate and the worker deny set; the reviewer's gate-change lens is the gate (2026-09-28)
 **Status:** Accepted as a TRIAL (operator, 2026-09-28: "remove codeowner from scripts and all the
@@ -2613,3 +2638,92 @@ makes the second node purely additive. Kea HA is API-complete (verified 2026-10-
 MASTER (advskew 0) and pve joins at 100 — the inventory's skews swap; lease sync is plaintext HTTP
 on `:8001` between the nodes' own LAN IPs (like pfsync — accepted); `CiliumBGPAllSessionsDown`
 becomes per-peer. Plan: [`router-move.md`](router-move.md) §The two windows; ROADMAP §HA step 2 amended.
+
+### ADR-146 — Every stack runs its own retro; it escalates platform faults as ADR-119 filings; the platform retro stops deep-diving stack repos (2026-10-02, accepted 2026-10-04)
+**Status:** Accepted (operator, 2026-10-04, wording read on #2172). Mechanism:
+[observability-and-retro.md](agents/observability-and-retro.md) §B2 "Stack series".
+**Decision:** (1) EVERY stack runs its own retro by default — the same `retro-session` workflow with
+`stack=<name>`, in the stack's fixer namespace on its own worker token, bundle scoped to the claim's
+repos, its own weekly slot; the knob is an opt-out, and the guard's event floor is what makes
+default-on safe. (2) Context = the platform brief template rendered for the stack + what the stack
+repo gives every ride (CLAUDE.md, `.agents/`); a stack may replace the brief wholesale with its own
+`.agents/retro.md` — only the placeholders and the report contract stay the platform's. The brief
+asks for attribution with evidence (platform cause vs the stack's own; unseen-from-the-stack =
+platform), nothing more prescriptive. (3) A platform cause is a finding targeting homelab with
+`Origin:` = the stack item; filing is the acceptance act's — inert, dedup by the canonical check,
+plus the cross-repo `blockedBy` edge; board intake, or INTO a covering platform Goal (ADR-122 (4)).
+(4) The platform series keeps the fleet-wide population counters and narrows its deep-dive set to
+the platform claim's repos.
+**Considered:** two overlapping retros with a cross-dedup rule (a judge nobody can author); dedup at
+a container checkpoint (rejected 2026-10-02); a platform-only retro (r4–r6 could not attribute;
+"unreachable" was #2171); an attribution rubric and an enumerated signal list (both go stale).
+**Why:** oracle-fleet#780 split 12 rounds into causes only the stack can see and three platform ones
+(#2162, agent-runtime#162, #2168). **Consequences:** §B2 point 2 amended (escalate, never fix);
+build = FU-058's next; #2167 is the duplicate-close gate defect; oracle first, hand-fired after
+platform r7.
+### ADR-147 — Every CNPG Cluster is backed up by default: the Barman Cloud plugin, wired at admission, one bucket per namespace (2026-10-03)
+**Status:** Accepted (operator, 2026-10-03: "some backups by default for everybody makes sense…
+I need something for the 'oops the Longhorn upgrade broke everything'"). **Decision:** (1) CNPG
+backups ride the **Barman Cloud plugin** (CNPG-I) into the backup Garage outside Longhorn (FU-299's
+target), with **cert-manager** installed only as the plugin's mTLS issuer; (2) a native
+**MutatingAdmissionPolicy** wires every Cluster in a store-holding namespace to that namespace's
+`ObjectStore` — the consumer declares nothing, `homelab.io/pg-backup: disabled` opts out; (3) **one
+bucket + key per namespace**; (4) a daily platform CronJob takes a base backup of every Cluster and
+FAILS on any uncovered one — the same job is `devbox run pg-backup-now`, the pre-upgrade restore point.
+**Considered:** in-tree `barmanObjectStore` (spike-proven against Garage, but CNPG 1.29 warns it is
+"completely removed in 1.30.0" — one minor away); Longhorn block backups of the CNPG volumes (2 MiB
+amplification, ~full every day, crash-consistent, and two copies of every database); a backup line
+in each consumer's manifest (stacks would have to opt in; the platform's three never were); one
+shared bucket (any tenant's key would read Infisical's database); Kyverno for the mutation (a new
+engine; the native API is v1 on Kubernetes 1.36). **Why:** physical base backups + WAL restore a
+whole cluster in about a minute (spike: 200k rows, identical checksum, 62 s), consistent by
+construction; the default reaches stack clusters without touching their repos. **Consequences:**
+the namespace list lives in three places (policy, `store-<ns>.yaml`, the bucket list) — the job's
+UNCOVERED verdict is the belt; a cluster restored by `recovery` is not auto-wired (its own name's WAL
+is already in the store); retention `14d`, cadence daily, no knobs yet. **Amended same day (rollout):** a RUNNING cluster
+is wired only by the explicit `pg-backup-wire` verb (an apply-time wire deadlocks the switchover,
+~10 min write outage on two clusters), and backups target the primary (a standby backup was not
+restorable). Mechanism + restore: [`postgres.md`](postgres.md) §Backups.
+
+### ADR-148 — Every alert declares `triage: none|now|dig`; the responder narrows to `now`, a grouped deep dig takes the rest (2026-10-03)
+**Status:** Accepted (operator, 2026-10-03, after the responder audit). **Decision:** (1) every alert
+rule carries `triage: none|now|dig` (meanings: [`patterns/observability.md`](patterns/observability.md)
+§3); ours and stacks' at the rule site, the stock kube-prometheus-stack rules through an
+alert-relabel map (`kube-prometheus-stack-triage.yaml`, fill-if-empty), `prometheus-rules-lint`
+holding both; (2) the per-fingerprint responder takes `triage="now"` only; (3) `dig` alerts go to a
+scheduled, GROUPED deep dig (standing ≥ N h or recurring, not explained by an FU/issue/meta-state,
+grouped by onset and host) whose output is a seat finding plus a PR only where the bot can merge.
+**Considered:** re-enabling the #1733 responder (the replay: the 12/day budget binds either way, and
+its sessions go to standing conditions it can only restate); severity as the filter (27 days: 13
+critical episodes, ~2 useful, and the best real-time catch — the nx-01 kata handler — was a warning);
+a per-alert static allow-list (value is per firing, not per name: AgentErrorFlagged was noise four
+times and a real CI break once); per-group chart labels (the groups are mixed). **Why:** the audit's
+three wins were all standing alerts the seat had seen for days, each needing 20–50 tool calls.
+**Consequences:** the route, `meta-alert-crosscheck.sh` and `responder-behaviour-test` §routing move
+together in the next step; the dig needs in-cluster Loki reads, which triggers `loki-tenancy.md`
+§Tightening; stack responders inherit the label. Evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
+§2026-10-03. Tracked: FU-249.
+
+### ADR-149 — argo-workflows chart majors merge on their own; the revert actor leaves Argo's cone (2026-10-05)
+**Status:** Accepted (operator, 2026-10-05, after the seat's read of PR#2254). **Decision:** (1) argo-workflows
+chart majors are ARMED the ADR-141 way — `major` kept, no `automerge` label, the lens's APPROVED completes
+the merge — once the chain below has passed a drill; (2) the post-deploy verdict is `ArgoControllerSilent`
+(agent-coordinator completes no workflow for 30 m, fails closed, `triage: now`, #2269); (3) the revert actor
+is **`chart-revert`**, an in-cluster webhook receiver (a Deployment in `agent-coordinator`, fed by an
+Alertmanager route) — NOT the `deploy-revert` Sensor, which runs ON Argo Workflows and dies with the
+controller it would revert (the dependency-cone rule, `dependency-upgrades.md` §4); (4) pin-only = only
+`targetRevision:` and comment lines of `argocd/platform/argo-workflows.yaml` changed; the revert PR's
+`reverted-charts: <chart>@<version>` line is `pin-only-lint` check (h)'s 30-day refusal memory; (5) the
+lens reads **appVersion from the chart index** — chart semver is not app semver: chart 1.0.24→1.1.1 (#2238,
+`deps-review`, no lens) was the app major 4.0→4.1 and the trigger of the FU-304 apiserver kill, while #2254
+(two lens rounds) moved the app 4.1.0→4.1.4. **Considered:** the management box as actor (rejected — no
+PR-writing credential; an App widening is operator-only); a GitHub Actions workflow on ARC (rejected —
+`schedule` lag 1–5 h without a webhook trigger); keeping the human merge (rejected — operator minutes:
+#2254 sat 9 h for a comment rewrite); extending the Argo Sensor (rejected — inside its own cone). **Why:**
+the change itself is a 2-s sync plus a CRD hook Job; the risk is a controller that runs but processes
+nothing, which only a heartbeat sees and only an actor outside Argo can answer. **Consequences:** with
+`crds.keep: true` a chart revert does not downgrade CRDs — safe while the app delta stays inside a minor,
+so an app-major is the lens's CHANGES_REQUESTED, never an auto-merge; a CRD-carrying chart sync is a
+control-plane memory event (FU-304, GOMEMLIMIT); the receiver is chart-agnostic but argo-workflows is its
+only consumer until a second chart earns the same evidence. Design: [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md)
+§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Next steps 9.

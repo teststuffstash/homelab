@@ -71,6 +71,22 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
   adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
   other major stays un-armed on the human lane until its class row is complete (#1988).
+- **Helm charts in `argocd/platform/*.yaml` and in-cluster images in `argocd/resources/**` (classes 1/2
+  of [`dependency-upgrades.md`](dependency-upgrades.md), proposers ON since 2026-10-04 — S9 next step 7).**
+  Neither the `argocd` nor the `kubernetes` manager has a default file match; `renovate-global.json`
+  gives each its pattern. Lanes: digest → `automerge`; patch/minor → `deps-review` (the merge-path
+  review reflex + the migration lens read the changelog, APPROVED merges, ArgoCD auto-sync is the
+  deploy); majors → the un-armed catch-all (human lane). First-party `ghcr.io/teststuffstash/**` images
+  and charts are disabled (class 3 — the deploy-pin PR owns them); the ARC controller + two runner scale
+  sets are one grouped PR (`arc`, lockstep); `prHourlyLimit: 6` (root-only, every repo; temporarily 6 for the watched first wave, 3 after —
+  operator 2026-10-04) paces the backlog per 6-hourly run. **What holds this lane, honestly:** the 7-day cooldown
+  (helm-repo charts; OCI charts and images are timestamp-optional = no cooldown), the LLM review, and
+  after the merge ArgoCD's sync/health (`/deploy-degraded` on Degraded — never fired by a real one,
+  FU-044) plus the per-service alert belts. **What it lacks** (the register's ⚠ cells): `ci` renders
+  only OUR OCI charts (`argocd-validate-pins.sh`) — a third-party chart bump has no render gate before
+  ArgoCD sync; no post-sync [contract probe](glossary.md) (FU-102); the revert is a human `git revert`, and a
+  CRD-carrying chart (Argo, Crossplane, cert-manager, ESO, CNPG) can change schema in a MINOR
+  (IAC-G09) — the lens is the only read of that.
 - **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
   exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
   catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
@@ -79,17 +95,24 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
   of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
   source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
-  (registry-signed, hash-verified), and **a bump must plan empty**: `management-sentinel` is green on
-  `+0 ~0 -0` and red — `provider bump changes the plan: <root>(…) — human read` — otherwise. With
+  (registry-signed, hash-verified), and **a bump must plan empty** — relative to master's own pending
+  plan, or be a default backfill (null→default attributes a release adds, #2191; ADR-131 amended
+  2026-10-04): `management-sentinel` is green on those and red — `provider bump changes the plan:
+  <root>(…) — human read` — otherwise. With
   `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
   ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
   the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
   (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
   orders — the evidence that a human read adds nothing here (S9 #1988).
-  **Terraform PROVIDER majors are not this lane** (2026-09-28): a provider major takes the major
-  catch-all — un-armed, `major`, the coordinator's lane (README §Dependency major bumps), because
-  a major here typically needs an in-PR adaptation (helm 3 turned the provider's `kubernetes {}`
-  block into an attribute, #2046).
+  **Terraform PROVIDER majors are ARMED since 2026-10-04** (operator, S9 #1988; the rule after the
+  Deployment-image one): `major` kept, no `automerge` label, so the reflex refuses it and the
+  migration lens is the merge gate — its APPROVED completes the merge. Behind it: the same
+  sentinel gate (empty plan relative to master's own, no stored schema/identity version raised —
+  PR#2205), `MgmtApplyErroredOnNewProvider` on the first changing apply (PR#2206) and the
+  `tofu-provider-revert` chain (PR#2207, drilled as #2209). A major that needs an in-PR adaptation
+  (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046) is red on the
+  sentinel and never auto-merges — the adaptation is no longer a pin-only diff. Until this flip a
+  provider major took the un-armed catch-all (2026-09-28..10-04: #2046, #2047 merged by hand).
   **Deployment IMAGE tags in tofu are their own armed lane** (ADR-141 amended 2026-09-28, #1988's
   class row): an `image = "<ref>"` line Renovate rewrites on a `kubernetes_deployment` is armed at
   every update type — non-majors on the terraform `automerge` rule, majors armed + `major` (the
@@ -141,6 +164,13 @@ Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
+- **Validate the LANES, not just the syntax: `devbox run renovate-lane-lint`** before landing a change
+  to `renovate-global.json`. Renovate arms a grouped branch only when EVERY member has
+  `automerge: true` while labels are the UNION — a rule gap on one member produces a lane-labelled,
+  un-armed PR nobody reads (G15: #2295 sat 16 h green). The verb runs Renovate itself
+  (`--platform=local --dry-run=lookup`, trace log) over the checkout and asserts one lane per branch;
+  ~2 min of datasource lookups, so a seat verb, not CI (operator 2026-10-06 — CI WAN stays locked
+  down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
   (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
   caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party

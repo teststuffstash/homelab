@@ -1,0 +1,12 @@
+# blocked-on-anchor — the decision table (family contract in fixture.yaml; per-row intent below).
+# id     | world | patch | env | expect
+# line1  = the marker is the ruling's first line — both readers hold (the shape they always agreed on)
+# mid    = the marker sits on line 3 under a heading — THE FIXED ROW: the predicate missed it on
+#          base (dispatched #240) while the belt kept #241's label; both hold after the fix
+# absent = no marker — the negative control: the gate dispatches #240, the belt removes #241's label
+# quoted = the ruling QUOTES a past marker (`> blocked-on: human`) and names it mid-sentence — the
+#          line anchor latches nothing, so both readers treat it as ordinary-path (IL-T26)
+line1  | line1 | | | held
+mid    | line1 | | | held
+absent | line1 | | | ordinary
+quoted | line1 | | | ordinary

@@ -1,0 +1,9 @@
+[
+  {
+    "number": 80,
+    "title": "docs: carrier issue for major version bump (homelab#2071 parallel)",
+    "labels": [{"name": "agent/review"}, {"name": "task/fix"}],
+    "body": "A carrier issue with agent/review but NO agent-fix (homelab#2164 defect state).\n\nTouches: docs/\n",
+    "updatedAt": "2026-09-28T06:00:00Z"
+  }
+]

@@ -1,0 +1,42 @@
+# The backup store for every CNPG Cluster in namespace `oracle-fleet` (ADR-147): bucket `cnpg-oracle-fleet` on the
+# backup Garage (CT 220 @ .73 on nx-02, ansible/group_vars/garage_backup.yml), its own key (wallet
+# `cnpg-backup-oracle-fleet-{key-id,secret}` → Infisical CNPG_BACKUP_ORACLE_FLEET_*). Per-namespace bucket + key
+# = no tenant can read another's backups. The admission policy wires Clusters here by name.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pg-backup-s3
+  namespace: oracle-fleet
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target: { name: pg-backup-s3, creationPolicy: Owner }
+  data:
+    - secretKey: ACCESS_KEY_ID
+      remoteRef: { key: CNPG_BACKUP_ORACLE_FLEET_KEY_ID }
+    - secretKey: ACCESS_SECRET_KEY
+      remoteRef: { key: CNPG_BACKUP_ORACLE_FLEET_SECRET }
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: pg-backup
+  namespace: oracle-fleet
+spec:
+  # Default for everybody; per-tenant knobs (retention, cadence) come later (FU-299).
+  retentionPolicy: "14d"
+  configuration:
+    destinationPath: s3://cnpg-oracle-fleet/
+    endpointURL: http://192.168.2.73:3900
+    s3Credentials:
+      accessKeyId: { name: pg-backup-s3, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: pg-backup-s3, key: ACCESS_SECRET_KEY }
+    wal: { compression: gzip }
+    data: { compression: gzip }
+  instanceSidecarConfiguration:
+    # Garage signs for region `garage`; boto3 would default to us-east-1 (proven by the spike).
+    env:
+      - { name: AWS_DEFAULT_REGION, value: garage }
+    resources:
+      requests: { cpu: "20m", memory: "64Mi" }
+      limits: { memory: "512Mi" }

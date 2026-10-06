@@ -190,6 +190,14 @@ machines:
     ip: 192.168.2.30
     notes: Provisioned by the separate tofu root tofu/provisioning/ (own state).
 
+  - name: backup-garage
+    kind: lxc
+    label: Backup Garage LXC (CTID 220)
+    role: Longhorn backup target — single-node Garage S3 (FU-299)
+    hardware: LXC container on nx-02 (CTID 220), rootfs on the SA400 `local-lvm` pool
+    ip: 192.168.2.73
+    notes: Provisioned by tofu/provisioning/ (survives a cluster wipe); Garage by ansible/garage-backup.yml. docs/longhorn-backup.md.
+
   - name: cp-01
     kind: vm
     zone: proxmox

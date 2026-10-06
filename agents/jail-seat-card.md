@@ -61,7 +61,9 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   existing item — it's a retrieval cue, not a decision handed to you: grep first, answer with ids.
 - **Next steps reported to the user must carry FU ids** — a proposed next step that hasn't been
   checked against the tracker is how duplicates start.
-- **≲5 minutes with the context in hand? Just do it** — an entry costs more than the fix; file
+- **≲5 minutes with the context in hand? Just do it** — and "do it" includes dispatching a background
+  subagent for a bounded, decided change (minting is held once by `.claude/hooks/fu-mint-gate.sh`,
+  a trial since 2026-10-02 — the denial IS the tracker's bar). An entry costs more than the fix; file
   only genuine deferrals.
 - **New deferred work / discovered loose end** → add an `FU-NNN` item there first. Never leave a
   free-floating `TODO` in code or docs — write the comment as `FU-NNN: <context>` instead.

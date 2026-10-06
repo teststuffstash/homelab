@@ -51,7 +51,7 @@ spec:
       # header (GC only when the store provably has no writer; failure is loud, never wedging).
       initContainers:
         - name: store-maintenance
-          image: registry:3.0.0
+          image: registry:3.1.2
           command: ["/bin/sh", "/maintenance/maintain.sh"]
           env:
             - { name: MIRROR_NAME, value: "mirror-mcr" }
@@ -67,7 +67,7 @@ spec:
             limits:   { cpu: "1",   memory: "512Mi" }
       containers:
         - name: registry
-          image: registry:3.0.0
+          image: registry:3.1.2
           env:
             - { name: REGISTRY_PROXY_REMOTEURL, value: "https://mcr.microsoft.com" }
             - { name: REGISTRY_PROXY_TTL, value: "168h" }

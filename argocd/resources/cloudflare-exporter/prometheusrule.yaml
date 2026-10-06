@@ -24,6 +24,8 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # triage: exporter pod, logs, ArgoCD app and token are readable in-cluster
+            triage: dig
           annotations:
             summary: "Cloudflare exporter scrape target down/absent"
             description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
@@ -115,6 +117,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: spend fact: intended vs accidental plan change is an operator call via the Cloudflare audit log
+            triage: none
           annotations:
             summary: "Cloudflare product zone {{ $labels.zone }} is no longer on the free plan"
             description: "Zone {{ $labels.zone }} reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
@@ -124,6 +128,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: probe pod logs and the ESO-fed token Secret are readable in-cluster
+            triage: dig
           annotations:
             summary: "Cloudflare spend belt is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
@@ -147,6 +153,8 @@ spec:
           labels:
             severity: warning
             platform_machinery: "true"
+            # triage: probe pod logs and the ESO-fed token Secret are readable in-cluster
+            triage: dig
           annotations:
             summary: "Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."

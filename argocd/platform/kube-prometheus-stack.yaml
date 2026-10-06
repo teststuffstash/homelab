@@ -34,11 +34,13 @@ spec:
     # 1) the chart, pinned. Renovate targets this `targetRevision` (class 1 — plain YAML).
     - repoURL: https://prometheus-community.github.io/helm-charts
       chart: kube-prometheus-stack
-      targetRevision: 86.1.0
+      targetRevision: 86.3.2
       helm:
         skipCrds: true
         valueFiles:
           - $values/argocd/platform/values/kube-prometheus-stack.yaml
+          # the upstream rules' `triage` labels (alert relabelling) — one home, see its header
+          - $values/argocd/platform/values/kube-prometheus-stack-triage.yaml
     # 2) THIS repo, referenced as $values — supplies the values file above.
     - repoURL: https://github.com/teststuffstash/homelab.git
       targetRevision: master

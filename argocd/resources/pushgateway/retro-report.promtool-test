@@ -93,32 +93,33 @@ tests:
         alertname: RetroReportOverdue
         exp_alerts: []
 
-  # ── (c) a genuinely stale success, no gap involved — fires after the 6h for-window ───────────
+  # ── (c) a genuinely stale success, no gap involved — fires after the 30m for-window ───────────
   # No wipe here: the series is CONTINUOUSLY present (no staleness marker), pushed once at t=0
   # and never updated. This is the ordinary "nobody re-fired the retro in over a week" case the
   # alert exists for in the first place, and the harden must not touch its timing.
   - interval: 1h
-    name: "(c) a continuously-present success ages past 8d and fires after for:6h"
+    name: "(c) a continuously-present success ages past 7d+3h and fires after for:30m"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
         values: "0+0x210"
     alert_rule_test:
-      - eval_time: 190h
+      - eval_time: 170h
         alertname: RetroReportOverdue
         exp_alerts: []
-      # 8d = 192h is when the condition turns true; `for: 6h` still holds it pending here
-      - eval_time: 197h
+      # 7d+3h = 171h is when the condition turns true; `for: 30m` still holds it pending here
+      - eval_time: 171h
         alertname: RetroReportOverdue
         exp_alerts: []
-      - eval_time: 199h
+      - eval_time: 172h
         alertname: RetroReportOverdue
         exp_alerts: &retro_overdue_alert
           - exp_labels:
               severity: warning
               platform_machinery: "true"
+              triage: dig
             exp_annotations:
-              summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
-              description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+              summary: "No retro report landed after Monday's scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
+              description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 7d+3h — every successful fire lands by the workflow's 07:00Z deadline, so the last Monday fire produced nothing (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
       # and it does not self-resolve while the belt stays silent
       - eval_time: 210h
         alertname: RetroReportOverdue
@@ -128,18 +129,18 @@ tests:
   # `max_over_time` over a series with ZERO samples anywhere is exactly as empty as bare `max()`
   # over one — the `or vector(0)` fallback path itself is untouched by the harden.
   - interval: 1h
-    name: "no retro report has EVER landed — fires at 8d+6h, not before"
+    name: "no retro report has EVER landed — fires at 7d+3h+30m, not before"
     input_series:
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
         values: "_x210"
     alert_rule_test:
-      - eval_time: 190h
+      - eval_time: 170h
         alertname: RetroReportOverdue
         exp_alerts: []
-      - eval_time: 197h
+      - eval_time: 171h
         alertname: RetroReportOverdue
         exp_alerts: []
-      - eval_time: 199h
+      - eval_time: 172h
         alertname: RetroReportOverdue
         exp_alerts: *retro_overdue_alert
       - eval_time: 210h
@@ -151,16 +152,16 @@ tests:
   # bare `max()` agree on any series with no staleness marker, so a fresh report still clears the
   # alert exactly as it did before the harden.
   - interval: 1h
-    name: a report ages out at 8d and the next one clears the alert
+    name: a report ages out at 7d+3h and the next one clears the alert
     input_series:
       # landed at t=0 …then re-pushed at t=221h with that hour's timestamp (221 * 3600)
       - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
         values: "0+0x220 795600+0x3"
     alert_rule_test:
-      - eval_time: 190h
+      - eval_time: 170h
         alertname: RetroReportOverdue
         exp_alerts: []
-      - eval_time: 199h
+      - eval_time: 172h
         alertname: RetroReportOverdue
         exp_alerts: *retro_overdue_alert
       # the Monday report lands at 221h — one evaluation later the alert is gone

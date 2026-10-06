@@ -1,0 +1,12 @@
+[
+  {
+    "number": 100,
+    "title": "clause-coverage: the frozen open PR (r7 F1) — armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved",
+    "reviewDecision": "APPROVED",
+    "autoMergeRequest": {"enabledAt": "2026-10-01T00:00:00Z"},
+    "mergeStateStatus": "BEHIND",
+    "statusCheckRollup": [{"conclusion": "SUCCESS"}],
+    "updatedAt": "2026-10-01T06:00:00Z",
+    "body": "Fixes #85\n"
+  }
+]

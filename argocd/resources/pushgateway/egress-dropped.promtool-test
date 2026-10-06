@@ -1,0 +1,125 @@
+# BEHAVIOUR fixture for AgentWorkerEgressDropped's benign-noise exclusion (responder audit
+# 2026-10-03: 52 firings on oracle-fleet in 7 days, ~95 % of the denied flows browser/SDK
+# phone-home that broke nothing).
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/egress-dropped.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# Expectations derive from the CR expr's three legs (prometheusrule.yaml), not from running it:
+#   - a `destination!~` list of EXACT benign names (anchored — PromQL regexes are fully anchored),
+#   - `unless` UDP to 142.251.x.x (Google QUIC) — UDP only,
+#   - `unless` ICMPv4 to 10.96.0.10 (kube-dns ping) — ICMP only,
+# so a series fires iff its destination is off the name list AND it is not one of the two
+# protocol-scoped flows. Every input below is a counter rising 6/min ⇒ rate 0.1/s > 0, sustained
+# well past `for: 2m`; eval at 15m.
+rule_files:
+  - egress-dropped.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ 1. ONLY BENIGN NOISE — the week's real top rows, every exclusion leg exercised ══════════
+  - interval: 1m
+    name: "browser/SDK phone-home alone does not fire"
+    input_series:
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="www.google.com",protocol="UDP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="www.google.com",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="accounts.google.com",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="clients2.google.com",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="android.clients.google.com,clients2.google.com",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="grafana.com",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="api.segment.io",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="169.254.169.254",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="142.251.150.119",protocol="UDP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="10.96.0.10",protocol="ICMPv4"}'
+        values: "0+6x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentWorkerEgressDropped
+        exp_alerts: []
+
+  # ══ 2. A MIRROR VIP DROP AMID THE NOISE STILL FIRES ══════════════════════════════════════════
+  # 192.168.40.31 is a registry mirror VIP — real signal, never on the list. The benign series
+  # ride along to prove the exclusion removes rows, not the namespace.
+  - interval: 1m
+    name: "registry mirror VIP drop fires even with benign noise present"
+    input_series:
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="www.google.com",protocol="UDP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="oracle-fleet",destination="192.168.40.31",protocol="TCP"}'
+        values: "0+6x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentWorkerEgressDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: oracle-fleet
+              triage: dig
+            exp_annotations: {}
+
+  # ══ 3. PYPI FROM HOMELAB FIRES ═══════════════════════════════════════════════════════════════
+  - interval: 1m
+    name: "pypi.org drop fires"
+    input_series:
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="homelab",destination="pypi.org",protocol="TCP"}'
+        values: "0+6x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentWorkerEgressDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: homelab
+              triage: dig
+            exp_annotations: {}
+
+  # ══ 4. THE EXCLUSION STAYS TIGHT — protocol scope + anchored names ═══════════════════════════
+  # Each source carries exactly one near-miss of a benign row; each must still fire:
+  #   ns-a: TCP to a QUIC IP (the 142.251 leg is UDP-only)
+  #   ns-b-agents: UDP to kube-dns 10.96.0.10 (the ICMP leg is ICMP-only — a DNS drop is real)
+  #   ns-c-agents: a lookalike name that only CONTAINS a benign one (anchoring)
+  #   ns-d-agents: an unlisted google.com host (no domain wildcard)
+  - interval: 1m
+    name: "protocol-scoped and anchored exclusions do not swallow near-misses"
+    input_series:
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="ns-a-agents",destination="142.251.150.119",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="ns-b-agents",destination="10.96.0.10",protocol="UDP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="ns-c-agents",destination="grafana.com.attacker.example",protocol="TCP"}'
+        values: "0+6x30"
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="ns-d-agents",destination="storage.googleapis.google.com",protocol="TCP"}'
+        values: "0+6x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentWorkerEgressDropped
+        exp_alerts:
+          - exp_labels: {severity: warning, source: ns-a-agents, triage: dig}
+            exp_annotations: {}
+          - exp_labels: {severity: warning, source: ns-b-agents, triage: dig}
+            exp_annotations: {}
+          - exp_labels: {severity: warning, source: ns-c-agents, triage: dig}
+            exp_annotations: {}
+          - exp_labels: {severity: warning, source: ns-d-agents, triage: dig}
+            exp_annotations: {}
+
+  # ══ 5. OUT-OF-SCOPE NAMESPACE NEVER FIRES (the source regex is unchanged) ════════════════════
+  - interval: 1m
+    name: "non-worker namespace is out of scope"
+    input_series:
+      - series: 'hubble_drop_total{reason="POLICY_DENIED",source="node-maintenance",destination="pypi.org",protocol="TCP"}'
+        values: "0+6x30"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentWorkerEgressDropped
+        exp_alerts: []

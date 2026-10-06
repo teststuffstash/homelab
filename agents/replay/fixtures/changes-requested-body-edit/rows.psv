@@ -1,0 +1,6 @@
+# changes-requested-body-edit — the decision table (family contract in fixture.yaml).
+# The axis is the edit pattern after a CHANGES_REQUESTED review.
+# `body-edit-only` is the row that reds on base (reviewable_again was false before the fix).
+# id                 | world | patch | env                  | expect      | params
+body-edit-only       |       |       | TEST_CASE=body-edit-only | body-edit |
+control-no-changes   |       |       | TEST_CASE=control-no-changes | control-no |

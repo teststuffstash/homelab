@@ -79,9 +79,19 @@ data:
     2048Mi agent + 512Mi kata overhead, requests == limits (Guaranteed; overcommit here
     global-OOMed a node in 2026-07). That is sized to fit the 8G kata laptops with ~1.3Gi spare,
     so those hold ONE ride; wk-metal-04 (16G) is the only node that fits two. Concurrency is
-    therefore memory-bound and asymmetric — `REPO_MAX_WIP` counts pods, not the memory they need,
-    the `ghcr.io` FQDN stays on the egress allowlist (dockerd's `registry-mirrors` is Hub-only),
-    in-cluster services reached via endpoint IPs until FU-072.
+    therefore memory-bound and asymmetric — `REPO_MAX_WIP` counts pods, not the memory they need.
+    The `ghcr.io` FQDN stays on the egress allowlist (dockerd's `registry-mirrors` is Hub-only).
+
+    ## Ride size class (`fixer.rideSize: standard | large`)
+
+    The envelope above is `standard`, the default. A stack whose rides spend their time in their
+    own gates (a parallel test suite, a kind e2e) sets `fixer.rideSize: large`: agent 10Gi with an
+    8-CPU burst, plus dind 6Gi with a 6-CPU burst under `fixer.docker` (~16.5Gi including kata
+    overhead). Memory requests equal limits, so a gate that sizes itself from the cgroup
+    (`/sys/fs/cgroup/memory.max`, `nproc`) sees the real budget — size `pytest -n` from
+    `memory.max`, never from the host. `large` is pinned to the 64G ride-tier node, so fewer rides run
+    at once; it is sized where test speed-ups flatten (~8 xdist workers, ~6 kind cores), not to a
+    CI runner's whole node. An unknown value renders `standard` and the launcher log says so.
 
     ## The subscription claude tier (`fixer.claudeTier: true`)
 

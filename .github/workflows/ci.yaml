@@ -180,6 +180,12 @@ jobs:
       - name: Maintenance-window self-test (devbox run maint-self-test)
         run: devbox run maint-self-test
 
+      # pr-wait is the seat's and every subagent's PR-cycle primitive (jail-subagent-card); its typed
+      # exits are what a caller acts on, so a regression there is a silent stall. The 2026-10-04
+      # additions — several PRs in one call, exit 6 on a merge conflict — are pinned with a gh stub.
+      - name: pr-wait self-test (devbox run pr-wait-test)
+        run: devbox run pr-wait-test
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script

@@ -16,15 +16,18 @@ groups:
         for: 30m
         labels:
           severity: warning
+          triage: dig
       - alert: LokiIngestVolumeHigh
         expr: |
           loki:distributor_ingest_bytes:rate30m > 120000
         for: 1h
         labels:
           severity: warning
+          triage: dig
       - alert: LokiIngestVolumeRamp
         expr: |
           loki:distributor_ingest_bytes:rate30m > clamp_min(8 * avg_over_time(loki:distributor_ingest_bytes:rate30m[7d]), 25000)
         for: 2h
         labels:
           severity: warning
+          triage: dig

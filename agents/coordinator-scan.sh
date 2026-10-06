@@ -38,6 +38,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
+. "${HERE}/kube.sh"
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -125,7 +126,7 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # format's ONE home; the coordinator session uses the same file's CLI verbs.
 . "${HERE}/goal-findings.sh"
 
-# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
+# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309, repo-general #1855) ─────
 # `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
 # files. So a queued issue whose DECLARED footprint lands on one of them cannot be delivered by a
 # PR at all: the required `ci` check is structurally red before the worker writes a line, and the
@@ -137,29 +138,91 @@ SWITCHBOARD=""; [ "${1:-}" = "--switchboard" ] && { SPAWN=1; SWITCHBOARD=1; }
 # same predicate against a second, static set, so the routing decision costs a report line instead
 # of a session.
 #
+# REPO-GENERAL (homelab#1855). The same guard exists per repo — agent-runtime's `deps-pin-guard.sh`
+# runs inside its required `ci` check and admits only a pure `agent-base/devbox.{json,lock}` diff —
+# and a footprint landing on it is just as undeliverable. The check was scoped to homelab, so that
+# repo's guard was invisible to dispatch and the constraint was rediscovered by a ride
+# (agent-runtime#145). The set is now read from the repo the issue belongs to.
+#
 # READ THE SET, NEVER RE-DECLARE IT. A second copy is the drift bug in the direction that hurts:
-# the lint widens, the scan keeps dispatching into the widened set. This is the same one-home read
-# the ADR-103 ratchet step already makes in `.github/workflows/ci.yaml` — grep the one line, eval
-# it — so there is exactly one definition of GUARDED in the repo and two readers of it.
+# the lint widens, the scan keeps dispatching into the widened set. Each repo's declaration is the
+# one home; the scan is the reader. Two declaration shapes exist on the platform:
+#   • a `GUARDED=` line in `scripts/pin-only-lint.sh` (homelab's pin-only-lint);
+#   • a `GUARD_SET:` env in the `ci` job of `.github/workflows/ci.yaml` (agent-runtime's
+#     deps-pin-guard).
+# The checkout's own repo is read from disk (no API call, no second copy); every other repo's
+# declaration is read from the repo itself through the API, because the scan clones only this repo.
 # >>>REPLAY:guarded-set>>>
 PIN_ONLY_LINT="${PIN_ONLY_LINT:-${HERE}/../scripts/pin-only-lint.sh}"
-# The set is THIS repo's CI's. A stack repo's `argocd/platform/` footprint is not touching this
-# repo's `arc-runners.yaml`, and holding it would be a category error — so the check is scoped to
-# the repo the checkout is, overridable for the same reason STACKS_FILE is.
+# The repo whose checkout this scan runs in — its declaration is the local file above. Overridable
+# for the same reason STACKS_FILE is.
 GUARDED_REPO="${GUARDED_REPO:-homelab}"
-guarded_paths() {   # → one guarded PATH per line. NO output = could not read (never "none guarded")
+
+# _guarded_from_sh <text> → one guarded PATH per line from a `GUARDED=` line; rc 1 = no such line.
+_guarded_from_sh() {
   local line="" GUARDED=""
-  [ -r "$PIN_ONLY_LINT" ] && line="$(grep -m1 '^GUARDED=' "$PIN_ONLY_LINT" || true)"
+  line="$(printf '%s\n' "$1" | grep -m1 '^GUARDED=' || true)"
   [ -n "$line" ] || return 1
   eval "$line" || return 1
   [ -n "$GUARDED" ] || return 1
   # The lint holds its set as a grep alternation (`a\.yaml|b\.yaml`); the footprint predicate wants
   # plain paths, so split on `|` and drop the regex escapes.
-  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$' || return 1
 }
-# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
-# work rather than releasing it (rule #6 — never fail INTO a dispatch).
-GUARDED_PATHS="$(guarded_paths || true)"
+
+# _guarded_from_workflow <text> → one guarded PATH per line from a `GUARD_SET:` env; rc 1 = none.
+# GUARD_SET is a whitespace-separated list (agent-runtime's deps-pin-guard reads it the same way).
+_guarded_from_workflow() {
+  local line="" GUARD_SET=""
+  line="$(printf '%s\n' "$1" | grep -m1 -E '^[[:space:]]*GUARD_SET:' || true)"
+  [ -n "$line" ] || return 1
+  GUARD_SET="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "$GUARD_SET" ] || return 1
+  printf '%s\n' "$GUARD_SET" | tr ' ' '\n' | grep -v '^[[:space:]]*$' || return 1
+}
+
+# _repo_file <slug> <path> → the file's text on stdout.
+#   rc 0 = present; rc 1 = the repo has no such file (404); rc 2 = unreadable (any other failure).
+# The absent/unreadable split is the "unknown, not false" posture: absent = the repo declares
+# nothing here; unreadable = we cannot tell, so the caller holds rather than dispatching blind.
+_repo_file() {
+  local slug="$1" path="$2" body="" rc=0
+  body="$(gh api "repos/${slug}/contents/${path}" 2>/dev/null)" || rc=$?
+  # A 404 body is the API's own "no such file": the live API returns it with a non-zero exit, the
+  # replay stub serves it as a world file with exit 0 — read the body, not the exit code.
+  if printf '%s' "$body" | jq -e '.status == "404"' >/dev/null 2>&1; then return 1; fi
+  if [ "$rc" != 0 ] || ! printf '%s' "$body" | jq -e '.content' >/dev/null 2>&1; then return 2; fi
+  printf '%s' "$body" | jq -r '.content' | base64 -d
+}
+
+# guarded_paths <repo> → one guarded PATH per line.
+#   rc 0 = read OK; rc 1 = the repo declares a guarded set but it could not be read (PROBE-FAILED
+#   → hold); rc 2 = the repo declares no guarded set (nothing to guard → dispatch).
+guarded_paths() {
+  local repo="$1" text="" rc=0
+  if [ "$repo" = "$GUARDED_REPO" ]; then
+    # The checkout's own repo: the one definition on disk. `pin-only-lint.sh` IS the declaration,
+    # so its presence with no `GUARDED=` line is a broken declaration (hold), not "none guarded".
+    [ -r "$PIN_ONLY_LINT" ] || return 1
+    text="$(cat "$PIN_ONLY_LINT" 2>/dev/null)" || return 1
+    _guarded_from_sh "$text" || return 1
+    return 0
+  fi
+  # A stack repo: read the declaration the repo itself carries, via the API. Probe the two shapes
+  # in order; a present-but-unparseable declaration is unreadable (hold), never "none guarded".
+  local slug="${ORG}/${repo}" text="" rc=0
+  # Shape 1: the CI workflow's GUARD_SET env. A workflow with no GUARD_SET is not a declaration —
+  # the file exists for every repo — so it falls through to shape 2.
+  rc=0; text="$(_repo_file "$slug" ".github/workflows/ci.yaml")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ] && _guarded_from_workflow "$text"; then return 0; fi
+  # Shape 2: a pin-only-lint.sh GUARDED= line. This file IS the declaration, so its presence with
+  # no GUARDED line is a broken declaration (hold), not "none guarded".
+  rc=0; text="$(_repo_file "$slug" "scripts/pin-only-lint.sh")" || rc=$?
+  [ "$rc" = 2 ] && return 1
+  if [ "$rc" = 0 ]; then _guarded_from_sh "$text" || return 1; return 0; fi
+  return 2
+}
 # <<<REPLAY:guarded-set<<<
 
 # ── OPERATOR-LANE PATHS — a pre-dispatch routing check (homelab#1151) ────────────────────────────
@@ -716,9 +779,9 @@ pr_state_fp_pair() {
 # <<<REPLAY:state-fp-pair<<<
 
 # ── BLOCKED-ON PREDICATE (homelab#1188) ────────────────────────────────────────────────────────
-# A terminal ruling may record what it waits on via a `blocked-on:` marker anchored at the start
-# of a comment (like every other marker in this lane — `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`,
-# `state-fp:`). The scan suppresses re-dispatch while that predicate holds.
+# A terminal ruling may record what it waits on via a `blocked-on:` marker on its own LINE (like
+# every other marker in this lane — `ci-cause:`, `AGENT_STRIKE:`, `AGENT_INFEASIBLE:`, `state-fp:`).
+# The scan suppresses re-dispatch while that predicate holds.
 #
 # Grammar: `blocked-on: <kind>=<ref>` with `kind ∈ {human, issue, pr}`.
 #   - `blocked-on: human`              → waiting on a human (no new review/comment since marker)
@@ -729,11 +792,21 @@ pr_state_fp_pair() {
 # AND its named blocker is still unresolved, the clause reports instead of dispatching — the same
 # report-vs-dispatch shape the `state-fp:` debounce already has.
 #
+# ONE GRAMMAR, ONE READER (homelab#1566). The suppression predicate here and the arbitrate
+# ordinary-path belt both read the marker through `blocked_on_kind` below — never a second regex.
+# The anchor is the START OF A LINE, not the start of the comment: a ruling is a human-readable
+# document with a heading, and every sibling marker it embeds is line-anchored, so a comment-start
+# anchor silently disarmed the hold whenever the marker sat under a heading (live on PR #1542).
+#
 # >>>REPLAY:blocked-on-jq>>>
-# Extract the newest blocked-on marker from PR comments (anchored at start of comment body).
-BLOCKED_ON_JQ='([ .comments[]? | select((.body // "") | test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)")) ]
+# The ONE marker grammar: given a comment body, yield the marker kind (`human` / `issue=<n>` /
+# `pr=<n>`) or the empty string. Line-anchored; a blockquote (`> blocked-on: …`) or a mid-sentence
+# mention does not match, so talking ABOUT a past ruling latches nothing (IL-T26).
+BLOCKED_ON_DEF='def blocked_on_kind: [ split("\n")[] | select(startswith("blocked-on: ")) ] | last // "" | if test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)") then (capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind) else "" end;'
+# Extract the newest blocked-on marker from PR comments (line-anchored, via blocked_on_kind).
+BLOCKED_ON_JQ="$BLOCKED_ON_DEF"'([ .comments[]? | select((.body // "") | blocked_on_kind != "") ]
   | sort_by(.createdAt) | last // {})
-  | ((.body // "") | capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)") | .kind // "")'
+  | ((.body // "") | blocked_on_kind)'
 # <<<REPLAY:blocked-on-jq<<<
 
 # pr_blocked_on_check <slug> <pr> [pr_json] → "blocked|<reason>" or "clear".
@@ -777,13 +850,13 @@ pr_blocked_on_check() {
       local marker_ts newest_ts wa_login rv_login
       wa_login="${WORKER_AUTHOR:-app/homelab-agents-1234}"; wa_login="${wa_login#app/}"; wa_login="${wa_login%\[bot\]}"
       rv_login="${REVIEWER_AUTHOR:-homelab-reviewer}"; rv_login="${rv_login%\[bot\]}"
-      marker_ts="$(printf '%s' "$probe" | jq -r '[.comments[]? | select((.body // "") | test("^blocked-on: human")) | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
+      marker_ts="$(printf '%s' "$probe" | jq -r "$BLOCKED_ON_DEF"'[.comments[]? | select((.body // "") | blocked_on_kind == "human") | .createdAt] | max // ""' 2>/dev/null)" || marker_ts=''
       [ -n "$marker_ts" ] || { printf 'clear\n'; return 0; }
       # A HUMAN review or a HUMAN non-marker comment clears the block — the README's own
       # Resolution rule. Reviews carry `submittedAt`, comments `createdAt`; an entry with no
       # resolvable author does not count as human engagement.
-      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" '
-        [ (.comments[]? | select(((.body // "") | test("^blocked-on: human")) | not)
+      newest_ts="$(printf '%s' "$probe" | jq -r --arg wa "$wa_login" --arg rv "$rv_login" "$BLOCKED_ON_DEF"'
+        [ (.comments[]? | select(((.body // "") | blocked_on_kind == "human") | not)
                         | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
                         | .createdAt),
           (.reviews[]?  | select((.author.login // "") != "" and (.author.login != $wa) and (.author.login != $rv))
@@ -826,6 +899,36 @@ pr_blocked_on_check() {
   esac
 }
 # <<<REPLAY:blocked-on-check<<<
+
+# ── THE ONE STRONG-LINK PREDICATE (ADR-122 one-parser rule) ────────────────────────────────────
+# A PR IMPLEMENTS issue #N iff its body carries a verb keyword (`implements|closes|fixes|resolves
+# #N`) or a line-anchored `Issue: #N` trailer. This is the grammar `finalize` writes and the
+# merged-closeout clauses read. `ghit` (the goal-child leg's merged-PR test) and `gref` (its
+# open-PR hold) are TWO READERS of this ONE grammar — homelab#1720 found them disagreeing: `ghit`
+# demanded a strong link while `gref` accepted a bare `#<n>` substring, so a prose sibling citation
+# in an unrelated open PR held a finished goal child open indefinitely. Both now call THIS
+# function, so they cannot drift again. `$3` (base) empty = any base; a non-empty base scopes the
+# count to PRs whose `baseRefName` equals it (an open PR on master is not live work on a goal
+# child by construction).
+# >>>REPLAY:strong-link-count>>>
+# The predicate itself, in ONE place. `$n` is the issue number (--argjson n); `$b` the base scope
+# (--arg b; empty = any base). Both readers below interpolate THIS string, so the grammar has one
+# home and the two readers cannot drift.
+STRONG_LINK_JQ='((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+  or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))'
+# strong_link_count <issue-n> <prs-json> [base] → how many PRs strongly link the issue.
+strong_link_count() {
+  local n="${1:?}" prs="${2:-[]}" base="${3:-}"
+  jq -r --argjson n "$n" --arg b "$base" \
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ)] | length" <<<"$prs"
+}
+# strong_link_pr <issue-n> <prs-json> [base] → the NEWEST strongly-linking PR number, or empty.
+strong_link_pr() {
+  local n="${1:?}" prs="${2:-[]}" base="${3:-}"
+  jq -r --argjson n "$n" --arg b "$base" \
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ) | .number] | sort | last // \"\"" <<<"$prs"
+}
+# <<<REPLAY:strong-link-count<<<
 
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */30 per-stack coordinate-<stack> cron
@@ -1756,15 +1859,25 @@ EOF_BBM
     # `updatedAt` is fetched for the homelab#155 belt's persistence guard (condition (c)) — read
     # the mergeStateStatus warning by the PR fetch below before touching this list: a selector
     # field that is not in --json comes back absent and silently matches nothing.
+    # >>>REPLAY:inprog-selector>>>
+    # The in-progress predicate, sentinelled (homelab#2280): the clause-coverage case lifts it and
+    # runs it over its enumerated states, so a widening/narrowing of THIS selector moves that
+    # fixture. A retyped copy in the fixture would stay green while this one regressed.
+    inprog_jq='[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]'
+    # <<<REPLAY:inprog-selector<<<
     inprog="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
+      --jq "$inprog_jq" 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # review_only (homelab#928): issues with agent/review but NOT agent/in-progress — used by the
     # phantom-label belt inside C4/C5 to detect phantom agent/review labels (no open PR, no merged
-    # PR mentioning it, persisted past C4C5_PERSIST_S). Queried here alongside $inprog because the
-    # C4/C5 clause is gated by a pod-probe and may be skipped; the variable is cheap and consistent.
+    # PR mentioning it, persisted past C4C5_PERSIST_S). Includes both agent-fix and non-agent-fix
+    # cases (homelab#2164). Queried here alongside $inprog because the C4/C5 clause is gated by a
+    # pod-probe and may be skipped; the variable is cheap and consistent.
+    # >>>REPLAY:review-only-selector>>>
+    review_only_jq='[.[]|(.labels|map(.name)) as $L|select(($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]'
+    # <<<REPLAY:review-only-selector<<<
     review_only="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body,updatedAt \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/review")) and (($L|index("agent/in-progress"))|not))]' 2>/dev/null || echo '[]')"
+      --jq "$review_only_jq" 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
@@ -1787,6 +1900,7 @@ EOF_BBM
 $(ib_rows "$(printf '%s' "$inprog" | jq '[.[] | select(((.labels|map(.name))|index("task/goal"))|not)]' 2>/dev/null || echo '[]')")
 EOF_BUSYFPS
     # <<<REPLAY:busy-fps<<<
+    # >>>REPLAY:fu143-goal-child>>>
     # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
     # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
     # MERGED into exactly that base is FINISHED work the closing keyword could not close
@@ -1808,8 +1922,20 @@ EOF_BUSYFPS
     # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
     # states; this leg was the odd one out. $inprog is left ALONE on purpose: it also feeds the
     # ADR-097 footprint holds, and widening those is a different decision.
+    # ⚠ `agent/blocked` is the THIRD state (homelab#1720, the mirror defect): an arbitrate
+    # escalation parks the ISSUE `agent/blocked` while its PR merges into the goal base, and the
+    # closing keyword is inert off master — so the child is a terminal sink no clause can see
+    # (live: #1781, theme #1768's last member, unparked by hand). The label is a HUMAN gate, so it
+    # is NOT admitted on the label alone: the escalation's own `blocked-on:` predicate must be
+    # RESOLVED first (the marker lives on the PR that implements the issue — the merged strong-link
+    # PR into the goal base — and is read through the ONE `pr_blocked_on_check` reader below). An
+    # unresolved predicate keeps the issue out, exactly as the C4/C5 selector excludes it.
+    # homelab#2164: includes agent/review without agent-fix.
+    # >>>REPLAY:goalcand-selector>>>
+    goalcand_jq='[.[]|(.labels|map(.name)) as $L|select((($L|index("agent/in-progress")) or ($L|index("agent/review")) or ($L|index("agent/blocked"))))]'
+    # <<<REPLAY:goalcand-selector<<<
     goalcand="$(gh issue list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,body \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
+      --jq "$goalcand_jq" 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     # ADR-122 (3): `Base:` via the ONE parser. The old capture was `goal/[^ \t\r\n]+` — it took
     # the value only when it STARTED with `goal/` and cut at the first blank; both halves are kept
@@ -1836,9 +1962,13 @@ EOF_GOALBASED
     # So C4/C5 must not guess: holding costs a meta nudge, guessing costs a duplicate ARMED PR onto
     # a protected goal branch that auto-merges. Asymmetric — hold.
     goalbased_nums="$(printf '%s' "$goalbased" | sed 's/|.*//' | tr '\n' ' ')"
+    # The `agent/blocked` subset of the candidates (homelab#1720): their admission is CONDITIONAL on
+    # the escalation's `blocked-on:` predicate being resolved, checked per-candidate below. Kept as
+    # a separate set so `goalbased` stays `number|base` (its two-field shape is read by the loop).
+    goalblocked_nums="$(printf '%s' "$goalcand" | jq -r '[.[] | (.labels|map(.name)) as $L | select($L|index("agent/blocked")) | .number] | .[]' 2>/dev/null | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
-      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
+      gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,body,baseRefName 2>/dev/null)" || gopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
@@ -1863,17 +1993,36 @@ EOF_GOALBASED
           # guard exists to reject ("that is the sibling issue (#31)"); anchoring to line start is
           # what keeps the two apart. Widen HERE rather than narrowing finalize: the authoring side
           # is already deployed fleet-wide and its trailer is the recipes own convention.
-          ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
-            '[.[] | select(.baseRefName == $b)
-                  | select((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
-                        or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$gmerged")" || ghit=0
+          ghit="$(strong_link_count "$gn" "$gmerged" "$gbase")" || ghit=0
           # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
           gmention="$(jq -r --arg b "$gbase" --argjson n "$gn" \
             '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || gmention=0
-          gref="$(jq -r --argjson n "$gn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$gopen")" || gref=0
+          # ⚠ The open-PR hold is the SAME strong-link predicate, scoped to the goal base
+          # (homelab#1720). The old test was a bare `#<n>` substring over EVERY open PR body,
+          # unscoped by base — so a prose sibling citation in an unrelated master-lane PR held a
+          # finished goal child open indefinitely (live: #1693 held ~38h by PR #1698's prose), and
+          # the cross-repo spelling `homelab#<n>` matched too. A bare mention carries no ownership
+          # claim in either direction: treating it as live work buys no safety and costs the whole
+          # goal lane. An open PR on master is not live work on a goal child by construction.
+          gref="$(strong_link_count "$gn" "$gopen" "$gbase")" || gref=0
           # merged PR into the declared base cites the issue AND no OPEN PR still references it
           # (an open follow-up round means live work — not closeable yet)
           if [ "${ghit:-0}" -gt 0 ] && [ "${gref:-0}" -eq 0 ]; then
+            # ⚠ `agent/blocked` admission is CONDITIONAL (homelab#1720): the escalation's
+            # `blocked-on:` predicate must be RESOLVED. The marker lives on the PR that implements
+            # the issue — the merged strong-link PR into the goal base — and is read through the
+            # ONE `pr_blocked_on_check` reader (never a second regex). An unresolved predicate
+            # keeps the issue out and reports, exactly as the C4/C5 selector excludes it.
+            if case " ${goalblocked_nums:-} " in *" ${gn} "*) true;; *) false;; esac; then
+              gboc_pr="$(strong_link_pr "$gn" "$gmerged" "$gbase")" || gboc_pr=""
+              gboc="$(pr_blocked_on_check "$slug" "$gboc_pr")"
+              case "$gboc" in
+                blocked|blocked\|*)
+                  orphans="${orphans}[$repo] ⏳ issue #${gn} — goal child parked \`agent/blocked\` and its merged PR #${gboc_pr} still records \`blocked-on: ${gboc#blocked|}\` (unresolved): the closeout waits (homelab#1188).\n"
+                  continue
+                  ;;
+              esac
+            fi
             c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
           elif [ "${gmention:-0}" -gt 0 ] && [ "${ghit:-0}" -eq 0 ]; then
             orphans="${orphans}[$repo] ⛔ issue #${gn} — a merged PR into ${gbase} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close. Auto-closeout resumes once agent-runtime#34's finalize ships the \`Implements #${gn}\` line.\n"
@@ -1883,6 +2032,7 @@ EOF_GOALBASED
         echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
       fi
     fi
+    # <<<REPLAY:fu143-goal-child<<<
     # Default branch: a queued issue without a `Base:` body line counts against this.
     # Hoisted above IL-G06 detection block since it's used there.
     default_branch="$(gh repo view "$slug" --json defaultBranch --jq .defaultBranch 2>/dev/null || echo "master")"
@@ -2080,9 +2230,7 @@ EOF
       # = null, and [null] has length 1 — without select(.!=null) every Running ride was
       # invisible to this hold (only Pending pods held the queue), so each tick burned a
       # sonnet deferral session against the launcher belt (found 2026-08-02, issue-96 churn).
-      live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
-          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
-                     | select(. != null)] | length) == 0)] | length')"
+      live="$(live_worker_pod_count "$WIPPODS_JSON")"
       case "${live:-}" in ''|*[!0-9]*) live=0;; esac
       if [ "$live" -ge "$REPO_MAX_WIP" ]; then
         wip_busy=1
@@ -2535,14 +2683,21 @@ EOF
       # be only PART of the issue's scope (#299: one manifest was landable, one env line was not)
       # — so the line names the file and the route, and a human re-scopes or splits it.
       # >>>REPLAY:guarded-hold>>>
-      if [ "$repo" = "$GUARDED_REPO" ]; then
-        if [ -z "$GUARDED_PATHS" ]; then
-          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
-          # `GUARDED=` line changed shape), so "not guarded" is unknown, not false. Loud and
-          # level-triggered — it clears itself on the scan after the read works again.
-          orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — no \`GUARDED=\` line readable at ${PIN_ONLY_LINT} (homelab#309). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
-          continue
-        fi
+      # The set is per REPO, not per issue — read it once per repo and reuse it across the repo's
+      # queue (the API read is not free). `_gp_rc`: 0 = read, 1 = unreadable (hold), 2 = none.
+      if [ "${_gp_repo:-}" != "$repo" ]; then
+        _gp_repo="$repo"; _gp_rc=0
+        GUARDED_PATHS="$(guarded_paths "$repo")" || _gp_rc=$?
+      fi
+      if [ "$_gp_rc" = 1 ]; then
+        # Rule #6: never fail INTO a dispatch. The repo declares a guarded set but it could not be
+        # read (the file moved, its line changed shape, the API read failed), so "not guarded" is
+        # unknown, not false. Loud and level-triggered — it clears itself on the scan after the
+        # read works again.
+        orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — ${repo}'s declared guarded set could not be read (homelab#309/#1855). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      if [ "$_gp_rc" = 0 ]; then
         # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
         # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
         # normalize to the empty prefix and are dropped here: reading them as guarded would stop
@@ -2554,7 +2709,7 @@ EOF
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
@@ -2626,7 +2781,7 @@ EOF_GUARDED
           [ -n "$fpe" ] || continue
           if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
         done <<EOF_QDECL
-$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+$(fp_split_entries "$qtouches")
 EOF_QDECL
         if [ -n "$qdecl" ]; then
           # fp_conflict_strict, not a grep: the boundary reasoning is the whole point. THIS
@@ -3729,7 +3884,7 @@ EOF_GTHEMES_OPEN
       # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
       # above ran first), so a running round is never mistaken for a finished one.
       # Also carries the reviewable_again probe (homelab#975): reviews added to the same fetch.
-      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews 2>/dev/null)" || cr_probe=''
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits,reviews,lastEditedAt 2>/dev/null)" || cr_probe=''
       # blocked-on predicate (homelab#1188): if a terminal ruling recorded a blocker and it is
       # still unresolved, report instead of dispatch (homelab#1427).
       cr_boc="$(pr_blocked_on_check "$slug" "$u" "$cr_probe")"
@@ -3748,13 +3903,15 @@ EOF_GTHEMES_OPEN
         cr_reviews="$(printf '%s' "$cr_probe" | jq -r '
           def newest_review_at:
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
+          def is_merge:
+            (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
-            ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
-          if newest_commit_at != "" and newest_commit_at > newest_review_at then "held" else "" end
+            ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
+          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)) then "held" else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then
-        head8="$(printf '%s' "$cr_probe" | jq -r '([.commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
+        head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
         orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
         continue
       fi
@@ -4077,20 +4234,21 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⚠ review-flip belt HELD — the open-PR read is unreadable this tick (rule #6: never fail INTO a write); no flips\n"
       fi
       # <<<REPLAY:review-flip-belt<<<
-      if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+      # >>>REPLAY:c4c5-bodies-probe>>>
+      bodies_ok=""
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then bodies_ok=1; fi
+      if [ -n "$bodies_ok" ] && PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
-        if [ -z "$PODS" ]; then
-          # >>>REPLAY:c4c5-bodies-probe>>>
-          if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
             # ONLY "no open PRs" signal, nothing else (homelab#488): `gh pr list` degraded to `[]` on
             # a transient 503 made every in-progress issue read as an abandoned ride, and the belt
             # re-queued work a live PR already owned (homelab#405, the 18:00:53Z tick).
-            # ONE selector, FOUR derivations (the infeasible terminal, the belt, the report line,
-            # the unit) — this is conditions (a)+(b) of the abandoned-ride predicate and the copies
-            # MUST NOT drift.
+            # ONE selector, THREE derivations (the belt, the report line, the unit) — this is
+            # conditions (a)+(b) of the abandoned-ride predicate and the copies MUST NOT drift.
+            # The infeasible terminal used to be the fourth; it has its OWN predicate now
+            # (`INFEAS_SEL`, defined beside this one — homelab#1797).
             # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and so in
             # every derivation) or c4c5-redispatch, which outranks merged-closeout, re-rides merged
             # work every tick while the closeout unit starves. Detection block above.
@@ -4103,6 +4261,9 @@ EOF_GTHEMES_OPEN
             # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
             # below, mid-write) can hold BOTH labels for a tick, and re-dispatching a human-gated
             # issue is the one thing C4/C5 must never do (retro r3 F4, homelab#257).
+            # homelab#2305: per-issue liveness moved from repo-wide gate into selector — each
+            # issue is evaluated independently. An in-progress issue WITH a live pod for that
+            # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
             # >>>REPLAY:c4c5-selector>>>
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
@@ -4111,8 +4272,34 @@ EOF_GTHEMES_OPEN
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select((($pods | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0))'
             # <<<REPLAY:c4c5-selector<<<
+            # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
+            # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
+            # the C4/C5 redispatch belt (an errored ride is a human's to un-latch) and WRONG here:
+            # a ride that declares infeasible and THEN dies on the way out is the COMMON shape —
+            # the wall that made the task infeasible often kills the session too — and it is
+            # exactly the case the marker exists for. oracle-fleet#637 is the worked case: a
+            # well-formed marker at 13:34:50Z, an http-401-storm 31 s later, `agent/error` stamped
+            # by the launcher, and the issue invisible to every clause since.
+            # The predicate is the marker's own: in-progress ∧ NOT `agent/blocked` (already parked
+            # — the one label that means a human owns it). The C4/C5-specific holds
+            # (merged-into-goal, goal-based, debounced, live session, open PR) are NOT applied:
+            # they answer "should this be RE-DISPATCHED", and this read is not a redispatch
+            # decision — the marker is a VERDICT, and it wins over every hold. `agent/error` is
+            # INCLUDED for the same reason, and the park CLEARS it (the verdict supersedes the
+            # crash latch). The goal-based hold is the one that mattered most: a goal child whose
+            # worker declared infeasible was held as "merged-but-unlinked or abandoned?" and then
+            # re-ridden by the strike-driven resumable path below (oracle-fleet#636).
+            # ⚠ Kept SINGLE-quoted and expanded as `jq -r "$INFEAS_SEL"` — the same discipline
+            # `C4C5_SEL` carries, so a future edit cannot eat a backslash through double quotes.
+            # >>>REPLAY:infeasible-selector>>>
+            INFEAS_SEL='.[] | (.labels|map(.name)) as $L
+               | select((($L|index("agent/blocked"))|not))
+               | .number as $n
+               | "\($n)"'
+            # <<<REPLAY:infeasible-selector<<<
             # ── THE INFEASIBLE TERMINAL (retro r3 F4, homelab#257) ────────────────────────────────
             # A worker that correctly rules the deliverable NOT IMPLEMENTABLE AS WRITTEN — a path in
             # its recipe's ban list, a resource outside the pod (cluster, live API creds, a
@@ -4140,8 +4327,7 @@ EOF_GTHEMES_OPEN
             #     issue keeps today's behaviour, belt and unit included.
             # >>>REPLAY:infeasible-terminal>>>
             infeas_done=""
-            for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-                --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+            for icand in $(printf '%s' "$inprog" | jq -r "$INFEAS_SEL"); do
               icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
               # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
               # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
@@ -4175,13 +4361,18 @@ EOF_GTHEMES_OPEN
               # ⚠ Same non-atomic write as the belt below, same order for the same reason: ADD the
               # new lifecycle label FIRST, remove `agent/in-progress` SECOND, then RE-READ and prove
               # the end state. With neither label the issue is invisible to every clause.
+              # `agent/error` is cleared too (homelab#1797): the verdict SUPERSEDES the crash
+              # latch, and an `agent/error` left on a parked issue reads as "a human must un-latch
+              # this crash" — the wrong next-mover for a verdict. Best-effort like the in-progress
+              # removal, and the re-read below proves it.
               if gh issue edit "$icand" --repo "$slug" --add-label agent/blocked >/dev/null 2>&1; then
                 gh issue edit "$icand" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+                gh issue edit "$icand" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 || true
               fi
               iend="$(gh issue view "$icand" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
               iok=""
               case ",${iend}," in
-                *",agent/blocked,"*) case ",${iend}," in *",agent/in-progress,"*) : ;; *) iok=1;; esac;;
+                *",agent/blocked,"*) case ",${iend}," in *",agent/in-progress,"*|*",agent/error,"*) : ;; *) iok=1;; esac;;
               esac
               if [ -n "$iok" ]; then
                 gh issue comment "$icand" --repo "$slug" --body "$(printf '%s\n' \
@@ -4195,8 +4386,13 @@ EOF_GTHEMES_OPEN
                   "" \
                   "**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove \`agent/blocked\` and re-queue. Re-queueing it unchanged will simply reach the same verdict." )" >/dev/null 2>&1 || true
                 orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} parked \`agent/blocked\` (worker: ${ipay}). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).\n"
+                # The board row (homelab#1797): the class the operator's todo view renders as
+                # "AGENT_INFEASIBLE — re-scope needed" (agents/board.sh, who=operator — the same
+                # `who` the parked-infeasible alert keys on). Pushed only on a PROVEN park: a
+                # half-applied write is a broken state, reported loudly above, not a park.
+                item_class_push "$repo" "issue-${icand}" "parked-infeasible" "operator"
               else
-                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipay}\`, but the label write FAILED or landed HALF-APPLIED — labels are now [${iend}]. Fix by hand: it wants \`agent/blocked\` and NOT \`agent/in-progress\`. The redispatch is suppressed either way (a proven-impossible task is not re-ridden on the strength of a label write).\n"
+                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipay}\`, but the label write FAILED or landed HALF-APPLIED — labels are now [${iend}]. Fix by hand: it wants \`agent/blocked\` and NOT \`agent/in-progress\` (nor \`agent/error\`). The redispatch is suppressed either way (a proven-impossible task is not re-ridden on the strength of a label write).\n"
               fi
             done
             # <<<REPLAY:infeasible-terminal<<<
@@ -4234,11 +4430,13 @@ EOF_GTHEMES_OPEN
             # re-queue it to `agent/queued` and hand it straight back to dispatch, undoing the human
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
+            # >>>REPLAY:c4c5-selector-run>>>
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
+            # <<<REPLAY:c4c5-selector-run<<<
             if [ -n "$c4c5_cands" ]; then
               now_s="$(date -u +%s)"
               # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
@@ -4346,7 +4544,10 @@ EOF_GTHEMES_OPEN
             # bridge in replay. The jq validation is the same guard $inprog uses.
             jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
             # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
-            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch
+            # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch.
+            # Also exclude issues with frozen open PRs (homelab#2281 — extended belt below).
+            frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
+            jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
               | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 '[.[] | (.labels|map(.name)) as $L
@@ -4356,8 +4557,10 @@ EOF_GTHEMES_OPEN
                        | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
-              now_s="$(date -u +%s)"
-              review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
+              if [ -z "${review_merged:-}" ]; then
+                review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              fi
               if ! jq -e . >/dev/null 2>&1 <<<"${review_merged:-null}"; then
                 orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/review phantom-label belt held every candidate this tick (rule #6)\n"
               else
@@ -4411,9 +4614,62 @@ EOF_GTHEMES_OPEN
                 done
               fi
             fi
+            # >>>REPLAY:review-phantom-frozen-open-pr>>>
+            # ── THE BELT (homelab#2281): DETECT frozen OPEN PRs with agent/review label ──────────
+            # An open PR that is armed, bot-APPROVED at head, ci green, and BEHIND but unmoved
+            # may match no scan clause: the `agent/review` phantom clause fires only when there is
+            # NO open PR, so an open-but-frozen PR is a terminal sink. This belt detects issues
+            # with `agent/review` that are mentioned by a frozen open PR (fetched above to feed
+            # only this belt).
+            #
+            # CONDITION: a PR that is:
+            #   - armed (autoMergeRequest != null)
+            #   - bot-APPROVED (reviewDecision == "APPROVED")
+            #   - ci green (every statusCheckRollup conclusion ∈ SUCCESS|NEUTRAL|SKIPPED; PENDING ≠ green)
+            #   - BEHIND (mergeStateStatus)
+            #   - unmoved (updatedAt unchanged past C4C5_PERSIST_S)
+            # and references an issue with agent/review.
+            # NOTE: PENDING must not read as green since a frozen PR is one that stopped moving.
+            #
+            # The belt REPORTS and HOLDS to avoid races with the review-flip belt or ongoing PRs.
+            # A hold costs a report line, guessing (reconciling without the guard) costs a duplicate
+            # review session on the same code.
+            review_frozen_cands=""
+            # A frozen armed PR is one that is APPROVED + ARMED + BEHIND + CI green + updatedAt unmoved.
+            # Match it to an issue with agent/review via the PR's body.
+            # >>>REPLAY:frozen-pr-selector>>>
+            # The frozen-open-PR predicate, sentinelled (homelab#2280): the clause-coverage case
+            # lifts it and runs it over its enumerated PR states, so a change to the r7 F1
+            # detection (armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved) moves that fixture.
+            FROZEN_PR_SEL='[.[] | (.labels|map(.name)) as $L
+                       | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+                       | (.number|tostring) as $n
+                       | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
+                       | ([$prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([ .statusCheckRollup[]? | select((.conclusion | IN("SUCCESS", "NEUTRAL", "SKIPPED")) | not) ] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | .[0] // empty) as $frozen_pr
+                       | if $frozen_pr then "\($n)|\($frozen_pr.updatedAt // "")" else empty end
+                ] | .[]'
+            # <<<REPLAY:frozen-pr-selector<<<
+            [ -n "$dispatchable" ] && review_frozen_cands="$(printf '%s' "$review_only" \
+              | jq -r --argjson prs "$frozen_pr_fetch" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+                "$FROZEN_PR_SEL")"
+            if [ -n "$review_frozen_cands" ]; then
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
+              for fcand in $review_frozen_cands; do
+                fcn="${fcand%%|*}"; fpr_upd="${fcand#*|}"
+                fpr_age="$(jq -rn --arg t "$fpr_upd" --argjson now "$now_s" \
+                  '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                case "$fpr_age" in ''|*[!0-9-]*) fpr_age=-1;; esac
+                if [ "$fpr_age" -lt "$C4C5_PERSIST_S" ]; then
+                  orphans="${orphans}[$repo] ⏳ agent/review frozen-open-PR belt HELD — issue #${fcn} has an armed, approved, behind PR with CI green, touched $(( fpr_age < 0 ? 0 : fpr_age / 60 ))m ago (< the ${C4C5_PERSIST_S}s guard); re-checked next scan\n"
+                  continue
+                fi
+                orphans="${orphans}[$repo] ⚠ agent/review with FROZEN OPEN PR detected — issue #${fcn} (armed ∧ approved ∧ ci green ∧ behind ∧ unmoved $(( fpr_age / 60 ))m). The scan detected this state matches no clause — operator review-dismissal may unblock it (homelab#2281).\n"
+              done
+            fi
+            # <<<REPLAY:review-phantom-frozen-open-pr<<<
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
@@ -4427,27 +4683,45 @@ EOF_GTHEMES_OPEN
             # again with the same (model, error_class) pair follows the existing second-strike rule
             # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
             # strike→resume→strike loop.
+            # ⚠ `$done` (homelab#1797): an issue the INFEASIBLE terminal parked this tick is NOT
+            # undecidable — the worker's verdict outranks the strike's resumable branch, and
+            # re-riding it would spend a paid session to re-derive a known answer (oracle-fleet#636
+            # is what a cheaper model does with the same wall). The marker is read in ONE place
+            # (the terminal above); this derivation keys off its `infeas_done` set rather than
+            # re-reading the grammar — no second regex.
             ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              --arg done "${infeas_done:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+               | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
-            # For each ambiguous issue, check if the newest AGENT_STRIKE: comment carries a
-            # Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # For each ambiguous issue, check if the newest terminal comment (AGENT_STRIKE: or
+            # AGENT_REPORT:) carries a Resumable branch pushed: line — if so, the state IS DECIDABLE.
+            # The finalizer writes the same line into both comment channels (FU-199 / homelab#1797);
+            # pick the newest terminal of either kind, as both producers use one parser below.
             ambig_decidable=""
+            ambig_terminal_type=""
             if [ -n "$ambig" ]; then
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
                 [ -n "$ambig_n" ] || continue
                 icmt="$(gh api "repos/${slug}/issues/${ambig_n}/comments?per_page=100" 2>/dev/null)" || icmt=""
                 if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then
-                  # Find the NEWEST AGENT_STRIKE: comment (last in the array, which is
-                  # oldest-first). Anchored at start-of-comment, never a substring — same
-                  # discipline as AGENT_INFEASIBLE: (homelab#257).
-                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:"))] | last // ""' <<<"$icmt")"
+                  # Find the NEWEST terminal comment (AGENT_STRIKE: or AGENT_REPORT:) with
+                  # Resumable branch pushed: (last in the array, which is oldest-first).
+                  # Anchored at start-of-comment, never a substring — same discipline as
+                  # AGENT_INFEASIBLE: (homelab#257). Both producers write the same line
+                  # (one parser, ADR-103).
+                  strike="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_STRIKE:|^AGENT_REPORT:"))] | last // ""' <<<"$icmt")"
                   if [ -n "$strike" ]; then
+                    # Determine which type of terminal comment this is
+                    term_type="AGENT_STRIKE"
+                    case "$strike" in
+                      AGENT_REPORT:*) term_type="AGENT_REPORT" ;;
+                    esac
                     # FU-199 (folded in, 2026-09-20): the finalizer writes the line in MARKDOWN —
                     # `**Resumable branch pushed:** \`<branch>\`` + trailing prose. The old
                     # `sub(".*Resumable branch pushed:[ \t]*"; "")` was greedy up to the opening
@@ -4466,7 +4740,11 @@ EOF_GTHEMES_OPEN
                         ] | first // ""
                     ')"
                     if [ -n "$branch" ]; then
-                      ambig_decidable="${ambig_decidable}${ambig_n} "
+                      # repo-qualified key: issue numbers are only unique per repo
+                      # space-separated (same format as bare issue numbers above)
+                      ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                      # Encode the terminal type with the repo-qualified issue number for later lookup
+                      ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=${term_type}"$'\n'
                       # repo-qualified key: issue numbers are only unique per repo
                       # NEWLINE-separated (not space): the dispatch loop reads this list with
                       # `IFS= read -r`, so a value carrying whitespace or a glob character can
@@ -4482,7 +4760,11 @@ EOF_GTHEMES_OPEN
               ambig_filtered=""
               while IFS= read -r ambig_line; do
                 ambig_n="$(printf '%s' "$ambig_line" | sed -n 's/^  issue #\([0-9]\+\).*/\1/p')"
-                case " $ambig_decidable " in *" $ambig_n "*) ;; *) ambig_filtered="${ambig_filtered}${ambig_line}\n";; esac
+                # Check for repo-qualified keys: repo#N or repo#N=…
+                case " $ambig_decidable " in
+                  *" ${repo}#${ambig_n} "*) ;;
+                  *) ambig_filtered="${ambig_filtered}${ambig_line}\n";;
+                esac
               done <<< "$ambig"
               ambig="$(printf '%b' "$ambig_filtered")"
             fi
@@ -4506,7 +4788,7 @@ EOF_GTHEMES_OPEN
               # extra `gh` call: it rides out of the same jq row, base64'd like `ib_rows` does.
               # A body the parser REFUSES holds the issue (rule #6 — a malformed block never
               # dispatches), exactly as the queued lane's `!` column does.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))|\(.body // "" | @base64)"'); do
@@ -4523,7 +4805,12 @@ EOF_GTHEMES_OPEN
             # Add resumable (decidable) goal children to dispatchable units — they were excluded
             # from the C4C5_SEL above by the goal-based filter, so they need their own loop.
             if [ -n "$ambig_decidable" ]; then
-              for ad_n in $ambig_decidable; do
+              for ad_qualified in $ambig_decidable; do
+                # ad_qualified is now repo#N; extract the bare issue number for jq queries
+                ad_n="${ad_qualified#*#}"
+                # Look up which type of terminal comment was found for this issue using the qualified key
+                ad_term_type="$(printf '%s' "$ambig_terminal_type" | grep "^${ad_qualified}=" | cut -d= -f2)"
+                ad_term_type="${ad_term_type:-AGENT_STRIKE}"
                 ad_class="$(printf '%s' "$inprog" | jq -r --arg n "$ad_n" '
                   .[] | select(.number == ($n|tonumber))
                   | ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))
@@ -4537,7 +4824,7 @@ EOF_GTHEMES_OPEN
                   [ -n "$ad_cv" ] && ad_class="$ad_cv"
                   units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                   item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — AGENT_STRIKE + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
                 else
                   orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
                   item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"
@@ -4546,14 +4833,14 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:c4c5-derivations<<<
           else
-            orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            if [ -n "$bodies_ok" ]; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)\n"
+            else
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"
+            fi
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
-        fi
-      else
-        echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
-    fi
     # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
     # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
     # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
@@ -4934,19 +5221,78 @@ EOF_GTHEMES_OPEN
             gh issue edit "$fn" --repo "$slug" --add-label agent/error >/dev/null 2>&1 || true
           fi
         done
-        # ONE comment listing all affected issues
-        affected_list=""
         sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
-        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
-          [ -n "$fn" ] || continue
-          affected_list="${affected_list}- #${fn}\n"
-        done
         # Marker-based idempotency: the first line of the comment is a machine marker carrying
         # the group identity. A repeat tick against an already-actioned fleet strike finds the
         # identical marker and skips the post (same discipline as state-fp:, homelab#244/IL-T26).
         fleet_strike_marker="fleet-strike-fp: error_class=${ec} issues=${sorted_nums}"
+        # ── THE CAUSE: resolve or create the ONE filing for this class (homelab#1714) ─────────
+        # The filing is the marker's `cause=`: closing it is the resolution signal the un-latch
+        # clause reads. Resolved BEFORE the marker comment so the comment can name it — a latch
+        # whose diagnosis cannot name its cause is not machine-un-latchable (the #1692 shape:
+        # labelled 16:47Z, silent, re-latched 18:18Z, wedged ~4.5h).
+        filing_n=""
+        if [ -n "$existing_filing" ]; then
+          filing_n="$existing_filing"
+          # Idempotency check: skip if the filing already has a comment with the identical marker
+          filing_comments="$(gh api "repos/${slug}/issues/${existing_filing}/comments?per_page=100" 2>/dev/null || true)"
+          filing_already_extended=0
+          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${filing_comments:-null}"; then
+            if jq -e --arg m "$fleet_strike_marker" \
+              '[.[] | (.body // "") | startswith($m)] | any' \
+              <<<"$filing_comments" >/dev/null 2>&1; then
+              filing_already_extended=1
+            fi
+          fi
+          if [ "$filing_already_extended" = 0 ]; then
+            # Extend the existing filing with a comment; include the cause marker if available
+            filing_fault_marker=""
+            [ -n "$filing_n" ] && filing_fault_marker="<!-- fleet-fault cause=${slug}#${filing_n} prs=${sorted_nums} -->"
+            gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
+              "${fleet_strike_marker}" \
+              "${filing_fault_marker:+$filing_fault_marker}" \
+              "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
+              "" \
+              "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
+          fi
+        else
+          # Create a new inert platform filing; its NUMBER is the marker's cause.
+          filing_n="$(gh issue create --repo "$slug" \
+            --title "fleet-strike: error_class=${ec}" \
+            --label "agent-fix" \
+            --body "$(printf '%s\n' \
+              "🤖 **Fleet strike filing** — inert platform issue (FU-200)." \
+              "" \
+              "**error_class:** \`${ec}\`" \
+              "" \
+              "**Affected issues:** $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
+              "" \
+              "**Detected at:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`" \
+              "" \
+              "This is a DEDUPED filing: one per error_class per 24h window. The affected issues carry \`agent/error\` and are human-first, report-only until the root cause is resolved." \
+              "" \
+              "**What to do.** Investigate the platform-level pattern behind \`${ec}\`. Each affected issue's ride transcript is in \`s3://agent-transcripts/\`. Once the root cause is fixed, strip \`agent/error\` from each affected issue to re-enable dispatch." )" 2>/dev/null \
+            | sed -n 's#.*/\([0-9][0-9]*\)$#\1#p')" || filing_n=''
+          case "$filing_n" in ''|*[!0-9]*) filing_n="";; esac
+        fi
+        # ── THE MARKER COMMENT, on EVERY affected issue (homelab#1714) ────────────────────────
+        # The latch is per-item (the breaker is per-item), so its diagnosis is per-item too: an
+        # issue that carries `agent/error` and no marker is undiagnosable AND un-clearable — the
+        # un-latch clause keys on exactly this marker. The SAME text goes on every affected issue
+        # (it lists the whole set), so the human ask still reads as one signal. The marker is
+        # written ONLY when the cause resolved: a latch that cannot name its cause stays
+        # human-first rather than carrying a marker the un-latch clause would misread.
+        affected_list=""
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          affected_list="${affected_list}- #${fn}\n"
+        done
+        fleet_fault_marker=""
+        [ -n "$filing_n" ] && fleet_fault_marker="<!-- fleet-fault cause=${slug}#${filing_n} prs=${sorted_nums} -->"
         comment_body="$(printf '%s\n' \
           "${fleet_strike_marker}" \
+          "${fleet_fault_marker:+$fleet_fault_marker}" \
+          "AGENT_ERROR: infra-class strike on $(printf '%s' "$nums" | tr ',' '\n' | sort -u | wc -l | tr -d ' ') issues — error_class=${ec}" \
           "" \
           "🤖 **Fleet strike detected** — \`error_class=${ec}\` on ≥2 distinct issues within 24h (FU-200)." \
           "" \
@@ -4962,62 +5308,36 @@ EOF_GTHEMES_OPEN
           "- All within a 24h window." \
           "" \
           "To re-enable dispatch on any issue, strip \`agent/error\` by hand after the root cause is resolved." )"
-        # Post the comment on the FIRST affected issue only (ONE comment listing them)
-        first_fn="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | head -1)"
-        if [ -n "$first_fn" ]; then
-          # Idempotency check: skip if a comment already starts with the identical marker
-          existing_comments="$(gh api "repos/${slug}/issues/${first_fn}/comments?per_page=100" 2>/dev/null || true)"
+        for fn in $(printf '%s' "$nums" | tr ',' '\n' | sort -u); do
+          [ -n "$fn" ] || continue
+          # Idempotency check: skip if a comment already starts with the identical marker.
+          # BUT: if the comment exists without a fleet-fault cause= marker and we now have a
+          # filing_n, repost to include the cause marker (homelab#2327). The marker's presence
+          # is part of the idempotency key, not an accident of the first post.
+          existing_comments="$(gh api "repos/${slug}/issues/${fn}/comments?per_page=100" 2>/dev/null || true)"
           already_posted=0
+          needs_cause_repost=0
           if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${existing_comments:-null}"; then
             if jq -e --arg m "$fleet_strike_marker" \
               '[.[] | (.body // "") | startswith($m)] | any' \
               <<<"$existing_comments" >/dev/null 2>&1; then
               already_posted=1
+              # Check if the existing marker comment lacks the fleet-fault cause= marker.
+              # If so and filing_n is set, we need to repost with it.
+              if [ -n "$filing_n" ]; then
+                if ! jq -e --arg m "$fleet_strike_marker" \
+                  '[.[] | select((.body // "") | startswith($m)) | (.body // "") | test("fleet-fault cause=")] | any' \
+                  <<<"$existing_comments" >/dev/null 2>&1; then
+                  needs_cause_repost=1
+                  already_posted=0  # Force repost
+                fi
+              fi
             fi
           fi
           if [ "$already_posted" = 0 ]; then
-            gh issue comment "$first_fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
+            gh issue comment "$fn" --repo "$slug" --body "$comment_body" >/dev/null 2>&1 || true
           fi
-        fi
-        # ONE deduped inert platform filing
-        if [ -n "$existing_filing" ]; then
-          # Idempotency check: skip if the filing already has a comment with the identical marker
-          filing_comments="$(gh api "repos/${slug}/issues/${existing_filing}/comments?per_page=100" 2>/dev/null || true)"
-          filing_already_extended=0
-          if jq -e 'type == "array"' >/dev/null 2>&1 <<<"${filing_comments:-null}"; then
-            if jq -e --arg m "$fleet_strike_marker" \
-              '[.[] | (.body // "") | startswith($m)] | any' \
-              <<<"$filing_comments" >/dev/null 2>&1; then
-              filing_already_extended=1
-            fi
-          fi
-          if [ "$filing_already_extended" = 0 ]; then
-            # Extend the existing filing with a comment
-            gh issue comment "$existing_filing" --repo "$slug" --body "$(printf '%s\n' \
-              "${fleet_strike_marker}" \
-              "" \
-              "Additional affected issues detected: $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
-              "" \
-              "Updated \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`." )" >/dev/null 2>&1 || true
-          fi
-        else
-          # Create a new inert platform filing
-          gh issue create --repo "$slug" \
-            --title "fleet-strike: error_class=${ec}" \
-            --label "agent-fix" \
-            --body "$(printf '%s\n' \
-              "🤖 **Fleet strike filing** — inert platform issue (FU-200)." \
-              "" \
-              "**error_class:** \`${ec}\`" \
-              "" \
-              "**Affected issues:** $(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ' ')" \
-              "" \
-              "**Detected at:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`" \
-              "" \
-              "This is a DEDUPED filing: one per error_class per 24h window. The affected issues carry \`agent/error\` and are human-first, report-only until the root cause is resolved." \
-              "" \
-              "**What to do.** Investigate the platform-level pattern behind \`${ec}\`. Each affected issue's ride transcript is in \`s3://agent-transcripts/\`. Once the root cause is fixed, strip \`agent/error\` from each affected issue to re-enable dispatch." )" >/dev/null 2>&1 || true
-        fi
+        done
       done
     fi
     # <<<REPLAY:fleet-strike-reader<<<
@@ -5110,8 +5430,10 @@ EOF_GTHEMES_OPEN
         orphans="${orphans}[$repo] ⏳ arbitrate belt — PR #${u}: ruling predates label event (homelab#1507). No label write.\n"
         continue
       fi
-      # If the ruling has no line-anchored blocked-on marker, it's ordinary-path — remove the label
-      if ! printf '%s' "$ruling_body" | grep -qE '^blocked-on:'; then
+      # If the ruling has no blocked-on marker, it's ordinary-path — remove the label. The marker
+      # is read through the SAME grammar as the suppression predicate (homelab#1566): one reader,
+      # never a second regex.
+      if [ -z "$(printf '%s' "$ruling_body" | jq -Rsr "$BLOCKED_ON_DEF"'blocked_on_kind' 2>/dev/null)" ]; then
         gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
           || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"
@@ -5119,17 +5441,38 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
-    # fleet-fault un-latch (FU-069, homelab#1539): when a PR carries `agent/error` from a fleet fault
-    # and the cited cause issue is CLOSED with green CI, remove the label and post one line. Rule #6
-    # holds all unreadable probes. Human-applied latches (no marker) and anomaly latches (STEP-0,
-    # verdict-count) are untouched — those are human-first cases that stay human-first.
+    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714): when an item carries
+    # `agent/error` from a fleet fault and the cited cause issue is CLOSED with green CI, remove the
+    # label and post one line. Rule #6 holds all unreadable probes. Human-applied latches (no
+    # marker) and anomaly latches (STEP-0, verdict-count) are untouched — those are human-first
+    # cases that stay human-first.
+    #
+    # ITEM-KIND-AGNOSTIC (homelab#1714). The latch is per-item, so its route out is per-item: a PR
+    # and an ISSUE carrying `agent/error` are both latched items, and both carry the SAME marker —
+    # the fleet reader's us-case writes it, this clause reads it (one grammar, one producer, one
+    # reader; never a second regex). Before this, the clause read `prsjson` alone, so an issue-side
+    # latch had no route out at all and the only exit was a human label write (#1692: labelled
+    # 16:47Z, stripped by hand 18:15Z, re-latched 18:18Z, wedged ~4.5h).
+    #
+    # The CI leg reads the item's PR head: the PR itself for a PR, and for an issue the OPEN PR that
+    # references it (the sibling-match rule the ci-red clause already uses — branch `issue-<n>-`,
+    # else a body closing keyword, both boundary-anchored). An issue with no referencing PR has no
+    # CI to read: HOLD (rule #6), never fail INTO a write.
     # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
     # >>>REPLAY:fleet-fault-unlatch>>>
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|.number' 2>/dev/null); do
-      # Fetch PR comments to find the fleet-fault marker
-      pr_json_ff="$(gh pr view "$u" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+    ff_items="$(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"pr \(.number)"' 2>/dev/null || true)"
+    ff_items="${ff_items}
+$(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"issue \(.number)"' 2>/dev/null || true)"
+    while read -r ff_kind ff_n; do
+      [ -n "$ff_kind" ] || continue
+      # Fetch the item's comments (and, for a PR, its own CI rollup)
+      if [ "$ff_kind" = "pr" ]; then
+        pr_json_ff="$(gh pr view "$ff_n" --repo "$slug" --json comments,statusCheckRollup 2>/dev/null)" || pr_json_ff=''
+      else
+        pr_json_ff="$(gh issue view "$ff_n" --repo "$slug" --json comments 2>/dev/null)" || pr_json_ff=''
+      fi
       if [ -z "$pr_json_ff" ]; then
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read PR state (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read item state (rule #6). No label write; next tick.\n"
         continue
       fi
       # Find the newest AGENT_ERROR: comment with fleet-fault marker
@@ -5147,17 +5490,27 @@ EOF_GTHEMES_OPEN
       fi
       # Check if the cause issue is CLOSED
       if ! cause_state="$(gh issue view "$cause_issue" --repo "$cause_repo" --json state 2>/dev/null | jq -r '.state' 2>/dev/null)"; then
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read cause issue ${cause_repo}#${cause_issue} (rule #6). No label write; next tick.\n"
         continue
       fi
       if [ "$cause_state" != "CLOSED" ]; then
         # Cause is still open — hold the latch
         continue
       fi
-      # Check if CI is green at the PR head
-      ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      # Check if CI is green at the item's PR head
+      if [ "$ff_kind" = "pr" ]; then
+        ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      else
+        # The issue's PR head: the open PR that references it (sibling-match, boundary-anchored).
+        ff_pr="$(printf '%s' "$prsjson" | jq -r --arg n "$ff_n" '[.[] | select((((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)")) or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"))))] | first | .number // ""' 2>/dev/null)" || ff_pr=''
+        if [ -z "$ff_pr" ]; then
+          orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: no open PR references it, CI leg unverifiable (rule #6). No label write; next tick.\n"
+          continue
+        fi
+        ff_ci="$(gh pr view "$ff_pr" --repo "$slug" --json statusCheckRollup 2>/dev/null | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
+      fi
       case "$ff_ci" in ''|*[!0-9]*)
-        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — PR #${u}: could not read CI state (rule #6). No label write; next tick.\n"
+        orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read CI state (rule #6). No label write; next tick.\n"
         continue
       ;;esac
       if [ "$ff_ci" -ne 0 ]; then
@@ -5165,11 +5518,18 @@ EOF_GTHEMES_OPEN
         continue
       fi
       # All conditions met: remove agent/error label and post a removal comment
-      gh pr edit "$u" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
-        && gh pr comment "$u" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
-        && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${u} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
-        || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${u} — human check\n"
-    done
+      if [ "$ff_kind" = "pr" ]; then
+        gh pr edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+          && gh pr comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+          || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${ff_n} — human check\n"
+      else
+        gh issue edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+          && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+          || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on issue #${ff_n} — human check\n"
+      fi
+    done <<< "$ff_items"
     # <<<REPLAY:fleet-fault-unlatch<<<
 
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
@@ -5330,6 +5690,10 @@ EOF_GTHEMES_OPEN
         # sha matches the current head (not a stale sha from a previous commit).
         # Computed only for cases where ARBITRATE might be applied (noop_round OR red_rounds >= MAX).
         ci_red_should_arbitrate=1
+        # The reason a hold fired, for the report line the noop/exhausted branches emit. Unset =
+        # the FU-1529 stale-sha default (their `${ci_red_hold_reason:-…}` fallback); the
+        # human-ruling hold below overrides it.
+        ci_red_hold_reason=""
         if [ -n "$noop_round" ] || [ "$red_rounds" -ge "$RED_MAX" ]; then
           # Sub-defect 1: verify red conclusion's sha matches current head. Query per-sha check runs.
           pr_head_oid="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || pr_head_oid=""
@@ -5344,15 +5708,145 @@ EOF_GTHEMES_OPEN
           else
             ci_red_should_arbitrate=0 # Can't verify sha, fail-safe to not escalate
           fi
-        fi
-        if [ -n "$noop_round" ]; then
+          # HUMAN-RULING HOLD (homelab#1544, MP-T13 sub-defect 2). A non-loop actor removing
+          # agent/arbitrate is a RULING, and without a representation in the state machine the next
+          # tick re-derives the escalation from scratch. Hold escalation while no commit on the PR
+          # is newer than that removal; release as soon as new work lands (the self-releasing key —
+          # a permanent hold would be the terminal-sink shape #1529 was filed about). The actor
+          # filter excludes the loop's own churn by `.actor.type == "Bot"` (verified live: the
+          # issue-events endpoint populates it for App actors) AND by normalized login, because the
+          # events endpoint reports the bare `homelab-agents-1234[bot]`, not `gh pr list`'s
+          # `app/`-prefixed form. `--paginate` is mandatory: the endpoint is oldest-first and pages
+          # at 30, so the newest label events on a long-lived PR are not on page 1.
+          # Fail-safe: an unreadable events probe HOLDS with a report line and writes no label
+          # (rule #6 — never fail into a write).
           if [ "$ci_red_should_arbitrate" = 1 ]; then
+            cr_events="$(gh api --paginate repos/"${slug}"/issues/"${u}"/events 2>/dev/null)" || cr_events=''
+            if [ -z "$cr_events" ] || ! printf '%s' "$cr_events" | jq -e 'type == "array"' >/dev/null 2>&1; then
+              ci_red_should_arbitrate=0
+              ci_red_hold_reason="could not read PR events (homelab#1544 human-ruling hold, rule #6)"
+            else
+              cr_wa="${WORKER_AUTHOR:-app/homelab-agents-1234}"; cr_wa="${cr_wa#app/}"; cr_wa="${cr_wa%\[bot\]}"
+              cr_removal_ts="$(printf '%s' "$cr_events" | jq -r --arg wa "$cr_wa" '
+                [ .[] | select(.event == "unlabeled" and (.label.name // "") == "agent/arbitrate")
+                      | select((.actor.type // "") != "Bot")
+                      | select(((.actor.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) != $wa)
+                      | .created_at ] | max // ""' 2>/dev/null)" || cr_removal_ts=''
+              if [ -n "$cr_removal_ts" ]; then
+                cr_commits="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" || cr_commits=''
+                cr_newest_commit="$(printf '%s' "$cr_commits" | jq -r '[.commits[]?.committedDate] | max // ""' 2>/dev/null)" || cr_newest_commit=''
+                if [ -z "$cr_newest_commit" ]; then
+                  ci_red_should_arbitrate=0
+                  ci_red_hold_reason="could not read PR commits (homelab#1544 human-ruling hold, rule #6)"
+                elif [[ "$cr_newest_commit" > "$cr_removal_ts" ]] 2>/dev/null; then
+                  : # new work since the ruling — the hold self-releases, escalate
+                else
+                  ci_red_should_arbitrate=0
+                  ci_red_hold_reason="a human removed agent/arbitrate at ${cr_removal_ts} and no commit is newer (homelab#1544 human-ruling hold)"
+                fi
+              fi
+            fi
+          fi
+        fi
+        # <<<REPLAY:ci-red-stale-sha<<<
+        # >>>REPLAY:ci-red-arbitrate-belt>>>
+        # FU-115 dispatch-gate belt (homelab#1627): the rounds-exhausted escalation fires on
+        # (rounds >= cap AND red now) without asking whether the red is the PR's round to spend.
+        # Two questions the state already answers, both FAIL-OPEN (an unreadable probe proceeds
+        # to escalate — the belt can only ADD a skip, never suppress a real red on a bad read,
+        # rule #6):
+        #   (1) FOOTPRINT — is the failing job/step inside the PR's declared `Touches:` footprint?
+        #       A red inherited from master in a file the PR does not touch is not the PR's round.
+        #   (2) GREEN+APPROVED HEAD — does the red postdate a head that was green and approved?
+        #       A converged, approved PR is not re-escalated by a later, unrelated red.
+        # The footprint read is the ONE parser (`ib_get Touches`, ADR-122 (3)) and the ONE
+        # intersection predicate (`fp_conflict_strict`, agents/footprint.sh) — no second regex
+        # here. STRICT, not the exempting `fp_conflict`: that variant strips the ADR-097
+        # replay-exempt classes from BOTH lists, so an annotation on `agents/replay/**` (the usual
+        # ci red in this lane) became an empty list, read "no conflict", and HELD a red that IS in
+        # the footprint. The exemption exists for dispatch disjointness, not for this question.
+        ci_red_belt_skip=0
+        ci_red_belt_reason=""
+        if [ "$ci_red_should_arbitrate" = 1 ]; then
+          # (2) green + approved head: the head was approved as-is and the red came after it.
+          belt_pr="$(gh pr view "$u" --repo "$slug" \
+              --json reviewDecision,reviews,commits,statusCheckRollup 2>/dev/null)" || belt_pr=''
+          if [ -n "$belt_pr" ] && jq -e . >/dev/null 2>&1 <<<"$belt_pr"; then
+            belt_appr="$(printf '%s' "$belt_pr" | jq -r '
+              select((.reviewDecision // "") == "APPROVED")
+              | ([.reviews[]? | select((.state // "") == "APPROVED") | (.submittedAt // "")] | max // "") as $a
+              | ([.commits[]? | select(((.messageHeadline // "") | startswith("Merge ")) | not) | (.committedDate // "")] | max // "") as $p
+              | select($a != "" and $p != "" and $a > $p) | $a')" || belt_appr=""
+            if [ -n "$belt_appr" ]; then
+              belt_red_ts="$(printf '%s' "$belt_pr" | jq -r '[.statusCheckRollup[]? | select((.conclusion // "") == "FAILURE" or (.conclusion // "") == "TIMED_OUT") | (.completedAt // "")] | max // ""')" || belt_red_ts=""
+              if [ -n "$belt_red_ts" ] && [ "$belt_red_ts" \> "$belt_appr" ]; then
+                ci_red_belt_skip=1
+                ci_red_belt_reason="red ${belt_red_ts} postdates a green+approved head (approved ${belt_appr})"
+              fi
+            fi
+          fi
+          # (1) footprint: the failing check's annotated paths vs the issue's declared Touches.
+          if [ "$ci_red_belt_skip" = 0 ] && [ -n "$red_issue" ]; then
+            belt_body="$(gh issue view "$red_issue" --repo "$slug" --json body --jq .body 2>/dev/null)" || belt_body=''
+            if [ -n "$belt_body" ]; then
+              belt_touches="$(ib_get Touches "${slug}#${red_issue}" "$belt_body")" || belt_touches=""
+              if [ -n "$belt_touches" ] && [ "$belt_touches" != "*" ]; then
+                belt_ids="$(gh api repos/"${slug}"/commits/"${pr_head_oid}"/check-runs \
+                    --jq '[.check_runs[]? | select(.status == "completed") | select((.conclusion // "") | ascii_downcase | . == "failure" or . == "timed_out") | .id] | .[]' 2>/dev/null)" || belt_ids=''
+                belt_paths=""
+                for _bid in $belt_ids; do
+                  _bp="$(gh api repos/"${slug}"/check-runs/"${_bid}"/annotations \
+                      --jq '[.[]? | (.path // "")] | .[]' 2>/dev/null)" || _bp=""
+                  # Only FILE-LEVEL annotations are evidence. GitHub Actions attaches a generic
+                  # failure annotation to every failed job (`Process completed with exit code 1`,
+                  # `path: .github`) and the API also returns empty paths; neither names a file,
+                  # so neither says which file failed. Counting them made `belt_paths` non-empty
+                  # on nearly every red, `belt_in` 0, and the belt HELD a real in-footprint red —
+                  # the fail-open contract inverted. Dropping them is what makes the "no evidence
+                  # ⇒ fail open" branch below reachable.
+                  #
+                  # A path the PR does NOT change is deliberately KEPT: that IS the belt's signal
+                  # (a red inherited from master in a file the PR does not touch is not the PR's
+                  # round — the origin, PR#1543). Filtering on the PR's changed files would drop
+                  # exactly that annotation and turn the hold into a fail-open escalate, so the
+                  # test below stays the declared-`Touches:` intersection.
+                  while IFS= read -r _bpp; do
+                    case "$_bpp" in ''|.github) continue ;; esac
+                    belt_paths="${belt_paths}${_bpp}
+"
+                  done <<EOF_BELT_ANN
+$_bp
+EOF_BELT_ANN
+                done
+                if [ -n "$belt_paths" ]; then
+                  belt_in=0
+                  while IFS= read -r _bp; do
+                    [ -n "$_bp" ] || continue
+                    if fp_conflict_strict "$belt_touches" "$_bp"; then belt_in=1; break; fi
+                  done <<EOF_BELT
+$belt_paths
+EOF_BELT
+                  if [ "$belt_in" = 0 ]; then
+                    ci_red_belt_skip=1
+                    ci_red_belt_reason="failing paths outside the declared Touches footprint (${belt_touches})"
+                  fi
+                fi
+              fi
+            fi
+          fi
+        fi
+        # <<<REPLAY:ci-red-arbitrate-belt<<<
+        # >>>REPLAY:ci-red-arbitrate>>>
+        if [ -n "$noop_round" ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
-            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — no completed red run on current head ${head8} (FU-1529 stale-sha): PR #${u}\n"
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_hold_reason:-no completed red run on current head ${head8} (FU-1529 stale-sha)}: PR #${u}\n"
           fi
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
           # CURRENCY (homelab#198) — the EXTENSION of this clause's existing content key, not a
@@ -5421,16 +5915,18 @@ EOF_GTHEMES_OPEN
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
 # Apply the same sha check as the noop case (FU-1529).
-          if [ "$ci_red_should_arbitrate" = 1 ]; then
+          if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
             gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
+          elif [ "${ci_red_belt_skip:-0}" = 1 ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_belt_reason:-belt} (FU-115 belt, homelab#1627): PR #${u}\n"
           else
-            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — no completed red run on current head (FU-1529 stale-sha): PR #${u}\n"
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_hold_reason:-no completed red run on current head (FU-1529 stale-sha)}: PR #${u}\n"
           fi
         fi
-        # <<<REPLAY:ci-red-stale-sha<<<
+        # <<<REPLAY:ci-red-arbitrate<<<
       done
     else
       echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
@@ -6131,6 +6627,73 @@ EOF
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
 done
+
+# >>>REPLAY:clause-coverage>>>
+# ── CLAUSE COVERAGE (Goal #2273 acceptance row 1, homelab#2280) ────────────────────────────────
+# Every admissible issue state is owned by EXACTLY ONE scan clause. This block runs the REAL
+# clause selectors — lifted from this file by sentinel, never a retyped copy — over each
+# enumerated state and exits 1 when a state matches zero clauses or more than one.
+#
+# THE CLAUSE SET (issue-level; each entry names the sentinel its predicate is lifted from):
+#   queued-dispatch  ← >>>REPLAY:queued-derivation>>>     agent/queued ∧ ¬direction-change ∧ ¬agent/error
+#   c4c5-redispatch  ← >>>REPLAY:c4c5-selector>>>         agent/in-progress (abandoned), over >>>REPLAY:inprog-selector>>>
+#   review-phantom   ← >>>REPLAY:review-only-selector>>> ∧ ¬frozen   (the IL-T27 belt's candidate)
+#   frozen-open-pr   ← >>>REPLAY:frozen-pr-selector>>>    armed ∧ bot-APPROVED ∧ ci green ∧ BEHIND ∧ unmoved (IL-T28/#2281)
+#
+# ENUMERATED STATES (one issue each in the fixture world; the row names the clause that owns it):
+#   queued / queued-goal / in-progress / review / review-no-fix (#2164) / review-frozen (r7 F1)
+# LISTED STATES (no clause owns them BY DESIGN — terminal or human gate; not enumerated):
+#   blocked (human gate) / error (FU-069 breaker) / done (terminal)
+#
+# The assertion is the exit code: 0 iff every enumerated state matched exactly one clause.
+if [ "${CC_RUN:-}" = "1" ]; then
+  cc_world="${REPLAY_WORLD:?clause-coverage needs REPLAY_WORLD}"
+  cc_issues="$(cat "$cc_world/gh/issue-list.json")"
+  cc_prs="$(cat "$cc_world/gh/pr-list.json")"
+  cc_bodies="$(jq -c '[.[].body // ""]' <<<"$cc_prs")"
+  # ── run the REAL selectors (lifted blocks; no retyped copy) ──
+  cc_queued="$(jq -r '.[].number' <<<"${queued:-[]}")"
+  cc_inprog="$(jq -c "$inprog_jq" <<<"$cc_issues")"
+  cc_review="$(jq -r '.[].number' <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")")"
+  # `pods` = "" — the enumerated in-progress state is the ABANDONED one (no live pod for the
+  # issue); a live-pod in-progress issue is skipped by the merged #2305 per-issue liveness and is
+  # not a phantom state, so it is not enumerated here (c4c5-pod-liveness pins that axis).
+  cc_c4c5="$(jq -r --argjson bodies "$cc_bodies" --arg cg "" --arg gb "" --arg db "" --arg sess "" \
+    --arg pods "" "$C4C5_SEL"' | .number' <<<"$cc_inprog")"
+  cc_frozen="$(jq -r --argjson prs "$cc_prs" --arg done "" "$FROZEN_PR_SEL" \
+    <<<"$(jq -c "$review_only_jq" <<<"$cc_issues")" | cut -d'|' -f1)"
+  # ── ownership: which clauses select this issue number ──
+  cc_has() { case " $(printf '%s' "$1" | tr '\n' ' ') " in *" $2 "*) return 0;; *) return 1;; esac; }
+  cc_owners() {
+    local n="$1" out=""
+    if cc_has "$cc_queued" "$n"; then out="$out queued-dispatch"; fi
+    if cc_has "$cc_c4c5"   "$n"; then out="$out c4c5-redispatch"; fi
+    if cc_has "$cc_frozen" "$n"; then out="$out frozen-open-pr"; fi
+    if cc_has "$cc_review" "$n" && ! cc_has "$cc_frozen" "$n"; then out="$out review-phantom"; fi
+    printf '%s' "${out# }"
+  }
+  cc_fail=0
+  for cc_row in "queued:80" "queued-goal:81" "in-progress:82" "review:83" "review-no-fix:84" "review-frozen:85"; do
+    cc_name="${cc_row%%:*}"; cc_num="${cc_row#*:}"
+    cc_own="$(cc_owners "$cc_num")"
+    cc_n=0; [ -n "$cc_own" ] && cc_n="$(printf '%s\n' $cc_own | wc -l | tr -d ' ')"
+    printf 'STATE %s (#%s): %s clause(s) — %s\n' "$cc_name" "$cc_num" "$cc_n" "${cc_own:-none}"
+    [ "$cc_n" = 1 ] || cc_fail=1
+  done
+  for cc_row in "blocked:86" "error:87" "done:88"; do
+    cc_name="${cc_row%%:*}"; cc_num="${cc_row#*:}"
+    cc_own="$(cc_owners "$cc_num")"
+    printf 'LISTED %s (#%s): no clause owns this by design — %s\n' "$cc_name" "$cc_num" "${cc_own:-none}"
+    [ -z "$cc_own" ] || cc_fail=1
+  done
+  if [ "$cc_fail" = 0 ]; then
+    printf 'CLAUSE-COVERAGE: OK — every enumerated state matches exactly one clause\n'
+  else
+    printf 'CLAUSE-COVERAGE: FAIL — a state matched zero clauses or more than one\n'
+    exit 1
+  fi
+fi
+# <<<REPLAY:clause-coverage<<<
 
 # FU-176, one scope level up (PR #915 review): SCAN_PHASE_NS is process-fixed at the top of this
 # file, so a per-stack flush would POST every stack to the SAME job=agent_board,namespace=<ns>

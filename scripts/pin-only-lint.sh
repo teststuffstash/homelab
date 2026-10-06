@@ -54,6 +54,20 @@
 #       `tofu-image-revert`). Same reason as (e): a merged-then-reverted version is re-proposed by
 #       Renovate, and without this the lane loops merge → stuck rollout → revert → re-propose.
 #       Runs only when the diff touches tofu/*.tf AND adds an image line; fail-closed on the read.
+#   (g) 2026-10-04 (S9 #1988): the provider-pin memory. A `.terraform.lock.hcl` diff that moves a
+#       provider TO a version a merged `revert-prov-*` PR rolled back in the last REVERT_MEMORY_DAYS
+#       (its `reverted-providers: <name>@<version>` body line, agents/coordinator/deploy-revert-argo.yaml
+#       `tofu-provider-revert`) is refused — name = the source's last segment. Same loop as (e)/(f):
+#       Renovate re-proposes a merged-then-reverted version. Fail-closed on the read.
+#   (h) 2026-10-05 (FU-304's class row — the #2254 read, ADR-141's pattern on the argocd chart
+#       lane): the chart-pin memory. An `argocd/platform/*.yaml` diff that ADDS a `targetRevision:`
+#       line is keyed `<chart>@<version>` (chart = the head file's `spec.source.chart`; a file with
+#       no `chart:` — a `path:` source — has no key; a trailing `# comment` is not part of the
+#       version) and refused when a merged `revert-chart-*` PR of the last REVERT_MEMORY_DAYS names
+#       that pair on its `reverted-charts: <chart>@<version> …` body line (the chart revert actor,
+#       driven by `ArgoControllerSilent`, records the version it reverted AWAY from). Same loop as
+#       (e)/(f)/(g): Renovate's `argocd` manager re-proposes a merged-then-reverted chart version.
+#       Runs only when such a line is added; fail-closed on the read.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -69,11 +83,17 @@ REVERT_MEMORY_DAYS="${REVERT_MEMORY_DAYS:-30}"
 BASE="${1:-origin/master}"
 GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml|agents/coordinator/sentinel-argo\.yaml|argocd/platform/openrouter-operator\.yaml'
 # Two pin shapes, one rule. The arc-runner bump writes an `image:` line; the chart-deploy lane
-# writes a `targetRevision:` line (CalVer + -g<sha>, ADR-084). Anything else in a guarded file is
-# still refused, so widening the FILE set does not widen what may be written to it.
+# writes a `targetRevision:` line — CalVer + -g<sha> for our own OCI charts (ADR-084), plain
+# SemVer (`0.14.2`, `v1.21.2`) for a third-party chart the Renovate `argocd` manager bumps
+# (#2216: arc-runners.yaml rides the grouped `arc` PR with its two siblings). The two branches are
+# DISJOINT: SemVer leads with 1–3 digits, CalVer with a 4-digit year, so a first-party pin that lost
+# its `-g<sha>` provenance (`2026.9.25`) still fails, and the optional trailing `# comment` is
+# scoped to the SemVer branch (every targetRevision in arc-runners.yaml carries one; Renovate
+# rewrites the value and keeps the comment) — a CalVer pin still admits no comment. Anything else
+# in a guarded file is still refused, so widening the FILE set does not widen what may be written.
 # ⚠ GUARDED= and PIN_LINE= are ONE HOME: ci.yaml's ratchet exemption eval-extracts both lines and
 # coordinator-scan.sh / goal-lint.sh split GUARDED on `|` — keep them single-line, single-quoted.
-PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+|targetRevision:[[:space:]]*[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]+)$'
+PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+|targetRevision:[[:space:]]*([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]+|v?[0-9]{1,3}\.[0-9]+\.[0-9]+([[:space:]]+#.*)?))$'
 # The third shape has its own pair so the two above stay byte-for-byte (their consumers never see
 # a workflow path in GUARDED, and the ratchet exemption never sees a `uses:` line as a pin).
 WORKFLOW_GUARDED='^\.github/workflows/[^/]+\.ya?ml$'
@@ -108,7 +128,34 @@ if [ -n "$tofu_changed" ]; then
   # shellcheck disable=SC2086  # word-splitting the newline list is the point
   added_images="$(git diff "$BASE" HEAD -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
 fi
-if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ]; then
+# (g): the lockfiles' ADDED provider versions, as "<name>@<version>" — read from the head's file per
+# provider block (a version line alone does not say whose it is), kept only where the base differs.
+lock_pairs() { awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); name = p[n] }
+                    /^[[:space:]]*version[[:space:]]*=/ && name != "" { v = $3; gsub(/"/, "", v); print name "@" v; name = "" }'; }
+added_providers=""
+for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)\.terraform\.lock\.hcl$' || true); do
+  new_pairs="$(git show "HEAD:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+  old_pairs="$(git show "$BASE:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+  added_providers="$added_providers $(comm -23 <(printf '%s\n' "$new_pairs") <(printf '%s\n' "$old_pairs") | tr '\n' ' ')"
+done
+added_providers="$(printf '%s\n' $added_providers | grep . | sort -u || true)"
+# (h): the ADDED chart pins under argocd/platform/, one "<file> <chart>@<version>" per line — the
+# version from the diff's `+ targetRevision:` lines (quotes and an optional trailing `# comment`
+# dropped), the chart from the head file's first `chart:` line (one chart per Application here; the
+# `sources:` form's other source is a `master` values repo). A file without a `chart:` line (a
+# `path:` source) contributes nothing, so a raw-manifest Application never reads the memory.
+TARGET_REVISION_ADDED='^\+[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?([[:space:]]+#.*)?[[:space:]]*$'
+added_charts=""
+for pf in $(git diff --name-only "$BASE" HEAD | grep -E '^argocd/platform/[^/]+\.ya?ml$' || true); do
+  chart="$(git show "HEAD:$pf" 2>/dev/null | awk '/^[[:space:]]*chart:[[:space:]]*[^[:space:]]/ { print $2; exit }' | tr -d "\"'" || true)"
+  [ -n "$chart" ] || continue
+  while read -r ver; do
+    [ -n "$ver" ] || continue
+    added_charts="${added_charts}${pf} ${chart}@${ver}"$'\n'
+  done <<< "$(git diff -U0 "$BASE" HEAD -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
+done
+added_charts="$(printf '%s' "$added_charts" | grep . | sort -u || true)"
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
@@ -138,6 +185,44 @@ if [ -n "$added_images" ]; then
       rc=1
     fi
   done <<< "$added_images"
+fi
+# (g) the reverted-provider memory — read once, fail-closed like (e)/(f).
+if [ -n "$added_providers" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_providers="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-prov-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-providers:\")) | ltrimstr(\"reverted-providers:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-prov-* PRs of ${slug:-<no repo slug>} (the reverted-provider memory, check (g)): ${reverted_providers:-}; refusing to report success." >&2
+    rc=2; reverted_providers=""
+  fi
+  while read -r pv; do
+    [ -n "$pv" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_providers | grep -qxF "$pv"; then
+      echo "pin-only-lint: FAIL — provider $pv is a REVERTED provider version — the tofu-provider-revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-prov-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1
+    fi
+  done <<< "$added_providers"
+fi
+# (h) the reverted-chart memory — read once, fail-closed like (e)/(f)/(g).
+if [ -n "$added_charts" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_charts="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-chart-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-charts:\")) | ltrimstr(\"reverted-charts:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-chart-* PRs of ${slug:-<no repo slug>} (the reverted-chart memory, check (h)): ${reverted_charts:-}; refusing to report success." >&2
+    rc=2; reverted_charts=""
+  fi
+  while read -r pf cv; do
+    [ -n "$cv" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_charts | grep -qxF "$cv"; then
+      echo "pin-only-lint: FAIL — $pf: chart $cv is a REVERTED chart version — the chart revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-chart-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
+      rc=1
+    fi
+  done <<< "$added_charts"
 fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
@@ -286,4 +371,4 @@ if [ "$rc" != 0 ]; then
 EOF
   exit "$rc"
 fi
-echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image not in the reverted memory)."
+echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image, provider, chart version not in the reverted memory)."

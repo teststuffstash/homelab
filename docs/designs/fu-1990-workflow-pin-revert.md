@@ -239,10 +239,70 @@ Replay pins: `tofu-image-revert-candidate` (the `--jq`-literal candidate read),
 runner's `dind` image opened as the App, merged by the reflex, stuck by the cluster, reverted by
 this chain, applied by the box — recorded in `agents/coordinator/TICK-LOG.md` when run.
 
+## Part 4 — chart-pin revert: the `chart-revert` receiver (2026-10-05, operator ruling)
+
+The fourth class, and the first NOT hosted on the chain. After the seat's read of PR #2254 (the
+argo-workflows 1.1.1 → 2.0.8 chart major, merged in a window) the operator ruled that argo-workflows
+chart majors merge on their own the way terraform provider majors do (ADR-141 as amended
+2026-10-04: armed, `major` kept, the lens's APPROVED completes the merge) — behind a detector and a
+revert actor. The detector is step 1, `ArgoControllerSilent`
+(`argocd/resources/argo-workflows-alerts/`, group `argo-workflows-heartbeat`, `triage: now`: the
+agent-coordinator namespace completed no workflow for 30 m, fails closed via `or vector(0)`). The
+actor is this part.
+
+**Why outside Argo's cone.** Parts 1–3 run ON Argo Workflows — one Sensor, four WorkflowTemplates.
+A chart bump that breaks the Argo controller breaks the chain that would revert it, the
+[dependency-cone rule](../dependency-upgrades.md) (§4 Rollout: an actor is only safe outside the
+change's dependency cone). Considered and rejected: the management box (holds no PR-writing
+credential; widening an App permission is operator-only) and a GitHub Actions workflow on ARC
+(schedule lag 1–5 h unless webhook-triggered). Chosen: **an in-cluster webhook receiver** —
+`argocd/resources/chart-revert/`, a plain Deployment in `agent-coordinator` fed by an Alertmanager
+route, reusing the chain's script logic, image (`ghcr.io/teststuffstash/agent-coordinator`: git,
+gh, python3) and credential (the `coordinator-git` Secret, mounted as a file and re-read per run —
+the token lives ~1 h). Argo Workflows and Argo Events are not on its path; Alertmanager, CoreDNS,
+GitHub and the ESO-refreshed token are.
+
+| leg | provider chain (deploy-revert-argo.yaml) | chart receiver (Part 4) |
+|---|---|---|
+| detector | `MgmtApplyErroredOnNewProvider` | `ArgoControllerSilent` (30 m silent + 5 m `for`) |
+| route | receiver `deploy-provider-revert` → EventSource `/provider-errored` | receiver `chart-revert` → `http://chart-revert.agent-coordinator.svc.cluster.local:8080/alert`, `continue: true` (the responder still triages), `group_wait: 10s` |
+| host | Argo Events Sensor → Workflow pod | Deployment `chart-revert`, one worker thread, serial |
+| candidate | the lockfile commit that introduced the version | newest MERGED PR ≤120 m whose squash commit touched `argocd/platform/argo-workflows.yaml`; `revert-*` heads never |
+| predicate | provider-pin-only (`mgmt_provider_pin_commit`) | **pin-only**: the squash commit touched exactly that one file, and every changed line that is not a `#` comment is a `targetRevision:` line — exactly one version removed, one added, different. #2254's diff rewrote the pin's comment block and passes; a values edit, a blank line, a second file does not |
+| stale guard | master's lockfile still pins the version | master's file still pins the bumped version — else `already` |
+| ledger | `responder-seen` ConfigMap + branch name | **branch name only**: `revert-chart-<sha8>` exists → `already` (no kubectl, no RBAC) |
+| memory | `reverted-providers: <name>@<version>` → check (g) | `reverted-charts: argo-workflows@<new version>` — the body's LAST line; pin-only-lint's chart memory reads it from merged `revert-chart-*` PRs |
+| lane | `automerge`+`dependencies`, armed | same — labels BEFORE arming (the `labeled` event fires the reflex), `gh pr merge --auto --squash` |
+| report | the pod log (gap G10) | `/metrics`, scraped: the counter is the durable report |
+
+**Payload contract.** Alertmanager webhook v4 on `POST /alert`. Every alert with `status=firing`
+and an alertname in the receiver's `TARGETS` table (`ArgoControllerSilent` → file
+`argocd/platform/argo-workflows.yaml`, chart `argo-workflows`) is queued and the POST returns 200
+at once (a clone + revert outruns a webhook timeout; a re-delivery is a no-op by the ledger).
+Everything else: ignored, 200; malformed JSON: 400. **Drill:** labels `drill="true"` and
+`drill_pr=<n>` (label or annotation) skip the 120-minute window and target that MERGED PR — still
+pin-only, still ledgered, and the PR body says DRILL. A drill alert without a numeric `drill_pr`,
+or naming an unmerged PR, is `error`, never a fall-through to the window. The drill for this
+chain is a real patch bump of the chart, reverted on a synthetic alert (the seat runs it).
+
+**Outcomes and metrics.** One decision per alert, one JSON line on stdout (Alloy → Loki) and one
+increment of `chart_revert_alerts_total{outcome}`: `reverted` (PR open, labelled, armed),
+`already` (branch exists, or master no longer pins the bumped version), `no_candidate` (no merge
+touched the file in the window — not a rollback case, the responder/operator lane owns it),
+`not_pin_only` (outside the revert class — **what stays human**: a bump that also edited values,
+or a merge that touched more than the pin, is read by a person; the counter says so, the responder
+session says why), `conflict` (`git revert` conflicted — aborted, nothing pushed, never forced),
+`error` (an unreadable `gh`/`git` read, no token, a bad drill — fail closed, no revert on bad
+data). All six are pre-initialised at 0 so `increase()` sees the first one.
+`chart_revert_last_run_timestamp_seconds` is the last decision; `chart_revert_webhooks_total{result=
+queued|ignored|bad_request}` proves delivery; `up{job="chart-revert"}` is the scrape. Tests:
+`devbox run chart-revert-self-test` (the predicate on the real #2254 patch, payload parsing, the
+ledger decision, and the whole walk against a scripted gh/git).
+
 ## Future Work
 
 - **Monitoring**: add a Prometheus alert if the revert chain fires more than N times/day (a flapping pin is a deeper problem)
-- **Metrics**: export a gauge `workflow_pin_revert_total{repo, workflow}` to track revert frequency
+- **Metrics**: export a gauge `workflow_pin_revert_total{repo, workflow}` to track revert frequency (Part 4's receiver already exports its own `chart_revert_alerts_total{outcome}` — the chain's templates still report to the pod log only, gap G10)
 - **Dashboard**: panel showing revert PRs over time, by repo
 
 ## References

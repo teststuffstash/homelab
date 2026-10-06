@@ -10,11 +10,55 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-02 afternoon — retro activity windows LIVE; TICK-LOG 2026-10-02 afternoon).**
-  `retro-activity-collect` runs every 30 min (warm ~2 min) and `retro-findings-reconcile` at 07:30Z; the first
-  reconcile is the first real-Garage `publications()` run — read it 10-03. **Before Mon 10-05 05:00Z:**
-  if the rank fix #2170 (queued) hasn't merged, decide whether r7 runs on the old rank (it samples
-  PRs on cancellations only and misses blocked issues). PR#2172 = ADR-146 Proposed, awaiting the operator's read.
+- **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
+  arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
+  merged mechanically, Renovate rebased #2240 itself); #2232 cloudflared + the seat's `tofu/cloudflare`
+  apply (window clean, state converged); **#2241 = G13** (cloudflared is a version set — regex manager +
+  group); waves 3/4/5 all merged and live (eso 2.11.0, infisical 1.11.0, kps 86.3.2, nginx 1.31 ×2, otel
+  0.161.0, python 3.14, kube-rbac-proxy 0.23.0, blackbox 0.28.0, registry 3.1.1). **#2257** drops
+  `prHourlyLimit` 6 → 3 (MERGED 08:22Z); the status-rows docs PR **#2258** was in review at wind-down. **Operator reads:** (1) three MAJORS parked on the
+  human lane — **#2254 argo-workflows chart 2.x** (lens APPROVED after a WORKER adapted it in-PR — the
+  first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
+  kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
+  unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
+  503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week; the arming chain's step 2 (an out-of-cone revert actor — the deploy-revert Sensor runs ON Argo Workflows) needs the operator's ruling on WHERE it runs (management box / ARC-hosted Actions workflow / in-cluster webhook receiver outside Argo) before steps 3–5 (pin-lint `reverted-charts` memory, bad-pin drill, one `matchPackageNames` line). (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
+  `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
+  Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
+  rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
+  no actor — but see #2254: the worker-adapts leg DID fire on CHANGES_REQUESTED), updater skip /
+  `rebaseWhen` for Renovate branches.
+- **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
+  (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
+  moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;
+  (b) the first provider MAJOR merged on the lens's APPROVED alone (rule e1748261). (2) Churn, not yet
+  tracked: a red/BLOCKED Renovate provider PR gets a master-merge from the updater on every master push
+  (#2191: 29 merges, 32 box plans in 30 h) — the terraform rule has no `rebaseWhen: behind-base-branch`
+  and the updater's Renovate skip covers Actions branches only (`update-pr-branch.sh` `renovate_author`);
+  decide: extend the skip + the rule to terraform, or accept. (3) Then S9 next step 7 (class 1/2
+  proposers, `docs/dependency-upgrades.md`).
+- **⚑ PICKUP (2026-10-02 night — helm provider 3.x applied under evidence; TICK-LOG 2026-10-02 evening).**
+  (1) **#2183 merged unread by the operator** (author==codeowner waiver) — the box apply loop now DEFERS
+  inside [declared windows](../glossary.md); operator to read its three calls: `MgmtApplyDeferredByWindow` at 6 h, the
+  reconciler's node windows hold the apply loop, `--admit-apply` separate from `--admit-reconciler`.
+  Confirm the box's next pull runs it (a `DEFERRED` line the first time a window is open). (2) The
+  `fu-mint-gate` hook is a TRIAL (operator: replace it if it doesn't change behaviour). (3) FU-299: daily Longhorn job + UniFi
+  `.unf` LIVE (PR#2196/#2197: schedule as code + UnifiAutobackupStale) — glance at the 10-04 01:00Z `.unf` +
+  02:00Z run; off-site PARKED by the operator.
+- **⚑ PICKUP (2026-10-04 evening — retro r7 prep; TICK-LOG 2026-10-04 evening).** **#2173** (rank
+  fix: SHA fallback, issue-only credit, latches/rounds as pain — oracle-fleet#753 samples on the
+  live store) and **#2215** (#2171: the in-pod `gh` wrapper overrode `RETRO_GH_TOKEN` with the
+  one-repo broker token; file mount, no broker) MERGED 19:08/19:24Z — **r7 (Mon 10-05 05:00Z) is
+  their first live test**: read the ride log for `gh repo view teststuffstash/oracle-fleet`
+  resolving and the deep-dive set NOT being the S9 Renovate PRs. **ADR-146 ACCEPTED** (wording
+  read; #2172 auto-merge armed) — build = FU-058's next: bundle + guard repo scope, per-stack
+  CronWorkflow, the brief's escalation clause, the opt-out knob; oracle first, hand-fired AFTER
+  r7 publishes. **#2174** = merge as a conservative hold, then fix forward (GitHub emits
+  no `marked_as_duplicate` timeline event; the canonical is GraphQL `duplicateOf` — the
+  canonical-follow path never fires live; a GraphQL replay stub has no precedent). The
+  reconcile ran 10-03/10-04 with nothing to reconcile (store holds only `activity.json`).
+  **ADR-142 re-read 10-05:** data pack in TICK-LOG 2026-10-04 evening (46 scripts PRs, 0
+  worker-authored, 3 DIFFERS all lens-justified, no weakened gate; D2 never ran; FU-296 ci step
+  unwired) — suggested: keep to 10-28.
 - **⚑ PICKUP (2026-09-27 night — FU-289 hardware half DONE, unattended; TICK-LOG has the arc).** nx-02 boots
   from the SA400 (root+swap; `local-lvm` 700 G thin pool on it; the WD is a spare still in the bay), the
   LSI HBA now exposes 2 INT13 disks, ci-runner-02 is UNPARKED (#2048 applied 21:16Z), the window is closed.
@@ -158,17 +202,11 @@ never the session's arc — that is TICK-LOG's.)
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
-- **⚑ RESPONDER UN-PAUSE (FU-249, due 2026-09-23 — on the operator list).** When it is re-enabled, run
-  this read-list in order. First delete the never-matching `alert-dep` filter in
-  `agents/coordinator/responder-argo.yaml`, which reverts #1746. Then:
-  (a) `responder_triage_sessions_today` for a day should sit well under the 09-11→16 ceiling of
-  11–12/day.
-  (b) `responder-seen` should gain `none-`/`window-`/`humandecided-`/`decided-` markers.
-  (c) The `agent-transcripts/homelab/` prefix should exist (FU-210's acceptance: a report-only session
-  still leaves a readable decision).
-  (d) One real `node-maintenance` window should cost no session (FU-230 leg b).
-  Known one-time cost: the FU-232 re-key files ONE fresh issue per affected (alert, object). That burst
-  is not a regression.
+- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Step (1)
+  LIVE (PR#2193: every rule carries `triage`, upstream via the relabel map). Next: the subject-key residuals
+  (FU-249 (2)) → route `triage="now"` with the crosscheck and §routing test, then delete the filter → the
+  grouped deep dig. oracle-fleet's own rules (ert-pipeline ×2, oracle-gateway ×3) still carry no `triage` —
+  the stack's lane (`patterns/observability.md` §3).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.
   Theme #1907's assembly (`goal/1906-scan → master`) is the one codeowner read, and it has not been
@@ -179,16 +217,8 @@ never the session's arc — that is TICK-LOG's.)
   and that is **FU-250**. #1640 router Goal. #1769 rails Goal. #1418 S8 [stint](chainless-redesign.md): #1649 landed 09-14, so it
   is due to close at a sweep.
 - **⚑ OPERATOR-OWED (one list, verified open 2026-09-24):**
-  (1) **FU-097's intent-review instruction** for `.agents/review.md` is operator-direct. Draft, proposed
-  under "Judge these carefully": *"On a surface the box
-  applies on its own (management-box.md §The capability ledger: the main-root allowlist, Talos
-  versions, Talos config), your read replaces the codeowner read, so review INTENT: does the plan +
-  install-impact line do what the linked issue asked, given what the fleet and the box already run
-  (a version skipping the canary type, a config that needs a reboot under `no_reboot`, a CP change
-  while the CP toggle is off)? Intent and plan disagreeing is BLOCKING even when every check is green."*
-  (1b) Same file, a second operator-direct fix: `.agents/review.md` ~L92 still frames ADR-128's narrowed gate as
-  "the trial week (2026-09-11 → 09-18)"; FU-233 ruled it standing. A live reviewer brief with a lapsed range can
-  mislead the reviewer. Its path list also omits `/scripts/` + `/nixos/`, which are in CODEOWNERS.
+  ((1)/(1b) DONE — `.agents/review.md` carries the intent-review rule (c8e38675) and the standing-gate
+  wording; verified by the 2026-10-03 fu-sweep.)
   (2) claude-jail `6f90815` (`DEVBOX_USE_VERSION=0.18.3`, FU-240) is still unpushed in `/workspace`.
   It needs your push + a jail rebuild, and the host profile wants the same export.
   (3) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).

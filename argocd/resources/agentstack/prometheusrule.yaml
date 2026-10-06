@@ -23,7 +23,8 @@ spec:
           expr: |
             kube_agentstack_status_condition{type="Synced"} == 0
           for: 15m
-          labels: { severity: warning }
+          # triage dig: Crossplane reconcile error is readable in-cluster via claim conditions and events
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "AgentStack {{ $labels.name }} has been Synced=False ({{ $labels.reason }}) for 15m"
             description: >-
@@ -43,7 +44,8 @@ spec:
           expr: |
             absent(kube_agentstack_status_condition{type="Synced"})
           for: 30m
-          labels: { severity: warning }
+          # triage dig: kube-state-metrics config or RBAC regression, diagnosable from its pod args and ClusterRole
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "No AgentStack Synced condition series for 30m — the XR health belt is blind"
             description: >-
@@ -74,7 +76,8 @@ spec:
                 kube_externalsecret_refresh_time{namespace!="agent-coordinator", remote_key!=""}
             ) > 0
           for: 10m
-          labels: { severity: warning }
+          # triage dig: ESO mirror lag is readable in-cluster; the responder's own token may share the fault
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.name }} still holds the token before the latest mint of {{ $labels.remote_key }} (10m+)"
             description: >-
@@ -96,7 +99,8 @@ spec:
           expr: |
             time() - kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"} > 3300
           for: 5m
-          labels: { severity: warning }
+          # triage dig: generator error readable via ESO; the responder's own GitHub token likely shares the fault, so no fast write
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.name }} has not minted a GitHub token for 55m+ — it expires within minutes"
             description: >-
@@ -110,7 +114,8 @@ spec:
           expr: |
             absent(kube_externalsecret_refresh_time{generator_kind="GithubAccessToken"})
           for: 30m
-          labels: { severity: warning }
+          # triage dig: kube-state-metrics custom-resource config or RBAC regression, diagnosable in-cluster
+          labels: { severity: warning, triage: dig }
           annotations:
             summary: "No GithubAccessToken ExternalSecret refresh_time series for 30m — the token mirror belt is blind"
             description: >-

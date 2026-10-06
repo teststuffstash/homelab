@@ -52,6 +52,7 @@ MAP=(
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   "responder-behaviour-test:^agents/"
+  "deep-dig-test:^agents/"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
   "state-fp-replay:^agents/"
@@ -68,12 +69,16 @@ MAP=(
   "shim-self-test:^scripts/claude-model-shim\.py"
   # the self-test's only inputs are scripts/pin-only-lint.sh + scripts/pin-only-lint-test.sh (#2072)
   "pin-only-lint-test:^scripts/pin-only-lint"
+  # the self-test's only inputs are scripts/governance-lint.sh + scripts/governance-lint-test.sh (FU-296)
+  "governance-lint-test:^scripts/governance-lint"
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
   # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
   "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^machines/"
   "maint-self-test:^scripts/maintenance-window"
+  # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
+  "pr-wait-test:^scripts/pr-wait"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   "docs-graph-lint:\.md$"

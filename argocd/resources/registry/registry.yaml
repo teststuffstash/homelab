@@ -91,7 +91,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: registry
-          image: registry:3.0.0
+          image: registry:3.1.2
           env:
             - { name: REGISTRY_STORAGE, value: "s3" }
             - { name: REGISTRY_STORAGE_S3_REGIONENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
@@ -159,7 +159,7 @@ spec:
             requests: { cpu: "100m", memory: "256Mi" }
             limits:   { cpu: "2",    memory: "1Gi" }
         - name: nginx
-          image: nginx:1.27-alpine
+          image: nginx:1.31-alpine
           ports:
             - { name: front, containerPort: 5001 }
           securityContext:

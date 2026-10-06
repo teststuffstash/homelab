@@ -1,0 +1,21 @@
+# ArgoCD application-controller metrics → Prometheus. The controller has exported `argocd_app_info`
+# (health_status, sync_status per Application), `argocd_app_sync_total{phase}` and the reconcile
+# histograms on :8082 since day one — UNSCRAPED for the chart's first 109 days (found 2026-10-04, the
+# S9 class-1/2 wave prep: `registry` had been Degraded since 04:00Z that day and nothing said so).
+# A PodMonitor, not the chart's ServiceMonitor values: the ArgoCD release is tofu-managed (class 4,
+# a human apply), while this lands by GitOps like every other belt. The container declares the
+# `metrics` port, so a named port is enough (contrast podmonitor-cloudflared.yaml's relabeling).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: argocd-application-controller
+  namespace: monitoring
+  labels: { app: argocd-metrics }
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels: { app.kubernetes.io/name: argocd-application-controller }
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 60s

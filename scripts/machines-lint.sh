@@ -113,4 +113,19 @@ if [ -n "$pin_drift" ]; then
 fi
 
 echo "machines-lint: PXE/USB Talos pins match var.talos_version_worker ($want)"
+
+# --- check 3: no PXE install flag in a TRACKED provisioning file (FU-244) -----------------------
+#
+# A matchbox_group is a per-node install flag: procedure state, set and cleared inside one
+# onboarding. It lives in tofu/provisioning/flags.local.tf (gitignored), never in git — a
+# committed flag outlives its procedure (nx_01_diag sat in git 2026-09-16 → 09-21, f844711a →
+# #1822) and a PXE-first box with a live group reinstall-loops. `git grep` searches tracked
+# files only, so a local flags file never trips this.
+flags=$(git grep -l -E '^[[:space:]]*resource[[:space:]]+"matchbox_group"' -- 'tofu/provisioning/*.tf' || true)
+if [ -n "$flags" ]; then
+  echo "machines-lint: FAIL — a matchbox_group (PXE install flag) is committed in: $flags" >&2
+  echo "  flags are procedure state: move it to tofu/provisioning/flags.local.tf (gitignored) — docs/provisioning.md step 1" >&2
+  exit 1
+fi
+echo "machines-lint: no PXE install flag in tracked provisioning files"
 exit 0

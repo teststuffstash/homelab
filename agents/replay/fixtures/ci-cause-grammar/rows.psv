@@ -1,0 +1,9 @@
+# ci-cause-grammar — the decision table (family contract in fixture.yaml). The marker line per
+# row lives in rows/<id>/vars.sh, not in this table.
+# id                          | world | patch | env | expect              | params
+step-with-space               |       |       |     | step-with-space     |
+step-with-space-infra         |       |       |     | step-with-space-infra |
+step-with-space-serve         |       |       |     | step-with-space-serve |
+step-contains-class-literal   |       |       |     | class-literal       |
+plain-step                    |       |       |     | plain               |
+prose-preceded                |       |       |     | plain               |

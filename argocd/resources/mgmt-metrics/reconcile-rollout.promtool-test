@@ -25,7 +25,7 @@ tests:
       - eval_time: 61m
         alertname: MgmtRolloutCanaryTimedOut
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100" , triage: none}
       - eval_time: 2h
         alertname: MgmtRolloutCanaryTimedOut
         exp_alerts: []
@@ -49,7 +49,7 @@ tests:
       - eval_time: 3h40m
         alertname: MgmtRolloutHaltUnreadable
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: unreadable }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: unreadable , triage: none}
 
   # ── the workload-health hold (FU-278): fires after 30m on either hold reason, never on the
   # differential's, and clears the moment the hold releases (healthy again, or a human ack) ──────
@@ -72,11 +72,11 @@ tests:
       - eval_time: 2h35m
         alertname: MgmtRolloutHeldOnWorkloadHealth
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health , triage: dig}
       - eval_time: 2h50m
         alertname: MgmtRolloutHeldOnWorkloadHealth
         exp_alerts: []
       - eval_time: 4h05m
         alertname: MgmtRolloutHeldOnWorkloadHealth
         exp_alerts:
-          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health-unreadable }
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", reason: workload-health-unreadable , triage: dig}

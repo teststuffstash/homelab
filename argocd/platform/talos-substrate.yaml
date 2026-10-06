@@ -1,5 +1,6 @@
 # The substrate belt — does the fleet run what git declares (FU-235 / FU-254). Raw manifests in
-# argocd/resources/talos-substrate/: one PrometheusRule, no workload. The complete per-node diff
+# argocd/resources/talos-substrate/: one PrometheusRule (two groups since 2026-10-05: the version
+# belt + control-plane-health, the chassis-can-hold-a-member belt), no workload. The complete per-node diff
 # (reachable/version/schematic) lives on the management box instead, because that is where the
 # declaration is — this is the half the cluster can see by itself, off kube_node_info.
 apiVersion: argoproj.io/v1alpha1

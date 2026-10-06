@@ -84,7 +84,7 @@ ib_refuse_malformed() {   # <key> <ref>
 ORIG_ARGS=("$@")
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
-  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--max-turns <n>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
   exit 0
 ;; esac
 shift || true
@@ -93,7 +93,8 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
+# >>>REPLAY:argv-parse>>>
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RIDE_SIZE=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -102,9 +103,11 @@ while [ $# -gt 0 ]; do
     --harness)   HARNESS="$2"; HARNESS_SET=1; shift 2;;
     --model)     MODEL="$2"; MODEL_SET=1; shift 2;;
     --docker)    DOCKER=1; shift;;    # repo needs a real docker daemon (kind/k3d CI gate): kata microVM pod + dind sidecar — stack POLICY, from the AgentStack claim's fixer.docker (counterpart of CI choosing the VM runner)
+    --size)      RIDE_SIZE="$2"; shift 2;;   # ride size class (standard|large) — stack POLICY, from the AgentStack claim's fixer.rideSize; explicit wins (drills)
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
+    --max-turns) export GOOSE_MAX_TURNS="$2" CLAUDE_MAX_TURNS="$2"; shift 2;;  # the turn cap the coordinator brief documents (homelab#1923): goose reads GOOSE_MAX_TURNS (pod env, default 200), claude reads CLAUDE_MAX_TURNS (run command, default 200). BOTH are set — the harness is derived from the model AFTER this loop, so the flag cannot be harness-scoped here.
     --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
@@ -113,6 +116,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+# <<<REPLAY:argv-parse<<<
 
 # ── RIDE PHASE TIMINGS (FU-160, homelab#287; spike: docs/spikes/ride-latency-breakdown.md) ──────
 # One ride was reconstructed by hand on 2026-08-09, and the single most useful fact in it — whether
@@ -640,6 +644,9 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
     fi
+    # The ride size class from the SAME claim read (fixer.rideSize; oracle handoff 2026-10-02) —
+    # mapped to the pod envelope by REPLAY:ride-size below. Explicit --size wins.
+    [ -n "$RIDE_SIZE" ] || RIDE_SIZE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.rideSize]|map(select(.!=null))|first // empty' 2>/dev/null)"
     # FU-114 L1: capture the egress knobs from the SAME claim read for the environment card (below).
     EGRESS_ENFORCE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.enforce]|map(select(.!=null))|first // empty' 2>/dev/null)"
     EGRESS_PROFILE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.egress.profile]|map(select(.!=null))|first // empty' 2>/dev/null)"
@@ -1427,21 +1434,8 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # briefly-unschedulable new pod from being discounted instantly.
     # #998: a pod whose .status.phase is absent/null is default-counted (parity with the
     # pre-#995 field-selector which matched any non-terminal phase, including empty/missing).
-    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null \
-      | jq '[.items[] | select(
-        .status.phase != "Succeeded" and .status.phase != "Failed" and
-        (
-          .status.phase == "Running" or .status.phase == "Unknown"
-          or
-          (.status.phase == "Pending" and (
-            ([.status.conditions[]? | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")] | length) == 0
-            or
-            (now - (.metadata.creationTimestamp | fromdateiso8601)) < 30
-          ))
-          or
-          (.status.phase | not)  # #998: absent/unset phase — default-count (parity with pre-#995 field-selector)
-        )
-      )] | length')"
+    _PF_PODS="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" -o json 2>/dev/null)" || _PF_PODS='{"items":[]}'
+    PF_LIVE="$(live_worker_pod_count "$_PF_PODS")"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
@@ -1656,26 +1650,34 @@ ${PF_ARB_BODY}"
             # `renovate-approve` skip sharing the CI run's createdAt sorted first and the log read
             # came back empty on every tick — a permanent defer (homelab#1440; the flag landed as a
             # seat quickfix 2026-09-05, PR#1448 carries the fixture).
+            #
+            # A run whose failing job has already completed is not yet `failure` while a SIBLING
+            # job is still running — GitHub reports the run `in_progress` until every job settles —
+            # so `--status failure` is empty for as long as any sibling runs, and a wedged sibling
+            # (no `timeout-minutes`) defers every ride for up to 6h (homelab#1940). Fall back to
+            # the newest run on the branch: its failed job's log is already readable, and the
+            # directive the round needs is that log, not a settled run-level conclusion.
             PF_LOG_TAIL=""
             PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --status failure --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
             if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
+              PF_RUN_ID="$(gh run list --repo "${PF_SLUG}" --branch "${PF_PR_REF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || PF_RUN_ID=""
+            fi
+            if [ -z "$PF_RUN_ID" ] || [ "$PF_RUN_ID" = "null" ]; then
               echo "→ dispatch deferred — directive unreadable (CI run log for PR #${PF_PR} branch ${PF_PR_REF}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
               exit 0
-            else
-              PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
-              if [ -z "$PF_LOG_TAIL" ]; then
-                echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
-                exit 0
-              else
-                PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
+            fi
+            PF_LOG_TAIL="$(gh run view "${PF_RUN_ID}" --repo "${PF_SLUG}" --log-failed 2>/dev/null | tail -200)" || PF_LOG_TAIL=""
+            if [ -z "$PF_LOG_TAIL" ]; then
+              echo "→ dispatch deferred — directive unreadable (CI run log empty for PR #${PF_PR} run ${PF_RUN_ID}; required for ci-red round) — the next pass retries (homelab#1205)" >&2
+              exit 0
+            fi
+            PF_CI_FAILURE_MD="${PF_CI_FAILURE_MD}
 
 ## Log tail (last 200 lines)
 \`\`\`
 ${PF_LOG_TAIL}
 \`\`\`"
-                PF_INDEX_ITEM "ci-failure.md" "OK"
-              fi
-            fi
+            PF_INDEX_ITEM "ci-failure.md" "OK"
             # <<<REPLAY:ci-failure-run-select<<<
           else
             PF_INDEX_ITEM "ci-failure.md" "MISSING" "No failing check runs found"
@@ -1938,6 +1940,27 @@ if [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode
   fi
 fi
 # <<<REPLAY:cred-inject<<<
+# homelab#2171: the platform retro ride's git identity IS the fleet-wide READ-ONLY retro token
+# (agents/coordinator/retro-git.yaml), not this namespace's worker token. The agent-base
+# entrypoint's ~/bin/gh wrapper re-resolves GH_TOKEN on EVERY call (broker → mounted file → env),
+# so the brief's `GH_TOKEN="$RETRO_GH_TOKEN" gh …` was silently overridden by the broker's
+# agent-git-<ns> token (repos=[openrouter-operator] only): r4–r6 read sleep-tracking and
+# oracle-fleet as "Could not resolve to a Repository" with the var SET and minutes old. Fix: no
+# broker URL for this ride (it writes nothing — the report lands via the harvest step's own
+# coordinator-git identity) and the in-ns mirror Secret mounted at the entrypoint's default
+# GIT_TOKEN_FILE path, so git's credential helper AND the gh wrapper re-read the live token per
+# call (kubelet rewrites the projected file on the mirror's 5m copy — no stale-token window).
+# optional: true keeps the FU-080 (a) degrade: absent mirror = no file = anonymous reads, and
+# the brief's "name the unreachable repos" clause still applies.
+# >>>REPLAY:retro-gh-mount>>>
+RETRO_GH_MOUNT=""; RETRO_GH_VOLUME=""
+if [ -n "${RETRO_GH_SECRET:-}" ]; then
+  echo "→ retro ride: git identity = Secret ${RETRO_GH_SECRET} file-mounted (fleet-wide read-only, re-read per call); broker URL not rendered (homelab#2171)"
+  CRED_BROKER_ENV=""
+  RETRO_GH_MOUNT=$'\n        - { name: retro-git, mountPath: /secrets/git, readOnly: true }'
+  RETRO_GH_VOLUME=$'\n    - name: retro-git\n      secret: { secretName: "'"$RETRO_GH_SECRET"'", optional: true, items: [ { key: GH_TOKEN, path: token } ] }'
+fi
+# <<<REPLAY:retro-gh-mount<<<
 # Git credentials are broker-only (FU-089): every ride sets GIT_CRED_BROKER_URL and the pod holds
 # no standing git Secret at all — the in-ns agent-git-token fallback was deleted with FU-089 (a
 # standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
@@ -2223,20 +2246,20 @@ fi
 # (it can't stack on the virtiofs rootfs, and the earlier 2Gi tmpfs charged the dind cgroup —
 # the full kind gate OOMed on image builds). --group=1000 lets the
 # non-root agent use the socket; dockerd-entrypoint.sh (not raw dockerd) keeps the dind cgroup-v2
-# nesting that gives inner containers the memory controller. Memory envelope: agent 2Gi + dind
-# 2560Mi, layer store on disk ≈ the acceptance-proven ~5Gi VM with tmpfs headroom back — sized to
-# FIT THE 8G LAPTOPS: 2560 + 2048 + 512 (RuntimeClass overhead) = 5120Mi against ~6.3Gi
-# allocatable, Guaranteed QoS (kata.tf).
+# nesting that gives inner containers the memory controller. Memory envelope: the ride SIZE
+# CLASS (REPLAY:ride-size below). `standard` is the original one — agent 2Gi + dind 2560Mi, layer
+# store on disk ≈ the acceptance-proven ~5Gi VM, sized to FIT THE 8G LAPTOPS: 2560 + 2048 + 512
+# (RuntimeClass overhead) = 5120Mi against ~6.3Gi allocatable, Guaranteed QoS (kata.tf). `large`
+# (~16.5Gi) fits only nx-01, the ride tier — the request IS the placement, no extra affinity.
 # ⚠ "one docker ride per node" was true of an all-8G kata fleet and is NO LONGER a fleet-wide
-# fact: the pool is wk-metal-01..04 and wk-metal-04 has 16G (~14.2Gi allocatable), so it fits TWO
-# and is the only node that does. The per-node count is a CONSEQUENCE of the request against that
+# fact: wk-metal-04 has 16G (~14.2Gi allocatable) and fits two standard rides, nx-01 (64G) many.
+# Of the laptops it is the only node that does. The per-node count is a CONSEQUENCE of the request against that
 # node's memory, not a policy — which is why concurrency here is memory-bound and asymmetric while
 # REPO_MAX_WIP merely counts pods. Observed live 2026-08-07: two kata rides co-scheduled on -04
 # with -01..-03 free, which is the scheduler placing on capacity, exactly as intended.
 # ⚠ Do NOT "fix" that with a topologySpreadConstraint — spreading moves a ride off the only node
 # with real headroom onto a 6.3Gi one.
 KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
-AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
 # ⚠ MEMORY requests MUST EQUAL limits (no overcommit) for agent workloads — 2026-07-27
 # incident: the #48 docker ride requested 2Gi total but its kata VM grows to limits (~5Gi
 # incl. RuntimeClass overhead); the scheduler placed it on a node with ~2Gi free and the
@@ -2244,10 +2267,54 @@ AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; a
 # The "one docker ride per node" envelope (comment above) is only real if requests SAY so.
 # CPU stays overcommitted deliberately: throttling is safe, and cpu=2 requests can't fit
 # 2-core kata nodes.
-AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }'
+# >>>REPLAY:ride-size>>>
+# The ride SIZE CLASS — stack policy from the claim's fixer.rideSize (or --size), mapped here to
+# the pod envelope. `large` exists because a ride's own gates run at the size of its cap: oracle
+# #774's diff-ci took ~29 min at 2 CPU/2Gi (pytest -n sized to memory.max = 1 worker) vs ~7 min
+# on an uncapped ARC runner (oracle handoff 2026-10-02 ride-size-class-per-stack). It is sized to
+# where the gain flattens — ~8 xdist workers, ~6 kind cores — not to CI's 40 cores: reserved
+# memory past that blocks the next ride for seconds of gain. Memory request == limit in EVERY
+# class (the 2026-07-27 rule above); only CPU is overcommitted. An unknown class degrades LOUDLY
+# to standard (a typo must not wedge the pod Pending on a size no node has).
+ride_size_envelope() {   # in: RIDE_SIZE, DOCKER → out: AGENT_/DIND_ REQUESTS+LIMITS (RIDE_SIZE normalized)
+  case "${RIDE_SIZE:-standard}" in
+    standard|large) RIDE_SIZE="${RIDE_SIZE:-standard}";;
+    *) echo "WARN: unknown ride size class '${RIDE_SIZE}' (fixer.rideSize / --size) — using standard" >&2; RIDE_SIZE=standard;;
+  esac
+  if [ -n "$DOCKER" ]; then
+    case "$RIDE_SIZE" in   # heavy lifting moves into the dind sidecar
+      large)
+        AGENT_REQUESTS='{ cpu: "2",    memory: "10Gi" }'; AGENT_LIMITS='{ cpu: "8", memory: "10Gi" }'
+        DIND_REQUESTS='{ cpu: "1",    memory: "6Gi" }';  DIND_LIMITS='{ cpu: "6",    memory: "6Gi" }';;
+      *)
+        AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }';  AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'
+        DIND_REQUESTS='{ cpu: "500m", memory: "2560Mi" }'; DIND_LIMITS='{ cpu: "2",    memory: "2560Mi" }';;
+    esac
+  else
+    case "$RIDE_SIZE" in   # install is partly CPU-bound; allow burst past 2
+      large) AGENT_REQUESTS='{ cpu: "2",    memory: "10Gi" }'; AGENT_LIMITS='{ cpu: "8", memory: "10Gi" }';;
+      *)     AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }';  AGENT_LIMITS='{ cpu: "6", memory: "4Gi" }';;
+    esac
+  fi
+  # `large` is PINNED BY NAME to the ride-tier node(s): AGENT_LARGE_RIDE_NODES (space-separated,
+  # default nx-01). No label means "ride tier" today — homelab.io/ephemeral also covers wk-03 and
+  # the laptops, and wk-metal-04 (16G, Longhorn bulk tier, no AVX2) fits a non-docker 10Gi ride, so
+  # the shared tier label would land `large` beside storage (PR#2184 review). Pinned regardless of
+  # docker/harness; same-term matchExpressions AND, so it composes with the opencode AVX2 pin.
+  if [ "$RIDE_SIZE" = large ]; then
+    _nodes=""; for _n in ${AGENT_LARGE_RIDE_NODES:-nx-01}; do _nodes="${_nodes:+$_nodes, }\"$_n\""; done
+    _tier="              - { key: kubernetes.io/hostname, operator: In, values: [${_nodes}] }"
+    if [ -n "${AFFINITY:-}" ]; then
+      AFFINITY="${AFFINITY}"$'\n'"${_tier}"
+    else
+      AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n'"${_tier}"
+    fi
+  fi
+  echo "→ ride size class: ${RIDE_SIZE} (agent ${AGENT_LIMITS}${DOCKER:+, dind ${DIND_LIMITS}})"
+}
+# <<<REPLAY:ride-size<<<
+ride_size_envelope
 if [ -n "$DOCKER" ]; then
-  AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
-  AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }'
   # dnsPolicy stays the cluster default (FU-072, 2026-09-04): kube-dns answers kata guests over
   # both TCP and UDP for *.svc.cluster.local, and the CNP's kube-dns leg is baseline, not gated on
   # docker. The old `dnsPolicy: None` + LAN resolver (192.168.2.1) could not resolve svc names at
@@ -2328,12 +2395,14 @@ if [ -n "$DOCKER" ]; then
         - { name: docker-run, mountPath: /run }
       volumeDevices:
         - { name: docker-lib, devicePath: /dev/docker-scratch }
-      resources:
-        requests: { cpu: "500m", memory: "2560Mi" }  # = limit (no memory overcommit; wk-metal-03 global-OOM 2026-07-27)
-        limits:   { cpu: "2",    memory: "2560Mi" }
+      resources:   # REPLAY:ride-size — memory request = limit (no overcommit; wk-metal-03 global-OOM 2026-07-27)
+        requests: __DIND_REQUESTS__
+        limits:   __DIND_LIMITS__
 DIND
 )"
   DIND_CONTAINER="${DIND_CONTAINER/__DIND_IMAGE__/${AGENT_DIND_IMAGE:-ghcr.io/k3d-io/k3d:5-dind}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__DIND_REQUESTS__/${DIND_REQUESTS}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__DIND_LIMITS__/${DIND_LIMITS}}"
   DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_DOCKER_IO__/${MIRROR_DOCKER_IO}}"
   # //: each of these now appears more than once (the buildkitd.toml write, homelab#1308) —
   # the single-slash form used here pre-#1308 only ever matched one occurrence and would now
@@ -2566,7 +2635,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-session, project: ${PROJECT}${SUB_LABEL} }
+  labels: { app: agent-session, project: ${PROJECT}, ride-size: ${RIDE_SIZE}${SUB_LABEL} }
 spec:
   restartPolicy: Never
   # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns
@@ -2773,8 +2842,8 @@ ${CLAUDE_ENV}
       resources:
         requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}${RETRO_GH_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}${RETRO_GH_VOLUME}
 EOF
 
 PF_POD_CREATED="1"

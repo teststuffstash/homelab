@@ -29,27 +29,27 @@ classes:
     name: Helm charts, GitOps
     extract: helm_gitops
     where: "`argocd/platform/*.yaml` `spec.source.chart` + `targetRevision`"
-    manager: "argocd (needs `managerFilePatterns` — NOT configured, so nothing proposes these today)"
+    manager: "argocd (`managerFilePatterns` over `argocd/platform/*.yaml` since 2026-10-04 — the Application files; `values/` excluded)"
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["argocd/platform/"]
-    proposer: {status: gap, text: "Renovate's `argocd` manager has no default file match and renovate-global.json does not configure one — no PR has ever proposed a chart bump here (§Ground truth: 97 deps extracted, none of them these)"}
+    proposer: {status: ok, text: "Renovate `argocd` manager over `argocd/platform/*.yaml` (renovate-global.json, 2026-10-04 — S9 #1985 next step 7): patch/minor → `deps-review`, digest → `automerge`, majors → the un-armed catch-all; the ARC controller + runner charts are one grouped PR; `prHourlyLimit` paces the backlog (6 for the watched first wave, 3 after — operator 2026-10-04). Every chart bump before it was hand-proposed (#2200) — the first Renovate chart PR is the proof §Last proven still lacks"}
     merge_gate: {status: ok, text: "minor → `deps-review` (reflex + lens), major → un-armed `major` lane (renovate-global.json; ADR-141 for the arm rule)"}
     deploy_edge: {status: ok, text: "ArgoCD `syncPolicy.automated` — a merge IS the deploy (27 of 34 Applications auto-sync)"}
-    detector: {status: gap, text: "ArgoCD health is shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe); the contract probe is FU-102"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` (15 m) / `ArgoCDAppSyncFailed` (10 m) since 2026-10-04 (argocd/resources/argocd-metrics/, `triage: dig` → responder) + the generic rollout belt; ArgoCD health stays shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe) — the deep contract probe is FU-102"}
     revert: {status: human, text: "a human `git revert` — the FU-044 deterministic revert is scoped to first-party image pins; extending it to charts REJECTED (operator 2026-08-04, IAC-G09: CRD/schema downgrades are not reversible by a revert)"}
-    canary: {status: gap, text: "none — a chart bump lands on the only instance; ARC controller/runners must move in lockstep (two files, one version)"}
+    canary: {status: gap, text: "none — a chart bump lands on the only instance; the ARC controller/runners move in ONE grouped Renovate PR (three files, one version — `groupName: arc`), which is lockstep, not a canary"}
 
   - id: 2
     name: In-cluster images, GitOps
     extract: images_gitops
     where: "`image:` in `argocd/resources/**/*.yaml` + `agents/coordinator/*.yaml` (third-party refs; first-party = class 3)"
-    manager: "kubernetes (needs `managerFilePatterns` — NOT configured) / none for agents/images.env"
+    manager: "kubernetes (`managerFilePatterns` over `argocd/resources/**/*.yaml` since 2026-10-04) / none for `agents/coordinator/*.yaml` (codeowner-gated `/agents/`, kept out of the pattern) or agents/images.env (class 3)"
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["argocd/resources/", "agents/coordinator/", "agents/images.env"]
-    proposer: {status: gap, text: "unmanaged — Renovate's `kubernetes` manager has no default file match and none is configured; digest-pinned refs never move (cloudflared 2026.5.2, python:3.13-slim@sha256, k3d:5-dind@sha256)"}
+    proposer: {status: ok, text: "Renovate `kubernetes` manager over `argocd/resources/**` (renovate-global.json, 2026-10-04): digest → `automerge`, patch/minor → `deps-review`, majors → the un-armed catch-all; first-party `ghcr.io/teststuffstash/**` refs disabled (class 3's deploy-pin PR owns them). `agents/coordinator/*.yaml` is outside the pattern (`/agents/` is codeowner-gated — a PR there would park on the human the lane removes; no third-party ref lives there today). Proof pending (§Last proven)"}
     merge_gate: {status: ok, text: "digest → `automerge` (reflex), version minor → `deps-review`, major → un-armed (renovate-global.json) — the lanes exist, nothing feeds them"}
     deploy_edge: {status: ok, text: "ArgoCD auto-sync of the manifest — path-scoped per resource dir"}
-    detector: {status: gap, text: "ArgoCD health (shallow) + the per-service alert belts where they exist; no post-deploy contract probe (FU-102)"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` / `ArgoCDAppSyncFailed` since 2026-10-04 + the generic rollout belt + the per-service alert belts where they exist (11 of 16 rows have one); no post-deploy contract probe (FU-102)"}
     revert: {status: human, text: "a human `git revert`; the FU-044 chain's pin-only predicate covers FIRST-PARTY pins only (class 3)"}
     canary: {status: gap, text: "none — single replica for most of these"}
 
@@ -63,7 +63,7 @@ classes:
     proposer: {status: ok, text: "the image repo's `deploy-pin` job (agent-runtime → agent-base, agent-coordinator) and `runner-image.yaml` (arc-runner) open `deploy/*` / `runner-image-pin` PRs; weekly `schedule` rebuilds since 2026-09-27"}
     merge_gate: {status: ok, text: "`automerge`+`dependencies` → renovate-approve reflex → CI-green auto-merge (`pin-only-lint` guards the diff shape)"}
     deploy_edge: {status: ok, text: "ArgoCD auto-sync; the deploy-pin sweep bumps every mirrored literal by git-grep (images.env header) — a ref with a DIFFERENT tag than images.env is one the sweep missed (⚠ on the row)"}
-    detector: {status: gap, text: "ArgoCD Degraded → `/deploy-degraded` (wired 2026-08-04) but NEVER fired by a real Degraded homelab app (FU-044); a bare `:latest`-equivalent ref is invisible to it"}
+    detector: {status: ok, text: "`ArgoCDAppDegraded` since 2026-10-04; ArgoCD Degraded → `/deploy-degraded` was wired 2026-08-04 but its first hop was DEAD until #2217 (recipient `webhook:agent-loop`, 150 failed deliveries) — never fired by a real Degraded app for that reason; `ArgoCDNotificationDeliveryFailing` now watches the hop; a bare `:latest`-equivalent ref is still invisible"}
     revert: {status: ok, text: "the cluster pin IS the revert (operator 2026-09-27): `deploy-revert-argo.yaml`'s pin-only predicate opens the revert PR; the FU-1990 sibling chain proved the shape end to end in the 2026-09-27 drill (agent-coordinator#20 → #21, ~3.5 min)"}
     canary: {status: gap, text: "none — the pin rolls every consumer at once (the coordinator, the reviewer, the sentinel, the transcript viewer)"}
 
@@ -89,10 +89,10 @@ classes:
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["tofu/"]
     proposer: {status: ok, text: "Renovate `terraform` — lockfile + constraint PRs flow since the `statuses` grant (2026-09-25; #1976/#1981/#1983/#1984/#1996/#1997 merged 2026-09-27); the two roots the box does not plan are excluded from the manager (row overrides)"}
-    merge_gate: {status: ok, text: "the management box is the gate, mechanically (ADR-131 amended 2026-09-27, #2026): stage 1 admits the `provider-pin` diff shape, stage 2 plans the head with the new provider and a pin must plan EMPTY — `management-sentinel` green on `+0 ~0 -0` → `automerge` (reflex approves, auto-merge lands); red = the only provider PRs a human sees (`mgmt-human-plan`). Built on six human-ordered `+0` plans; the first merge on the sentinel's own green is still owed (§Last proven end to end)"}
+    merge_gate: {status: ok, text: "the management box is the gate, mechanically (ADR-131 amended 2026-09-27, #2026): stage 1 admits the `provider-pin` diff shape, stage 2 plans the head with the new provider and a pin must plan EMPTY — relative to master's own pending plan, or a default backfill (null→default attributes a release adds, #2191) — and keep every stored schema/identity version (the state-compatibility check, 2026-10-04) — `management-sentinel` green on `+0 ~0 -0` → `automerge` (reflex approves, auto-merge lands); red = the only provider PRs a human sees (`mgmt-human-plan`). Built on six human-ordered `+0` plans; merging on the sentinel's own green since 2026-09-28 (#2075 proxmox, #2096 talos; #2213 random on 2026-10-04 — Renovate merged, reflex-approved, no human). MAJORS armed 2026-10-04 (operator; ADR-141 amended): `major` kept, no `automerge` label, the migration lens's APPROVED completes the merge"}
     deploy_edge: {status: ok, text: "an empty plan IS the deploy: the box's next plan/apply runs the new provider binary (registry-signed, hash-verified by tofu); nothing to apply by construction"}
-    detector: {status: ok, text: "the sentinel's plan-on-PR (red = `provider bump changes the plan`, by design) + `MgmtApplyResidueStanding` on main; the external roots plan read-only on the box (FU-237/FU-238)"}
-    revert: {status: human, text: "`git revert` of the lockfile + the same empty plan; a provider downgrade re-plans clean (lockfile-only)"}
+    detector: {status: ok, text: "the sentinel's plan-on-PR (red = `provider bump changes the plan`, by design) + `MgmtApplyResidueStanding` on main; post-merge, `MgmtApplyErroredOnNewProvider` names the provider when the first CHANGING apply under a new version errors (2026-10-04, docs/management-box.md §MB3); the external roots plan read-only on the box (FU-237/FU-238)"}
+    revert: {status: ok, text: "`git revert` of the lockfile + the same empty plan; lockfile-only BY GATE since 2026-10-04 — a pin that would raise a stored schema/identity version never merges on the sentinel, so the downgrade reads the state back (docs/management-box.md §MB3); the `tofu-provider-revert` chain (2026-10-04, agents/coordinator/deploy-revert-argo.yaml) reverts the introducing pin on `MgmtApplyErroredOnNewProvider` — DRILLED 2026-10-04 (synthetic alert → #2209 merged + applied, no human; §Last proven); provider MAJORS armed 2026-10-04 behind this chain (ADR-141 amended)"}
     canary: {status: gap, text: "none — `tofu/provisioning` is the low-blast root a provider bump could land on first, but nothing orders the roots"}
 
   - id: 6

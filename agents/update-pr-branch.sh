@@ -133,7 +133,8 @@ label_conflict() {
 # So: update only what is MERGE-READY — nothing but currency + CI left before auto-merge fires.
 #   * reviewDecision == APPROVED — GitHub's own gate is satisfied (dismiss_stale_reviews_on_push
 #     means APPROVED already implies "at the current content"), or
-#   * bot_approved_head on a repo whose ruleset requires no approval (reviewDecision "").
+#   * reviewDecision == "" (a repo whose ruleset requires no approval) ∧ (bot_approved_head ∨ the
+#     PR carries the `automerge` label — the review reflex's skip class, homelab#1896).
 # Everything else stays BEHIND and costs nothing: an unreviewed PR is reviewed BEHIND (PR#1446), a
 # changes-requested PR gets its fix round pushed BEHIND (CI runs on the content), a codeowner park
 # waits for its human — the #887 skip is now just a special case of "not merge-ready".
@@ -195,6 +196,26 @@ while read -r pr; do
   # currency + CI left, and no reconstruction of the bot's review history may overrule that. This
   # also makes the guard probe-free — a park costs zero API calls, not just zero updates.
   if [ "$(jq -r '.reviewDecision' <<<"$pr")" = REVIEW_REQUIRED ]; then continue; fi
+  # ARM 2, THE SKIP-CLASS HALF (homelab#1896). reviewDecision == "" here means the repo's ruleset
+  # requires no approval (an approval-required repo reports REVIEW_REQUIRED/APPROVED/
+  # CHANGES_REQUESTED, never ""). On such a repo the PR is merge-ready when EITHER the reviewer bot
+  # approved at head (the #1452 arm below) OR it carries the `automerge` label — the review reflex's
+  # SKIP class (docs/agents/merge-path.md §Decisions/FU-046; docs/agents/iac-lane.md). The
+  # mechanical classes on the -iac repos are CI-only BY DESIGN, so the reflex never reviews them and
+  # the bot-approval arm can never reach them: before this they stranded armed+BEHIND forever
+  # (oracle-iac, 2026-09-21: 10 open PRs, all armed+BEHIND, the oldest from 09-16, ~500 updater
+  # passes over them). The label condition is LOAD-BEARING: without it an ordinary unreviewed PR on
+  # a no-approval repo would be updated before its review — the waste #1452 removes.
+  # ⚠ BOTH halves are required (PR#2303 review, 2026-10-06): the arm tests `reviewDecision == ""`
+  # AND the label. The park guard above excludes only REVIEW_REQUIRED, so a label-only arm would
+  # read an `automerge` PR at CHANGES_REQUESTED as merge-ready and move its branch — contradicting
+  # this file's header ("a changes-requested PR gets its fix round pushed BEHIND") and letting the
+  # label bypass an approval-required repo's gate. `reviewDecision == ""` is the no-approval signal;
+  # the label is the skip class. Neither alone is merge-ready.
+  if [ "$(jq -r '.reviewDecision' <<<"$pr")" = "" ] \
+     && [ "$(jq -r '[.labels[].name] | index("automerge") != null' <<<"$pr")" = "true" ]; then
+    ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; continue
+  fi
   approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
     [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
       | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"
@@ -214,31 +235,50 @@ while read -r pr; do
     ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"
   fi
 done <<<"$cands"
-picks="$(jq -r --argjson ready "$ready" '
+# Per-lane ordered candidate lists (oldest first). The lane is the serialization unit (ADR-125
+# (2)): at most ONE update LANDS per lane per pass. But a lane's oldest merge-ready member can be
+# WEDGED — a persistent 422 (a conflict the DIRTY labeler has not yet seen, or a head that keeps
+# racing) leaves `updatedAt` untouched, so it re-enters as the pick on every pass and starves every
+# younger merge-ready member of the same lane indefinitely (homelab#2203: #2174 sat BEHIND 54h
+# behind a wedged older member). The hop below is the non-blocking fix: within a lane, walk the
+# members oldest-first and stop at the first SUCCESSFUL update. A failed attempt landed nothing, so
+# it invalidated no approval and the lane's serialization is intact — the hop only spends the
+# attempt the pass was already going to spend, and still lands at most one update per lane.
+lanes="$(jq -c --argjson ready "$ready" '
   [.[] | select(.number as $n | $ready | index($n) != null)]
   | group_by(.baseRefName // "")
-  | map(sort_by(.createdAt) | .[0])
-  | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
-if [ -n "$picks" ]; then
-  # One update per lane. `while read` over a here-string: a pipe would run the body in a subshell,
-  # which costs nothing today but is the shape that silently loses state the moment this leg keeps
-  # any.
-  # The OUT line is deliberately unchanged: the lane is visible as the SET of picks in one pass
-  # (one line per lane), and re-wording it would have rewritten every expected stream in the
-  # `updater` replay family for no behavioural reason.
-  while read -r pick pick_oid; do
-    [ -n "$pick" ] || continue
-    [ "$pick_oid" != "-" ] || pick_oid=""
-    echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
-    if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
-      ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+  | map(sort_by(.createdAt))' <<<"$PRS")"
+if [ "$(jq 'length' <<<"$lanes")" -gt 0 ]; then
+  # `while read` over a here-string: a pipe would run the body in a subshell, which costs nothing
+  # today but is the shape that silently loses state the moment this leg keeps any.
+  # The FIRST attempt's OUT line is deliberately unchanged: the lane is visible as the SET of
+  # first-attempts in one pass (one line per lane), and re-wording it would have rewritten every
+  # expected stream in the `updater` replay family for no behavioural reason. A HOP emits its own
+  # line, so no pre-#2203 expected stream moves.
+  while IFS= read -r lane; do
+    [ -n "$lane" ] || continue
+    first=1
+    while IFS= read -r member; do
+      [ -n "$member" ] || continue
+      pick="${member%% *}"; pick_oid="${member#* }"
+      [ "$pick_oid" != "-" ] || pick_oid=""
+      if [ "$first" = 1 ]; then
+        echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
+      else
+        echo "updater[$REPO]: updating #$pick (lane hop — the lane's older member did not clear)"
+      fi
+      if gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
+        ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+        break   # one update LANDS per lane per pass
+      fi
       # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
       # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
       # on the next pass. Replayed: fixtures/updater `update-fail` row (covers both race and
       # conflict — the script deliberately no longer distinguishes them on 422, homelab#1007).
       echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
-    fi
-  done <<<"$picks"
+      first=0
+    done <<<"$(printf '%s\n' "$lane" | tr '|' '\n')"
+  done <<<"$(jq -r '.[] | map("\(.number) \(.headRefOid // "-")") | join("|")' <<<"$lanes")"
 else
   echo "updater[$REPO]: no armed+BEHIND PR to update"
 fi

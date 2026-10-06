@@ -197,7 +197,7 @@ class PipelineTests(unittest.TestCase):
         prefix = ('DATE=2026-09-28; STACK=platform; RUN=r6; BR=retro/r6; N=1; DEAD_NOTE=; GH_TOKEN=t; '
                   'gh() { echo "gh $*" >> %s; case "$*" in *"pr create"*) echo https://new/pull/9;; '
                   '*"--state open"*) echo "%s";; *"--state merged"*) echo "%s";; esac; }; '
-                  'git() { if [ "$1" = -c ]; then echo "push" >> %s; else command git "$@"; fi; }; '
+                  'git() { if [ "$1" = push ]; then echo "push" >> %s; else command git "$@"; fi; }; '
                   % (log, open_pr, merged_pr, log))
         out = p.run('bash', '-ec', prefix + block + '\nprintf "%s" "$REPORT_PR"', cwd=repo, env=env)
         calls = log.read_text() if log.exists() else ''
