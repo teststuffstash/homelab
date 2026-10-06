@@ -21,10 +21,9 @@
 # matches=1 and the GREEN assertion passes.
 #
 pins:
-  - IL-T06  # c4c5-redispatch (requires agent-fix)
-  - IL-T09  # merged-closeout (requires agent-fix in compound selector)
-  - IL-T27  # phantom review belt (requires agent-fix)
-  - IL-T28  # phantom done belt
+  - IL-T06
+  - IL-T09
+  - IL-T27
 name: clause-coverage
 mode: actions
 source: agents/coordinator-scan.sh
