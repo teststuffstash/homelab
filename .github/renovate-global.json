@@ -23,6 +23,7 @@
   "separateMinorPatch": true,
   "platformAutomerge": true,
   "rebaseWhen": "conflicted",
+  "allowedCommands": ["^install-tool helm v4\\.3\\.0$", "^bash scripts/upstream-alerts-refresh\\.sh$"],
   "prHourlyLimit": 3,
 
   "argocd": {
@@ -221,6 +222,17 @@
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "kube-prometheus-stack: the upstream alert-name list RIDES the Renovate branch (gap register G12, docs/dependency-upgrades.md §Worked case). prometheus-rules-lint reds every chart bump until scripts/upstream-alerts-refresh.sh re-renders argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt for the pinned chart — a `helm pull`, so the lint never runs it, and #2225/#2245 each sat red until the seat ran it by hand. postUpgradeTasks runs it on the branch after the pin moves (executionMode branch: once per PR, not per member — the prometheus-operator-crds group partner needs no render), fileFilters commits ONLY the rendered list, and the commands are allowlisted exactly in the top-level `allowedCommands` (compiled as templates first; no shell executor, so two plain commands, no `&&`). The Renovate image is the SLIM one (renovatebot/github-action default `ghcr.io/renovatebot/renovate:<version>`, no `-full`): containerbase + jq, no helm — `install-tool helm v4.3.0` (the full image's own helm) installs it at runtime (slim keeps binarySource=install; the runtime user ran prepare-tool). The script is yq-free for the same reason (its header). A bump with NO new alert name is born CI-green; a bump that ADDS a name stays red on the lint naming it — the `deps-review` worker-adapts leg classifies it in kube-prometheus-stack-triage.yaml (that judgment never rides a script). Lane and arming unchanged (the class-1 deps-review rule above, the kube-prometheus-stack group).",
+      "matchManagers": ["argocd"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["kube-prometheus-stack"],
+      "postUpgradeTasks": {
+        "commands": ["install-tool helm v4.3.0", "bash scripts/upstream-alerts-refresh.sh"],
+        "fileFilters": ["argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt"],
+        "executionMode": "branch"
+      }
     }
   ],
 
