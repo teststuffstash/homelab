@@ -205,6 +205,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-failure-run-select/ci-failure-run-select` | actions | - | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
+| `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-deferred-then-debounced` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
