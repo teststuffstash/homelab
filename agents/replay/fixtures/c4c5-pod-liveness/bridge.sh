@@ -23,6 +23,7 @@ if [ "${REPLAY_WORLD##*/}" != "probe-fail" ]; then
   PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
 else
   PODS=""
+  dispatchable=""
 fi
 KUBECTL="kubectl"
 KUBE=""
