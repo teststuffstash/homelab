@@ -1,0 +1,12 @@
+# changes-requested/reviewable-again-body-edit — the decision table (family contract in
+# fixture.yaml). The axis is the activity after a CHANGES_REQUESTED review. Each row has its own
+# world (gh/pr-list.json + gh/pr-view-*.json) under rows/<id>/. THE FIXED ROW is body-edit-only:
+# red on base (old .updatedAt predicate fails to distinguish from comment-only), green after (new
+# .bodyLastEditedAt predicate works).
+#
+# id                    | world | patch | env | expect                | params
+body-edit-only          |       |       |     | body-edit-only        |
+new-commit              |       |       |     | new-commit            |
+comment-only            |       |       |     | comment-only          |
+review-submission-only  |       |       |     | review-submission-only |
+nothing-since-review    |       |       |     | nothing-since-review  |

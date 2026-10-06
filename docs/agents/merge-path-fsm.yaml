@@ -353,6 +353,7 @@ transitions:
       - agents/replay/fixtures/changes-requested/blocked-held
       - agents/replay/fixtures/changes-requested/dispatched
       - agents/replay/fixtures/changes-requested/reviewable-again-held
+      - agents/replay/fixtures/changes-requested/reviewable-again-body-edit
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }

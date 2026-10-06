@@ -203,7 +203,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
-| `changes-requested/reviewable-again-body-edit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `changes-requested/reviewable-again-body-edit` | table | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
@@ -431,7 +431,6 @@ is stale, so it cannot drift the way the prose register did.
 | `review-pick/required-contexts-present-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/same-lane-oldest` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
-| `reviewable-again-body-edit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |

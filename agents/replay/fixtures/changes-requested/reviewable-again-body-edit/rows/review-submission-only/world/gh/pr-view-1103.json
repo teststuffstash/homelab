@@ -1,0 +1,20 @@
+{
+  "comments": [],
+  "commits": [
+    {
+      "oid": "dddd0000110000000000000000000000dddd1103",
+      "committedDate": "2026-09-01T10:00:00Z",
+      "messageHeadline": "fix: initial commit"
+    }
+  ],
+  "reviews": [
+    {
+      "state": "CHANGES_REQUESTED",
+      "submittedAt": "2026-09-01T10:30:00Z",
+      "author": {"login": "human-reviewer"}
+    }
+  ],
+  "updatedAt": "2026-09-01T10:30:00Z",
+  "body": "Fixes #1103\n\nInitial PR body",
+  "bodyLastEditedAt": "2026-09-01T10:00:00Z"
+}

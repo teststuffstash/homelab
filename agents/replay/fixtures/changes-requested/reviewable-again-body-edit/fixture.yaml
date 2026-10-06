@@ -1,21 +1,34 @@
-# changes-requested/reviewable-again-body-edit (homelab#2168) — test re-review on body-only fixes
+# changes-requested/reviewable-again-body-edit (homelab#2168) — the reviewable_again predicate
+# as a decision table (Goal #2273 fix rule: table first, then the row).
 #
-# CONDITION UNDER REPLAY. Tests three paths covering the body-edit re-review logic:
-# 1. PR #1100: CHANGES_REQUESTED with only a comment after review → NOT reviewable
-#    (prevents the dispatcher loop from case 1 of the arbitration).
-# 2. PR #1101: CHANGES_REQUESTED with body edit after review, no new commits → reviewable
-#    (the fix: body edits should trigger re-review).
-# 3. PR #1102: CHANGES_REQUESTED with new commit after review → reviewable
-#    (existing case, must not regress).
+# THE CONTRACT. Two readers independently check whether a CHANGES_REQUESTED PR should be
+# re-reviewed:
+# - agents/review-reflex.sh:327 (reviewable_again) — decides if the reflex dispatches reviewer
+# - agents/coordinator-scan.sh:3719 (changes-requested clause) — decides if the scan holds the PR
 #
-# THE CONTRACT:
-#   1. For PR #1100: A `gh pr view` call; no UNIT; an ORPHAN line for the hold (comment-only).
-#   2. For PR #1101: A `gh pr view` call; no UNIT; dispatched (body edit detected).
-#   3. For PR #1102: A `gh pr view` call; no UNIT; dispatched (new commit detected).
+# The predicate: re-review happens when (1) a new non-merge commit lands after the review, OR
+# (2) the PR body is edited after the review (bodyLastEditedAt > newest_review_at). Activity like
+# comments or review submissions bump updatedAt but not bodyLastEditedAt, so they do NOT trigger
+# re-review.
+#
+# THE ROWS (rows.psv; per-row worlds in rows/<id>/world). The axis is the activity after a
+# CHANGES_REQUESTED review:
+# - body-edit-only: THE FIXED ROW. Body edit after review, no new commits. Red on base (the
+#   old .updatedAt predicate would not distinguish this from comment-only). Green after (the
+#   new .bodyLastEditedAt predicate correctly identifies body edits).
+# - new-commit: New non-merge commit after review. Existing case, must not regress.
+# - comment-only: Comment added after review (bumps updatedAt but not bodyLastEditedAt).
+#   Must stay NOT reviewable.
+# - review-submission-only: The review submission itself is the last activity. Must stay
+#   NOT reviewable (submittedAt ≤ updatedAt, not bodyLastEditedAt).
+# - nothing-since-review: No activity after the review. Must stay NOT reviewable.
+#
+# Both readers are driven off the same recorded world per row, so the table is the
+# producer→consumer round-trip: one grammar (bodyLastEditedAt), two readers, one pin.
 pins:
   - MP-T11
 name: changes-requested-reviewable-again-body-edit
-mode: actions
+mode: table
 source: agents/coordinator-scan.sh
 parts:
   - block:blocked-on-jq
@@ -25,6 +38,7 @@ parts:
   - file:bridge.sh
   - block:changes-requested-gate
   - file:post.sh
+rows: rows.psv
 env:
   - IN_SLUG=teststuffstash/homelab
   - IN_REPO=homelab

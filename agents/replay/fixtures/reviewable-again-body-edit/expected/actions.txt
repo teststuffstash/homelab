@@ -1,2 +1,0 @@
-OUT ✓ All scenarios passed
-RC 0

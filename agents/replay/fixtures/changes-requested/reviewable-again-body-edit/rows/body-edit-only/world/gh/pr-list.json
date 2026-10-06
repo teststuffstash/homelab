@@ -1,0 +1,3 @@
+[
+  {"number":1101,"labels":[],"reviewDecision":"CHANGES_REQUESTED","author":{"login":"app/homelab-agents-1234"},"headRefName":"fix/issue-1101-test","body":"Fixes #1101\n\nUpdated PR body with fix explanation"}
+]
