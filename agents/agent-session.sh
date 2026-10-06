@@ -93,6 +93,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
+# >>>REPLAY:argv-parse>>>
 RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RIDE_SIZE=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -106,6 +107,7 @@ while [ $# -gt 0 ]; do
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
+    --max-turns) export GOOSE_MAX_TURNS="$2" CLAUDE_MAX_TURNS="$2"; shift 2;;  # the turn cap the coordinator brief documents (homelab#1923): goose reads GOOSE_MAX_TURNS (pod env, default 200), claude reads CLAUDE_MAX_TURNS (run command, default 200). BOTH are set — the harness is derived from the model AFTER this loop, so the flag cannot be harness-scoped here.
     --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
@@ -114,6 +116,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+# <<<REPLAY:argv-parse<<<
 
 # ── RIDE PHASE TIMINGS (FU-160, homelab#287; spike: docs/spikes/ride-latency-breakdown.md) ──────
 # One ride was reconstructed by hand on 2026-08-09, and the single most useful fact in it — whether
