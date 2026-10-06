@@ -71,6 +71,7 @@ MAP=(
   "pin-only-lint-test:^scripts/pin-only-lint"
   # the self-test's inputs: the CLI + its test, and the vendored hook copy it asserts byte-identical (ADR-150)
   "upgrade-lease-test:^(agents/upgrade-lease|argocd/resources/kube-prometheus-stack-lease/upgrade-lease\.sh)"
+  "devbox-update-test:^scripts/devbox-update|^scripts/fixtures/devbox-update/"
   # the self-test's only inputs are scripts/governance-lint.sh + scripts/governance-lint-test.sh (FU-296)
   "governance-lint-test:^scripts/governance-lint"
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`

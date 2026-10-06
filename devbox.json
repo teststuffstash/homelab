@@ -443,6 +443,9 @@
       ],
       "upgrade-lease-test": [
         "bash agents/upgrade-lease-test.sh"
+      ],
+      "devbox-update-test": [
+        "bash scripts/devbox-update-test.sh"
       ]
     }
   }

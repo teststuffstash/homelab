@@ -197,7 +197,9 @@ Safe: no duplication, no churn, nothing auto-acts on it.
   updates are owned instead by the weekly **`devbox-update`** job (`scripts/devbox-update.sh` /
   `.github/workflows/devbox-update.yaml`), which keeps `@latest` but
   re-resolves *all* repos' locks in one pass so the shared toolchain aligns (nix cache + agent-base bake
-  hits) — alignment a per-repo Renovate bump can't give.
+  hits) — alignment a per-repo Renovate bump can't give. The PR body carries a second section —
+  same-major downgrades + compatibility-line moves of python3/opentofu/kubectl/openssl — that the
+  migration lens answers line by line; it informs, never un-arms (G17, ADR-141 as amended 2026-10-06).
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
