@@ -1,0 +1,36 @@
+# footprint-entry-split — the `Touches:` ENTRY-SPLITTER as one decision table (homelab#1567,
+# Goal #2273 fix rule: table first, then the row).
+#
+# THE CONTRACT. A `Touches:` footprint is a comma-separated list of path prefixes/globs, and an
+# entry may carry a trailing ` (...)` annotation scoping a broad path to a narrower intent
+# (docs/agents/issue-authoring.md §Touches). ONE splitter (`fp_split_entries`, agents/footprint.sh)
+# turns that line into entries: comma-split, trim leading/trailing whitespace, strip the trailing
+# annotation. Every reader routes through it — `fp_conflict` (the scan's ADR-097 footprint hold),
+# `fp_conflict_strict` (the pin-only GUARDED pre-dispatch check) and `touches_check` (the
+# reviewer's escape set) — so the grammar has one home (ADR-122).
+#
+# THE DEFECT. The splitter used to be `tr ',' '\n' | tr -d ' \t'`, which deletes EVERY space, not
+# just the ones around commas. `mcps/riigiteataja/ingest/delta.py (log fields only)` normalized to
+# `mcps/riigiteataja/ingest/delta.py(logfieldsonly)` — one token with no `/` boundary — so
+# `fp_pair_conflict` prefix-matched nothing and the changed path surfaced as a false-positive
+# ESCAPE (oracle-fleet#543's non-blocking reviewer note; the same mangled entry feeds the hold and
+# the GUARDED check, so the class is a dispatch-decision risk, not just a note).
+#
+# THE ROWS (rows.psv; per-row state in rows/<id>/vars.sh). The axis is the ENTRY SHAPE:
+#   annotated-exact / annotated-among-many / annotated-glob — the three shapes the defect missed
+#     (a lone annotated entry, one annotated among plain siblings, an annotated glob). RED on the
+#     pre-fix tree: the mangled entry conflicts with nothing, so HOLD/STRICT read `no` and the
+#     changed path lands in ESCAPES.
+#   annotated-escape-still-reported — the replacement-enumeration negative: stripping the
+#     annotation must NOT widen the entry, so a genuinely undeclared sibling still escapes.
+#   plain-entry / whitespace-padded — the shapes the old splitter already handled, kept so the
+#     fix is a widening, never a silent narrowing.
+#
+# Both readers are called on the SAME declared/changed pair per row (the producer→consumer
+# round-trip): a correct splitter makes fp_conflict, fp_conflict_strict and touches_check agree.
+name: footprint-entry-split
+mode: table
+parts:
+  - file:bridge.sh
+  - file:post.sh
+rows: rows.psv
