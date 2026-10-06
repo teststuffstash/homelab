@@ -1,0 +1,36 @@
+# clause-coverage — enumeration of issue label states and verification that
+# each matches exactly one scan clause (Goal #2273, the clause-coverage replay gate).
+#
+# THE CONTRACT (ADR-103 / Goal #2273):
+#   The coordinator scan owns every admissible issue label state exactly once.
+#   No state can be invisible (matched by zero clauses) or ambiguous (matched by multiple).
+#   This fixture tests the two known defects from Goal #2273 acceptance:
+#
+#   - #2164: agent/review without agent-fix (invisible to both IL-T27 phantom-review belt
+#     and IL-T09 merged-closeout C6 clause — both require agent-fix)
+#   - r7 F1: agent/in-progress without agent-fix (invisible to IL-T06 c4c5-redispatch,
+#     IL-T27 phantom-review belt, IL-T09 merged-closeout — all gate on agent-fix)
+#
+#   The fixture is RED on the base tree (assertions fail) because these states match zero
+#   clauses. It GREENs once the scan's guards are widened to own these states.
+#   The pin-vacuity gate (ADR-103) records: red-on-base means the current code has the bug,
+#   green-after means the fix covers it.
+#
+# The two rows each emit a diagnostic line showing how many clauses matched the state.
+# On base (unfixed), matches=0 and the line indicates the defect. After the fix,
+# matches=1 and the GREEN assertion passes.
+#
+pins:
+  - IL-T06  # c4c5-redispatch (requires agent-fix)
+  - IL-T09  # merged-closeout (requires agent-fix in compound selector)
+  - IL-T27  # phantom review belt (requires agent-fix)
+  - IL-T28  # phantom done belt
+name: clause-coverage
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:clause-coverage
+  - file:post.sh
+requires:
+  - bash

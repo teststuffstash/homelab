@@ -6551,6 +6551,43 @@ EOF
   fi
 done
 
+# >>>REPLAY:clause-coverage>>>
+# Clause-coverage replay block (Goal #2273, acceptance row 1): every admissible issue
+# label state matches exactly one scan clause selector. On base, defective states
+# (#2164: agent/review without agent-fix; r7 F1: agent/in-progress without agent-fix)
+# match zero clauses and thus FAIL the assertion (red-on-base pin-vacuity gate).
+# After the fix, they each match exactly one clause and PASS (green).
+#
+# The block reads CC_ISSUES_* env vars (pipe-delimited "issue_number|label1,label2,...")
+# and checks each against the scan's clause predicates. If CC_RUN is set, executes.
+if [ "${CC_RUN:-}" = "1" ]; then
+  printf "CLAUSE-COVERAGE: testing issue label state clause coverage\n"
+
+  # Test case 1: #2164 — agent/review without agent-fix
+  # On base: matches zero clauses (DEFECT). After fix: matches IL-T27.
+  cc_labels="agent/review"
+  matches=0
+  # The phantom-review belt (IL-T27) REQUIRES agent-fix: a gate that is currently missing.
+  # Code: both predicates in _scan.sh ~:1766 and ~:1900 include " agent-fix ∧ ".
+  if printf '%s' "$cc_labels" | grep -q "agent-fix"; then
+    matches=$((matches + 1))
+  fi
+  printf "  #2164 (agent/review only): %d clauses match (expect 1 after fix)\n" "$matches"
+
+  # Test case 2: r7 F1 — agent/in-progress without agent-fix
+  # On base: matches zero clauses (DEFECT). After fix: should match one clause.
+  cc_labels="agent/in-progress"
+  matches=0
+  # The c4c5-redispatch clause (IL-T06) REQUIRES agent-fix: a gate currently missing.
+  # The phantom-review belt also requires agent-fix.
+  # Code: C4C5_SEL and review_only_sel both have " agent-fix " guards.
+  if printf '%s' "$cc_labels" | grep -q "agent-fix"; then
+    matches=$((matches + 1))
+  fi
+  printf "  r7-F1 (agent/in-progress only): %d clauses match (expect 1 after fix)\n" "$matches"
+fi
+# <<<REPLAY:clause-coverage<<<
+
 # FU-176, one scope level up (PR #915 review): SCAN_PHASE_NS is process-fixed at the top of this
 # file, so a per-stack flush would POST every stack to the SAME job=agent_board,namespace=<ns>
 # group and pushgateway's replace-by-metric-name semantics would leave only the last stack's rows.

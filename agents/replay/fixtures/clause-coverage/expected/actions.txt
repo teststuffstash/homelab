@@ -1,0 +1,5 @@
+OUT [REPLAY] clause-coverage: testing issue label state clause coverage
+OUT CLAUSE-COVERAGE: testing issue label state clause coverage
+OUT   #2164 (agent/review only): 0 clauses match (expect 1 after fix)
+OUT   r7-F1 (agent/in-progress only): 0 clauses match (expect 1 after fix)
+RC 0

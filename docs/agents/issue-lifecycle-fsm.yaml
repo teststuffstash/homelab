@@ -288,6 +288,7 @@ transitions:
     status: guarded
     replay:
       - agents/replay/fixtures/c4c5-infeasible   # THE TABLE (move-2 rollout): row parks = a no-marker issue beside a parked one still gets its unit; row quoted-inert = the ordinary abandoned ride unchanged by IL-T26; row probe-fail = it still gets it when the terminal's own probe is down
+      - agents/replay/fixtures/clause-coverage   # clause-coverage enumeration (Goal #2273): the r7 F1 defect (agent/in-progress without agent-fix is invisible to this clause on base)
     guards:
       - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
@@ -354,6 +355,7 @@ transitions:
     replay:
       - agents/replay/fixtures/review-phantom-belt
       - agents/replay/fixtures/review-only-label-combinations
+      - agents/replay/fixtures/clause-coverage   # clause-coverage enumeration (Goal #2273): the #2164 defect (agent/review without agent-fix is invisible to this clause on base)
     guards:
       - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
@@ -500,6 +502,7 @@ transitions:
     replay:
       - agents/replay/fixtures/merged-closeout-default-branch
       - agents/replay/fixtures/merged-closeout-ilg06-detect
+      - agents/replay/fixtures/clause-coverage   # clause-coverage enumeration (Goal #2273): verifies agent/review without agent-fix and agent/in-progress without agent-fix are not matched by this clause on base
     unreplayed: "LLM play — the play layer is outside the harness by design. The IL-G06 detection semantics (strong-link vs bare-mention, dref exclusion, the claim-after-merge hold) are replayed by merged-closeout-ilg06-detect since homelab#1199/#1472."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
