@@ -1,0 +1,6 @@
+CALL gh pr view 738 --repo teststuffstash/oracle-fleet --json state,labels,reviews,commits
+CALL gh pr merge 738 --repo teststuffstash/oracle-fleet --auto --squash
+CALL gh pr edit 738 --repo teststuffstash/oracle-fleet --remove-label agent/in-progress
+CALL gh api repos/teststuffstash/oracle-fleet/pulls/738 --jq "\(.auto_merge != null) \([.labels[].name] | join(","))"
+OUT major-handoff: teststuffstash/oracle-fleet#738 → ARMED (packaging-only chart major: appVersion unchanged; agent/in-progress removed; homelab-reviewer approval at head, submitted 2026-09-25T12:00:00Z)
+RC 0

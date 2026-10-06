@@ -49,8 +49,20 @@ handoff gate matches them literally):
 A Helm chart's version and the application it ships move independently, and Renovate labels on the
 CHART's semver. Read the chart index for BOTH pins before the four headings — `helm show chart
 <chart> --repo <url> --version <v>` for the current and the target (or the repo's `index.yaml`,
-`appVersion`) — and open `## Upstream` with one line: `chart X → Y, app A → B`. Then review the
-delta that is actually crossing:
+`appVersion`) — and open `## Upstream` with the **structured verdict line, mandatory on every chart
+bump, computed from the chart index and never copied from the PR body**: the FIRST line of
+`## Upstream` is exactly
+
+- `appVersion: unchanged (<v>)` when the embedded app version does not move, or
+- `appVersion: <A> → <B>` when it does,
+
+followed by the prose line `chart X → Y, app A → B`. **The handoff reads that line** (ADR-141 as
+amended 2026-10-06, later; `agents/major-handoff.sh` gate step 5): on a `major` chart PR whose
+APPROVED-at-head review opens with `appVersion: unchanged`, the handoff ARMS auto-merge instead of
+parking `major/awaiting-human` — a packaging-only chart major is a major by semver only, and your
+APPROVED completes the merge (the terraform-provider-major shape). An app move keeps the human
+lane until the chart has a lease (ADR-150) or a receiver (ADR-149). Then review the delta that is
+actually crossing:
 
 - **An app major inside a chart minor or patch** is the real migration: `--request-changes` naming
   the app's release notes read it needs. The `deps-review` lane does not run this lens, so say in

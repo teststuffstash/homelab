@@ -1,0 +1,6 @@
+{
+  "number": 738,
+  "state": "open",
+  "auto_merge": { "enabled_by": { "login": "homelab-agents[bot]" }, "merge_method": "squash" },
+  "labels": [ { "name": "major" }, { "name": "dependencies" } ]
+}
