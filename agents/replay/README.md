@@ -412,6 +412,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-gh-token-env/mount-unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/unset` | actions | - | `agents/agent-session.sh` | - |
+| `retro-harvest-push` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-harvest` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-key/minted-block-style` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key/minted-labels-first` | actions | - | `agents/retro-session.sh` | - |

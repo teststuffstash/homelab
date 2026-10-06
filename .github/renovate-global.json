@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open). dependencyDashboard is OFF by operator ruling (2026-08-18): the dashboard is an interactive click-ops surface whose approval/rebase checkboxes nothing here uses — every lane keys on labels; Renovate liveness is the exporter-gauge signal (FU-125), never dashboard-issue-exists.",
+  "description": "BEFORE LANDING A CHANGE TO THIS FILE run `devbox run renovate-lane-lint` (scripts/renovate-lane-lint.sh): Renovate itself over the checkout, asserting every branch it would open sits in ONE lane and arms as its labels say — `renovate-config-validator` checks syntax only; a grouped branch arms only when EVERY member has automerge:true, so a rule gap on one member parks the whole PR on nobody (gap register G15, #2295). GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open). dependencyDashboard is OFF by operator ruling (2026-08-18): the dashboard is an interactive click-ops surface whose approval/rebase checkboxes nothing here uses — every lane keys on labels; Renovate liveness is the exporter-gauge signal (FU-125), never dashboard-issue-exists.",
 
   "extends": ["config:recommended", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
 
@@ -128,6 +128,14 @@
       "automerge": true
     },
     {
+      "description": "The two VERSION-SET partners' regex members (crossplane engine digest, cloudflared in tofu/cloudflare) ride the `deps-review` lane WITH automerge, exactly like the chart/image member they are grouped with. Renovate arms a grouped branch only when EVERY upgrade in it has `automerge: true` — the exclusion above alone left these members at the default (false), so the first PR BORN as a group (#2295, cloudflared 2026.10.0, 2026-10-05) came out `Automerge: Disabled by config`, un-armed, and parked on nobody: the review reflex reads armed PRs only, the coordinator's un-armed clause reads `major` only (gap register G15). #2228/#2240 looked proven only because the crossplane branch had been armed by GitHub while it was still a single-member PR and the group rewrite force-pushed onto it. Majors are untouched: the catch-all below sets `automerge: false` on them, so a grouped major stays un-armed as intended.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["crossplane/crossplane", "cloudflare/cloudflared"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
       "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (docs/renovate.md).",
       "matchManagers": ["nix", "devbox"],
       "enabled": false
@@ -195,6 +203,15 @@
       "description": "Terraform PROVIDER majors — ARMED (operator 2026-10-04, S9 #1988; ADR-131 as amended 2026-10-04). Same shape as the Deployment-image rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. What stands behind that merge, all built and drilled before this rule: the box sentinel's provider-pin gate (a pin head must plan EMPTY relative to master's own pending plan, or be a default backfill, and may not raise any stored schema/identity version — PR#2205), the empty plan IS the deploy, `MgmtApplyErroredOnNewProvider` names the provider when its first CHANGING apply errors (PR#2206), and the `tofu-provider-revert` chain reverts the introducing pin on that alert (PR#2207; drilled 2026-10-04, #2209: alert → merged + applied revert, no human). A major whose plan is not empty or whose plan ERRORS (helm 3, #2046: the `kubernetes {}` block) is red on the sentinel and never auto-merges — the worker adapts in-PR and the adaptation is no longer a pin-only diff. The two humans this lane still has: a red sentinel (`mgmt-human-plan`) and a lens that requests changes. The residual accepted here is the same as for Actions and Deployment images: a change that plans empty, applies clean and is still wrong later — the lens's upstream read is the only defence. First real acceptance: the first `MgmtApplyErroredOnNewProvider` firing on a real apply (the detector is fixture- and drill-proven only). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
       "matchManagers": ["terraform"],
       "matchDatasources": ["terraform-provider"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
+    },
+    {
+      "description": "argo-workflows chart MAJORS — ARMED (operator 2026-10-05, ADR-149; the chain was drilled the same day: #2276 bump → synthetic ArgoControllerSilent → #2279 revert merged + synced in 10 min, no human). Same shape as the provider-major rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge. The lens READS APPVERSION FROM THE CHART INDEX: chart semver is not app semver (1.0.24→1.1.1 was the app major 4.0→4.1 and rode deps-review unlensed, #2238; #2254, two lens rounds, was packaging). Behind the merge: ArgoControllerSilent (triage now, fails closed) is the post-deploy verdict; the chart-revert webhook receiver (argocd/resources/chart-revert/, OUTSIDE Argo Workflows' cone) reverts the pin-only merge as revert-chart-<sha8> with a `reverted-charts:` line; scripts/pin-only-lint.sh check (h) refuses the re-proposal for 30 days. Scoped to ONE chart — a second chart joins only on its own evidence (a drilled chain for the thing it breaks). `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
+      "matchManagers": ["argocd"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["argo-workflows"],
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true

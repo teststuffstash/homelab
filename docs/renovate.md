@@ -164,6 +164,13 @@ Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
+- **Validate the LANES, not just the syntax: `devbox run renovate-lane-lint`** before landing a change
+  to `renovate-global.json`. Renovate arms a grouped branch only when EVERY member has
+  `automerge: true` while labels are the UNION — a rule gap on one member produces a lane-labelled,
+  un-armed PR nobody reads (G15: #2295 sat 16 h green). The verb runs Renovate itself
+  (`--platform=local --dry-run=lookup`, trace log) over the checkout and asserts one lane per branch;
+  ~2 min of datasource lookups, so a seat verb, not CI (operator 2026-10-06 — CI WAN stays locked
+  down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
   (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
   caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party

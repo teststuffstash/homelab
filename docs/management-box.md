@@ -284,6 +284,14 @@ count-gated org secrets need, and the read-only twin of the Cloudflare write tok
 jail); ansible plays (`--check` of a PR head — the same executes-PR-
 content class, the same allowlist) after that.
 
+**Goal children get a base-pass, not a plan (FU-295, 2026-10-06).** The `required-checks` ruleset
+requires this context on `goal/**` bases too, and a box that judged master-bound heads only left
+every approved Goal child BLOCKED (the ADR-142 control drill #2093; Goal #2273's children). Nothing
+on a goal branch reaches an apply — the goal→master assembly PR is the only road to a box-held root,
+and it is master-bound, so it gets both stages in full. A head whose base is `goal/**` therefore
+gets `success` "base goal/… — box surface judged at the assembly PR to master" in one tick, no
+stage 1, no plan; other non-master bases are not required and stay unjudged.
+
 **Privilege.** The plan runs as its own unix user with its own `EnvironmentFile`
 (`/var/lib/mgmt/sentinel.env`), never as root with the belt's file: one consumer, one token, at its
 tier — and read-only credential variants where the provider's model allows (Proxmox roles do; the
