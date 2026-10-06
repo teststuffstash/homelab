@@ -133,6 +133,21 @@ the others as part of the SAME change, not as "lint/dev targets that need not mo
   lands the members CODEOWNERS owns in THAT repo — read it, never assume — and says so). Bumping `target-version`
   also turns on the new release's lints, so the review lists what they flag.
 
+## Lock bumps (devbox-update) — read the whole move list, not the flagged tool
+
+A weekly `devbox-update` PR (`scripts/devbox-update.sh`) moves every `@latest` package at once —
+#2260 moved 18 tools and the lane gate named ONE (the leading-integer major). Read the WHOLE lock
+diff (`git diff master -- devbox.lock`, the per-package `version` field) as the subject, and the PR
+body's second section — **Downgrades and compatibility-line moves** (gap register G17, ADR-141 as
+amended 2026-10-06) — as the list you must answer line by line: for each downgrade say whether it is a
+deliberate upstream re-point (nixpkgs moving a default alias to an LTS — openssl 3.6.0 → 3.5.8,
+NixOS/nixpkgs#564262) or a regression, and for each line move (python3 / opentofu / kubectl / openssl
+`major.minor`) what it means for THIS repo's call sites (grep the scripts that invoke the tool; a
+state-format or skew consequence — opentofu stamps state, kubectl's minor is the cluster-skew window —
+is named, not assumed). The PR STAYS ARMED (ruling: rely on the lens), so your `--approve` is the gate.
+**Graduation:** the first time a listed move turns out to have mattered, say so under `## Evidence` —
+that class then joins the `major` gate the ADR-141 way (one `matchPackageNames`/gate line, operator-direct).
+
 ## Verdict
 
 `--approve` only once every breaking change is N/A or handled in the diff, the known-issues read
