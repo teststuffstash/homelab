@@ -9,7 +9,9 @@ metadata:
   name: kps-lease-presync
   annotations:
     argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # HookFailed too: a Failed Job of this name is otherwise read as the NEXT sync's hook result
+    # (the 22:2xZ OOM-killed run poisoned two retries); the log survives in Loki.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookFailed
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 120

@@ -2,7 +2,8 @@
 # upgrade-lease-test — the lease CLI (agents/upgrade-lease.sh, ADR-150) against a FAKE kubectl: a
 # ConfigMap store on disk that answers get/create/delete/patch the way the API does, plus a fixed
 # clock, so every rule in the header is asserted without a cluster:
-#   open-new · open-same-sha-noop (the ArgoCD retry rule) · open-other-sha-replaces (new started) ·
+#   open-new · open-same-sha-noop (the ArgoCD retry rule) · open-same-sha-other-to-replaces (#2256) ·
+#   open-other-sha-replaces (new started) ·
 #   renew-capped (never past max-end) · confirm-missing-ok · list-expired · vendored copy identical.
 #   devbox run upgrade-lease-test   (or: bash agents/upgrade-lease-test.sh)
 set -uo pipefail
@@ -67,6 +68,14 @@ export LEASE_NOW_CMD="echo 2026-10-07T01:15:00Z"
 out="$($L open --subject $SUBJ --chart kube-prometheus-stack --sha aaaa1111 --from 86.3.2 --to 91.8.0 --expect-min 20 --max-min 60 2>/dev/null)"
 is same-sha-no-write "$(grep -cE ' (create -f|delete configmap)' "$CALLS")" 0
 is same-sha-deadline-kept "$(j '.["expected-end"]' "$out")" 2026-10-07T01:20:00Z
+
+# 2b. open-same-sha-other-to-replaces: the SAME sha synced at a different chart version is a new
+#     upgrade (the #2256 shape: the git source synced first at 86.3.2, then the real 91.8.0 sync)
+: >"$CALLS"
+out="$($L open --subject $SUBJ --chart kube-prometheus-stack --sha aaaa1111 --from 86.3.2 --to 91.8.1 --expect-min 20 --max-min 60 2>/dev/null)"
+is same-sha-other-to-delete-then-create "$(grep -oE ' (create -f|delete configmap)' "$CALLS" | awk '{printf "%s ", $1}')" "delete create "
+is same-sha-other-to-new-to "$(j .to "$out")" 91.8.1
+is same-sha-other-to-new-deadline "$(j '.["expected-end"]' "$out")" 2026-10-07T01:35:00Z
 
 # 3. open-other-sha-replaces: delete + create, a new started / max-end
 : >"$CALLS"

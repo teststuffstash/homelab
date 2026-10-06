@@ -23,11 +23,16 @@
 #   from / to (chart versions) · expected-end · max-end (RFC3339 UTC) · by · reason.
 #   ONE decisive field: `expected-end`. `max-end` = started + the per-subject cap renewals never pass.
 #
-# THE RETRY RULE: `open` on a subject whose lease already carries the SAME sha is a NO-OP (prints the
-# existing record, exit 0). ArgoCD re-runs PreSync on every sync retry (retry.limit 5 on the
-# Application) and on every self-heal of the same revision — without this rule each retry would
-# push the deadline forward and a wedged sync could renew itself forever. A DIFFERENT sha replaces
-# the record (delete + create → a new `started`): a newer commit is a new upgrade.
+# THE RETRY RULE: `open` on a subject whose lease already carries the SAME IDENTITY — sha AND
+# from AND to — is a NO-OP (prints the existing record, exit 0). ArgoCD re-runs PreSync on every
+# sync retry (retry.limit 5 on the Application) and on every self-heal of the same revision —
+# without this rule each retry would push the deadline forward and a wedged sync could renew
+# itself forever. ANY other identity replaces the record (delete + create → a new `started`): a
+# newer commit is a new upgrade, and so is the SAME commit synced at a different chart version —
+# the kps 91.8.0 merge (#2256, 2026-10-06 23:13Z) moved the hooks source and the pin in ONE commit,
+# ArgoCD synced the git source first (chart still 86.3.2, the app-of-apps had not bumped the
+# Application yet), and a sha-only rule kept that `86.3.2 → 86.3.2` record, with its deadline,
+# through the real 91.8.0 sync.
 #
 # CALLERS: the kube-prometheus-stack PreSync / PostSync hook Jobs
 # (argocd/resources/kube-prometheus-stack-lease/ — the vendored copy there must stay byte-identical,
@@ -86,11 +91,11 @@ case "$VERB" in
     need SUBJECT=subject CHART=chart SHA=sha FROM=from TO=to EXPECT=expect-min MAX=max-min
     name="upgrade-lease-$(slug "$SUBJECT")"
     if existing="$(get_lease "$name")"; then
-      if [ "$(printf '%s' "$existing" | jq -r '.data.sha')" = "$SHA" ]; then
-        printf 'upgrade-lease: %s already open for %s — no-op (a sync retry never moves the deadline)\n' "$name" "${SHA:0:8}" >&2
+      if [ "$(printf '%s' "$existing" | jq -r '[.data.sha, .data.from, .data.to] | join(" ")')" = "$SHA $FROM $TO" ]; then
+        printf 'upgrade-lease: %s already open for %s %s → %s — no-op (a sync retry never moves the deadline)\n' "$name" "${SHA:0:8}" "$FROM" "$TO" >&2
         printf '%s' "$existing" | print_lease; exit 0
       fi
-      printf 'upgrade-lease: %s held %s, replacing with %s\n' "$name" "$(printf '%s' "$existing" | jq -r '.data.sha' | cut -c1-8)" "${SHA:0:8}" >&2
+      printf 'upgrade-lease: %s held %s, replacing with %s %s → %s\n' "$name" "$(printf '%s' "$existing" | jq -r '"\(.data.sha[0:8]) \(.data.from) → \(.data.to)"')" "${SHA:0:8}" "$FROM" "$TO" >&2
       kc delete configmap "$name" --ignore-not-found >/dev/null
     fi
     start="$(now)"
