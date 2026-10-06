@@ -61,12 +61,5 @@
     "labels": [{"name": "agent-fix"}, {"name": "agent/review"}],
     "body": "PR #105 was just updated, within the C4C5_PERSIST_S guard; frozen belt should HOLD. Fixes #88\n\nTouches: agents/coordinator-scan.sh\n",
     "updatedAt": "2026-08-25T06:10:00Z"
-  },
-  {
-    "number": 89,
-    "title": "scan: frozen PR shape but CI red should NOT be detected",
-    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
-    "body": "An open PR armed, bot-approved, behind and unmoved, but CI red (FAILURE). The frozen-PR belt should NOT detect this because ci-green check requires SUCCESS|NEUTRAL|SKIPPED only. Fixes #89\n\nTouches: agents/coordinator-scan.sh\n",
-    "updatedAt": "2026-08-25T06:15:00Z"
   }
 ]

@@ -4572,8 +4572,8 @@ EOF_GTHEMES_OPEN
             # An open PR that is armed, bot-APPROVED at head, ci green, and BEHIND but unmoved
             # may match no scan clause: the `agent/review` phantom clause fires only when there is
             # NO open PR, so an open-but-frozen PR is a terminal sink. This belt detects issues
-            # with `agent/review` that are mentioned by a frozen open PR (already fetched above
-            # for exclusion from the existing phantom belt's candidates).
+            # with `agent/review` that are mentioned by a frozen open PR (fetched above to feed
+            # only this belt).
             #
             # CONDITION: a PR that is:
             #   - armed (autoMergeRequest != null)
