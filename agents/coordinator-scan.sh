@@ -4503,8 +4503,10 @@ EOF_GTHEMES_OPEN
                        | select(([$frozen_prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
-              now_s="$(date -u +%s)"
-              review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
+              if [ -z "${review_merged:-}" ]; then
+                review_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || review_merged=""
+              fi
               if ! jq -e . >/dev/null 2>&1 <<<"${review_merged:-null}"; then
                 orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/review phantom-label belt held every candidate this tick (rule #6)\n"
               else
