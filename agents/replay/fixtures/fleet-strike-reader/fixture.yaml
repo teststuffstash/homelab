@@ -7,10 +7,11 @@
 #   2. Posts ONE comment on the first affected issue listing all of them.
 #   3. Files ONE deduped inert platform issue (or extends an existing open match).
 #
-# EIGHT TICKS under replay:
+# SEVEN TICKS under replay:
 #   TICK 1 — first pass against the #326 four-strike world (no prior action). 18 actions.
 #   TICK 2 — second pass against the POST-ACTION world (agent/error applied, marker present,
-#            filing exists). ZERO actions (idempotency guards fire).
+#            filing exists). Comments reposted on affected issues #326-#329 with the
+#            fleet-fault cause= marker (homelab#2327 row change — marker now includes cause).
 #   TICK 3 — stale world (same strikes but now_s >24h after the newest). ZERO actions
 #            (live-window check fires).
 #   TICK 4 — RESOLVED inside the window (homelab#1712): a CLOSED filing for the class covers the
@@ -21,13 +22,10 @@
 #   TICK 6 — SPOOFED: the same closed filing whose `issues=` marker is authored by a FOREIGN user.
 #            The marker is a machine ruling, so the resolution subtraction must not honour it —
 #            the normal path owns the class. This row is the pin on the author filter.
-#   TICK 7 — MARKER-LESS LATCH (homelab#2327 row 1): a previous gh issue create failed, so the
-#            marker comment was posted WITHOUT the fleet-fault cause= line. The latch is stuck
-#            (un-clearable by the un-latch clause which requires both markers). No filing exists.
-#            ZERO actions (no new filing, no cause to add yet).
-#   TICK 8 — REPOST WITH CAUSE (homelab#2327 row 2): the filing now exists (#999). The scan
-#            detects the marker comment lacks the cause marker and reposts with it included.
-#            Expected: comments reposted on issues #326–#329 with the fleet-fault cause= marker.
+#   TICK 7 — MARKER-LESS LATCH WITH REPOST (homelab#2327): the marker comment lacks the
+#            fleet-fault cause= line; the filing exists (#999). The scan detects this and reposts
+#            the marker comment with the cause marker included on issues #326–#329. Expected:
+#            repost comments on the affected issues and extend comment on the filing.
 #
 # THE #326 FOUR-STRIKE WORLD (recorded fixture). Four issues (#326, #327, #328, #329) each carry
 # an AGENT_STRIKE: comment with `error_class=unknown`, all within 24h. The scan detects the
@@ -77,8 +75,6 @@ parts:
   - file:tick5.sh
   - block:fleet-strike-reader
   - file:tick6.sh
-  - block:fleet-strike-reader
-  - file:tick7.sh
   - block:fleet-strike-reader
   - file:tick8.sh
   - block:fleet-strike-reader
