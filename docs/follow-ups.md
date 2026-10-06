@@ -461,12 +461,6 @@ six OVERSIZE items pointer-ized into
       [ADR-142](adr.md) trial (gate-change lens + gate-drift report). **Next:** the trial
       re-reads 2026-10-05 and 2026-10-28 (revert or keep; the box verbs + `mgmt/` stay owned
       until the box is decided); then decide whether the seat-only scripts move out of `scripts/`.
-- [ ] **FU-295** — **The box's management-sentinel never reports on a homelab `goal/**` PR**, but the
-      `required-checks` ruleset (`refs/heads/goal/**` + default) requires it — an APPROVED goal-based
-      PR sits BLOCKED forever (the ADR-142 control drill #2093, 2026-09-28, 20+ min). Cause:
-      `mgmt/scripts/mgmt-sentinel.sh:89,94` judges master-bound PRs only. Why deferred: a box
-      change (mgmt/ is operator-owned, window + ssh). **Next:** for a non-master base, post the
-      no-box-surface SUCCESS in seconds (the FU-237 (b) shape) — or plan against the goal base.
 - [ ] **FU-296** — **governance-lint's worker match has no self-test**, and under the ADR-142
       trial it is worker-authorable: drill D3 (#2092, 2026-09-28) anchored `WORKER_PATTERN` so it
       missed the REST `homelab-agents-1234[bot]` login — every worker PR would pass — and the
