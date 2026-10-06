@@ -1,0 +1,6 @@
+OUT brief-rc: 0
+OUT brief-surfaces: issue comments, PR bodies
+OUT surface-missing: {{surface}}
+OUT cmd-refs-brief: no
+OUT cmd-restates-surfaces: yes
+RC 0

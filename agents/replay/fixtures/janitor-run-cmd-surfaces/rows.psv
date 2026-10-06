@@ -1,0 +1,11 @@
+# janitor-run-cmd-surfaces — the decision table (family contract in fixture.yaml; per-row intent below).
+# The RUN_CMD's sweep-6 clause must read the surfaces from the brief's single TOOL_GAP_SURFACES:
+# declaration instead of restating them. The three "reaches" rows assert the round-trip (RUN_CMD →
+# brief → surface); the contrast row proves the guard detects the base defect; the restates row
+# asserts the one-declaration property (no second copy of the surface set).
+# id                                  | world | patch | env                                   | expect                         | params
+run-cmd-reaches-issue-comment         |       |       | SURFACE=issue-comments                | cmd-reaches                    | surface=issue-comments
+run-cmd-reaches-pr-body               |       |       | SURFACE=pr-bodies                     | cmd-reaches                    | surface=pr-bodies
+run-cmd-reaches-pr-review-body        |       |       | SURFACE=pr-review-bodies              | cmd-reaches                    | surface=pr-review-bodies
+base-run-cmd-misses-pr-review-body    | base  |       | SURFACE=pr-review-bodies BRIEF_NAME=README.md | cmd-misses-review-body  | surface=pr-review-bodies
+run-cmd-restates-no-surface           |       |       | SURFACE=issue-comments                | cmd-no-restatement             | surface=issue-comments
