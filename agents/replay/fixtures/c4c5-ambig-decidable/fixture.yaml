@@ -1,9 +1,11 @@
-# c4c5-ambig-decidable — FU-199: the narrowed C4/C5 goal-child hold.
+# c4c5-ambig-decidable — FU-199 / homelab#1797: the narrowed C4/C5 goal-child hold, both AGENT_STRIKE and AGENT_REPORT.
 #
-# THE CONTRACT (homelab#1203, FU-199). A goal child whose newest AGENT_STRIKE: comment carries a
-# Resumable branch pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the
-# branch so the session resumes with --work-branch <branch> (never a restart). No strike / no
-# resumable branch ⇒ hold exactly as today (the FU-143/IL-G06 asymmetry stands unchanged).
+# THE CONTRACT (homelab#1203, FU-199, homelab#1797). A goal child whose newest terminal comment
+# (AGENT_STRIKE: or AGENT_REPORT:) carries a Resumable branch pushed: <branch> line IS DECIDABLE —
+# emit an ordinary C4/C5 unit carrying the branch so the session resumes with --work-branch <branch>
+# (never a restart). No strike / no resumable branch ⇒ hold exactly as today (the FU-143/IL-G06
+# asymmetry stands unchanged). The finalizer writes the same line into both comment channels (one
+# producer, one parser); the reader accepts either (homelab#1797).
 #
 # Three properties are load-bearing:
 #   • ANCHORED at the start of a COMMENT body, never a substring. Same discipline as
@@ -19,6 +21,11 @@
 #                     its ordinary v2 report + unit.
 #   no-strike         #329 has NO AGENT_STRIKE: comment → held as today; #330 beside it keeps its
 #                     ordinary v2 report + unit.
+#   report-resumable  #329 has an AGENT_REPORT: comment (deliberate stop) with Resumable branch
+#                     pushed: fix/issue-329-loop → decidable: emits C4/C5 unit with work-branch;
+#                     #330 beside it keeps its ordinary v2 report + unit (homelab#1797).
+#   strike-resumable-markdown (documented in rows.psv)
+#   report-resumable-markdown (documented in rows.psv)
 pins:
   - IL-T29
 name: c4c5-ambig-decidable
