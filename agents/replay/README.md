@@ -429,6 +429,7 @@ is stale, so it cannot drift the way the prose register did.
 | `review-pick/required-contexts-present-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/same-lane-oldest` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `reviewable-again-body-edit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
