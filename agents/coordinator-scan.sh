@@ -5359,6 +5359,10 @@ EOF_GTHEMES_OPEN
         # sha matches the current head (not a stale sha from a previous commit).
         # Computed only for cases where ARBITRATE might be applied (noop_round OR red_rounds >= MAX).
         ci_red_should_arbitrate=1
+        # The reason a hold fired, for the report line the noop/exhausted branches emit. Unset =
+        # the FU-1529 stale-sha default (their `${ci_red_hold_reason:-…}` fallback); the
+        # human-ruling hold below overrides it.
+        ci_red_hold_reason=""
         if [ -n "$noop_round" ] || [ "$red_rounds" -ge "$RED_MAX" ]; then
           # Sub-defect 1: verify red conclusion's sha matches current head. Query per-sha check runs.
           pr_head_oid="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || pr_head_oid=""
@@ -5373,6 +5377,45 @@ EOF_GTHEMES_OPEN
           else
             ci_red_should_arbitrate=0 # Can't verify sha, fail-safe to not escalate
           fi
+          # HUMAN-RULING HOLD (homelab#1544, MP-T13 sub-defect 2). A non-loop actor removing
+          # agent/arbitrate is a RULING, and without a representation in the state machine the next
+          # tick re-derives the escalation from scratch. Hold escalation while no commit on the PR
+          # is newer than that removal; release as soon as new work lands (the self-releasing key —
+          # a permanent hold would be the terminal-sink shape #1529 was filed about). The actor
+          # filter excludes the loop's own churn by `.actor.type == "Bot"` (verified live: the
+          # issue-events endpoint populates it for App actors) AND by normalized login, because the
+          # events endpoint reports the bare `homelab-agents-1234[bot]`, not `gh pr list`'s
+          # `app/`-prefixed form. `--paginate` is mandatory: the endpoint is oldest-first and pages
+          # at 30, so the newest label events on a long-lived PR are not on page 1.
+          # Fail-safe: an unreadable events probe HOLDS with a report line and writes no label
+          # (rule #6 — never fail into a write).
+          if [ "$ci_red_should_arbitrate" = 1 ]; then
+            cr_events="$(gh api --paginate repos/"${slug}"/issues/"${u}"/events 2>/dev/null)" || cr_events=''
+            if [ -z "$cr_events" ] || ! printf '%s' "$cr_events" | jq -e 'type == "array"' >/dev/null 2>&1; then
+              ci_red_should_arbitrate=0
+              ci_red_hold_reason="could not read PR events (homelab#1544 human-ruling hold, rule #6)"
+            else
+              cr_wa="${WORKER_AUTHOR:-app/homelab-agents-1234}"; cr_wa="${cr_wa#app/}"; cr_wa="${cr_wa%\[bot\]}"
+              cr_removal_ts="$(printf '%s' "$cr_events" | jq -r --arg wa "$cr_wa" '
+                [ .[] | select(.event == "unlabeled" and (.label.name // "") == "agent/arbitrate")
+                      | select((.actor.type // "") != "Bot")
+                      | select(((.actor.login // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "")) != $wa)
+                      | .created_at ] | max // ""' 2>/dev/null)" || cr_removal_ts=''
+              if [ -n "$cr_removal_ts" ]; then
+                cr_commits="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" || cr_commits=''
+                cr_newest_commit="$(printf '%s' "$cr_commits" | jq -r '[.commits[]?.committedDate] | max // ""' 2>/dev/null)" || cr_newest_commit=''
+                if [ -z "$cr_newest_commit" ]; then
+                  ci_red_should_arbitrate=0
+                  ci_red_hold_reason="could not read PR commits (homelab#1544 human-ruling hold, rule #6)"
+                elif [[ "$cr_newest_commit" > "$cr_removal_ts" ]] 2>/dev/null; then
+                  : # new work since the ruling — the hold self-releases, escalate
+                else
+                  ci_red_should_arbitrate=0
+                  ci_red_hold_reason="a human removed agent/arbitrate at ${cr_removal_ts} and no commit is newer (homelab#1544 human-ruling hold)"
+                fi
+              fi
+            fi
+          fi
         fi
         if [ -n "$noop_round" ]; then
           if [ "$ci_red_should_arbitrate" = 1 ]; then
@@ -5381,7 +5424,7 @@ EOF_GTHEMES_OPEN
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
           else
-            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — no completed red run on current head ${head8} (FU-1529 stale-sha): PR #${u}\n"
+            orphans="${orphans}[$repo] ⏳ ci-red NO-OP held — ${ci_red_hold_reason:-no completed red run on current head ${head8} (FU-1529 stale-sha)}: PR #${u}\n"
           fi
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
           # CURRENCY (homelab#198) — the EXTENSION of this clause's existing content key, not a
@@ -5456,7 +5499,7 @@ EOF_GTHEMES_OPEN
               && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
           else
-            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — no completed red run on current head (FU-1529 stale-sha): PR #${u}\n"
+            orphans="${orphans}[$repo] ⏳ ci-red EXHAUSTED held — ${ci_red_hold_reason:-no completed red run on current head (FU-1529 stale-sha)}: PR #${u}\n"
           fi
         fi
         # <<<REPLAY:ci-red-stale-sha<<<
