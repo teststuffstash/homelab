@@ -1,0 +1,7 @@
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json body --jq [.[].body]
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers
+OUT CANDIDATES: 101
+OUT ORPHANS: [homelab] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)
+OUT 
+OUT REACHED: end
+RC 0

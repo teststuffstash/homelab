@@ -1,3 +1,14 @@
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json body --jq [.[].body]
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers
+CALL gh api repos/teststuffstash/homelab/issues/100/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/101/comments?per_page=100
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 40 --json body --jq [.[].body // ""]
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body
 OUT CANDIDATES: 101
+OUT ORPHANS: [homelab] ⚠ PROBE_FAILED reading issue #100's comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)
+OUT [homelab] ⚠ PROBE_FAILED reading issue #101's comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)
+OUT [homelab] ⚠ PROBE_FAILED (terminal pods / merged PRs) — the phantom-label belt held every candidate this tick; the C4/C5 report + unit below are unaffected (rule #6)
+OUT 
 OUT REACHED: end
 RC 0

@@ -10,7 +10,7 @@ c4c5_cleared=""
 orphans=""
 units=""
 resumable_branches=""
-BODIES="$(cat "$REPLAY_WORLD/gh/pr-list-bodies.json")"
+BODIES="$(cat "$REPLAY_WORLD/gh/pr-list-open.json")"
 inprog="$(cat "$REPLAY_WORLD/gh/issue-list-inprog.json")"
 db=""
 sess_nums=""
@@ -18,8 +18,12 @@ cg=""
 gb=""
 infeas_done=""
 c6db_nums=""
-# Bind PODS from the world's kubectl stub
-PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
+# Bind PODS from the world's kubectl stub (probe-fail world: let scan's probe fail)
+if [ "${REPLAY_WORLD##*/}" != "probe-fail" ]; then
+  PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json" 2>/dev/null)" || PODS=""
+else
+  PODS=""
+fi
 KUBECTL="kubectl"
 KUBE=""
 ITEM_CLASS_ROWS=""

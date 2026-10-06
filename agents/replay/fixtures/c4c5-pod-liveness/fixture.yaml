@@ -26,6 +26,7 @@ requires:
   - python3
 parts:
   - file:bridge.sh
+  - block:c4c5-bodies-probe
   - block:c4c5-selector
   - block:c4c5-selector-run
   - block:c4c5-derivations
