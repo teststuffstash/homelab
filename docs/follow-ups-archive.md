@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-295** *(archived 2026-10-06)* — **The box sentinel never reported on goal/** PRs.** PR#2299: goal/**
+  heads get an immediate base-pass `success` ("box surface judged at the assembly PR to master"); assembly PRs
+  to master are still fully planned. Verified live on Goal #2273's children (7/7 success, merges resumed).
 - **FU-151** *(archived 2026-10-04)* — **First-party `-iac` deploy bumps skipped LLM review by TIMING, not
   design.** Every deploy-pin now labels its -iac PR `automerge`+`dependencies` on every run: sleep-tracking
   (`5b8c384`), snore-recorder#43, circles#97 (+ its `specs-pr-route.sh` route PRs, the reviewer's catch).

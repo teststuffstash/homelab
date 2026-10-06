@@ -1,4 +1,0 @@
-CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1413-pypi-cache-env --status failure --limit 1 --json databaseId --jq .[0].databaseId
-CALL gh run view 33965268108 --repo teststuffstash/homelab --log-failed
-OUT ✓ ci-failure-run-select fixture passed
-RC 0

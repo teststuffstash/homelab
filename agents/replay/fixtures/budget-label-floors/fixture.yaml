@@ -1,0 +1,27 @@
+# budget-label-floors — homelab#2163: the escalation advice's label→floor grammar, as a decision
+# table (census S2: two readers disagree on one grammar).
+#
+# THE CONTRACT. The escalation carrier is the issue's `agent-budget/*` label, and the floors it
+# carries live in `label_map` (`argocd/resources/openrouter-proxy/model-classes.json`) — the ONE
+# home, read by `route()`. The coordinator's brief (§arbitrate) restated that grammar as "edit the
+# label to one tier higher", which is FALSE for `sm`→`md`: `md` floors at `cheap` and the served
+# flash pair (`deepseek-v4-flash`, `deepseek-v4.1-flash`) is `tier: cheap`, so the re-grade changes
+# only the $ cap and the session reports a model escalation that did not happen (oracle-fleet
+# PR#780, issue #774). Only `lg` (`tier_floor: large`, `never_free`) moves a deepseek ride.
+#
+# THE ROWS (the input axis is the budget label; the world is the brief's escalation advice):
+#   sm-floors-none          the SHIPPED advice declares `sm` floors at `none`
+#   md-floors-cheap         the SHIPPED advice declares `md` floors at `cheap` — THE FIXED ROW: red
+#                           on base, where the advice said "one tier higher" and declared no floor
+#   lg-floors-large         the SHIPPED advice declares `lg` floors at `large`
+#   base-advice-undeclared  the CONTRAST row: the BASE advice ("one tier higher") declares no floor,
+#                           so the guard is proven to detect the defect it fixes
+#
+# The round-trip is the assertion: the floor the advice declares for the row's label is the floor
+# `label_map` (the one home) carries. The advice is the CONSUMER; `label_map` is the PRODUCER.
+name: budget-label-floors
+mode: table
+parts:
+  - file:bridge.sh
+  - file:post.sh
+rows: rows.psv

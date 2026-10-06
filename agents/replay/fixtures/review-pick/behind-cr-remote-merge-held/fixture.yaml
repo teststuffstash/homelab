@@ -1,0 +1,34 @@
+# review-pick-behind-cr-remote-merge-held (homelab#2181) — a CHANGES_REQUESTED PR whose only
+# post-verdict commit is a NON-updater merge is not reviewable, BEHIND or not.
+#
+# WHY THIS ROW EXISTS. `behind-cr-no-content-held` pins the merge-not-content rule for the
+# updater's "Merge branch 'master' into …" phrasing. The live #2046 defect was a merge with a
+# DIFFERENT phrasing — the seat brought the branch current with `git merge origin/master`, headline
+# "Merge remote-tracking branch 'origin/master' into …". The old one-prefix filter counted it as
+# content, so `newest_commit_at` became the merge date, `reviewable_again` went true, and the
+# reflex re-dispatched a reviewer at a head whose author had not answered the verdict — the
+# flip-flop the ROUNDS ceiling exists to stop. A merge brings no PR-authored diff, so the PR must
+# stay held.
+#
+# CONDITION UNDER REPLAY. #140: armed, green, BEHIND, reviewDecision CHANGES_REQUESTED, one
+# homelab-reviewer CHANGES_REQUESTED verdict at 10:00 — and the ONLY commit after it is a
+# conflict-resolution merge ("Merge remote-tracking branch 'origin/master' into …", 12:00).
+# `newest_commit_at` filters the merge shape, so the newest CONTENT commit stays 09:00 < 10:00 and
+# `reviewable_again` is false.
+#
+# THE CONTRACT (executes the REAL pick jq from review-reflex.sh via sentinel):
+#   1. NO pick line — the candidate array is empty and `.[]` over it emits nothing.
+#   2. The merge does not resurrect it. A predicate that counted this merge as content would make
+#      `reviewable_again` true and this fixture would red with a PICK line — the #2046 shape,
+#      red-cased.
+#
+# EXPECTED STREAM (computed from the world + the predicate): only post.sh's REACHED line, RC 0.
+#
+# Parts: bridge.sh + block:review-pick (real code) + post.sh — shared with two-lanes-two-picks.
+name: review-pick-behind-cr-remote-merge-held
+mode: actions
+source: agents/review-reflex.sh
+parts:
+  - file:../two-lanes-two-picks/bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh

@@ -1,0 +1,12 @@
+{
+  "commits": [
+    {
+      "messageHeadline": "fix: the thing",
+      "committedDate": "2026-08-19T09:00:00Z"
+    },
+    {
+      "messageHeadline": "Merge branch 'master' into fix/x",
+      "committedDate": "2026-08-19T12:00:00Z"
+    }
+  ]
+}

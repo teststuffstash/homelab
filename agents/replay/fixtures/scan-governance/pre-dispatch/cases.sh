@@ -11,6 +11,7 @@ homelab|1005|devbox.json|add a new devbox tool
 homelab|1006|CODEOWNERS|reassign ownership
 homelab|1007|.agents/fix.yaml|update the fix recipe
 oracle-fleet|1008|scripts/|a stack repo that happens to own a same-named path
-homelab|1009|scripts/governance-lint.sh|widen the governance set (ADR-142 trial: scripts/ is worker-authorable)"
+homelab|1009|scripts/governance-lint.sh|widen the governance set (ADR-142 trial: scripts/ is worker-authorable)
+homelab|1010|CODEOWNERS (ownership)|an annotated entry on a governance file: pre-fix the scan's inline tr mangles the annotation and the GOVERNANCE hit is missed"
 while IFS='|' read -r repo qnum qtouches qtitle; do
   [ -n "$qnum" ] || continue

@@ -10,6 +10,21 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-06 evening — Goal #2273 BOTH THEMES ON MASTER; TICK-LOG 2026-10-06).** FU-295 fixed
+  (#2299, box activated, archived 638095cd). Theme 1 scan-guards #2339 (f0b19f81) + theme 2 seam-parsers
+  #2333 merged 19:23/19:34Z after seat codeowner reads (verdicts on the PRs). Goal now post-launch
+  (bucket #2300); **verdict is the operator's** after the Production-leg window (bucket-A count vs 38).
+  Operator reads: (1) seat raised `Budget: 30 → 36` (FU-131 full-cap charging inflated Σ; revert = re-scope);
+  (2) #2324 lets the scan CLEAR `agent/error` when an `AGENT_INFEASIBLE:` verdict parks the issue — a breaker
+  label removed by machinery for the first time; (3) `coordinatorModel` still `opencode-go/deepseek-v4-flash`
+  (the 09-25 temporary). Open, filed today: #2307 (coordinator sleep-polls to the 3600s deadline). Not filed:
+  the FU-143 goal-child closeout never fired for #2280 (strong `Fixes #2280`, PR merged 18:37Z, closed by hand
+  19:10Z) — re-check on the next goal child now that theme 1 is on master; `agents/meta-needs-attention.sh:172`
+  fails `bash -n` (jq filter, same on master).
+  #2174 merged 2026-10-06 ~20:05Z after a seat master-refresh + codeowner read: a DUPLICATE-closed blocker now
+  HOLDS (conservative — live it always takes the canonical-unreadable arm); fix-forward = #2341 (GraphQL
+  `duplicateOf`, inert, sub-issue of #2167).
+
 - **⚑ PICKUP (2026-10-05 morning — S9 backlog THROUGH, unattended; TICK-LOG 2026-10-05 morning has the
   arc).** Landed: #2234 (G11 second cut) + **G11 PROVEN** (#2228 2.3.6 and #2240 2.4.2 carried both lines,
   merged mechanically, Renovate rebased #2240 itself); #2232 cloudflared + the seat's `tofu/cloudflare`

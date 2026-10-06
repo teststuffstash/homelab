@@ -1,0 +1,11 @@
+[
+  {
+    "number": 100,
+    "title": "goal child",
+    "labels": [
+      { "name": "agent-fix" },
+      { "name": "agent/in-progress" }
+    ],
+    "body": "---\nTouches: agents/coordinator-scan.sh\nBase: goal/x\nClass: fix\n---\n\n## Why\n\nA goal child whose PR merged into its goal base.\n"
+  }
+]

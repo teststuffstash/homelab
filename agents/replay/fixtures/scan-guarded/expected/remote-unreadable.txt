@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/agent-runtime/contents/.github/workflows/ci.yaml
+OUT ORPHAN [agent-runtime] ⛔ GUARDED-SET PROBE-FAILED — agent-runtime's declared guarded set could not be read (homelab#309/#1855). Holding rather than dispatching blind:
+OUT ORPHAN   issue #145 — agent-base-lock-pin
+OUT REACHED: end
+RC 0

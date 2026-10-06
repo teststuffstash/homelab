@@ -1030,7 +1030,7 @@ query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
 __GOAL_FIELDS__
         pullRequests(states:OPEN, first:40) {
           nodes {
-            number isDraft updatedAt reviewDecision baseRefName headRefName mergeStateStatus
+            number isDraft createdAt updatedAt reviewDecision baseRefName headRefName mergeStateStatus
             labels(first:15){ nodes { name } }
             reviews(last:10){ nodes { author { login } state submittedAt } }
             headRefOid
@@ -1080,6 +1080,18 @@ def is_transient_graphql_error(exc):
     or a 502 is not evidence that `parent`/`stateReason` are unreadable, and a process that
     concluded so would serve an empty goal panel until someone restarted it."""
     return any(marker in str(exc).lower() for marker in _TRANSIENT_GRAPHQL)
+
+
+def armed_behind_no_approval(pr):
+    """True when a PR is armed ∧ BEHIND on a repo whose ruleset requires no approval (homelab#1896).
+
+    `reviewDecision == ""` is the no-approval signal: an approval-required repo reports
+    REVIEW_REQUIRED/APPROVED/CHANGES_REQUESTED, never "". Drafts are excluded (GitHub nulls their
+    reviewDecision). Pure over the GraphQL node, so the self-test drives it against the recorded
+    oracle-iac shape."""
+    return bool(pr.get("createdAt")) and pr.get("autoMergeRequest") is not None \
+        and (pr.get("mergeStateStatus") or "").upper() == "BEHIND" \
+        and (pr.get("reviewDecision") or "") == "" and not pr.get("isDraft")
 
 
 def collect_open_prs(lines):
@@ -1192,6 +1204,22 @@ def collect_open_prs(lines):
                 for lab in (pr.get("labels") or {}).get("nodes") or []:
                     if lab:
                         lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
+                # homelab#1896: an armed+BEHIND PR on a repo whose ruleset requires no approval is
+                # NEVER a legitimate steady state — the updater brings it current within a pass (the
+                # */15 cron plus the /update-pr edge). Before #1896's fix the updater's merge-ready
+                # arm required a bot approval the mechanical `automerge` classes never get
+                # (docs/agents/iac-lane.md: deploy_bump "CI-only, instant"; docs/agents/merge-path.md
+                # §Decisions/FU-046), so they stranded indefinitely — oracle-iac, 2026-09-21: 10 open
+                # PRs, all armed+BEHIND, the oldest from 09-16, ~500 updater passes over them.
+                # Value = createdAt epoch, so the alert reads age = time()-this; the series
+                # disappears the moment the PR is updated (no longer BEHIND) or merged, so the alert
+                # self-resolves. Absent createdAt (a partial read) emits NO series — absent, never a
+                # fake 0 (the FU-108 read-honesty rule).
+                if armed_behind_no_approval(pr):
+                    lines.append(metric(
+                        "github_pull_request_armed_behind_no_approval_timestamp",
+                        {**ident, "base": pr["baseRefName"], "head": pr["headRefName"]},
+                        epoch(pr["createdAt"])))
                 # reviewable_again inputs, mirroring review-reflex.sh: newest NON-MERGE commit
                 # (updater merge commits are not new content — the #57 nine-review loop) vs newest
                 # APPROVED/CHANGES_REQUESTED verdict by ANY author; ISO-8601 UTC strings compare
@@ -2378,6 +2406,7 @@ FIXTURE_RULES = os.path.join(_HERE, "queued-age.promtool-rules")
 GOALS_FIXTURE_RULES = os.path.join(_HERE, "agent-goals.promtool-rules")
 MGMT_FIXTURE_RULES = os.path.join(_HERE, "mgmt-apply.promtool-rules")
 COVERAGE_FIXTURE_RULES = os.path.join(_HERE, "dependency-coverage.promtool-rules")
+ARMED_BEHIND_FIXTURE_RULES = os.path.join(_HERE, "armed-behind.promtool-rules")
 QUEUED_AGE_METRIC = "github_workflow_run_queued_since_timestamp"
 _ALERT_RE = re.compile(r"^\s*-\s*alert:\s*(\S+)\s*$")
 # homelab#348: the goal registry's arithmetic is RECORDING rules, so the pin needs the same block
@@ -2719,6 +2748,30 @@ def self_test():
         urllib.request.urlopen = saved_urlopen_behind
         _behind_dispatched.clear()
 
+    # ── the armed+BEHIND no-approval detector (homelab#1896) ─────────────────────────────────────
+    # The 2026-09-21 oracle-iac shape: armed ∧ BEHIND ∧ reviewDecision "" (no approval required) ∧
+    # not a draft ⇒ the series exists (the alert's input). Every other axis value must NOT emit:
+    # an approval-required repo reports REVIEW_REQUIRED (not ""), a CLEAN PR is not BEHIND, an
+    # unarmed PR is not queued to land, a draft is excluded, and a partial read with no createdAt
+    # emits nothing (absent, never a fake 0).
+    _ab = dict(createdAt="2026-09-16T09:00:00Z", autoMergeRequest={"enabledAt": "x"},
+               mergeStateStatus="BEHIND", reviewDecision="", isDraft=False)
+    assert armed_behind_no_approval(_ab), "the oracle-iac shape must emit"
+    assert not armed_behind_no_approval({**_ab, "reviewDecision": "REVIEW_REQUIRED"}), \
+        "an approval-required repo (REVIEW_REQUIRED) must not emit"
+    assert not armed_behind_no_approval({**_ab, "reviewDecision": "APPROVED"}), \
+        "an approved PR is not the no-approval shape"
+    assert not armed_behind_no_approval({**_ab, "mergeStateStatus": "CLEAN"}), \
+        "a CLEAN PR is not BEHIND"
+    assert not armed_behind_no_approval({**_ab, "autoMergeRequest": None}), \
+        "an unarmed PR is not queued to land"
+    assert not armed_behind_no_approval({**_ab, "isDraft": True}), \
+        "a draft is excluded (GitHub nulls its reviewDecision)"
+    assert not armed_behind_no_approval({**_ab, "createdAt": None}), \
+        "a partial read with no createdAt emits nothing (absent, never a fake 0)"
+    # The walk carries the field the series reads.
+    assert "createdAt" in _PR_QUERY_BASE
+
     # ── transient HTTP error retry (homelab#652): exponential backoff for 5xx errors ──────────────
     # Test that transient 5xx errors are retried within a poll, but persistent errors fail fast.
     assert _is_transient_http_error(urllib.error.HTTPError(None, 502, "Bad Gateway", {}, None))
@@ -2978,6 +3031,22 @@ def self_test():
         "prometheusrule.yaml — re-extract it (the yq one-liner is in mgmt-apply.promtool-rules) "
         "and re-run `promtool test rules argocd/resources/github-exporter/mgmt-apply.promtool-test`\n"
         f"  shipped: {_mgmt_shipped}\n  fixture: {_mgmt_fixture}")
+
+    # ── the armed-behind detector pin (homelab#1896) ─────────────────────────────────────────────
+    # Same contract as CiDispatchStalled/MgmtApplyResidueStanding above: the behaviour fixture
+    # loads a COPY of the rule, so a drifted copy would be a green test of a rule nobody deployed.
+    _ab_shipped = alert_rule(RULE_FILE, "ArmedBehindNoApprovalStranded")
+    _ab_fixture = alert_rule(ARMED_BEHIND_FIXTURE_RULES, "ArmedBehindNoApprovalStranded")
+    assert _ab_shipped, f"ArmedBehindNoApprovalStranded is gone from {RULE_FILE}"
+    assert any("github_pull_request_armed_behind_no_approval_timestamp" in line
+               for line in _ab_shipped), \
+        "ArmedBehindNoApprovalStranded no longer reads the armed+BEHIND no-approval series"
+    assert _ab_fixture, f"ArmedBehindNoApprovalStranded not found in {ARMED_BEHIND_FIXTURE_RULES}"
+    assert _ab_shipped == _ab_fixture, (
+        "the promtool fixture's copy of ArmedBehindNoApprovalStranded has drifted from "
+        "prometheusrule.yaml — re-extract it (the yq one-liner is in armed-behind.promtool-rules) "
+        "and re-run `promtool test rules argocd/resources/github-exporter/armed-behind.promtool-test`\n"
+        f"  shipped: {_ab_shipped}\n  fixture: {_ab_fixture}")
 
     # ── the agent-goals pins (homelab#348) ───────────────────────────────────────────────────────
     # Same pin, RECORDING lane. #348 found goal_budget_ratio and goal_budget_remaining_usd empty
@@ -4035,7 +4104,7 @@ def self_test():
           "runner-pool split + busy-slot gauge (ask-D instrument), issue "
           "lifecycle series with re-queue first-epoch rule, first-poll job-timings skip when "
           "_first_successful_poll flag is set, sentinel head-changed edge-trigger, "
-          "updater behind edge-trigger (ADR-111 #743), "
+          "updater behind edge-trigger (ADR-111 #743), armed+BEHIND no-approval detector (homelab#1896), "
           "cired edge-trigger direct coverage with real run_attempt dedup (homelab#1187), "
           "rollup-path run_attempt propagation through collect_open_prs, "
           "REST-fallback-path run_attempt propagation through collect_open_prs, "

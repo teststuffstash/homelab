@@ -1,22 +1,30 @@
 # c4c5-ambig-decidable-cross-repo — FU-199 cross-repo state leak regression test.
 #
-# THE CONTRACT (homelab#1203 r3). The resumable_branches key carries the repo to prevent
-# cross-repo collisions: repo A's issue #N with a resumable branch must not leak its branch
-# onto repo B's unrelated issue #N.
+# THE CONTRACT (homelab#1203 r3, extended for homelab#2326). Both resumable_branches and
+# ambig_terminal_type keys carry the repo to prevent cross-repo collisions: repo A's issue #N with
+# a resumable branch and terminal type must not leak onto repo B's unrelated issue #N.
 #
 # WORLDS:
 #   Repo A (homelab): issue #329 is a goal child with AGENT_STRIKE: + Resumable branch pushed:
 #                      → decidable: writes homelab#329=fix/issue-329-loop to resumable_branches
-#   Repo B (oracle-fleet): issue #329 is ALSO a goal child with AGENT_STRIKE: + Resumable branch pushed:
+#                      and homelab#329=AGENT_STRIKE to ambig_terminal_type
+#   Repo B (oracle-fleet): issue #329 is ALSO a goal child with AGENT_REPORT: + Resumable branch pushed:
 #                      → decidable: writes oracle-fleet#329=fix/issue-329-oracle to resumable_branches
+#                      and oracle-fleet#329=AGENT_REPORT to ambig_terminal_type
 # Both repos write key …#329=…, colliding on the bare number and distinct under the qualified key.
 # The fu146-resumable-match block asserts each repo's dispatch resolves to its own branch.
+# The observe-terminal-type.sh scripts assert each repo's terminal-type lookup resolves to its own type.
 #
-# The fixture runs the c4c5-derivations block twice (once per repo) with the resumable_branches
-# variable persisting between runs, simulating a multi-repo stack tick.
+# The fixture runs the c4c5-derivations block twice (once per repo), simulating a multi-repo stack
+# tick. `resumable_branches` accumulates across both passes (it is the clause's cross-repo output);
+# `ambig_decidable` / `ambig_terminal_type` are per-repo SCRATCH state, re-initialized inside the
+# block on each pass, so each repo's terminal-type lookup is observed immediately after its own
+# pass (homelab#2326).
 #
-# Pre-fix (bare keys): repo B's dispatch wrongly inherits repo A's branch for issue #329.
-# Post-fix (qualified keys): repo B's dispatch finds no match — no work-branch leakage.
+# Pre-fix (bare keys): the terminal-type lookup for #329 matches BOTH repos' entries, so the
+# emitted type is a two-line value (garbled); repo B's dispatch also wrongly inherits repo A's
+# branch for issue #329.
+# Post-fix (qualified keys): each repo's lookup resolves to its own type and branch — no leakage.
 name: c4c5-ambig-decidable-cross-repo
 mode: actions
 source: agents/coordinator-scan.sh
@@ -27,12 +35,15 @@ requires:
   - python3
 parts:
   - block:c4c5-selector
+  - block:infeasible-selector
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations
+  - file:observe-terminal-type.sh
   - file:bridge.sh
   - block:infeasible-terminal
   - block:c4c5-derivations
+  - file:observe-terminal-type.sh
   - file:bridge.sh
   - block:fu146-resumable-match
   - file:observe-resumable-match.sh

@@ -1,0 +1,70 @@
+# Behaviour fixture for ArmedBehindNoApprovalStranded (homelab#1896) — replays the 2026-09-21
+# oracle-iac world (10 open PRs, all armed+BEHIND, the oldest from 09-16, ~500 updater passes over
+# them) against the committed alert.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/armed-behind.promtool-test
+#
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that this one
+# FIRES on the shape it was written for and stays quiet on the shapes that look like it.
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# CLOCK: promtool's test clock starts at 0, so a PR "created at t" carries the value t (seconds)
+# rather than a real epoch — `time() - created` is unaffected, which is the whole point of
+# publishing a timestamp instead of a precomputed age.
+#
+# THE NEGATIVE IS STRUCTURAL, not a series: the exporter emits
+# github_pull_request_armed_behind_no_approval_timestamp ONLY for reviewDecision == "" (a repo
+# whose ruleset requires no approval). An armed+BEHIND PR on an approval-required repo has
+# reviewDecision REVIEW_REQUIRED/APPROVED/CHANGES_REQUESTED and therefore NO series at all — so
+# there is nothing here to assert quiet; the absence IS the quiet.
+rule_files:
+  - armed-behind.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── the 2026-09-21 oracle-iac world: armed+BEHIND no-approval PRs strand ─────────────────────
+  # #899 and #673 are the oldest (created at t=0); #901 is a fresh PR (created 50m in) that must
+  # NOT ring — the alert is about a PR that has sat armed+BEHIND past the updater's cadence, not
+  # about a PR that just went BEHIND.
+  - interval: 1m
+    name: "oracle-iac 2026-09-21 — armed+BEHIND no-approval PRs strand and fire"
+    input_series:
+      - series: 'github_pull_request_armed_behind_no_approval_timestamp{owner="teststuffstash",repo="oracle-iac",number="899",base="master",head="deploy/pin-899"}'
+        values: "0+0x120"
+      - series: 'github_pull_request_armed_behind_no_approval_timestamp{owner="teststuffstash",repo="oracle-iac",number="673",base="master",head="deploy/pin-673"}'
+        values: "0+0x120"
+      - series: 'github_pull_request_armed_behind_no_approval_timestamp{owner="teststuffstash",repo="oracle-iac",number="901",base="master",head="deploy/pin-901"}'
+        values: "_x50 3000+0x70"
+    alert_rule_test:
+      # Under an hour: nothing is stranded yet.
+      - eval_time: 30m
+        alertname: ArmedBehindNoApprovalStranded
+        exp_alerts: []
+      # The age threshold is crossed at 61m, so `for: 10m` still holds it here — pending, not firing.
+      - eval_time: 70m
+        alertname: ArmedBehindNoApprovalStranded
+        exp_alerts: []
+      # 71m: the two old PRs fire; #901 (created 50m in, age 21m) stays quiet.
+      - eval_time: 71m
+        alertname: ArmedBehindNoApprovalStranded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              owner: teststuffstash
+              repo: oracle-iac
+              number: "899"
+            exp_annotations:
+              summary: "Armed+BEHIND PR oracle-iac#899 stranded on a no-approval repo"
+              description: "PR oracle-iac#899 is armed and BEHIND on a repo whose ruleset requires no approval, and is over an hour old — the updater should have brought it current within a pass (the */15 cron plus the /update-pr edge). This is never a legitimate steady state. Check: (1) the updater's last pass for this repo (agents/update-pr-branch.sh, the updater-git token); (2) whether the PR carries the `automerge` label (the review reflex's skip class) or a bot approval at head — the two merge-ready arms; (3) the /update-pr edge (github-exporter UPDATE_PR_WEBHOOK_URL). https://github.com/teststuffstash/oracle-iac/pull/899"
+          - exp_labels:
+              severity: warning
+              triage: dig
+              owner: teststuffstash
+              repo: oracle-iac
+              number: "673"
+            exp_annotations:
+              summary: "Armed+BEHIND PR oracle-iac#673 stranded on a no-approval repo"
+              description: "PR oracle-iac#673 is armed and BEHIND on a repo whose ruleset requires no approval, and is over an hour old — the updater should have brought it current within a pass (the */15 cron plus the /update-pr edge). This is never a legitimate steady state. Check: (1) the updater's last pass for this repo (agents/update-pr-branch.sh, the updater-git token); (2) whether the PR carries the `automerge` label (the review reflex's skip class) or a bot approval at head — the two merge-ready arms; (3) the /update-pr edge (github-exporter UPDATE_PR_WEBHOOK_URL). https://github.com/teststuffstash/oracle-iac/pull/673"
