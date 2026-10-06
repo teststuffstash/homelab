@@ -1,0 +1,30 @@
+# changes-requested/reviewable-again-body-edit (homelab#2168) — test re-review on body-only fixes
+#
+# CONDITION UNDER REPLAY. Tests three paths covering the body-edit re-review logic:
+# 1. PR #1100: CHANGES_REQUESTED with only a comment after review → NOT reviewable
+#    (prevents the dispatcher loop from case 1 of the arbitration).
+# 2. PR #1101: CHANGES_REQUESTED with body edit after review, no new commits → reviewable
+#    (the fix: body edits should trigger re-review).
+# 3. PR #1102: CHANGES_REQUESTED with new commit after review → reviewable
+#    (existing case, must not regress).
+#
+# THE CONTRACT:
+#   1. For PR #1100: A `gh pr view` call; no UNIT; an ORPHAN line for the hold (comment-only).
+#   2. For PR #1101: A `gh pr view` call; no UNIT; dispatched (body edit detected).
+#   3. For PR #1102: A `gh pr view` call; no UNIT; dispatched (new commit detected).
+pins:
+  - MP-T11
+name: changes-requested-reviewable-again-body-edit
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

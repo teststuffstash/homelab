@@ -3716,7 +3716,7 @@ EOF_GTHEMES_OPEN
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
           def newest_commit_at:
             ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
-          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (.updatedAt > newest_review_at and .updatedAt > newest_commit_at) then "held" else "" end
+          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or ((.bodyLastEditedAt // "") > newest_review_at and (.bodyLastEditedAt // "") > newest_commit_at) then "held" else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
       if [ -n "$cr_reviews" ]; then

@@ -324,7 +324,7 @@ EOF_C9
       ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
     def reviewable_again:
       (.reviewDecision == "CHANGES_REQUESTED") and
-      ((newest_commit_at > newest_review_at) or (.updatedAt > newest_review_at and .updatedAt > newest_commit_at));
+      ((newest_commit_at > newest_review_at) or ((.bodyLastEditedAt // "") > newest_review_at and (.bodyLastEditedAt // "") > newest_commit_at));
     def bot_approved_head:
       ([ .reviews[]?
          | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
