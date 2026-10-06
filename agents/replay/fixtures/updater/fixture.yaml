@@ -13,7 +13,8 @@
 #      stands between the PR and auto-merge: reviewDecision APPROVED, or reviewDecision "" (a repo
 #      whose ruleset requires no approval) ∧ (the reviewer bot's APPROVED post-dating the newest
 #      NON-MERGE commit ∨ the PR carries the `automerge` label — the review reflex's SKIP class,
-#      homelab#1896). ¬CHANGES_REQUESTED and the #887 codeowner-park skip are now special cases of
+#      homelab#1896; the label arm itself requires reviewDecision == "", PR#2303 review).
+#      ¬CHANGES_REQUESTED and the #887 codeowner-park skip are now special cases of
 #      it. `unreviewed-behind-no-update` is the pin
 #      (same world as the pre-#1452 fifo row, minus the approvals ⇒ no update);
 #      `merge-ready-only-off-legacy-pick` holds UPDATER_MERGE_READY_ONLY=0 (the old pick) for the

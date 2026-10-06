@@ -205,9 +205,15 @@ while read -r pr; do
   # the bot-approval arm can never reach them: before this they stranded armed+BEHIND forever
   # (oracle-iac, 2026-09-21: 10 open PRs, all armed+BEHIND, the oldest from 09-16, ~500 updater
   # passes over them). The label condition is LOAD-BEARING: without it an ordinary unreviewed PR on
-  # a no-approval repo would be updated before its review — the waste #1452 removes. Placed AFTER
-  # the park guard so the label can never bypass an approval-required repo's gate.
-  if [ "$(jq -r '[.labels[].name] | index("automerge") != null' <<<"$pr")" = "true" ]; then
+  # a no-approval repo would be updated before its review — the waste #1452 removes.
+  # ⚠ BOTH halves are required (PR#2303 review, 2026-10-06): the arm tests `reviewDecision == ""`
+  # AND the label. The park guard above excludes only REVIEW_REQUIRED, so a label-only arm would
+  # read an `automerge` PR at CHANGES_REQUESTED as merge-ready and move its branch — contradicting
+  # this file's header ("a changes-requested PR gets its fix round pushed BEHIND") and letting the
+  # label bypass an approval-required repo's gate. `reviewDecision == ""` is the no-approval signal;
+  # the label is the skip class. Neither alone is merge-ready.
+  if [ "$(jq -r '.reviewDecision' <<<"$pr")" = "" ] \
+     && [ "$(jq -r '[.labels[].name] | index("automerge") != null' <<<"$pr")" = "true" ]; then
     ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; continue
   fi
   approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
