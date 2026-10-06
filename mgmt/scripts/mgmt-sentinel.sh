@@ -91,8 +91,13 @@ if [ $HUMAN = 1 ]; then
   prs="$(jq -c '[.]' <<<"$one")"
   log "HUMAN PLAN of #$HPR@$(jq -r '.head.sha[0:8]' <<<"$one") — stage 1 reported, not enforced; the verdict posts only on confirmation"
 else
-  prs="$(gh_api_paged "pulls?state=open&base=master")" || { log "PROBE-FAIL: PR list failed — evaluating nothing"; exit 1; }
-  count=$(jq 'length' <<<"$prs"); log "open PRs on ${ORG}/${MGMT_REPO} (base master): $count"
+  # master-bound heads are judged; goal/** heads get the base-pass success below (FU-295) — the
+  # `required-checks` ruleset requires this context on `goal/**` too, and a box that never posted
+  # there left every approved Goal child BLOCKED (ADR-142 control drill #2093; Goal #2273's eight
+  # children, 2026-10-06). Other bases are not required and stay unjudged.
+  prs="$(gh_api_paged "pulls?state=open")" || { log "PROBE-FAIL: PR list failed — evaluating nothing"; exit 1; }
+  prs="$(jq -c '[.[] | select(.base.ref == "master" or (.base.ref | startswith("goal/")))]' <<<"$prs")" || { log "PROBE-FAIL: PR list unreadable — evaluating nothing"; exit 1; }
+  count=$(jq 'length' <<<"$prs"); log "open PRs on ${ORG}/${MGMT_REPO} (base master or goal/**): $count"
 fi
 
 # human_confirm <pr> <sha> <state> → 0 to post. --yes skips; no tty and no --yes = no post (rc 1).
@@ -211,9 +216,18 @@ install_impact() {
   fi
 }
 
-while IFS=$'\t' read -r pr sha; do
+while IFS=$'\t' read -r pr sha bref; do
   [ -n "$pr" ] || continue
   if [ $HUMAN = 0 ] && verdicted "$sha"; then continue; fi
+  # A GOAL CHILD (base goal/**, FU-295): nothing on a goal branch reaches an apply — the only road
+  # to the box's roots is the goal→master ASSEMBLY PR, which is master-bound and planned above in
+  # full. So the child gets the no-plan success in seconds (the FU-237 (b) shape), naming where the
+  # judgement happens; planning it against the goal base would judge a tree no apply ever reads.
+  if [ "$bref" != master ]; then
+    post_verdict "$sha" success "base $bref — box surface judged at the assembly PR to master"
+    log "[#$pr@${sha:0:8}] base $bref — base-pass success (judged at assembly)"
+    continue
+  fi
   log "[#$pr@${sha:0:8}] evaluating"
   mgmt_git -C "$REPO" fetch --quiet origin "+refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] fetch of the head failed — skipped this run"; continue; }
   base="$(git -C "$REPO" merge-base origin/master "$sha" 2>/dev/null)" || { log "[#$pr] no merge-base with master — skipped"; continue; }
@@ -467,7 +481,7 @@ while IFS=$'\t' read -r pr sha; do
   post_verdict "$sha" "$state" "${desc% }"
   [ $HUMAN = 1 ] && human_stamp="$state"
   git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
-done < <(jq -r '.[] | [.number, .head.sha] | @tsv' <<<"$prs")
+done < <(jq -r '.[] | [.number, .head.sha, .base.ref] | @tsv' <<<"$prs")
 
 if [ $HUMAN = 1 ]; then
   case "$human_stamp" in
