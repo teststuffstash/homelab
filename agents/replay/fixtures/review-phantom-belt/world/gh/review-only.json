@@ -42,6 +42,13 @@
     "updatedAt": "2026-08-25T06:10:00Z"
   },
   {
+    "number": 87,
+    "title": "review-held issue test case (human gate)",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "agent/blocked"}],
+    "body": "Test case for agent/review + agent/blocked exclusion — no open PR, no merged PR, persisted; a human gate is never re-queued.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:10:00Z"
+  },
+  {
     "number": 83,
     "title": "scan: frozen open PR armed ∧ approved ∧ green ∧ BEHIND",
     "labels": [{"name": "agent-fix"}, {"name": "agent/review"}, {"name": "task/fix"}],
