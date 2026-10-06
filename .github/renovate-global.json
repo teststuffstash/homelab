@@ -128,6 +128,14 @@
       "automerge": true
     },
     {
+      "description": "The two VERSION-SET partners' regex members (crossplane engine digest, cloudflared in tofu/cloudflare) ride the `deps-review` lane WITH automerge, exactly like the chart/image member they are grouped with. Renovate arms a grouped branch only when EVERY upgrade in it has `automerge: true` — the exclusion above alone left these members at the default (false), so the first PR BORN as a group (#2295, cloudflared 2026.10.0, 2026-10-05) came out `Automerge: Disabled by config`, un-armed, and parked on nobody: the review reflex reads armed PRs only, the coordinator's un-armed clause reads `major` only (gap register G15). #2228/#2240 looked proven only because the crossplane branch had been armed by GitHub while it was still a single-member PR and the group rewrite force-pushed onto it. Majors are untouched: the catch-all below sets `automerge: false` on them, so a grouped major stays un-armed as intended.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["crossplane/crossplane", "cloudflare/cloudflared"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
       "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (docs/renovate.md).",
       "matchManagers": ["nix", "devbox"],
       "enabled": false
