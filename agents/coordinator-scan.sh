@@ -4382,11 +4382,13 @@ EOF_GTHEMES_OPEN
             # re-queue it to `agent/queued` and hand it straight back to dispatch, undoing the human
             # gate it was just given. Excluded here, and from both derivations below, via the same
             # `$done` list the belt's own clears use.
+            # >>>REPLAY:c4c5-selector-run>>>
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
               | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
+            # <<<REPLAY:c4c5-selector-run<<<
             if [ -n "$c4c5_cands" ]; then
               now_s="$(date -u +%s)"
               # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
