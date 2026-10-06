@@ -14,7 +14,12 @@
 # exit 5 (not a refusal — the writes were issued).
 #
 # ROWS. `handoff` is the clean approved world (the constructed sibling of the recorded evidence);
-# `merge-commit-not-content` and `bot-suffix-normalized` pin the two replicated reflex rules;
+# `merge-commit-not-content` / `merge-remote-not-content` / `merge-pr-not-content` pin the merge
+# shape axis (homelab#2181): the updater's "Merge branch 'x'", a seat's "Merge remote-tracking
+# branch 'origin/x' into y" (the live #2046 case), and a GitHub-UI "Merge pull request #N" — all
+# three are non-content, so the handoff proceeds. The first two of those three red on the pre-fix
+# tree (the one-prefix filter counted them as content → refusal); `bot-suffix-normalized` pins the
+# other replicated reflex rule;
 # `approved-without-headings` / `approval-stale` / `not-major-lane` each earn a refusal by one
 # patch; `no-approval` replays the LIVE oracle-fleet#738 recording — the PR the coordinator
 # relabelled by hand with `reviews: []` — and refuses it; `reviews-unreadable` injects a failed

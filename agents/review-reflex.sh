@@ -307,12 +307,21 @@ EOF_C9
         and ([ $required[] | select(. as $r | ($names | index($r)) == null) ] | length) == 0;
     def newest_review_at:
       ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
+    def is_merge:
+      # MERGE COMMITS ARE NOT NEW CONTENT (found live 2026-07-21, oracle-fleet#57: the update-branch
+      # merges kept outdating a valid head approval — re-review → merge → re-review, NINE reviewer
+      # sessions before STEP-0 tripped the breaker). A merge brings no PR-authored diff; CI still
+      # re-runs on the new head via the required check either way.
+      # Classified by its GitHub default message SHAPE, not by one updater phrasing (homelab#2181):
+      # the update-branch "Merge branch x", the agent-authored conflict-resolution "Merge
+      # remote-tracking branch origin/x into y" (the live #2046 case), and "Merge pull request #N".
+      # The same three-prefix set the reviewer-session exit contract uses (homelab#560 round 2) —
+      # one grammar, mirrored. gh pr view/list --json commits exposes no .parents[], so the message
+      # shape is the structural test available on this call.
+      (.messageHeadline // "")
+      | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
     def newest_commit_at:
-      # UPDATER MERGE COMMITS ARE NOT NEW CONTENT (found live 2026-07-21, oracle-fleet#57: the
-      # update-branch merges kept outdating a valid head approval — re-review → merge → re-review,
-      # NINE reviewer sessions before STEP-0 tripped the breaker). A merge brings no PR-authored
-      # diff; CI still re-runs on the new head via the required check either way.
-      ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
+      ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
     def reviewable_again:
       (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
     def bot_approved_head:
@@ -349,7 +358,7 @@ EOF_C9
     # A stateless level-triggered reflex turns any predicate bug into an infinite dispatcher (the
     # 2026-07-12 oracle-fleet#13 loop: 12 duplicate approvals), so the shell trips agent/error
     # instead of dispatching when the counts are impossible for a legitimate pick.
-    | ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max // "") as $head
+    | ([ .commits[]? | select(((.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "))) | not) | .committedDate ] | max // "") as $head
     | ([ .reviews[]?
          | select((.author.login // "") | startswith($bot))
          | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts
