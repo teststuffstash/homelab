@@ -38,6 +38,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
+. "${HERE}/kube.sh"
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -2080,9 +2081,7 @@ EOF
       # = null, and [null] has length 1 — without select(.!=null) every Running ride was
       # invisible to this hold (only Pending pods held the queue), so each tick burned a
       # sonnet deferral session against the launcher belt (found 2026-08-02, issue-96 churn).
-      live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
-          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
-                     | select(. != null)] | length) == 0)] | length')"
+      live="$(live_worker_pod_count "$WIPPODS_JSON")"
       case "${live:-}" in ''|*[!0-9]*) live=0;; esac
       if [ "$live" -ge "$REPO_MAX_WIP" ]; then
         wip_busy=1
