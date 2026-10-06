@@ -25,6 +25,18 @@
 #      `parked-head-approved-no-update` (latestReviews reading non-APPROVED while `reviews[]` holds
 #      the APPROVED at head — the shape that LEAKED, and the non-vacuous pin: it reds on the
 #      pre-#1649 source).
+#      ⚠ #2203: the lane pick's OTHER axis is the oldest member's update OUTCOME. `fifo-pick` is
+#      the head-clears value (the oldest is picked and the younger waits — one update per lane).
+#      `lane-hop-wedged-oldest` is the head-stuck value: the oldest member's `update-branch` 422s
+#      every pass, so `updatedAt` never moves and it re-enters as the pick forever, starving the
+#      lane's younger merge-ready members (live: #2174 sat BEHIND 54h behind a wedged older
+#      member). The fix walks the lane oldest-first and stops at the first SUCCESSFUL update, so a
+#      wedged member cannot hold its lane hostage; the row is RED on the pre-#2203 source (which
+#      took `.[0]` per lane and stopped after the failed attempt). The no-approval-repo shape
+#      (#1896 — a repo whose ruleset requires no approval, where the mechanical classes never get a
+#      bot review) is the `unreviewed-behind-no-update` row: `reviewDecision: ""` with no bot
+#      APPROVED is not merge-ready, so it stays BEHIND. #1896 owns that arm's fix; this family
+#      pins the boundary it must move.
 #   2. unstrand (the CR∧BEHIND crack, narrowed 2026-08-17): armed ∧ BEHIND ∧ CHANGES_REQUESTED,
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
 #      newest homelab-reviewer verdict; unreadable commit/review data HOLDS (rule #6).

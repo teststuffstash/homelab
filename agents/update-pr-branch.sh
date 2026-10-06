@@ -214,31 +214,50 @@ while read -r pr; do
     ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"
   fi
 done <<<"$cands"
-picks="$(jq -r --argjson ready "$ready" '
+# Per-lane ordered candidate lists (oldest first). The lane is the serialization unit (ADR-125
+# (2)): at most ONE update LANDS per lane per pass. But a lane's oldest merge-ready member can be
+# WEDGED — a persistent 422 (a conflict the DIRTY labeler has not yet seen, or a head that keeps
+# racing) leaves `updatedAt` untouched, so it re-enters as the pick on every pass and starves every
+# younger merge-ready member of the same lane indefinitely (homelab#2203: #2174 sat BEHIND 54h
+# behind a wedged older member). The hop below is the non-blocking fix: within a lane, walk the
+# members oldest-first and stop at the first SUCCESSFUL update. A failed attempt landed nothing, so
+# it invalidated no approval and the lane's serialization is intact — the hop only spends the
+# attempt the pass was already going to spend, and still lands at most one update per lane.
+lanes="$(jq -c --argjson ready "$ready" '
   [.[] | select(.number as $n | $ready | index($n) != null)]
   | group_by(.baseRefName // "")
-  | map(sort_by(.createdAt) | .[0])
-  | .[] | "\(.number) \(.headRefOid // "-")"' <<<"$PRS")"
-if [ -n "$picks" ]; then
-  # One update per lane. `while read` over a here-string: a pipe would run the body in a subshell,
-  # which costs nothing today but is the shape that silently loses state the moment this leg keeps
-  # any.
-  # The OUT line is deliberately unchanged: the lane is visible as the SET of picks in one pass
-  # (one line per lane), and re-wording it would have rewritten every expected stream in the
-  # `updater` replay family for no behavioural reason.
-  while read -r pick pick_oid; do
-    [ -n "$pick" ] || continue
-    [ "$pick_oid" != "-" ] || pick_oid=""
-    echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
-    if ! gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
-      ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+  | map(sort_by(.createdAt))' <<<"$PRS")"
+if [ "$(jq 'length' <<<"$lanes")" -gt 0 ]; then
+  # `while read` over a here-string: a pipe would run the body in a subshell, which costs nothing
+  # today but is the shape that silently loses state the moment this leg keeps any.
+  # The FIRST attempt's OUT line is deliberately unchanged: the lane is visible as the SET of
+  # first-attempts in one pass (one line per lane), and re-wording it would have rewritten every
+  # expected stream in the `updater` replay family for no behavioural reason. A HOP emits its own
+  # line, so no pre-#2203 expected stream moves.
+  while IFS= read -r lane; do
+    [ -n "$lane" ] || continue
+    first=1
+    while IFS= read -r member; do
+      [ -n "$member" ] || continue
+      pick="${member%% *}"; pick_oid="${member#* }"
+      [ "$pick_oid" != "-" ] || pick_oid=""
+      if [ "$first" = 1 ]; then
+        echo "updater[$REPO]: updating #$pick (oldest armed+BEHIND, FIFO)"
+      else
+        echo "updater[$REPO]: updating #$pick (lane hop — the lane's older member did not clear)"
+      fi
+      if gh api -X PUT "repos/$REPO/pulls/$pick/update-branch" \
+        ${pick_oid:+-f expected_head_sha="$pick_oid"} >/dev/null; then
+        break   # one update LANDS per lane per pass
+      fi
       # 422 = conflict OR expected_head_sha race (homelab#986). Both are safe to skip: a race
       # preserves the concurrent push's commit; a conflict is caught by the DIRTY labeler (leg 3)
       # on the next pass. Replayed: fixtures/updater `update-fail` row (covers both race and
       # conflict — the script deliberately no longer distinguishes them on 422, homelab#1007).
       echo "updater[$REPO]: update of #$pick failed (422) — skipping; next pass retries"
-    fi
-  done <<<"$picks"
+      first=0
+    done <<<"$(printf '%s\n' "$lane" | tr '|' '\n')"
+  done <<<"$(jq -r '.[] | map("\(.number) \(.headRefOid // "-")") | join("|")' <<<"$lanes")"
 else
   echo "updater[$REPO]: no armed+BEHIND PR to update"
 fi
