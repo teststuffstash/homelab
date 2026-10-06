@@ -421,6 +421,7 @@ is stale, so it cannot drift the way the prose register did.
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `review-pick/behind-cr-remote-merge-held` | actions | - | `agents/review-reflex.sh` | - |
 | `review-pick/behind-first-review-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/required-context-absent-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/required-contexts-present-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
