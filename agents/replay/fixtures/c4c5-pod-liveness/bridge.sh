@@ -18,9 +18,8 @@ cg=""
 gb=""
 infeas_done=""
 c6db_nums=""
-# PODS and PODS_ESCAPED are now bound inside the sentinel region (coordinator-scan.sh),
-# not in the bridge. The sentinel reads from the kubectl world stub directly.
-# KUBECTL is the path to the kubectl stub, KUBE are kubectl flags (empty in fixtures).
+# Bind PODS from the world's kubectl stub
+PODS="$(jq -r '.items[]?.metadata.name' "$REPLAY_WORLD/kubectl/get-pods.json")"
 KUBECTL="kubectl"
 KUBE=""
 ITEM_CLASS_ROWS=""

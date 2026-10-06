@@ -16,8 +16,6 @@
 #                  `[ -z "$PODS" ]` (no pods anywhere). With any pod, the gate is false and selector
 #                  never executes: both issues get no line. After fix: selector checks per-issue
 #                  liveness, so #100 is skipped (has pod) and #101 is included (no pod).
-#   probe-fail     The PODS kubectl probe fails. The error is REPORTED to stderr and the entire
-#                  C4/C5 block is SKIPPED this tick. No selector output, no belt action.
 #
 pins:
   - IL-T16

@@ -4217,7 +4217,7 @@ EOF_GTHEMES_OPEN
             # >>>REPLAY:c4c5-selector>>>
             # Bind PODS and escape for jq inside the sentinel — must be scoped to this if block
             # to avoid affecting fixture extraction with unbound variables (homelab#2305).
-            PODS_ESCAPED="$(printf '%s\n' "$PODS" | sed 's/[\\"\x27]/\\&/g')"
+            PODS_ESCAPED="$(printf '%s\n' "${PODS-}" | sed 's/[\\"\x27]/\\&/g')"
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                | .number as $n
