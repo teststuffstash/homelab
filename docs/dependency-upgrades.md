@@ -550,6 +550,13 @@ depends on it until the next PXE boot) — another reason class 9 is not one cla
 no-human end-state analysis (HA router pair, management network, out-of-band coordinator, what
 remains genuinely human): [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
 
+**The commit-confirm shape, generalized (ruling 2026-10-06): the ⚓ upgrade lease.** When the change's
+cone contains the detector itself — kube-prometheus-stack, a node-by-node substrate rollout — no
+in-cluster alert can judge it. The actor declares the upgrade with a deadline (a PreSync hook, or
+the reconciler), verifies and DELETES the declaration (a PostSync hook), and the management box
+reverts whatever is still declared past its deadline. The box diagnoses nothing; an expired lease
+has one meaning. Fields, hooks, the credential click and the window rule: §Worked case below.
+
 ### 5. Monitoring
 
 A bump is not done when it merges; it is done when nothing broke. What exists and what doesn't:
@@ -609,32 +616,43 @@ at +0.6 GiB on the laptop CP, which is the measured cost per operator minor.
 
 **Why the ADR-149 recipe does not apply unchanged.** The receiver is fed by an Alertmanager route,
 and kube-prometheus-stack IS Alertmanager and Prometheus: a bump that stops the Prometheus
-StatefulSet stops every alert, including the one that would name the bump. The detector has to be
-an ABSENCE read, not a firing alert. The cheap one already exists upstream: the always-firing
-`Watchdog` — routed to `null` today, with NO consumer, while the triage map already leans on one:
-`AlertmanagerClusterDown`, `PrometheusErrorSendingAlertsToAnyAlertmanager` and
-`PrometheusNotConnectedToAlertmanagers` are classified `none` with the comment "Watchdog dead-man
-covers" (`kube-prometheus-stack-triage.yaml`). The G2 shape again: a belt assumed, never wired. Route it to `chart-revert` with a short `repeat_interval` and
-let the receiver treat "no Watchdog for N minutes ∧ a pin-only kube-prometheus-stack merge within
-the window" as the revert trigger, confirmed by its own `GET /-/ready` on the Prometheus and
-Alertmanager Services before it writes a PR (two independent reads, so a receiver restart or a
-CoreDNS blip is not a revert). The receiver's runtime (agent-coordinator ns, ArgoCD, GitHub, the
-token) is outside this chart's cone; its `/metrics` scrape is inside it, which is why the counter
-is not the belt here. FU-302 (the management box's Prometheus-free view) is the SIBLING of this read
-for the box's own gates — a reuse candidate, not the prerequisite.
+StatefulSet stops every alert, including the one that would name the bump. Nothing inside the
+cluster can judge this chart's bump, and no alert-shaped detector can tell "the upgrade broke it"
+from "the disk filled up" (the upstream `Watchdog`, routed to `null` today, would fire on both —
+and the triage map already leans on a Watchdog dead-man that nothing consumes:
+`AlertmanagerClusterDown`, `PrometheusErrorSendingAlertsToAnyAlertmanager`,
+`PrometheusNotConnectedToAlertmanagers` are `none` "because Watchdog covers" — the G2 shape).
 
-**What stays human after all of that:** an operator minor whose CRD schema change is not additive
-(revert cannot downgrade a CRD — ADR-149's consequence holds here with `Delete=false` too), read by
-the lens from the operator changelog; and the grafana subchart major, which is a UI with sqlite-sync
-state and no probe (G5).
+**⚖ Ruling (operator, 2026-10-06): the ⚓ upgrade lease — commit-confirm from the management box.**
+An upgrade declares itself with a deadline; the thing that performed it deletes the declaration
+after verifying; the box reverts whatever is still declared past its deadline. The box never
+diagnoses — an expired lease has exactly one meaning, "this upgrade was not confirmed", which is
+why the detector is a timer and not an alert. The box is outside every cluster cone, including this
+chart's. ADR pending (the primary seat's); the design, as ruled:
 
-**Order that follows:** G16 first (the CRD owner — without it every operator-minor crossing is
-unsupported skew, lens or no lens), G12 second (the re-render rides the Renovate run —
-`postUpgradeTasks` — or a PR job), the Watchdog-absence trigger third (one `TARGETS` row plus the
-absence mode in `chart_revert.py`, drilled on a real patch bump like #2276 → #2279), and only then the
-one `matchPackageNames` line. The packaging-only chart majors (operator minor unchanged) can be
-ruled onto the lens-alone lane before any of it, which is the lever with the best
-operator-minutes return.
+| piece | what | who |
+|---|---|---|
+| the lease | one record per in-flight upgrade in the `responder-window` ConfigMap's namespace (a sibling record, the same read path the apply loop uses for [declared windows](glossary.md)): identity = subject (the chart file or node set) + commit sha + from/to version; ONE decisive field, `expected-end`; `started` is the record's own `creationTimestamp`; `max-end` = `started` + a per-subject cap that `expected-end` may never pass | written by the actor |
+| arm | the Application's **PreSync** hook Job creates the lease when the sync STARTS — the cluster's clock, so ArgoCD's git-poll lag and the box's tick are both outside the window. No sync, no lease, no revert (nothing changed) | the chart's hooks (a third `source` on the Application: a small kustomize dir, two Jobs) |
+| confirm | the **PostSync** hook Job runs the subject's real checks and DELETES the lease. ArgoCD `Healthy` is not the check (the shallow gate, §4). For this chart: Prometheus + Alertmanager `/-/ready`, rule-evaluation failures at zero, `Watchdog` present in the Alertmanager API, operator pod Ready, and (after G16) the CRDs' `operator.prometheus.io/version` equal to the operator image. The Job's image must not depend on the component it verifies (curl/kubectl, never a Prometheus client that needs Prometheus up) | the chart's hooks |
+| renew | a node-by-node rollout (Talos, Kubernetes — the reconciler) cannot know its end at the start: ONE lease, `expected-end` moved forward as each node comes back, never past `max-end`. The box only acts on expiry, so a renewal is invisible to it; the cap is what stops a stuck loop renewing forever | the actor |
+| revert | the box's 5-min loop (the sentinel/apply cadence — `mgmt-pull` is hourly but it is the box's OWN flake, not master) lists leases; for every record with `expected-end` in the past it opens ONE revert PR of the lease's sha — pin-only, `automerge`+`dependencies`, reflex-approved, carrying the `reverted-charts:` line so pin-only-lint's 30-day memory holds Renovate off that version — and records the branch. Not a direct push: the lane's checks still run. Lands between the deadline and the next tick | the box |
+| credential | the ONE operator click: `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab only (ADR-149 rejected the box as actor on this premise; the ruling reverses it) | operator |
+| windows | a declared window HOLDS the apply loop (FU-300); it must NOT hold the lease timer — a confirmed upgrade must never revert after the window closes, and an unconfirmed one must revert whether or not a seat has a window open. The lease is a sibling of the window, not a window: a seat opening a window never arms a revert | rule |
+| scope | kube-prometheus-stack first (the chart that is its own cone); the shape is generic — any chart major, any node rollout. `chart-revert` (ADR-149) stays for argo-workflows until evidence says one actor; its `TARGETS` never gains this chart | — |
+
+What stays human after it: an operator minor whose CRD schema change is not additive (a revert
+cannot downgrade a CRD — ADR-149's consequence holds with `Delete=false` too), read by the lens
+from the operator changelog; and the grafana subchart major (a UI with sqlite-sync state and no
+probe, G5). The one timing hole: a healthy roll that genuinely outlasts `expected-end` reverts — the
+fix is a longer deadline on that subject's record, never a smarter box.
+
+**Order that follows:** (1) the ruling with the best operator-minutes return costs nothing to build
+— chart majors where the operator minor does not move (89, 90) merge on the lens's APPROVED alone;
+(2) G16, the CRD owner — without it every operator-minor crossing is unsupported skew, lens or no
+lens; (3) G12, the re-render rides the Renovate run; (4) the lease: the record + the box's expiry
+loop + the credential click, drilled on a real patch bump the way #2276 → #2279 was; (5) then the one
+`matchPackageNames` line.
 
 ### Gap register — what the class-1/2 wave is finding (2026-10-04 →)
 
