@@ -7,3 +7,6 @@ annotated-glob                    |       |       |     | hold   |
 annotated-escape-still-reported   |       |       |     | escape | path=mcps/riigiteataja/ingest/other.py
 plain-entry                       |       |       |     | hold   |
 whitespace-padded                 |       |       |     | hold   |
+scan-guarded-annotated            |       |       |     | hold   |
+scan-governance-guarded           |       |       |     | hold   |
+conflict-internal-whitespace      |       |       |     | hold   |

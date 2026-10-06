@@ -251,11 +251,17 @@ fp_conflict_strict() (
   _la="$(fp_split_entries "$1")"
   _lb="$(fp_split_entries "$2")"
   [ -n "$_la" ] && [ -n "$_lb" ] || return 1
-  for _a in $_la; do
-    for _b in $_lb; do
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    while IFS= read -r _b; do
+      [ -n "$_b" ] || continue
       fp_pair_conflict "$_a" "$_b" && return 0
-    done
-  done
+    done <<EOF_B
+$_lb
+EOF_B
+  done <<EOF_A
+$_la
+EOF_A
   return 1
 )
 
@@ -273,16 +279,32 @@ fp_conflict() (
   # anything, including a legacy `*` sentinel issue). The `*` sentinel itself normalizes to ""
   # and is NOT exempt — legacy-vs-legacy stays serial exactly as before.
   _fa=""; _fb=""
-  for _a in $_la; do fp_replay_exempt "$_a" || _fa="${_fa}${_a}
-"; done
-  for _b in $_lb; do fp_replay_exempt "$_b" || _fb="${_fb}${_b}
-"; done
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    fp_replay_exempt "$_a" || _fa="${_fa}${_a}
+"
+  done <<EOF_LA
+$_la
+EOF_LA
+  while IFS= read -r _b; do
+    [ -n "$_b" ] || continue
+    fp_replay_exempt "$_b" || _fb="${_fb}${_b}
+"
+  done <<EOF_LB
+$_lb
+EOF_LB
   [ -n "$_fa" ] && [ -n "$_fb" ] || return 1
-  for _a in $_fa; do
-    for _b in $_fb; do
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    while IFS= read -r _b; do
+      [ -n "$_b" ] || continue
       fp_pair_conflict "$_a" "$_b" && return 0
-    done
-  done
+    done <<EOF_B
+$_fb
+EOF_B
+  done <<EOF_A
+$_fa
+EOF_A
   return 1
 )
 
