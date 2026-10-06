@@ -993,7 +993,8 @@ commit, the `regen` files (the upstream alert list + triage map, rendered from t
 LAST body line `reverted-charts: <chart>@<to>` = `pin-only-lint` check (h)'s 30-day memory, so Renovate's
 re-proposal of the reverted version stays red until a newer one exists. Outcomes: `reverted` · `already` ·
 `no_policy` · `not_pin_only` · `conflict` (never forced) · `error` (push/PR/label/arm failed — the lease stays,
-the next tick retries from the ledger). Metrics via the textfile (job `mgmt-node`): `mgmt_lease_active`,
+and the next tick RESUMES where it stopped: a branch already on origin → the PR step, an open PR missing
+its labels or arm → labels + arm; never a rebuild, whose new sha could not be pushed over the branch). Metrics via the textfile (job `mgmt-node`): `mgmt_lease_active`,
 `mgmt_lease_expired`, `mgmt_lease_revert_total{outcome}` (every outcome pre-initialised at 0),
 `mgmt_lease_last_run_timestamp_seconds`, `mgmt_lease_unreadable`. Belts
 (`argocd/resources/mgmt-metrics/upgrade-lease.yaml`): `MgmtLeaseRevertFailed` (`now` — the box refused to

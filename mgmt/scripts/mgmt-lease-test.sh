@@ -44,8 +44,15 @@ gh_api() {  # records every call; answers by GH_MODE
   printf '%s %s %s\n' "$1" "$2" "${3:-}" >>"$GH_LOG"
   case "$1 $2" in
     "GET branches/master") return 1 ;;                       # mgmt_clone falls back to a fetch
-    "GET pulls?state=all&head="*) [ "$GH_MODE" = pr-exists ] && echo '[{"number":77}]' || echo '[]' ;;
-    "POST pulls") echo '{"number":4242,"node_id":"PR_x"}' ;;
+    "GET pulls?state=all&head="*)
+      case "$GH_MODE" in
+        pr-exists)  echo '[{"number":77,"state":"open","node_id":"PR_77","labels":[{"name":"automerge"},{"name":"dependencies"}],"auto_merge":{"merge_method":"squash"}}]' ;;
+        pr-merged)  echo '[{"number":78,"state":"closed","node_id":"PR_78","labels":[],"auto_merge":null,"merged_at":"2026-10-07T00:00:00Z"}]' ;;
+        pr-unarmed) echo '[{"number":79,"state":"open","node_id":"PR_79","labels":[{"name":"dependencies"}],"auto_merge":null}]' ;;
+        *) echo '[]' ;;
+      esac ;;
+    "POST pulls") [ "$GH_MODE" = pr-create-fails ] && { echo "HTTP 502" >&2; return 1; }; echo '{"number":4242,"node_id":"PR_x"}' ;;
+    "POST issues/79/labels") echo '[]' ;;
     "POST issues/4242/labels") echo '[]' ;;
     "POST /graphql") echo '{"data":{}}' ;;
     *) echo "gh_api stub: unexpected $1 $2" >&2; return 1 ;;
@@ -107,7 +114,7 @@ expect reverted-expired-gauge '^1$' "$(metric mgmt_lease_expired .)"
 # 4. expired, a PR for the branch already exists → already (nothing pushed: origin unchanged)
 GH_MODE=pr-exists; BEFORE="$(git -C "$ORIGIN" show-ref | sha256sum)"
 run expired-already-pr 0
-expect already-pr "lease l2: already — PR #77 exists for $BR" "$OUT"
+expect already-pr "lease l2: already — PR #77 is open, labelled and armed for $BR" "$OUT"
 expect already-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
 GH_MODE=none
 
@@ -150,6 +157,39 @@ chmod -R u+w "$ORIGIN"
 expect push-error "lease l7: error — push of $BR FAILED: .*contents:write" "$OUT"
 expect_empty push-error-no-pr "$(grep '^POST pulls' "$GH_LOG" || true)"
 expect push-error-counter '^1$' "$(metric mgmt_lease_revert_total 'outcome="error"')"
+
+# 11. push succeeded, the PR call failed (a 5xx) → error; the NEXT tick must RESUME at the PR step on
+#     the branch already on origin — never rebuild (a new sha could not be pushed over it; #2350 review)
+LEASES="$(jq -nc --argjson l "$(lease l8 argocd/platform/kube-prometheus-stack.yaml "$A" 86.3.2 91.8.0 "$PAST")" '{items:[$l]}')"
+GH_MODE=pr-create-fails
+run pr-create-fails 0
+expect pr-create-fails-error "lease l8: error — branch $BR is on origin but the PR could not be opened: .*HTTP 502.*resumes at the PR step" "$OUT"
+expect pr-create-fails-branch-pushed "refs/heads/$BR" "$(git -C "$ORIGIN" show-ref)"
+PUSHED="$(git -C "$ORIGIN" rev-parse "refs/heads/$BR")"
+GH_MODE=none
+run pr-create-then-succeeds 0
+expect resume-at-pr "lease l8: branch $BR exists on origin with no PR — resuming at the PR, nothing rebuilt" "$OUT"
+expect resume-reverted "lease l8: reverted — PR #4242 opened: kube-prometheus-stack 91.8.0 → 86.3.2, branch $BR, automerge\+dependencies, armed" "$OUT"
+expect resume-branch-unchanged "^$PUSHED\$" "$(git -C "$ORIGIN" rev-parse "refs/heads/$BR")"
+expect resume-one-pr-call '^1$' "$(grep -c '^POST pulls ' "$GH_LOG")"
+expect resume-labelled '"labels":\["automerge","dependencies"\]' "$(grep '^POST issues/4242/labels' "$GH_LOG")"
+expect resume-armed 'enablePullRequestAutoMerge' "$(grep '^POST /graphql' "$GH_LOG")"
+
+# 12. the PR is open but a label/arm call failed on an earlier tick → resume at labels + arm, no push
+GH_MODE=pr-unarmed; BEFORE="$(git -C "$ORIGIN" show-ref | sha256sum)"
+run pr-open-unarmed 0
+expect unarmed-resume "lease l8: PR #79 for $BR is open but not labelled\+armed — resuming there" "$OUT"
+expect unarmed-rearmed "lease l8: reverted — PR #79 re-armed, automerge\+dependencies, armed" "$OUT"
+expect unarmed-labels '"labels":\["automerge","dependencies"\]' "$(grep '^POST issues/79/labels' "$GH_LOG")"
+expect unarmed-arm-node 'PR_79' "$(grep '^POST /graphql' "$GH_LOG")"
+expect unarmed-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
+expect_empty unarmed-no-pr-create "$(grep '^POST pulls' "$GH_LOG" || true)"
+
+# 13. a merged/closed PR for the branch → already
+GH_MODE=pr-merged
+run pr-merged 0
+expect merged-already "lease l8: already — PR #78 exists for $BR \(closed\)" "$OUT"
+GH_MODE=none
 
 echo "mgmt-lease-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

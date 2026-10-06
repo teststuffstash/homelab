@@ -49,7 +49,9 @@
 #   not_pin_only  the lease's commit changed more than the pin (+ keep/regen) — a human reads it
 #   conflict      `git revert` conflicted — never forced, nothing pushed
 #   error         push / PR / label / arm failed, or a read failed mid-revert — the pre-click 403
-#                 lands here; the lease stays, the next tick retries from the ledger
+#                 lands here; the lease stays and the next tick RESUMES where it stopped (a branch
+#                 on origin → the PR step; an open un-armed PR → labels + arm) — never a rebuild,
+#                 whose new sha could not be pushed over the existing branch (#2350's first review)
 # A lease still expired after the tick counts in mgmt_lease_expired (MgmtLeaseExpiredUnreverted).
 #
 # Usage: mgmt/scripts/mgmt-lease.sh    (the mgmt-lease.timer unit). MGMT_SHADOW=1: builds the revert
@@ -175,16 +177,35 @@ revert_lease() {  # <lease-json> <policy-file>
   chart="$(jq -r '.chart // ""' <<<"$row")"; keep="$(jq -r '(.keep // []) | join(" ")' <<<"$row")"; regen="$(jq -r '(.regen // []) | join(" ")' <<<"$row")"
   case "$sha" in *[!0-9a-f]*|'') outcome error "$name" "lease carries no usable sha ('$sha')"; return ;; esac
   sha8="${sha:0:8}"; branch="${BRANCH_PREFIX}${sha8}"
-  # ledger 1: a PR for the revert branch exists (open or merged) — a previous tick owns it
+  # ledger 1: a PR for the revert branch exists — a previous tick owns it. OPEN but un-labelled or
+  # un-armed (a label/arm call failed on that tick) → RESUME at the labels, never rebuild: the
+  # mechanical lane needs both or the PR parks on nobody. Closed/merged → already.
   if [ "${MGMT_SHADOW:-0}" != 1 ]; then
     if ! prs="$(gh_api GET "pulls?state=all&head=${ORG}:${branch}" 2>/dev/null)"; then outcome error "$name" "cannot read the PRs of branch $branch — nothing written"; return; fi
-    if [ "$(jq 'length' <<<"$prs")" != 0 ]; then outcome already "$name" "PR #$(jq -r '.[0].number' <<<"$prs") exists for $branch"; return; fi
+    if [ "$(jq 'length' <<<"$prs")" != 0 ]; then
+      pr="$(jq -c '(map(select(.state == "open")) | first) // (.[0])' <<<"$prs")"
+      num="$(jq -r '.number' <<<"$pr")"; node="$(jq -r '.node_id // empty' <<<"$pr")"
+      if [ "$(jq -r '.state' <<<"$pr")" != open ]; then outcome already "$name" "PR #$num exists for $branch ($(jq -r .state <<<"$pr"))"; return; fi
+      if jq -e '([.labels[]?.name] | index("automerge") != null and index("dependencies") != null) and (.auto_merge != null)' <<<"$pr" >/dev/null; then
+        outcome already "$name" "PR #$num is open, labelled and armed for $branch"; return
+      fi
+      log "lease $name: PR #$num for $branch is open but not labelled+armed — resuming there"
+      label_and_arm "$name" "$num" "$node" "re-armed" && return; return
+    fi
   fi
   # ledger 2: master's pin is no longer the lease's `to` → reverted or bumped again, a stale lease
   if ! mpin="$(pin_at origin/master "$subject")"; then outcome error "$name" "cannot read the pin of $subject at origin/master"; return; fi
   if [ "$mpin" != "$to" ]; then outcome already "$name" "master's $subject pin is $mpin, not the lease's $to — stale lease"; return; fi
   git -C "$REPO" cat-file -e "${sha}^{commit}" 2>/dev/null || { outcome error "$name" "commit $sha is not in the clone (fetch depth?)"; return; }
   if ! why="$(pin_only_commit "$sha" "$subject" "$keep" "$regen" "$from" "$to")"; then outcome not_pin_only "$name" "$why"; return; fi
+  # ledger 3: the branch is already on origin (a previous tick pushed it, then the PR call failed —
+  # a 5xx, a blip, a secondary rate limit). RESUME at the PR step: a rebuilt revert carries a new
+  # committer timestamp = a new sha, and its push would be refused as non-fast-forward on every
+  # later tick — the wedge the first review of this loop named (#2350). Never rebuild what exists.
+  if [ "${MGMT_SHADOW:-0}" != 1 ] && mgmt_git -C "$REPO" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+    log "lease $name: branch $branch exists on origin with no PR — resuming at the PR, nothing rebuilt"
+    open_pr_label_arm "$name" "$branch" "$chart" "$to" "$from" "$sha" "$started" "$exp" "$by" "$reason"; return
+  fi
   # build the revert on a fresh branch off origin/master (the clone is this loop's own)
   git -C "$REPO" checkout -q -B "$branch" origin/master 2>/dev/null || { outcome error "$name" "cannot branch $branch off origin/master"; return; }
   if ! git -C "$REPO" revert --no-edit "$sha" >/dev/null 2>&1; then
@@ -204,19 +225,33 @@ revert_lease() {  # <lease-json> <policy-file>
     outcome error "$name" "push of $branch FAILED: $(printf '%s' "$why" | tr '\n' ' ' | tail -c 200) (pre-click? homelab-sentinel needs contents:write — ADR-150 (5))"; return
   fi
   git -C "$REPO" checkout -q --detach origin/master; git -C "$REPO" branch -q -D "$branch" 2>/dev/null
+  open_pr_label_arm "$name" "$branch" "$chart" "$to" "$from" "$sha" "$started" "$exp" "$by" "$reason"
+}
+# open_pr_label_arm <name> <branch> <chart> <to> <from> <sha> <started> <exp> <by> <reason> — the PR step
+# for a branch that IS on origin (just pushed, or found there). A failure here leaves the branch;
+# the next tick resumes at this step (ledger 3), never at the build.
+open_pr_label_arm() {
+  local name="$1" branch="$2" chart="$3" to="$4" from="$5" sha="$6" started="$7" exp="$8" by="$9" reason="${10}" pr num node
   if ! pr="$(gh_api POST pulls "$(jq -nc --arg t "revert: $chart chart $to → $from (upgrade lease expired)" --arg h "$branch" \
         --arg b "$(pr_body "$chart" "$to" "$from" "$name" "$sha" "$started" "$exp" "$by" "$reason")" '{title:$t, head:$h, base:"master", body:$b}')" 2>&1)"; then
-    outcome error "$name" "branch $branch pushed but the PR could not be opened: $(printf '%s' "$pr" | tr '\n' ' ' | tail -c 200) — next tick re-tries from the ledger"; return
+    outcome error "$name" "branch $branch is on origin but the PR could not be opened: $(printf '%s' "$pr" | tr '\n' ' ' | tail -c 200) — the next tick resumes at the PR step"; return 1
   fi
   num="$(jq -r '.number // empty' <<<"$pr")"; node="$(jq -r '.node_id // empty' <<<"$pr")"
-  [ -n "$num" ] || { outcome error "$name" "PR create returned no number for $branch"; return; }
+  [ -n "$num" ] || { outcome error "$name" "PR create returned no number for $branch — the next tick resumes from the ledger"; return 1; }
+  label_and_arm "$name" "$num" "$node" "opened: $chart $to → $from, branch $branch"
+}
+# label_and_arm <name> <pr-number> <pr-node-id> <what> — labels + auto-merge on an OPEN PR; idempotent
+# (a label already present and an already-armed PR both answer 2xx), so a failed tick resumes here.
+label_and_arm() {
+  local name="$1" num="$2" node="$3" what="$4"
   if ! gh_api POST "issues/$num/labels" '{"labels":["automerge","dependencies"]}' >/dev/null 2>&1; then
-    outcome error "$name" "PR #$num open but the automerge+dependencies labels FAILED — label it by hand"; return
+    outcome error "$name" "PR #$num open but the automerge+dependencies labels FAILED — the next tick resumes here"; return 1
   fi
+  [ -n "$node" ] || { outcome error "$name" "PR #$num open + labelled but its node id is unknown — cannot arm; the next tick resumes here"; return 1; }
   if ! gh_api POST /graphql "$(jq -nc --arg id "$node" '{query:"mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}){clientMutationId}}", variables:{id:$id}}')" 2>/dev/null | jq -e '.errors == null' >/dev/null; then
-    outcome error "$name" "PR #$num open + labelled but auto-merge could NOT be armed — arm it by hand"; return
+    outcome error "$name" "PR #$num open + labelled but auto-merge could NOT be armed — the next tick resumes here"; return 1
   fi
-  outcome reverted "$name" "PR #$num opened: $chart $to → $from, branch $branch, automerge+dependencies, armed"
+  outcome reverted "$name" "PR #$num $what, automerge+dependencies, armed"
 }
 
 lease_main() {
