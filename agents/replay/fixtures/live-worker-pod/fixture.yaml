@@ -19,5 +19,7 @@ name: live-worker-pod
 mode: table
 source: agents/kube.sh
 parts:
+  - file:pre.sh
   - block:live_worker_pod_count
+  - file:post.sh
 rows: rows.psv

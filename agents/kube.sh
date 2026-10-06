@@ -37,6 +37,7 @@ KUBECTL="$(command -v kubectl || true)"
 #
 # Usage: live_worker_pod_count <json-pod-list>
 # Returns: the count of live-agent pods, printed to stdout.
+# >>>REPLAY:live_worker_pod_count>>>
 live_worker_pod_count() {
   printf '%s' "$1" | jq '[.items[]
     | select(.status.phase != "Succeeded" and .status.phase != "Failed")
@@ -52,3 +53,4 @@ live_worker_pod_count() {
     | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
                | select(. != null)] | length) == 0)] | length' 2>/dev/null || echo 0
 }
+# <<<REPLAY:live_worker_pod_count<<<

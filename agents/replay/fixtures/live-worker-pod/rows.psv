@@ -4,13 +4,13 @@
 # THE FIXED ROW: red on base (the launcher counted it; the scan did not), green after (both now use
 # scan semantics: not live).
 #
-# id                 | world | patch | expect
-running-agent-alive  |       |       | 1
-running-agent-terminated-sidecar-held |  |  | 0
-pending-schedulable  |       |       | 1
-pending-unschedulable |      |       | 0
-pending-young        |       |       | 1
-unknown-phase        |       |       | 1
-unset-phase          |       |       | 1
-succeeded-phase      |       |       | 0
-failed-phase         |       |       | 0
+# id                 | world | patch | env | expect                    | params
+running-agent-alive  |       |       |     | running-agent-alive       |
+running-agent-terminated-sidecar-held |  |  |  | running-agent-terminated-sidecar-held |
+pending-schedulable  |       |       |     | pending-schedulable       |
+pending-unschedulable |      |       |     | pending-unschedulable     |
+pending-young        |       |       |     | pending-young             |
+unknown-phase        |       |       |     | unknown-phase             |
+unset-phase          |       |       |     | unset-phase               |
+succeeded-phase      |       |       |     | succeeded-phase           |
+failed-phase         |       |       |     | failed-phase              |
