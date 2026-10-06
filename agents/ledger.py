@@ -92,8 +92,16 @@ STRIKE_RE = re.compile(r"^AGENT_STRIKE: model=(\S+) error_class=(\S+) round=(\d+
 
 # ci-cause marker — mandatory on every ci-red and arbitrate ruling comment (homelab#1286).
 # Format: ci-cause: <job>/<step> class=<class> basis=<basis>
+# `<job>/<step>` is the fleet-fault rule's STABLE identifier, taken from `gh run view --json jobs`
+# — and real step names contain SPACES (`e2e/kind e2e (chart + image + test Garage)`). The capture
+# is therefore non-greedy and anchored on the ` class=` field name, not on `\S+` (homelab#1775,
+# residue of #1350 one group to the right): `\S+` silently dropped 40% of production markers,
+# exactly the ones naming the failing e2e step. Non-greedy (not `.+`) so a step name containing
+# the literal text ` class=` cannot drag the match to a later field — the ` basis=` anchor forces
+# the leftmost ` class=` that is followed by a basis. Pure widening: every marker the old capture
+# accepted still parses to the same three groups.
 # The marker is DATA only — no behavioral read of class/basis exists outside the emitter.
-CI_CAUSE_RE = re.compile(r"^ci-cause: (\S+) class=(\S+) basis=(\S+)", re.MULTILINE)
+CI_CAUSE_RE = re.compile(r"^ci-cause: (.+?) class=(\S+) basis=(\S+)", re.MULTILINE)
 
 # ── Rail vocabulary (homelab#795 — G-A, one taxonomy across ledger + proxy + rules) ────────────
 # The launcher (agent-runtime's agent-session.sh, AGENT_RAIL) emits FOUR values:

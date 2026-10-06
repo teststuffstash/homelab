@@ -1,0 +1,4 @@
+OUT JOB_STEP e2e/kind e2e (chart + image + test Garage)
+OUT CLASS infra
+OUT BASIS observed
+RC 0
