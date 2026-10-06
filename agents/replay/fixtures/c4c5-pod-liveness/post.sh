@@ -5,4 +5,7 @@ if [ -n "${c4c5_cands:-}" ]; then
 else
   printf 'CANDIDATES: (empty)\n'
 fi
+if [ -n "${orphans:-}" ]; then
+  printf 'ORPHANS: %b\n' "$orphans"
+fi
 echo "REACHED: end"

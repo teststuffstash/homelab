@@ -16,6 +16,10 @@
 #                  `[ -z "$PODS" ]` (no pods anywhere). With any pod, the gate is false and selector
 #                  never executes: both issues get no line. After fix: selector checks per-issue
 #                  liveness, so #100 is skipped (has pod) and #101 is included (no pod).
+#   probe-fail     kubectl pods probe returns an error. The BODIES probe succeeds (open PRs list),
+#                  but PODS probe fails. Per rule #6 (never fail INTO a write), the entire C4/C5
+#                  block is HELD: no selector runs, no belt, no redispatch. Expect PROBE_FAILED
+#                  orphan line and no candidates for any unit.
 #
 pins:
   - IL-T16

@@ -6,3 +6,7 @@
 #               selector entirely when ANY pod exists, so both are invisible to C4/C5.
 #               After fix: selector runs, #100 is skipped (has pod), #101 is included (no pod).
 both-issues | both-issues |       |     | both-issues
+# probe-fail = kubectl pods probe fails (IL-T16 contract item 4). Rule #6 (never fail INTO
+#              a write): entire C4/C5 block is HELD, no belt, no selector, no redispatch.
+#              The orphan report line documents the hold with PROBE_FAILED (kubectl pods).
+probe-fail | probe-fail |       |     | probe-fail

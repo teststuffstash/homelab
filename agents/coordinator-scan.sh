@@ -4194,9 +4194,10 @@ EOF_GTHEMES_OPEN
       fi
       # <<<REPLAY:review-flip-belt<<<
       # >>>REPLAY:c4c5-bodies-probe>>>
-      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)" && \
-         PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-               --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
+      bodies_ok=""
+      if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then bodies_ok=1; fi
+      if [ -n "$bodies_ok" ] && PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+            --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
             # The open-PR body probe is guarded the same way its kubectl sibling above is: a probe
             # failure is REPORTED (`⚠ PROBE_FAILED (open PRs)`) and the WHOLE clause is skipped for
             # this repo this tick — it must never fail INTO a wake (rule #6). An empty array is the
@@ -4223,9 +4224,6 @@ EOF_GTHEMES_OPEN
             # issue is evaluated independently. An in-progress issue WITH a live pod for that
             # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
             # >>>REPLAY:c4c5-selector>>>
-            # Bind PODS and escape for jq inside the sentinel — must be scoped to this if block
-            # to avoid affecting fixture extraction with unbound variables (homelab#2305).
-            PODS_ESCAPED="$(printf '%s\n' "${PODS-}" | sed 's/[\\"\x27]/\\&/g')"
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                | .number as $n
@@ -4234,7 +4232,7 @@ EOF_GTHEMES_OPEN
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
-               | select(("'"${PODS_ESCAPED}"'" | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0)'
+               | select((($pods | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0))'
             # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
@@ -4393,7 +4391,7 @@ EOF_GTHEMES_OPEN
             # `$done` list the belt's own clears use.
             # >>>REPLAY:c4c5-selector-run>>>
             [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-              | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\(.updatedAt // "")"')"
@@ -4572,7 +4570,7 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:review-phantom-belt<<<
             # >>>REPLAY:c4c5-derivations>>>
-            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+            v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${c4c5_cleared:-}${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
@@ -4685,7 +4683,7 @@ EOF_GTHEMES_OPEN
               # extra `gh` call: it rides out of the same jq row, base64'd like `ib_rows` does.
               # A body the parser REFUSES holds the issue (rule #6 — a malformed block never
               # dispatches), exactly as the queued lane's `!` column does.
-              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
+              for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg pods "${PODS-}" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
                   --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                   "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                    | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))|\(.body // "" | @base64)"'); do
@@ -4728,7 +4726,7 @@ EOF_GTHEMES_OPEN
             fi
             # <<<REPLAY:c4c5-derivations<<<
           else
-            if BODIES="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json body --jq '[.[].body]' 2>/dev/null)"; then
+            if [ -n "$bodies_ok" ]; then
               orphans="${orphans}[$repo] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)\n"
             else
               orphans="${orphans}[$repo] ⚠ PROBE_FAILED (open PRs) — the C4/C5 open-PR predicate was SKIPPED for this repo this tick; no belt write, no c4c5-redispatch (rule #6)\n"

@@ -1,3 +1,4 @@
-OUT CANDIDATES: 101
+OUT CANDIDATES: (empty)
+OUT ORPHANS: [homelab] ⚠ PROBE_FAILED (kubectl pods) — the C4/C5 block held; no selector, no belt, no redispatch this tick (rule #6)
 OUT REACHED: end
 RC 0
