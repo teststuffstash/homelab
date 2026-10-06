@@ -28,7 +28,7 @@ source: agents/coordinator-scan.sh
 requires:
   - python3
 parts:
-  - block:c4c5-selector
   - file:bridge.sh
+  - block:c4c5-selector
   - block:c4c5-derivations
   - file:post.sh

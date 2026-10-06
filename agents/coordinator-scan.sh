@@ -4214,9 +4214,9 @@ EOF_GTHEMES_OPEN
             # homelab#2305: per-issue liveness moved from repo-wide gate into selector — each
             # issue is evaluated independently. An in-progress issue WITH a live pod for that
             # issue is skipped (not phantom). Without, it may be phantom and eligible for belt.
+            # >>>REPLAY:c4c5-selector>>>
             # Escape PODS for safe use in jq: backslash any special characters.
             PODS_ESCAPED="$(printf '%s\n' "$PODS" | sed 's/[\\"\x27]/\\&/g')"
-            # >>>REPLAY:c4c5-selector>>>
             C4C5_SEL='.[] | (.labels|map(.name)) as $L
                | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                | .number as $n
@@ -4226,7 +4226,7 @@ EOF_GTHEMES_OPEN
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                | select(("'"${PODS_ESCAPED}"'" | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0)'
-            # <<<REPLAY:c4c5-selector>>>
+            # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
             # NOT `C4C5_SEL`. That selector's first filter drops `agent/error`, which is right for
             # the C4/C5 redispatch belt (an errored ride is a human's to un-latch) and WRONG here:
