@@ -8,9 +8,9 @@
 #   Repo A (homelab): issue #329 is a goal child with AGENT_STRIKE: + Resumable branch pushed:
 #                      → decidable: writes homelab#329=fix/issue-329-loop to resumable_branches
 #                      and homelab#329=AGENT_STRIKE to ambig_terminal_type
-#   Repo B (oracle-fleet): issue #329 is ALSO a goal child with AGENT_STRIKE: + Resumable branch pushed:
+#   Repo B (oracle-fleet): issue #329 is ALSO a goal child with AGENT_REPORT: + Resumable branch pushed:
 #                      → decidable: writes oracle-fleet#329=fix/issue-329-oracle to resumable_branches
-#                      and oracle-fleet#329=AGENT_STRIKE to ambig_terminal_type
+#                      and oracle-fleet#329=AGENT_REPORT to ambig_terminal_type
 # Both repos write key …#329=…, colliding on the bare number and distinct under the qualified key.
 # The fu146-resumable-match block asserts each repo's dispatch resolves to its own branch.
 # The observe-terminal-type.sh scripts assert each repo's terminal-type lookup resolves to its own type.
