@@ -4588,7 +4588,7 @@ EOF_GTHEMES_OPEN
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
-                       | ([$prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | .[0] // empty) as $frozen_pr
+                       | ([$prs[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest != null and .mergeStateStatus == "BEHIND" and ([ .statusCheckRollup[]? | select((.conclusion | IN("SUCCESS", "NEUTRAL", "SKIPPED")) | not) ] | length) == 0 and (.body // "" | test("#\($n)\\b")))] | .[0] // empty) as $frozen_pr
                        | if $frozen_pr then "\($n)|\($frozen_pr.updatedAt // "")" else empty end
                 ] | .[]')"
             if [ -n "$review_frozen_cands" ]; then
