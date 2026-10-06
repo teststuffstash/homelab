@@ -1,0 +1,8 @@
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1413-pypi-cache-env --status failure --limit 1 --json databaseId --jq .[0].databaseId
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1413-pypi-cache-env --limit 1 --json databaseId --jq .[0].databaseId
+CALL gh run view 35839762985 --repo teststuffstash/homelab --log-failed
+OUT RUN 35839762985
+OUT LOG 2026-09-23T09:52:21.000Z e2e: opening corpus
+OUT INDEX ci-failure.md  OK
+OUT REACHED: end
+RC 0
