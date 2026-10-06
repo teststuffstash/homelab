@@ -1,0 +1,57 @@
+# prometheus-operator-crds — the OWNER of the ten `monitoring.coreos.com` CRDs (ADR-151, gap G16).
+#
+# Until this Application the CRDs had no owner at all: `kube-prometheus-stack.yaml` syncs with
+# `skipCrds: true` (the 2026-08-04 ArgoCD adoption, one change at a time — its header says why),
+# and Helm's `crds/` directory is INSTALL-ONLY — `helm upgrade` never touches it. So the ten CRDs
+# were written once (2026-06-02, operator v0.91.0) and nothing has applied them since; every
+# operator-minor crossing in the stack chart (86 → 91 = v0.91.0 → v0.94.1, #2256) would run the
+# operator against CRDs it did not ship. Upstream publishes the same `crds/` as its own chart,
+# `prometheus-operator-crds` — one chart major per operator minor (29.0.0 = v0.91.0, 32.0.1 =
+# v0.94.1), which is why this file exists instead of flipping `skipCrds`.
+#
+# The pair moves in ONE Renovate PR: `.github/renovate-global.json` groups this chart with
+# `kube-prometheus-stack` (`groupName: kube-prometheus-stack`, asserted by `devbox run
+# renovate-lane-lint`) — the G11/G13 version-set shape. Renovate's `argocd` manager targets the
+# `targetRevision` below. The box belt (`mgmt/scripts/mgmt-probe.sh` `check_kps_crds`) compares the
+# CRDs' `operator.prometheus.io/version` with the running operator image and FAILs on skew.
+#
+# Failure modes designed out:
+#   • a pruned CRD takes every ServiceMonitor/PrometheusRule and the Prometheus CR with it — so
+#     `prune: false` AND every CRD carries `argocd.argoproj.io/sync-options: Delete=false` (through
+#     the chart's `crds.annotations`), and this Application has NO finalizer: deleting it orphans
+#     the CRDs, never cascades.
+#   • the CRD schemas exceed the client-side `last-applied` annotation limit → ServerSideApply.
+#   • the first sync is the FU-304 control-plane memory event (a CRD apply on the laptop CP;
+#     GOMEMLIMIT absorbed +0.6 GiB for argo-workflows' hook) — the seat merges this file INSIDE a
+#     declared window, and every chart major after it rides the grouped PR the same way.
+#   • sync-wave "0": the CRDs land before the stack chart's wave "1" on a fresh cluster.
+#
+# A lease revert (ADR-150) rides the STACK chart's pin, never this one — a CRD never downgrades.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-operator-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-operator-crds
+    targetRevision: 29.0.0 # = operator v0.91.0, the version the live CRDs already carry (first sync: annotation only)
+    helm:
+      valuesObject:
+        crds:
+          annotations:
+            argocd.argoproj.io/sync-options: Delete=false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: false, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

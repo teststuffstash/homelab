@@ -53,7 +53,7 @@
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file mgmt/scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds substrate
+#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds substrate kps-crds
 #   GITHUB_TOKEN  the read-only PAT the env file already carries for tofu/github — also used to
 #                 authenticate the substrate check's upstream release reads (5000/hr vs 60/hr);
 #                 absent or insufficient falls back to anonymous
@@ -718,6 +718,48 @@ ansible_verdict() {
   fi
 }
 
+# ── check: the prometheus-operator CRDs match the running operator (ADR-151, gap G16) ───────────
+# The ten `monitoring.coreos.com` CRDs are owned by `argocd/platform/prometheus-operator-crds.yaml`
+# and the operator by the kube-prometheus-stack chart; Renovate moves the pair in one grouped PR,
+# but nothing else asserts they AGREE — a CRD sync that failed, a chart major merged outside the
+# group, or a revert of the stack pin alone (a lease revert never downgrades CRDs, ADR-150) all
+# leave the operator running against a schema it did not ship. kube-state-metrics exports no CRD
+# annotations, so this is a kubectl read: every CRD's `operator.prometheus.io/version` must equal
+# the operator image tag (minus the `v`). Skew is a FAIL even when it "works" (additive schemas
+# tolerate it for a while): the point is that the drift is named before the next crossing widens it.
+check_kps_crds() {
+  skip_requested kps-crds && { skipped kps-crds requested "SKIP requested"; return; }
+  local kc="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
+  [ -f "$kc" ] || { skipped kps-crds no-input "no kubeconfig at $kc"; return; }
+  local crds img
+  crds="$(devbox run --quiet -- kubectl --kubeconfig "$kc" get crd -o json 2>&1)" || {
+    failed kps-crds unreachable "kubectl get crd failed: $(printf '%s' "$crds" | tail -1 | head -c 160)"; return; }
+  img="$(devbox run --quiet -- kubectl --kubeconfig "$kc" -n monitoring get deploy kube-prometheus-stack-operator \
+          -o jsonpath='{.spec.template.spec.containers[0].image}' 2>&1)" || {
+    failed kps-crds unreachable "operator Deployment unreadable: $(printf '%s' "$img" | tail -1 | head -c 160)"; return; }
+  kps_crds_verdict "$crds" "$img"
+}
+
+# The verdict, split out so mgmt-probe-test.sh can drive it with captured JSON + an image ref.
+#   $1 = `kubectl get crd -o json`   $2 = the operator container image (`…/prometheus-operator:v0.91.0`)
+kps_crds_verdict() {
+  local crds="$1" img="$2" want rows n skewed
+  want="${img##*:}"; want="${want#v}"
+  case "$want" in [0-9]*.[0-9]*.[0-9]*) ;; *) failed kps-crds unparseable "operator image tag unparseable: $img"; return ;; esac
+  # one "<name> <version>" per monitoring.coreos.com CRD; a CRD without the annotation reads "-"
+  rows="$(printf '%s' "$crds" | jq -r '.items[] | select(.spec.group == "monitoring.coreos.com")
+           | "\(.metadata.name) \(.metadata.annotations["operator.prometheus.io/version"] // "-")"' 2>/dev/null)" || {
+    failed kps-crds unparseable "CRD list is not the JSON shape expected"; return; }
+  n="$(printf '%s\n' "$rows" | grep -c .)"
+  [ "$n" -gt 0 ] || { failed kps-crds missing "no monitoring.coreos.com CRD on the cluster"; return; }
+  skewed="$(printf '%s\n' "$rows" | awk -v w="$want" '$2 != w {printf "%s=%s ", $1, $2}')"
+  if [ -z "$skewed" ]; then
+    passed kps-crds "$n CRDs at operator $want (image $img)"
+  else
+    failed kps-crds skew "operator $want vs CRDs: ${skewed% }"
+  fi
+}
+
 # ── check: every credential the box holds is readable ────────────────────────────────────────────
 # A rotation that half-landed locks the box out of its own job. Read, never print.
 check_creds() {
@@ -913,6 +955,7 @@ case "$MODE" in
     check_ansible
     check_creds
     check_substrate
+    check_kps_crds
     # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the
     # jail's 0.17.5 wrote — package pins unchanged, but the checkout is left dirty (2026-09-13).
     # Put it back so the tree stays "what git says".
