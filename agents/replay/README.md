@@ -420,6 +420,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
+| `review-only-label-combinations` | table | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/behind-first-review-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
