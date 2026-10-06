@@ -170,6 +170,12 @@
       "groupName": "cloudflared"
     },
     {
+      "description": "kube-prometheus-stack is a VERSION SET (ADR-151, gap G16 — docs/dependency-upgrades.md §Version SETS): the stack chart in argocd/platform/kube-prometheus-stack.yaml (`skipCrds: true` since the 2026-08-04 adoption) AND upstream's `prometheus-operator-crds` chart in argocd/platform/prometheus-operator-crds.yaml, which owns the ten monitoring.coreos.com CRDs the stack chart never applies (Helm's crds/ is install-only; they sat at operator v0.91.0 owned by nobody). The CRD chart cuts one major per operator minor (29.0.0 = v0.91.0, 32.0.1 = v0.94.1), so a stack major that crosses an operator minor MUST carry the CRD bump in the same PR — one group, one PR; labels come from the argocd rules (deps-review for patch/minor, the major catch-all for majors). `devbox run renovate-lane-lint` asserts the group arms as one. The first CRD sync is the FU-304 control-plane memory event — the seat merges a crossing inside a window.",
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["kube-prometheus-stack", "prometheus-operator-crds"],
+      "groupName": "kube-prometheus-stack"
+    },
+    {
       "description": "Class 1/2 (charts in argocd/platform, images in argocd/resources) patch/minor → the LLM `deps-review` lane (FU-046): armed, the merge-path review reflex reviews, APPROVED merges, ArgoCD auto-sync is the deploy edge. Not `automerge`: a chart minor re-renders manifests and an image minor runs in prod — there is something to read. Digest bumps take the mechanical rule at the top; majors take the catch-all below (un-armed, `major` — the CRD-carrying charts Argo/Crossplane/cert-manager/ESO/CNPG reach the human lane by update type, IAC-G09).",
       "matchManagers": ["argocd", "kubernetes"],
       "matchUpdateTypes": ["patch", "minor"],
