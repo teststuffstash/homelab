@@ -1,0 +1,35 @@
+# kube-prometheus-stack-lease — the SUPPORT half of the ⚓ upgrade lease for kube-prometheus-stack
+# (ADR-150; docs/dependency-upgrades.md §Worked case): the ServiceAccount, RBAC and the script
+# ConfigMap the chart's PreSync / PostSync hook Jobs run. The Jobs themselves live in hooks/ and
+# are a source of the kube-prometheus-stack Application (argocd/platform/kube-prometheus-stack.yaml)
+# — a hook only runs inside the sync of the Application it belongs to.
+#
+# WHY TWO DIRS. ArgoCD applies a PreSync hook BEFORE every Sync-phase resource of its own
+# Application, ConfigMaps and ServiceAccounts included (docs/user-guide/sync-waves.md "Things to
+# keep in mind": "keep the credentials for your hooks outside the Application"). A hook that
+# mounted a ConfigMap from the kps Application would hang on the first sync (nothing to mount) and
+# run the PREVIOUS script after every edit (a hash-named ConfigMap not yet created). So this dir is
+# its own Application (argocd/platform/kube-prometheus-stack-lease.yaml, sync-wave 0 — before the
+# chart's 1), stable names (no hash suffix: the Jobs reference the ConfigMap by name across two
+# Applications), and the hooks dir carries only the two Jobs.
+#
+# upgrade-lease.sh is a VENDORED COPY of agents/upgrade-lease.sh (kustomize's root-only load
+# restriction forbids ../../../agents); agents/upgrade-lease-test.sh (`devbox run
+# upgrade-lease-test`; its ci.yaml step lands operator-direct, the guarded-file lane) fails when
+# the two copies differ.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - rbac.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: kps-lease-scripts
+    namespace: monitoring
+    files:
+      - upgrade-lease.sh
+      - presync.sh
+      - postsync.sh
