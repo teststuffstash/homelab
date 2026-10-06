@@ -5042,6 +5042,7 @@ EOF_GTHEMES_OPEN
             gh issue edit "$fn" --repo "$slug" --add-label agent/error >/dev/null 2>&1 || true
           fi
         done
+        sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
         # Marker-based idempotency: the first line of the comment is a machine marker carrying
         # the group identity. A repeat tick against an already-actioned fleet strike finds the
         # identical marker and skips the post (same discipline as state-fp:, homelab#244/IL-T26).
