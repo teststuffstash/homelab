@@ -1,0 +1,4 @@
+CALL gh pr view 1104 --repo teststuffstash/homelab --json comments,commits,reviews,updatedAt
+OUT UNIT changes-requested|homelab|pr-1104
+OUT REACHED: end
+RC 0

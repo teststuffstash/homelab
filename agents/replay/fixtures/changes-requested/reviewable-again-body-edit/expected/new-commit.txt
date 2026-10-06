@@ -1,4 +1,4 @@
-CALL gh pr view 1102 --repo teststuffstash/homelab --json comments,commits,reviews,updatedAt,bodyLastEditedAt
+CALL gh pr view 1102 --repo teststuffstash/homelab --json comments,commits,reviews,updatedAt
 OUT ORPHAN [homelab] ⏳ changes-requested held (re-review pending — round pushed cccc1111):
 OUT ORPHAN   PR #1102
 OUT REACHED: end
