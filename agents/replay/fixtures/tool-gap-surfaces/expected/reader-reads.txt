@@ -1,0 +1,5 @@
+OUT reader-rc: 0
+OUT reader-surfaces: issue comments, PR bodies, PR review bodies
+OUT reader-reads: {{surface}}
+OUT emitter-wired: yes
+RC 0

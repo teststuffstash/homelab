@@ -96,9 +96,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > **Name your tool gaps; never leave a capability demand in prose.** When a NAMED diagnostic or
 > tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked
 > fetch — and its absence changed what you could verify, emit ONE structured line in your session's
-> normal output surface (issue comment / report): `TOOL_GAP: <tool-or-verb> — <what it was needed
-> for, one clause>`. Anchor it like `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the
-> line, never a substring — once per session per tool, and never as a request for the grant itself:
+> normal output surface (the surfaces the janitor's inventory reads — §The janitor tick, sweep 6):
+> `TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>`. Anchor it like
+> `AGENT_STRIKE:`/`AGENT_INFEASIBLE:` — first characters of the line, never a substring — once per
+> session per tool, and never as a request for the grant itself:
 > evidence, not lobbying. The janitor's daily tick aggregates these into the operator's inventory
 > (§The janitor tick, sweep #6); a gap already ruled out stays listed with its ruling.
 >
@@ -679,10 +680,22 @@ the product:
    name it a BLOCKING finding in the report headline. Your write tier is unchanged — inert
    drafts only; the edge + the blocking-park surfaces carry the urgency to the human.
 6. **Tool-gap inventory (TOOL_GAP, homelab#536)** — the capability-demand reader. Aggregate the
-   session-issued `TOOL_GAP:` marker lines across the stack's repos (issue comments + PR bodies,
-   trailing ~30d) into a `tool × count × sample-need` inventory, so the operator reads demand
-   instead of prose archaeology. Seed the first report from the known prose record, and keep a gap
-   already RULED listed with its ruling — the point is visibility, not re-litigation:
+   session-issued `TOOL_GAP:` marker lines across the stack's repos (the surfaces declared on the
+   `TOOL_GAP_SURFACES:` line below, trailing ~30d) into a `tool × count × sample-need` inventory,
+   so the operator reads demand instead of prose archaeology. Seed the first report from the known
+   prose record, and keep a gap already RULED listed with its ruling — the point is visibility,
+   not re-litigation:
+
+   **The channel set is declared ONCE, on the line below** — the reviewer's emitter contract
+   (`agents/reviewer-session.sh`) reads this line at dispatch time and interpolates it, so the
+   emitter and this reader can never disagree again (homelab#1776). A marker written to a PR
+   **review body** counts: the reviewer lane's filings land there, and reading only issue comments
+   and PR bodies left 13 real filings per ~30d unread (the ADR-122 (3) class one layer down — one
+   grammar, two surfaces, an emitter and a reader that never agreed which surface counts). Any
+   other restatement of the surfaces — including the launcher's janitor `RUN_CMD` summary in
+   `agents/coordinator-session.sh` — is a summary this line supersedes.
+
+   TOOL_GAP_SURFACES: issue comments, PR bodies, PR review bodies
    - `talosctl` — the PodSigkilled family (#63/#65/#68/#100/#101/#153/#472) — **ruled
      out-of-scope by construction**: the agent image carries no devbox and node-level truth (Talos
      dmesg, machine config) is unreachable by any in-cluster agent whatever its RBAC
