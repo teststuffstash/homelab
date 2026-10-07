@@ -1,0 +1,61 @@
+[
+{
+"number": 2402,
+"title": "revert: chore: devbox update (auto-rollback)",
+"headRefName": "revert-lock-aaaaaaaa",
+"mergedAt": "2026-10-12T03:50:00Z",
+"mergeCommit": {
+"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+},
+"files": [
+{
+"path": "devbox.lock"
+}
+]
+},
+{
+"number": 2401,
+"title": "docs: a README touch",
+"headRefName": "fix/readme",
+"mergedAt": "2026-10-12T03:40:00Z",
+"mergeCommit": {
+"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+},
+"files": [
+{
+"path": "README.md"
+}
+]
+},
+{
+"number": 2400,
+"title": "chore: devbox update \u2014 MAJOR bump (align toolchain lock)",
+"headRefName": "devbox-update",
+"mergedAt": "2026-10-12T03:30:00Z",
+"mergeCommit": {
+"oid": "0123456789abcdef0123456789abcdef01234567"
+},
+"files": [
+{
+"path": "devbox.lock"
+}
+]
+},
+{
+"number": 2399,
+"title": "chore: devbox update (align toolchain lock) + fixture",
+"headRefName": "devbox-update-adapted",
+"mergedAt": "2026-10-12T03:10:00Z",
+"mergeCommit": {
+"oid": "cccccccccccccccccccccccccccccccccccccccc"
+},
+"files": [
+{
+"path": "devbox.lock"
+},
+{
+"path": "agents/replay/fixtures/x/fixture.yaml"
+}
+]
+}
+]

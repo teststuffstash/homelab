@@ -4,7 +4,10 @@
 # "unknown arguments" (gh's --jq takes only the expression), swallowed by `2>/dev/null || true`
 # into "no candidate". The contract pinned here: ONE `gh pr list` call whose --jq carries the
 # cutoff LITERALLY (the CALL line is the pin — the --arg form is a different call and reds),
-# and the candidate's number / merge SHA / title extracted from what gh printed.
+# and the candidate's number / merge SHA / title extracted from what gh printed. 2026-10-07: the
+# call line widened once — the lock shape (a merge whose every file is a devbox.lock) joins the
+# workflow-touching merges as a candidate (class 7 majors armed, docs/dependency-upgrades.md §2
+# Review); the sibling fixture workflow-pin-revert-lock-candidate pins the lock case.
 name: workflow-pin-revert-candidate
 mode: actions
 source: agents/coordinator/deploy-revert-argo.yaml

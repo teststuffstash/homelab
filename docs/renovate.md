@@ -59,6 +59,12 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   exist; they run in prod), major base-image changes. These carry `deps-review`, arm
   auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the
   harmless ones (→ auto-merge) and requests changes on the rest (→ a worker adapts the code). No human.
+- **devbox lock majors (class 7) are ARMED with the `major` label kept (2026-10-07,
+  [`dependency-upgrades.md`](dependency-upgrades.md) §2 Review).** CI on the PR proves the toolchain
+  before the merge, the reflex's reviewer runs the migration lens and its APPROVED completes the merge;
+  the post-merge half is the `workflow-pin-revert` lock shape + `pin-only-lint` check (i). The one
+  lock major left un-armed for a human is a `HUMAN_PACKAGES` crossing (opentofu — the state-format
+  owner a lock revert cannot read back); the body's `lock-lane:` line names the lane.
 - **GitHub Actions bumps — every type, majors included — ride the grouped mechanical lane (ADR-141,
   amended 2026-09-27).** One `github-actions` PR per repo per wave, `automerge` label, the reflex
   approves, CI on the bumped head is the proof (a `pull_request` workflow runs the PR's own file);
@@ -200,6 +206,10 @@ Safe: no duplication, no churn, nothing auto-acts on it.
   hits) — alignment a per-repo Renovate bump can't give. The PR body carries a second section —
   same-major downgrades + compatibility-line moves of python3/opentofu/kubectl/openssl — that the
   migration lens answers line by line; it informs, never un-arms (G17, ADR-141 as amended 2026-10-06).
+  A lock MAJOR is armed too (`major` kept, the lens's APPROVED completes the merge; opentofu majors
+  excepted — §"The automerge vs review split"); a reverted lock version is refused by `pin-only-lint`
+  check (i) for 30 days, which holds the WHOLE weekly PR red — the lever out is a `devbox.json` pin of
+  that one package (`"<pkg>": {"version": "<x.y.z>"}`), dropped once nixpkgs moves on.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
