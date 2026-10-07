@@ -23,3 +23,9 @@ requires:
 parts:
   - file:bridge.sh
   - block:reviewer-touches-check
+# curl reworded CURLE_FILE_COULDNT_READ_FILE (37) between 8.17 and 8.22 ("Couldn't open file" ->
+# "Could not open file"). This fixture pins the review lane's FAIL-OPEN behaviour, never curl's
+# own message text, so both known wordings normalise to the recorded canonical form. The recorded
+# assertion (expected/actions.txt) is deliberately NOT edited — it stays byte-identical.
+scrub:
+  - "s/Could not open file/Couldn't open file/"
