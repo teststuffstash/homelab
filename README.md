@@ -23,7 +23,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | Host | IP | Role |
 |---|---|---|
 | OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
-| Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
+| Proxmox `pve` (X99/Xeon, 128GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | Backup Garage LXC (CTID 220) | 192.168.2.73 | Longhorn backup target — single-node Garage S3 (FU-299) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
