@@ -21,6 +21,11 @@
 # WHAT IT ASSERTS ON. The ACTION STREAM — the calls a clause makes and the lines it emits — never
 # its internal variables. A clause stays refactorable; only its observable behaviour is pinned.
 set -u
+# SIGPIPE ignored for every clause (inherited across exec): a `printf | grep -q/-m1` writer then
+# reports "printf: Broken pipe" on stderr — which the replay captures — instead of dying silently.
+# The GitHub runner already runs this way, so the class flaked there on timing alone (master CI
+# 37668796169, 2026-10-07); here every run sees it, and scan-guarded/remote-guarded-large pins it.
+trap '' PIPE
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
