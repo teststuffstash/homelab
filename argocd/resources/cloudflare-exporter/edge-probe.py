@@ -74,6 +74,8 @@ HEADERS = [
     "# TYPE cloudflare_edge_rate_limit_events_total counter",
     "# HELP cloudflare_edge_firewall_events_host_action_source_total Cumulative firewall events by zone, host, action and source (the product/phase that acted: firewallCustom, firewallManaged, rateLimiter, securityLevel, bic, ...).",
     "# TYPE cloudflare_edge_firewall_events_host_action_source_total counter",
+    "# HELP cloudflare_edge_firewall_events_host_action_source_rule_total The same events split further by the rule that acted (rule_id = Cloudflare ruleId, rule = its description). `source` alone cannot tell the managed ruleset's CVE signatures from its AI-bot rule.",
+    "# TYPE cloudflare_edge_firewall_events_host_action_source_rule_total counter",
     "# HELP cloudflare_edge_client_ip_retention_seconds_dataset How far back Cloudflare serves a dataset that carries the visitor IP (settings.notOlderThan), per zone and dataset. Refreshed hourly; holds its last value between refreshes.",
     "# TYPE cloudflare_edge_client_ip_retention_seconds_dataset gauge",
     "# HELP cloudflare_edge_probe_ok 1 when the edge poll succeeded for the zone this poll. 0 or absent means the counters above are STALE, not safe.",
@@ -98,6 +100,7 @@ _totals_req = {}     # (zone, host, status) -> cumulative requests
 _totals_cached = {}  # (zone, host)         -> cumulative cache-served requests
 _totals_fw = {}      # (zone, host, action) -> cumulative firewall events (every action)
 _totals_fw_src = {}  # (zone, host, action, source) -> the same, split by the acting product
+_totals_fw_rule = {}  # (zone, host, action, source, rule_id, rule) -> the same, split by rule
 _buckets = {}        # dedupe: bucket key -> (count already counted, first-seen epoch)
 _retention = {}      # (zone, dataset) -> notOlderThan seconds, for client-IP datasets
 _settings_at = {}    # zone id -> epoch of its last successful settings read
@@ -131,6 +134,7 @@ def _reset_totals():
     _totals_cached.clear()
     _totals_fw.clear()
     _totals_fw_src.clear()
+    _totals_fw_rule.clear()
     _buckets.clear()
     _retention.clear()
     _settings_at.clear()
@@ -251,6 +255,8 @@ def graphql_query(zone_tag, start, end):
                 clientRequestHTTPHost
                 action
                 source
+                ruleId
+                description
               }
             }
           }
@@ -349,6 +355,24 @@ def collect(lines, fetch=None, zone_ids=None, fetch_settings=None):
                 label_key = (zone_name, host, action, source)
                 _totals_fw_src[label_key] = _totals_fw_src.get(label_key, 0) + delta
 
+            # And by the rule that acted. `firewallManaged` is the WHOLE managed WAF — the AI-bot
+            # rule and every CVE signature alike (2026-10-07: a contract alert keyed on `source`
+            # fired on wp-config.php scanners). Own bucket key, so the series above stay unchanged.
+            rule_buckets = {}
+            for row in firewall_rows:
+                key = (row.get("datetime", ""),
+                       row.get("clientRequestHTTPHost", "unknown"),
+                       row.get("action", "unknown"),
+                       row.get("source") or "unknown",
+                       row.get("ruleId") or "unknown",
+                       row.get("description") or "")
+                rule_buckets[key] = rule_buckets.get(key, 0) + 1
+            for (stamp, host, action, source, rule_id, rule), count in sorted(rule_buckets.items()):
+                delta = _accumulate(("fwrule", zone_name, stamp, host, action, source, rule_id, rule),
+                                    count, now)
+                label_key = (zone_name, host, action, source, rule_id, rule)
+                _totals_fw_rule[label_key] = _totals_fw_rule.get(label_key, 0) + delta
+
         except Exception as exc:
             failed += 1
             _errors += 1
@@ -391,6 +415,10 @@ def collect(lines, fetch=None, zone_ids=None, fetch_settings=None):
         lines.append(metric("cloudflare_edge_firewall_events_host_action_source_total",
                             {"zone": zone, "host": host, "action": action, "source": source},
                             value))
+    for (zone, host, action, source, rule_id, rule), value in sorted(_totals_fw_rule.items()):
+        lines.append(metric("cloudflare_edge_firewall_events_host_action_source_rule_total",
+                            {"zone": zone, "host": host, "action": action, "source": source,
+                             "rule_id": rule_id, "rule": rule}, value))
     for (zone, dataset), value in sorted(_retention.items()):
         lines.append(metric("cloudflare_edge_client_ip_retention_seconds_dataset",
                             {"zone": zone, "dataset": dataset}, value))
@@ -526,12 +554,26 @@ _FLIPPED_FIREWALL = [
         "clientRequestHTTPHost": "minutark.ee",
         "action": "block",
         "source": "firewallManaged",
+        "ruleId": "eb4f2dedc16c49f9bf27a5170989fb0f",
+        "description": "Block AI bots on ad pages",
     },
     {
         "datetime": "2026-09-02T18:50:00Z",
         "clientRequestHTTPHost": "minutark.ee",
         "action": "block",
         "source": "firewallManaged",
+        "ruleId": "eb4f2dedc16c49f9bf27a5170989fb0f",
+        "description": "Block AI bots on ad pages",
+    },
+    # Recorded 2026-10-07: the SAME source, a different rule — the managed ruleset's CVE signature
+    # blocking a wp-config.php scanner. The case the rule split exists to tell apart.
+    {
+        "datetime": "2026-09-02T18:50:00Z",
+        "clientRequestHTTPHost": "minutark.ee",
+        "action": "block",
+        "source": "firewallManaged",
+        "ruleId": "9ce4e284ff2a486aaa37d642bff5a079",
+        "description": "Wordpress - Broken Access Control, File Inclusion",
     },
 ]
 
@@ -759,6 +801,9 @@ def self_test():
     assert not any(l.startswith("cloudflare_edge_firewall_events_host_action_source_total{")
                    for l in body.splitlines()), \
         "quiet state must emit no firewall-source data series"
+    assert not any(l.startswith("cloudflare_edge_firewall_events_host_action_source_rule_total{")
+                   for l in body.splitlines()), \
+        "quiet state must emit no firewall-rule data series"
 
     # 2. Flipped fixture → traffic with cache misses and rate-limit events.
     flipped = _exposition(_FLIPPED_REQUESTS, _FLIPPED_FIREWALL)
@@ -770,9 +815,12 @@ def self_test():
         'cloudflare_edge_cached_requests_total{host="minutark.ee",zone="minutark.ee"} 100',
         'cloudflare_edge_cached_requests_total{host="mcp.minutark.ee",zone="minutark.ee"} 0',
         'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
-        'cloudflare_edge_rate_limit_events_total{action="block",host="minutark.ee",zone="minutark.ee"} 2',
+        'cloudflare_edge_rate_limit_events_total{action="block",host="minutark.ee",zone="minutark.ee"} 3',
         'cloudflare_edge_firewall_events_host_action_source_total{action="rate_limit",host="mcp.minutark.ee",source="rateLimiter",zone="minutark.ee"} 3',
-        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 2',
+        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 3',
+        'cloudflare_edge_firewall_events_host_action_source_rule_total{action="block",host="minutark.ee",rule="Block AI bots on ad pages",rule_id="eb4f2dedc16c49f9bf27a5170989fb0f",source="firewallManaged",zone="minutark.ee"} 2',
+        'cloudflare_edge_firewall_events_host_action_source_rule_total{action="block",host="minutark.ee",rule="Wordpress - Broken Access Control, File Inclusion",rule_id="9ce4e284ff2a486aaa37d642bff5a079",source="firewallManaged",zone="minutark.ee"} 1',
+        'cloudflare_edge_firewall_events_host_action_source_rule_total{action="rate_limit",host="mcp.minutark.ee",rule="",rule_id="unknown",source="rateLimiter",zone="minutark.ee"} 3',
         'cloudflare_edge_probe_ok{zone="minutark.ee"} 1',
     ):
         assert sample in body, f"missing sample: {sample}\n--- exposition ---\n{body}"
@@ -786,7 +834,8 @@ def self_test():
         'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",zone="minutark.ee"} 42',
         'cloudflare_edge_requests_total{host="minutark.ee",status="200",zone="minutark.ee"} 100',
         'cloudflare_edge_rate_limit_events_total{action="rate_limit",host="mcp.minutark.ee",zone="minutark.ee"} 3',
-        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 2',
+        'cloudflare_edge_firewall_events_host_action_source_total{action="block",host="minutark.ee",source="firewallManaged",zone="minutark.ee"} 3',
+        'cloudflare_edge_firewall_events_host_action_source_rule_total{action="block",host="minutark.ee",rule="Block AI bots on ad pages",rule_id="eb4f2dedc16c49f9bf27a5170989fb0f",source="firewallManaged",zone="minutark.ee"} 2',
     ):
         assert sample in twice, (
             "re-polling an already-counted bucket changed its total — dedupe is broken.\n"
