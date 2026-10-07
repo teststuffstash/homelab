@@ -118,10 +118,10 @@ classes:
     proof_head_prefixes: ["devbox-update"]
     proof_paths: ["devbox.lock"]
     proposer: {status: ok, text: "the weekly synchronized `devbox-update.yaml` — one job re-resolves EVERY repo's lock together, one PR per repo (the model other classes must match, #2014)"}
-    merge_gate: {status: ok, text: "`automerge`+`dependencies` → reflex → CI-green; a major in the resolved set relabels the PR `major` and disarms it (scripts/devbox-update.sh)"}
+    merge_gate: {status: ok, text: "`automerge`+`dependencies` → reflex → CI-green; a major in the resolved set relabels the PR `major` and KEEPS it armed (2026-10-07, §2 Review — the migration lens's APPROVED completes the merge); only a `HUMAN_PACKAGES` major (opentofu, the state-format owner) disarms it for a human (scripts/devbox-update.sh `lock_lane`)"}
     deploy_edge: {status: ok, text: "self-deploying for CI and the jail (`devbox run` reads the lock); the agent-base image rebuilds weekly (class 3 carries the pin)"}
     detector: {status: gap, text: "CI on the PR is the only check; nothing compares the jail's, the runner's and the worker image's resolved versions (the #2014 version-set gap; FU-240 for the box↔jail devbox skew)"}
-    revert: {status: ok, text: "`git revert` of the lock — nothing else references the store paths"}
+    revert: {status: ok, text: "`git revert` of the lock — nothing else references the store paths; mechanised 2026-10-07 as the `workflow-pin-revert` lock shape (`revert-lock-<sha8>`, `reverted-locks:` memory → pin-only-lint check (i)), drill pending (§Next steps 10)"}
     canary: {status: gap, text: "none — every repo moves in the same weekly pass by design (alignment over caution)"}
 
   - id: 8

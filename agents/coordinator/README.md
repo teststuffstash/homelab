@@ -1508,18 +1508,23 @@ set = deploy-atomic; the meta-11 paired-rolls rule).
 
 The weekly `devbox update` (`devbox-update.yaml`, docs/renovate.md) opens a bump PR per repo. A **non-major** bump arms auto-merge and
 rides the normal reflex track — you never see it. A **MAJOR** bump (e.g. `kubernetes-helm 3 → 4`) is
-different: `devbox-update.sh` labels it **`major`** and **deliberately does NOT arm auto-merge**, because
-a major crossing needs a human to merge *after* the machine has done its homework. **Arming is the
-boundary** — the review reflex only touches armed PRs, so an un-armed `major` PR is invisible to it and
-lands squarely in your lap. Own it end-to-end; do **not** hand-dispatch it through the reflex path.
+labelled **`major`** and, since 2026-10-07 (docs/dependency-upgrades.md §2 Review), **ARMED too** — the
+reflex's reviewer runs the migration lens by the label and its APPROVED completes the merge; you never
+see it either. The ONE lock major `devbox-update.sh` leaves **un-armed** is a crossing by a
+`HUMAN_PACKAGES` member (opentofu — the state-format owner no lock revert can undo; the body's
+`lock-lane: human — …` line says so), because that one needs a human to merge *after* the machine has
+done its homework. **Arming is the boundary** — the review reflex only touches armed PRs, so an un-armed
+`major` PR is invisible to it and lands squarely in your lap. Own it end-to-end; do **not** hand-dispatch
+it through the reflex path.
 
 The PR is typically **red at birth** (the major breaks CI — that's the point, CI caught it). Drive it
 like an `agent-fix` issue, but PR-first and keyed on the `major` label:
 
 1. **List** open PRs labelled `major` (across your stack's repos) that are not yet `major/awaiting-human`
-   **and are NOT armed** — an armed `major` (a GitHub Actions major, ADR-141) is the reflex's: the
-   reviewer's lens is its merge gate and the FU-1990 chain its rollback; never touch it (the scan's
-   major clause already keys on `autoMergeRequest == null`).
+   **and are NOT armed** — an armed `major` (a GitHub Actions major, ADR-141; a devbox lock major since
+   2026-10-07) is the reflex's: the reviewer's lens is its merge gate and the FU-1990 chain (the
+   `workflow-pin-revert` lock shape for a lock) its rollback; never touch it (the scan's major clause
+   already keys on `autoMergeRequest == null`).
    The scan's `unarmed-major` unit brings you EVERY state of such a PR — red at birth, `CHANGES_REQUESTED`
    (Renovate-authored: the changes-requested clause never sees it), pushed-but-not-re-reviewed, green +
    APPROVED — debounced on the homelab#198 state fingerprint, so the ride you are on is the one this

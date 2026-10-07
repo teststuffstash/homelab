@@ -12671,3 +12671,48 @@ updates or reverts as much as possible — mechanical revert or a responder."
   apostrophe inside the jq string); the `pr-wait-test` flake = clause replay `scan-guarded` family,
   `printf | grep -m1` broken pipe on a long body (G17 lane's read, unfixed); zsh `$K` word-split bit a poll loop
   again (memory `jail-ops-gotchas`).
+
+## 2026-10-07 evening — G17 proven live: #2260 closed, devbox-update re-dispatched → #2362 (seat)
+
+- **Operator read:** sentinel click done; #2260 (10-05 run) predated G17 (#2344) — its body had no
+  downgrade/line-move section and the lens never mentioned openssl 3.6.0→3.5.8; a Monday re-run would
+  force-push the same branch and drop the worker's curl fix. Once merged, master sits on 3.5.8 and the
+  downgrade row never shows live again → **closed #2260, `gh workflow run devbox-update.yaml` 17:41Z**
+  (run 37661055974, full 8-repo matrix).
+- **#2362 (17:43Z):** body carried the G17 section on real data — openssl downgrade + kubectl 1.36.3→1.37.1,
+  opentofu 1.12.5→1.13.1, python3 3.12.8→3.14.7. Red at birth on the one curl-37 fixture (712/713, the
+  #2262 recurrence). Lens round 1 (18:16Z) answered every line AND asked for a wording-TOLERANT pin (a flip
+  fails on master's curl 8.17); worker 9e26b4f (deepseek-v4.1-flash, goose) added a `scrub:` rule to the
+  fixture, `expected/` untouched; CI green; lens APPROVED 18:56Z (four headings, each move under Platform
+  compatibility); **major-handoff parked `major/awaiting-human` ~19:0xZ** — operator merges. G17 row → PROVEN.
+- **Matrix:** openrouter-operator job failed on a GitHub GraphQL 502 at `gh pr edit` AFTER the push — #87 born
+  label-less/un-armed (the G15 invisible shape, transient cause); `gh run rerun --failed` recovered it
+  (`automerge,dependencies`, ARMED). The other six repos clean.
+- Operator ran pve maintenance in parallel from 18:0xZ — no stall observed on the ARC-hosted CI or the rides.
+- **Operator design read → ruling → #2369 (merged ~20:1xZ): class-7 (devbox lock) MAJORS ARM.** "Why is this
+  PR for my approval? Not possible to detect and revert?" — the human lane was a pre-ADR-141 default
+  (`devbox-update.sh` "majors need a human — FU-022"), never re-ruled; two lens rides found only N/A. Blast
+  radius read consumer by consumer (CI proves pre-merge; runner-image is the one push-only consumer → the
+  FU-1990 chain; jail = human by nature; worker image = ride belts); the ONE one-way door is opentofu's
+  state stamp → `HUMAN_PACKAGES` keeps its majors human. Operator correction on the form: **no ADR
+  amendment — the ADR points at the doc, the ADR file is measured oversized** (memory
+  `adr-pointer-not-implementation`). Built: `lock_lane` + `lock-lane:` body line (5 test cases), the
+  `workflow-pin-revert` LOCK shape (`revert-lock-<sha8>`, `reverted-locks:` from the clone; fixture
+  `workflow-pin-revert-lock-candidate`, the candidate fixture's CALL line edited with ADR-103 disclosure),
+  `pin-only-lint` check (i) (4 cases), docs (§2 Review, §Last proven ❌×2, §Next steps 10, classes.yaml,
+  renovate.md, lens brief, coordinator README, merge-path, design Part 5). Gate-change lens APPROVED 19:46Z.
+  Proofs deferred: the next lock major (lane) + a drill (chain).
+- **#2354 (Renovate `major-kube-prometheus-stack` group PR) CLOSED by the seat on the operator's call, branch
+  deleted:** it proposed kps 91.8.2 + CRDs 32.0.1, both already on master (#2256 + the seat's 91.8.2 bump) along
+  with the AlertmanagerClusterFailedPeers triage — the operator had armed it after it went `merge-conflict`
+  (20:00Z, the updater's 422). No clause could move it: the worker's adaptation commit stops Renovate's rebase,
+  the rebase-tick is report-only on an adapted branch, the unarmed-major ride excludes armed + awaiting-human,
+  and `argocd/platform/**` would still need a codeowner review. Not recreated: Renovate proposes only newer.
+- **Wind-down (operator: "wind down when this finishes"):** #2362 merged by the operator 20:11Z (44d3e2f9) — the new
+  lock's two post-merge consumers both GREEN: `runner-image` rebuild (run 37680131369, the lock revert chain's
+  one live trigger) and master `ci`. Lock on master: argo-workflows 4.0.5, openssl 3.5.8, opentofu 1.13.1 (the
+  box's first main-root apply from here stamps state 1.13 — forward-only, the lens's named consequence). Open
+  for the next session: the ADR-150 revert-half drill on the next pin-only kps bump, step (5) the kps-major
+  `matchPackageNames` line, the §Next steps 10 proofs (next lock major arms; lock revert drill), the Goal #2273
+  production-leg verdict. Bookkeeping pushed once at wind-down (this push).
+
