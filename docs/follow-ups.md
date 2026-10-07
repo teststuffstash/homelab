@@ -494,6 +494,8 @@ the block needs pruning, not more headings.
       consumer spends (no such series yet) (scan vs session vs reflex), then decide the lever (doorbell debounce per stack,
       scan query batching, or a separate App/installation per stack). **2026-09-25 (operator):**
       renovate.yaml's org-wide `{"repo":"all"}` ring removed meanwhile. Relates FU-125, ADR-094.
+      **2026-10-07 18:02Z: 0 again** — the whole afternoon burned ~3–4k pts/hour (troughs 589–1043);
+      the pve window's reschedules tipped it. The baseline sits at the edge, not just under churn.
 
 - [ ] **FU-291** — **The reviewer finds in round N what already existed at round N-1's head.** Measured
       2026-09-27: homelab#2002 round 1 named 3 stale-text sites, 4 more siblings of the same class sat at
