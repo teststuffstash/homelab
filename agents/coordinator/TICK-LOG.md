@@ -12702,4 +12702,10 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `pin-only-lint` check (i) (4 cases), docs (§2 Review, §Last proven ❌×2, §Next steps 10, classes.yaml,
   renovate.md, lens brief, coordinator README, merge-path, design Part 5). Gate-change lens APPROVED 19:46Z.
   Proofs deferred: the next lock major (lane) + a drill (chain).
+- **#2354 (Renovate `major-kube-prometheus-stack` group PR) CLOSED by the seat on the operator's call, branch
+  deleted:** it proposed kps 91.8.2 + CRDs 32.0.1, both already on master (#2256 + the seat's 91.8.2 bump) along
+  with the AlertmanagerClusterFailedPeers triage — the operator had armed it after it went `merge-conflict`
+  (20:00Z, the updater's 422). No clause could move it: the worker's adaptation commit stops Renovate's rebase,
+  the rebase-tick is report-only on an adapted branch, the unarmed-major ride excludes armed + awaiting-human,
+  and `argocd/platform/**` would still need a codeowner review. Not recreated: Renovate proposes only newer.
 
