@@ -1,0 +1,4 @@
+CALL gh pr list --repo teststuffstash/homelab --state merged --limit 10 --json number,title,headRefName,mergedAt,mergeCommit,files --jq [.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= "2026-10-12T02:00:00Z") | select(any(.files[]?.path; startswith(".github/workflows/")) or ((.files | length) > 0 and all(.files[].path; endswith("devbox.lock"))))] | sort_by(.mergedAt) | last | select(.)
+OUT → candidate: teststuffstash/homelab#2400 @ 01234567 (chore: devbox update — MAJOR bump (align toolchain lock))
+OUT PRNUM=2400 SHA=0123456789abcdef0123456789abcdef01234567 TITLE=chore: devbox update — MAJOR bump (align toolchain lock)
+RC 0
