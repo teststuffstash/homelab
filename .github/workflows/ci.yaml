@@ -200,6 +200,12 @@ jobs:
       - name: Tracked Python parses (devbox run py-compile-lint)
         run: devbox run py-compile-lint
 
+      # printf/echo piped into grep -q / -m1 / head: the reader exits early, the writer takes EPIPE —
+      # a CI-only flake under the runner's ignored SIGPIPE (2026-10-07: #2367/#2373/#2377 cleared 169
+      # sites). The replay harness also runs it, but only for PRs touching agents/ or devbox.json.
+      - name: No printf|grep -q / | head pipes in tracked shell (devbox run sigpipe-lint)
+        run: devbox run sigpipe-lint
+
       # The estimator's assertion suite existed since birth and NOTHING executed it — the
       # written-is-not-applied class, found in the 2026-08-10 coverage audit. The registry math
       # (banding, effective price, provider pin) is the budget breaker's input; keep it gated.
@@ -293,7 +299,7 @@ jobs:
             kept=""
             while IFS= read -r f; do
               [ -z "$f" ] && continue
-              if printf '%s\n' "$f" | grep -qE "^($GUARDED)$"; then
+              if grep -qE "^($GUARDED)$" <<< "$f"; then
                 patch=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq ".[] | select(.filename==\"$f\") | .patch // \"\"")
                 nonpin=$(printf '%s\n' "$patch" | grep -E '^[-+][^-+]' | grep -Ev "$PIN_LINE" || true)
                 if [ -n "$patch" ] && [ -z "$nonpin" ]; then
