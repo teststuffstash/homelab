@@ -169,11 +169,11 @@ machines:
 
   - name: pve
     kind: metal
-    label: Proxmox `pve` (X99/Xeon, 64GB)
+    label: Proxmox `pve` (X99/Xeon, 128GB)
     role: Hypervisor for the Talos VMs + Matchbox LXC
     hardware: AliExpress X99 + Intel Xeon E5-2680 v4
     cpu_cores: 28        # 14C / 28T
-    memory_gb: 64
+    memory_gb: 128
     ip: 192.168.2.3
     plug: sensor.plug_pve_power
     idle_w: 127
