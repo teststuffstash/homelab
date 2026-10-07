@@ -222,11 +222,14 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
                  # gone, so the intent has to be stated. Same label the changes-requested
                  # clause in coordinator-scan.sh already honours.
                  and all(.labels[].name; . != "major/awaiting-human")
-                 # major = the human-merge LANE MARKER itself (devbox-update.sh, FU-022): a major
-                 # bump is never self-armed, before OR after its handoff (homelab S9 #1987 - the
-                 # same lane read agent-finalize now makes before arming). Today the author
-                 # predicate above already keeps Renovate-authored majors out of C9; this line
-                 # makes the rule structural instead of an accident of who opened the PR.
+                 # major = the migration-lens marker: C9 never self-arms one. The LAUNCHER that
+                 # opened it decides the arm at creation (devbox-update.sh since 2026-10-07 arms a
+                 # lock major unless a HUMAN_PACKAGES member crossed; Renovate arms a graduated
+                 # Actions major - ADR-141), and an un-armed major is the human lane by intent,
+                 # before OR after its handoff (homelab S9 #1987 - the same lane read agent-finalize
+                 # makes before arming). Today the author predicate above already keeps those
+                 # launcher-authored majors out of C9; this line makes the rule structural instead
+                 # of an accident of who opened the PR.
                  and all(.labels[].name; . != "major")
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
@@ -294,10 +297,13 @@ EOF_C9
   #   renovate-approve reflex, CI-only, no LLM). Skip them so the reviewer isn't burned on digest noise.
   #   Renovate's REVIEWABLE bumps carry `deps-review` (not `automerge`) → they fall through here and get
   #   the LLM reviewer like any agent PR (FU-046; docs/renovate.md + docs/agents/merge-path.md).
-  #   ARMING IS THE BOUNDARY: this reflex only ever touches auto-merge-armed PRs. Un-armed `major` devbox
-  #   bumps (devbox-update.sh gate, FU-022) are HUMAN-GATED and COORDINATOR-owned — the coordinator
-  #   dispatches their investigation review directly (even while red) and hands off to a human; the reflex
-  #   must NOT reach across the arming wall for them, or the two would fight over one PR. See merge-path.md.
+  #   ARMING IS THE BOUNDARY: this reflex only ever touches auto-merge-armed PRs. An un-armed `major`
+  #   (a devbox lock major whose HUMAN_PACKAGES member crossed — devbox-update.sh, docs/dependency-upgrades.md
+  #   §2 Review; a base-image major) is HUMAN-GATED and COORDINATOR-owned — the coordinator dispatches
+  #   its investigation review directly (even while red) and hands off to a human; the reflex must NOT
+  #   reach across the arming wall for it, or the two would fight over one PR. An ARMED `major` (a lock
+  #   major since 2026-10-07, a graduated Actions major — ADR-141) is this reflex's: the reviewer runs the
+  #   migration lens by the label and its APPROVED completes the merge. See merge-path.md.
   picks="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" --arg default "$DEFAULT_BRANCH" --argjson required "${required_json:-[]}" '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c

@@ -5,7 +5,7 @@
       "gap_cells": [
         "canary"
       ],
-      "gap_rows": 14,
+      "gap_rows": 15,
       "human_cells": [
         "revert"
       ],
@@ -15,7 +15,7 @@
       "last_proven_pr": 2240,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
-      "rows": 14
+      "rows": 15
     },
     {
       "complete": false,
@@ -107,7 +107,7 @@
         "detector",
         "canary"
       ],
-      "gap_rows": 37,
+      "gap_rows": 38,
       "human_cells": [],
       "human_rows": 0,
       "id": 7,
@@ -115,7 +115,7 @@
       "last_proven_pr": 1488,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
-      "rows": 37
+      "rows": 38
     },
     {
       "complete": true,
@@ -610,7 +610,7 @@
       "key": "1:argo-workflows",
       "last_proven": "2026-10-05T04:21:26Z",
       "name": "argo-workflows",
-      "version": "1.1.1",
+      "version": "2.0.8",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -675,7 +675,7 @@
       "key": "1:forgejo",
       "last_proven": "2026-10-04T22:02:16Z",
       "name": "forgejo",
-      "version": "17.1.7",
+      "version": "17.2.0",
       "where": [
         "argocd/platform/forgejo.yaml"
       ]
@@ -741,7 +741,7 @@
       "key": "1:kube-prometheus-stack",
       "last_proven": "2026-10-05T06:41:36Z",
       "name": "kube-prometheus-stack",
-      "version": "86.3.2",
+      "version": "91.8.2",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -773,6 +773,19 @@
       ]
     },
     {
+      "class": 1,
+      "gap_columns": [
+        "canary"
+      ],
+      "key": "1:prometheus-operator-crds",
+      "last_proven": null,
+      "name": "prometheus-operator-crds",
+      "version": "32.0.1",
+      "where": [
+        "argocd/platform/prometheus-operator-crds.yaml"
+      ]
+    },
+    {
       "class": 2,
       "gap_columns": [
         "canary"
@@ -793,7 +806,7 @@
       "key": "2:cloudflare/cloudflared",
       "last_proven": "2026-10-05T05:16:18Z",
       "name": "cloudflare/cloudflared",
-      "version": "2026.9.3@sha256:072c067d25cc",
+      "version": "2026.10.0@sha256:9b49eed8f628",
       "where": [
         "argocd/resources/publicroute/composition.yaml"
       ]
@@ -860,7 +873,7 @@
       "key": "2:grafana/alloy",
       "last_proven": "2026-10-05T04:12:48Z",
       "name": "grafana/alloy",
-      "version": "v1.20.0",
+      "version": "v1.20.1",
       "where": [
         "argocd/resources/loki/alloy.yaml"
       ]
@@ -917,7 +930,7 @@
       "key": "2:otel/opentelemetry-collector-contrib",
       "last_proven": "2026-10-05T07:32:58Z",
       "name": "otel/opentelemetry-collector-contrib",
-      "version": "0.161.0",
+      "version": "0.162.0",
       "where": [
         "argocd/resources/otel-collector/deployment.yaml"
       ]
@@ -943,7 +956,7 @@
       "key": "2:python",
       "last_proven": "2026-10-05T07:27:28Z",
       "name": "python",
-      "version": "3.14-slim, 3.14-slim@sha256:65a94bb37b63",
+      "version": "3.14-slim, 3.14-slim@sha256:cfe2e24a7530",
       "where": [
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml",
@@ -977,7 +990,7 @@
       "key": "2:quay.io/prometheus/blackbox-exporter",
       "last_proven": "2026-10-05T07:42:47Z",
       "name": "quay.io/prometheus/blackbox-exporter",
-      "version": "v0.28.0",
+      "version": "v0.29.0",
       "where": [
         "argocd/resources/blackbox/blackbox.yaml"
       ]
@@ -990,7 +1003,7 @@
       "key": "2:registry",
       "last_proven": "2026-10-05T07:58:26Z",
       "name": "registry",
-      "version": "3.1.1",
+      "version": "3.1.2",
       "where": [
         "argocd/resources/registry-cache/mirror-docker-io.yaml",
         "argocd/resources/registry-cache/mirror-ghcr.yaml",
@@ -1008,7 +1021,7 @@
       "key": "3:agent-base",
       "last_proven": "2026-09-28T13:49:47Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.9.28-g3df151221c3d.92",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.7-g28045f8d3a1c",
       "where": [
         "agents/images.env"
       ]
@@ -1022,7 +1035,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-09-28T13:29:19Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.9.28-gca94f4a2dd99; 28 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.5-gca94f4a2dd99; 31 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1039,6 +1052,9 @@
         "agents/coordinator/update-pr-argo.yaml",
         "agents/images.env",
         "argocd/resources/agentstack/composition.yaml",
+        "argocd/resources/chart-revert/deployment.yaml",
+        "argocd/resources/kube-prometheus-stack-lease/hooks/postsync-job.yaml",
+        "argocd/resources/kube-prometheus-stack-lease/hooks/presync-job.yaml",
         "argocd/resources/registry-cache/gc-mirrors.yaml"
       ]
     },
@@ -1064,7 +1080,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-02T21:59:33Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.2-gd0b15ed85110 (×3)",
+      "version": "2026.10.6-gf17a6d8c3767 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1797,6 +1813,20 @@
         "canary",
         "detector"
       ],
+      "key": "7:renovate",
+      "last_proven": null,
+      "name": "renovate",
+      "version": "44.37.1",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "canary",
+        "detector"
+      ],
       "key": "7:sops",
       "last_proven": "2026-08-31T09:50:54Z",
       "name": "sops",
@@ -1934,7 +1964,7 @@
       "key": "8:renovatebot/github-action",
       "last_proven": "2026-10-05T03:36:53Z",
       "name": "renovatebot/github-action",
-      "version": "1cd96b855fee0da6f230617e89dbff0e06ea393a (v46.3.5)",
+      "version": "6d26fcf0275dc65624cbc3d51fe78bc773f98321 (v46.3.6)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]
@@ -1947,7 +1977,7 @@
       "key": "10:ghcr.io/actions/actions-runner",
       "last_proven": "2026-09-27T11:39:05Z",
       "name": "ghcr.io/actions/actions-runner",
-      "version": "2.337.0",
+      "version": "2.338.0",
       "where": [
         "docker/arc-runner/Dockerfile"
       ]

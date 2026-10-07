@@ -346,11 +346,20 @@ spec:
 # paths are independent and compose — a revert does not prevent a triage, and a triage does not
 # prevent a revert.
 #
-# IDEMPOTENCY: branch name revert-wf-<sha8> (deterministic; second attempt hits already-exists),
-# plus the responder-seen cm ledger keyed wf-<repo>-<sha>. Guards: non-master/main = report-only;
-# no recent workflow-pin merge = report-only; every probe failure is loud and fail-closed (no revert
-# on bad data). The pin-only predicate is fail-closed: empty/unreadable diff = FAIL, never "no
-# offending lines found".
+# THE LOCK SHAPE (2026-10-07, class 7 majors armed — docs/dependency-upgrades.md §2 Review): the same
+# trigger admits a merge whose EVERY file is a `devbox.lock` (the weekly `devbox-update` PR, lock-only;
+# a worker-adapted lock PR carrying a fixture is OUTSIDE the class — the responder lane owns it). A
+# lock is the resolved pin set, so it is pin-only by construction (no `uses:` grammar to check); the
+# revert branch is `revert-lock-<sha8>` and the memory line `reverted-locks: <name>@<version> …` (every
+# package whose resolved version the merge moved — the versions this revert removes again), read by
+# scripts/pin-only-lint.sh check (i): the next weekly re-resolve that lands a named version stays red
+# for REVERT_MEMORY_DAYS (the lever out is a `devbox.json` pin of that one package).
+#
+# IDEMPOTENCY: branch name revert-wf-<sha8> / revert-lock-<sha8> (deterministic; second attempt hits
+# already-exists), plus the responder-seen cm ledger keyed wf-<repo>-<sha>. Guards: non-master/main =
+# report-only; no recent workflow-pin/lock merge = report-only; every probe failure is loud and
+# fail-closed (no revert on bad data). The pin-only predicate is fail-closed: empty/unreadable diff =
+# FAIL, never "no offending lines found".
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -432,8 +441,9 @@ spec:
             # mint multiple revert PRs for the same merge.
             # We compute the key AFTER finding the candidate below.
 
-            # The revert candidate: newest merge within the window whose files touch .github/workflows/.
-            # revert-* branches excluded (never revert a revert — that ping-pongs).
+            # The revert candidate: newest merge within the window whose files touch .github/workflows/
+            # OR are all devbox.lock files (the lock shape). revert-* branches excluded (never revert
+            # a revert — that ping-pongs).
             # Fail-closed: no candidate = report-only.
             # >>>REPLAY:workflow-pin-revert-candidate>>>
             # ⚠ `gh … --jq` takes ONLY the expression (not jq's CLI): `--jq --arg cutoff …` was
@@ -444,14 +454,18 @@ spec:
             CUTOFF="${CUTOFF:-$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)}"
             CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
               --json number,title,headRefName,mergedAt,mergeCommit,files \
-              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(.files[]?.path | startswith(\".github/workflows/\"))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
-            [ -n "$CAND" ] || { echo "→ $SLUG: NO workflow-touching merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(any(.files[]?.path; startswith(\".github/workflows/\")) or ((.files | length) > 0 and all(.files[].path; endswith(\"devbox.lock\"))))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
+            [ -n "$CAND" ] || { echo "→ $SLUG: NO workflow-touching or lock-only merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
 
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
             SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"
             echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE)"
             # <<<REPLAY:workflow-pin-revert-candidate<<<
+            # The lock shape: every file a devbox.lock → pin-only by construction (header). Decided
+            # from the candidate's own file list, never inferred from the branch name.
+            IS_LOCK="$(printf '%s' "$CAND" | jq -r 'if (.files | length) > 0 and all(.files[].path; endswith("devbox.lock")) then 1 else 0 end')"
+            LOCK_FILES="$(printf '%s' "$CAND" | jq -r '[.files[].path] | join(" ")')"
 
             # Ledger check (now that we have the SHA).
             KEY="wf-$(printf '%s' "${SLUG}-${SHA}" | sha256sum | cut -c1-16)"
@@ -466,6 +480,10 @@ spec:
             # where tag is `v<digits>` with up to two `.<digits>` groups. Leading YAML indentation
             # and an optional `- ` list marker allowed. Nothing else.
             # Fail-closed: empty/unreadable diff = FAIL, never "no offending lines found".
+            # The lock shape skips this grammar: a lock-only merge is inside the class by its file list.
+            if [ "$IS_LOCK" = 1 ]; then
+              echo "→ $SLUG#$PRNUM is lock-only ($LOCK_FILES) — inside the revert class (the lock IS the pin set)"
+            else
             DIFF="$(gh pr diff "$PRNUM" --repo "$SLUG" 2>/dev/null || true)"
             if [ -z "$DIFF" ]; then
               echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0
@@ -487,19 +505,23 @@ spec:
             fi
 
             echo "→ $SLUG#$PRNUM is pin-only — inside the revert class"
+            fi
 
             # ── THE REVERTED PINS (for the CI refusal, pin-only-lint check (e)) ────────────────────────────────
             # In the ORIGINAL PR's diff the `+` lines are the versions this revert removes again.
             # They go into the revert PR body as one `reverted-pins:` line; pin-only-lint check (e)
             # refuses a Renovate PR that re-adds any of them (header note (b)). The refusal
             # cannot happen here: Renovate re-creates the PR only AFTER this revert merges.
+            REVERTED_PINS=""
+            if [ "$IS_LOCK" != 1 ]; then
             # >>>REPLAY:workflow-pin-revert-reverted-pins>>>
             REVERTED_PINS="$(printf '%s\n' "$CONTENT_LINES" | grep '^+' | sed -E 's/^[-+][[:space:]]*(- )?uses:[[:space:]]*([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}).*/\2/' | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
             echo "→ reverted pins: ${REVERTED_PINS:-<none>}"
             # <<<REPLAY:workflow-pin-revert-reverted-pins<<<
+            fi
 
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — workflow '$WF' failed on $BRANCH within ${REVERT_WINDOW_MIN}m of the merge"
-            BR="revert-wf-$(printf '%s' "$SHA" | cut -c1-8)"
+            if [ "$IS_LOCK" = 1 ]; then BR="revert-lock-$(printf '%s' "$SHA" | cut -c1-8)"; else BR="revert-wf-$(printf '%s' "$SHA" | cut -c1-8)"; fi
             rm -rf /work/repo
             # >>>REPLAY:deploy-revert-token-clone>>>
             # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
@@ -514,14 +536,37 @@ spec:
             if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
               echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
             fi
+            # ── THE REVERTED LOCK VERSIONS (the lock shape's memory, pin-only-lint check (i)) ─────────
+            # Every package whose resolved version differs between the merge and its first parent, as
+            # `<name>@<new>` — base name, the `@pin` stripped (the key scripts/devbox-update.sh lock_moves
+            # uses). Read from the clone, never from the PR diff (a lock diff's +/- lines carry versions
+            # without the package they belong to). Fail-closed: an unreadable blob or a merge that moved
+            # no version is report-only, never a blind revert.
+            REVERTED_LOCKS=""
+            if [ "$IS_LOCK" = 1 ]; then
+              for lf in $LOCK_FILES; do
+                _old="$(git show "$SHA^:$lf" 2>/dev/null)" || { echo "→ cannot read $lf at the parent of $SHA — refusing to classify (report-only)"; exit 0; }
+                _new="$(git show "$SHA:$lf" 2>/dev/null)"  || { echo "→ cannot read $lf at $SHA — refusing to classify (report-only)"; exit 0; }
+                _moved="$(jq -rn --argjson o "$_old" --argjson n "$_new" 'def base: sub("@[^@]*$"; ""); def vermap($p): ($p // {}) | to_entries | map({key: (.key|base), value: .value.version}) | from_entries; vermap($o.packages) as $op | [ vermap($n.packages) | to_entries[] | select($op[.key] != null and .value != null and $op[.key] != .value) | "\(.key)@\(.value)" ] | join(" ")' 2>/dev/null)" || { echo "→ cannot parse $lf — refusing to classify (report-only)"; exit 0; }
+                REVERTED_LOCKS="$REVERTED_LOCKS $_moved"
+              done
+              REVERTED_LOCKS="$(printf '%s\n' $REVERTED_LOCKS | grep . | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
+              [ -n "$REVERTED_LOCKS" ] || { echo "→ $SLUG#$PRNUM moved no package version — nothing to revert (report-only)"; exit 0; }
+              echo "→ reverted lock versions: $REVERTED_LOCKS"
+            fi
             git checkout -b "$BR"
             git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
             git push origin "$BR"
             # Compute the PR body — printf, not a multi-line shell string: a literal newline at column 0
             # would close this YAML block scalar, and indenting it instead would emit a markdown code block.
             RUN_NUM="$(printf '%s' "$ALERT" | jq -r '.number')"
+            if [ "$IS_LOCK" = 1 ]; then
+            BODY="$(printf 'Lock revert chain (class 7 — docs/dependency-upgrades.md §2 Review): workflow **%s** failed on `%s` within %sm of #%s merging. The merge was lock-only (every changed file a `devbox.lock`, the resolved pin set), so reverting restores the previous toolchain. The next weekly `devbox-update` re-resolve that lands a version named below is refused by pin-only-lint check (i) in ci for 30 days (the lever out: pin that ONE package in `devbox.json`, docs/renovate.md §devbox). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)\n\nreverted-locks: %s' \
+              "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM" "$REVERTED_LOCKS")"
+            else
             BODY="$(printf 'FU-1990 deterministic rollback: workflow **%s** failed on `%s` within %sm of #%s merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. A Renovate PR that re-proposes a reverted pin is refused by pin-only-lint check (e) in ci (it stays red until Renovate proposes a newer release). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #%s — %s\n**Failed workflow:** %s on %s (run #%s)\n\nreverted-pins: %s' \
               "$WF" "$BRANCH" "$REVERT_WINDOW_MIN" "$PRNUM" "$PRNUM" "$TITLE" "$WF" "$BRANCH" "$RUN_NUM" "$REVERTED_PINS")"
+            fi
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — workflow '${WF}' failed post-merge)" \
               --body "$BODY" \

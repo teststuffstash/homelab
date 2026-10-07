@@ -68,6 +68,18 @@
 #       driven by `ArgoControllerSilent`, records the version it reverted AWAY from). Same loop as
 #       (e)/(f)/(g): Renovate's `argocd` manager re-proposes a merged-then-reverted chart version.
 #       Runs only when such a line is added; fail-closed on the read.
+#   (i) 2026-10-07 (class 7 majors ARMED — docs/dependency-upgrades.md §2 Review): the lock memory.
+#       A `devbox.lock` diff (any directory) is keyed per package whose resolved `version` differs
+#       between base and head — `<name>@<new-version>`, base name with the `@pin` stripped, the key
+#       scripts/devbox-update.sh lock_moves uses — and refused when a merged `revert-lock-*` PR of the
+#       last REVERT_MEMORY_DAYS names that pair on its `reverted-locks: <name>@<version> …` body line
+#       (the lock shape of `workflow-pin-revert`, agents/coordinator/deploy-revert-argo.yaml: a master
+#       workflow failing within the window after a lock-only merge reverts it and records the versions
+#       it removed). Same loop as (e)–(h): the weekly `devbox-update` re-resolves `@latest` to the same
+#       version until nixpkgs moves on, and without this the lane loops merge → fail → revert → merge.
+#       The refusal holds the WHOLE weekly PR red (one lock, all packages) — the lever out is a
+#       `devbox.json` pin of the one package (docs/renovate.md §devbox). Needs jq (fail-closed without
+#       it); runs only when a lock file changed.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -155,7 +167,32 @@ for pf in $(git diff --name-only "$BASE" HEAD | grep -E '^argocd/platform/[^/]+\
   done <<< "$(git diff -U0 "$BASE" HEAD -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
 done
 added_charts="$(printf '%s' "$added_charts" | grep . | sort -u || true)"
-if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ]; then
+# (i): the ADDED lock versions — per changed devbox.lock, "<name>@<new>" for every package whose
+# resolved version moved (added/removed packages carry no pair). jq, not awk: the lock is JSON and a
+# version line alone does not say whose it is (the (g) lesson).
+lock_moved() {  # <old-json> <new-json> → "<name>@<new>" per line
+  jq -rn --argjson o "$1" --argjson n "$2" '
+    def base: sub("@[^@]*$"; "");
+    def vermap($p): ($p // {}) | to_entries | map({key: (.key|base), value: .value.version}) | from_entries;
+    vermap($o.packages) as $op
+    | vermap($n.packages) | to_entries[]
+    | select($op[.key] != null and .value != null and $op[.key] != .value)
+    | "\(.key)@\(.value)"'
+}
+added_locks=""
+for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)devbox\.lock$' || true); do
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "pin-only-lint: FAIL — jq not on PATH, cannot key the $lf diff (check (i)); refusing to report success." >&2; exit 2
+  fi
+  new_json="$(git show "HEAD:$lf" 2>/dev/null || echo '{}')"
+  old_json="$(git show "$BASE:$lf" 2>/dev/null || echo '{}')"
+  if ! moved="$(lock_moved "$old_json" "$new_json" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot parse $lf at base/head (check (i)): $moved; refusing to report success." >&2; exit 2
+  fi
+  added_locks="$added_locks $(printf '%s\n' "$moved" | tr '\n' ' ')"
+done
+added_locks="$(printf '%s\n' $added_locks | grep . | sort -u || true)"
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ] && [ -z "$added_locks" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
@@ -223,6 +260,25 @@ if [ -n "$added_charts" ]; then
       rc=1
     fi
   done <<< "$added_charts"
+fi
+# (i) the reverted-lock memory — read once, fail-closed like (e)–(h).
+if [ -n "$added_locks" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_locks="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-lock-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-locks:\")) | ltrimstr(\"reverted-locks:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-lock-* PRs of ${slug:-<no repo slug>} (the reverted-lock memory, check (i)): ${reverted_locks:-}; refusing to report success." >&2
+    rc=2; reverted_locks=""
+  fi
+  while read -r lv; do
+    [ -n "$lv" ] || continue
+    # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+    if printf '%s\n' $reverted_locks | grep -qxF "$lv"; then
+      echo "pin-only-lint: FAIL — devbox.lock: $lv is a REVERTED lock version — the lock revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-lock-* PR names it); this PR stays red until nixpkgs moves that package on (or devbox.json pins it)." >&2
+      rc=1
+    fi
+  done <<< "$added_locks"
 fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
