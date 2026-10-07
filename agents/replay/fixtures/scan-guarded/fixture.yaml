@@ -16,6 +16,10 @@
 #     shapes the platform uses (the workflow's `GUARD_SET`, then a `pin-only-lint.sh` `GUARDED=`).
 #
 # THE ROWS (one per axis value; per-row intent in rows.psv):
+#   remote-guarded-large    remote-guarded with >64 KiB AFTER the GUARD_SET line → same verdict, and
+#                           NO stderr: a `printf | grep -m1` reader took EPIPE here (master CI run
+#                           37668796169, 2026-10-07 — "printf: Broken pipe" on timing alone); the
+#                           scan reads haystacks from here-strings, and this row makes it deterministic.
 #   homelab-guarded-dir     local, a DIRECTORY footprint over a guarded file → HELD.
 #   homelab-guarded-file    local, an exact guarded file → HELD.
 #   homelab-guarded-multi   local, a directory covering TWO guarded files → HELD, both named.

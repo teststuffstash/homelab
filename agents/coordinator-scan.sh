@@ -161,7 +161,7 @@ GUARDED_REPO="${GUARDED_REPO:-homelab}"
 # _guarded_from_sh <text> → one guarded PATH per line from a `GUARDED=` line; rc 1 = no such line.
 _guarded_from_sh() {
   local line="" GUARDED=""
-  line="$(printf '%s\n' "$1" | grep -m1 '^GUARDED=' || true)"
+  line="$(grep -m1 '^GUARDED=' <<< "$1" || true)"
   [ -n "$line" ] || return 1
   eval "$line" || return 1
   [ -n "$GUARDED" ] || return 1
@@ -174,7 +174,7 @@ _guarded_from_sh() {
 # GUARD_SET is a whitespace-separated list (agent-runtime's deps-pin-guard reads it the same way).
 _guarded_from_workflow() {
   local line="" GUARD_SET=""
-  line="$(printf '%s\n' "$1" | grep -m1 -E '^[[:space:]]*GUARD_SET:' || true)"
+  line="$(grep -m1 -E '^[[:space:]]*GUARD_SET:' <<< "$1" || true)"
   [ -n "$line" ] || return 1
   GUARD_SET="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
   [ -n "$GUARD_SET" ] || return 1
@@ -2298,7 +2298,7 @@ EOF
     fi
     sess_holds() {   # $1 = item key (issue-N / pr-N); 0 = a coordinator session is riding it
       [ -n "$sess_busy" ] || return 1
-      printf '%s\n' "$sess_busy" | grep -qx -- "$1"
+      grep -qx -- "$1" <<< "$sess_busy"
     }
     # <<<REPLAY:session-belt<<<
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
@@ -3998,11 +3998,11 @@ EOF_GTHEMES_OPEN
         continue
       fi
       rt_body="$(printf '%s' "$rt_pr" | jq -r '.body // ""' 2>/dev/null)" || rt_body=''
-      if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
+      if grep -q -- '- \[x\] <!-- rebase-check -->' <<< "$rt_body"; then
         orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
         continue
       fi
-      if ! printf '%s' "$rt_body" | grep -q -- '- \[ \] <!-- rebase-check -->'; then
+      if ! grep -q -- '- \[ \] <!-- rebase-check -->' <<< "$rt_body"; then
         orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u} has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)\n"
         continue
       fi
@@ -6186,7 +6186,7 @@ EOF_BELT
       # higher-priority unit — with nothing above it the candidate wins the walk anyway and the
       # probes would buy nothing.
       aging_front=""
-      if printf '%s\n' "$lane_units" | grep -qE '^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint)\|'; then
+      if grep -qE '^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint)\|' <<< "$lane_units"; then
         while IFS= read -r acand; do
           [ -n "$acand" ] || continue
           case " $tried_units " in *" $acand "*) continue;; esac
