@@ -103,7 +103,7 @@ mc_event() {   # mc_event <slug> <number> <kind> <line-markdown>
   # substring anywhere (a comment that merely mentions the marker inline is not a summary comment).
   ids="$(printf '%s' "$listed" | jq -r --arg m "$MC_MARKER" \
         '[ .[] | select((.body // "") | startswith($m)) ] | sort_by(.created_at) | .[].id' 2>/dev/null)" || ids=''
-  id="$(printf '%s' "$ids" | head -1)"
+  id="$(head -1 <<< "$ids")"
 
   # Detect extra marked comments (ADR-103 invariant leak — homelab#607). If a second marked
   # comment exists (a second writer, a race), report it. Do not try to consolidate here: that

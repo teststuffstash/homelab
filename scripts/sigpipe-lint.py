@@ -34,11 +34,7 @@ import sys
 # Files whose sites convert in their own PR, with the reason. Hits there are listed, never fatal;
 # an entry whose file is clean prints a STALE notice — delete it then. Shrink-only: a NEW file
 # never goes here (convert it instead).
-PENDING = {
-    "agents/agent-session.sh": "ADR-103 ratchet clause file — converts in its own PR (behaviour-neutral, README-recorded)",
-    "agents/reviewer-session.sh": "ADR-103 ratchet clause file — converts in its own PR (behaviour-neutral, README-recorded)",
-    "agents/machine-comment.sh": "ADR-103 ratchet clause file — converts in its own PR (behaviour-neutral, README-recorded)",
-}
+PENDING = {}
 
 WRITER_RE = re.compile(r"^(printf|echo)(\s|$)")
 LEAD_WORDS = ("!", "if", "then", "elif", "else", "while", "until", "do", "{", "time")

@@ -656,11 +656,11 @@ gh pr view ${PR} --json labels -q '.labels[].name' 2>/dev/null | grep -qxE 'majo
 # (agents/lenses/gate-change.md). BLOCKING by construction, pinned below like migration. A repo
 # opts in by carrying the report step's script on its DEFAULT branch (read there, never from the
 # PR — a PR deleting it must not deselect the lens); no repo is named here.
-if printf '%s\n' "\$CHANGED" | grep -qE '^scripts/' && git cat-file -e origin/HEAD:scripts/gate-drift.sh 2>/dev/null; then
+if grep -qE '^scripts/' <<< "\$CHANGED" && git cat-file -e origin/HEAD:scripts/gate-drift.sh 2>/dev/null; then
   LENSES="\$LENSES gate-change"
 fi
-printf '%s\n' "\$CHANGED" | grep -qE '^charts?/' && LENSES="\$LENSES helm"
-if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manifests|deploy)/.*\.ya?ml\$' \
+grep -qE '^charts?/' <<< "\$CHANGED" && LENSES="\$LENSES helm"
+if grep -qE '^charts?/templates/|^(argocd|k8s|manifests|deploy)/.*\.ya?ml\$' <<< "\$CHANGED" \
    || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
   LENSES="\$LENSES k8s-prod"
 fi
