@@ -10,6 +10,10 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-07 21:00Z — seat; TICK-LOG same date).** (1) Confirm the box loops recovered after the
+  venv move: a `management-sentinel` status on open PR heads, `MgmtLeaseLoopStale` cleared, no `MgmtApplyLoopStale`;
+  then FU-305's detector. (2) #2368 (goal-child twin) merges on the sentinel's status. (3) The SIGPIPE lint
+  subagent's PR (`fix/sigpipe-lint`) — check it landed. (4) pve x16 NVMe test-fit rides the next pve window.
 - **OPERATOR: oracle-fleet#798 item 6** (the privacy retention line) is still unfixed and needs a human — the
   issue sits `agent/blocked`, out of the loop since #2366 (2026-10-07), so nothing retries it. Delete this bullet
   when #798 closes.

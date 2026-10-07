@@ -12716,3 +12716,31 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `matchPackageNames` line, the §Next steps 10 proofs (next lock major arms; lock revert drill), the Goal #2273
   production-leg verdict. Bookkeeping pushed once at wind-down (this push).
 
+
+## 2026-10-07 17:45–21:00Z — pve RAM window, wk-01/02 → 32 GiB, the #798 loop residue, box loops wedged by #2362 (seat)
+
+- **pve window** seat-1791395172-6514: wk-02/wk-01/wk-03 + cp-01 via `node-maintenance down` (cp-01 = etcd
+  forfeit + snapshot; wk-03 waited out an ARC ride), ci-runner-01 idle + matchbox by hand, `poweroff`. Operator
+  fitted 4 × 32 GB: POSTed headless first try, 125 GiB @ 2400, onboot self-start, `up` ×4, Cilium 13/13. The x16
+  NVMe test-fit was NOT done (no drive fitted). Side effect: `PveNumaNodeMemoryLow` on nx-02 node 0 (1.2 GiB, no
+  swap-out) while wk-04 carried pve's pods — FU-289. Closed `--force` over PodSigkilled (G5's class).
+- **Records:** hardware repo — NX NVMe adapters x4 since 09-24 (six stale x1 copies amended, inventory bullet =
+  the one home); pve 128 GB; Microns on the shelf; NX DIMM placement REVISED (operator): Samsungs consolidate on
+  nx-02, Microns → nx-01, one whole-chassis window after the router runs on pve (FU-289). homelab
+  machines.yaml pve 64 → 128.
+- **#2365** wk-01/wk-02 16/12 → 32 GiB (operator: "16GB means nothing fits" — wk-04 stays 32): window
+  seat-1791398541-2081, both down (wk-01 waited ~15 min for coordinator-homelab-pr-2362), `MGMT_YES=1 mgmt-tf
+  apply` (2 in-place + started), up; capacity 32849880Ki on both.
+- **#2367** the scan's 6 `printf | grep -q/-m1` sites → here-strings (master CI flake 37668796169, `printf:
+  Broken pipe` in captured stderr); the harness now `trap '' PIPE` like the runner, and
+  scan-guarded/remote-guarded-large pins it (pre-fix 11/12). Lint for the rest: background subagent.
+- **The other session's #798 hand-off:** FU-290 corrected (the 18:02Z drain was the loop, not baseline); the
+  goal-child twin → #2368 (`Fixes #2370`, footprint issue; approved 20:36Z — a `gh pr update-branch` merge
+  commit does NOT trigger re-review, an empty content commit did); #798 item 6 → meta-state (operator).
+- **Seat error, repaired:** a failed clone + `cd` ran `git checkout -b fix/pve-workers-32g` in the SHARED tree
+  (~18:30–19:50Z); a concurrent session's commit landed on the stray branch. Rebased everything onto master,
+  stray branch deleted, nothing lost. Memory updated (shared-checkout resight).
+- **Box loops wedged 20:15Z → ~20:55Z (FU-305):** #2362's lock moved Python; the shared `VENV_DIR` made devbox
+  prompt "overwrite it? (y/n)" on the timers → every `yq` failed → `mgmt-sentinel` skipped every PR WITHOUT a
+  status (required check absent: #2368 sat APPROVED + BLOCKED), apply/lease PROBE-FAILed. Stale venv moved aside
+  on the box (`homelab.stale-20261007`).
