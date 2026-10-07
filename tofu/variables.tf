@@ -236,7 +236,10 @@ variable "nodes" {
     # iscsi-tools + util-linux-tools as serving, so dropping the flag would repoint `file_id`
     # in proxmox.tf, REPLACE the VM, and bring it back unable to mount any Longhorn PVC.
     # Asked and settled twice now (#296 round 2, #302) — leave it alone.
-    wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 16384, disk_gb = 80, longhorn = true }
+    # memory 16→32 GiB, and wk-02 12→32 GiB (2026-10-07): pve went 64→128 GB (4 × 32 GB RDIMM), and the
+    # pve workers take the new room as the same 32 GiB class as wk-04 so the big pods fit on either
+    # hypervisor. A memory change lands only at a FULL VM stop/start: node-maintenance down → apply → up.
+    wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 32768, disk_gb = 80, longhorn = true }
     # disk 240→80 (2026-09-14, operator): the 240 G was the ADR-089 bulk pairing with wk-metal-01;
     # wk-02 left the bulk tier and then std altogether (PR#1683 — the pve box is compute-only, its
     # volumes are mounted, never served). XFS cannot shrink and Talos never re-partitions, so this
@@ -244,7 +247,7 @@ variable "nodes" {
     # — the apply resource has no attribute keyed on the VM, so it will not re-run on its own),
     # inside a node-maintenance window; 80 G = wk-01's size for the same workload class, image
     # store bounded by the 60/50 kubelet GC (PR#1681). Grow-only from here.
-    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80, longhorn = true }
+    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 32768, disk_gb = 80, longhorn = true }
     # Ephemeral CI/runner tier VM (2026-08-18): 8 cores is deliberate CPU overprovision (host was
     # 20/28 vCPU allocated at load ~4; CI is burst work, throttling is safe) — memory is the
     # careful number (host had ~12Gi free; 8Gi leaves ~4Gi buffer). 2026-09-08: 8→16Gi + 8→12
