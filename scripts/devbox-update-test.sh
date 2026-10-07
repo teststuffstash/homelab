@@ -10,6 +10,8 @@
 #                downgrade — a line-move row for it would double-count the same fact)
 #   a no-move lock → all three empty and the body section prints "none" twice
 #   an unparseable version pair (a hash) → majors (changed + unparseable), never downgrades
+#   lane (lock_lane, 2026-10-07): #2260 → arm (argo-workflows is a major, opentofu only a line move);
+#                an opentofu MAJOR → human; HUMAN_PACKAGES is the seam (empty set → always arm)
 #   devbox run devbox-update-test
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -53,6 +55,18 @@ check "edge: unparseable pair never a downgrade; rc suffix compares on leading d
       "kubectl: 1.36.3 → 1.35.0" "$(jq -r '.downgrades | join(";")' <<<"$moves")"
 check "edge: opentofu patch move is no line move; kubectl's downward minor move is the downgrade row only" \
       "" "$(jq -r '.lines | join(";")' <<<"$moves")"
+
+# the lane (lock_lane): only a HUMAN_PACKAGES member among the MAJORS parks the PR on a human
+moves="$(lock_moves "$(cat "$F/pr2260-old.lock")" "$(cat "$F/pr2260-new.lock")")"
+check "lane: 2260 arms (argo-workflows major; opentofu 1.12 → 1.13 is a line move, not a major)" arm "$(lock_lane "$moves")"
+old='{"packages":{"opentofu@latest":{"version":"1.13.1"},"argo-workflows@latest":{"version":"3.6.10"}}}'
+new='{"packages":{"opentofu@latest":{"version":"2.0.0"},"argo-workflows@latest":{"version":"4.0.5"}}}'
+moves="$(lock_moves "$old" "$new")"
+check "lane: an opentofu major parks (human), naming the move" "human opentofu: 1.13.1 → 2.0.0" "$(lock_lane "$moves")"
+check "lane: HUMAN_PACKAGES is the seam — an empty set always arms" arm "$(HUMAN_PACKAGES="" lock_lane "$moves")"
+check "lane: no majors at all → arm (the body writer makes it the mechanical lane)" arm "$(lock_lane "$(lock_moves "$same" "$same")")"
+check "lane: a HUMAN_PACKAGES member that only moved a minor does not park" arm \
+      "$(lock_lane "$(lock_moves '{"packages":{"opentofu@latest":{"version":"1.12.5"}}}' '{"packages":{"opentofu@latest":{"version":"1.13.1"}}}')")"
 
 echo "devbox-update-test: $n check(s), $fails failure(s)"
 [ "$fails" -eq 0 ]

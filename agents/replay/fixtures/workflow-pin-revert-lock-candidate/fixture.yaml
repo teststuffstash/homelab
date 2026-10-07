@@ -1,0 +1,17 @@
+# workflow-pin-revert-lock-candidate — the LOCK shape of the FU-1990 chain's candidate read
+# (2026-10-07, class 7 majors armed — docs/dependency-upgrades.md §2 Review, designs/fu-1990-workflow-
+# pin-revert.md Part 5). The contract pinned here: a merged PR whose EVERY file is a `devbox.lock`
+# is a revert candidate (the weekly devbox-update lock-only merge); a newer merge that is neither
+# workflow-touching nor lock-only is walked past, a `revert-*` merge is never a candidate, and a
+# lock PR that ALSO carries a fixture (the worker-adapted #2362 shape) is OUTSIDE the class —
+# the world holds all four and the chain must pick the lock-only one.
+name: workflow-pin-revert-lock-candidate
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - SLUG=teststuffstash/homelab
+  - REVERT_WINDOW_MIN=120
+  - CUTOFF=2026-10-12T02:00:00Z
+parts:
+  - block:workflow-pin-revert-candidate
+  - file:post.sh
