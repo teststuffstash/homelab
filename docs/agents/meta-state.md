@@ -22,7 +22,7 @@ never the session's arc — that is TICK-LOG's.)
   --subject argocd/platform/kube-prometheus-stack.yaml --chart kube-prometheus-stack --sha <merged sha> --from
   <old> --to <new> --expect-min 0`, the #2276→#2279 shape) → `mgmt-lease` opens `revert-chart-lease-<sha8>` →
   reflex merges → ArgoCD back; only then **step (5)** the one `matchPackageNames` line arming kps majors (next
-  to the argo-workflows rule). (b) #2260 (devbox major) merge — nothing blocks. (c) **Goal #2273 production-leg
+  to the argo-workflows rule). (b) **#2362** (devbox major — #2260 closed + re-dispatched 17:41Z so the G17 section rendered on real data; lens APPROVED 18:56Z, parked `major/awaiting-human`) merge — nothing blocks. (c) **Goal #2273 production-leg
   finding:** theme 2 (#2333) put `lastEditedAt` in `gh pr list --json` — not a gh field — every stack's review
   ride FATAL'd 23:22–23:45Z; seat quickfix 914b2b3c drops it, the body-edit re-review leg is INERT until it reads
   GraphQL `PullRequest.lastEditedAt` (bucket-A material; the rides are green again from 23:49Z). **Loose (S9,
