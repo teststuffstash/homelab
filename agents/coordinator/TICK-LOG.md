@@ -12689,3 +12689,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   label-less/un-armed (the G15 invisible shape, transient cause); `gh run rerun --failed` recovered it
   (`automerge,dependencies`, ARMED). The other six repos clean.
 - Operator ran pve maintenance in parallel from 18:0xZ — no stall observed on the ARC-hosted CI or the rides.
+- **Operator design read → ruling → #2369 (merged ~20:1xZ): class-7 (devbox lock) MAJORS ARM.** "Why is this
+  PR for my approval? Not possible to detect and revert?" — the human lane was a pre-ADR-141 default
+  (`devbox-update.sh` "majors need a human — FU-022"), never re-ruled; two lens rides found only N/A. Blast
+  radius read consumer by consumer (CI proves pre-merge; runner-image is the one push-only consumer → the
+  FU-1990 chain; jail = human by nature; worker image = ride belts); the ONE one-way door is opentofu's
+  state stamp → `HUMAN_PACKAGES` keeps its majors human. Operator correction on the form: **no ADR
+  amendment — the ADR points at the doc, the ADR file is measured oversized** (memory
+  `adr-pointer-not-implementation`). Built: `lock_lane` + `lock-lane:` body line (5 test cases), the
+  `workflow-pin-revert` LOCK shape (`revert-lock-<sha8>`, `reverted-locks:` from the clone; fixture
+  `workflow-pin-revert-lock-candidate`, the candidate fixture's CALL line edited with ADR-103 disclosure),
+  `pin-only-lint` check (i) (4 cases), docs (§2 Review, §Last proven ❌×2, §Next steps 10, classes.yaml,
+  renovate.md, lens brief, coordinator README, merge-path, design Part 5). Gate-change lens APPROVED 19:46Z.
+  Proofs deferred: the next lock major (lane) + a drill (chain).
+
