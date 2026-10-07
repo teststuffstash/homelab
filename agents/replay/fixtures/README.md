@@ -96,3 +96,21 @@ un-owns a member of the version set (openrouter-operator: `devbox.json`, replace
 a finding on it must be classified as a worker's adaptation, not as `Operator-lane (no container):`.
 The pre-state is the finding — openrouter-operator#80 (2026-09-27), where the hard-coded list read
 `devbox.json` as operator-only on a repo where it was not, and #81 then merged on the bot alone.
+
+## sigpipe-lint — the three clause files' here-string conversion (homelab#2371)
+
+No fixture applies. Each site trades `printf|echo … | grep -q`/`| head` for `grep … <<< "$x"` /
+`head -N <<< "$x"` — the same lines in, the same verdict out (a here-string carries
+`printf '%s\n'`'s bytes; the `$(…)` around each `head` strips the one newline it adds).
+- `agents/reviewer-session.sh` — the PREP lens selection on `$CHANGED` (×3) sits OUTSIDE every
+  `>>>REPLAY:` sentinel, so no fixture can compose it (the FU-072 note above). It is also the one
+  site with real exposure: a PR listing enough files to outrun the writer's buffer, matching early,
+  could drop a lens under `pipefail`.
+- `agents/agent-session.sh` (image-volumes fence ×3, transcript-mirror-probe `head -1`) and
+  `agents/machine-comment.sh` (`mc_event`'s oldest-id `head -1`) are inside sentinels, but the
+  race needs a multi-line haystack larger than the writer's buffer with an early match. The
+  image-volume fields are single lines (the claim parser strips newlines), and the ids and error
+  text run a few lines. No recorded world reaches the race, and a contrived >8 KB world would pin
+  the harness rather than the clause.
+
+The class itself is held by `scripts/sigpipe-lint.py`, which the `sigpipe-lint` suite fixture runs.

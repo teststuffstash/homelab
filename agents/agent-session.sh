@@ -703,9 +703,9 @@ resolve_image_volumes() {
   fi
   [ -n "$rows" ] || return 0
   while IFS="$US" read -r name ref mp; do
-    if ! printf '%s' "$name" | grep -Eq '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$' \
-       || ! printf '%s' "$ref" | grep -Eq '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$' \
-       || ! printf '%s' "$mp" | grep -Eq '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'; then
+    if ! grep -Eq '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$' <<< "$name" \
+       || ! grep -Eq '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$' <<< "$ref" \
+       || ! grep -Eq '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$' <<< "$mp"; then
       # The refused entry's text is UNVALIDATED claim input headed for two prompts (this log is
       # read by the dispatching session, the card by the ride) — only its [a-z0-9-] residue leaves.
       name="$(printf '%s' "$name" | tr -cd 'a-z0-9-' | cut -c1-32)"; [ -n "$name" ] || name="unnamed"
@@ -2103,7 +2103,7 @@ TS_SECRET_ERR="$("$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 2>&1 
       echo "→ transcript mirror probe: cannot check agent-transcripts-s3 in ns ${NS} (RBAC denied — launcher SA has no secret access by design). Worker reads the secret under its own SA via secretKeyRef optional:true, so this is not a verdict on the upload."
       ;;
     *)
-      echo "→ transcript mirror probe: unexpected error checking agent-transcripts-s3 in ns ${NS}: $(echo "$TS_SECRET_ERR" | head -1)"
+      echo "→ transcript mirror probe: unexpected error checking agent-transcripts-s3 in ns ${NS}: $(head -1 <<< "$TS_SECRET_ERR")"
       ;;
   esac
 }
