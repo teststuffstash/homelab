@@ -19,7 +19,11 @@ reject the *whole batch*, which killed the Pro zone's data. This poller queries 
 time, so it cannot poison a batch.
 
 Config (env): CF_API_TOKEN (observability-read token), CF_EDGE_ZONE_IDS (comma-separated zone
-ids to poll), POLL_INTERVAL_SECONDS (120), LISTEN_PORT (9506).
+ids to poll), POLL_INTERVAL_SECONDS (120), SETTINGS_INTERVAL_SECONDS (3600), LISTEN_PORT (9506).
+
+It also publishes how long Cloudflare keeps visitor IPs: every enabled dataset whose fields
+include `clientIP` → its `settings.notOlderThan` (oracle-fleet#798 — a privacy page states that
+period, and a stack-owned alert on this gauge is its drift detector).
 
 Self-test (no network, no credential):
     python3 argocd/resources/cloudflare-exporter/edge-probe.py --self-test
@@ -46,6 +50,10 @@ TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
 ZONE_IDS = [z.strip() for z in os.environ.get("CF_EDGE_ZONE_IDS", "").split(",") if z.strip()]
 INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
 PORT = int(os.environ.get("LISTEN_PORT", "9506"))
+# Dataset retention moves about once a year and the full settings read is ~32KB — hourly is plenty.
+SETTINGS_INTERVAL = int(os.environ.get("SETTINGS_INTERVAL_SECONDS", "3600"))
+# The fields that make a dataset hold a visitor's address.
+CLIENT_IP_FIELDS = {"clientIP"}
 
 _lock = threading.Lock()
 _body = "# probe has not completed a cycle yet\n"
@@ -66,6 +74,8 @@ HEADERS = [
     "# TYPE cloudflare_edge_rate_limit_events_total counter",
     "# HELP cloudflare_edge_firewall_events_host_action_source_total Cumulative firewall events by zone, host, action and source (the product/phase that acted: firewallCustom, firewallManaged, rateLimiter, securityLevel, bic, ...).",
     "# TYPE cloudflare_edge_firewall_events_host_action_source_total counter",
+    "# HELP cloudflare_edge_client_ip_retention_seconds_dataset How far back Cloudflare serves a dataset that carries the visitor IP (settings.notOlderThan), per zone and dataset. Refreshed hourly; holds its last value between refreshes.",
+    "# TYPE cloudflare_edge_client_ip_retention_seconds_dataset gauge",
     "# HELP cloudflare_edge_probe_ok 1 when the edge poll succeeded for the zone this poll. 0 or absent means the counters above are STALE, not safe.",
     "# TYPE cloudflare_edge_probe_ok gauge",
 ]
@@ -89,6 +99,9 @@ _totals_cached = {}  # (zone, host)         -> cumulative cache-served requests
 _totals_fw = {}      # (zone, host, action) -> cumulative firewall events (every action)
 _totals_fw_src = {}  # (zone, host, action, source) -> the same, split by the acting product
 _buckets = {}        # dedupe: bucket key -> (count already counted, first-seen epoch)
+_retention = {}      # (zone, dataset) -> notOlderThan seconds, for client-IP datasets
+_settings_at = {}    # zone id -> epoch of its last successful settings read
+_settings_fields = []  # ZoneSettings field names, introspected once per process
 
 # Buckets are datetime-anchored, so a bucket older than the lookback can never be re-reported.
 # 1800s is 6x the lookback and 15x the poll interval — generous, and it bounds memory.
@@ -119,6 +132,8 @@ def _reset_totals():
     _totals_fw.clear()
     _totals_fw_src.clear()
     _buckets.clear()
+    _retention.clear()
+    _settings_at.clear()
 
 
 def esc(value):
@@ -148,6 +163,57 @@ def api_get(path):
     if not payload.get("success"):
         raise RuntimeError(f"GET {path} → success=false: {payload.get('errors')}")
     return payload.get("result")
+
+
+def graphql_post(query, variables=None):
+    """POST one GraphQL document and return `data`. Raises on transport or `errors`."""
+    body = json.dumps({"query": query, "variables": variables or {}}).encode()
+    req = urllib.request.Request(
+        API,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "homelab-cloudflare-edge-probe",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.load(resp)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"GraphQL query → HTTP {exc.code}: {exc.read()[:500]!r}") from None
+    if payload.get("errors"):
+        raise RuntimeError(f"GraphQL query → errors: {payload['errors']}")
+    return payload.get("data") or {}
+
+
+def settings_query(zone_tag):
+    """{dataset: notOlderThan seconds} for every ENABLED zone dataset that exposes a client IP.
+
+    The dataset list is introspected rather than hard-coded, so a dataset Cloudflare adds with
+    `clientIP` in it shows up here without a code change — that is the drift case a privacy page
+    cares about as much as a retention change on a known dataset."""
+    if not _settings_fields:
+        found = graphql_post('{ __type(name: "ZoneSettings") { fields { name } } }')
+        _settings_fields.extend(f["name"] for f in ((found.get("__type") or {}).get("fields") or []))
+        if not _settings_fields:
+            raise RuntimeError("ZoneSettings introspection returned no fields")
+    selection = " ".join(f"{name} {{ enabled notOlderThan availableFields }}" for name in _settings_fields)
+    data = graphql_post(
+        f"query($z: String!) {{ viewer {{ zones(filter: {{zoneTag: $z}}) {{ settings {{ {selection} }} }} }} }}",
+        {"z": zone_tag})
+    zones = (data.get("viewer") or {}).get("zones") or []
+    if not zones:
+        raise RuntimeError(f"settings query returned no zones for zoneTag={zone_tag}")
+    out = {}
+    for dataset, limits in (zones[0].get("settings") or {}).items():
+        if limits and limits.get("enabled") and CLIENT_IP_FIELDS & set(limits.get("availableFields") or []):
+            out[dataset] = int(limits.get("notOlderThan") or 0)
+    if not out:
+        # Zero IP-bearing datasets is a schema change, not a fact to publish as "nothing kept".
+        raise RuntimeError(f"settings for zoneTag={zone_tag}: no enabled dataset exposes {sorted(CLIENT_IP_FIELDS)}")
+    return out
 
 
 def graphql_query(zone_tag, start, end):
@@ -196,27 +262,8 @@ def graphql_query(zone_tag, start, end):
             "end": end,
         },
     }
-    body = json.dumps(query).encode()
-    req = urllib.request.Request(
-        API,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "homelab-cloudflare-edge-probe",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            payload = json.load(resp)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"GraphQL query → HTTP {exc.code}: {exc.read()[:500]!r}") from None
-    # GraphQL envelope: {"data": …, "errors": null} — there is NO REST `success` field here
-    # (that guard raised on every response, #1340 residual). Errors are the signal.
-    if payload.get("errors"):
-        raise RuntimeError(f"GraphQL query → errors: {payload['errors']}")
-    zones = payload.get("data", {}).get("viewer", {}).get("zones", [])
+    data = graphql_post(query["query"], query["variables"])
+    zones = data.get("viewer", {}).get("zones", [])
     if not zones:
         raise RuntimeError(f"GraphQL query returned no zones for zoneTag={zone_tag}")
     zone = zones[0]
@@ -225,13 +272,16 @@ def graphql_query(zone_tag, start, end):
     return requests_rows, firewall_rows
 
 
-def collect(lines, fetch=None, zone_ids=None):
+def collect(lines, fetch=None, zone_ids=None, fetch_settings=None):
     """Emit per-zone edge metrics. Every configured zone emits `edge_probe_ok` no matter what
-    failed, so a zone that silently stops answering is visible as a zone, not as a gap."""
+    failed, so a zone that silently stops answering is visible as a zone, not as a gap.
+
+    `fetch_settings` is the self-test seam for the retention read; with a `fetch` fixture and no
+    `fetch_settings` the retention read is skipped."""
     global _errors
     lines += HEADERS
     now = time.time()
-    # Poll a short window: 5 minutes back. Adaptive retention is 1w1d; Prometheus owns history.
+    # Poll a short window: 5 minutes back. Adaptive retention is 31d; Prometheus owns history.
     start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 300))
     end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
 
@@ -304,6 +354,23 @@ def collect(lines, fetch=None, zone_ids=None):
             _errors += 1
             print(f"zone {zone_id}: edge poll failed: {exc}", flush=True)
 
+        # Retention: hourly, retried on every poll after a failure (the refresh time only advances
+        # on success). Its OWN try, after the counters: a broken settings read must never stall
+        # the edge counters — it flips probe_ok and keeps the gauge's last real value, nothing else.
+        read_settings = fetch_settings or (settings_query if fetch is None else None)
+        if read_settings and now - _settings_at.get(zone_id, 0) >= SETTINGS_INTERVAL:
+            try:
+                fresh = read_settings(zone_id)
+                for key in [k for k in _retention if k[0] == zone_name]:
+                    del _retention[key]
+                for dataset, seconds in fresh.items():
+                    _retention[(zone_name, dataset)] = seconds
+                _settings_at[zone_id] = now
+            except Exception as exc:
+                failed += 1
+                _errors += 1
+                print(f"zone {zone_id}: settings read failed: {exc}", flush=True)
+
         probe_ok.append((zone_name, 0 if failed else 1))
 
     _prune_buckets(now)
@@ -324,6 +391,9 @@ def collect(lines, fetch=None, zone_ids=None):
         lines.append(metric("cloudflare_edge_firewall_events_host_action_source_total",
                             {"zone": zone, "host": host, "action": action, "source": source},
                             value))
+    for (zone, dataset), value in sorted(_retention.items()):
+        lines.append(metric("cloudflare_edge_client_ip_retention_seconds_dataset",
+                            {"zone": zone, "dataset": dataset}, value))
     for zone_label, value in probe_ok:
         lines.append(metric("cloudflare_edge_probe_ok", {"zone": zone_label}, value))
 
@@ -639,6 +709,26 @@ def _transport_check():
         req_rows, fw_rows = graphql_query(_Z_PRODUCT, "2026-09-02T18:45:00Z", "2026-09-02T18:50:00Z")
         assert req_rows == _FLIPPED_REQUESTS and fw_rows == _FLIPPED_FIREWALL, \
             "a clean GraphQL envelope (errors: null, no success field) must yield the rows"
+        # The retention read: introspection, then settings — only enabled client-IP datasets count.
+        _settings_fields.clear()
+        answers = iter([
+            {"data": {"__type": {"fields": [{"name": "httpRequestsAdaptive"},
+                                            {"name": "httpRequestsAdaptiveGroups"},
+                                            {"name": "firewallEventsAdaptive"}]}}, "errors": None},
+            {"data": {"viewer": {"zones": [{"settings": {
+                "httpRequestsAdaptive": {"enabled": True, "notOlderThan": 2678400,
+                                         "availableFields": ["clientIP", "datetime"]},
+                "httpRequestsAdaptiveGroups": {"enabled": True, "notOlderThan": 2678400,
+                                               "availableFields": ["clientRequestHTTPHost"]},
+                "firewallEventsAdaptive": {"enabled": False, "notOlderThan": 2678400,
+                                           "availableFields": ["clientIP"]},
+            }}]}}, "errors": None},
+        ])
+        urllib.request.urlopen = lambda req, timeout=None: _Resp(json.dumps(next(answers)).encode())
+        got = settings_query(_Z_PRODUCT)
+        assert got == {"httpRequestsAdaptive": 2678400}, \
+            f"only ENABLED datasets exposing clientIP may count: {got}"
+        _settings_fields.clear()
         urllib.request.urlopen = fake({"data": None, "errors": [{"message": 'unknown field "requests"'}]})
         try:
             graphql_query(_Z_PRODUCT, "a", "b")
@@ -725,6 +815,75 @@ def self_test():
         "a downward-revised bucket must never decrement a counter\n"
         f"--- exposition ---\n{held}")
 
+    # 2e. CLIENT-IP RETENTION — the gauge oracle's privacy-page drift alert reads.
+    calls = []
+
+    def settings_fixture(answer):
+        def read(zone_id):
+            calls.append(zone_id)
+            if isinstance(answer, Exception):
+                raise answer
+            return dict(answer)
+        return read
+
+    def poll(answer, reset=False):
+        if reset:
+            _reset_totals()
+        out = []
+        collect(out, fetch=_fixture_fetch([], []), zone_ids=[_Z_PRODUCT],
+                fetch_settings=settings_fixture(answer))
+        return "\n".join(out)
+
+    rec = {"firewallEventsAdaptive": 2678400, "httpRequestsAdaptive": 2678400}  # live 2026-10-07
+    first = poll(rec, reset=True)
+    for sample in (
+        'cloudflare_edge_client_ip_retention_seconds_dataset{dataset="firewallEventsAdaptive",zone="minutark.ee"} 2678400',
+        'cloudflare_edge_client_ip_retention_seconds_dataset{dataset="httpRequestsAdaptive",zone="minutark.ee"} 2678400',
+    ):
+        assert sample in first, f"missing retention sample: {sample}\n--- exposition ---\n{first}"
+    # Within the hour: no re-read, the value holds.
+    held_ret = poll({"httpRequestsAdaptive": 1})
+    assert len(calls) == 1, f"settings must not be re-read inside SETTINGS_INTERVAL: {calls}"
+    assert 'dataset="httpRequestsAdaptive",zone="minutark.ee"} 2678400' in held_ret
+    # A failed refresh keeps the last real value, flips probe_ok, and retries on the next poll.
+    _settings_at[_Z_PRODUCT] = 0
+    before = _errors
+    failed_ret = poll(RuntimeError("settings unavailable"))
+    assert 'dataset="httpRequestsAdaptive",zone="minutark.ee"} 2678400' in failed_ret, \
+        "a failed settings read must not drop the last known retention"
+    assert 'cloudflare_edge_probe_ok{zone="minutark.ee"} 0' in failed_ret, \
+        "a failed settings read must flip probe_ok so the blind alert covers it"
+    _errors = before
+    # A PERSISTENT settings failure must not stall the counters (review of #2372): rows still
+    # accumulate on every poll, probe_ok reads 0, and the read is retried each time.
+    _reset_totals()
+    before = _errors
+    for n in (1, 2):
+        stalled = []
+        collect(stalled, fetch=_fixture_fetch(_FLIPPED_REQUESTS if n == 1 else later, []),
+                zone_ids=[_Z_PRODUCT], fetch_settings=settings_fixture(RuntimeError("no scope")))
+        stalled = "\n".join(stalled)
+        want = 42 * n
+        assert f'cloudflare_edge_requests_total{{host="mcp.minutark.ee",status="200",zone="minutark.ee"}} {want}' in stalled, \
+            f"a failing settings read stalled the edge counters (poll {n})\n{stalled}"
+        assert 'cloudflare_edge_probe_ok{zone="minutark.ee"} 0' in stalled
+    _errors = before
+    _reset_totals()
+    calls.clear()
+    poll(rec, reset=True)
+    poll(RuntimeError("x"))  # inside the interval: not attempted
+    _settings_at[_Z_PRODUCT] = 0
+    poll(RuntimeError("settings unavailable"))
+    _errors = before
+
+    # A changed answer replaces the zone's set — a dataset that loses clientIP leaves the gauge.
+    changed = poll({"httpRequestsAdaptive": 7776000})
+    assert len(calls) == 3, f"a failed read must be retried on the next poll: {calls}"
+    assert 'dataset="httpRequestsAdaptive",zone="minutark.ee"} 7776000' in changed
+    assert 'dataset="firewallEventsAdaptive"' not in changed, \
+        f"a dataset no longer reported must leave the gauge\n{changed}"
+    _reset_totals()
+
     # 3. The committed rules, read from disk.
     exprs = rule_exprs()
     blind = "CloudflareEdgeProbeBlind"
@@ -796,7 +955,8 @@ def self_test():
     _transport_check()
 
     print("cloudflare edge-probe self-test: OK (parser, handler over a real socket, GraphQL "
-          "transport guard, today's exposition, counter semantics — dedupe across overlapping "
+          "transport guard + the settings read, today's exposition, client-IP retention (hourly "
+          "refresh, held through a failed read, replaced on change), counter semantics — dedupe across overlapping "
           "windows, persistence when a label set leaves the window, monotonicity under a "
           f"downward-revised bucket, survival of a failed poll — and the committed {blind} expr "
           "replayed against flipped + blind fixtures; the retired CloudflareEdge5xx asserted "
