@@ -274,7 +274,7 @@ if [ -n "$added_locks" ]; then
   while read -r lv; do
     [ -n "$lv" ] || continue
     # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
-    if printf '%s\n' $reverted_locks | grep -qxF "$lv"; then
+    if grep -qxF "$lv" <<< "$(printf '%s\n' $reverted_locks)"; then
       echo "pin-only-lint: FAIL — devbox.lock: $lv is a REVERTED lock version — the lock revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-lock-* PR names it); this PR stays red until nixpkgs moves that package on (or devbox.json pins it)." >&2
       rc=1
     fi
