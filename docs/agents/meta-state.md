@@ -10,19 +10,22 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **OPERATOR: oracle-fleet#798 item 6** (the privacy retention line) is still unfixed and needs a human — the
+  issue sits `agent/blocked`, out of the loop since #2366 (2026-10-07), so nothing retries it. Delete this bullet
+  when #798 closes.
 - **⚑ PICKUP (2026-10-07 morning — S9 build list DONE overnight; TICK-LOG 2026-10-06 night has the arc).**
   Landed: #2345 (0: packaging-only chart majors ARM on `appVersion: unchanged`), #2344 (1: G17 second body
   section + fixture; ci step c757e178), #2348 (2: ADR-151 CRD owner app + group + belt), #2351 (3: G12
   postUpgradeTasks), #2347/#2349/#2355/#2359 + #2350 (4: ADR-150 lease, cluster + box — box timer LIVE
   21:28Z), #2346 (sentinel `contents: write` DECLARED). **kps 91.8.0 + CRDs 32.0.1 LIVE 23:34Z** (#2256; the
   lease armed→confirmed on a real bump after a seat renew — ordering hole fixed by #2359). Cloudflared
-  2026.10.0 tofu half applied. **OPERATOR (morning):** (a) the `homelab-sentinel` permission click
-  (`contents: write`; `GithubAppPermissionDrift` had not fired by 23:46Z — expect it) → then the seat drills the
+  2026.10.0 tofu half applied. **OPERATOR (morning):** (a) ✅ the `homelab-sentinel` permission click DONE (operator, 2026-10-07 — reported at the
+  evening session's start) → NEXT the seat drills the
   REVERT half: a synthetic expired lease on the next merged pin-only kps bump (`agents/upgrade-lease.sh open
   --subject argocd/platform/kube-prometheus-stack.yaml --chart kube-prometheus-stack --sha <merged sha> --from
   <old> --to <new> --expect-min 0`, the #2276→#2279 shape) → `mgmt-lease` opens `revert-chart-lease-<sha8>` →
   reflex merges → ArgoCD back; only then **step (5)** the one `matchPackageNames` line arming kps majors (next
-  to the argo-workflows rule). (b) #2260 (devbox major) merge — nothing blocks. (c) **Goal #2273 production-leg
+  to the argo-workflows rule). (b) ✅ **#2362 MERGED by the operator ~20:4xZ** (devbox major — #2260 closed + re-dispatched 17:41Z so the G17 section rendered on real data; lens APPROVED 18:56Z, parked `major/awaiting-human`) — the LAST lock major a human merges: **#2369 (merged 20:1xZ) arms class-7 majors** (operator ruling, `dependency-upgrades.md` §2 Review — no ADR edit; opentofu majors stay human via `HUMAN_PACKAGES`). Two proofs pending (§Next steps 10): the next lock major opening `lock-lane: arm` + merging on the lens; the lock revert drill (bad lock on `runner-image.yaml` → `revert-lock-<sha8>` → check (i) red). (c) **Goal #2273 production-leg
   finding:** theme 2 (#2333) put `lastEditedAt` in `gh pr list --json` — not a gh field — every stack's review
   ride FATAL'd 23:22–23:45Z; seat quickfix 914b2b3c drops it, the body-edit re-review leg is INERT until it reads
   GraphQL `PullRequest.lastEditedAt` (bucket-A material; the rides are green again from 23:49Z). **Loose (S9,
