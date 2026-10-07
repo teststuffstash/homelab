@@ -172,9 +172,9 @@ _gf_self_test() {
   # rule: the ⇒ suffix lands on the numbered entry only, and a second ruling REPLACES the first
   ruled="$(printf '%s\n' "$body" | awk -v n=2 -v r="fold → #9 — already filed" '$0 ~ ("^" n "\\. ") { sub(/ ⇒ .*$/, ""); print $0 " ⇒ " r; next } { print }')"
   [ "$(printf '%s\n' "$ruled" | grep -c ' ⇒ ')" = "1" ] || { echo "self-test: rule suffix count wrong" >&2; return 1; }
-  printf '%s\n' "$ruled" | grep -q '^2\. origin=#13 surface=b class=child — y ⇒ fold → #9 — already filed$' || { echo "self-test: rule suffix not on entry 2" >&2; return 1; }
+  grep -q '^2\. origin=#13 surface=b class=child — y ⇒ fold → #9 — already filed$' <<< "$ruled" || { echo "self-test: rule suffix not on entry 2" >&2; return 1; }
   reruled="$(printf '%s\n' "$ruled" | awk -v n=2 -v r="mint → #77" '$0 ~ ("^" n "\\. ") { sub(/ ⇒ .*$/, ""); print $0 " ⇒ " r; next } { print }')"
-  printf '%s\n' "$reruled" | grep -q '^2\. origin=#13 surface=b class=child — y ⇒ mint → #77$' || { echo "self-test: re-rule did not replace" >&2; return 1; }
+  grep -q '^2\. origin=#13 surface=b class=child — y ⇒ mint → #77$' <<< "$reruled" || { echo "self-test: re-rule did not replace" >&2; return 1; }
   [ "$(printf '%s\n' "$reruled" | gf_parse_counts)" = "2 0" ] || { echo "self-test: a ruled entry still counts once" >&2; return 1; }
   # checkpoint: inserted after burn-down: on first stamp, replaced in place on the next, never a second line
   st1="$(printf '%s\n' "$body" | gf_stamp_checkpoint "2026-09-23T06:00:00Z (c) no change")"
@@ -182,7 +182,7 @@ _gf_self_test() {
   printf '%s\n' "$st1" | sed -n '4p' | grep -q '^last-checkpoint: 2026-09-23T06:00:00Z (c) no change$' || { echo "self-test: checkpoint line not after burn-down:" >&2; return 1; }
   st2="$(printf '%s\n' "$st1" | gf_stamp_checkpoint "2026-09-23T07:00:00Z (a) 2 minted")"
   [ "$(printf '%s\n' "$st2" | grep -c '^last-checkpoint:')" = "1" ] || { echo "self-test: checkpoint re-stamp grew a second line" >&2; return 1; }
-  printf '%s\n' "$st2" | grep -q '^last-checkpoint: 2026-09-23T07:00:00Z (a) 2 minted$' || { echo "self-test: checkpoint re-stamp did not replace" >&2; return 1; }
+  grep -q '^last-checkpoint: 2026-09-23T07:00:00Z (a) 2 minted$' <<< "$st2" || { echo "self-test: checkpoint re-stamp did not replace" >&2; return 1; }
   [ "$(printf '%s\n' "$st2" | gf_parse_counts)" = "2 0" ] || { echo "self-test: the header line disturbed the counts parse" >&2; return 1; }
   echo "goal-findings self-test: OK (counts, append numbering, advance rewrite, rule suffix, checkpoint stamp)"
 }

@@ -53,8 +53,8 @@ ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
 eq()       { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout contains: $2" || ok "$1"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wantnot()  { grep -qF -- "$2" <<< "$OUT" && bad "$1" "stdout contains: $2" || ok "$1"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
 
 # _derive <pr-meta-json> — run the derivation block with a stub gh that returns the given JSON

@@ -263,7 +263,7 @@ src_blockpark() {
       if [ "${bcount:-0}" -gt 0 ] 2>/dev/null; then
         printf 'BLOCKPARK|%s#%s|park gates %s blocked issue(s) via %s#%s — read it AHEAD of the pile\n' \
           "$r" "$n" "$bcount" "$irepo" "$inum" >> "$tmp"
-      elif printf '%s' "$ititle" | grep -q '🚨'; then
+      elif grep -q '🚨' <<< "$ititle"; then
         printf 'BLOCKPARK|%s#%s|park on hotfix-class issue %s#%s (🚨) — read it AHEAD of the pile\n' \
           "$r" "$n" "$irepo" "$inum" >> "$tmp"
       fi
@@ -297,7 +297,7 @@ src_stint() {
   openo=0; opens=0
   while IFS=: read -r num st; do
     [ -n "$num" ] || continue
-    if printf '%s\n' "$orig" | grep -qx "$num"; then
+    if grep -qx "$num" <<< "$orig"; then
       [ "$st" = "open" ] && openo=$((openo+1))
     else
       [ "$st" = "open" ] && opens=$((opens+1))

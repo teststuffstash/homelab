@@ -147,14 +147,14 @@ ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
 eq()       { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wanterr()  { printf '%s' "$ERR" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
-noerr()    { [ -z "$ERR" ] && ok "$1" || bad "$1" "stderr: $(printf '%s' "$ERR" | head -2)"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wanterr()  { grep -qF -- "$2" <<< "$ERR" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+noerr()    { [ -z "$ERR" ] && ok "$1" || bad "$1" "stderr: $(head -2 <<< "$ERR")"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
 # The two that carry the whole point.
-dispatched() { printf '%s' "$OUT" | grep -qF "REACHED: dispatch" && [ "$RC" = 0 ] \
+dispatched() { grep -qF "REACHED: dispatch" <<< "$OUT" && [ "$RC" = 0 ] \
                  && ok "$1" || bad "$1" "did NOT reach dispatch (rc=$RC, stderr: $(printf '%s' "$ERR" | tail -1))"; }
-refused()    { printf '%s' "$OUT" | grep -qF "REACHED: dispatch" \
+refused()    { grep -qF "REACHED: dispatch" <<< "$OUT" \
                  && bad "$1" "DISPATCHED — the slo-teeth gate was bypassed (this is homelab#831)" \
                  || { [ "$RC" = 0 ] && ok "$1" || bad "$1" "refused, but with exit $RC — a guard must stand aside cleanly, not fail the pod (stderr: $(printf '%s' "$ERR" | tail -1))"; }; }
 

@@ -9,5 +9,8 @@
 # The match is the NAME SUFFIX after any scope prefix — Claude Code scopes skills with `:`
 # (plugin:skill, apps/web:deploy) and paths with `/` — so a re-scope cannot fail the gate open.
 input=$(cat)
-printf '%s' "$input" | grep -Eq '"skill"[[:space:]]*:[[:space:]]*"([^"]*[:/])?design-agents"' || exit 0
+# A heredoc, never `printf | grep -q` (scripts/sigpipe-lint.py); /bin/sh has no here-strings.
+grep -Eq '"skill"[[:space:]]*:[[:space:]]*"([^"]*[:/])?design-agents"' <<EOF || exit 0
+$input
+EOF
 printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Unprompted design-agents read blocked (operator rule 2026-09-27, seat card section Design questions). The full agents-corpus load (~300-350k tokens) starts ONLY when the operator types /design-agents themselves. STOP here: do not read docs/agents/ or the agents/ READMEs wholesale as a workaround. Ask the operator (AskUserQuestion) whether the question needs the full corpus, a named slice of it, or no corpus read; if the full read, the operator issues /design-agents <question> in their next message."}}'

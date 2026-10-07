@@ -10,7 +10,7 @@
 # No jq: runs on the host too. Detection reads the raw hook JSON: an open-item header `[ ] **FU-NNN**`
 # whose id heads no item in the tracker or its archive is a mint.
 input=$(cat)
-printf '%s' "$input" | grep -q 'follow-ups\.md' || exit 0
+case "$input" in *follow-ups.md*) ;; *) exit 0 ;; esac   # not `printf | grep -q` — scripts/sigpipe-lint.py
 dir="${CLAUDE_PROJECT_DIR:-.}/docs"
 [ -f "$dir/follow-ups.md" ] || exit 0
 new=""

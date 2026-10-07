@@ -89,15 +89,15 @@ gj="$(api "repos/$slug/issues/$goal")" || { echo "PROBE-FAIL: cannot read $slug#
 jq -e . >/dev/null 2>&1 <<<"$gj" || { echo "PROBE-FAIL: unparseable issue payload" >&2; exit 2; }
 title="$(jq -r .title <<<"$gj")"; body="$(jq -r '.body // ""' <<<"$gj")"
 labels="$(jq -r '[.labels[].name] | join(" ")' <<<"$gj")"; utype="$(jq -r .user.type <<<"$gj")"
-has_label() { printf ' %s ' "$labels" | grep -q " $1 "; }
+has_label() { grep -q " $1 " <<< " $labels "; }
 echo "goal-lint — $slug#$goal: $title"
 
 has_label task/goal && ok "task/goal label" || fail "missing \`task/goal\` — nothing in the goal lane sees it (burn-down, checkpoint, terminals all key on the label)"
-printf '%s' "$title" | grep -qE '^Goal:' || warn "title should read \`Goal: <intent>\` (the type is capitalised; lowercase 'goal' is retired vocabulary — docs/glossary.md)"
+grep -qE '^Goal:' <<< "$title" || warn "title should read \`Goal: <intent>\` (the type is capitalised; lowercase 'goal' is retired vocabulary — docs/glossary.md)"
 
 nb="$(count_lines "$body" Budget)"
 if [ "$nb" -eq 1 ]; then
-  bv="$(line "$body" Budget)"; printf '%s' "$bv" | grep -qE '^[0-9]+(\.[0-9]+)?$' && ok "Budget: $bv" || fail "Budget: '$bv' is not a bare number (the launcher parses it as USD)"
+  bv="$(line "$body" Budget)"; grep -qE '^[0-9]+(\.[0-9]+)?$' <<< "$bv" && ok "Budget: $bv" || fail "Budget: '$bv' is not a bare number (the launcher parses it as USD)"
 elif [ "$nb" -eq 0 ]; then fail "no \`Budget:\` line — the launcher pre-flight and the registry both read it (unfunded-unknown, not funded-zero)"
 else fail "$nb \`Budget:\` lines — exactly one is the machine truth (#29's trap: €12 in prose, \$16 in the footer)"; fi
 
@@ -118,19 +118,19 @@ if [ -z "$gbase" ]; then
 elif [ "$gbase" = master ]; then
   : # ruled AFTER the walk (homelab#1423): `ok` when ≥ 1 `theme:` container carries an existing
     # goal/<goal>-<slug> branch (the ADR-126 themed shape), today's warn otherwise
-elif printf '%s' "$gbase" | grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$"; then
+elif grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$" <<< "$gbase"; then
   if branch_exists "$gbase"; then ok "Base: $gbase (branch exists)"; else
     fail "Base: $gbase — the branch does NOT exist. IL-G02: the AUTHOR cuts it from master before queueing anything; nothing in the machinery creates it (the first child ride fails at clone otherwise)"; fi
 else
   fail "Base: '$gbase' — must be \`master\` or \`goal/${goal}-<slug>\` (this goal's own number)"
 fi
 
-printf '%s\n' "$body" | grep -qE '^##+[[:space:]]*Goal\b' && ok "## Goal section" || fail "no \`## Goal\` section (intent + the acid test)"
-if printf '%s\n' "$body" | grep -qiE '^##+[[:space:]]*Acceptance'; then
-  printf '%s\n' "$body" | grep -qE '^[[:space:]]*[0-9]+\.' && ok "## Acceptance (numbered)" || warn "## Acceptance has no numbered items — each criterion must be checkable"
+grep -qE '^##+[[:space:]]*Goal\b' <<< "$body" && ok "## Goal section" || fail "no \`## Goal\` section (intent + the acid test)"
+if grep -qiE '^##+[[:space:]]*Acceptance' <<< "$body"; then
+  grep -qE '^[[:space:]]*[0-9]+\.' <<< "$body" && ok "## Acceptance (numbered)" || warn "## Acceptance has no numbered items — each criterion must be checkable"
 else fail "no \`## Acceptance\` section"; fi
-printf '%s\n' "$body" | grep -qiE '^##+[[:space:]]*Out of scope' && ok "## Out of scope" || warn "no \`## Out of scope\` — name it, or sprouts drift in"
-printf '%s\n' "$body" | grep -qE '^[[:space:]]*Assembly-for:' && fail "\`Assembly-for:\` belongs on the ASSEMBLY PR body, never the goal (IL-T18 keys on the PR)"
+grep -qiE '^##+[[:space:]]*Out of scope' <<< "$body" && ok "## Out of scope" || warn "no \`## Out of scope\` — name it, or sprouts drift in"
+grep -qE '^[[:space:]]*Assembly-for:' <<< "$body" && fail "\`Assembly-for:\` belongs on the ASSEMBLY PR body, never the goal (IL-T18 keys on the PR)"
 has_label agent/error && fail "agent/error on the goal — human-first breaker; clear it before anything runs"
 [ "$utype" = Bot ] && warn "authored by a Bot — breaker #1: the scan refuses a Bot-queued goal (a jail session writes as the operator and is fine)"
 
@@ -168,7 +168,7 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
     par="$(api "repos/$slug/issues/$k/sub_issues?per_page=1" --jq 'length')" || { warn "#$k: sub-issue count unreadable"; incomplete=1; par=0; }; par="${par:-0}"
     cb="$(line "$b" Base "$slug#$k")"
     ctouches="$(line "$b" Touches "$slug#$k")"
-    if printf '%s' "$t" | grep -qiE '^theme:'; then is_theme=1; else is_theme=0; fi
+    if grep -qiE '^theme:' <<< "$t"; then is_theme=1; else is_theme=0; fi
     if [ "$is_theme" -eq 1 ]; then
       # A THEME owns a branch (ADR-126): `Base: goal/<goal>-<slug>`, cut from master by the
       # goal-checkpoint at theme formation (a hand-authored theme's author does the same — IL-G02's
@@ -176,7 +176,7 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
       # must fit inside (v1.3.1 delta 2).
       if [ -z "$cb" ]; then
         fail "#$k (theme) has no \`Base:\` — a theme owns a goal/${goal}-<slug> branch: the checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it. Without it its children base nothing and the assembly PR has no head"
-      elif ! printf '%s' "$cb" | grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$"; then
+      elif ! grep -qE "^goal/${goal}-[a-z0-9][a-z0-9.-]*$" <<< "$cb"; then
         fail "#$k (theme) Base: '$cb' — must name goal/${goal}-<slug> (this goal's own number; \`master\` is the GOAL's base, never a theme's)"
       elif ! branch_exists "$cb"; then
         fail "#$k (theme) Base: $cb — the branch does NOT exist. The checkpoint cuts it at theme formation (a hand-authored theme's author does the same); nothing else creates it — cut it from master before queueing anything under the theme"
@@ -190,16 +190,16 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
         fail "#$k Base: '$cb' — a child of theme #$tnum must base the theme's branch ($tbase); '$cb' is $([ "$cb" = "$gbase" ] && echo "the GOAL's base" || echo "another branch") and its diff would land outside the theme's roll"
       fi
     elif [ -n "$cb" ]; then
-      if [ "$cb" = "$gbase" ]; then :; elif printf '%s' "$cb" | grep -qE "^goal/${goal}-" && branch_exists "$cb"; then :;
+      if [ "$cb" = "$gbase" ]; then :; elif grep -qE "^goal/${goal}-" <<< "$cb" && branch_exists "$cb"; then :;
       else fail "#$k Base: '$cb' — must equal the goal's Base ($gbase) or name an EXISTING goal/${goal}-<theme> branch"; fi
     fi
     # A CONTAINER (theme / post-launch bucket) is label-inert by design; a WORK ITEM may also
     # have sub-issues — its sprouts bind under their origin (lineage rule 8) — so "has children"
     # alone says nothing. Work item = carries agent-fix; container = has children and does not.
-    if printf ' %s ' "$l" | grep -q ' agent-fix '; then is_work=1; else is_work=0; fi
+    if grep -q ' agent-fix ' <<< " $l "; then is_work=1; else is_work=0; fi
     # Machine/seat containers are recognisable by title even before they have children: the
     # IL-T17 post-launch bucket, v1.3 themes, stints, retro batches.
-    if printf '%s' "$t" | grep -qiE '^(post-launch|theme|stint|retro-batch):'; then is_named_container=1; else is_named_container=0; fi
+    if grep -qiE '^(post-launch|theme|stint|retro-batch):' <<< "$t"; then is_named_container=1; else is_named_container=0; fi
     if { [ "$par" -gt 0 ] || [ "$is_named_container" -eq 1 ]; } && [ "$is_work" -eq 0 ]; then
       containers=$((containers+1))
       # The post-launch BUCKET is out of scope by construction (it carries a `deferred by=bucket`
@@ -207,10 +207,10 @@ walk() {  # walk <issue-number> <depth> [<theme-base> <theme-touches> <theme-num
       # — a theme, a stint — is an ordinary tree member the container must rule. Tested on the
       # CLASSIFICATION, never on the title alone: homelab#1334 is a work item whose title starts
       # `post-launch:` and a title-only test dropped exactly the member worth reporting.
-      printf '%s' "$t" | grep -qiE '^post-launch:' || MEMBER_NUMS+=("$k")
+      grep -qiE '^post-launch:' <<< "$t" || MEMBER_NUMS+=("$k")
       # a post-launch bucket's children base master by design (ADR-102) — no Base: expected
-      if [ -z "$cb" ] && ! printf '%s' "$t" | grep -qiE '^post-launch:'; then warn "#$k (container, depth $d) has no \`Base:\` — its children inherit nothing"; fi
-      printf ' %s ' "$l" | grep -qE ' agent/(queued|in-progress) ' && fail "#$k is a container (sub-issues, no agent-fix) but carries a dispatch label — containers stay label-inert"
+      if [ -z "$cb" ] && ! grep -qiE '^post-launch:' <<< "$t"; then warn "#$k (container, depth $d) has no \`Base:\` — its children inherit nothing"; fi
+      grep -qE ' agent/(queued|in-progress) ' <<< " $l " && fail "#$k is a container (sub-issues, no agent-fix) but carries a dispatch label — containers stay label-inert"
       if [ "$is_theme" -eq 1 ]; then
         [ "$d" -lt 3 ] && walk "$k" $((d+1)) "$cb" "$ctouches" "$k"
       else
@@ -253,14 +253,14 @@ EOF_CGUARD
         fi
       fi
       [ "$is_work" -eq 1 ] || warn "#$k lacks \`agent-fix\` — invisible to every dispatch clause until labelled"
-      if ! printf ' %s ' "$l" | grep -qE ' task/[a-z]+ '; then
-        if printf '%s' "$t" | grep -qiE '\b(build|harness|e2e|as-code|implement|scaffold|wire|add)\b'; then
+      if ! grep -qE ' task/[a-z]+ ' <<< " $l "; then
+        if grep -qiE '\b(build|harness|e2e|as-code|implement|scaffold|wire|add)\b' <<< "$t"; then
           warn "#$k has no \`task/*\` class and reads build-shaped — it would ride \`fix.yaml\` (a bug-hunter's brief); label \`task/build\` (the sleep#48 trap)"
         else
           echo "info: #$k has no \`task/*\` class — defaults to \`task/fix\` (fine for a defect)"
         fi
       fi
-      printf '%s\n' "$b" | grep -qiE 'acceptance|deliverable|done when|expected' || warn "#$k states no acceptance/deliverable anywhere in its body — one deliverable with its own acceptance"
+      grep -qiE 'acceptance|deliverable|done when|expected' <<< "$b" || warn "#$k states no acceptance/deliverable anywhere in its body — one deliverable with its own acceptance"
       e="$(api "repos/$slug/issues/$k/dependencies/blocked_by?per_page=50" --jq 'length')"; edges=$((edges + ${e:-0}))
       [ "$par" -gt 0 ] && [ "$d" -lt 3 ] && walk "$k" $((d+1)) "$tbase" "$ttouches" "$tnum"
     fi

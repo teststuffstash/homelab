@@ -115,7 +115,7 @@ VM_KEY="${OPN_TEST_SSH_KEY:-$PVE_KEY}"
 KEY_ENTRY="${OPN_TEST_KEY_ENTRY:-opnsense-test-api-key}"
 SECRET_ENTRY="${OPN_TEST_SECRET_ENTRY:-opnsense-test-api-secret}"
 
-echo "$OPN_TEST_HOST" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "OPN_TEST_HOST must be an IPv4 literal"
+grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$OPN_TEST_HOST" || die "OPN_TEST_HOST must be an IPv4 literal"
 # The live router (docs/router-move.md (B): Big Data before window 1, the nx-02 node after) and every
 # router node, live or standing — the test VM is none of them.
 PROD_HOST="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml" | head -1)"
@@ -382,7 +382,7 @@ preflight() {
   pk="$(vm_ssh "pkg query '%n %v' os-frr os-haproxy os-acme-client" 2>/dev/null || true)"
   PLUGINS="$(echo "$pk" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
   for n in os-frr os-haproxy os-acme-client; do
-    echo "$pk" | grep -q "^$n " || die "plugin $n is not installed on the test VM (baseline incomplete)"
+    grep -q "^$n " <<< "$pk" || die "plugin $n is not installed on the test VM (baseline incomplete)"
   done
 }
 

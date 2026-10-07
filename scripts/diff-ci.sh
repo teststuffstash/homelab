@@ -66,6 +66,8 @@ MAP=(
   "github-apps-lint:^(agents/|scripts/|docs/github-apps)"
   "prompt-transport-lint:^(agents/|argocd/|scripts/)"
   "py-compile-lint:\.py$"
+  # every tracked shell file + the lint itself (the replay suite also runs it, fixtures/sigpipe-lint/)
+  "sigpipe-lint:(\.(sh|bash)$|^scripts/sigpipe-lint\.py$|^githooks/|^agents/replay/stubs/)"
   "shim-self-test:^scripts/claude-model-shim\.py"
   # the self-test's only inputs are scripts/pin-only-lint.sh + scripts/pin-only-lint-test.sh (#2072)
   "pin-only-lint-test:^scripts/pin-only-lint"
@@ -140,7 +142,7 @@ changed=$( { git diff --name-only "$base"; git diff --name-only --cached; git st
 echo "diff-ci: $(printf '%s\n' "$changed" | grep -c .) changed file(s) vs $BASE"
 
 run=0; skipped=0; failed=""
-if printf '%s\n' "$changed" | grep -qE '^devbox\.(json|lock)$'; then
+if grep -qE '^devbox\.(json|lock)$' <<< "$changed"; then
   echo "diff-ci: devbox pins changed — running EVERYTHING"
   match_all=true
 else
@@ -148,7 +150,7 @@ else
 fi
 for entry in "${MAP[@]}"; do
   task="${entry%%:*}"; regex="${entry#*:}"
-  if ! $match_all && ! printf '%s\n' "$changed" | grep -qE "$regex"; then
+  if ! $match_all && ! grep -qE "$regex" <<< "$changed"; then
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"

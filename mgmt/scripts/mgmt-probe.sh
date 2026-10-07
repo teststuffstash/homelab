@@ -508,7 +508,7 @@ check_substrate() {
       # component — an absent gauge, never a false "current" (the mgmt_node_drift rule).
       unread+=("$comp"); continue
     fi
-    fetched="$(printf '%s\n' "$upstream" | head -1)"
+    fetched="$(head -1 <<< "$upstream")"
     minors="$(printf '%s\n' "$upstream" | tail -n +2)"
     [ -n "$minors" ] && [ -n "$fetched" ] || { unread+=("$comp"); continue; }
     # How many distinct upstream minors are strictly newer than ours. ⚠ Bounded by the release
@@ -693,7 +693,7 @@ ansible_verdict() {
       # the host's own failure lines: `failed: [host] …` (loop items) / `fatal: [host]: …`
       local mine
       mine="$(printf '%s\n' "$clean" | grep -E "^(failed|fatal): \[$host\]" || true)"
-      if [ -n "$mine" ] && ! printf '%s\n' "$mine" | grep -vqE "$ANSIBLE_CONNECT_RE"; then
+      if [ -n "$mine" ] && ! grep -vqE "$ANSIBLE_CONNECT_RE" <<< "$mine"; then
         unreach+=("$host")
       else
         errored+=("$host")

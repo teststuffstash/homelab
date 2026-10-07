@@ -544,7 +544,9 @@ EOF
   verdict_parse="strict"
   if [ "$sonnet_verdict" = "UNKNOWN" ]; then
     echo "  UNPARSEABLE verdict — raw reply, first 600 bytes:"
-    printf '%s' "${RAW_REPLY:-(none)}" | head -c 600 | sed 's/^/  | /'
+    # sliced in-shell, never `printf | head -c` (a reader that exits early leaves the writer on a
+    # closed pipe — scripts/sigpipe-lint.py); LC_ALL=C in the subshell keeps the cut in BYTES.
+    ( LC_ALL=C; rr="${RAW_REPLY:-(none)}"; printf '%s' "${rr:0:600}" ) | sed 's/^/  | /'
     echo ""
     # RECOVER THE TOKEN, never infer the verdict. The measured failure is a well-formed verdict
     # inside malformed JSON — a `findings` value carrying literal newlines or unescaped quotes,

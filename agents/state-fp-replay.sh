@@ -283,12 +283,12 @@ differs() { [ "$2" != "$3" ] && ok "$1" || bad "$1" "the fingerprint did NOT mov
 eq()      { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
 nonempty(){ [ -n "$2" ] && ok "$1" || bad "$1" "empty, wanted a value"; }
 isempty() { [ -z "$2" ] && ok "$1" || bad "$1" "got '$2', wanted empty"; }
-want()    { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wantnot() { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout has: $2" || ok "$1"; }
-wanterr() { printf '%s' "$ERR" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
-noerr()   { [ -z "$ERR" ] && ok "$1" || bad "$1" "stderr: $(printf '%s' "$ERR" | head -2)"; }
+want()    { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wantnot() { grep -qF -- "$2" <<< "$OUT" && bad "$1" "stdout has: $2" || ok "$1"; }
+wanterr() { grep -qF -- "$2" <<< "$ERR" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+noerr()   { [ -z "$ERR" ] && ok "$1" || bad "$1" "stderr: $(head -2 <<< "$ERR")"; }
 wantrc()  { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
-survives(){ printf '%s' "$OUT" | grep -qF "REACHED: end" && [ "$RC" = 0 ] \
+survives(){ grep -qF "REACHED: end" <<< "$OUT" && [ "$RC" = 0 ] \
               && ok "$1: runs to completion under set -euo pipefail" \
               || bad "$1: runs to completion under set -euo pipefail" "rc=$RC, stderr: $(printf '%s' "$ERR" | tail -1)"; }
 markers() { jq '[.comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}"))] | length' "$FIX"; }
@@ -388,9 +388,9 @@ eq       "K4: later prose does not shadow the newest MARKER"         "$(prev)" "
 section "5 — the PR#234 sequence: five rides become one"
 fx_base
 _go arbitrate; ARB="$OUT"
-printf '%s' "$ARB" | grep -qF "UNITS arbitrate|${REPO}|pr-${PR}" && ok "T1: tick 1 EMITS the arbitrate unit" \
+grep -qF "UNITS arbitrate|${REPO}|pr-${PR}" <<< "$ARB" && ok "T1: tick 1 EMITS the arbitrate unit" \
   || bad "T1: tick 1 EMITS the arbitrate unit" "no unit line in: $ARB"
-printf '%s' "$ARB" | grep -qF "DEBOUNCED" && bad "T1: and does not debounce (nothing recorded yet)" "debounced on the first tick" \
+grep -qF "DEBOUNCED" <<< "$ARB" && bad "T1: and does not debounce (nothing recorded yet)" "debounced on the first tick" \
   || ok "T1: and does not debounce (nothing recorded yet)"
 survives "T1"
 UCLAUSE=arbitrate _go mark
@@ -409,7 +409,7 @@ survives "T2"
 T_EMITS=0
 for _i in 1 2 3 4; do
   _go arbitrate
-  printf '%s' "$OUT" | grep -qF "UNITS arbitrate|" && T_EMITS=$((T_EMITS+1))
+  grep -qF "UNITS arbitrate|" <<< "$OUT" && T_EMITS=$((T_EMITS+1))
 done
 eq       "T3: four further ticks on frozen state emit ZERO units"    "$T_EMITS" "0"
 eq       "T3: and write no further markers"                          "$(markers)" "1"

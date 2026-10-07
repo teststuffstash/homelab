@@ -60,8 +60,8 @@ go() {
   PATH="$BIN:$PATH" env ${DIG_ENV:-} bash "$SEL" select --out "$H/digest.json" 2> "$H/err.txt"; RC=$?
   OUT="$(cat "$H/err.txt")"
 }
-want()   { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
-wantnot(){ printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stderr has: $2" || ok "$1"; }
+want()   { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+wantnot(){ grep -qF -- "$2" <<< "$OUT" && bad "$1" "stderr has: $2" || ok "$1"; }
 jqok()   { # <label> <jq predicate over the digest>
   # The digest must EXIST and be a digest before a predicate may pass: `jq -e` over an empty file
   # runs the filter zero times and exits 0, which made every assertion here vacuous while the

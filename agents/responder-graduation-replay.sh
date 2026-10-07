@@ -35,8 +35,8 @@ ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); local d="${2:-}"; printf '  \033[31m✗\033[0m %s\n' "$1"; [ -n "$d" ] && printf '       %s\n' "$d"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
 eq()       { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "output lacks: $2"; }
-wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "output contains: $2" || ok "$1"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "output lacks: $2"; }
+wantnot()  { grep -qF -- "$2" <<< "$OUT" && bad "$1" "output contains: $2" || ok "$1"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2"; }
 
 # ── simulated renderer ──────────────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ RBAC="$ROOT/argocd/resources/agentstack/rbac.yaml"
 MIRROR="$(awk '/^  # Responder graduation dial/{p=1} p; /^---/{if(p) exit}' "$RBAC")"
 
 # Check that the responder escalation-check mirror section exists
-if echo "$MIRROR" | grep -q "Responder graduation dial" 2>/dev/null; then
+if grep -q "Responder graduation dial" 2>/dev/null <<< "$MIRROR"; then
   ok "E2: responder graduation dial section exists in rbac.yaml"
 else
   bad "E2: responder graduation dial section NOT found in rbac.yaml" "Expected comment 'Responder graduation dial'"
@@ -292,7 +292,7 @@ for verb_resource in "pods:get,list,watch,patch,delete" "configmaps:get,list,wat
   # Check each expected verb appears in the verbs line
   missing=""
   for v in ${verbs//,/ }; do
-    if echo "$found_verbs" | grep -q "\[.*$v" 2>/dev/null; then
+    if grep -q "\[.*$v" 2>/dev/null <<< "$found_verbs"; then
       :  # verb found
     else
       missing="$missing $v"
@@ -308,14 +308,14 @@ done
 # Assert that secrets is deliberately NOT pre-granted in the mirror block.
 # The grep is scoped to the mirror block, so a mention of "secrets" in the prose comment
 # (L93-99) does not false-pass — we check for an actual resources: [secrets] rule entry.
-if echo "$MIRROR" | grep -q "resources: \[.*secrets" 2>/dev/null; then
+if grep -q "resources: \[.*secrets" 2>/dev/null <<< "$MIRROR"; then
   bad "E3a: secrets IS pre-granted in escalation mirror — should be absent" "The secrets carve-out (rbac.yaml L93-99) is violated"
 else
   ok "E3a: secrets deliberately NOT pre-granted in escalation mirror (carve-out holds)"
 fi
 
 # Check that the responder section includes the escalation-check warning
-if echo "$MIRROR" | grep -q "attempting to grant RBAC permissions not currently held" 2>/dev/null; then
+if grep -q "attempting to grant RBAC permissions not currently held" 2>/dev/null <<< "$MIRROR"; then
   ok "E4: escalation-check warning present in rbac.yaml"
 else
   bad "E4: escalation-check warning NOT found" "The escalation check comment is missing"

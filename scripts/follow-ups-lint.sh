@@ -61,6 +61,12 @@ referenced=$( { git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(e
 
 status=0
 
+# Newline-list membership WITHOUT `printf | grep -qx` (an early-exit reader leaves the writer on
+# a closed pipe — scripts/sigpipe-lint.py). POSIX sh: no here-strings, so `case` on the list.
+nl='
+'
+in_list() { case "$nl$2$nl" in *"$nl$1$nl"*) return 0 ;; esac; return 1; }
+
 # One entry per id (homelab#1500, 2026-09-08): the tracker held two divergent copies each of
 # FU-220 and FU-221 — an appended pair landed twice — and `sort -u` above hid it from every
 # other check. The routing table's one-home rule applies inside the tracker itself.
@@ -80,7 +86,7 @@ next_free=$(grep -oE 'Next free id: \*\*FU-[0-9][0-9][0-9]' "$TRACKER" | grep -o
 
 nf_num=$(printf '%s' "$next_free" | sed 's/^0*//'); [ -n "$nf_num" ] || nf_num=0
 for id in $referenced; do
-  if ! printf '%s\n' "$defined" | grep -qx "$id"; then
+  if ! in_list "$id" "$defined"; then
     n=$(printf '%s' "${id#FU-}" | sed 's/^0*//'); [ -n "$n" ] || n=0
     if [ "$n" -ge "$nf_num" ]; then
       echo "DANGLING $id — at/past the Next-free counter (FU-$next_free): this id never existed. Clean up: git grep $id"
@@ -106,9 +112,9 @@ todo_report=$(printf '%s\n' "$todo_lines" | while IFS= read -r line; do
   [ -n "$line" ] || continue
   loc=${line%%:*}:$(printf '%s' "${line#*:}" | cut -d: -f1)
   for id in $(printf '%s' "$line" | grep -oE "$todo_re" | grep -o 'FU-[0-9][0-9][0-9]' | sort -u); do
-    if printf '%s\n' "$open_ids" | grep -qx "$id"; then
+    if in_list "$id" "$open_ids"; then
       :
-    elif printf '%s\n' "$archived_ids" | grep -qx "$id"; then
+    elif in_list "$id" "$archived_ids"; then
       echo "WARN TODO-ARCHIVED $id — $loc points at a RESOLVED (archived) id as open work; repoint or reword"
     else
       echo "FAIL TODO-RETIRED $id — $loc is a live pointer at an id that is neither open nor archived; repoint or rewrite as prose"
@@ -117,7 +123,7 @@ todo_report=$(printf '%s\n' "$todo_lines" | while IFS= read -r line; do
 done)
 if [ -n "$todo_report" ]; then
   printf '%s\n' "$todo_report" | sed -e 's/^WARN //' -e 's/^FAIL //'
-  printf '%s\n' "$todo_report" | grep -q '^FAIL ' && status=1
+  case "$nl$todo_report" in *"${nl}FAIL "*) status=1 ;; esac
 fi
 
 # Per-item checks. awk splits the tracker into open-item blocks and emits "<id>|<lines>|<body>".
@@ -151,7 +157,10 @@ printf '%s\n' "$items" | while IFS='|' read -r id n body; do
     echo "OVERSIZE $id — ${n} lines (> ${MAX_ITEM_LINES}): move the detail to a doc, leave a pointer"
   fi
 
-  if printf '%s' "$body" | grep -qE "$DONE_RE"; then
+  if grep -qE "$DONE_RE" <<EOF
+$body
+EOF
+  then
     echo "DONE-MARKER $id — a resolution marker inside an open item: move it to the doc, or archive the item"
   fi
 

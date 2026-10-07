@@ -48,7 +48,7 @@ if [ -z "$author" ]; then
   exit 0
 fi
 
-if ! printf '%s' "$author" | grep -qE "$WORKER_PATTERN"; then
+if ! grep -qE "$WORKER_PATTERN" <<< "$author"; then
   echo "governance-lint: author '$author' is not the worker lane — pass."
   exit 0
 fi
@@ -90,8 +90,8 @@ hits="$(printf '%s\n' "$changed" | grep -E "$GOVERNANCE" || true)"
 # approves" — so on the assembly lane judge each hit by COMMIT authorship, not PR authorship.
 # Lane test = the same strong link the scan's post-launch transition trusts: a goal/** head AND
 # a line-anchored `Assembly-for: #<n>` trailer. Fails CLOSED on unreadable history.
-if [ -n "$hits" ] && printf '%s' "${PR_HEAD_REF:-}" | grep -qE '^goal/' \
-   && printf '%s\n' "${PR_BODY:-}" | grep -qE '^[[:space:]]*Assembly-for:[[:space:]]*#[0-9]+'; then
+if [ -n "$hits" ] && grep -qE '^goal/' <<< "${PR_HEAD_REF:-}" \
+   && grep -qE '^[[:space:]]*Assembly-for:[[:space:]]*#[0-9]+' <<< "${PR_BODY:-}"; then
   base_sha="$(git rev-parse "$BASE")"
   # The CI checkout is depth 1 (the merge ref only) — fetch the goal branch's own history into a
   # private ref so `base..head -- <hit>` can name the committer of every governance line.
@@ -105,7 +105,7 @@ if [ -n "$hits" ] && printf '%s' "${PR_HEAD_REF:-}" | grep -qE '^goal/' \
     authors="$(git log --format='%an' "${base_sha}..refs/govlint/head" -- "$h" 2>/dev/null)" || {
       echo "governance-lint: FAIL — assembly lane: git log unreadable for '$h'; refusing to report success." >&2
       exit 2; }
-    if printf '%s\n' "$authors" | grep -qE "$WORKER_PATTERN"; then worker_hits="${worker_hits}${h}"$'\n'; fi
+    if grep -qE "$WORKER_PATTERN" <<< "$authors"; then worker_hits="${worker_hits}${h}"$'\n'; fi
   done
   if [ -n "$worker_hits" ]; then
     echo "governance-lint: FAIL — assembly PR carries WORKER-authored commits on governance paths (ADR-106 (4)):" >&2

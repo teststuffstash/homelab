@@ -25,10 +25,10 @@ IFS='|' read -r to sha from reason < <(printf '%s' "$app" | jq -r --arg chart "$
 # pin, `sha` to the resolved git revision of the last comparison (.status.sync.revisions) — and
 # only a 40-hex sha is ever written (the box reverts by sha; `master` is not a commit).
 [ -n "$to" ] || to="$(printf '%s' "$app" | jq -r --arg chart "$CHART" '[.spec.sources[]? | select(.chart == $chart) | .targetRevision][0] // ""')"
-if ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+if ! grep -qE '^[0-9a-f]{40}$' <<< "$sha"; then
   sha="$(printf '%s' "$app" | jq -r '(.spec.sources // [] | to_entries[] | select(.value.ref == "values") | .key) as $i | .status.sync.revisions[$i] // ""')"
 fi
-printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$' && [ -n "$to" ] || { echo "presync: could not read the in-flight sync's revisions (to='$to' sha='$sha') — refusing to arm on bad data" >&2; exit 1; }
+grep -qE '^[0-9a-f]{40}$' <<< "$sha" && [ -n "$to" ] || { echo "presync: could not read the in-flight sync's revisions (to='$to' sha='$sha') — refusing to arm on bad data" >&2; exit 1; }
 [ -n "$from" ] || from="$to"
 echo "presync: $CHART $from → $to at ${sha:0:8} ($reason); lease expect ${EXPECT_MIN} min, cap ${MAX_MIN} min"
 exec bash /scripts/upgrade-lease.sh open --subject "$SUBJECT" --chart "$CHART" --sha "$sha" --from "$from" --to "$to" \

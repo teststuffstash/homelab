@@ -17,13 +17,13 @@ if [ "$rc" = 0 ] && [ -n "$SURFACES" ]; then
   if [ "$HIT" = yes ]; then echo "surface-reachable: $SURFACE"; else echo "surface-missing: $SURFACE"; fi
 fi
 # One declaration: the RUN_CMD references the brief's TOOL_GAP_SURFACES line
-if echo "$RUN_CMD" | grep -qF 'TOOL_GAP_SURFACES'; then
+if grep -qF 'TOOL_GAP_SURFACES' <<< "$RUN_CMD"; then
   echo "cmd-refs-brief: yes"
 else
   echo "cmd-refs-brief: no"
 fi
 # No second copy: the RUN_CMD does NOT restate specific surfaces
-if echo "$RUN_CMD" | grep -qF 'issue comments + PR bodies'; then
+if grep -qF 'issue comments + PR bodies' <<< "$RUN_CMD"; then
   echo "cmd-restates-surfaces: yes"
 else
   echo "cmd-restates-surfaces: no"

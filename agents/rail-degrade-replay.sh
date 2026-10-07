@@ -242,9 +242,9 @@ go() {
   RC=$?
   OUT="$(cat "$TMP/out.txt")"; ERR="$(cat "$TMP/err.txt")"
 }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout has: $2" || ok "$1"; }
-wanterr()  { printf '%s' "$ERR" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wantnot()  { grep -qF -- "$2" <<< "$OUT" && bad "$1" "stdout has: $2" || ok "$1"; }
+wanterr()  { grep -qF -- "$2" <<< "$ERR" && ok "$1" || bad "$1" "stderr lacks: $2"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
 # homelab#190: the account-scope probe is the proxy's /router-status, not OpenRouter's
 # management-only /api/v1/credits. Counting the NEW path is what keeps leg 1 pinned — a launcher

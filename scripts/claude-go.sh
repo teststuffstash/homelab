@@ -97,7 +97,7 @@ for s in "$SLOT_HAIKU" "$SLOT_SONNET" "$SLOT_OPUS"; do
   case "$s" in
     opencode-go/*)
       if [ -n "$GO_CAT" ]; then
-        printf '%s' "$GO_CAT" | grep -q "${s#opencode-go/}" \
+        grep -q "${s#opencode-go/}" <<< "$GO_CAT" \
           || echo "claude-go: ⚠ slot model '${s}' not found in the live go /models catalog" >&2
       else
         echo "claude-go: (go catalog unreachable — slot '${s}' unverified this run)" >&2
@@ -105,7 +105,7 @@ for s in "$SLOT_HAIKU" "$SLOT_SONNET" "$SLOT_OPUS"; do
       ;;
     opencode/*)
       if [ -n "$ZEN_CAT" ]; then
-        printf '%s' "$ZEN_CAT" | grep -q "${s#opencode/}" \
+        grep -q "${s#opencode/}" <<< "$ZEN_CAT" \
           || echo "claude-go: ⚠ slot model '${s}' not found in the live zen /models catalog" >&2
       else
         echo "claude-go: (zen catalog unreachable — slot '${s}' unverified this run)" >&2

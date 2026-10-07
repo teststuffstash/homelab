@@ -31,7 +31,7 @@ pass=0; fail=0
 case_() {  # <name> <want-rc> <want-grep> <pr-args…> — the world is set up by the caller first
   local name="$1" want="$2" grep_="$3" out rc; shift 3
   out="$(bash "$HERE/pr-wait.sh" "$@" --interval 0 --timeout 30 --no-arm 2>&1)"; rc=$?
-  if [ "$rc" = "$want" ] && printf '%s' "$out" | grep -qF -- "$grep_"; then pass=$((pass+1)); echo "PASS $name (rc $rc)"
+  if [ "$rc" = "$want" ] && grep -qF -- "$grep_" <<< "$out"; then pass=$((pass+1)); echo "PASS $name (rc $rc)"
   else fail=$((fail+1)); echo "FAIL $name — want rc $want + '$grep_', got rc $rc:"; printf '%s\n' "$out" | sed 's/^/     /'; fi
   rm -rf "$WORLD"; mkdir -p "$WORLD"
 }
@@ -65,7 +65,7 @@ case_ status-red-exits-4 4 "#11 STATUS RED at head — management-sentinel: plan
 # a timeout names the PRs still open
 { v OPEN REVIEW_REQUIRED j1 MERGEABLE; } >"$WORLD/view-10"
 out="$(bash "$HERE/pr-wait.sh" 10 --interval 1 --timeout 1 --no-arm 2>&1)"; rc=$?
-if [ "$rc" = 5 ] && printf '%s' "$out" | grep -qF "on #10"; then pass=$((pass+1)); echo "PASS timeout-names-open (rc 5)"
+if [ "$rc" = 5 ] && grep -qF "on #10" <<< "$out"; then pass=$((pass+1)); echo "PASS timeout-names-open (rc 5)"
 else fail=$((fail+1)); echo "FAIL timeout-names-open — rc $rc:"; printf '%s\n' "$out" | sed 's/^/     /'; fi
 echo "pr-wait-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

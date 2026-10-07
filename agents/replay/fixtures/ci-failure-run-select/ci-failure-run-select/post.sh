@@ -3,6 +3,6 @@
 # table — the settled row picks the concluded-failure run, the unsettled row falls back to the
 # newest run on the branch.
 printf 'RUN %s\n' "${PF_RUN_ID:-<none>}"
-printf 'LOG %s\n' "$(printf '%s' "${PF_LOG_TAIL:-}" | head -1)"
+printf 'LOG %s\n' "$(head -1 <<< "${PF_LOG_TAIL:-}")"
 printf 'INDEX %s\n' "$(printf '%s' "${PF_INDEX:-}" | tr -d '\n')"
 echo "REACHED: end"

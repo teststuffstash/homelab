@@ -160,8 +160,8 @@ go_ts() {
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
 }
-want()      { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wantnot()   { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout has: $2" || ok "$1"; }
+want()      { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wantnot()   { grep -qF -- "$2" <<< "$OUT" && bad "$1" "stdout has: $2" || ok "$1"; }
 wantbrief() { grep -qF -- "$2" "$H/brief.txt" 2>/dev/null && ok "$1" || bad "$1" "brief lacks: $2"; }
 wantcall()  { grep -qF -- "$2" "$H/calls.log" 2>/dev/null && ok "$1" || bad "$1" "no call: $2"; }
 wantnocall(){ grep -qF -- "$2" "$H/calls.log" 2>/dev/null && bad "$1" "unexpected call: $2" || ok "$1"; }
