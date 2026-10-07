@@ -299,18 +299,6 @@ def collect(lines, fetch=None, zone_ids=None, fetch_settings=None):
                 # For self-test: fetch returns a pre-built (zone_name, requests_rows, firewall_rows) tuple
                 zone_name, requests_rows, firewall_rows = fetch(zone_id, start, end)
 
-            # Retention: hourly, and retried on every poll after a failure (the refresh time
-            # only advances on success) — so a broken settings read holds probe_ok at 0 and
-            # CloudflareEdgeProbeBlind covers it, while the gauge keeps its last real value.
-            read_settings = fetch_settings or (settings_query if fetch is None else None)
-            if read_settings and now - _settings_at.get(zone_id, 0) >= SETTINGS_INTERVAL:
-                fresh = read_settings(zone_id)
-                for key in [k for k in _retention if k[0] == zone_name]:
-                    del _retention[key]
-                for dataset, seconds in fresh.items():
-                    _retention[(zone_name, dataset)] = seconds
-                _settings_at[zone_id] = now
-
             # Accumulate into the cumulative counters, deduped by each row's own datetime
             # bucket so the overlapping poll windows cannot double-count.
             for row in requests_rows:
@@ -365,6 +353,23 @@ def collect(lines, fetch=None, zone_ids=None, fetch_settings=None):
             failed += 1
             _errors += 1
             print(f"zone {zone_id}: edge poll failed: {exc}", flush=True)
+
+        # Retention: hourly, retried on every poll after a failure (the refresh time only advances
+        # on success). Its OWN try, after the counters: a broken settings read must never stall
+        # the edge counters — it flips probe_ok and keeps the gauge's last real value, nothing else.
+        read_settings = fetch_settings or (settings_query if fetch is None else None)
+        if read_settings and now - _settings_at.get(zone_id, 0) >= SETTINGS_INTERVAL:
+            try:
+                fresh = read_settings(zone_id)
+                for key in [k for k in _retention if k[0] == zone_name]:
+                    del _retention[key]
+                for dataset, seconds in fresh.items():
+                    _retention[(zone_name, dataset)] = seconds
+                _settings_at[zone_id] = now
+            except Exception as exc:
+                failed += 1
+                _errors += 1
+                print(f"zone {zone_id}: settings read failed: {exc}", flush=True)
 
         probe_ok.append((zone_name, 0 if failed else 1))
 
@@ -849,6 +854,28 @@ def self_test():
     assert 'cloudflare_edge_probe_ok{zone="minutark.ee"} 0' in failed_ret, \
         "a failed settings read must flip probe_ok so the blind alert covers it"
     _errors = before
+    # A PERSISTENT settings failure must not stall the counters (review of #2372): rows still
+    # accumulate on every poll, probe_ok reads 0, and the read is retried each time.
+    _reset_totals()
+    before = _errors
+    for n in (1, 2):
+        stalled = []
+        collect(stalled, fetch=_fixture_fetch(_FLIPPED_REQUESTS if n == 1 else later, []),
+                zone_ids=[_Z_PRODUCT], fetch_settings=settings_fixture(RuntimeError("no scope")))
+        stalled = "\n".join(stalled)
+        want = 42 * n
+        assert f'cloudflare_edge_requests_total{{host="mcp.minutark.ee",status="200",zone="minutark.ee"}} {want}' in stalled, \
+            f"a failing settings read stalled the edge counters (poll {n})\n{stalled}"
+        assert 'cloudflare_edge_probe_ok{zone="minutark.ee"} 0' in stalled
+    _errors = before
+    _reset_totals()
+    calls.clear()
+    poll(rec, reset=True)
+    poll(RuntimeError("x"))  # inside the interval: not attempted
+    _settings_at[_Z_PRODUCT] = 0
+    poll(RuntimeError("settings unavailable"))
+    _errors = before
+
     # A changed answer replaces the zone's set — a dataset that loses clientIP leaves the gauge.
     changed = poll({"httpRequestsAdaptive": 7776000})
     assert len(calls) == 3, f"a failed read must be retried on the next poll: {calls}"
