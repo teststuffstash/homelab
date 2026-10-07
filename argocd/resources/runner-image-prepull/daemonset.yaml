@@ -64,7 +64,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: hold
-          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.6-gf17a6d8c3767
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.7-g44d3e2f9a6d6
           imagePullPolicy: IfNotPresent
           command: ["sleep", "infinity"]
           resources:
@@ -165,7 +165,7 @@ spec:
             capabilities: { drop: ["ALL"] }
       containers:
         - name: hold
-          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.6-gf17a6d8c3767
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.7-g44d3e2f9a6d6
           imagePullPolicy: IfNotPresent
           command: ["sleep", "infinity"]
           resources:

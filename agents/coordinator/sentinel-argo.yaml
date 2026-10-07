@@ -65,7 +65,7 @@ spec:
         parameters:
           - { name: wake, value: "{{workflow.parameters.wake}}" }
       container:
-        image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.6-gf17a6d8c3767
+        image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.7-g44d3e2f9a6d6
         command: ["bash", "-lc"]
         args:
           - |
