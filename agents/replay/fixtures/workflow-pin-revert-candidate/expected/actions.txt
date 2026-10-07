@@ -1,4 +1,4 @@
-CALL gh pr list --repo teststuffstash/agent-coordinator --state merged --limit 10 --json number,title,headRefName,mergedAt,mergeCommit,files --jq [.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= "2026-09-27T07:20:00Z") | select(.files[]?.path | startswith(".github/workflows/"))] | sort_by(.mergedAt) | last | select(.)
+CALL gh pr list --repo teststuffstash/agent-coordinator --state merged --limit 10 --json number,title,headRefName,mergedAt,mergeCommit,files --jq [.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= "2026-09-27T07:20:00Z") | select(any(.files[]?.path; startswith(".github/workflows/")) or ((.files | length) > 0 and all(.files[].path; endswith("devbox.lock"))))] | sort_by(.mergedAt) | last | select(.)
 OUT → candidate: teststuffstash/agent-coordinator#20 @ 01234567 (drill: pin actions/create-github-app-token to v1.0.0 (FU-1990 rollback drill))
 OUT PRNUM=20 SHA=0123456789abcdef0123456789abcdef01234567 TITLE=drill: pin actions/create-github-app-token to v1.0.0 (FU-1990 rollback drill)
 RC 0

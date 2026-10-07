@@ -13,6 +13,11 @@
 #          report line, no unit (homelab#1472). Events world: issues-93-events.json.
 #   - #94: merged PR? none strong-links #94 (dhit = 0, dmention = 0) → silent; its events world
 #          exists so a regression that probes events BEFORE the strong-link test shows up as a CALL.
+#   - #95: merged PR #205 `Implements #95`, no open PR — BUT the issue is `agent/blocked` (the
+#          closeout itself parked it: "outcome does not fully hold", oracle-fleet#798). Not a
+#          candidate on the default branch: no events probe, no unit, no report (FU-290 loop —
+#          ~24 closeout rides/h re-ruling the same human gate). A regression shows as a CALL for
+#          issues/95/events (unserved → a HELD orphan) or as a UNIT.
 #
 # The state-keyed world files (pr-list-merged, pr-list-open) are served distinctly by the stub
 # after homelab#1199 fixed _rp_words to keep --state values in the world key.
@@ -33,7 +38,8 @@ goalcand='[
   {"number": 91, "title": "test issue 91", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]},
   {"number": 92, "title": "test issue 92", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
   {"number": 93, "title": "test issue 93", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/in-progress"}]},
-  {"number": 94, "title": "test issue 94", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]}
+  {"number": 94, "title": "test issue 94", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/review"}]},
+  {"number": 95, "title": "test issue 95", "body": "", "labels": [{"name": "agent/fix"}, {"name": "agent/blocked"}]}
 ]'
 # dbmerged and dbopen are fetched by the IL-G06 detection block from the replay world.
 # world/gh/pr-list-merged.json has the merged PRs (state-keyed).

@@ -299,6 +299,23 @@ queued|ignored|bad_request}` proves delivery; `up{job="chart-revert"}` is the sc
 `devbox run chart-revert-self-test` (the predicate on the real #2254 patch, payload parsing, the
 ledger decision, and the whole walk against a scripted gh/git).
 
+## Part 5 — the lock shape: `workflow-pin-revert` admits a lock-only merge (2026-10-07, class 7 armed)
+
+The fifth class rides the FIRST chain unchanged in trigger and actor: `GithubWorkflowRunFailed` on
+master → the `workflow-pin-revert` WorkflowTemplate. What changed when devbox lock majors were armed
+([`dependency-upgrades.md`](../dependency-upgrades.md) §2 Review — the ruling lives there, no ADR):
+the candidate query admits a merge whose EVERY file is a `devbox.lock` beside the workflow-touching
+ones; such a merge is pin-only by construction (the lock IS the resolved pin set), so the `uses:`
+grammar is skipped; the branch is `revert-lock-<sha8>`; the memory line is `reverted-locks:
+<name>@<version> …` — every package whose resolved version the merge moved, read from the clone
+(`git show <sha>^:devbox.lock` vs `<sha>:devbox.lock`, the lock's +/- lines carry versions without
+their package) — consumed by `pin-only-lint` check (i). Outside the class, by the same file test: a
+worker-adapted lock PR (lock + a fixture, the #2262/#2362 shape) — the responder lane owns that. The
+one consumer the chain can fire on today is `runner-image.yaml` (push to master, `devbox.lock` in its
+paths); `ci.yaml` on master re-runs what the PR already proved. Drill pending (§Next steps 10 there).
+Replay: `workflow-pin-revert-candidate` (the widened call line) + `workflow-pin-revert-lock-candidate`
+(a lock-only merge is the candidate).
+
 ## Future Work
 
 - **Monitoring**: add a Prometheus alert if the revert chain fires more than N times/day (a flapping pin is a deeper problem)

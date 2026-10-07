@@ -161,7 +161,7 @@ GUARDED_REPO="${GUARDED_REPO:-homelab}"
 # _guarded_from_sh <text> → one guarded PATH per line from a `GUARDED=` line; rc 1 = no such line.
 _guarded_from_sh() {
   local line="" GUARDED=""
-  line="$(printf '%s\n' "$1" | grep -m1 '^GUARDED=' || true)"
+  line="$(grep -m1 '^GUARDED=' <<< "$1" || true)"
   [ -n "$line" ] || return 1
   eval "$line" || return 1
   [ -n "$GUARDED" ] || return 1
@@ -174,7 +174,7 @@ _guarded_from_sh() {
 # GUARD_SET is a whitespace-separated list (agent-runtime's deps-pin-guard reads it the same way).
 _guarded_from_workflow() {
   local line="" GUARD_SET=""
-  line="$(printf '%s\n' "$1" | grep -m1 -E '^[[:space:]]*GUARD_SET:' || true)"
+  line="$(grep -m1 -E '^[[:space:]]*GUARD_SET:' <<< "$1" || true)"
   [ -n "$line" ] || return 1
   GUARD_SET="$(printf '%s' "${line#*:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
   [ -n "$GUARD_SET" ] || return 1
@@ -2047,11 +2047,18 @@ EOF_GOALBASED
     # abandoned, and c4c5-redispatch OUTRANKS merged-closeout. Strong link only, never a bare
     # mention (the circles#36 asymmetry stands). Probe failures skip LOUDLY (rule #6).
     c6db=""; c6db_nums=""
-    # Candidate set: OPEN issues with agent-fix and (agent/in-progress or agent/review) that do
-    # NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses $goalcand which was
-    # already fetched above for the goal-child leg.
+    # Candidate set: OPEN issues with agent/in-progress or agent/review (never agent/blocked — the
+    # ⚠ note below) that do NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses
+    # $goalcand which was already fetched above for the goal-child leg.
     # ADR-122 (3): the exact complement of $goalbased above, read through the ONE parser —
     # candidates are the open issues whose `Base:` is NOT a goal branch (default-branch issues).
+    # ⚠ `agent/blocked` stays OUT of this leg. The goalcand widening (homelab#1720) is for GOAL
+    # children only — its `blocked-on:` gate lives in the goal-child loop above, and its premise
+    # (the keyword is inert off master) is a goal-base fact. As the complement, this leg inherited
+    # the blocked set UNGATED: a default-branch issue the closeout itself parked `agent/blocked`
+    # after the merge ("outcome does not fully hold") matched every tick, and the session ruled
+    # "not actionable" each time — oracle-fleet#798, ~24 closeout rides/h from 2026-10-06 20:00Z,
+    # the shared homelab-agents GraphQL pool drained to 0 (FU-290). Blocked = a human gate here.
     dbcand=""
     while IFS='|' read -r _dbn _dbb; do
       [ -n "$_dbn" ] || continue
@@ -2060,7 +2067,7 @@ EOF_GOALBASED
       case "$_dbv" in goal/?*) : ;; *) dbcand="${dbcand}${_dbn}
 " ;; esac
     done <<EOF_DBCAND
-$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | select(((.labels|map(.name))|index("agent/error"))|not)]' 2>/dev/null || echo '[]')")
+$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | (.labels|map(.name)) as $L | select(($L|index("agent/error"))|not) | select(($L|index("agent/blocked"))|not)]' 2>/dev/null || echo '[]')")
 EOF_DBCAND
     if [ -n "$dbcand" ]; then
       dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName,mergedAt 2>/dev/null)" || dbmerged='X'
@@ -2274,7 +2281,7 @@ EOF
     fi
     sess_holds() {   # $1 = item key (issue-N / pr-N); 0 = a coordinator session is riding it
       [ -n "$sess_busy" ] || return 1
-      printf '%s\n' "$sess_busy" | grep -qx -- "$1"
+      grep -qx -- "$1" <<< "$sess_busy"
     }
     # <<<REPLAY:session-belt<<<
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
@@ -3974,11 +3981,11 @@ EOF_GTHEMES_OPEN
         continue
       fi
       rt_body="$(printf '%s' "$rt_pr" | jq -r '.body // ""' 2>/dev/null)" || rt_body=''
-      if printf '%s' "$rt_body" | grep -q -- '- \[x\] <!-- rebase-check -->'; then
+      if grep -q -- '- \[x\] <!-- rebase-check -->' <<< "$rt_body"; then
         orphans="${orphans}[$repo] ⏳ merge-conflict Renovate PR #${u}: rebase already requested (box ticked) — Renovate's next run rebases it; the updater clears the label once it is clean\n"
         continue
       fi
-      if ! printf '%s' "$rt_body" | grep -q -- '- \[ \] <!-- rebase-check -->'; then
+      if ! grep -q -- '- \[ \] <!-- rebase-check -->' <<< "$rt_body"; then
         orphans="${orphans}[$repo] ⚠ merge-conflict Renovate PR #${u} has no rebase checkbox in its body — human check (close + delete the branch and let Renovate re-open, docs/renovate.md)\n"
         continue
       fi
@@ -6162,7 +6169,7 @@ EOF_BELT
       # higher-priority unit — with nothing above it the candidate wins the walk anyway and the
       # probes would buy nothing.
       aging_front=""
-      if printf '%s\n' "$lane_units" | grep -qE '^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint)\|'; then
+      if grep -qE '^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint)\|' <<< "$lane_units"; then
         while IFS= read -r acand; do
           [ -n "$acand" ] || continue
           case " $tried_units " in *" $acand "*) continue;; esac
