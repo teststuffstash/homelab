@@ -1,0 +1,6 @@
+{
+  "comments": [
+    { "author": { "login": "homelab-agents-1234" }, "body": "**Merged-closeout ruling:** the PR merged into the goal base, but the outcome does not fully hold (item 6 still unfixed). Parking the issue `agent/blocked` for a human — not closing.", "createdAt": "2026-10-06T20:00:00Z" }
+  ],
+  "reviews": []
+}

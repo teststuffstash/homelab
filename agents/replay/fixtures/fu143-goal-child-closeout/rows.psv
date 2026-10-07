@@ -7,6 +7,9 @@
 # cross-repo         = an open PR carries the cross-repo spelling `homelab#100` → closeout (defect 1)
 # blocked-resolved   = agent/blocked child, blocked-on resolved → closeout (defect 2)
 # blocked-unresolved = agent/blocked child, blocked-on unresolved → HELD (defect 2)
+# blocked-no-marker  = agent/blocked child whose merged PR carries NO blocked-on: marker (its own
+#                      closeout parked it — the oracle-fleet#798 shape, FU-290) → HELD, never
+#                      read as "clear" (a level-triggered closeout loop otherwise)
 # review-no-fix      = homelab#2164: agent/review child with NO agent-fix, merged strong link,
 #                      no open PR → closeout (the widened goalcand selector finds it)
 in-progress        |  |  |  | in-progress
@@ -16,4 +19,5 @@ strong-master      |  |  |  | strong-master
 cross-repo         |  |  |  | cross-repo
 blocked-resolved   |  |  |  | blocked-resolved
 blocked-unresolved |  |  |  | blocked-unresolved
+blocked-no-marker  |  |  |  | blocked-no-marker
 review-no-fix      |  |  |  | review-no-fix

@@ -2013,9 +2013,26 @@ EOF_GOALBASED
             # the issue — the merged strong-link PR into the goal base — and is read through the
             # ONE `pr_blocked_on_check` reader (never a second regex). An unresolved predicate
             # keeps the issue out and reports, exactly as the C4/C5 selector excludes it.
+            # ⚠ NO MARKER = HELD, not "clear" (the goal-child twin of oracle-fleet#798, FU-290):
+            # the widening admits a child whose escalation RECORDED a predicate that has since
+            # resolved — #1720's "blocked-on predicate is resolved". A child parked `agent/blocked`
+            # with NO marker (its own closeout ruled "outcome does not hold", or a human parked it)
+            # has no predicate to resolve; `pr_blocked_on_check` reads that as "clear", and
+            # admitting it re-dispatches the same closeout every tick, re-ruling the same human
+            # gate. One fetch, read by the ONE marker grammar ($BLOCKED_ON_JQ) and handed to the
+            # ONE reader; an unreadable PR (or no strong-link PR) yields no marker → held.
             if case " ${goalblocked_nums:-} " in *" ${gn} "*) true;; *) false;; esac; then
               gboc_pr="$(strong_link_pr "$gn" "$gmerged" "$gbase")" || gboc_pr=""
-              gboc="$(pr_blocked_on_check "$slug" "$gboc_pr")"
+              gboc_json=""; gboc_mk=""
+              if [ -n "$gboc_pr" ]; then
+                gboc_json="$(gh pr view "$gboc_pr" --repo "$slug" --json comments,reviews 2>/dev/null)" || gboc_json=""
+                gboc_mk="$(jq -r "$BLOCKED_ON_JQ" 2>/dev/null <<<"${gboc_json:-null}")" || gboc_mk=""
+              fi
+              if [ -z "$gboc_mk" ]; then
+                orphans="${orphans}[$repo] ⏳ issue #${gn} — goal child parked \`agent/blocked\` with NO \`blocked-on:\` marker on its merged PR #${gboc_pr:-?} (a closeout/human ruling, not a predicate that can resolve): held — a human unparks it (FU-290).\n"
+                continue
+              fi
+              gboc="$(pr_blocked_on_check "$slug" "$gboc_pr" "$gboc_json")"
               case "$gboc" in
                 blocked|blocked\|*)
                   orphans="${orphans}[$repo] ⏳ issue #${gn} — goal child parked \`agent/blocked\` and its merged PR #${gboc_pr} still records \`blocked-on: ${gboc#blocked|}\` (unresolved): the closeout waits (homelab#1188).\n"
