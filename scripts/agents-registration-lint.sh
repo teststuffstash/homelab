@@ -77,7 +77,7 @@ for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.
       echo "agents-registration-lint: ${repo} token-list check SKIPPED (App install pending — see TOKEN_EXEMPT)" >&2
       continue;;
     esac
-    if ! printf '%s\n' "$have" | grep -qx "$repo"; then
+    if ! grep -qx "$repo" <<< "$have"; then
       echo "MISSING: $repo (in agents/stacks.json) not in $target repositories: list" >&2
       fail=1
     fi

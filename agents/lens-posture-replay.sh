@@ -133,9 +133,9 @@ ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
 eq()       { [ "$2" = "$3" ] && ok "$1" || bad "$1" "got '$2', wanted '$3'"; }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdout lacks: $2"; }
-wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout contains: $2" || ok "$1"; }
-wanterr()  { printf '%s' "$ERR" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "stdout lacks: $2"; }
+wantnot()  { grep -qF -- "$2" <<< "$OUT" && bad "$1" "stdout contains: $2" || ok "$1"; }
+wanterr()  { grep -qF -- "$2" <<< "$ERR" && ok "$1" || bad "$1" "stderr lacks: $2"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
 
 _go() {   # _go <repo>
@@ -233,8 +233,8 @@ wantnot "H1: no POSTURE line"                                    "POSTURE: block
 _go_handling '{"k8s-prod":"blocking"}' k8s-prod true
 want    "H2: blocking lens attaches"                             "lens attached: k8s-prod (BLOCKING"
 GOT_SYS="$(cat "$TMP/sysfile.txt")"
-printf '%s' "$GOT_SYS" | grep -qF "POSTURE: blocking" && ok "H2: POSTURE line in sysfile" \
-  || bad "H2: POSTURE line in sysfile" "sysfile: $(printf '%s' "$GOT_SYS" | head -3)"
+grep -qF "POSTURE: blocking" <<< "$GOT_SYS" && ok "H2: POSTURE line in sysfile" \
+  || bad "H2: POSTURE line in sysfile" "sysfile: $(head -3 <<< "$GOT_SYS")"
 
 # 3c — blocking lens fetch fails
 _go_handling '{"k8s-prod":"blocking"}' k8s-prod false

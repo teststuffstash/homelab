@@ -197,6 +197,9 @@
       "pin-only-lint-test": [
         "bash scripts/pin-only-lint-test.sh"
       ],
+      "sigpipe-lint": [
+        "python3 scripts/sigpipe-lint.py \"$@\""
+      ],
       "goal-findings-self-test": [
         "bash agents/goal-findings.sh --self-test"
       ],

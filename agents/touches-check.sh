@@ -77,7 +77,7 @@ touches_check() {
     while IFS= read -r path; do
       [ -n "$path" ] || continue
       fp_replay_exempt "$path" && continue
-      if [ -n "$sentinel_only" ] && printf '%s\n' "$sentinel_only" | grep -qxF -- "$path"; then continue; fi
+      if [ -n "$sentinel_only" ] && grep -qxF -- "$path" <<< "$sentinel_only"; then continue; fi
       marker="$(governance_paths "$path")" || marker=""
       if [ -n "$marker" ]; then
         printf '%s|%s\n' "$path" "$marker"
@@ -99,7 +99,7 @@ EOF_PATHS
     # read as "no conflict" and surface as an ESCAPE, inverting the exemption.
     fp_replay_exempt "$path" && continue
     # Addendum 3 (#944): sentinel-only files, content-verified by the caller.
-    if [ -n "$sentinel_only" ] && printf '%s\n' "$sentinel_only" | grep -qxF -- "$path"; then continue; fi
+    if [ -n "$sentinel_only" ] && grep -qxF -- "$path" <<< "$sentinel_only"; then continue; fi
     # Treat the changed path as a singleton footprint entry and check against declared
     if ! fp_conflict "$declared" "$path"; then
       # Path does not conflict with declared touches → it's escaped

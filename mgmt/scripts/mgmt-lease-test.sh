@@ -73,7 +73,7 @@ run() {  # <name> <expected rc>  → sets OUT (log) and runs emit_metrics into $
   if [ "$RC" = "$2" ]; then pass=$((pass+1)); echo "PASS $1 (rc=$RC)"; else fail=$((fail+1)); echo "FAIL $1 — rc=$RC, want $2"; printf '%s\n' "$OUT" | sed 's/^/     /'; fi
 }
 expect() {  # <name> <grep-pattern> <text>
-  if printf '%s' "$3" | grep -qE -- "$2"; then pass=$((pass+1)); echo "PASS $1"; else fail=$((fail+1)); echo "FAIL $1 — no '$2' in:"; printf '%s\n' "$3" | sed 's/^/     /'; fi
+  if grep -qE -- "$2" <<< "$3"; then pass=$((pass+1)); echo "PASS $1"; else fail=$((fail+1)); echo "FAIL $1 — no '$2' in:"; printf '%s\n' "$3" | sed 's/^/     /'; fi
 }
 expect_empty() {  # <name> <text>
   if [ -z "$2" ]; then pass=$((pass+1)); echo "PASS $1"; else fail=$((fail+1)); echo "FAIL $1 — expected nothing, got:"; printf '%s\n' "$2" | sed 's/^/     /'; fi

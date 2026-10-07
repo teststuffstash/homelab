@@ -180,7 +180,7 @@ if [ -n "$added_images" ]; then
   while read -r ref; do
     [ -n "$ref" ] || continue
     # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
-    if printf '%s\n' $reverted_images | grep -qxF "$ref"; then
+    if grep -qxF "$ref" <<< "$(printf '%s\n' $reverted_images)"; then
       echo "pin-only-lint: FAIL — tofu: image = \"$ref\" is a REVERTED image — the tofu-image-revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-img-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
       rc=1
     fi
@@ -199,7 +199,7 @@ if [ -n "$added_providers" ]; then
   while read -r pv; do
     [ -n "$pv" ] || continue
     # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
-    if printf '%s\n' $reverted_providers | grep -qxF "$pv"; then
+    if grep -qxF "$pv" <<< "$(printf '%s\n' $reverted_providers)"; then
       echo "pin-only-lint: FAIL — provider $pv is a REVERTED provider version — the tofu-provider-revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-prov-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
       rc=1
     fi
@@ -218,7 +218,7 @@ if [ -n "$added_charts" ]; then
   while read -r pf cv; do
     [ -n "$cv" ] || continue
     # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
-    if printf '%s\n' $reverted_charts | grep -qxF "$cv"; then
+    if grep -qxF "$cv" <<< "$(printf '%s\n' $reverted_charts)"; then
       echo "pin-only-lint: FAIL — $pf: chart $cv is a REVERTED chart version — the chart revert chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-chart-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
       rc=1
     fi
@@ -251,7 +251,7 @@ resolve_tag_commit() {
     fi
     type="${out%% *}"; sha="${out#* }"
   fi
-  if [ "$type" != commit ] || ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+  if [ "$type" != commit ] || ! grep -Eq '^[0-9a-f]{40}$' <<< "$sha"; then
     printf 'tag %s resolves to a %s object (%s), not a commit\n' "$tag" "${type:-?}" "$sha"; return 1
   fi
   printf '%s\n' "$sha"
@@ -296,7 +296,7 @@ for f in $wf_changed; do
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       # Try pinned format first.
-      if printf '%s' "$line" | grep -Eq "$WORKFLOW_PIN_LINE"; then
+      if grep -Eq "$WORKFLOW_PIN_LINE" <<< "$line"; then
         extracted="$(printf '%s' "$line" | sed -E "$WORKFLOW_PIN_EXTRACT")"
         or="$(printf '%s' "$extracted" | awk '{print $2}')"
       else
@@ -346,7 +346,7 @@ for f in $wf_changed; do
   fi
   while read -r or sha tag; do
     [ -n "$or" ] || continue
-    if printf '%s\n' $reverted_pins | grep -qxF "$or@$sha"; then
+    if grep -qxF "$or@$sha" <<< "$(printf '%s\n' $reverted_pins)"; then
       echo "pin-only-lint: FAIL — $f: $or@$sha # $tag is a REVERTED pin — the FU-1990 chain rolled it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-wf-* PR names it); this PR stays red until Renovate proposes a newer version." >&2
       rc=1; continue
     fi

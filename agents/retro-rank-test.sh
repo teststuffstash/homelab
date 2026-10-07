@@ -116,7 +116,7 @@ else
 fi
 
 # 3. the no-silent-caps log line names the exclusion count.
-if printf '%s' "$out" | grep -q 'excluded 1 snapshot rows from the rank'; then
+if grep -q 'excluded 1 snapshot rows from the rank' <<< "$out"; then
   ok "log line counts the exclusion: 'excluded 1 snapshot rows from the rank'"
 else
   bad "exclusion not logged loudly" "no 'excluded 1 snapshot rows' in: $out"
@@ -158,12 +158,12 @@ else
   else
     bad "ranks after drop unexpected" "want '1 2 3 ', got '$ranks2'"
   fi
-  if printf '%s' "$out2" | grep -q 'excluded 1 merged-work rows from the rank'; then
+  if grep -q 'excluded 1 merged-work rows from the rank' <<< "$out2"; then
     ok "log line counts the merged-work exclusion: 'excluded 1 merged-work rows from the rank'"
   else
     bad "merged-work exclusion not logged loudly" "no 'excluded 1 merged-work rows' in: $out2"
   fi
-  if printf '%s' "$out2" | grep -q 'kept 1 rows on an unreadable probe'; then
+  if grep -q 'kept 1 rows on an unreadable probe' <<< "$out2"; then
     ok "log line counts the unreadable probe: 'kept 1 rows on an unreadable probe'"
   else
     bad "unreadable probe not counted" "no 'kept 1 rows on an unreadable probe' in: $out2"

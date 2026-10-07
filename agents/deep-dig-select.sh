@@ -208,7 +208,7 @@ cmd_select() {
   printf '%s' "$DAYS" | jq -r --argjson min "$DIG_RECUR_DAYS" 'to_entries[] | select(.value >= $min) | .key' \
   | while read -r name; do
       case "$name" in Watchdog|InfoInhibitor) continue;; esac
-      printf '%s\n' "$firing_names" | grep -qxF "$name" && continue
+      grep -qxF "$name" <<< "$firing_names" && continue
       local m tri sev
       m="$(printf '%s' "$LATEST" | jq -c --arg n "$name" '.[$n] // {}')"
       sev="$(printf '%s' "$m" | jq -r '.severity // ""')"

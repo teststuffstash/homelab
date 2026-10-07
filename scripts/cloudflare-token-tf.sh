@@ -43,7 +43,9 @@ cd "$ROOT/tofu/cloudflare-token"
 READ_ALL='cloudflare_api_token.jail_read_all[0]'
 excluded=0
 case "${1:-}" in plan|apply)
-  if [ "${CF_INCLUDE_READ_ALL:-0}" != 1 ] && ! printf '%s\n' "$@" | grep -qE '^-(target|exclude)='; then
+  scoped=0   # a `case` per arg, never `printf | grep -q` (scripts/sigpipe-lint.py)
+  for a in "$@"; do case "$a" in -target=*|-exclude=*) scoped=1 ;; esac; done
+  if [ "${CF_INCLUDE_READ_ALL:-0}" != 1 ] && [ "$scoped" = 0 ]; then
     set -- "$@" "-exclude=$READ_ALL"; excluded=1
   fi ;;
 esac

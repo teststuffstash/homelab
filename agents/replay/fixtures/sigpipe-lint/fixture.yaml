@@ -1,0 +1,17 @@
+# sigpipe-lint — no `printf|echo … | grep -q` / `| grep -m1` / `| head` in tracked shell.
+#
+# CONDITION UNDER REPLAY. An early-exit reader leaves the writer on a closed pipe: EPIPE, a
+# "printf: Broken pipe" on stderr when SIGPIPE is ignored (the runner; this harness since #2367),
+# exit 141 when it is not — and under `set -o pipefail` a present needle reads as MISSING. Timing-
+# dependent, so it shipped as CI flakes (PR#1436's board-test 2026-09-05, FU-219, master run
+# 37668796169 2026-10-07). Mechanism + the rule: scripts/sigpipe-lint.py's docstring.
+#
+# mode: suite — a repo-wide static property, not an action stream. Registered HERE so the replay
+# run every agents/ PR and every master push already executes carries it (no workflow edit); the
+# dedicated `devbox run sigpipe-lint` CI step is the follow-up that also covers scripts/-only PRs.
+name: sigpipe-lint
+mode: suite
+entrypoint: agents/replay/fixtures/sigpipe-lint/suite.sh
+requires:
+  - python3
+  - git

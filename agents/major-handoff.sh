@@ -194,7 +194,7 @@ if ! now_labels="$(gh api "repos/$SLUG/issues/$PR/labels" --jq '.[].name' 2>/dev
   printf 'major-handoff: END STATE NOT PROVEN — both writes issued on %s#%s but the label re-read failed\n' "$SLUG" "$PR"
   exit 5
 fi
-if ! printf '%s\n' "$now_labels" | grep -qx -- "$HANDOFF_LABEL" || printf '%s\n' "$now_labels" | grep -qx -- "$CLAIM_LABEL"; then
+if ! grep -qx -- "$HANDOFF_LABEL" <<< "$now_labels" || grep -qx -- "$CLAIM_LABEL" <<< "$now_labels"; then
   printf 'major-handoff: END STATE NOT PROVEN — %s#%s labels after the writes: %s\n' "$SLUG" "$PR" "$(printf '%s' "$now_labels" | tr '\n' ',')"
   exit 5
 fi

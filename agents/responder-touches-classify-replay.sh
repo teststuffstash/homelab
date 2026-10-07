@@ -29,8 +29,8 @@ PASS=0; FAIL=0; FAILED=()
 ok()       { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()      { FAIL=$((FAIL+1)); FAILED+=("$1"); local d="${2:-}"; printf '  \033[31m✗\033[0m %s\n' "$1"; [ -n "$d" ] && printf '       %s\n' "$d"; }
 section()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
-want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "output lacks: $2"; }
-wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "output contains: $2" || ok "$1"; }
+want()     { grep -qF -- "$2" <<< "$OUT" && ok "$1" || bad "$1" "output lacks: $2"; }
+wantnot()  { grep -qF -- "$2" <<< "$OUT" && bad "$1" "output contains: $2" || ok "$1"; }
 
 # ── extract the embedded script from the YAML ───────────────────────────────────────────────────
 printf '\033[1mresponder-touches-classify-replay\033[0m — #1207: filing-door Touches classification\n\n'

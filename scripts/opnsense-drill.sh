@@ -102,7 +102,7 @@ die() { log "REFUSED: $*"; exit 2; }
 # window 1, the nx-02 node after (ADR-145). NODES = every router node, live or standing: never a drill host.
 PROD="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml")"
 NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
-[ "$(printf '%s\n' "$PROD" | grep -c .)" = 1 ] && echo "$PROD" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || die "could not read ONE live prod router address from the ansible inventories (got: $(echo $PROD))"
+[ "$(printf '%s\n' "$PROD" | grep -c .)" = 1 ] && grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$PROD" || die "could not read ONE live prod router address from the ansible inventories (got: $(echo $PROD))"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
 # fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
 fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
@@ -478,14 +478,14 @@ n=$(basename $(ls -d /sys/bus/pci/devices/$1/net/* | head -1))
 echo "$n carrier=$(cat /sys/class/net/$n/carrier) master=$(basename $(readlink /sys/class/net/$n/master)) br_addr=$(ip -br -4 addr show dev $2 | awk '{print $3}')"
 SH
 )"
-    probe wan_dark "$(echo "$hd" | grep -q 'carrier=0 master=vmbr' && echo "$hd" | grep -q 'br_addr=$' && echo 1 || echo 0)" \
+    probe wan_dark "$(grep -q 'carrier=0 master=vmbr' <<< "$hd" && grep -q 'br_addr=$' <<< "$hd" && echo 1 || echo 0)" \
       "host port (nx-02 $WAN_PCI): \`${hd:-unread}\` (want carrier=0, enslaved to the WAN bridge, bridge without an address)"
   else
   igb="$(vm_ssh 'ifconfig igb0' 2>/dev/null || true)"
-  probe wan_dark "$(echo "$igb" | grep -q 'status: no carrier' && echo 1 || echo 0)" \
+  probe wan_dark "$(grep -q 'status: no carrier' <<< "$igb" && echo 1 || echo 0)" \
     "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | head -1)\` (want no carrier)"
   fi
-  probe wan_mac "$(echo "$igb" | grep -qi "ether $WAN_MAC" && echo 1 || echo 0)" \
+  probe wan_mac "$(grep -qi "ether $WAN_MAC" <<< "$igb" && echo 1 || echo 0)" \
     "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0) ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
   _kpw() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
              "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
@@ -499,7 +499,7 @@ SH
       "prod's \`$ent-*\` wallet pair on \`GET /api/$path\` → HTTP $code (want 200)"
   done
   iss="$(probe_ct "sh -c 'echo | timeout 15 openssl s_client -connect $hv:443 -servername $hn 2>/dev/null | openssl x509 -noout -issuer -subject'" 2>/dev/null | tr '\n' ' ' || true)"
-  probe real_cert "$(echo "$iss" | grep -q "Let's Encrypt" && echo "$iss" | grep -q "$hn" && echo 1 || echo 0)" \
+  probe real_cert "$(grep -q "Let's Encrypt" <<< "$iss" && grep -q "$hn" <<< "$iss" && echo 1 || echo 0)" \
     "VIP \`$hv:443\` SNI \`$hn\` serves \`$(echo "${iss:-nothing}" | cut -c1-110)\` (want the carried LE cert)"
   # Root: the live config's root hash must verify against the wallet's opnsense-root-password
   # (recomputed with the hash's own salt; the password never leaves this process's stdin pipes).

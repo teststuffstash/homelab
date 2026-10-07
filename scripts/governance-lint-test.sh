@@ -42,7 +42,7 @@ pass=0; fail=0
 check() {  # check <repo> <author> <want-exit> <want-phrase> <label>
   local out rc
   out="$(cd "$T" && PR_AUTHOR="$2" CI= bash "$1/scripts/governance-lint.sh" base 2>&1)"; rc=$?
-  if [ "$rc" = "$3" ] && printf '%s' "$out" | grep -qF -- "$4"; then
+  if [ "$rc" = "$3" ] && grep -qF -- "$4" <<< "$out"; then
     pass=$((pass+1)); echo "ok   $5"
   else
     fail=$((fail+1)); echo "FAIL $5 — author '$2': want exit $3 + '$4', got exit $rc:"; printf '       %s\n' "$out"

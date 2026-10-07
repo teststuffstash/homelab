@@ -233,7 +233,7 @@ evaluate() {
         # "violation" with rule `?` and no detail, which reads as a policy verdict and is
         # permanent instead of self-healing.
         log "[$repo#$pr@$ref] kyverno TOOL ERROR (rc=$krc, no fail-summary) — probe failed, not a finding:"
-        printf '%s\n' "$kout" | head -8 | sed 's/^/    /'
+        head -8 <<< "$kout" | sed 's/^/    /'
         metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
         KYVERNO_TOOL_ERROR=1
       else

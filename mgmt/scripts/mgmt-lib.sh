@@ -87,7 +87,7 @@ gh_api_paged() {
 # mgmt_post_status <sha> <context> <state> <description> — the enforcement write. Shadow = log only.
 mgmt_post_status() {
   local sha="$1" ctx="$2" state="$3" desc="$4"
-  desc="$(printf '%s' "$desc" | head -c 130)"   # GitHub caps description at 140
+  desc="$(head -c 130 <<< "$desc")"   # GitHub caps description at 140
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then
     log "[shadow] status $ctx=$state on ${sha:0:8}: $desc"; return 0
   fi
@@ -451,7 +451,7 @@ mgmt_stage1() {
       +++\ *|---\ *) continue ;;
       +*) line="${line#+}"
           for pat in "${denyre[@]}"; do
-            if printf '%s' "$line" | grep -Eq -- "$pat"; then
+            if [ -n "$line" ] && grep -Eq -- "$pat" <<< "$line"; then
               hits_out="${hits_out}deny_patterns"$'\t'"${cur}"$'\t'"${pat}"$'\n'
             fi
           done ;;

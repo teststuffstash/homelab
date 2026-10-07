@@ -332,7 +332,7 @@ while IFS=$'\t' read -r pr sha bref; do
       # posted nothing at all because its headline carried an `=`). Same `=` guard as the headlines.
       locs="$(grep -E '^(│ )?[[:space:]]+on [^[:space:]]+ line [0-9]+' "$out.log" 2>/dev/null | sed -E 's/^│ //; s/^[[:space:]]+//' | grep -v '=' | head -3)"
       { echo; echo "### \`$root\` — plan ERRORED"
-        if [ -n "$heads" ] && ! printf '%s' "$heads" | grep -q '='; then echo '```'; printf '%s\n' "$heads"; [ -n "$locs" ] && printf '%s\n' "$locs"; echo '```'; echo "(headlines + positions only — the full log stays in the box journal)"
+        if [ -n "$heads" ] && ! grep -q '=' <<< "$heads"; then echo '```'; printf '%s\n' "$heads"; [ -n "$locs" ] && printf '%s\n' "$locs"; echo '```'; echo "(headlines + positions only — the full log stays in the box journal)"
         elif [ -n "$locs" ]; then echo '```'; printf '%s\n' "$locs"; echo '```'; echo "(positions only — the headline may carry values; the full log stays in the box journal)"
         else echo "see the box journal (output withheld: it may carry values)"; fi
       } >>"$bodyf"

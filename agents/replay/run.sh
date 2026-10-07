@@ -346,7 +346,7 @@ run_fixture() {
   [ -n "$dir" ] || { bad "$(basename "${1%/}"): not a directory: $1"; return 0; }
   [ -f "$dir/fixture.yaml" ] || { bad "$(basename "$dir"): no fixture.yaml in $dir"; return 0; }
   FXY="$(parse_fixture "$dir/fixture.yaml")"
-  if printf '%s\n' "$FXY" | grep -q '^E	'; then
+  if grep -q '^E	' <<< "$FXY"; then
     bad "$(basename "$dir"): fixture.yaml has lines outside the supported subset" \
         "$(printf '%s\n' "$FXY" | awk -F'\t' '$1=="E" { printf "line %s: %s\n", $2, $3 }')"
     return 0
@@ -378,7 +378,7 @@ run_fixture() {
   if [ "$SELFTEST_HIT" != 1 ]; then
     bad "$name: PROBE-FAIL SELF-TEST DID NOT FIRE — a fixture broken on purpose went GREEN" \
         "The detector this fixture exists to prove is not working, so every other fixture's green is worth less than it looks."
-  elif [ -n "$want" ] && ! printf '%s' "$SELFTEST_DETAIL" | grep -qF -- "$want"; then
+  elif [ -n "$want" ] && ! grep -qF -- "$want" <<< "$SELFTEST_DETAIL"; then
     bad "$name: red-cased, but NOT for the declared reason" \
         "wanted the report to contain: $want
 what the harness actually said:

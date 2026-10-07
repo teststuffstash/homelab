@@ -53,7 +53,7 @@ cp "$TMP/rules.json" "$TMP/rules.yaml"   # JSON is valid YAML; promtool reads ei
 # ── 2. drift pin: the metrics the alert reads are the metrics the scan pushes ───────────────────
 expr_txt="$(jq -r '.groups[0].rules[0].expr' "$TMP/rules.json")"
 for m in agent_scan_phase_start_timestamp agent_scan_in_deterministic; do
-  if printf '%s' "$expr_txt" | grep -q "$m" && grep -q "$m" "$SCAN_FILE"; then
+  if grep -q "$m" <<< "$expr_txt" && grep -q "$m" "$SCAN_FILE"; then
     ok "metric ${m} is both pushed by ${SCAN_FILE} and read by the alert"
   else
     bad "metric ${m} is missing on one side (scan pushes / alert reads)" \

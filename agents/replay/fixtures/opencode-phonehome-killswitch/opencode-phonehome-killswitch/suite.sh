@@ -72,7 +72,7 @@ fi
 # ── 4. the comment names the pair it exists for (the pin carries its alert) ──────────────────────
 comment="$(sed -n "$((var_ln-5)),$((var_ln-1))p" "$LAUNCHER")"
 for dest in models.opencode.ai registry.npmjs.org; do
-  if printf '%s\n' "$comment" | grep -qF -- "$dest"; then
+  if grep -qF -- "$dest" <<< "$comment"; then
     ok "comment above the var names $dest"
   else
     bad "comment above the var names $dest" "no '$dest' in the comment block (L$((var_ln-5))–L$((var_ln-1)))"

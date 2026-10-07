@@ -104,10 +104,10 @@ case_() {
   out="$(bash "$LINT" "$BASE" 2>&1)"; rc=$?
   git -C "$R" checkout -q master
   if [ "$want" = ok ]; then
-    if [ $rc = 0 ] && printf '%s' "$out" | grep -q '^pin-only-lint: OK'; then pass=$((pass+1)); echo "PASS $name (rc 0)"; return; fi
+    if [ $rc = 0 ] && grep -q '^pin-only-lint: OK' <<< "$out"; then pass=$((pass+1)); echo "PASS $name (rc 0)"; return; fi
     fail=$((fail+1)); echo "FAIL $name — wanted OK, rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'; return
   fi
-  if [ $rc != 0 ] && printf '%s' "$out" | grep -q 'pin-only-lint: FAIL' && printf '%s' "$out" | grep -qF -- "$want"; then
+  if [ $rc != 0 ] && grep -q 'pin-only-lint: FAIL' <<< "$out" && grep -qF -- "$want" <<< "$out"; then
     pass=$((pass+1)); echo "PASS $name (rc $rc, fired on '$want')"; return
   fi
   fail=$((fail+1)); echo "FAIL $name — wanted a FAIL naming '$want', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
@@ -281,7 +281,7 @@ rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
 ref_ actions/checkout v4 commit $NEW
 ref_ docker/setup-buildx-action v3 commit $NEW
 out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
-if [ $rc = 0 ] && printf '%s' "$out" | grep -q '^pin-only-lint: OK'; then
+if [ $rc = 0 ] && grep -q '^pin-only-lint: OK' <<< "$out"; then
   pass=$((pass+1)); echo "PASS initial-pin-unpinned-to-pinned (rc 0)"
 else
   fail=$((fail+1)); echo "FAIL initial-pin-unpinned-to-pinned — wanted OK, rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
@@ -295,7 +295,7 @@ git -C "$R2" add -A && git -C "$R2" commit -q -m "pin mismatch"
 rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
 ref_ actions/cache v4 commit $NEW
 out="$(PIN_ONLY_REPO="$R2" PIN_ONLY_GH="$PIN_ONLY_GH" bash "$LINT" "$BASE2" 2>&1)"; rc=$?
-if [ $rc != 0 ] && printf '%s' "$out" | grep -q 'do not pair up'; then
+if [ $rc != 0 ] && grep -q 'do not pair up' <<< "$out"; then
   pass=$((pass+1)); echo "PASS initial-pin-owner-mismatch (rc $rc, fired on 'do not pair up')"
 else
   fail=$((fail+1)); echo "FAIL initial-pin-owner-mismatch — wanted 'do not pair up', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'

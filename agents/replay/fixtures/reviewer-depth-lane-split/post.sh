@@ -2,7 +2,7 @@
 # Row (a): goal-base depth 2 → suppressed
 PROMPT="Initial prompt."
 depth-rule-append 2 "goal/s6" "" "" 1 "$REPO_SLUG" && _rc=0 || _rc=$?
-if printf '%s' "$PROMPT" | grep -q "DO NOT emit a Follow-ups: section"; then
+if grep -q "DO NOT emit a Follow-ups: section" <<< "$PROMPT"; then
   echo "OUT row_a=suppress" >> "$REPLAY_ACTIONS"
 elif [ "$_rc" = "1" ]; then
   echo "OUT row_a=none" >> "$REPLAY_ACTIONS"
@@ -18,7 +18,7 @@ fi
 # Row (c): master-base depth 4 non-hotfix → Container-findings
 PROMPT="Initial prompt."
 depth-rule-append 4 "master" "some title" "" 1 "$REPO_SLUG" && _rc=0 || _rc=$?
-if printf '%s' "$PROMPT" | grep -q "Container-findings"; then
+if grep -q "Container-findings" <<< "$PROMPT"; then
   echo "OUT row_c=container-findings" >> "$REPLAY_ACTIONS"
 elif [ "$_rc" = "1" ]; then
   echo "OUT row_c=none" >> "$REPLAY_ACTIONS"
@@ -36,7 +36,7 @@ fi
 # unreadable body must not read as "not hotfix" and narrow the review to Container-findings.
 PROMPT="Initial prompt."
 depth-rule-append 4 "master" "some title" "$(printf -- '---\nalert-fp: abc\nbogus line\n---\nbody')" 1 "$REPO_SLUG" && _rc=0 || _rc=$?
-if printf '%s' "$PROMPT" | grep -q "Container-findings"; then
+if grep -q "Container-findings" <<< "$PROMPT"; then
   echo "OUT row_e=container-findings" >> "$REPLAY_ACTIONS"
 elif [ "$_rc" = "1" ]; then
   echo "OUT row_e=none" >> "$REPLAY_ACTIONS"
