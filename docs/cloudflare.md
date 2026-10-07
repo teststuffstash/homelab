@@ -265,6 +265,7 @@ grep this doc, so the strings must match the emitter exactly):
 | `cloudflare_edge_firewall_events_host_action_source_total` | counter | `zone`, `host`, `action`, `source` | the same events split by the acting product (`firewallCustom`, `firewallManaged`, `rateLimiter`, …) — `sum by (host, action, source) (rate(…[$__rate_interval]))`; added 2026-09-24 for oracle-fleet#732 (the "Block AI bots" managed rule was only nameable by a GraphQL read) |
 | `cloudflare_edge_firewall_events_host_action_source_rule_total` | counter | `zone`, `host`, `action`, `source`, `rule_id`, `rule` | the same events split by the rule that acted (`rule_id` = Cloudflare `ruleId`, `rule` = its description; `unknown`/empty for sources without one). **`source="firewallManaged"` is the whole managed WAF** — the AI-bot rule (`eb4f2dedc16c49f9bf27a5170989fb0f`, "Block AI bots on ad pages") AND every CVE signature, which blocks scanners near-daily (31d read 2026-10-07: the bot rule silent since 09-24, WordPress/React-RCE signatures firing on 20 of the days). Alert on a RULE, not on the source: `sum(increase(…{host="minutark.ee",action="block",rule_id="eb4f2dedc16c49f9bf27a5170989fb0f"}[24h])) > 0` |
 | `cloudflare_edge_probe_ok` | gauge | `zone` | `min by (zone) (min_over_time(…[10m]))` |
+| `cloudflare_edge_client_ip_retention_seconds_dataset` | gauge | `zone`, `dataset` | how long Cloudflare serves each **enabled dataset that exposes `clientIP`** (`settings.notOlderThan`; 2678400 = 31d on `firewallEventsAdaptive` + `httpRequestsAdaptive` as of 2026-10-07). The dataset set is introspected, so a NEW IP-bearing dataset appears on its own. Refreshed hourly, holds its last value; a failed read flips `probe_ok`. Drift alert for a page that states the period: `max by (zone) (cloudflare_edge_client_ip_retention_seconds_dataset{zone="minutark.ee"}) != 2678400` — the threshold is the consumer's published value, so the alert lives in the consumer's repo (oracle-fleet#798) |
 
 **There is no `route` label — the per-hostname dimension is `host`.** `by (route)` parses, returns
 one empty unlabelled series, and fails nothing: it is what oracle-fleet#572 shipped, and what its
@@ -314,6 +315,11 @@ when the single-replica probe rolls (homelab#334) — is the promtool fixture be
 
 ### Free-zone GraphQL matrix (VALIDATED LIVE 2026-08-08, teststuff.net free vs eid-demo.com pro)
 
+Retention and window limits are **queryable, not doc lore**: `viewer { zones(filter:{zoneTag}) {
+settings { <dataset> { enabled notOlderThan maxDuration availableFields } } } }` returns each
+dataset's per-zone boundaries (seconds) — read that before quoting a number; the matrix's
+retention cells were re-read that way 2026-10-07.
+
 Probed with `homelab-observability-read` against `api.cloudflare.com/client/v4/graphql` — the
 limits below are the API's own error messages, not doc paraphrase (probe script shape:
 scratchpad `cf-graphql-probe.sh`, one dataset per query so errors can't mask each other):
@@ -321,17 +327,17 @@ scratchpad `cf-graphql-probe.sh`, one dataset per query so errors can't mask eac
 | Dataset | free (teststuff.net) | pro (eid-demo.com) | monitoring use |
 |---|---|---|---|
 | `httpRequests1dGroups` | ✅ (requests/cached/bytes/threats/encrypted + uniques; no wall hit at 11 months back) | ✅ | daily traffic + threat trending |
-| `httpRequestsAdaptiveGroups` | ✅ — **1d max window/query, 1w1d retention**; host+status dims proven. **Field shape**: `count` (request count), `dimensions { datetime, clientRequestHTTPHost, edgeResponseStatus, cacheStatus }`, `sum { edgeResponseBytes }` | ✅ — window widens to 1w1d, **retention SAME 1w1d** | per-host/per-status series — poll short windows into Prometheus and retention becomes ours |
-| `firewallEventsAdaptive` | ✅ — flat event list (one row per event). **Field shape**: `datetime`, `clientRequestHTTPHost`, `action`, `source` — no `dimensions`/`sum` wrapper. Count events by counting rows in Python. | ✅ | WAF hits on `ha.teststuff.net` = someone probing the public edge |
+| `httpRequestsAdaptiveGroups` | ✅ — **30d max window/query, 31d retention** (`settings.notOlderThan` = 2678400 s, re-read live 2026-10-07; the 2026-08-08 probe measured 1d / 1w1d — Cloudflare widened free adaptive retention, docs "Limits" page 2026-10-02); host+status dims proven. **Field shape**: `count` (request count), `dimensions { datetime, clientRequestHTTPHost, edgeResponseStatus, cacheStatus }`, `sum { edgeResponseBytes }` | ✅ — same 30d window / 31d retention as free (2026-10-07) | per-host/per-status series — poll short windows into Prometheus and retention becomes ours |
+| `firewallEventsAdaptive` | ✅ — flat event list (one row per event), **31d retention, carries `clientIP`** (2026-10-07). **Field shape**: `datetime`, `clientRequestHTTPHost`, `action`, `source` — no `dimensions`/`sum` wrapper. Count events by counting rows in Python. | ✅ | WAF hits on `ha.teststuff.net` = someone probing the public edge |
 | `dnsAnalyticsAdaptiveGroups` | ✅ live rows (queryName, responseCode) | ✅ | authoritative-DNS query monitoring |
 | `httpRequests1mGroups` | ❌ "does not have access to the path" | ✅ | minute-granularity totals — **the lablabs exporter's dataset** (why it can't serve free zones, #132) |
 | `healthCheckEventsAdaptiveGroups` | ❌ | ❌ (Health Checks not configured; Biz/Ent feature) | n/a |
 
-**Pro-for-monitoring verdict: thin.** The measured delta is 1-minute granularity + 8× query
-window; adaptive retention does NOT improve, and a poller that scrapes every few minutes makes
+**Pro-for-monitoring verdict: thin.** The measured delta is 1-minute granularity (the query-window
+gap closed 2026-10-07 — both plans 30d); adaptive retention does NOT improve, and a poller that scrapes every few minutes makes
 both moot (Prometheus keeps the history). A Pro upgrade should be justified by WAF/bot features
 on public endpoints, not analytics. Per-request logs (Logpush/Logpull) are Enterprise — but
-`httpRequestsAdaptive` (per-request sampled records: datetime/host/path/status/country/UA) IS
+`httpRequestsAdaptive` (per-request sampled records: datetime/host/path/status/country/UA **and `clientIP`**, 31d) IS
 queryable on free, and at our traffic volumes sampling ≈ 100%: that's the incident-forensics
 "log", fetched on demand from the jail.
 

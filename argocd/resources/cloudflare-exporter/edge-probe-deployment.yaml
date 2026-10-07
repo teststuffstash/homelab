@@ -36,7 +36,7 @@ spec:
             - name: CF_EDGE_ZONE_IDS
               value: "fa1b02951c29ee4828b8948d0dd7baaf"
             # Poll short windows (5 min) into Prometheus and retention becomes ours. Adaptive
-            # retention is 1w1d; Prometheus owns the history.
+            # retention is 31d (settings.notOlderThan, 2026-10-07); Prometheus owns the history.
             - name: POLL_INTERVAL_SECONDS
               value: "120"
           ports:
