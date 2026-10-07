@@ -2047,11 +2047,18 @@ EOF_GOALBASED
     # abandoned, and c4c5-redispatch OUTRANKS merged-closeout. Strong link only, never a bare
     # mention (the circles#36 asymmetry stands). Probe failures skip LOUDLY (rule #6).
     c6db=""; c6db_nums=""
-    # Candidate set: OPEN issues with agent-fix and (agent/in-progress or agent/review) that do
-    # NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses $goalcand which was
-    # already fetched above for the goal-child leg.
+    # Candidate set: OPEN issues with agent/in-progress or agent/review (never agent/blocked — the
+    # ⚠ note below) that do NOT carry a `Base: goal/**` line (i.e., default-branch issues). Reuses
+    # $goalcand which was already fetched above for the goal-child leg.
     # ADR-122 (3): the exact complement of $goalbased above, read through the ONE parser —
     # candidates are the open issues whose `Base:` is NOT a goal branch (default-branch issues).
+    # ⚠ `agent/blocked` stays OUT of this leg. The goalcand widening (homelab#1720) is for GOAL
+    # children only — its `blocked-on:` gate lives in the goal-child loop above, and its premise
+    # (the keyword is inert off master) is a goal-base fact. As the complement, this leg inherited
+    # the blocked set UNGATED: a default-branch issue the closeout itself parked `agent/blocked`
+    # after the merge ("outcome does not fully hold") matched every tick, and the session ruled
+    # "not actionable" each time — oracle-fleet#798, ~24 closeout rides/h from 2026-10-06 20:00Z,
+    # the shared homelab-agents GraphQL pool drained to 0 (FU-290). Blocked = a human gate here.
     dbcand=""
     while IFS='|' read -r _dbn _dbb; do
       [ -n "$_dbn" ] || continue
@@ -2060,7 +2067,7 @@ EOF_GOALBASED
       case "$_dbv" in goal/?*) : ;; *) dbcand="${dbcand}${_dbn}
 " ;; esac
     done <<EOF_DBCAND
-$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | select(((.labels|map(.name))|index("agent/error"))|not)]' 2>/dev/null || echo '[]')")
+$(ib_rows "$(printf '%s' "$goalcand" | jq '[.[] | (.labels|map(.name)) as $L | select(($L|index("agent/error"))|not) | select(($L|index("agent/blocked"))|not)]' 2>/dev/null || echo '[]')")
 EOF_DBCAND
     if [ -n "$dbcand" ]; then
       dbmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName,mergedAt 2>/dev/null)" || dbmerged='X'

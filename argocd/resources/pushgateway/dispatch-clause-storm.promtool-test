@@ -1,0 +1,105 @@
+# BEHAVIOUR fixture for DispatchClauseStorm — the #1162 class, one row per known sighting plus
+# each clause's baseline ceiling.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/dispatch-clause-storm.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# `agent_dispatch_wake_clause_timestamp` is an epoch gauge stamped at each dispatch, one sticky
+# series per (project, clause, unit, base) — so `changes()` over a window COUNTS dispatches. A
+# series stamped k times shows k-1 changes from its first sample.
+#
+#   - Row 1: the 2026-10-04 goal-checkpoint storm (sleep-tracking#121), a re-dispatch every 3 min.
+#   - Row 2: goal-checkpoint's baseline ceiling — 3 in an hour (the 14-day pre-storm max) is quiet.
+#   - Row 3: the 2026-10-06 merged-closeout storm (oracle-fleet#798), a re-dispatch every 2.5 min
+#     (24/h, as measured) — fires on its lane, with the clause in the labels.
+#   - Row 4: merged-closeout's baseline ceiling — 14/h held for 30 min (the 30-day pre-storm
+#     max, 2026-09-13 on oracle master) stays quiet: the per-clause threshold, not goal-checkpoint's 6.
+#   - Row 5: the clause filter — an unlisted clause (queued-dispatch) at storm cadence never fires;
+#     dispatch volume in general is not the condition.
+rule_files:
+  - dispatch-clause-storm.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ 1. THE 2026-10-04 STORM — a goal-checkpoint every 3 minutes on sleep-tracking/master ══════
+  # Stamps at 0,3,6,…: the 1h count reaches 6 at 18m (pending), firing needs 15m of continuous
+  # truth → firing by 33m, quiet at 20m (pending, not firing).
+  - interval: 1m
+    name: "a checkpoint re-dispatched every 3 min fires on its lane"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="sleep-tracking",role="coordinator-scan",clause="goal-checkpoint",base="master"}'
+        values: "1000 1000 1000 1180 1180 1180 1360 1360 1360 1540 1540 1540 1720 1720 1720 1900 1900 1900 2080 2080 2080 2260 2260 2260 2440 2440 2440 2620 2620 2620 2800 2800 2800 2980 2980 2980 3160 3160 3160 3340 3340 3340"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DispatchClauseStorm
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: DispatchClauseStorm
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              project: sleep-tracking
+              clause: goal-checkpoint
+              base: master
+              triage: dig
+            exp_annotations: {}
+
+  # ══ 2. GOAL-CHECKPOINT BASELINE — 3 checkpoints in an hour is ordinary ═════════════════════════
+  - interval: 1m
+    name: "three checkpoints in an hour (the 14-day max) stay quiet"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="homelab",role="coordinator-scan",clause="goal-checkpoint",base="master"}'
+        values: "1000+0x9 1600+0x19 2800+0x19 4000+0x30"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: DispatchClauseStorm
+        exp_alerts: []
+
+  # ══ 3. THE 2026-10-06 STORM — a merged-closeout every 2.5 minutes on oracle-fleet/master ════════
+  # The 1h count reaches 16 at 40m (pending) → firing from 55m; quiet at 45m (pending, not firing).
+  - interval: 1m
+    name: "a merged-closeout re-dispatched every 2.5 min (24/h) fires on its lane"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",clause="merged-closeout",base="master"}'
+        values: "1000 1000 1000 1150 1150 1300 1300 1300 1450 1450 1600 1600 1600 1750 1750 1900 1900 1900 2050 2050 2200 2200 2200 2350 2350 2500 2500 2500 2650 2650 2800 2800 2800 2950 2950 3100 3100 3100 3250 3250 3400 3400 3400 3550 3550 3700 3700 3700 3850 3850 4000 4000 4000 4150 4150 4300 4300 4300 4450 4450 4600 4600 4600 4750 4750 4900 4900 4900 5050 5050"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: DispatchClauseStorm
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: DispatchClauseStorm
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              project: oracle-fleet
+              clause: merged-closeout
+              base: master
+              triage: dig
+            exp_annotations: {}
+
+  # ══ 4. MERGED-CLOSEOUT BASELINE — 14/h sustained is ordinary ═══════════════════════════════════
+  # A stamp every 257 s holds the 1h count at 13–14 from ~60m on — the 30-day pre-storm peak,
+  # held longer than it ever was (≤40 min), and still quiet.
+  - interval: 1m
+    name: "a 14/h merged-closeout burst (the 30-day max) stays quiet"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",clause="merged-closeout",base="master"}'
+        values: "1000 1000 1000 1000 1000 1257 1257 1257 1257 1514 1514 1514 1514 1771 1771 1771 1771 1771 2028 2028 2028 2028 2285 2285 2285 2285 2542 2542 2542 2542 2799 2799 2799 2799 2799 3056 3056 3056 3056 3313 3313 3313 3313 3570 3570 3570 3570 3570 3827 3827 3827 3827 4084 4084 4084 4084 4341 4341 4341 4341 4598 4598 4598 4598 4598 4855 4855 4855 4855 5112 5112 5112 5112 5369 5369 5369 5369 5369 5626 5626 5626 5626 5883 5883 5883 5883 6140 6140 6140 6140"
+    alert_rule_test:
+      - eval_time: 89m
+        alertname: DispatchClauseStorm
+        exp_alerts: []
+
+  # ══ 5. THE CLAUSE FILTER — an unlisted clause at storm cadence is not a storm ══════════════════
+  - interval: 1m
+    name: "an unlisted clause at storm cadence never fires"
+    input_series:
+      - series: 'agent_dispatch_wake_clause_timestamp{job="agent_dispatch_phase",project="oracle-fleet",role="coordinator-scan",clause="queued-dispatch",base="master"}'
+        values: "1000 1000 1000 1150 1150 1300 1300 1300 1450 1450 1600 1600 1600 1750 1750 1900 1900 1900 2050 2050 2200 2200 2200 2350 2350 2500 2500 2500 2650 2650 2800 2800 2800 2950 2950 3100 3100 3100 3250 3250 3400 3400 3400 3550 3550 3700 3700 3700 3850 3850 4000 4000 4000 4150 4150 4300 4300 4300 4450 4450 4600 4600 4600 4750 4750 4900 4900 4900 5050 5050"
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: DispatchClauseStorm
+        exp_alerts: []

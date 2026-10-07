@@ -16,6 +16,8 @@
 #   2. The dref exclusion blocks detection when an open PR references the issue.
 #   3. Only #91 is detected and emitted as a merged-closeout unit.
 #   4. #92 produces an orphan warning (merged PR mentions but does not implement).
+#   5. #95 (`agent/blocked`, strong-linked merge) is not a default-branch candidate at all —
+#      the oracle-fleet#798 closeout loop (FU-290).
 pins:
   - IL-T09
 name: merged-closeout-ilg06-detect
