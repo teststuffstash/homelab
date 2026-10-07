@@ -231,7 +231,7 @@ def collect(lines, fetch=None, zone_ids=None):
     global _errors
     lines += HEADERS
     now = time.time()
-    # Poll a short window: 5 minutes back. Adaptive retention is 1w1d; Prometheus owns history.
+    # Poll a short window: 5 minutes back. Adaptive retention is 31d; Prometheus owns history.
     start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 300))
     end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
 
