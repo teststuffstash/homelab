@@ -10,6 +10,9 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **OPERATOR: oracle-fleet#798 item 6** (the privacy retention line) is still unfixed and needs a human — the
+  issue sits `agent/blocked`, out of the loop since #2366 (2026-10-07), so nothing retries it. Delete this bullet
+  when #798 closes.
 - **⚑ PICKUP (2026-10-07 morning — S9 build list DONE overnight; TICK-LOG 2026-10-06 night has the arc).**
   Landed: #2345 (0: packaging-only chart majors ARM on `appVersion: unchanged`), #2344 (1: G17 second body
   section + fixture; ci step c757e178), #2348 (2: ADR-151 CRD owner app + group + belt), #2351 (3: G12
