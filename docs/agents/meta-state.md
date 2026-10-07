@@ -19,8 +19,8 @@ never the session's arc — that is TICK-LOG's.)
   postUpgradeTasks), #2347/#2349/#2355/#2359 + #2350 (4: ADR-150 lease, cluster + box — box timer LIVE
   21:28Z), #2346 (sentinel `contents: write` DECLARED). **kps 91.8.0 + CRDs 32.0.1 LIVE 23:34Z** (#2256; the
   lease armed→confirmed on a real bump after a seat renew — ordering hole fixed by #2359). Cloudflared
-  2026.10.0 tofu half applied. **OPERATOR (morning):** (a) the `homelab-sentinel` permission click
-  (`contents: write`; `GithubAppPermissionDrift` had not fired by 23:46Z — expect it) → then the seat drills the
+  2026.10.0 tofu half applied. **OPERATOR (morning):** (a) ✅ the `homelab-sentinel` permission click DONE (operator, 2026-10-07 — reported at the
+  evening session's start) → NEXT the seat drills the
   REVERT half: a synthetic expired lease on the next merged pin-only kps bump (`agents/upgrade-lease.sh open
   --subject argocd/platform/kube-prometheus-stack.yaml --chart kube-prometheus-stack --sha <merged sha> --from
   <old> --to <new> --expect-min 0`, the #2276→#2279 shape) → `mgmt-lease` opens `revert-chart-lease-<sha8>` →

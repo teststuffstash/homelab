@@ -12708,4 +12708,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (20:00Z, the updater's 422). No clause could move it: the worker's adaptation commit stops Renovate's rebase,
   the rebase-tick is report-only on an adapted branch, the unarmed-major ride excludes armed + awaiting-human,
   and `argocd/platform/**` would still need a codeowner review. Not recreated: Renovate proposes only newer.
+- **Wind-down (operator: "wind down when this finishes"):** #2362 merged by the operator 20:11Z (44d3e2f9) — the new
+  lock's two post-merge consumers both GREEN: `runner-image` rebuild (run 37680131369, the lock revert chain's
+  one live trigger) and master `ci`. Lock on master: argo-workflows 4.0.5, openssl 3.5.8, opentofu 1.13.1 (the
+  box's first main-root apply from here stamps state 1.13 — forward-only, the lens's named consequence). Open
+  for the next session: the ADR-150 revert-half drill on the next pin-only kps bump, step (5) the kps-major
+  `matchPackageNames` line, the §Next steps 10 proofs (next lock major arms; lock revert drill), the Goal #2273
+  production-leg verdict. Bookkeeping pushed once at wind-down (this push).
 
