@@ -13,7 +13,8 @@
 #   (3) if the child is `agent/blocked`, the escalation's `blocked-on:` predicate is RESOLVED
 #       (homelab#1720 defect 2: the selector accepted only in-progress/review, so a child parked
 #       `agent/blocked` by an arbitrate escalation was a terminal sink once its PR merged — live:
-#       #1781, theme #1768's last member, unparked by hand).
+#       #1781, theme #1768's last member, unparked by hand). A child with NO marker has no
+#       predicate to resolve and stays OUT (FU-290: read as "clear" it loops every tick).
 #
 # ROWS (one per value of each input axis the defect missed):
 #   in-progress        baseline: in-progress child, merged strong link, no open PR → closeout
@@ -23,6 +24,9 @@
 #   cross-repo         an open PR carries the cross-repo spelling `homelab#100` → closeout (defect 1)
 #   blocked-resolved   agent/blocked child, blocked-on resolved → closeout (defect 2)
 #   blocked-unresolved agent/blocked child, blocked-on unresolved → HELD (defect 2)
+#   blocked-no-marker  agent/blocked child, NO blocked-on marker (its own closeout parked it) →
+#                      HELD — no predicate to resolve is not "resolved" (FU-290, the goal-child
+#                      twin of oracle-fleet#798)
 name: fu143-goal-child-closeout
 mode: table
 source: agents/coordinator-scan.sh

@@ -1,0 +1,11 @@
+[
+  {
+    "number": 100,
+    "title": "goal child",
+    "labels": [
+      { "name": "agent-fix" },
+      { "name": "agent/blocked" }
+    ],
+    "body": "---\nTouches: agents/coordinator-scan.sh\nBase: goal/x\nClass: fix\n---\n\n## Why\n\nA goal child its own closeout parked agent/blocked (outcome does not hold), no marker.\n"
+  }
+]
