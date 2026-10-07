@@ -43,6 +43,9 @@ reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%
 # reverts_chart_ <chart@version …>: ONE merged revert-chart-* PR naming those chart versions
 # (check (h), the chart revert actor's memory — FU-304's class row).
 reverts_chart_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-chart-abcd1234"},"body":"FU-304 rollback\\n\\nreverted-charts: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+# reverts_lock_ <name@version …>: ONE merged revert-lock-* PR naming those lock versions (check (i),
+# the lock shape of workflow-pin-revert — class 7 majors armed 2026-10-07).
+reverts_lock_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-lock-abcd1234"},"body":"lock rollback\\n\\nreverted-locks: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
 OLD=1111111111111111111111111111111111111111
@@ -88,6 +91,8 @@ printf 'spec:\n  source:\n    repoURL: https://github.com/teststuffstash/homelab
 mkdir -p "$R/tofu"
 # check (g)'s home: a lockfile with two providers (the version line alone does not say whose it is).
 printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "2.38.0"\n  constraints = "~> 2.31"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n' >"$R/tofu/.terraform.lock.hcl"
+# check (i)'s home: a devbox.lock with two packages (the version line alone does not say whose it is).
+printf '{"packages":{"jq@latest":{"version":"1.8.1"},"curl@latest":{"version":"8.17.0"}}}\n' >"$R/devbox.lock"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
@@ -227,6 +232,16 @@ case_ provider-other-name-same-version ok "reverts_prov_ helm@3.2.1" \
   "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
 case_ provider-memory-unreadable 'cannot read the merged revert-prov-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/2.38.0/3.2.1/' tofu/.terraform.lock.hcl"
+# (i) the reverted-lock memory: a devbox.lock re-resolve passes on an empty memory, is REFUSED when a
+# merged revert-lock-* PR names that name@version, passes when the memory names ANOTHER package at the
+# same version (the name is part of the key), and an unreadable memory is a FAIL.
+case_ lock-bump ok "" "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+case_ lock-reverted-refused 'is a REVERTED lock version' "reverts_lock_ curl@8.22.0" \
+  "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
+  "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
+  "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 # (h) the reverted-chart memory: an unguarded chart Application's targetRevision bump passes on an
 # empty memory, is REFUSED when a merged revert-chart-* PR names that chart@version, passes when
 # the memory names the same chart at ANOTHER version or ANOTHER chart at the same version (the key

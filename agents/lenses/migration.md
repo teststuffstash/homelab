@@ -144,7 +144,10 @@ deliberate upstream re-point (nixpkgs moving a default alias to an LTS — opens
 NixOS/nixpkgs#564262) or a regression, and for each line move (python3 / opentofu / kubectl / openssl
 `major.minor`) what it means for THIS repo's call sites (grep the scripts that invoke the tool; a
 state-format or skew consequence — opentofu stamps state, kubectl's minor is the cluster-skew window —
-is named, not assumed). The PR STAYS ARMED (ruling: rely on the lens), so your `--approve` is the gate.
+is named, not assumed). The PR STAYS ARMED (ruling: rely on the lens) — and since 2026-10-07 a lock
+MAJOR is armed too (`lock-lane: arm` on the body, docs/dependency-upgrades.md §2 Review), so your
+`--approve` is the gate either way; the one lock major that parks on a human is a `HUMAN_PACKAGES`
+crossing (opentofu — `lock-lane: human — …`), where your four headings feed `major-handoff.sh`.
 **Graduation:** the first time a listed move turns out to have mattered, say so under `## Evidence` —
 that class then joins the `major` gate the ADR-141 way (one `matchPackageNames`/gate line, operator-direct).
 

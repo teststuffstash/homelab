@@ -7,10 +7,19 @@
 # in-cluster nix cache (ADR-083) and the `agent-base` baked toolchain hit instead of re-fetch. Pinning
 # per-repo (the original FU-022 idea) drifts between updates; a synchronized bump doesn't.
 #
-# MAJOR bumps are human-gated (not pinned away): if any tool's leading version integer changed, the PR
-# is labelled `major` and auto-merge is NOT armed — CI + the reviewer/coordinator pipeline still run
-# (reviewer investigates the migration + comments what's needed), but a human makes the final merge
-# call. Non-major bumps keep the `automerge` auto-merge path.
+# MAJOR bumps (any tool's leading version integer changed) are labelled `major` — the migration-lens
+# marker — and, since 2026-10-07 (operator ruling, docs/dependency-upgrades.md §2 Review), ARMED the
+# ADR-141 way: `major` kept, no `automerge` label, so the review reflex dispatches the reviewer with
+# the migration lens and its APPROVED completes the merge. CI on the PR proves the toolchain BEFORE
+# the merge (the lock self-deploys to CI); the post-merge half is the lock revert chain
+# (`workflow-pin-revert`, agents/coordinator/deploy-revert-argo.yaml: a master workflow failing within
+# the window after a lock-only merge reverts it, and pin-only-lint check (i) refuses the re-resolve for
+# 30 days). The ONE human-lane member is the HUMAN_PACKAGES set (default: opentofu — it stamps the
+# tofu state on the management box's first apply, so a lock revert cannot read it back: a one-way
+# door no chain can undo): a major of such a package leaves the PR UN-ARMED, coordinator-owned,
+# `major/awaiting-human` on the lens's APPROVED (agents/major-handoff.sh), a human merges. The lane is
+# written on the body as a line-anchored `lock-lane:` line (mechanical | arm | human — <why>).
+# Non-major bumps keep the `automerge` mechanical path.
 #
 # A SECOND body section (gap register G17, ADR-141 as amended 2026-10-06) names what the major gate is
 # blind to: same-major DOWNGRADES (numeric-tuple compare — openssl 3.6.0 → 3.5.8 when nixpkgs re-pointed
@@ -33,6 +42,12 @@ set -euo pipefail
 # cluster-skew window; opentofu's stamps the state version (a lock revert cannot read it back);
 # python3's is the interpreter the scripts run under; openssl's is the LTS alias nixpkgs points at.
 LINE_PACKAGES="${LINE_PACKAGES:-python3 opentofu kubectl openssl}"
+# Packages whose MAJOR keeps the PR on the human lane (un-armed): the state-format owner. opentofu's
+# first apply after a bump stamps the state with the new version and an older binary refuses to read
+# it, so the lock revert chain's `git revert` would leave the management box unable to plan — the
+# one move in the lock a chain cannot undo. Line/patch moves of the same package stay armed (the G17
+# ruling: the lens reads them; the box moves forward on every lock either way).
+HUMAN_PACKAGES="${HUMAN_PACKAGES:-opentofu}"
 
 # lock_moves <old-lock-json> <new-lock-json> → one JSON object: {majors, downgrades, lines}, each a
 # list of "pkg: old → new" strings over the packages present in BOTH locks (added/removed ignored).
@@ -66,6 +81,15 @@ lock_moves() {
         lines:      [ $moves[] | select(.om == .nm and .om != null and (.k | IN($lines[])))
                                | select(.ot != null and .nt != null and (.ot[0:2] != .nt[0:2]) and .nt > .ot) | "\(.k): \(.ov) → \(.nv)" ] }
   '
+}
+# lock_lane <moves-json> → "arm", or "human <pkg: old → new>[; …]" when a HUMAN_PACKAGES member is among
+# the majors. Only the majors list decides (a line move of opentofu is informational, G17); a
+# non-major PR never asks (it is the mechanical lane).
+lock_lane() {
+  jq -r --arg hp "$HUMAN_PACKAGES" '
+    ($hp | split(" ") | map(select(length > 0))) as $h
+    | [ .majors[] | select((split(":")[0]) | IN($h[])) ]
+    | if length == 0 then "arm" else "human " + join("; ") end' <<<"$1"
 }
 # lock_moves_section <downgrades> <lines> → the second body section (markdown), "none" lines when empty.
 lock_moves_section() {
@@ -123,15 +147,21 @@ gh label create major        --repo "$REPO" --color b60205 --force >/dev/null 2>
 BASE_BODY="Weekly synchronized \`devbox update\` (FU-022): keeps \`@latest\` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits."
 # The second section rides BOTH bodies — it informs the lens, never the lane (G17).
 G17_SECTION="$(lock_moves_section "$DOWNGRADES" "$LINES")"
-if [ -n "$MAJORS" ]; then
+LANE="$(lock_lane "$MOVES")"   # arm | human <pkg: old → new …>
+if [ -n "$MAJORS" ] && [ "$LANE" != arm ]; then
   TITLE="chore: devbox update — MAJOR bump, human review (align toolchain lock)"
   LABELS="major,dependencies"
-  BODY="$(printf '%s\n\n⚠️ **MAJOR version bump(s) — human-gated, auto-merge NOT armed:**\n\n%s\n\nCI + the reviewer/coordinator pipeline still run (and may fix breakage); the reviewer investigates the migration and comments what is needed, but the final merge is a human call (majors need a human — FU-022).\n\n%s' \
+  BODY="$(printf '%s\n\n⚠️ **MAJOR version bump(s) — human-gated, auto-merge NOT armed:**\n\n%s\n\nA HUMAN_PACKAGES member crossed a major (%s): the state-format owner is a one-way door the lock revert chain cannot undo, so this PR stays UN-ARMED, coordinator-owned — the reviewer investigates the migration under the four headings, `agents/major-handoff.sh` parks it `major/awaiting-human` on the APPROVED, and a human merges (docs/dependency-upgrades.md §2 Review).\n\nlock-lane: human — %s\n\n%s' \
+    "$BASE_BODY" "$(printf '%s\n' "$MAJORS" | sed 's/^/- /')" "${LANE#human }" "${LANE#human }" "$G17_SECTION")"
+elif [ -n "$MAJORS" ]; then
+  TITLE="chore: devbox update — MAJOR bump (align toolchain lock)"
+  LABELS="major,dependencies"
+  BODY="$(printf '%s\n\n⚠️ **MAJOR version bump(s) — the migration lens is the merge gate (ARMED, ADR-141 way):**\n\n%s\n\nAuto-merge is armed and the `major` label kept: the review reflex dispatches the reviewer with the migration lens (upstream notes, known issues, platform compatibility, evidence) and its APPROVED completes the merge; CHANGES_REQUESTED sends a worker to adapt this branch. CI on this head proves the toolchain before the merge; a master workflow failing after a lock-only merge is reverted by the lock revert chain (`workflow-pin-revert`), and pin-only-lint check (i) refuses the re-resolve for 30 days (docs/dependency-upgrades.md §2 Review, operator ruling 2026-10-07).\n\nlock-lane: arm\n\n%s' \
     "$BASE_BODY" "$(printf '%s\n' "$MAJORS" | sed 's/^/- /')" "$G17_SECTION")"
 else
   TITLE="chore: devbox update (align toolchain lock)"
   LABELS="automerge,dependencies"
-  BODY="$(printf '%s CI-gated; auto-merges via the automerge label.\n\n%s' "$BASE_BODY" "$G17_SECTION")"
+  BODY="$(printf '%s CI-gated; auto-merges via the automerge label.\n\nlock-lane: mechanical\n\n%s' "$BASE_BODY" "$G17_SECTION")"
 fi
 
 PR="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
@@ -145,12 +175,22 @@ else
   else                      gh pr edit "$PR" --repo "$REPO" --remove-label major     >/dev/null 2>&1 || true; fi
 fi
 
-if [ -n "$MAJORS" ]; then
-  # The major gate: DON'T arm auto-merge. FU-041's updater only touches auto-merge-armed PRs, so an
+if [ -n "$MAJORS" ] && [ "$LANE" != arm ]; then
+  # The human lane: DON'T arm auto-merge — and DISARM if a re-run flipped an armed PR here (the
+  # Monday run edits the open PR in place). FU-041's updater only touches auto-merge-armed PRs, so an
   # un-armed PR simply waits for a human — while CI + the reviewer/coordinator pipeline still run on it.
-  echo "::warning::[$REPO] MAJOR bump on #$PR — left for a human (auto-merge NOT armed):"
+  gh pr merge "$PR" --repo "$REPO" --disable-auto >/dev/null 2>&1 || true
+  echo "::warning::[$REPO] MAJOR bump of a HUMAN_PACKAGES member on #$PR — left for a human (auto-merge NOT armed): ${LANE#human }"
   printf '%s\n' "$MAJORS" | sed 's/^/  /'
-  echo "[$REPO] devbox-update PR #${PR} (labelled major, human-gated)"
+  echo "[$REPO] devbox-update PR #${PR} (labelled major, human-gated: ${LANE#human })"
+elif [ -n "$MAJORS" ]; then
+  # The ARMED major (ADR-141 way): `major` kept, auto-merge armed — the reflex's reviewer runs the
+  # migration lens and its APPROVED completes the merge. Same arm call as the mechanical lane below.
+  gh pr merge "$PR" --repo "$REPO" --auto --squash \
+    || echo "::warning::[$REPO] could not arm auto-merge on #$PR"
+  echo "::notice::[$REPO] MAJOR bump on #$PR — ARMED, the migration lens is the merge gate:"
+  printf '%s\n' "$MAJORS" | sed 's/^/  /'
+  echo "[$REPO] devbox-update PR #${PR} (labelled major + armed)"
 else
   # ARM auto-merge — REQUIRED for non-major bumps: the FU-041 updater only touches auto-merge-armed PRs
   # (require_auto_merge_enabled) and GitHub only completes an armed merge. `gh pr merge --auto` is the

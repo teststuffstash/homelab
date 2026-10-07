@@ -172,7 +172,8 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 | CI red beyond T hours | reflex labels → **coordinator decides** | re-dispatch, park, or escalate |
 | PR merged (issue auto-closed via `Fixes #N`) | **coordinator closes the loop** | next tick: verify the outcome actually holds; comment; reopen + re-dispatch if it doesn't |
 | ARMED `major` PR opens (a GRADUATED GitHub Actions major — ADR-141 as amended 2026-09-27; un-graduated Actions majors ride the grouped `automerge` lane and never reach the lens) | **reflex** (armed = its world) | reviewer runs the migration lens as a batch member (Renovate has no fixer behind it — a missed-on-master call site is its next rebase, never a finding); APPROVED is the merge gate (distinct identity, one-review rule); a post-merge master failure rolls back via the FU-1990 chain (`deploy-revert-argo.yaml`, PR#2002), the re-proposal is refused by `pin-only-lint` check (e) in `ci` until a newer release |
-| un-armed `major` devbox bump PR opens (FU-022 gate) | **coordinator owns end-to-end** (never the reflex — it's un-armed) | investigate (dispatch reviewer *even while red* — the review explains the break) → worker fixes breakage if within budget → green + approved → relabel `major/awaiting-human`; a **human** merges. See `agents/coordinator/README.md` §"Dependency major bumps". |
+| ARMED `major` devbox lock bump PR opens (a lock major, 2026-10-07 — [`dependency-upgrades.md`](../dependency-upgrades.md) §2 Review; `lock-lane: arm`) | **reflex** (armed = its world; the lens's APPROVED completes the merge, the `workflow-pin-revert` lock shape is the rollback) |
+| un-armed `major` devbox bump PR opens (a `HUMAN_PACKAGES` major — opentofu; `lock-lane: human`) | **coordinator owns end-to-end** (never the reflex — it's un-armed) | investigate (dispatch reviewer *even while red* — the review explains the break) → worker fixes breakage if within budget → green + approved → relabel `major/awaiting-human`; a **human** merges. See `agents/coordinator/README.md` §"Dependency major bumps". |
 
 Two properties fall out. First, the merge path stays fully deterministic (constraint 1): every
 box on the mechanical rows is a GitHub workflow, an Argo Events Sensor, or an Argo CronWorkflow.
@@ -183,10 +184,12 @@ close — the coordinator just isn't billed an LLM turn for the trivial 90 %. It
 *mechanical* "trigger the reviewer" step and gains the exception plays in the table.
 
 **Arming is the boundary between the two.** The review reflex only ever selects auto-merge-**armed**
-PRs; everything un-armed is outside its world. The FU-022 major-devbox gate leans on exactly this: a
-**`major`** bump is deliberately left **un-armed** (a human merges a major crossing, not the bot), so it
-is invisible to the reflex and falls to the **coordinator**, which owns it end-to-end (investigate →
-fix-if-in-budget → `major/awaiting-human` → human merge — the new escalation-table row). This keeps the
+PRs; everything un-armed is outside its world. The devbox lock gate leans on exactly this: a **`major`**
+bump whose HUMAN_PACKAGES member crossed (opentofu — the one move a lock revert cannot undo) is
+deliberately left **un-armed** (a human merges that crossing, not the bot), so it is invisible to the
+reflex and falls to the **coordinator**, which owns it end-to-end (investigate → fix-if-in-budget →
+`major/awaiting-human` → human merge — the escalation-table row); every other lock major is ARMED at
+creation and the reflex's (2026-10-07). This keeps the
 split collision-free *by construction*: **the arm, never the label, decides the owner** — an un-armed
 `major` is the coordinator's, an armed `major` is the reflex's (ADR-141: a GitHub Actions major is the
 CI-exercised blast class, so Renovate arms it and the reflex's reviewer runs the migration lens as the
