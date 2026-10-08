@@ -138,6 +138,10 @@ resource "proxmox_download_file" "debian_cloud" {
 
 # cloud-init user-data: drop the App key + minting script, mint a registration token at boot,
 # register the runner as a systemd service. (Requires 'snippets' enabled on var.datastore_images.)
+# The App private key rides the cloud-init as sensitive(): without it every plan that touches this
+# file printed the PEM in clear — the jail terminal, the box's saved plan .txt (found 2026-10-08,
+# #2382's scoped plan). sensitive() changes no byte of the rendered cloud-init; plans show the
+# whole `data` as (sensitive value) instead.
 resource "proxmox_virtual_environment_file" "ci_runner_cloud_init" {
   count        = var.ci_runner_enabled ? 1 : 0
   content_type = "snippets"
@@ -149,7 +153,7 @@ resource "proxmox_virtual_environment_file" "ci_runner_cloud_init" {
     data = templatefile("${path.module}/templates/ci-runner-cloud-init.yaml.tftpl", {
       name            = "ci-runner-01"
       ssh_key         = var.ci_runner_ssh_authorized_key
-      app_private_key = file(var.github_app_private_key_file)
+      app_private_key = sensitive(file(var.github_app_private_key_file))
       mint_script     = file("${path.module}/../scripts/gh-app-runner-token.sh")
       app_id          = var.github_app_id
       installation_id = var.github_app_installation_id
@@ -245,7 +249,7 @@ resource "proxmox_virtual_environment_file" "ci_runner_02_cloud_init" {
     data = templatefile("${path.module}/templates/ci-runner-cloud-init.yaml.tftpl", {
       name            = "ci-runner-02"
       ssh_key         = var.ci_runner_ssh_authorized_key
-      app_private_key = file(var.github_app_private_key_file)
+      app_private_key = sensitive(file(var.github_app_private_key_file))
       mint_script     = file("${path.module}/../scripts/gh-app-runner-token.sh")
       app_id          = var.github_app_id
       installation_id = var.github_app_installation_id
