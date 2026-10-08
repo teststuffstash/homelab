@@ -210,9 +210,18 @@ prep_ref() { # prep_ref base|head <sha>
   cp "$GUARD_SRC" "$wt/ansible/zz-test-vm-guard.yml"
   # ANSIBLE_COLLECTIONS_PATH too: without it galaxy consults the DEFAULT path, finds the
   # prod wrapper's copy there, and installs nothing ("already installed").
-  ANSIBLE_COLLECTIONS_PATH="$col" \
-    ansible-galaxy collection install -r "$wt/ansible/collections/requirements.yml" -p "$col" \
-    > "$LOG/$name-galaxy.log" 2>&1 || die "collection install for $name failed — $LOG/$name-galaxy.log"
+  # --no-cache: galaxy's shared response cache (~/.ansible/galaxy_cache/api.json) is what the
+  # weekly drill died on 2026-10-04 ("Missing expected 'results' in ansible-galaxy cache" — a
+  # partial entry written by a flaky galaxy.ansible.com answer; the pin itself was fine). One
+  # retry covers the flake that wrote it.
+  local try
+  for try in 1 2; do
+    ANSIBLE_COLLECTIONS_PATH="$col" \
+      ansible-galaxy collection install --no-cache -r "$wt/ansible/collections/requirements.yml" -p "$col" \
+      > "$LOG/$name-galaxy.log" 2>&1 && break
+    [ "$try" = 1 ] && { echo "collection install for $name failed (try 1) — retrying in 20 s" >&2; sleep 20; continue; }
+    die "collection install for $name failed twice — $LOG/$name-galaxy.log: $(grep -m1 ERROR "$LOG/$name-galaxy.log" | cut -c1-200)"
+  done
   want="$(yq -r '.collections[] | select(.name == "oxlorg.opnsense") | .version' "$wt/ansible/collections/requirements.yml")"
   got="$(jq -r .collection_info.version "$col/ansible_collections/oxlorg/opnsense/MANIFEST.json")"
   [ "$want" = "$got" ] || die "$name: requirements pin $want but $col holds $got"
