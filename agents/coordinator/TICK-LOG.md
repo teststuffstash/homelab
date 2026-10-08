@@ -12755,3 +12755,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - FU-306 mint held by fu-mint-gate → detector PR dispatched to a background subagent instead (node_exporter +
   static scrape + root-fs alert, then the janitor `-v` + volume-prune fix). FU-305 extended from oracle's
   venv-prompt handoff.
+- Attempt 3 then failed differently: `failed to fetch oauth token: denied` pulling ghcr.io/astral-sh/uv on the
+  DEFAULT builder. Cause = same fill: runner-01 was already ENOSPC 2026-10-06 16:18Z; snore-recorder
+  build-image's login-action wrote ghcr.io creds, the worker crashed before the post-step logout → expired
+  creds in /home/runner/.docker/config.json. A/B reproduced, auth entry removed, pull verified; runner-02
+  clean. #815 attempt 4 queued; subagent told (per-job DOCKER_CONFIG = follow-on candidate).
