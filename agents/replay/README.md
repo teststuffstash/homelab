@@ -7,6 +7,8 @@ file is the map of the directory.
 ```
 run.sh                  the runner — `bash agents/replay/run.sh [-v] [fixture-dir ...]`
 stubs/gh                PATH-shim gh:      serves world/gh/,      records mutations
+stubs/gh-json-fields.tsv  the --json field allowlist stubs/gh enforces (unknown field = gh's own error,
+                        exit 1) — GENERATED from the pinned gh by gh-json-fields.sh; never hand-edit
 stubs/kubectl           PATH-shim kubectl: serves world/kubectl/, records mutations (incl. stdin)
 stubs/_common.sh        world lookup, action recording, the read/write split
 fixtures/<name>/
@@ -204,9 +206,10 @@ is stale, so it cannot drift the way the prose register did.
 | `c4c5-infeasible` | table | - | `agents/coordinator-scan.sh` | IL-T06 IL-T26 |
 | `c4c5-pod-liveness` | table | - | `agents/coordinator-scan.sh` | IL-T16 |
 | `c9-rearm` | table | - | `agents/review-reflex.sh` | - |
-| `changes-requested-body-edit` | table | - | `agents/review-reflex.sh` | - |
+| `changes-requested-body-edit` | table | - | `agents/review-reflex.sh` | MP-T04 |
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
+| `changes-requested/body-edit-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
@@ -289,6 +292,8 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
+| `gh-json-fields/allowlist-current` | suite | - | `agents/replay/gh-json-fields.sh` | - |
+| `gh-json-fields/unknown-field-refused` | actions | - | `-` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |

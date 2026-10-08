@@ -7,8 +7,7 @@
       "login": "app/homelab-agents-1234"
     },
     "headRefName": "fix/blocked-test",
-    "body": "A fix attempt",
-    "lastEditedAt": "2024-01-01T00:00:00Z"
+    "body": "A fix attempt"
   },
   {
     "number": 457,
@@ -18,7 +17,6 @@
       "login": "app/homelab-agents-1234"
     },
     "headRefName": "fix/resolved-test",
-    "body": "A fix attempt",
-    "lastEditedAt": "2024-01-01T00:00:00Z"
+    "body": "A fix attempt"
   }
 ]

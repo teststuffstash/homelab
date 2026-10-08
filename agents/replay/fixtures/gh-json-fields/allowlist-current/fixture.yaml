@@ -1,0 +1,10 @@
+# gh-json-fields/allowlist-current — the fake gh's `--json` allowlist (stubs/gh-json-fields.tsv)
+# still matches the devbox-pinned gh. The committed file carries gh's version line, so a gh BUMP
+# reds this until regenerated (`devbox run gh-json-fields -- --write`): a field a bump drops then
+# fails the replay, not a production tick. Sibling: unknown-field-refused (the fake's refusal).
+name: gh-json-fields-allowlist-current
+mode: suite
+source: agents/replay/gh-json-fields.sh
+requires:
+  - gh
+entrypoint: agents/replay/gh-json-fields.sh

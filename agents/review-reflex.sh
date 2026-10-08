@@ -31,6 +31,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
+. "${HERE}/pr-last-edited.sh"   # pr_last_edited_merge — the body-edit leg of reviewable_again
 
 ORG="${ORG:-teststuffstash}"
 # Repos: explicit AGENT_REPOS wins; else derive ALL stack repos from agents/stacks.json —
@@ -188,6 +189,16 @@ for repo in $REPOS; do
     sleep 10
   done
   rm -f "$errfile"
+  # BODY-EDIT LEG of reviewable_again (homelab#2168): gh pr list has no lastEditedAt field (asking
+  # for it aborted every review tick, 2026-10-06 — quickfix 914b2b3c), so it is read from GraphQL
+  # and merged into the CHANGES_REQUESTED PRs BY NUMBER; the jq predicates below read it unchanged.
+  # The ONE home is agents/pr-last-edited.sh (the coordinator scan reads through it too): at most
+  # one 1-point query per repo per tick, none without a CHANGES_REQUESTED PR. A failed read does
+  # NOT abort the tick (unlike the list above) — it logs a WARN and degrades to the commit-time
+  # rule, because the commit leg still works and a secondary signal must not stop the review edge.
+  # >>>REPLAY:last-edited-merge>>>
+  prs="$(pr_last_edited_merge "$slug" "$prs")"
+  # <<<REPLAY:last-edited-merge<<<
 
   # >>>REPLAY:c9-rearm>>>
   # C9 repair (TICK-LOG meta-7 retro (a) — the FU-079 class): a WORKER-authored PR that arrived

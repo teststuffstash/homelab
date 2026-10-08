@@ -1,0 +1,25 @@
+[
+  {
+    "number": 815,
+    "reviewDecision": "CHANGES_REQUESTED",
+    "reviews": [
+      {
+        "author": {"login": "homelab-reviewer"},
+        "state": "CHANGES_REQUESTED",
+        "submittedAt": "2026-01-01T10:00:00Z"
+      }
+    ],
+    "commits": [
+      {"committedDate": "2026-01-01T09:00:00Z", "messageHeadline": "Fix the thing"},
+      {"committedDate": "2026-01-01T10:45:00Z", "messageHeadline": "Merge branch 'master' into fix/the-thing"}
+    ]
+  },
+  {
+    "number": 816,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviews": [],
+    "commits": [
+      {"committedDate": "2026-01-01T09:00:00Z", "messageHeadline": "Another PR"}
+    ]
+  }
+]

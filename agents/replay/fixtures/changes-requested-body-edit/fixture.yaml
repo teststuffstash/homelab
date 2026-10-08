@@ -15,15 +15,31 @@
 #                        THE FIXED ROW: red on base (both readers silence it), green after.
 #   control-no-changes  — neither commits nor body edited after the verdict.
 #                        Guard: must stay non-reviewable (no re-review dispatch).
+#   fetch-*             — THE FETCH (oracle-fleet#815, 2026-10-08). The rows above feed lastEditedAt
+#                        straight into the predicate, so they stayed green while production could
+#                        not READ the field at all: gh has no `lastEditedAt` JSON field (asking for
+#                        it aborted every review tick, 2026-10-06; quickfix 914b2b3c dropped it and
+#                        the leg went inert). Here the listed PRs carry no lastEditedAt; it arrives
+#                        only through the fake `gh api graphql` (world cr-815), read by
+#                        agents/pr-last-edited.sh via the reflex's real `last-edited-merge` block:
+#     fetch-body-edited  — edit after the verdict, only an updater merge since → reviewable (the
+#                          #815 row: red on base, which has no merge block).
+#     fetch-never-edited — GraphQL says never edited → not reviewable.
+#     fetch-read-fails   — the GraphQL read fails → WARN on stderr, degrade to the commit-time rule
+#                          (not reviewable here), RC 0: the tick is never aborted for this signal.
+#   Every fetch row also lists a non-CR PR (#816) the query must NOT ask about (budget rule).
 #
 # THE READERS. Both are jq predicates that must agree:
-#   - agents/review-reflex.sh:325 (the reflex's pick gate, runs every ~5 min)
+#   - agents/review-reflex.sh `reviewable_again` (the reflex's pick gate, runs every ~5 min)
 #   - agents/coordinator-scan.sh (changes-requested clause, runs every ~10 min)
+# and both READ lastEditedAt through agents/pr-last-edited.sh (one fetch, one failure posture).
 #
 # This fixture seals them into one guard: both read through ONE home (the reflex),
 # the coordinator's copy becomes a mirror to lint against (touches-check.sh rule 3).
 #
 name: changes-requested-body-edit
+pins:
+  - MP-T04
 mode: table
 source: agents/review-reflex.sh
 parts:

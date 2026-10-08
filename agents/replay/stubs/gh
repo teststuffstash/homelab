@@ -15,6 +15,32 @@ _rp_record "$@"
 WORDS="$(_rp_words "$@")"
 [ -n "$WORDS" ] || _rp_die "bare \`gh\` with no subcommand — nothing to key a world file on."
 
+# `--json` FIELD VALIDATION (the #2333 class): the real gh refuses an unknown field BEFORE any
+# network call (`Unknown JSON field: "lastEditedAt"` + the available list, exit 1) — and on
+# 2026-10-06 that refusal aborted every stack's review tick while this fake, serving any field list,
+# kept every fixture green. So the fake refuses exactly as gh does, from the allowlist GENERATED
+# out of the pinned gh (gh-json-fields.tsv, by ../gh-json-fields.sh; its --check reds on a gh bump).
+# Checked first, ahead of failure injection: gh validates flags before it can fail on the wire.
+_rp_json=''; PREV=''
+for a in "$@"; do
+  case "$PREV" in --json) _rp_json="$a" ;; esac
+  case "$a" in --json=*) _rp_json="${a#--json=}" ;; esac
+  PREV="$a"
+done
+if [ -n "$_rp_json" ]; then
+  _rp_cmd="$(printf '%s\n' "$WORDS" | awk '{print $1, $2}')"
+  _rp_ff="$REPLAY_STUB_DIR/gh-json-fields.tsv"
+  [ -f "$_rp_ff" ] || _rp_die "missing $_rp_ff — regenerate: devbox run gh-json-fields -- --write"
+  _rp_allowed="$(awk -F'\t' -v c="$_rp_cmd" '$1 == c { print $2 }' "$_rp_ff")"
+  [ -n "$_rp_allowed" ] || _rp_die "\`gh $_rp_cmd --json\` has no field list in gh-json-fields.tsv — add the subcommand to agents/replay/gh-json-fields.sh and regenerate"
+  _rp_bad="$(printf '%s\n' "$_rp_json" | tr ',' '\n' | awk -v ok=",$_rp_allowed," 'NF && index(ok, "," $0 ",") == 0 { print; exit }')"
+  if [ -n "$_rp_bad" ]; then
+    printf 'Unknown JSON field: "%s"\nAvailable fields:\n' "$_rp_bad" >&2
+    printf '%s\n' "$_rp_allowed" | tr ',' '\n' | sed 's/^/  /' >&2
+    exit 1
+  fi
+fi
+
 # Per-call failure injection (homelab#740): STUB_GH_<slugged-world-key> overrides the run-global
 # $STUB_GH for ONE named call, evaluated for BOTH reads and writes. The slug is the same bare-words
 # slug _rp_serve uses. Supports the same values as $STUB_GH plus `empty` (empty stdout, exit 0).
@@ -44,6 +70,19 @@ IS_API_WRITE=0; IS_API_PAGINATE=0; PREV=''
   esac
   PREV="$a"
 done
+# `gh api graphql` always carries -f/-F (query=, variables), which the loop above reads as a write.
+# A graphql QUERY is a READ — it must be served from the world (and DIE unrecorded, like any read);
+# only an operation that is a `mutation` is recorded-and-succeeds.
+case "$WORDS" in
+  'api graphql'|'api graphql '*)
+    IS_API_WRITE=0
+    for a in "$@"; do
+      case "$a" in
+        query=*) case "$(printf '%s' "${a#query=}" | tr -d ' \t\n')" in mutation*) IS_API_WRITE=1 ;; esac ;;
+      esac
+    done
+    ;;
+esac
 
 MUTATING_VERBS="comment edit close reopen merge review ready create delete rename transfer lock
 unlock pin unpin sync develop checkout add remove set"

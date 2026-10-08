@@ -1,0 +1,5 @@
+CALL gh api graphql -f query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { p815: pullRequest(number: 815) { number lastEditedAt } } } -f owner=teststuffstash -f name=oracle-fleet
+OUT #815 reviewable_again=false
+OUT #816 reviewable_again=false
+ERR WARN [teststuffstash/oracle-fleet] lastEditedAt GraphQL read failed — body-edit re-review leg degraded to the commit-time rule this tick: gh: Not Found (HTTP 404)
+RC 0

@@ -251,6 +251,9 @@
       "clause-replay": [
         "bash agents/replay/run.sh"
       ],
+      "gh-json-fields": [
+        "bash agents/replay/gh-json-fields.sh \"$@\""
+      ],
       "exporter-self-test": [
         "python3 argocd/resources/github-exporter/github-exporter.py --self-test"
       ],

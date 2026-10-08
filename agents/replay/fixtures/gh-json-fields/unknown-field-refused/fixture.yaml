@@ -1,0 +1,21 @@
+# gh-json-fields/unknown-field-refused — the fake `gh` refuses a `--json` field the real gh lacks.
+#
+# THE INCIDENT IT PINS (2026-10-06 23:22–23:41Z): #2333 added `lastEditedAt` to the review reflex's
+# `gh pr list --json` and the scan's `gh pr view --json`. gh has no such pull-request field, so the
+# real call died `Unknown JSON field: "lastEditedAt"` and every stack's review tick aborted — while
+# every fixture stayed green, because the fake served the recorded world for ANY field list.
+#
+# THE CONTRACT. stubs/gh validates `--json` against stubs/gh-json-fields.tsv (GENERATED from the
+# devbox-pinned gh by agents/replay/gh-json-fields.sh; the sibling `allowlist-current` suite reds
+# when a gh bump moves it) and fails EXACTLY as gh does: gh's error text on stderr, exit 1, before
+# any world file is consulted. The control call (known fields) is served from the world as before.
+#
+# EXPECTED: both calls recorded; the control's payload on OUT; the refusal's two header lines on
+# ERR (the indented field list is scrubbed — it is the generated file's content, pinned there, not
+# here); the clause sees rc=1. On the pre-fix stub the bad call is served like the good one → red.
+name: gh-json-fields-unknown-field-refused
+mode: actions
+parts:
+  - file:clause.sh
+scrub:
+  - '/^ERR   /d'
