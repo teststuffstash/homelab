@@ -406,7 +406,9 @@ hrc=$?
 set -e
 if [ "$hrc" -eq 0 ]; then rep "- converge: every router-code unit applied (harness PASS)"
 else
-  fail "harness rc=$hrc — $(grep -E '^FAIL' "$WORK/converge.log" | head -5 | tr '\n' ';')"
+  # rc 1 = step FAIL lines; rc 2 = the harness's own `die` line (guard/environment) — carry
+  # whichever the log holds, so the journal/report names the reason (10-04's said nothing)
+  fail "harness rc=$hrc — $(grep -E '^FAIL|^opnsense-test-vm:' "$WORK/converge.log" | head -5 | tr '\n' ';')"
   [ "$hrc" -eq 1 ] || exit 1      # 2 = guard/environment: nothing converged, nothing to score
 fi
 sed -n '/^### all\./,/^### /p' "$WORK/harness/report.md" 2>/dev/null | sed '$d' >> "$REPORT" || true
