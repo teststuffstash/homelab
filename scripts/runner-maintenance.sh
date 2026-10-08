@@ -7,6 +7,8 @@
 #   bash scripts/runner-maintenance.sh undrain <vm>              # declared labels back on
 #   bash scripts/runner-maintenance.sh verify  <vm>              # READ-ONLY: registrations + exporter up
 #   bash scripts/runner-maintenance.sh run <plan-id> <vm>        # ATTENDED: window → drain → apply → verify
+#   bash scripts/runner-maintenance.sh silence-close <vm>        # expire THIS verb's silences for <vm>
+#                                                                  (a failed `run` leaves them, like its window)
 #   (devbox run runner-maint -- <verb> …)
 #
 # WHY (operator, 2026-10-08): any edit to templates/ci-runner-cloud-init.yaml.tftpl REPLACES the
@@ -37,6 +39,10 @@
 # drain, `MGMT_YES=1 mgmt-tf apply <plan-id>`, wait for `verify` (≤ VERIFY_TIMEOUT: cloud-init
 # installs docker + nix and registers both slots), `compare` against the baseline until clean
 # (≤ COMPARE_SETTLE), and close the window only then. A failure after acting leaves the window open.
+# Between the baseline and the drain it opens Alertmanager silences for the VM (see §silences below)
+# and expires them where it closes the window — a refusal before the apply closes both, a failure
+# after acting leaves both (node-maintenance.sh's precedent): the silences then self-expire at the
+# run's own bound, or `silence-close <vm>` expires them once the human has finished by hand.
 # Passing the plan id IS the confirmation — plan it scoped and read it first (docs/runbook.md).
 #
 # Exit: 0 ok · 1 failed after acting (or a verify fail / unreadable) · 2 refused, nothing touched
@@ -45,7 +51,8 @@
 # Env: DRAIN_TIMEOUT (3600 s), VERIFY_TIMEOUT (1800 s), COMPARE_SETTLE (600 s), RUNNER_POLL (20 s),
 #      RUNNER_APP_KEY (the runner-registrar App's .pem; default the box's TF_VAR_github_app_private_key_file,
 #      else ~/.claude/homelab-runner-app/private-key.pem), GH_RUNNER_TOKEN (an installation token
-#      already minted — skips the mint), PROM_URL, RUNNER_EVIDENCE_DIR, KUBECONFIG.
+#      already minted — skips the mint), PROM_URL, RUNNER_EVIDENCE_DIR, KUBECONFIG,
+#      AM_URL (Alertmanager; else NM_AM, else http://192.168.40.14:9093), SILENCE=0 (touch no silence).
 set -euo pipefail
 
 ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -68,6 +75,8 @@ LABELS="${TF_VAR_github_runner_labels:-$(tfdefault github_runner_labels)}"
 APP_KEY="${RUNNER_APP_KEY:-${TF_VAR_github_app_private_key_file:-$HOME/.claude/homelab-runner-app/private-key.pem}}"
 GH_API="${GH_API_URL:-https://api.github.com}"
 PROM="${PROM_URL:-http://192.168.40.13:9090}"
+AM="${AM_URL:-${NM_AM:-http://192.168.40.14:9093}}"   # same default + override as node-maintenance.sh
+SILENCE="${SILENCE:-1}"
 SLOTS="${RUNNER_SLOTS:-2}"   # cloud-init's `<vm>` + `<vm>-2`
 POLL="${RUNNER_POLL:-20}"
 MGMT_TF="${MGMT_TF:-$ROOT/mgmt/scripts/mgmt-tf.sh}"
@@ -144,6 +153,63 @@ need_vm() { # <vm> — a ci-runner VM that machines.yaml knows, with its ip → 
   case "$1" in ci-runner-*) ;; *) log "'$1' is not a ci-runner VM — Talos nodes go through node-maintenance.sh"; exit 64 ;; esac
   VM_IP="$(yq -r ".machines[] | select(.name == \"$1\") | .ip // \"\"" "$ROOT/machines/machines.yaml" 2>/dev/null)" || VM_IP=""
   [ -n "$VM_IP" ] || { log "'$1' has no ip in machines/machines.yaml"; exit 64; }
+}
+
+# ── silences (the shape of node-maintenance.sh §"the window silence") ────────────────────────────
+# The declared window (seat-window.sh) only quiets the responder's triage; the PAGE goes through
+# Alertmanager, so `run` silences what the replace raises (2026-10-08, the first attended run paged on
+# all three). One silence per matcher set — Alertmanager ANDs the matchers inside one silence:
+#   1. instance=~"<ip>(:[0-9]+)?" — every alert keyed on the VM's own exporter: CiRunnerNodeExporterDown,
+#      NodeRebooted (the fresh VM's first boot), CiRunnerRootFs{FillingUp,AlmostFull} (a new disk).
+#   2. alertname="TargetDown", job="ci-runner-node" — kube-prometheus-stack's TargetDown is a
+#      JOB-level ratio with no instance label, so it cannot be scoped to one VM: for the run's
+#      duration this ALSO hides a genuine outage of the OTHER runner's exporter (its own
+#      CiRunnerNodeExporterDown, matcher 1 for the other ip, stays live and covers it).
+# Deliberately NOT silenced: the pve exporter's guest alerts (PveVmIoError, PveGuestSwapped — keyed
+# name=<vm>, vmid): a replace does not raise them, and an io-error on the new disk is the thin pool
+# filling, a real fault the window must not hide (node-maintenance keeps capacity alerts live too).
+# Owner tag `runner-maintenance.sh/<vm>` in createdBy: close expires ONLY these, never a silence a
+# human or node-maintenance made. Best-effort, like node-maintenance: an unreachable Alertmanager
+# warns and the run goes on — a page is a nuisance, a refused window over it would be a worse one.
+# ⚠ Alertmanager keeps silences on an emptyDir (FU-195): a monitoring restart mid-run drops them.
+silence_owner() { printf 'runner-maintenance.sh/%s' "$1"; }
+silence_ids() { # <vm> → ids of this verb's live silences for <vm>; non-zero if Alertmanager was unreadable
+  local out
+  out="$(curl -fsS --max-time 10 "$AM/api/v2/silences" 2>/dev/null)" || return 1
+  jq -r --arg by "$(silence_owner "$1")" '.[] | select(.createdBy == $by and .status.state != "expired") | .id' <<<"$out" 2>/dev/null
+}
+post_silence() { # <vm> <matchers-json> <seconds> <comment>
+  local body id
+  body="$(jq -cn --argjson m "$2" --arg by "$(silence_owner "$1")" --arg s "$3" --arg c "$4" \
+    '{matchers:$m, startsAt:(now|todate), endsAt:((now + ($s|tonumber))|todate), createdBy:$by, comment:$c}')"
+  id="$(curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json' -d "$body" "$AM/api/v2/silences" 2>/dev/null \
+    | jq -r '.silenceID // empty' 2>/dev/null)" || id=""
+  [ -n "$id" ] || return 1
+  log "  silence $id: $(jq -r 'map("\(.name)\(if .isRegex then "=~" else "=" end)\(.value)") | join(" ")' <<<"$2")"
+}
+silence_open() { # <vm> <ip> <seconds> <why>
+  [ "$SILENCE" = 1 ] || { log "SILENCE=0 — not touching Alertmanager"; return 0; }
+  local existing m
+  existing="$(silence_ids "$1")" || { log "  ⚠ Alertmanager unreadable at $AM — trying the silences anyway"; existing=""; }
+  [ -z "$existing" ] || { log "silences already active for $1: $(tr '\n' ' ' <<<"$existing")"; return 0; }
+  while IFS= read -r m; do
+    post_silence "$1" "$m" "$3" "runner-maintenance window on $1 ($(date -u +%FT%TZ)) — $4. Expired by the run's close, or \`runner-maintenance.sh silence-close $1\`." \
+      || log "  ⚠ could not open a silence ($m at $AM) — these alerts will page for this window"
+  done < <(jq -cn --arg ip "$2" '[{name:"instance", value:($ip + "(:[0-9]+)?"), isRegex:true, isEqual:true}],
+                                 [{name:"alertname", value:"TargetDown", isRegex:false, isEqual:true},
+                                  {name:"job", value:"ci-runner-node", isRegex:false, isEqual:true}]')
+}
+silence_close() { # <vm> → non-zero if a silence of ours may still be live (warned; each self-expires)
+  [ "$SILENCE" = 1 ] || return 0
+  local ids id n=0 rc=0
+  ids="$(silence_ids "$1")" || { log "  ⚠ Alertmanager unreadable at $AM — silences for $1 NOT expired (they self-expire at their endsAt)"; return 1; }
+  [ -n "$ids" ] || { log "no runner-maintenance silence to expire for $1"; return 0; }
+  for id in $ids; do
+    if curl -fsS --max-time 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null 2>&1; then n=$((n + 1))
+    else log "  ⚠ could not expire silence $id — it self-expires at its endsAt"; rc=1; fi
+  done
+  log "expired $n silence(s) for $1"
+  return $rc
 }
 
 # ── verbs ────────────────────────────────────────────────────────────────────────────────────────
@@ -252,19 +318,23 @@ cmd_run() { # <plan-id> <vm>
     log "run: baseline unreadable — closing the window, nothing touched"
     bash "$MAINT" close --id "$wid" --force > "$dir/window-close.log" 2>&1 || true; exit 3
   fi
+  # Silences after the baseline (it records what was already firing), before anything acts; same
+  # lifetime as the window — the run's own bounds plus margin.
+  silence_open "$vm" "$VM_IP" "$((hours * 3600))" "ci-runner VM replace, plan $plan, window $wid"
 
   local rc=0; cmd_drain "$vm" || rc=$?
   if [ "$rc" = 2 ]; then
-    log "run: drain refused (labels restored) — closing the window, nothing applied"
+    log "run: drain refused (labels restored) — closing the window + silences, nothing applied"
+    silence_close "$vm" || true
     bash "$MAINT" close --id "$wid" --force > "$dir/window-close.log" 2>&1 || true; exit 2
   elif [ "$rc" != 0 ]; then
-    log "run: ⚠ drain failed AND its label restore failed — window $wid LEFT OPEN; 'runner-maint -- undrain $vm'"; exit 1
+    log "run: ⚠ drain failed AND its label restore failed — window $wid + silences LEFT OPEN; 'runner-maint -- undrain $vm', then 'silence-close $vm'"; exit 1
   fi
 
   # MGMT_YES=1: passing the plan id to `run` is the confirmation (helm-release-evidence.sh, same).
   rc=0; MGMT_YES=1 bash "$MGMT_TF" apply "$plan" 2>&1 | tee "$dir/apply.log" >&2 || rc=${PIPESTATUS[0]}
   if [ "$rc" != 0 ]; then
-    log "run: ⚠ apply rc=$rc — window $wid LEFT OPEN, $vm's labels left OFF (read apply.log: if the old VM still runs, 'runner-maint -- undrain $vm')"
+    log "run: ⚠ apply rc=$rc — window $wid + silences LEFT OPEN, $vm's labels left OFF (read apply.log: if the old VM still runs, 'runner-maint -- undrain $vm'; done: 'silence-close $vm')"
     exit 1
   fi
 
@@ -275,7 +345,7 @@ cmd_run() { # <plan-id> <vm>
     sleep "$POLL"
   done
   cat "$dir/verify.txt" >&2
-  [ "$ok" = 1 ] || { log "run: ⚠ $vm did not verify within ${VERIFY_TIMEOUT:-1800}s — window $wid LEFT OPEN"; exit 1; }
+  [ "$ok" = 1 ] || { log "run: ⚠ $vm did not verify within ${VERIFY_TIMEOUT:-1800}s — window $wid + silences LEFT OPEN"; exit 1; }
 
   # An alert the replace raised (TargetDown on the exporter) resolves an evaluation or two after
   # `up` returns — compare until clean, like the box loop's post-check.
@@ -286,12 +356,13 @@ cmd_run() { # <plan-id> <vm>
     sleep 30
   done
   cat "$dir/health-compare.txt" >&2
-  [ "$ok" = 1 ] || { log "run: ⚠ health compare still regressed after ${COMPARE_SETTLE:-600}s — window $wid LEFT OPEN"; exit 1; }
+  [ "$ok" = 1 ] || { log "run: ⚠ health compare still regressed after ${COMPARE_SETTLE:-600}s — window $wid + silences LEFT OPEN"; exit 1; }
   if bash "$MAINT" close --id "$wid" > "$dir/window-close.log" 2>&1; then
+    silence_close "$vm" || true   # a silence left behind self-expires at the run's bound (warned)
     log "run: $vm replaced and verified; window $wid closed"
   else
     cat "$dir/window-close.log" >&2
-    log "run: ⚠ window $wid LEFT OPEN — its close check is not clean; read it, then 'devbox run maint -- close --id $wid'"; exit 1
+    log "run: ⚠ window $wid LEFT OPEN — its close check is not clean; read it, then 'devbox run maint -- close --id $wid' + 'runner-maint -- silence-close $vm'"; exit 1
   fi
 }
 
@@ -300,5 +371,6 @@ case "${1:-}" in
   undrain) shift; cmd_undrain "${1:-}" || exit 1 ;;
   verify)  shift; cmd_verify "${1:-}" || exit 1 ;;
   run)     shift; cmd_run "$@" ;;
-  *) echo "usage: runner-maintenance.sh drain|undrain|verify <vm> | run <plan-id> <vm>" >&2; exit 64 ;;
+  silence-close) shift; need_vm "${1:-}"; silence_close "$1" || exit 1 ;;
+  *) echo "usage: runner-maintenance.sh drain|undrain|verify|silence-close <vm> | run <plan-id> <vm>" >&2; exit 64 ;;
 esac

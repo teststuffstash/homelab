@@ -572,10 +572,12 @@ it to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
    running jobs, ≤ `DRAIN_TIMEOUT` 60 min), applies, waits for `verify` (both slots online with
    their labels and the exporter `up`, ≤ `VERIFY_TIMEOUT` 30 min), and closes the window on a clean
    compare. A failure leaves the window open. Evidence lands in `~/.claude/runner-maintenance/`.
+   It silences the VM's alerts and the job-wide `TargetDown` for the run. A failed run leaves them
+   in place; `runner-maint -- silence-close <vm>` expires them once you have finished by hand.
 3. The other VM the same way, then a full `mgmt-tf -- plan` of master applied by its id, which
    stamps the apply loop's baseline (a scoped apply does not).
 
-By hand: `runner-maint -- drain|undrain|verify <vm>`. Exits: 0 ok, 1 failed after acting,
+By hand: `runner-maint -- drain|undrain|verify|silence-close <vm>`. Exits: 0 ok, 1 failed after acting,
 2 refused with nothing touched, 3 refused before a window.
 
 ### Reclaiming thin-pool space from a Talos VM
