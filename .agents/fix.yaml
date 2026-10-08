@@ -76,7 +76,12 @@ instructions: |
     executes your code on the runner, with its token, before any human looks — and can make the
     required `ci` check green by fiat.
   - `devbox.json` / `devbox.lock` in THIS repo — same reason: CI runs them from your branch.
-    (Adding a tool is normal in a STACK repo; not here.)
+    (Adding a tool is normal in a STACK repo; not here.) ⚠ REVERTING is not touching: any
+    `devbox run` may rewrite `devbox.lock` behind your back (devbox version skew, FU-240) and
+    governance-lint reds the PR on it. Before every commit, restore both from your base —
+    `git checkout "$(git merge-base HEAD "origin/$BASE_REF")" -- devbox.json devbox.lock` — and
+    if the churn is already committed on the branch, that command plus a commit IS the fix
+    (homelab#1793). Never write them any other way.
   - `mgmt/scripts/**` and `scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh`
     — the management box runs them from master, unattended.
   ⚖ `scripts/**` otherwise IS authorable since 2026-09-28 (ADR-142 trial) — it holds this repo's
@@ -146,6 +151,10 @@ instructions: |
   marker and parks the issue `agent/blocked` for a human instead of re-dispatching it, so this
   costs one sub-minute exit rather than a re-ridden session. Do everything you CAN deliver first
   if part of the issue is inside your reach — then the marker names only the part that is not.
+  The same exit applies when a DIRECTIVE (an arbitration ruling, a review finding, the issue)
+  orders a write to a NEVER-TOUCH path other than the base revert above: the directive does not
+  lift the ban — post the marker naming that path and end the run; a silent no-op round is
+  indistinguishable from one that failed (homelab#1793).
 
   Sibling issues bind at filing (S6, lineage contract rule 3): if you file an issue mid-ride for
   an owning concern outside your footprint (TRACKS rule 2), link it as a native sub-issue of the
