@@ -17,6 +17,19 @@
 #
 # HOLD > the node's advert interval, advbase + advskew/256 (nx-02 at skew 100 = 1.39 s — 1.5 s
 # flapped a MASTER's WAN in the drill). 3 s = CARP's own master-down time (3 x advbase).
+#
+# The LAN tap also gets unicast FLOODING OFF (bridge port `flood off`) each time it appears. A
+# Linux bridge floods every unknown-destination unicast frame to every port, and the OPNsense
+# guest's vtnet accepts frames not addressed to it and ROUTES them back out with its own MAC
+# (QEMU's virtio-net delivers them; FreeBSD assumes the NIC filtered) — so a standby/BACKUP node
+# re-emits whatever the hypervisor floods at it, including the MASTER's own DHCP replies to
+# clients this bridge has not learned. That is what tripped pve's kill switch on 2026-10-02
+# 17:14:43Z (a `.1`-sourced BOOTP reply from 9171's MAC, with no DHCP server configured on it) —
+# reproduced and fixed with injected frames on 2026-10-08 (docs/router-move.md §Status). With
+# flooding off the port only receives unicast to MACs learned on it: the node's own, and the
+# CARP virtual MAC once this node advertises as MASTER. Broadcast and multicast still arrive
+# (CARP, pfsync, DHCP DISCOVERs). The WAN tap is left alone: on vmbr3 flooding is how the
+# ISP's frames reach a node before its MAC is learned.
 set -u
 vmid="$1"; lan="tap${vmid}i0"; wan="tap${vmid}i1"; qmp="/var/run/qemu-server/$vmid.qmp"
 # The pair's belt reads what this gate SEES (argocd/resources/pve-metrics/, group router-pair):
@@ -63,7 +76,8 @@ while :; do
   if [ ! -e "/sys/class/net/$wan" ] || [ ! -e "/sys/class/net/$lan" ]; then
     state=""; write_prom 0; sleep 0.5; continue   # VM down: not a master, gate alive
   fi
-  [ -n "$state" ] || set_wan down "taps appeared"
+  [ -n "$state" ] || { set_wan down "taps appeared"
+    bridge link set dev "$lan" flood off 2>/dev/null && say "LAN tap $lan: unicast flood off" || say "LAN tap $lan: flood off FAILED"; }
   if timeout "$hold" tcpdump -Q in -n -c 1 -i "$lan" 'ip proto 112' >/dev/null 2>&1; then
     set_wan up "CARP advert = MASTER"; write_prom 1
   else
