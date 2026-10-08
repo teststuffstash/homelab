@@ -15,6 +15,13 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
   the ADR-142 trial — the BLOCKING gate-change lens reads it instead.)
   Those are the launcher, the scan, the reflex and the rulesets over them. A worker editing its own
   governor is ungated whatever the ruleset says. Block regardless of how good the change looks.
+  **Worker-authored PRs only** — the author (`gh pr view <N> --json author`) matches the master
+  copy of `WORKER_PATTERN` in `scripts/governance-lint.sh` (the one home of that test; never a
+  second regex here). For any other author (the human codeowner, whose CODEOWNERS gate is the
+  control — ADR-106) state the governance escapes as context, not BLOCK. A closing issue with no
+  declared footprint (inert-filed reports carry none) is itself stated as context, not as an
+  escape — except that a worker PR still blocks, since undeclared means every path escapes
+  (`agents/touches-check.sh`; homelab#1794 leaves that worker case open).
   ⚠ The ADR-097 compelled-counterpart classes are NEVER escapes and NEVER governance-blocking —
   `agents/replay/**`, top-level `agents/*-test.sh`/`agents/*-replay.sh` (not `agents/*/*`), and
   `docs/agents/*-fsm.{yaml,md}` (`agents/footprint.sh` `fp_replay_exempt` is the one predicate;
