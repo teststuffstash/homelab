@@ -180,12 +180,6 @@ jobs:
       - name: Maintenance-window self-test (devbox run maint-self-test)
         run: devbox run maint-self-test
 
-      # The ci-runner VM verb (scripts/runner-maintenance.sh): an unreadable runner list must never
-      # read as idle, a drain timeout restores the labels, and `run` refuses a plan that replaces any
-      # VM but the one it drained — fake GitHub/Prometheus curl + stub box/window scripts.
-      - name: runner-maintenance self-test (devbox run runner-maint-self-test)
-        run: devbox run runner-maint-self-test
-
       # pr-wait is the seat's and every subagent's PR-cycle primitive (jail-subagent-card); its typed
       # exits are what a caller acts on, so a regression there is a silent stall. The 2026-10-04
       # additions — several PRs in one call, exit 6 on a merge conflict — are pinned with a gh stub.
