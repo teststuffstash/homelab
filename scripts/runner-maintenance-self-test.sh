@@ -5,7 +5,8 @@
 # Prometheus `up` query from a state dir; stub mgmt-tf / maintenance-window / seat-window scripts
 # stand in for the box and the window. The cases pin the failure semantics the verb exists for:
 # an unread runner list is never "idle", a timeout restores the labels, a plan that replaces any VM
-# but the drained one is refused before a window opens.
+# but the drained one is refused before a window opens. The fake also plays Alertmanager's silence
+# API: `run` posts its silences, expires only its own on a clean close, keeps them on a failure.
 #
 #   devbox run runner-maint-self-test
 set -uo pipefail
@@ -34,6 +35,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$url" in
+  */api/v2/silences)
+    [ -f "$FAKE/am-fail" ] && exit 7
+    [ -f "$FAKE/silences.json" ] || echo '[]' > "$FAKE/silences.json"
+    if [ "$m" = POST ]; then
+      n=$(( $(jq length "$FAKE/silences.json") + 1 ))
+      jq --arg id "s$n" --argjson b "$data" '. + [$b + {id:$id, status:{state:"active"}}]' "$FAKE/silences.json" > "$FAKE/s.tmp" \
+        && mv "$FAKE/s.tmp" "$FAKE/silences.json"
+      echo "am POST silence" >> "$FAKE/calls"; printf '{"silenceID":"s%s"}\n' "$n"
+    else cat "$FAKE/silences.json"; fi ;;
+  */api/v2/silence/*)
+    [ "$m" = DELETE ] || exit 22
+    [ -f "$FAKE/am-fail" ] && exit 7
+    id="${url##*/}"
+    jq --arg id "$id" 'map(if .id == $id then .status.state = "expired" else . end)' "$FAKE/silences.json" > "$FAKE/s.tmp" \
+      && mv "$FAKE/s.tmp" "$FAKE/silences.json"
+    echo "EXPIRE $id" >> "$FAKE/expires" ;;
   */api/v1/query)
     echo "$q" >> "$FAKE/prom-queries"
     case "$(cat "$FAKE/prom" 2>/dev/null || echo 1)" in
@@ -107,12 +124,17 @@ reset() {
     > "$FAKE/runners.json"
   echo 1 > "$FAKE/prom"
 }
+active() { jq -r --arg by "${2:-runner-maintenance.sh/ci-runner-02}" '[.[] | select(.createdBy == $by and .status.state == "active")] | length' "$FAKE/silences.json" 2>/dev/null || echo 0; }
+foreign() { # a silence somebody else made — the verb must never expire it
+  jq -n '[{id:"h1", createdBy:"seat (by hand)", status:{state:"active"},
+           matchers:[{name:"alertname", value:"TargetDown", isRegex:false, isEqual:true}]}]' > "$FAKE/silences.json"
+}
 labels_of() { jq -r --arg n "$1" '.[] | select(.name == $n) | [.labels[] | select(.type == "custom") | .name] | join(",")' "$FAKE/runners.json"; }
 run_sut() { # <expected rc> <name> <args…>
   local want="$1" name="$2"; shift 2
   PATH="$TMP/bin:$PATH" GH_RUNNER_TOKEN=fake RUNNER_POLL=0 DRAIN_TIMEOUT="${DT:-30}" VERIFY_TIMEOUT=5 COMPARE_SETTLE=0 \
     MGMT_TF="$TMP/mgmt-tf" MAINT_WINDOW="$TMP/maint" SEAT_WINDOW="$TMP/seatwin" KUBECONFIG="$TMP/kubeconfig" \
-    RUNNER_EVIDENCE_DIR="$TMP/evidence" PROM_URL=http://prom.invalid GH_API_URL=https://gh.invalid \
+    RUNNER_EVIDENCE_DIR="$TMP/evidence" PROM_URL=http://prom.invalid GH_API_URL=https://gh.invalid AM_URL=http://am.invalid \
     bash "$SUT" "$@" > "$TMP/out" 2>&1
   local rc=$?
   if [ "$rc" = "$want" ]; then ok "$name (rc=$rc)"; else bad "$name: rc=$rc, want $want"; sed 's/^/      /' "$TMP/out"; fi
@@ -199,6 +221,48 @@ done
 [ "$(grep -n 'mgmt-tf summary' "$FAKE/calls" | cut -d: -f1)" -lt "$(grep -n 'maint open' "$FAKE/calls" | cut -d: -f1)" ] \
   && ok "plan scope read before the window opened" || bad "order: $(tr '\n' ';' < "$FAKE/calls")"
 grep -q -- '--force' "$FAKE/calls" && bad "closed with --force on the happy path" || ok "closed without --force"
+
+echo "== silences"
+reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"; foreign
+# Freeze the run before close to read the silences it posted: a regressed compare leaves them.
+echo 2 > "$FAKE/compare-rc"
+run_sut 1 "run posts silences, keeps them on a failure after acting" run p ci-runner-02
+[ "$(active x runner-maintenance.sh/ci-runner-02)" = 2 ] && ok "two silences live after the failed run" || bad "active=$(active x)"
+jq -e '[.[] | select(.createdBy == "runner-maintenance.sh/ci-runner-02") | .matchers] ==
+       [[{name:"instance", value:"192.168.2.66(:[0-9]+)?", isRegex:true, isEqual:true}],
+        [{name:"alertname", value:"TargetDown", isRegex:false, isEqual:true}, {name:"job", value:"ci-runner-node", isRegex:false, isEqual:true}]]' \
+  "$FAKE/silences.json" >/dev/null && ok "matchers: the VM's instance regex + TargetDown{job=ci-runner-node}" || bad "matchers: $(jq -c 'map(.matchers)' "$FAKE/silences.json")"
+jq -e '[.[] | select(.createdBy == "runner-maintenance.sh/ci-runner-02") | ((.endsAt | fromdate) - (.startsAt | fromdate))] | all(. >= 3600)' \
+  "$FAKE/silences.json" >/dev/null && ok "lifetime covers the run's bounds" || bad "lifetime: $(jq -c 'map([.startsAt,.endsAt])' "$FAKE/silences.json")"
+first() { grep -n -m1 -F -- "$1" "$FAKE/calls" | cut -d: -f1; }
+[ "$(first 'maint snapshot')" -lt "$(first 'am POST')" ] && [ "$(first 'am POST')" -lt "$(first 'mgmt-tf apply')" ] \
+  && ok "silenced between baseline and apply" || bad "order: $(tr '\n' ';' < "$FAKE/calls")"
+run_sut 0 "silence-close expires them" silence-close ci-runner-02
+[ "$(active x)" = 0 ] && ok "own silences expired" || bad "still active: $(active x)"
+[ "$(active x 'seat (by hand)')" = 1 ] && ok "the foreign silence untouched" || bad "foreign silence expired"
+
+reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"; foreign
+run_sut 0 "run happy path with silences" run p ci-runner-02
+[ "$(jq '[.[] | select(.createdBy == "runner-maintenance.sh/ci-runner-02")] | length' "$FAKE/silences.json")" = 2 ] \
+  && ok "two silences were posted" || bad "posted: $(jq -c . "$FAKE/silences.json")"
+[ "$(active x)" = 0 ] && ok "clean close expired its own" || bad "still active: $(active x)"
+[ "$(active x 'seat (by hand)')" = 1 ] && ok "foreign silence survived the close" || bad "foreign silence expired"
+grep -q 'EXPIRE h1' "$FAKE/expires" && bad "DELETE sent for the foreign silence" || ok "never touched the foreign id"
+
+reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"; echo 0 > "$FAKE/gh-fail-after"
+run_sut 2 "drain refusal expires its silences too" run p ci-runner-02
+[ "$(jq '[.[] | select(.createdBy == "runner-maintenance.sh/ci-runner-02")] | length' "$FAKE/silences.json")" = 2 ] && [ "$(active x)" = 0 ] \
+  && ok "posted, then expired on the refusal" || bad "silences: $(jq -c . "$FAKE/silences.json" 2>/dev/null)"
+
+reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"; touch "$FAKE/am-fail"
+run_sut 0 "unreachable Alertmanager: warn, the run goes on" run p ci-runner-02
+grep -q 'could not open a silence' "$TMP/out" && ok "warned it could not silence" || bad "no warning"
+grep -qF 'mgmt-tf apply p' "$FAKE/calls" && ok "still applied" || bad "did not apply"
+run_sut 1 "silence-close on an unreachable Alertmanager fails loud" silence-close ci-runner-02
+
+reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"
+SILENCE=0 run_sut 0 "SILENCE=0 touches no silence" run p ci-runner-02
+[ -f "$FAKE/silences.json" ] && bad "Alertmanager was called" || ok "Alertmanager untouched"
 
 reset; summary "[$(vmchange ci-runner-02 '["create","delete"]')]"; echo 1 > "$FAKE/apply-rc"
 run_sut 1 "run: apply failure leaves the window open" run p ci-runner-02

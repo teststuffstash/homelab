@@ -613,7 +613,10 @@ them; `verify` is the read-only health check (every slot `online` with the full 
 window is live or unless the saved plan's only VM change is a replace of the VM named `<vm>`
 (`mgmt-tf summary`, filtered on the box, because the snippet in the plan carries the App key). It
 then opens its own window, takes a `snapshot` baseline, drains, applies the plan id, waits for
-`verify`, and closes only on a clean `compare`. It is report-only and never reverts.
+`verify`, and closes only on a clean `compare`. It is report-only and never reverts. Between the
+baseline and the drain it also opens Alertmanager silences (`instance=~"<ip>(:[0-9]+)?"`, plus
+`TargetDown{job="ci-runner-node"}`, which is job-wide), owner-tagged so close expires only its own;
+a failure leaves them with the window, and `silence-close <vm>` expires them once you have finished.
 
 **It is ATTENDED today**, the way `scripts/helm-release-evidence.sh` began. The box wiring is
 planned, not built:
