@@ -1,0 +1,22 @@
+# The runner VMs' node_exporter (Debian prometheus-node-exporter, installed by the runner
+# cloud-init — tofu/templates/ci-runner-cloud-init.yaml.tftpl). A static LAN target like
+# mgmt-node / pve-node, on its OWN job: the stock NodeFilesystem* rules select job="node-exporter"
+# (the in-cluster DaemonSet) and pve-metrics' rules select job="pve-node", so neither reads these.
+# `release` label: the chart's scrapeConfigSelector (see pve-metrics/scrapeconfig.yaml).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ci-runner-node
+  namespace: monitoring
+  labels:
+    app: ci-runner-metrics
+    release: kube-prometheus-stack
+spec:
+  jobName: ci-runner-node
+  scrapeInterval: 60s
+  metricsPath: /metrics
+  staticConfigs:
+    - targets: ["192.168.2.55:9100"]
+      labels: { host: ci-runner-01 }
+    - targets: ["192.168.2.66:9100"]
+      labels: { host: ci-runner-02 }

@@ -1,0 +1,116 @@
+# Behaviour fixture for ci-runner-metrics.promtool-rules (FU-158 shape): `devbox run
+# prometheus-rules-lint` runs it. Each test drives one alert through its `for:` window and asserts
+# the others stay quiet on the same input.
+#
+# Sizes: a 79 GiB root fs is ~84.8e9 bytes; 84e9 keeps the arithmetic readable.
+rule_files:
+  - ci-runner-metrics.promtool-rules
+evaluation_interval: 15m
+
+tests:
+  # THE 2026-10-08 INCIDENT'S SHAPE: ci-runner-01 loses ~2.4 GB/day to leaked anonymous volumes
+  # (25 MB per 15 min), 30 GB → 0 over ~12.5 days. ci-runner-02 sits flat at 19 % free beside it
+  # (low but not moving — must stay quiet: a full-but-stable disk is AlmostFull's business only
+  # under 10 %). Arithmetic: under 30 % free from 48 h; the 1-day trend reaches zero within 7 days
+  # once avail < 7 d × 2.4 GB = 16.8 GB, i.e. at 132 h → FillingUp fires at 133 h (for: 1h) — 7
+  # days before the disk fills (300 h). Under 10 % (8.4 GB) at 216 h → AlmostFull at 216 h 5 m.
+  - interval: 15m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '30e9-25e6x1200'
+      - series: 'node_filesystem_size_bytes{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '84e9x1200'
+      - series: 'node_filesystem_avail_bytes{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '16e9x1200'
+      - series: 'node_filesystem_size_bytes{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '84e9x1200'
+      - series: 'up{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01"}'
+        values: '1x1200'
+      - series: 'up{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02"}'
+        values: '1x1200'
+    alert_rule_test:
+      # 4 days in: under 30 % free, but ~8.7 days of runway at this slope — quiet.
+      - eval_time: 96h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts: []
+      # 131 h: still > 7 days of runway (17.0 GB left).
+      - eval_time: 131h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts: []
+      - eval_time: 134h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: ci-runner-node, instance: "192.168.2.55:9100", host: ci-runner-01, device: /dev/sda1, fstype: ext4, mountpoint: / }
+      - eval_time: 134h
+        alertname: CiRunnerRootFsAlmostFull
+        exp_alerts: []
+      - eval_time: 134h
+        alertname: CiRunnerNodeExporterDown
+        exp_alerts: []
+      - eval_time: 215h
+        alertname: CiRunnerRootFsAlmostFull
+        exp_alerts: []
+      - eval_time: 217h
+        alertname: CiRunnerRootFsAlmostFull
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: now, job: ci-runner-node, instance: "192.168.2.55:9100", host: ci-runner-01, device: /dev/sda1, fstype: ext4, mountpoint: / }
+      - eval_time: 217h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: ci-runner-node, instance: "192.168.2.55:9100", host: ci-runner-01, device: /dev/sda1, fstype: ext4, mountpoint: / }
+
+  # One kind e2e's transient footprint is NOT a leak: flat at 24 % free for a day, then a run
+  # takes 6 GB for an hour and gives it back. The 1-day regression barely tilts — quiet before,
+  # during and after.
+  - interval: 15m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '20e9x96 14e9x4 20e9x12'
+      - series: 'node_filesystem_size_bytes{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '84e9x112'
+      - series: 'up{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02"}'
+        values: '1x112'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: CiRunnerRootFsFillingUp
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: CiRunnerRootFsAlmostFull
+        exp_alerts: []
+
+  # The belt's liveness: ci-runner-02's exporter stops answering — fires after 15 m of up == 0;
+  # ci-runner-01 keeps answering and stays out of it.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01"}'
+        values: '1x40'
+      - series: 'up{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02"}'
+        values: '1x10 0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CiRunnerNodeExporterDown
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CiRunnerNodeExporterDown
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: ci-runner-node, instance: "192.168.2.66:9100", host: ci-runner-02 }
+
+  # The scrape job itself gone (ScrapeConfig not loaded): no `up` series at all → the absent() arm.
+  - interval: 1m
+    input_series:
+      - series: 'node_load1{job="unrelated"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CiRunnerNodeExporterDown
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CiRunnerNodeExporterDown
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: ci-runner-node }

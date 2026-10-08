@@ -1,0 +1,24 @@
+# ci-runner-metrics — the two Proxmox runner VMs (ci-runner-01/-02, tofu/ci-runner.tf) as scrape
+# targets + the root-fs belts (2026-10-08: runner-01 filled to 100 % with no alert).
+# Raw manifests in argocd/resources/ci-runner-metrics/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ci-runner-metrics
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/ci-runner-metrics
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -11,6 +11,11 @@
 # (same single-user-nix flow as the ARC runners, see homelab docs/ci.md).
 #
 # SAFETY: this hits live Proxmox. `devbox run -- tofu -chdir=tofu plan` and review before apply.
+# ⚠ ANY edit to templates/ci-runner-cloud-init.yaml.tftpl REPLACES the runner VM(s) on apply (the
+# snippet is re-created, and the VM's user_data_file_id goes with it — measured 2026-09-08: three
+# merged template commits applied as one destroy+create of VM 9001, 1m39s). The runner is
+# stateless (boot-minted registration, fresh disk), so a replace is a short CI-capacity window:
+# do one runner at a time, with no job in flight on its slots.
 # HOST PREREQUISITE (not tofu-managed — Proxmox storage config): 'snippets' must be enabled on
 # var.datastore_images on EACH hypervisor that hosts a runner, or the cloud-init upload fails:
 #   pvesm set local --content import,backup,vztmpl,iso,snippets   # = the existing list + snippets

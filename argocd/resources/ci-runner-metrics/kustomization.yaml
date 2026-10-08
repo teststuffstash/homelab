@@ -1,0 +1,11 @@
+# ci-runner-metrics — the Proxmox runner VMs (ci-runner-01 @ .55 on pve, ci-runner-02 @ .66 on
+# nx-02; tofu/ci-runner.tf) as scrape targets + the root-fs belts. The VMs are out of the cluster,
+# so this is a static ScrapeConfig — the mgmt-metrics / pve-metrics pattern — on its own job so no
+# node-exporter (DaemonSet) or pve-node rule reads them as a cluster node or a hypervisor.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - scrapeconfig.yaml
+  - prometheusrule.yaml
