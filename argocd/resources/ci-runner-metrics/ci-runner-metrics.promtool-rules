@@ -1,0 +1,36 @@
+# ci-runner-disk — lifted VERBATIM out of prometheusrule.yaml (annotations stripped; the manifest
+# is their one home) so `promtool test rules` can load them. Named .promtool-rules rather than
+# .yaml on purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
+# DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   devbox run -- yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/ci-runner-metrics/prometheusrule.yaml | devbox run -- yq -P '.'
+#
+groups:
+  - name: ci-runner-disk
+    rules:
+      - alert: CiRunnerRootFsFillingUp
+        expr: |
+          (
+            node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}
+              / node_filesystem_size_bytes{job="ci-runner-node",mountpoint="/"} < 0.30
+          )
+          and predict_linear(node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}[1d], 7 * 86400) < 0
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+      - alert: CiRunnerRootFsAlmostFull
+        expr: |
+          node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}
+            / node_filesystem_size_bytes{job="ci-runner-node",mountpoint="/"} < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          triage: now
+      - alert: CiRunnerNodeExporterDown
+        expr: |
+          up{job="ci-runner-node"} == 0 or absent(up{job="ci-runner-node"})
+        for: 15m
+        labels:
+          severity: warning
+          triage: none

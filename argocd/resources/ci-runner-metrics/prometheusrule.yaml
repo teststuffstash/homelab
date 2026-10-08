@@ -1,0 +1,81 @@
+# The runner VMs' root-fs belts (2026-10-08). ci-runner-01's root fs reached 100 % (75G/79G) on
+# leaked anonymous docker volumes (~2.4 GB/day since 09-24); every oracle-fleet `e2e` job died
+# ~40 s in with no log blob and a red PR sat ~20 h, read as a reviewer outage. ci-runner-02 was on
+# the same curve (75 %). Not one alert fired: neither VM ran node_exporter, so Prometheus held zero
+# series for them. The series now come from the VMs' own exporter (job="ci-runner-node",
+# scrapeconfig beside this file); `host` names the VM, `instance` its LAN address.
+#
+# Shapes — the stock NodeFilesystem* pair (predictive + threshold), re-scoped to this job (the
+# stock rules select job="node-exporter" and would never see these):
+#   FillingUp   — under 30 % free AND the 1-day trend reaches zero within 7 days. A leak of this
+#                 incident's rate (~2.4 GB/day on 79 G) trips it ~7 days before the disk is full;
+#                 one kind run's transient GBs do not (a 1-day regression barely moves on an hour's
+#                 dip — the fixture holds that). `for: 1h` absorbs a run starting at the edge.
+#   AlmostFull  — under 10 % free, whatever the trend: one e2e (kind node + images) needs GBs, so
+#                 at this level the next runs on that VM fail at boot.
+#   ExporterDown — the belt's own liveness: a runner whose exporter is gone has no disk belt.
+# Fixture: ci-runner-metrics.promtool-{rules,test} (replays the incident's slope).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ci-runner-metrics
+  namespace: monitoring
+  labels:
+    app: ci-runner-metrics
+spec:
+  groups:
+    - name: ci-runner-disk
+      rules:
+        - alert: CiRunnerRootFsFillingUp
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}
+                / node_filesystem_size_bytes{job="ci-runner-node",mountpoint="/"} < 0.30
+            )
+            and predict_linear(node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}[1d], 7 * 86400) < 0
+          for: 1h
+          # triage dig: the growth curve and the runner's recent job history are readable; the
+          # remedy (what holds the disk, a prune, a janitor change) is on the VM or by PR
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "{{ $labels.host }} root fs is filling — under 30 % free and on course to fill within 7 days"
+            description: >-
+              {{ $labels.host }} ({{ $labels.instance }}) root filesystem has under 30 % free and its
+              1-day trend reaches zero within 7 days. When it does, kind-based e2e jobs on this runner
+              fail at cluster create, usually without a log blob. What to check: the slope
+              (`node_filesystem_avail_bytes{host="{{ $labels.host }}",mountpoint="/"}[7d]`), then on
+              the VM (ssh as `debian`, docs/ci.md §Trade-offs) `docker system df -v`,
+              `docker volume ls -qf dangling=true | wc -l`, `docker ps -a`, and the kind-janitor
+              journal (`journalctl -u kind-janitor.service`).
+        - alert: CiRunnerRootFsAlmostFull
+          expr: |
+            node_filesystem_avail_bytes{job="ci-runner-node",mountpoint="/"}
+              / node_filesystem_size_bytes{job="ci-runner-node",mountpoint="/"} < 0.10
+          for: 5m
+          # triage now: every e2e routed to this VM is about to fail — reds on stack PRs should be
+          # read as runner-caused while this fires
+          labels: { severity: critical, triage: now }
+          annotations:
+            summary: "{{ $labels.host }} root fs under 10 % free ({{ $value | humanizePercentage }})"
+            description: >-
+              {{ $labels.host }} ({{ $labels.instance }}) has under 10 % of its root filesystem free.
+              A kind e2e needs several GB for its node container and images, so jobs on this runner
+              are likely to fail at cluster create — read red `e2e` checks on stack PRs against this
+              alert before reading them as a code or reviewer fault. What to check on the VM:
+              `df -h /`, `docker system df -v`, `docker volume ls -qf dangling=true | wc -l`,
+              `docker ps -a`, and the kind-janitor journal.
+        - alert: CiRunnerNodeExporterDown
+          expr: |
+            up{job="ci-runner-node"} == 0 or absent(up{job="ci-runner-node"})
+          for: 15m
+          # triage none: the VM is down or off the LAN, or its exporter unit failed — no in-cluster
+          # read changes what anyone does; ssh or Proxmox is the remedy
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "{{ $labels.host }} node_exporter not answering — its disk belts are blind"
+            description: >-
+              No scrape of {{ $labels.instance }}'s node_exporter for 15m, so the runner's root-fs
+              alerts cannot fire. What to check: the VM's power state on its hypervisor (ci-runner-02
+              may be parked by `ci_runner_02_running = false` in tofu/ci-runner.tf), then
+              `systemctl status prometheus-node-exporter` on the VM. A VM created before the exporter
+              joined the runner cloud-init (2026-10-08) has none until it is recreated.

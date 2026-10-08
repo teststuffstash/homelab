@@ -234,3 +234,14 @@ cloud-init-created `homelab-mirrors` buildx builder — per-registry mirrors via
 homelab#1308, `docs/patterns/python-stack.md`); `ubuntu-latest`
 remains the zero-infra escape hatch — and deliberately builds the runner image itself
 (bootstrap: the image must not depend on the fleet it provisions).
+
+**The VM runners are metered (2026-10-08).** Both (`ci-runner-01` @ .55 on pve, `ci-runner-02` @
+.66 on nx-02) run Debian's `prometheus-node-exporter` from the runner cloud-init, scraped as the
+static job `ci-runner-node`; the root-fs belts `CiRunnerRootFsFillingUp` (under 30 % free and the
+1-day trend reaches zero within 7 days) / `CiRunnerRootFsAlmostFull` (under 10 %) and the belt's
+liveness `CiRunnerNodeExporterDown` live in
+[`argocd/resources/ci-runner-metrics/`](../argocd/resources/ci-runner-metrics/prometheusrule.yaml)
+(promtool-fixtured on the incident's slope). Why: runner-01's disk filled to 100 % on leaked
+anonymous docker volumes with no series to alert on, and every kind e2e on it failed at create.
+Any template edit replaces the VM on apply (header of `tofu/ci-runner.tf`); ssh as `debian` with
+the `homelab-forgejo` key cache for on-VM reads.

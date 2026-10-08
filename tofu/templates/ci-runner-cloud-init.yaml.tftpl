@@ -2,7 +2,11 @@
 hostname: ${name}
 package_update: true
 # qemu-guest-agent: so Proxmox sees the agent/IP + clean shutdowns (the VM sets agent.enabled=true).
-packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent, skopeo]
+# prometheus-node-exporter (2026-10-08 incident): the runner's root fs filled to 100 % from leaked
+# anonymous docker volumes and nothing alerted — no exporter, so Prometheus had zero series for
+# either runner. Debian's package listens on :9100 and is enabled on install; the cluster scrapes
+# it as the static job `ci-runner-node` (argocd/resources/ci-runner-metrics/, the disk belts).
+packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent, skopeo, prometheus-node-exporter]
 users:
   - name: debian
     groups: [sudo, docker]
@@ -125,6 +129,7 @@ write_files:
       WantedBy=timers.target
 runcmd:
   - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now prometheus-node-exporter
   - sysctl --system
   # Persistent journal so a first-boot kernel panic is debuggable next time (it wasn't).
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
