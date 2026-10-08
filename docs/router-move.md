@@ -151,7 +151,8 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    `opnsense_standby: true` from the first write (not `opnsense-users`: the users are carried),
    then `dnsmasq-dhcp.py` with `OPN_DHCP_ENABLE=0` and `tuya-egress.py`;
 4. **check** (also its own read-only verb) — the inert rules read back over the API (LAN address,
-   every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP/ddclient/ACME renewal off, the switch
+   every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP off — dnsmasq AND Kea, its HA hook too
+   (since 2026-10-08; before that a standby node's Kea went unread) — ddclient/ACME renewal off, the switch
    armed and never tripped) and prod unharmed (`.1` at Big Data's MAC, Unbound answering, a
    HAProxy name serving).
 
