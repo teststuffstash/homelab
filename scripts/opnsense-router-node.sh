@@ -164,7 +164,12 @@ check() {
   v="$(api quagga/bgp/search_neighbor 2>/dev/null | jq -r '[.rows[] | .enabled] | unique | join(",")' || true)"
   expect_on "$v" "BGP neighbours (all)"
   v="$(api dnsmasq/settings/get 2>/dev/null | jq -r '.dnsmasq.enable' || true)"; [ "$v" = 0 ] && ok "dnsmasq (DHCP) off" || no "dnsmasq enable='${v:-unread}'"
-  if [ $live = 1 ]; then v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.general.enabled' || true)"; expect_on "$v" "Kea DHCPv4"; fi
+  # Kea is read on EVERY node, not only a live one: a standby node with Kea on answers as `.1` the
+  # moment its config holds the subnet (pve's node did, 2026-10-02 17:14Z, while this check read
+  # only dnsmasq and called it green). Standby wants the server AND its HA hook off — a hot-standby
+  # peer serves in partner-down, which is the same rogue lease by another path.
+  v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.general.enabled' || true)"; expect_on "$v" "Kea DHCPv4"
+  if [ $live = 0 ]; then v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.ha.enabled' || true)"; [ "$v" = 0 ] && ok "Kea HA hook off" || no "Kea HA hook enabled='${v:-unread}' (want 0 on a standby node)"; fi
   if [ $live = 1 ]; then   # egress via its own WAN: the standing LAN_GW (default route to .1) is gone
     v="$(api routing/settings/search_gateway 2>/dev/null | jq -r '[.rows[] | select(.name=="LAN_GW")] | length' || true)"
     [ "$v" = 0 ] && ok "no LAN_GW (default route = WAN_GW)" || no "LAN_GW still present ('${v:-unread}') — its default route is its own .1"
