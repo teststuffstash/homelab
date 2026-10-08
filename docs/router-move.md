@@ -366,6 +366,22 @@ above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back 
 3. Checks: CARP MASTER/BACKUP as expected, the lease DB synced, BGP 26/26, the belts green.
 4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out.
 
+**The 2026-10-02 "standby node served DHCP" trip, explained (2026-10-08).** pve's node had no
+DHCP server at all (Kea, dnsmasq, dhcpd all off; no API write that day). Its filter log for
+17:13–17:14Z shows it FORWARDING other hosts' LAN frames out of its own LAN port (`pass out
+vtnet0`, sources .80/.139/.67/.13/.12 → `.1` and the Loki VIP): a Linux bridge floods every
+unknown-destination unicast to every port, QEMU's virtio-net hands the guest frames not addressed
+to it, and FreeBSD — its vtnet not in promiscuous mode, so it assumes the NIC filtered — routes
+them back out with the node's own MAC. nx-02's real DHCP reply to the mower (a wifi client pve's
+bridge had never learned) came back out of 9171 with IP source `.1` and tripped the switch — a
+relayed frame, not a served lease. Reproduced with injected unknown-destination frames (5/5
+re-emitted), fixed host-side: unicast flooding OFF on the router node's LAN tap (0/5 after; the
+node still answers directly addressed traffic), applied by the WAN gate whenever the tap appears
+(`router-wangate.sh`). A standby or BACKUP node therefore never sees unicast for MACs the bridge
+learned elsewhere; the CARP virtual MAC moves to its tap with its first advert as MASTER. The
+kill switch's reading of the event stands — a frame sourced `.1` left the node — and the class is
+the hypervisor's flooding, not the node's config.
+
 ## Status
 
 - 2026-09-29 night: the inventory above. Prod, the test VM baseline and the drill all on 26.7.4_1
