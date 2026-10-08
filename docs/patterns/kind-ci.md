@@ -35,12 +35,18 @@ CI — the OOTB principle):
    clusters exhausted 512 inotify instances on 2026-09-02; two exhausted 128 in #228; the leak
    reaches ANY limit eventually). Pre-create, remove *own-prefix* containers that are hours old
    (`docker ps -a --filter name=<stack>-e2e-` + an age check) — self-healing beats trap-based
-   cleanup on a runner where jobs get cancelled. The platform runs an hourly `kind-janitor`
+   cleanup on a runner where jobs get cancelled. **Remove with `docker rm -f -v`, never bare
+   `rm -f`**: `kindest/node` declares `VOLUME /var` (and `registry:2` declares
+   `/var/lib/registry`), so a removal without `-v` leaks an anonymous volume per container —
+   2–2.8 GB per kind node; 698 of them filled ci-runner-01's root fs on 2026-10-08 (#2379).
+   The platform runs an hourly `kind-janitor`
    systemd timer on the VM as the belt (`tofu/templates/ci-runner-cloud-init.yaml.tftpl`) — it
-   matches a fixed **prefix list**, so a stack that renames its cluster silently drops out of the
-   belt (oracle's #363 rename did exactly that; the drop-in was also cron-based until 2026-09-04
-   and the Debian 12 cloud image ships no cron, so it had never once run). Your pre-create sweep
-   is the cause-side half and the only one that reliably holds.
+   reaps with `rm -f -v` and then runs `docker volume prune -f`, which (Docker ≥23, no `-a`)
+   collects every UNUSED ANONYMOUS volume, whoever leaked it; named volumes are never touched.
+   It matches a fixed **prefix list**, so a stack that renames its cluster silently drops out of
+   the container half of the belt (oracle's #363 rename did exactly that; the drop-in was also
+   cron-based until 2026-09-04 and the Debian 12 cloud image ships no cron, so it had never once
+   run). Your pre-create sweep is the cause-side half and the only one that reliably holds.
 3. **Keep the teardown trap anyway** (`trap cleanup EXIT`, `kind delete cluster --name
    "$CLUSTER"`), with a `KEEP=1` escape for local poking. It covers the normal path; rule 2
    covers the cancel path.

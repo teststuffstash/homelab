@@ -90,6 +90,14 @@ write_files:
   # rule 2 — landed for oracle in oracle-fleet#363, `scripts/lib/e2e-sweep.sh`).
   # ⚠ The prefixes must track the stacks' CURRENT cluster names: oracle renamed to
   # `oracle-fleet-e2e-*` in #363 and the pre-#363 names still appear on runner-local leftovers.
+  # VOLUMES too (2026-10-08 disk-full, #2379): `kindest/node` declares `VOLUME /var`, so a reap
+  # without `-v` left each node's 2–2.8 GB anonymous /var behind (runner-01: 698 leaked volumes,
+  # 33.6 GB, root fs 100 %). `rm -f -v` drops a reaped container's anonymous volumes; the
+  # trailing `volume prune -f` collects anonymous volumes leaked by ANY container removed
+  # without `-v` (stacks' own cleanups — oracle's `registry:2` was the bulk of the count). On
+  # Docker ≥23 (runners: 29.8.0, verified 2026-10-08) prune without `-a` removes only UNUSED
+  # ANONYMOUS volumes: named ones (buildx_buildkit_*_state, stacks' named caches) are never
+  # touched, nor is any volume a container (running or stopped) still references. Never add `-a`.
   - path: /usr/local/bin/kind-janitor.sh
     permissions: '0755'
     owner: root:root
@@ -100,7 +108,33 @@ write_files:
       docker ps -a --format '{{.Names}}'$'\t''{{.Status}}' \
         | grep -E "^(oracle-fleet-e2e-|oracle-e2e-|oracle-serve-|sleep-itest-|circles-test|kind-registry-)" \
         | grep -E "$(printf '%s' 'Up ([3-9]|[0-9]{2,}) hours|Up [0-9]+ (days|weeks|months)|Exited')" \
-        | cut -f1 | xargs -r docker rm -f
+        | cut -f1 | xargs -r docker rm -f -v
+      docker volume prune -f
+  # Registry logins must not outlive their job (2026-10-06, #2379): a job's `docker/login-action`
+  # wrote ghcr.io auth into the runner's docker config, the worker crashed (ENOSPC) before the
+  # post-step logout, and the expired token broke every later default-builder `docker build`
+  # ("denied: denied"). Fix = per-SLOT docker config + this job-started hook. Each slot's `.env`
+  # (runcmd below) sets its own DOCKER_CONFIG, so one slot's reset never wipes the OTHER slot's
+  # in-flight login (a hook on one shared config.json would — two slots, one $HOME). BUILDX_CONFIG
+  # stays pinned to the shared ~/.docker/buildx: buildx keeps builder state under
+  # $DOCKER_CONFIG/buildx by default, so without the pin a slot loses `homelab-mirrors`
+  # (verified 2026-10-08 on runner-01: DOCKER_CONFIG alone lists only `default`).
+  # ACTIONS_RUNNER_HOOK_JOB_STARTED runs it before every job's first step; it keeps any non-auth
+  # keys and resets only `auths`.
+  - path: /usr/local/bin/runner-job-started.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -eu
+      cfg="$${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+      mkdir -p "$(dirname "$cfg")"
+      if [ -s "$cfg" ] && jq -e 'type == "object"' "$cfg" >/dev/null 2>&1; then
+        jq '.auths = {}' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+      else
+        printf '{"auths": {}}\n' > "$cfg"
+      fi
+      chmod 0600 "$cfg"
   # systemd timer, NOT cron: the Debian 12 genericcloud image ships NO cron package, so the
   # /etc/cron.d drop-in this replaced was inert from the day it was written (found 2026-09-04 on
   # the freshly recreated VM — janitor script present, nothing ever ran it).
@@ -164,8 +198,15 @@ runcmd:
   # The runner is a systemd service (non-login) → job steps don't source ~/.profile, so single-user
   # nix (~/.nix-profile) and devbox (/usr/local/bin) miss the PATH. The actions-runner `.env` is
   # loaded for every job step — put both on PATH there. `nix` must be present for `devbox run`.
-  - printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\n' > /home/runner/actions-runner/.env && chown runner:runner /home/runner/actions-runner/.env
-  - cp -p /home/runner/actions-runner/.env /home/runner/actions-runner-2/.env
+  # Per-slot DOCKER_CONFIG + shared BUILDX_CONFIG + the job-started hook: see
+  # runner-job-started.sh in write_files above (the stale-registry-login fix).
+  - install -d -m 0700 -o runner -g runner /home/runner/.docker-slot-1 /home/runner/.docker-slot-2
+  - |
+    for slot in 1 2; do
+      dir=/home/runner/actions-runner; [ "$slot" = 1 ] || dir=/home/runner/actions-runner-$slot
+      printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\nDOCKER_CONFIG=/home/runner/.docker-slot-%s\nBUILDX_CONFIG=/home/runner/.docker/buildx\nACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/runner-job-started.sh\n' "$slot" > "$dir/.env"
+      chown runner:runner "$dir/.env"
+    done
   - |
     set -e
     TOKEN=$(GH_APP_ID='${app_id}' GH_APP_INSTALLATION_ID='${installation_id}' \

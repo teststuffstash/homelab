@@ -243,5 +243,12 @@ liveness `CiRunnerNodeExporterDown` live in
 [`argocd/resources/ci-runner-metrics/`](../argocd/resources/ci-runner-metrics/prometheusrule.yaml)
 (promtool-fixtured on the incident's slope). Why: runner-01's disk filled to 100 % on leaked
 anonymous docker volumes with no series to alert on, and every kind e2e on it failed at create.
+The cause-side fix is the `kind-janitor` reaping volumes too ([`patterns/kind-ci.md`](patterns/kind-ci.md)
+rule 2). The same incident left a crashed job's ghcr.io login behind in the shared
+`~/.docker/config.json`, breaking every later default-builder `docker build`, so **registry
+logins are job-scoped**: each runner slot's `.env` sets its own `DOCKER_CONFIG`
+(`~/.docker-slot-<n>`) and an `ACTIONS_RUNNER_HOOK_JOB_STARTED` hook
+(`runner-job-started.sh`) resets that file's `auths` before every job. `BUILDX_CONFIG` stays
+pinned to the shared `~/.docker/buildx`, so both slots keep the `homelab-mirrors` builder.
 Any template edit replaces the VM on apply (header of `tofu/ci-runner.tf`); ssh as `debian` with
 the `homelab-forgejo` key cache for on-VM reads.
