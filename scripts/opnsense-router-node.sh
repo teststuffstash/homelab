@@ -113,12 +113,27 @@ api_setup() {  # prod's wallet pair — carried to the node, so it authenticates
 }
 api() { curl -sfk -K "$API_CURL" --max-time 30 "https://$HOST/api/$1"; }
 
+# The Kea HA peer set for a LIVE node (opnsense/kea-dhcp.py OPN_KEA_HA) when the inventory holds
+# more than one live node: "<this>;<name>=http://<ip>:8001/=<role>,…" — primary = the lowest CARP
+# advskew (the MASTER), every other live node standby (hot-standby: it answers only in partner-down).
+# One live node (window 1's shape) → empty = HA off, Kea serving alone.
+kea_ha_env() {
+  local rows n
+  rows="$(yq -r '.all.children.opnsense.hosts | to_entries[] | select(.value.opnsense_standby == false) | "\(.key) \(.value.ansible_host) \(.value.router_carp_advskew // 0)"' "$INV" | sort -k3,3n -k1,1)"
+  n="$(printf '%s\n' "$rows" | grep -c .)"
+  [ "$n" -ge 2 ] || return 0
+  printf '%s;' "$INV_HOST"
+  printf '%s\n' "$rows" | awk 'NR==1{r="primary"} NR>1{r="standby"} {printf "%s%s=http://%s:8001/=%s", (NR>1?",":""), $1, $2, r}'
+}
+
 converge() {
-  local dhcp_enable=0 dhcp_server=kea   # Kea's config converges on every node; only a LIVE one serves
+  local dhcp_enable=0 dhcp_server=kea kea_ha=''   # Kea's config converges on every node; only a LIVE one serves
   if [ "$STANDBY" != true ]; then   # LIVE (ADR-145): the kill switch would trip on the first converge
     pve "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
       && die "$INV_HOST is LIVE but $KS_UNIT is still armed/enabled on $PVE — retire it first: $VMID in pve_router_live_vmids, then ansible/pve-router-killswitch.yml"
     dhcp_enable=1
+    kea_ha="$(kea_ha_env)"
+    [ -z "$kea_ha" ] || log "Kea HA peers: $kea_ha"
   fi
   local p rest plays='opnsense-acme.yml opnsense-bgp.yml opnsense-unbound.yml opnsense-haproxy.yml'
   # opnsense-users.yml is NOT run: a node's users + keys are carried from prod (seed-shape
@@ -138,7 +153,7 @@ converge() {
   for py in dnsmasq-dhcp kea-dhcp tuya-egress; do
     log "opnsense/$py.py → $HOST$(case $py in *-dhcp) echo " (OPN_DHCP_SERVER=$dhcp_server OPN_DHCP_ENABLE=$dhcp_enable)";; esac)"
     OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-api-key)" OPN_API_SECRET="$(kp opnsense-api-secret)" \
-      OPN_DHCP_ENABLE=$dhcp_enable OPN_DHCP_SERVER=$dhcp_server \
+      OPN_DHCP_ENABLE=$dhcp_enable OPN_DHCP_SERVER=$dhcp_server OPN_KEA_HA="$kea_ha" \
       python3 "opnsense/$py.py" > "$WORK/$py.log" 2>&1 || { tail -15 "$WORK/$py.log" >&2; die "$py.py failed"; }
   done
   # Flush to disk: the nano image's UFS (soft-updates) lost ~1 min of config writes to a hard stop
@@ -169,7 +184,9 @@ check() {
   # only dnsmasq and called it green). Standby wants the server AND its HA hook off — a hot-standby
   # peer serves in partner-down, which is the same rogue lease by another path.
   v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.general.enabled' || true)"; expect_on "$v" "Kea DHCPv4"
-  if [ $live = 0 ]; then v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.ha.enabled' || true)"; [ "$v" = 0 ] && ok "Kea HA hook off" || no "Kea HA hook enabled='${v:-unread}' (want 0 on a standby node)"; fi
+  v="$(api kea/dhcpv4/get 2>/dev/null | jq -r '.dhcpv4.ha.enabled' || true)"
+  if [ $live = 0 ] || [ -z "$(kea_ha_env)" ]; then [ "$v" = 0 ] && ok "Kea HA hook off" || no "Kea HA hook enabled='${v:-unread}' (want 0: standby, or a lone live node)"
+  else [ "$v" = 1 ] && ok "Kea HA hook on (pair)" || no "Kea HA hook enabled='${v:-unread}' (want 1: a live node of the pair)"; fi
   if [ $live = 1 ]; then   # egress via its own WAN: the standing LAN_GW (default route to .1) is gone
     v="$(api routing/settings/search_gateway 2>/dev/null | jq -r '[.rows[] | select(.name=="LAN_GW")] | length' || true)"
     [ "$v" = 0 ] && ok "no LAN_GW (default route = WAN_GW)" || no "LAN_GW still present ('${v:-unread}') — its default route is its own .1"

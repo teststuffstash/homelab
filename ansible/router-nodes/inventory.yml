@@ -27,20 +27,11 @@ all:
           opnsense_standby: false    # LIVE since window 1 (ADR-145) — serves .1, DHCP (Kea), BGP, WAN
           router_carp_advskew: 0     # MASTER (ADR-145: nx-02 takes .1 alone in window 1; pve joins as BACKUP)
           haproxy_vip_interface: lo0
-          # Window 1: `.1` on THIS node only (a host var wins over the group list). pve's node joins
-          # it in window 2 — then the list moves back to group_vars for both.
-          router_carp_vips:
-            - address: 192.168.2.72/24
-              vhid: 72
-              description: carp-trial
-              state: absent
-            - address: 192.168.2.1/24
-              vhid: 1
-              description: lan-gateway
+          # `.1` comes from the group list (group_vars/opnsense.yml) since window 2 — both nodes.
         opnsense-pve:
           ansible_host: 192.168.2.71
           bgp_router_id: 192.168.2.71   # its own address, never the .1 VIP (ADR-145, docs/bgp.md)
           ansible_connection: local
-          opnsense_standby: true
+          opnsense_standby: false    # LIVE since window 2 (2026-10-08) — the CARP BACKUP for .1, Kea HA standby, BGP peer .71
           router_carp_advskew: 100   # BACKUP (ADR-145)
           haproxy_vip_interface: lo0

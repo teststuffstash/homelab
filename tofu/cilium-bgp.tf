@@ -11,6 +11,7 @@ locals {
   # docs/bgp.md §With the router pair). Window 1: nx-02 alone; window 2 adds pve's .71.
   opnsense_peers = {
     "opnsense-nx02" = "192.168.2.70"
+    "opnsense-pve"  = "192.168.2.71" # window 2 (2026-10-08): the BACKUP peers too — routes survive a failover
   }
   lb_pool_cidr = "192.168.40.0/24" # dedicated subnet so LAN clients route via OPNsense (L3), not ARP (L2)
 }

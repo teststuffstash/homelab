@@ -7,3 +7,6 @@ pve_serial_log_vmids:
 # --- pve-router-killswitch (ADR-144) ---
 # opnsense-pve (tofu/opnsense-router.tf, vmid 9171) — the standing router node.
 pve_router_killswitch_vmids: [9171]
+# LIVE since window 2 (2026-10-08, ADR-145): the CARP BACKUP — its WAN gate runs, its kill switch
+# is retired (a live node's converge trips it on the first CARP advert / BGP SYN by design).
+pve_router_live_vmids: [9171]

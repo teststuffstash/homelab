@@ -130,10 +130,10 @@ resource "proxmox_virtual_environment_vm" "opnsense_router_pve" {
   tags      = sort(["opnsense", "router"])
 
   started = false
-  # LATCHED OFF 2026-10-02: the kill switch tripped 17:14:43Z — this STANDBY node sent a DHCP reply
-  # sourced 192.168.2.1 (meta-state's window-2 blocker, FU-297). Declared false so the box's apply
-  # loop stops refusing on the latch as drift; back to true in a reviewed change once understood.
-  on_boot = false
+  # on_boot: latched OFF 2026-10-02 by the kill switch (a relayed, not served, DHCP reply — the
+  # hypervisor's unicast flooding, explained + fixed 2026-10-08, docs/router-move.md). Back to true
+  # for window 2 (ADR-145): the node is the CARP BACKUP; kill switch host_vars pve-host.yml.
+  on_boot = true
 
   cpu {
     cores = 2
