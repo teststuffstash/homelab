@@ -359,7 +359,10 @@ above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back 
    `pve_router_live_vmids`, the play — as nx-02's in window 1); `.1` moves from nx-02's host var
    back to the group `router_carp_vips` for both; its WAN on the WAN switch (the gate keeps it
    dark while BACKUP).
-2. Kea HA on, both nodes (nx-02 primary); the Cilium peer `.71` added.
+2. Kea HA on, both nodes (nx-02 primary) — `converge` exports the peer set itself once the
+   inventory holds two live nodes (`kea_ha_env`; the primary = the lowest advskew); converge
+   nx-02 FIRST (a primary with HA on and no partner serves after `max-response-delay`), then pve
+   (a standby with no primary would ALSO start serving — two servers). The Cilium peer `.71` added.
 3. Checks: CARP MASTER/BACKUP as expected, the lease DB synced, BGP 26/26, the belts green.
 4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out.
 
