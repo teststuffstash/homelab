@@ -12760,3 +12760,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
   build-image's login-action wrote ghcr.io creds, the worker crashed before the post-step logout → expired
   creds in /home/runner/.docker/config.json. A/B reproduced, auth entry removed, pull verified; runner-02
   clean. #815 attempt 4 queued; subagent told (per-job DOCKER_CONFIG = follow-on candidate).
+- **Window closed 18:52Z.** #2379/#2381 shipped by recreating both runners through the new attended verb
+  `runner-maintenance.sh run` (#2382 + silences #2387). First attended run found the runner install pin below
+  GitHub's registration floor (#2388, 2.323.0 → 2.338.0) and the missing Alertmanager silences; ci-runner-01 rode
+  an unscoped master plan → box baseline stamped 31d0db06, master plans No changes. Main state now tofu 1.13.1
+  (operator-acknowledged forward-only). Runner App key printed by plans → #2384 sensitive(), key ROTATED (old
+  refused 17:56:11Z). Incident docs/incidents/2026-10-06-ci-runner-disk-full-key-in-plans.md; residual FU-306
+  (box wiring + runner-pin tracking decision). Also #2383: body-edit re-review leg live (GraphQL lastEditedAt) +
+  fake gh refuses unknown --json fields.

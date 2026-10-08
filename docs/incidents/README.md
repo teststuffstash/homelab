@@ -68,3 +68,4 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-09-16 | [A targeted `tofu apply` for one node replaced three worker VMs](2026-09-16-targeted-apply-replaced-three-vms.md) | FU-248 |
 | 2026-09-21 | [A talosconfig (os:admin key) was committed to public master; the direct lane had no secret scan](2026-09-21-talosconfig-committed-to-public-master.md) | FU-264 |
 | 2026-10-03 | [Wiring CNPG backups into running clusters left grafana-pg and forgejo-pg without a writable primary (~10 min each), and nothing alerted](2026-10-03-cnpg-wire-switchover-deadlock.md) | FU-299 |
+| 2026-10-06 | [ci-runner-01's root disk filled unseen (leaked kind volumes, no node_exporter) — oracle e2e red ~2 days, read as a reviewer outage; the runner App key surfaced in plans and was rotated](2026-10-06-ci-runner-disk-full-key-in-plans.md) | FU-306 |
