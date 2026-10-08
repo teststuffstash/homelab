@@ -1,0 +1,22 @@
+{
+  "comments": [],
+  "commits": [
+    {
+      "oid": "aaaaaaaa22222222222222222222222222222222",
+      "committedDate": "2026-08-26T17:20:11Z",
+      "messageHeadline": "fix: round 1"
+    },
+    {
+      "oid": "bbbbbbbb22222222222222222222222222222222",
+      "committedDate": "2026-08-26T17:40:00Z",
+      "messageHeadline": "Merge branch 'master' into fix/issue-2168-body-only"
+    }
+  ],
+  "reviews": [
+    {
+      "state": "CHANGES_REQUESTED",
+      "submittedAt": "2026-08-26T17:23:07Z",
+      "author": {"login": "homelab-reviewer"}
+    }
+  ]
+}

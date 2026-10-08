@@ -411,7 +411,10 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   independent of approvals). Worker pushes a fix → that push dismisses nothing (there's no
   approval) but re-triggers CI → PR re-enters the queue. The *request-changes review itself*
   survives new pushes; the reviewer must re-review and approve — the reflex must treat
-  "changes-requested by reviewer-bot + new commits since" as reviewable again.
+  "changes-requested by reviewer-bot + new commits since" as reviewable again. A **PR body edit**
+  since the verdict counts too (homelab#2168): `lastEditedAt` is read from GraphQL by
+  `agents/pr-last-edited.sh` — gh has no such `--json` field — and only the `*/15` backstop
+  carries that leg, not the exporter edge (MP-T04).
 - **Code-owner-gated repo — bot approval never flips `reviewDecision`** (found live:
   oracle-fleet#13, 2026-07-12). With `require_code_owner_review` (oracle-fleet gates `/specs/` +
   `/.agents/` on Rasmus), `reviewDecision` stays `REVIEW_REQUIRED` after the reviewer approves —

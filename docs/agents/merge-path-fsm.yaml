@@ -244,12 +244,21 @@ transitions:
   - id: MP-T04
     name: re-review after changes-requested + new content
     owner: review reflex (reviewable_again arm) + exporter edge (same arm since 2026-07-21)
-    when: "changes_requested ∧ content_pushed since verdict (BEHIND allowed — the verdict is about the fix, not currency)"
+    when: "changes_requested ∧ (content_pushed ∨ PR body edited) since verdict (BEHIND allowed — the verdict is about the fix, not currency)"
     status: guarded
-    unreplayed: "reviewable_again arm — replayable; fixture on its next touch (fix-density, ADR-103)"
+    replay:
+      - agents/replay/fixtures/changes-requested-body-edit
     guards:
       - desc: "new CONTENT since verdict (non-merge commits only, via newest_commit_at)"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewable_again" }
+      - desc: "OR a PR BODY edit since verdict (homelab#2168): lastEditedAt is not a gh --json field
+          (asking for it aborted every review tick 2026-10-06, quickfix 914b2b3c — the leg sat inert
+          until oracle-fleet#815 stranded), so it is read from GraphQL by the ONE home
+          agents/pr-last-edited.sh (≤1 one-point query per repo per tick, none without a
+          CHANGES_REQUESTED PR) and merged by number; a failed read WARNs and degrades to the
+          commit leg, never aborts. The exporter edge does NOT carry this leg — the backstop
+          CronWorkflow owns body-edit re-reviews (≤15 min)"
+        anchor: { file: agents/review-reflex.sh, pattern: "REPLAY:last-edited-merge" }
       - desc: "the exporter edge carries the SAME arm — the edge must not re-POST a just-verdicted
           head at all. Until homelab#122 / PR #123 (master 11c2045, 2026-08-08) delegating the check
           to the STEP-0 belt made every benign re-POST an agent/error latch that froze the PR's own
@@ -353,6 +362,7 @@ transitions:
       - agents/replay/fixtures/changes-requested/blocked-held
       - agents/replay/fixtures/changes-requested/dispatched
       - agents/replay/fixtures/changes-requested/reviewable-again-held
+      - agents/replay/fixtures/changes-requested/body-edit-held
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -368,7 +378,7 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "STATE_FP_JQ" }
       - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
-      - desc: "changes-requested clause holds when newest non-merge commit post-dates the newest review — the pushed fix round is already in flight and the next bot verdict retires the clause (homelab#975)"
+      - desc: "changes-requested clause holds when newest non-merge commit — or the PR body's lastEditedAt (GraphQL via agents/pr-last-edited.sh, homelab#2168) — post-dates the newest review: the answered round is the reviewer's, and the next bot verdict retires the clause (homelab#975)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "reviewable_again" }
     belts:
       - desc: "ordinary-path ruling removal (homelab#1507): when a PR armed + green wears agent/arbitrate but the newest coordinator ruling carries NO blocked-on marker (ordinary-path: re-dispatch, follow-up-class, or nothing-to-do), the belt removes the label so the reflex picks it normally (label-first-then-verify, IL-T16)"

@@ -15,6 +15,27 @@ if [ -z "$(printf '%s' "$JQ_DEFS" | tr -d '[:space:]')" ]; then
   exit 1
 fi
 
+# THE FETCH ROWS (TEST_CASE=fetch): lastEditedAt is NOT in the listed PR (gh has no such field —
+# the 2026-10-06 abort); it arrives ONLY through the fake `gh api graphql` (world gh/api-graphql.json)
+# read by the ONE home, agents/pr-last-edited.sh, via the reflex's REAL merge block (extracted by
+# sentinel, like the predicate). So these rows pin the FETCH + the by-number merge, not just the jq.
+if [ "${TEST_CASE:-}" = fetch ]; then
+  . "${REPLAY_ROOT}/agents/pr-last-edited.sh"
+  MERGE_BLOCK="$(sed -n '/# >>>REPLAY:last-edited-merge>>>/,/# <<<REPLAY:last-edited-merge<<</p' "${REPLAY_ROOT}/agents/review-reflex.sh")"
+  if [ -z "$(printf '%s' "$MERGE_BLOCK" | tr -d '[:space:]')" ]; then
+    echo "bridge: EMPTY last-edited-merge extraction from ${REPLAY_ROOT}/agents/review-reflex.sh — sentinel block missing or moved" >&2
+    exit 1
+  fi
+  slug="teststuffstash/oracle-fleet"
+  prs="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
+  eval "$MERGE_BLOCK"
+  # Every listed PR runs the predicate: the non-CR #816 must stay false and must not have been
+  # queried (the query asks for CHANGES_REQUESTED numbers only — the budget rule).
+  printf '%s' "$prs" | jq -r "$JQ_DEFS
+    .[] | \"#\(.number) reviewable_again=\(if reviewable_again then \"true\" else \"false\" end)\""
+  exit 0
+fi
+
 # Test data based on ${TEST_CASE} environment variable
 case "${TEST_CASE:-body-edit-only}" in
   body-edit-only)

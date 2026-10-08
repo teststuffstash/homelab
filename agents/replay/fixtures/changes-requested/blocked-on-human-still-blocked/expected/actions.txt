@@ -1,5 +1,6 @@
 CALL gh pr view 456 --repo teststuffstash/homelab --json comments,commits,reviews
 CALL gh pr view 457 --repo teststuffstash/homelab --json comments,commits,reviews
+CALL gh api graphql -f query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { p456: pullRequest(number: 456) { number lastEditedAt } p457: pullRequest(number: 457) { number lastEditedAt } } } -f owner=teststuffstash -f name=homelab
 OUT UNIT changes-requested|homelab|pr-457
 OUT ORPHAN [homelab] ⏳ changes-requested BLOCKED-ON — PR #456: a terminal ruling recorded `blocked-on: human` and the blocker is still unresolved (homelab#1188). No ride is spent to re-derive the same answer.
 OUT REACHED: end

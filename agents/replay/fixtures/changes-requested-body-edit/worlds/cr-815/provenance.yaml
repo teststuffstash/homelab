@@ -1,0 +1,4 @@
+# constructed (not recorded): the oracle-fleet#815 shape of 2026-10-08 — bot CHANGES_REQUESTED, the
+# body edited AFTER the verdict, then only an updater merge commit (not content). gh pr list carries
+# no lastEditedAt (gh has no such field); it arrives only through `gh api graphql` (the base world:
+# never edited — patches/body-edited.jq adds the edit).

@@ -1,0 +1,31 @@
+# changes-requested/body-edit-held (homelab#2168, oracle-fleet#815) — the scan's mirror of the
+# reflex's body-edit leg, through the FETCH.
+#
+# CONDITION UNDER REPLAY. PR #1097 (worker-authored, CHANGES_REQUESTED at 17:23) was answered by
+# EDITING THE BODY at 17:30; the only commit since the verdict is an updater merge (17:40, not
+# content). `gh pr view --json` cannot carry lastEditedAt (gh has no such field — the 2026-10-06
+# abort), so the edit arrives ONLY via the fake `gh api graphql`, read once per repo by
+# agents/pr-last-edited.sh and merged into the probe BY NUMBER.
+#
+# THE CONTRACT:
+#   1. One `gh pr view`, then exactly one `gh api graphql` (lazy, per repo) naming only the
+#      CHANGES_REQUESTED numbers.
+#   2. No UNIT: the PR is the REVIEWER's work item (reviewable_again via the body edit), so the
+#      clause holds it instead of dispatching a redundant fix round. On base (no fetch) the edit is
+#      invisible and the clause dispatches — red.
+pins:
+  - MP-T11
+name: changes-requested-body-edit-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

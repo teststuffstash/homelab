@@ -4,3 +4,8 @@
 # id                 | world | patch | env                  | expect      | params
 body-edit-only       |       |       | TEST_CASE=body-edit-only | body-edit |
 control-no-changes   |       |       | TEST_CASE=control-no-changes | control-no |
+# The FETCH rows (TEST_CASE=fetch): lastEditedAt arrives only via the fake `gh api graphql`.
+# `fetch-body-edited` is the oracle-fleet#815 row: red on base (no merge block, no fetch), green after.
+fetch-body-edited    | cr-815 | gh/api-graphql.json @ patches/body-edited.jq | TEST_CASE=fetch | fetch | v=true
+fetch-never-edited   | cr-815 |       | TEST_CASE=fetch      | fetch | v=false
+fetch-read-fails     | cr-815 | gh/api-graphql.json @ patches/body-edited.jq | TEST_CASE=fetch STUB_GH_api_graphql=fail | fetch-degraded |

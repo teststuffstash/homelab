@@ -39,6 +39,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
 . "${HERE}/kube.sh"
+. "${HERE}/pr-last-edited.sh"   # pr_last_edited_merge — the body-edit leg of the changes-requested hold
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -3856,6 +3857,7 @@ EOF_GTHEMES_OPEN
       # higher-priority clause winning the same tick silently sinks the goal-checkpoint forever.
       assembly_cr_prs="${assembly_cr_prs} ${repo}:issue-${g}:${u}"
     done
+    cr_le_prs=""   # per-repo cache of the lastEditedAt read (pr_last_edited_merge): ONE query per repo per tick, lazily
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("agent/blocked"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
@@ -3920,10 +3922,20 @@ EOF_GTHEMES_OPEN
       esac
       # reviewable_again hold (homelab#975): a fix round that pushed a new commit is the
       # reviewer's work item, not the coordinator's — the next bot verdict retires the clause.
-      # Same predicate as review-reflex.sh:279 (newest non-merge commit > newest
-      # APPROVED/CHANGES_REQUESTED review). Fail-safe: a failed or empty probe falls through.
+      # Same predicate as review-reflex.sh `reviewable_again` (newest non-merge commit OR the body's
+      # lastEditedAt > newest APPROVED/CHANGES_REQUESTED review). Fail-safe: a failed or empty probe falls through.
+      # BODY-EDIT LEG (homelab#2168): `gh pr view` has no lastEditedAt field (asking for it aborted
+      # every review tick, 2026-10-06 — quickfix 914b2b3c), so it comes from GraphQL through the
+      # reflex's ONE home, agents/pr-last-edited.sh — fetched lazily, once per repo per tick, for
+      # every CHANGES_REQUESTED PR in prsjson, then merged into this PR's probe BY NUMBER. A failed
+      # read degrades (WARN on stderr, no lastEditedAt) to the commit-time rule; it never aborts.
       cr_reviews=""
       if [ -n "$cr_probe" ]; then
+        [ -n "$cr_le_prs" ] || cr_le_prs="$(pr_last_edited_merge "$slug" "$prsjson")"
+        cr_le="$(printf '%s' "$cr_le_prs" | jq -r --argjson n "$u" '.[] | select(.number == $n) | .lastEditedAt // ""' 2>/dev/null)" || cr_le=""
+        if [ -n "$cr_le" ]; then
+          cr_probe="$(printf '%s' "$cr_probe" | jq -c --arg le "$cr_le" '.lastEditedAt = $le' 2>/dev/null)" || cr_probe=""
+        fi
         cr_reviews="$(printf '%s' "$cr_probe" | jq -r '
           def newest_review_at:
             ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
@@ -3931,8 +3943,14 @@ EOF_GTHEMES_OPEN
             (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
             ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
-          if (newest_commit_at != "" and newest_commit_at > newest_review_at) or (((.lastEditedAt // "") > newest_review_at)) then "held" else "" end
+          if (newest_commit_at != "" and newest_commit_at > newest_review_at) then "held"
+          elif ((.lastEditedAt // "") > newest_review_at) then "held-body"
+          else "" end
         ' 2>/dev/null)" || cr_reviews=""
+      fi
+      if [ "$cr_reviews" = held-body ]; then
+        orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — PR body edited ${cr_le} after the verdict):\n  PR #${u}\n"
+        continue
       fi
       if [ -n "$cr_reviews" ]; then
         head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"

@@ -1,0 +1,4 @@
+CALL gh api graphql -f query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { p815: pullRequest(number: 815) { number lastEditedAt } } } -f owner=teststuffstash -f name=oracle-fleet
+OUT #815 reviewable_again={{v}}
+OUT #816 reviewable_again=false
+RC 0

@@ -10,8 +10,7 @@
     "author": {
       "login": "app/homelab-agents-1234"
     },
-    "headRefName": "fix/issue-1094",
-    "lastEditedAt": "2024-01-01T00:00:00Z"
+    "headRefName": "fix/issue-1094"
   },
   {
     "number": 1100,
@@ -21,7 +20,6 @@
       "login": "app/homelab-agents-1234"
     },
     "headRefName": "fix/blocked-test",
-    "body": "A fix attempt",
-    "lastEditedAt": "2024-01-01T00:00:00Z"
+    "body": "A fix attempt"
   }
 ]

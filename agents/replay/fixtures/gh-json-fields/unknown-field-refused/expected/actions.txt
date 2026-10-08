@@ -1,0 +1,7 @@
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,reviewDecision
+CALL gh pr list --repo teststuffstash/homelab --state open --json number,reviewDecision,lastEditedAt
+OUT [{"number":1,"reviewDecision":"CHANGES_REQUESTED"}]
+OUT rc=1
+ERR Unknown JSON field: "lastEditedAt"
+ERR Available fields:
+RC 0
