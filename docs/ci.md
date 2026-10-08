@@ -250,5 +250,7 @@ logins are job-scoped**: each runner slot's `.env` sets its own `DOCKER_CONFIG`
 (`~/.docker-slot-<n>`) and an `ACTIONS_RUNNER_HOOK_JOB_STARTED` hook
 (`runner-job-started.sh`) resets that file's `auths` before every job. `BUILDX_CONFIG` stays
 pinned to the shared `~/.docker/buildx`, so both slots keep the `homelab-mirrors` builder.
-Any template edit replaces the VM on apply (header of `tofu/ci-runner.tf`); ssh as `debian` with
+Any template edit replaces the VM on apply (header of `tofu/ci-runner.tf`): apply it one VM at a
+time through `devbox run runner-maint -- run <plan-id> <vm>`, which drains the VM's jobs first
+([`runbook.md`](runbook.md) §Replacing a ci-runner VM). ssh as `debian` with
 the `homelab-forgejo` key cache for on-VM reads.

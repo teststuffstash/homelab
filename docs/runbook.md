@@ -556,6 +556,28 @@ plan id only (#1827), so the scope rides inside the plan.
 
 Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
 
+### Replacing a ci-runner VM (a cloud-init edit) — drained, one at a time
+
+Any edit to `tofu/templates/ci-runner-cloud-init.yaml.tftpl` plans a replace of both runner VMs
+(`proxmox_virtual_environment_{file,vm}.ci_runner[0]` and `.ci_runner_02[0]`), and the box refuses
+it to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
+([`management-box.md`](management-box.md) §Non-Talos VMs: the runner verb):
+
+1. Plan the one VM, with `-exclude` on the other runner's VM and snippet file. For ci-runner-02:
+   `devbox run mgmt-tf -- plan -exclude='proxmox_virtual_environment_vm.ci_runner[0]' -exclude='proxmox_virtual_environment_file.ci_runner_cloud_init[0]'`
+   (for ci-runner-01, exclude `ci_runner_02[0]` and `ci_runner_02_cloud_init[0]`). Read it: one
+   VM replace plus its snippet, and whatever residue master already carries.
+2. `devbox run runner-maint -- run <plan-id> ci-runner-02`. It refuses unless the plan's only VM
+   change is that VM's replace. It opens its own window, drains both slots (waits for the
+   running jobs, ≤ `DRAIN_TIMEOUT` 60 min), applies, waits for `verify` (both slots online with
+   their labels and the exporter `up`, ≤ `VERIFY_TIMEOUT` 30 min), and closes the window on a clean
+   compare. A failure leaves the window open. Evidence lands in `~/.claude/runner-maintenance/`.
+3. The other VM the same way, then a full `mgmt-tf -- plan` of master applied by its id, which
+   stamps the apply loop's baseline (a scoped apply does not).
+
+By hand: `runner-maint -- drain|undrain|verify <vm>`. Exits: 0 ok, 1 failed after acting,
+2 refused with nothing touched, 3 refused before a window.
+
 ### Reclaiming thin-pool space from a Talos VM
 Deleting data inside a Talos VM does **not** return blocks to the hypervisor's LVM thin pool.
 Nothing in the guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its
