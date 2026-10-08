@@ -14,7 +14,9 @@ Exit 1 if any backup failed or timed out, or any Cluster is uncovered.
 
 Backup CRs are bookkeeping only (deleting one does not delete data — the ObjectStore's
 retentionPolicy owns the bytes); this job prunes its own CRs older than KEEP_DAYS.
-Stdlib only, in-cluster ServiceAccount auth.
+Stdlib only, in-cluster ServiceAccount auth. Transient API errors (429, 5xx, connection drops) are
+retried INSIDE api() — what client-go gives every controller for free; the Job keeps backoffLimit 0,
+because a pod-level re-run re-takes EVERY base backup and re-reports deterministic failures.
 """
 import datetime as dt
 import json
@@ -37,13 +39,38 @@ _ctx = ssl.create_default_context(cafile=f"{SA}/ca.crt")
 _token = open(f"{SA}/token").read().strip()
 
 
+API_ATTEMPTS = 6  # 1+2+4+8+16 s of backoff (or the server's Retry-After) ≈ half a minute of tolerance
+
+
 def api(method, path, body=None):
-    req = urllib.request.Request(API + path, method=method,
-                                 data=json.dumps(body).encode() if body is not None else None)
-    req.add_header("Authorization", f"Bearer {_token}")
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, context=_ctx, timeout=30) as r:
-        return json.load(r)
+    """One API call, with transient failures retried: 429 (APF, or a cold watch cache — the
+    apiserver answers "storage is (re)initializing" + Retry-After on the first request for a CRD
+    after a restart, which failed the 2026-10-08 run), 5xx, and connection errors."""
+    data = json.dumps(body).encode() if body is not None else None
+    for attempt in range(1, API_ATTEMPTS + 1):
+        req = urllib.request.Request(API + path, method=method, data=data)
+        req.add_header("Authorization", f"Bearer {_token}")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, context=_ctx, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            # A POST whose earlier attempt landed server-side despite the error: the name is
+            # deterministic, so AlreadyExists on a retry means the object is there — done.
+            if e.code == 409 and method == "POST" and attempt > 1:
+                return json.loads(data)
+            if (e.code != 429 and e.code < 500) or attempt == API_ATTEMPTS:
+                raise
+            ra = e.headers.get("Retry-After", "")
+            wait = min(int(ra), 30) if ra.isdigit() else 2 ** (attempt - 1)
+            reason = f"HTTP {e.code}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if attempt == API_ATTEMPTS:
+                raise
+            wait = 2 ** (attempt - 1)
+            reason = str(getattr(e, "reason", e))
+        log(f"{method} {path}: {reason} — retry {attempt}/{API_ATTEMPTS - 1} in {wait}s")
+        time.sleep(wait)
 
 
 def log(msg):
