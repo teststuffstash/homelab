@@ -100,10 +100,14 @@ variable "github_runner_labels" {
   default = "proxmox-vm,k3d,integration"
 }
 
+# The INSTALL version only — a registered runner self-updates (the old VMs ran 2.337.0 off this
+# 2.323.0 pin). But GitHub refuses to REGISTER a runner below its enforced minimum, so a stale pin
+# breaks exactly one thing: every fresh VM (2026-10-08, the recreate window: "minimum runner version
+# required to register … is now 2.329.0", cloud-init runcmd failed, both slots offline).
 variable "github_runner_version" {
   description = "actions/runner release (check github.com/actions/runner/releases)."
   type        = string
-  default     = "2.323.0"
+  default     = "2.338.0"
 }
 
 variable "github_app_id" {
