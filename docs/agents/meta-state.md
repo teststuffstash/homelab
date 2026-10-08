@@ -31,8 +31,8 @@ never the session's arc — that is TICK-LOG's.)
   reflex merges → ArgoCD back; only then **step (5)** the one `matchPackageNames` line arming kps majors (next
   to the argo-workflows rule). (b) ✅ **#2362 MERGED by the operator ~20:4xZ** (devbox major — #2260 closed + re-dispatched 17:41Z so the G17 section rendered on real data; lens APPROVED 18:56Z, parked `major/awaiting-human`) — the LAST lock major a human merges: **#2369 (merged 20:1xZ) arms class-7 majors** (operator ruling, `dependency-upgrades.md` §2 Review — no ADR edit; opentofu majors stay human via `HUMAN_PACKAGES`). Two proofs pending (§Next steps 10): the next lock major opening `lock-lane: arm` + merging on the lens; the lock revert drill (bad lock on `runner-image.yaml` → `revert-lock-<sha8>` → check (i) red). (c) **Goal #2273 production-leg
   finding:** theme 2 (#2333) put `lastEditedAt` in `gh pr list --json` — not a gh field — every stack's review
-  ride FATAL'd 23:22–23:45Z; seat quickfix 914b2b3c drops it, the body-edit re-review leg is INERT until it reads
-  GraphQL `PullRequest.lastEditedAt` (bucket-A material; the rides are green again from 23:49Z). **Loose (S9,
+  ride FATAL'd 23:22–23:45Z; seat quickfix 914b2b3c dropped it — ✅ RESOLVED 2026-10-08 by #2383 (one GraphQL
+  `lastEditedAt` read via `agents/pr-last-edited.sh`, both readers; the fake gh now refuses unknown `--json` fields). **Loose (S9,
   no new FUs):** `KernelOopsCaptured` counts OOM-kill dumps (`Call Trace:` in the Alloy regex — wk-04 23:25 was
   the PostSync Job OOM) → exclude the oom-killer dump or count it apart; `install-tool helm v4.3.0` in the G12
   rule has no proposer; `pr-wait-test`/clause-replay flake = `scan-guarded` `printf | grep -m1` broken pipe on a
