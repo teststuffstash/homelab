@@ -12,6 +12,9 @@
 #   devbox run mgmt-tf -- apply <plan-id>               # applies THAT plan, nothing else
 #   devbox run mgmt-tf -- state list                    # any tofu subcommand; -state/-var-file are
 #                                                       # added for the ones that take them
+#   devbox run mgmt-tf -- summary <plan-id>             # READ-ONLY: one `MGMT_SUMMARY {json}` line —
+#                                                       # the plan's .meta + every changed address
+#                                                       # (address, type, actions; `name` for VMs only)
 #
 # ⚠ **APPLY TAKES A PLAN ID, NEVER FLAGS** (FU-248, 2026-09-21). Every `plan` writes a saved plan
 # on the box (/var/lib/mgmt/plan/<id>.bin, + .txt human copy, + .meta) and prints its id; `apply`
@@ -75,6 +78,16 @@ USAGE
     case "$2" in *[!A-Za-z0-9._-]*) echo "mgmt-tf: '$2' is not a plan id" >&2; exit 2 ;; esac
     PLAN_ID="$2"
     ARGS=(apply -state="$STATEF") ;;  # the plan path is appended on the box
+  summary)
+    # A saved plan's SHAPE for a caller that must judge its scope (scripts/runner-maintenance.sh
+    # refuses a plan that replaces any VM but the one it drained). The plan JSON holds every value
+    # in clear — the runner cloud-init snippet carries the App private key — so it is filtered ON
+    # the box and only addresses/types/actions (+ a VM's `name`) cross the hop; never the .txt.
+    MODE=summary
+    [ $# -eq 2 ] || { echo "mgmt-tf: summary takes exactly one plan id" >&2; exit 2; }
+    case "$2" in -*|*[!A-Za-z0-9._-]*) echo "mgmt-tf: '$2' is not a plan id" >&2; exit 2 ;; esac
+    PLAN_ID="$2"
+    ARGS=(show -json) ;;
   destroy)
     echo "mgmt-tf: no direct destroy — 'plan -destroy' writes a plan id, then 'apply <id>' (FU-248)" >&2; exit 2 ;;
   refresh|import|console|output|taint|untaint)
@@ -101,6 +114,12 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    REF="$1"; STAMP="$2"; MODE="$3"; PLAN_ID="$4"; YES="$5"; shift 5
    R=/var/lib/mgmt/apply/homelab
    P=/var/lib/mgmt/plan
+   # summary: show the plan with the tofu that WROTE it — a plan file is refused by any other
+   # tofu version (the devbox pin moves under a stale plan), so check out the plan own sha.
+   if [ "$MODE" = summary ]; then
+     [ -f "$P/$PLAN_ID.bin" ] && [ -f "$P/$PLAN_ID.meta" ] || { echo "mgmt-tf: no such plan id: $PLAN_ID (ls $P)" >&2; exit 2; }
+     . "$P/$PLAN_ID.meta"; REF="$PLAN_SHA"
+   fi
    [ -d "$R/.git" ] || git clone -q https://github.com/teststuffstash/homelab.git "$R"
    git -C "$R" fetch -q origin; git -C "$R" reset -q --hard "$REF"
    cd "$R"
@@ -133,6 +152,22 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
        printf "mgmt-tf: apply this plan? [y/N] " >&2; read -r ans || ans=""
        case "$ans" in y|Y|yes|YES) ;; *) echo "mgmt-tf: aborted" >&2; exit 1 ;; esac
      fi
+   fi
+   if [ "$MODE" = summary ]; then
+     # No lock: `show` of a saved plan reads the plan file, never the state. The box own jq (not
+     # devbox run, whose shell re-expands the filter). One marker line, so a caller can pick it
+     # out of whatever else the session interleaves.
+     export PLAN_ID PLAN_REF PLAN_SHA SCOPED PLANNED_AT
+     J="$(devbox run --quiet -- tofu -chdir=tofu show -json "$P/$PLAN_ID.bin" | jq -c \
+       "{plan_id:env.PLAN_ID, plan_ref:env.PLAN_REF, plan_sha:env.PLAN_SHA, scoped:(env.SCOPED == \"1\"),
+         planned_at:env.PLANNED_AT,
+         changes:[.resource_changes[]? | select(.change.actions != [\"no-op\"] and .change.actions != [\"read\"])
+           | {address, type, actions:.change.actions}
+             + (if .type == \"proxmox_virtual_environment_vm\"
+                then {name:((.change.before // {}).name // (.change.after // {}).name)} else {} end)]}")" \
+       || { echo "mgmt-tf: could not read plan $PLAN_ID" >&2; exit 1; }
+     [ -n "$J" ] || { echo "mgmt-tf: plan $PLAN_ID read empty" >&2; exit 1; }
+     echo "MGMT_SUMMARY $J"; exit 0
    fi
    echo "mgmt-tf: $SHA on $(hostname) — tofu $*" >&2
    # ONE lock span for tofu AND the stamp: mgmt-apply reads/writes applied-rev under this same
@@ -176,7 +211,8 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    fi
    exit $rc'
 rc=0
-ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+TTY=-t; [ "$MODE" = summary ] && TTY=-T   # a captured read: no pty folding stderr into stdout
+ssh "$TTY" -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
   "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "$MODE" "$PLAN_ID" "${MGMT_YES:-0}" "${ARGS[@]}")" || rc=$?
 # The second failure domain (docs/tofu-state.md §Snapshots): an apply that wrote main's state just
 # produced a snapshot on the box — bring it into the wallet cache now, while the session that made

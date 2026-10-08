@@ -484,13 +484,14 @@ the block needs pruning, not more headings.
       **Next:** decide the harvest's owner (coordinator scan at the bump's merge vs the stint closeout)
       in a design sitting with #2014; until then the lens tells the reviewer to write the bullets anyway.
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
-      2026-10-07 20:15Z → ~21:00Z: #2362 (devbox major) moved Python; `devbox.json` `VENV_DIR` =
-      `$HOME/.cache/devbox-venv/homelab` is ONE venv shared by every checkout on the box, so devbox asked
-      "overwrite it? (y/n)" on a timer → every `yq` failed → `mgmt-sentinel` skipped every PR with NO status
-      (required check absent = every PR BLOCKED), `mgmt-apply`/`mgmt-lease` PROBE-FAILed. Unwedged by moving the
-      stale venv aside (`homelab.stale-20261007` on the box). **Next (detector first):** a
-      `MgmtSentinelLoopStale` belt beside `MgmtApplyLoopStale` (+ replay at 20:15–21:00Z), then a per-checkout
-      venv (`$HOME/.cache/devbox-venv$PWD`) so a lock bump cannot strand a second clone.
+      2026-10-07 20:15Z → ~21:10Z: #2362 moved Python 3.12.8→3.14.7; `devbox.json` `VENV_DIR` =
+      `$HOME/.cache/devbox-venv/homelab` is ONE venv per HOST, and `/var/lib/homelab` was still on the old lock →
+      devbox's "overwrite it? (y/n)" exits 1 non-interactive → `mgmt-sentinel` posted no status (every PR BLOCKED),
+      `mgmt-apply`/`mgmt-lease` PROBE-FAILed; the same prompt hit `pr-wait` in the oracle jail's clone (handoff
+      10-08). Cleared once mgmt-pull moved the checkout to the new lock (+ stale venv moved aside). RECURS every
+      Python bump. **Next:** `MgmtSentinelLoopStale` belt beside `MgmtApplyLoopStale` (+ replay 20:15–21:10Z), then
+      a per-checkout venv (`docs/patterns/python-stack.md` rule 5 — already the CI rule), and surface devbox's stderr
+      in mgmt-lib's yq calls (`mgmt/scripts/mgmt-sentinel.sh:238`/`:246` log only "policy unreadable").
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran

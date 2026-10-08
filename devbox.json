@@ -311,6 +311,12 @@
       "maint-self-test": [
         "bash scripts/maintenance-window-self-test.sh"
       ],
+      "runner-maint": [
+        "bash scripts/runner-maintenance.sh \"$@\""
+      ],
+      "runner-maint-self-test": [
+        "bash scripts/runner-maintenance-self-test.sh"
+      ],
       "cp-upgrade": [
         "bash scripts/controlplane-upgrade.sh \"$@\""
       ],

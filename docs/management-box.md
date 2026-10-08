@@ -595,6 +595,41 @@ even when every check is green.
 | Rollout workload-health hold (FU-278) | — | harness + replay | #1891 (replay holds on forgejo before cp-01); first live rollout pending (FU-278 archived 2026-09-22) |
 | Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
 | Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
+| ci-runner VM replace (`runner-maintenance`) | human | not yet tested | attended verb only — §Non-Talos VMs below |
+
+### Non-Talos VMs: the runner verb (2026-10-08)
+
+The two GitHub Actions runner VMs (`tofu/ci-runner.tf`, Debian + cloud-init, not Talos) are
+replaced whole by any edit to their cloud-init template, and a `proxmox_virtual_environment_vm`
+replace is outside the apply allowlist, so the box refuses that plan to a human apply. The runner
+is stateless; the replace is safe exactly when no job is running on it. `node-maintenance.sh`
+covers Talos nodes only, so the runner has its own verb,
+[`scripts/runner-maintenance.sh`](../scripts/runner-maintenance.sh) (`devbox run runner-maint`):
+`drain <vm>` removes the declared labels (`var.github_runner_labels`; workflows route on
+`proxmox-vm`) from every registration of the VM through the runner-registrar App and waits until
+all read idle (a timeout or an unreadable API restores them and refuses, exit 2); `undrain` restores
+them; `verify` is the read-only health check (every slot `online` with the full label set, the VM's
+`ci-runner-node` exporter `up`). `run <plan-id> <vm>` is the bracket: it refuses (3) while another
+window is live or unless the saved plan's only VM change is a replace of the VM named `<vm>`
+(`mgmt-tf summary`, filtered on the box, because the snippet in the plan carries the App key). It
+then opens its own window, takes a `snapshot` baseline, drains, applies the plan id, waits for
+`verify`, and closes only on a clean `compare`. It is report-only and never reverts.
+
+**It is ATTENDED today**, the way `scripts/helm-release-evidence.sh` began. The box wiring is
+planned, not built:
+
+- **The policy maps an address glob and an action to a verb**: a `proxmox_virtual_environment_vm`
+  replace under `ci_runner*` runs `runner-maintenance run` instead of refusing the plan. The
+  allowlist stays a list of addresses, and the verb is the gate for this one shape.
+- **The VM name is read from the plan JSON**, the replaced resource's `name`, never from a list of
+  runner names in the policy or the script.
+- **One VM per tick.** With both runners pending, the loop plans with `-exclude` on the other
+  runner's VM and snippet file, runs the verb on that scoped plan id, and leaves the other runner
+  for the next tick. The lane is never empty.
+- **The final full apply stamps.** A scoped apply does not advance `applied-rev`; the tick after
+  the last runner plans master unscoped, and that apply stamps as any other.
+
+It enters the ledger above as box-run only after its first unattended success.
 
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 

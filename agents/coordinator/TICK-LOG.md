@@ -12744,3 +12744,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
   prompt "overwrite it? (y/n)" on the timers → every `yq` failed → `mgmt-sentinel` skipped every PR WITHOUT a
   status (required check absent: #2368 sat APPROVED + BLOCKED), apply/lease PROBE-FAILed. Stale venv moved aside
   on the box (`homelab.stale-20261007`).
+
+## 2026-10-08 (seat) — "reviewer outage" on oracle-fleet#815 = ci-runner-01 root fs 100%
+- oracle jail read #815's missing review as a reviewer fault; truth: reflex correctly skips red PRs, #815's
+  `e2e` died ~40 s in on ci-runner-01 with NO log blob (attempts 1+2). `/` 75G/79G: 698 dangling ANONYMOUS
+  docker volumes (33.6 GB, oldest 09-24). ci-runner-02 same curve (75 %, 173 vols). No alert: neither VM runs
+  node_exporter — zero Prometheus series.
+- Un-wedged: `docker volume prune -f` on runner-01 → 57 % (images/build cache kept); #815 e2e attempt 3 queued.
+- Likely cause: `kind-janitor` (cloud-init timer, kind-ci.md rule 2) reaps with `docker rm -f` without `-v`.
+- FU-306 mint held by fu-mint-gate → detector PR dispatched to a background subagent instead (node_exporter +
+  static scrape + root-fs alert, then the janitor `-v` + volume-prune fix). FU-305 extended from oracle's
+  venv-prompt handoff.
+- Attempt 3 then failed differently: `failed to fetch oauth token: denied` pulling ghcr.io/astral-sh/uv on the
+  DEFAULT builder. Cause = same fill: runner-01 was already ENOSPC 2026-10-06 16:18Z; snore-recorder
+  build-image's login-action wrote ghcr.io creds, the worker crashed before the post-step logout → expired
+  creds in /home/runner/.docker/config.json. A/B reproduced, auth entry removed, pull verified; runner-02
+  clean. #815 attempt 4 queued; subagent told (per-job DOCKER_CONFIG = follow-on candidate).
