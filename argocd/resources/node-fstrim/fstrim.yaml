@@ -38,9 +38,18 @@
 # k8s node; it is a normal Linux guest covered by its own systemd fstrim.timer — verify that
 # separately, this CronJob cannot reach it.
 #
-# One CronJob per node because a Job cannot pin different pods to different nodes, and `nodeName`
-# is what puts a pod on a specific box. They are staggered so four simultaneous discards do not
-# hit one NVMe together.
+# One CronJob per node because a Job cannot pin different pods to different nodes. They are
+# staggered so four simultaneous discards do not hit one NVMe together.
+#
+# PINNING = required nodeAffinity on kubernetes.io/hostname + the `node-maintenance` PriorityClass,
+# NEVER `nodeName` (2026-10-09). `nodeName` bypasses the scheduler: the pod goes straight to the
+# kubelet, which rejects it at admission when the node's CPU requests are full — `OutOfcpu`,
+# "Node didn't have enough resource: cpu, requested: 50, used: 3888, capacity: 3900" on wk-01/wk-02
+# while a wk-04 window had displaced pods onto them — and nothing retries or preempts; the guards
+# failed every 15 min (CronJobNotSucceeding + node-fstrim Degraded). Through the scheduler, a full
+# node means preemption of a lower-priority pod instead. The cordon case is unchanged: the
+# `operator: Exists` toleration also tolerates node.kubernetes.io/unschedulable, so a cordoned
+# node still takes the pod (and the control-plane taint on cp-01).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -54,6 +63,19 @@ metadata:
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: privileged
     pod-security.kubernetes.io/warn: privileged
+---
+# Cluster-scoped: baselined by name in policy/iac/exceptions/homelab.yaml (iac-no-cluster-scoped).
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: node-maintenance
+value: 900000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: >-
+  Node-pinned maintenance pods (node-fstrim's per-node trim + guard CronJobs) that must run on ONE
+  specific node. Below longhorn-critical (1000000000), above every workload: on a node whose CPU
+  requests are full, the scheduler preempts a lower-priority pod instead of the pod being lost.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -194,9 +216,16 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          # nodeName, not affinity: this must run on exactly this box, and it must still run when
-          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
-          nodeName: cp-01
+          # Exactly this box, via the scheduler (see the header: nodeName = OutOfcpu, no preemption).
+          # It must still run when the node is cordoned — cordon is precisely when reclaim matters;
+          # the Exists toleration covers node.kubernetes.io/unschedulable.
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [cp-01] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
@@ -246,9 +275,16 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          # nodeName, not affinity: this must run on exactly this box, and it must still run when
-          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
-          nodeName: wk-01
+          # Exactly this box, via the scheduler (see the header: nodeName = OutOfcpu, no preemption).
+          # It must still run when the node is cordoned — cordon is precisely when reclaim matters;
+          # the Exists toleration covers node.kubernetes.io/unschedulable.
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-01] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
@@ -298,9 +334,16 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          # nodeName, not affinity: this must run on exactly this box, and it must still run when
-          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
-          nodeName: wk-02
+          # Exactly this box, via the scheduler (see the header: nodeName = OutOfcpu, no preemption).
+          # It must still run when the node is cordoned — cordon is precisely when reclaim matters;
+          # the Exists toleration covers node.kubernetes.io/unschedulable.
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-02] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
@@ -350,9 +393,16 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          # nodeName, not affinity: this must run on exactly this box, and it must still run when
-          # the node is cordoned for maintenance — cordon is precisely when reclaim matters.
-          nodeName: wk-03
+          # Exactly this box, via the scheduler (see the header: nodeName = OutOfcpu, no preemption).
+          # It must still run when the node is cordoned — cordon is precisely when reclaim matters;
+          # the Exists toleration covers node.kubernetes.io/unschedulable.
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-03] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
@@ -390,7 +440,7 @@ spec:
   # fstrim above is still the guaranteed floor and runs unchanged. GUARD_THRESHOLD is an env so the
   # exact point can be tuned without re-rendering the script. Staggered by node (:00/:03/:06/:09)
   # for the same reason as the twice-daily set — four discards must not land on the one NVMe at
-  # once. `concurrencyPolicy: Forbid` + `nodeName` + `tolerations` mirror the floor jobs: a guard
+  # once. `concurrencyPolicy: Forbid` + the hostname affinity + `tolerations` mirror the floor jobs: a guard
   # must still run on a cordoned node, and a slow query must not pile up jobs.
   schedule: "0,15,30,45 * * * *"
   concurrencyPolicy: Forbid
@@ -404,7 +454,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: cp-01
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [cp-01] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
@@ -447,7 +503,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: wk-01
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-01] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
@@ -489,7 +551,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: wk-02
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-02] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
@@ -531,7 +599,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: wk-03
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-03] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
@@ -577,7 +651,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: wk-04
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-04] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim
@@ -618,7 +698,13 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeName: wk-04
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [wk-04] }
           tolerations: [{ operator: Exists }]
           containers:
             - name: fstrim-guard
