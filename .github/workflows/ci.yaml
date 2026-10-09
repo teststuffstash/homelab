@@ -68,36 +68,27 @@ jobs:
         run: |
           devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
             --paginate --jq '.[].filename' > /tmp/ci-changed-files
-          prom=false; clause=false; publicroute=false; mgmt=false
-          # ONE HOME (#518, the pin-only-lint pattern): the trigger regexes live in
-          # scripts/diff-ci.sh (single-line, single-quoted, eval-safe by contract there) —
-          # eval-extracted here so the local pre-flight and CI's skip map cannot drift.
-          # Rationale for each set is documented at the definitions.
-          eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"
-          eval "$(grep -m1 '^CLAUSE_PATHS=' scripts/diff-ci.sh)"
-          eval "$(grep -m1 '^PUBLICROUTE_PATHS=' scripts/diff-ci.sh)"
-          eval "$(grep -m1 '^MGMT_PATHS=' scripts/diff-ci.sh)"
-          [ -n "$PROM_PATHS" ] && [ -n "$CLAUSE_PATHS" ] && [ -n "$PUBLICROUTE_PATHS" ] && [ -n "$MGMT_PATHS" ] || { echo "FATAL: could not extract PROM_PATHS/CLAUSE_PATHS/PUBLICROUTE_PATHS/MGMT_PATHS from scripts/diff-ci.sh — skip map unavailable, failing closed"; exit 1; }
-          grep -qE "$PROM_PATHS" /tmp/ci-changed-files && prom=true
-          grep -qE "$CLAUSE_PATHS" /tmp/ci-changed-files && clause=true
-          grep -qE "$PUBLICROUTE_PATHS" /tmp/ci-changed-files && publicroute=true
-          grep -qE "$MGMT_PATHS" /tmp/ci-changed-files && mgmt=true
-          { echo "prom=$prom"; echo "clause=$clause"; echo "publicroute=$publicroute"; echo "mgmt=$mgmt"; } >> "$GITHUB_OUTPUT"
-          echo "skip map: prometheus-rules-lint=$prom clause-replay=$clause publicroute-tf-validate=$publicroute mgmt-policy-test=$mgmt ($(grep -c . /tmp/ci-changed-files) changed file(s))"
+          # ONE HOME: the path→task MAP in scripts/diff-ci.sh — one `<task-key>=true|false` per row
+          # (2026-10-09: the whole MAP, not #518's four heavies). Every gate step below reads its own
+          # key as `if: steps.diff.outputs.<key> != 'false'`, so push/dispatch (this step skipped)
+          # runs everything — the master push is the net for a too-narrow row.
+          devbox run diff-ci -- --ci-outputs /tmp/ci-changed-files > /tmp/ci-skip-map
+          cat /tmp/ci-skip-map >> "$GITHUB_OUTPUT"
+          echo "skip map: $(grep -c '=true$' /tmp/ci-skip-map || true)/$(grep -c . /tmp/ci-skip-map) gates run ($(grep -c . /tmp/ci-changed-files) changed file(s)); skipped: $(grep '=false$' /tmp/ci-skip-map | cut -d= -f1 | tr '\n' ' ')"
 
       # ADR-131: the management box's stage-1 fixtures + the fail-closed policy/classifier reads
       # (homelab#1631's four review rounds were unverified by any required check — the reviewer
       # read the diff). Serial and BEFORE the ∥ suites start: the test's nested `devbox run yq`
       # calls must not overlap a background `devbox run` (the "text file busy" class, #1139).
       - name: mgmt policy fixtures (devbox run mgmt-policy-test)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.mgmt == 'true'
+        if: steps.diff.outputs.mgmt-policy-test != 'false'
         run: devbox run mgmt-policy-test
 
       # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
       # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
       # form gate the ~44 alert rules have. Runs ∥; verdict at "— collect" below.
       - name: PrometheusRule exprs parse — start ∥ (devbox run prometheus-rules-lint)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.prom == 'true'
+        if: steps.diff.outputs.prometheus-rules-lint != 'false'
         run: |
           # detach fully (own fds, no step pipes) — a leaked step fd can hold the step open.
           # Bare script under the shellenv snapshot, NOT `devbox run` — see the warm-up step.
@@ -106,7 +97,7 @@ jobs:
       # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
       # harness (agents/replay/, homelab#206). Runs ∥; verdict at "— collect" below.
       - name: Clause replays — start ∥ (devbox run clause-replay)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
+        if: steps.diff.outputs.clause-replay != 'false'
         run: |
           ( set +e; source /tmp/devbox-env.sh && bash agents/replay/run.sh; echo $? > /tmp/clause-replay.rc ) > /tmp/clause-replay.log 2>&1 < /dev/null &
 
@@ -134,6 +125,7 @@ jobs:
       # Nix + devbox + the LAN nix substituter. `devbox run` fetches the project closure from
       # the in-cluster cache on first use.
       - name: Validate ArgoCD OCI chart pins (devbox run argocd-validate-pins)
+        if: steps.diff.outputs.argocd-validate-pins != 'false'
         run: devbox run argocd-validate-pins
 
       # Platform-lane tier 1 (docs/agents/iac-lane.md): argocd/resources/** is deliberately UNOWNED
@@ -142,6 +134,7 @@ jobs:
       # what makes "CI-green" mean something for that tier. NB it SKIPS CRs with no local schema and
       # says so loudly; the script fails if it ever validates nothing.
       - name: Schema-validate the raw manifests ArgoCD applies (devbox run manifest-lint)
+        if: steps.diff.outputs.manifest-lint != 'false'
         run: devbox run manifest-lint
 
       # #1315: the PublicRoute Composition TEMPLATES Terraform that provider-terraform applies
@@ -153,7 +146,7 @@ jobs:
       # the FU-130 class; images via the LAN mirrors, docker from the dind sidecar). Skip-mapped
       # like the heavies: only when the Composition, its pins, or the gate itself changed.
       - name: PublicRoute Composition renders valid Terraform (devbox run publicroute-tf-validate)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.publicroute == 'true'
+        if: steps.diff.outputs.publicroute-tf-validate != 'false'
         run: devbox run publicroute-tf-validate
 
       # The loop's own CronWorkflows/WorkflowTemplates (agents/coordinator/, ArgoCD-synced from
@@ -161,6 +154,7 @@ jobs:
       # (docs/agents/iac-lane.md §tier-1 residue). `argo lint --offline` resolves template
       # references, not just schema — the oracle-iac ci.sh shape. 0.3s, no downloads.
       - name: Argo Workflow manifests lint (devbox run argo-lint)
+        if: steps.diff.outputs.argo-lint != 'false'
         run: devbox run argo-lint
 
       # homelab#1134: the sentinel's engines (kyverno + gitleaks) are a REQUIRED status on
@@ -170,6 +164,7 @@ jobs:
       # bump that breaks an engine now reds its OWN PR (exit 2), a tree with a real violation
       # reds too (exit 1 — the sentinel would anyway).
       - name: Sentinel engines smoke (devbox run sentinel-smoke)
+        if: steps.diff.outputs.sentinel-smoke != 'false'
         run: devbox run sentinel-smoke
 
       # The maintenance-window gate decides whether a live change is safe to continue and whether
@@ -178,15 +173,18 @@ jobs:
       # green, because nothing here exercised the script at all. This pins the read-failure
       # semantics with fake kubectl/gh and a dead Prometheus port — no cluster needed.
       - name: Maintenance-window self-test (devbox run maint-self-test)
+        if: steps.diff.outputs.maint-self-test != 'false'
         run: devbox run maint-self-test
 
       - name: runner-maintenance self-test (devbox run runner-maint-self-test)
+        if: steps.diff.outputs.runner-maint-self-test != 'false'
         run: devbox run runner-maint-self-test
 
       # pr-wait is the seat's and every subagent's PR-cycle primitive (jail-subagent-card); its typed
       # exits are what a caller acts on, so a regression there is a silent stall. The 2026-10-04
       # additions — several PRs in one call, exit 6 on a merge conflict — are pinned with a gh stub.
       - name: pr-wait self-test (devbox run pr-wait-test)
+        if: steps.diff.outputs.pr-wait-test != 'false'
         run: devbox run pr-wait-test
 
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
@@ -194,6 +192,7 @@ jobs:
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script
       # from the manifest at run time via yq, so it cannot drift from what actually ships (#133).
       - name: Responder behaviour harness (devbox run responder-behaviour-test)
+        if: steps.diff.outputs.responder-behaviour-test != 'false'
         run: devbox run responder-behaviour-test
 
       # The ConfigMap-shipped Python (exporters, the proxy/router) is the other thing manifest-lint
@@ -201,29 +200,34 @@ jobs:
       # surfaced when ArgoCD rolled the pod (#173, found landing the #153 fix). Parse-only: no
       # imports run, so in-cluster-only deps (kopf) don't break the lint.
       - name: Tracked Python parses (devbox run py-compile-lint)
+        if: steps.diff.outputs.py-compile-lint != 'false'
         run: devbox run py-compile-lint
 
       # printf/echo piped into grep -q / -m1 / head: the reader exits early, the writer takes EPIPE —
       # a CI-only flake under the runner's ignored SIGPIPE (2026-10-07: #2367/#2373/#2377 cleared 169
       # sites). The replay harness also runs it, but only for PRs touching agents/ or devbox.json.
       - name: No printf|grep -q / | head pipes in tracked shell (devbox run sigpipe-lint)
+        if: steps.diff.outputs.sigpipe-lint != 'false'
         run: devbox run sigpipe-lint
 
       # The estimator's assertion suite existed since birth and NOTHING executed it — the
       # written-is-not-applied class, found in the 2026-08-10 coverage audit. The registry math
       # (banding, effective price, provider pin) is the budget breaker's input; keep it gated.
       - name: Budget estimator self-test (devbox run estimate-budget -- --self-test)
+        if: steps.diff.outputs.estimate-budget-self-test != 'false'
         run: devbox run estimate-budget -- --self-test
 
       # homelab#215 (harvested from PR#214's review): the exporter's own logic tests — goal walk,
       # budget parse, verdict, membership, fallback query — as a gate, not just a deploy-time hope.
       - name: github-exporter self-test (devbox run exporter-self-test)
+        if: steps.diff.outputs.exporter-self-test != 'false'
         run: devbox run exporter-self-test
 
       # homelab#217 (PR#220's operator finding 1): the spend-probe's rule replay as a gate — it
       # reads the alert exprs OUT of the committed prometheusrule.yaml, so an expr/metric renamed
       # on one side only goes red here instead of rotting silently.
       - name: cloudflare spend-probe self-test (devbox run spend-probe-self-test)
+        if: steps.diff.outputs.spend-probe-self-test != 'false'
         run: devbox run spend-probe-self-test
 
       # Goal #1302 (#1306 → PR #1320): the edge-probe's self-test — the committed
@@ -232,12 +236,14 @@ jobs:
       # never-executed class, fourth instance; #1315's widened scope). Same shape as the
       # spend-probe row above; 0.3s, no network.
       - name: cloudflare edge-probe self-test (devbox run edge-probe-self-test)
+        if: steps.diff.outputs.edge-probe-self-test != 'false'
         run: devbox run edge-probe-self-test
 
       # ADR-124: the public request map's renderer — the committed example must render
       # byte-identical from the committed platform map (a platform-map edit that changes the
       # picture reds here until the example is regenerated with it); validator teeth included.
       - name: request-map renderer self-test (devbox run request-flow-self-test)
+        if: steps.diff.outputs.request-flow-self-test != 'false'
         run: devbox run request-flow-self-test
 
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
@@ -245,18 +251,21 @@ jobs:
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
       # 100 assertions, no network, ~2s.
       - name: Rail-degrade contract replay (devbox run rail-degrade-replay)
+        if: steps.diff.outputs.rail-degrade-replay != 'false'
         run: devbox run rail-degrade-replay
 
       # #197: the prose-inside-executing-code class (4 instances in 4 days) gets a mechanical
       # guard — jq -Rs used as shell quoting, and $<digit> in an expanding manifest heredoc.
       # Fixtures carry the real pre-fix defects; the self-test runs on every invocation.
       - name: Prompt transport lint (devbox run prompt-transport-lint)
+        if: steps.diff.outputs.prompt-transport-lint != 'false'
         run: devbox run prompt-transport-lint
 
       # #198/#201: the state-fingerprint debounce (arbitrate/ci-red dispatch on CHANGE, not
       # existence) pinned as an executed replay — the five scan blocks sentinel-extracted at run
       # time, replaying the PR#234 five-rides-on-frozen-state sequence. 88 assertions, ~1s.
       - name: State-fingerprint debounce replay (devbox run state-fp-replay)
+        if: steps.diff.outputs.state-fp-replay != 'false'
         run: devbox run state-fp-replay
 
       # The ADR-103 RATCHET: a PR that changes clause-carrying files without touching any replay
@@ -405,29 +414,35 @@ jobs:
       # exporter/spend-probe/router self-tests, wired for the same reason: an unexecuted
       # assertion suite already bit this repo once (the estimator self-test, 2026-08-10 audit).
       - name: Findings-store self-test (devbox run goal-findings-self-test)
+        if: steps.diff.outputs.goal-findings-self-test != 'false'
         run: devbox run goal-findings-self-test
 
       - name: pin-only-lint self-test (devbox run pin-only-lint-test)
+        if: steps.diff.outputs.pin-only-lint-test != 'false'
         run: devbox run pin-only-lint-test
 
       # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
       # lock diff — the major gate, the downgrade + line-move lists the second body section carries.
       - name: devbox-update self-test (devbox run devbox-update-test)
+        if: steps.diff.outputs.devbox-update-test != 'false'
         run: devbox run devbox-update-test
 
       # ADR-150: the ⚓ upgrade-lease CLI against a fake kubectl (the retry no-op, the renew cap, the
       # box's `list` shape) + the vendored hook copy staying byte-identical to agents/upgrade-lease.sh.
       - name: upgrade-lease self-test (devbox run upgrade-lease-test)
+        if: steps.diff.outputs.upgrade-lease-test != 'false'
         run: devbox run upgrade-lease-test
 
       # ADR-143: the lockfile-intake gate's offline self-test (extractors, key parsing, fail-closed).
       - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
+        if: steps.diff.outputs.lock-intake-lint-test != 'false'
         run: devbox run lock-intake-lint-test
 
       # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
       # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local
       # pre-flight, so a new step here rotted the map on master unseen (the unexecuted-gate class).
       - name: diff-ci coverage belt — every ci.yaml devbox task has a MAP row (devbox run diff-ci -- --coverage-only)
+        if: steps.diff.outputs.diff-ci-coverage-only != 'false'
         run: devbox run diff-ci -- --coverage-only
 
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
@@ -521,54 +536,67 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
 
       - name: machines/generate.py outputs current (devbox run machines-lint)
+        if: steps.diff.outputs.machines-lint != 'false'
         run: devbox run machines-lint
 
       # tofu paths are CODEOWNERS-gated (a human reads the diff), so CI buys the cheap half only:
       # fmt is free, while `tofu validate` needs a provider download per PR (the FU-130 WAN class).
       # `devbox run tf-validate` stays the local/manual gate.
       - name: OpenTofu formatting (fmt -check, all roots)
+        if: steps.diff.outputs.tofu-fmt-check-recursive-tofu != 'false'
         run: devbox run -- tofu fmt -check -recursive tofu/
 
       # Stale-registration gate (TICK-LOG meta-1: 5/6 reflex gaps were a stack repo missing from a
       # per-identity token list). Interim until the AgentStack XRD (FU-048) renders all from one claim.
       - name: Agents registration lint (stacks.json ⊆ coordinator/reviewer token lists)
+        if: steps.diff.outputs.agents-registration-lint != 'false'
         run: devbox run agents-registration-lint
       - name: Merge-path FSM model matches code (devbox run merge-path-lint)
+        if: steps.diff.outputs.merge-path-lint != 'false'
         run: devbox run merge-path-lint
       # ADR-097 double-dispatch belt: the footprint predicate the scan sources, under synthetic
       # rules — a predicate bug must fail HERE, not double-dispatch two workers into one lane.
       - name: Footprint-intersection predicate rules (devbox run footprint-test)
+        if: steps.diff.outputs.footprint-test != 'false'
         run: devbox run footprint-test
       - name: Touches escape-set predicate (devbox run touches-check-test)
+        if: steps.diff.outputs.touches-check-test != 'false'
         run: devbox run touches-check-test
       # FU-127: the model-id rules, plus the drift pin on the proxy's copy of the rail-namespace
       # half (it lives in another deployment unit and cannot import the parser).
       - name: Model-id parse rules + proxy drift pin (devbox run model-id-test)
+        if: steps.diff.outputs.model-id-test != 'false'
         run: devbox run model-id-test
       - name: GitHub App mint sites ⊆ declared permissions (FU-098)
+        if: steps.diff.outputs.github-apps-lint != 'false'
         run: devbox run github-apps-lint
       # Every kind the AgentStack Composition renders has a crossplane grant in rbac.yaml — a
       # missing one parks the whole claim at Synced=False (fifth hand-found instance, homelab#1620).
       - name: AgentStack composed kinds ⊆ crossplane RBAC (devbox run agentstack-rbac-lint)
+        if: steps.diff.outputs.agentstack-rbac-lint != 'false'
         run: devbox run agentstack-rbac-lint
       # ADR-096 router: DB round-trip + model-classes.json parse/threshold sanity — the same
       # self-test a deployed pod's module carries.
       - name: Router self-test (devbox run router-self-test)
+        if: steps.diff.outputs.router-self-test != 'false'
         run: devbox run router-self-test
       # The proxy's own 12-section suite (rail routing, header allowlist, guardrail, Go-leg
       # isolation). Was cited as evidence across PR#429's five rounds while never executing as
       # a gate — the same unexecuted-suite class as the 2026-08-10 estimator audit (#429 fu).
       - name: Proxy self-test (devbox run proxy-self-test)
+        if: steps.diff.outputs.proxy-self-test != 'false'
         run: devbox run proxy-self-test
       # The jail's model-splitting shim — same unexecuted-suite class: its 18-check suite was
       # #446's evidence while nothing ran it in CI (reviewer-flagged on that PR; the proxy
       # self-test above got this exact fix in the Go wave, 0616d31).
       - name: Shim self-test (devbox run shim-self-test)
+        if: steps.diff.outputs.shim-self-test != 'false'
         run: devbox run shim-self-test
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".
       - name: FU tracker lint (devbox run follow-ups-lint)
+        if: steps.diff.outputs.follow-ups-lint != 'false'
         run: devbox run follow-ups-lint
 
       # Doc graph: relative .md links resolve + the agents doc table indexes every agents doc
@@ -576,6 +604,7 @@ jobs:
       # (CLAUDE.md "Design questions run full-context") enters at the doc table and chases
       # links — this lint is what keeps that entry point trustworthy between grooms.
       - name: Docs graph lint (devbox run docs-graph-lint)
+        if: steps.diff.outputs.docs-graph-lint != 'false'
         run: devbox run docs-graph-lint
 
       # Mermaid parse-lint: every tracked ```mermaid block through mermaid's own parser (linkedom,
@@ -583,6 +612,7 @@ jobs:
       # (docs/README.md §Conventions; the docs/agents/README.md worked-example was unrenderable
       # for weeks). Deno with NO permissions, deps in scripts/mermaid-lint/deno.lock (ADR-143).
       - name: Mermaid parse lint (devbox run mermaid-lint)
+        if: steps.diff.outputs.mermaid-lint != 'false'
         run: devbox run mermaid-lint
 
       # ── collect the ∥ suites started at the top of the job (#518). Each waits for its rc
@@ -594,7 +624,7 @@ jobs:
       # "never finished" instead of its own diff (PR#1366 and every fixer PR that morning:
       # 11–22 min reds for a 76 s harness). Green wrote rc=0 and was fast, which is why it hid.
       - name: Clause replays — collect (started ∥ above)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.clause == 'true'
+        if: steps.diff.outputs.clause-replay != 'false'
         run: |
           for i in $(seq 1 600); do [ -f /tmp/clause-replay.rc ] && break; sleep 1; done
           [ -f /tmp/clause-replay.rc ] || { echo "::error::clause-replay never finished (background run died?)"; cat /tmp/clause-replay.log 2>/dev/null; exit 1; }
@@ -603,7 +633,7 @@ jobs:
 
       # FU-158: behaviour tests (promtool test rules) ride the same script — see the start step.
       - name: PrometheusRule exprs parse — collect (started ∥ above)
-        if: github.event_name != 'pull_request' || steps.diff.outputs.prom == 'true'
+        if: steps.diff.outputs.prometheus-rules-lint != 'false'
         run: |
           for i in $(seq 1 900); do [ -f /tmp/prom-lint.rc ] && break; sleep 1; done
           [ -f /tmp/prom-lint.rc ] || { echo "::error::prometheus-rules-lint never finished (background run died?)"; cat /tmp/prom-lint.log 2>/dev/null; exit 1; }
