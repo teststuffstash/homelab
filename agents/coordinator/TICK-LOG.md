@@ -12921,3 +12921,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   HA plug sensors `laptop3/laptop4/pve` stale since 12:51Z (none — unrelated to the sleds?), `registry-fs`'s
   third (failed) replica on wk-04 awaits Longhorn's cleanup, `OpnsenseConfigUnattributedRevision` = the
   carp-maintenance enter/leave revisions.
+- **Operator (13:50Z): "triage=dig alerts would get a responder run during this maintenance if it was not disabled
+  and produce a lot of false reads."** Read against the code: the responder lane is `triage=now` ONLY (the AM
+  route, ADR-148) and it reads the declared window by NAME (`responder-window`), so this window's four `now`
+  alerts were all declared → skipped even if enabled. The `dig` set goes to the scheduled deep dig, whose selector
+  (`agents/deep-dig-select.sh`) admits a candidate only when STANDING ≥ `DIG_STANDING_H`=6 h or RECURRING on ≥
+  `DIG_RECUR_DAYS`=3 distinct days, and drops one a LIVE window names. A 15–30 min decay never qualifies. **The gap
+  is the recurring key:** `seat-window.sh close` DELETES the record, so NodeRebooted / PodSigkilled /
+  CiliumUnreachableNodes — fired on 10-07 (pve window), 10-08 (WAN loss), 10-09 (this window) — now count as a
+  3-day recurrence with no window left to explain any of the days → the next dig can read three maintenance
+  windows as a standing fault. Fix shape: closed windows keep a record for ≥ DIG_RECUR_DAYS+1 days and the
+  recurring key consults the day's window set (per-day explanation, not live-only). Agent-platform design — not
+  acted on; no FU/GAPS entry matches (grep `recurring|closed window|window history`); the dig's consumer leg is
+  FU-231's. Operator's call whether to file.
