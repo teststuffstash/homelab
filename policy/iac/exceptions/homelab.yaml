@@ -75,3 +75,8 @@ spec:
             - MutatingAdmissionPolicyBinding
           names:
             - pg-backup-default # ADR-147: CNPG Clusters wired to their namespace's backup store
+      - resources:
+          kinds:
+            - PriorityClass
+          names:
+            - node-maintenance # the node-pinned maintenance CronJobs (node-fstrim) — preempt instead of OutOfcpu at kubelet admission (2026-10-09)
