@@ -213,7 +213,8 @@
         "bash scripts/manifest-lint.sh \"$@\""
       ],
       "sentinel-smoke": [
-        "bash scripts/iac-sentinel.sh --smoke"
+        "bash scripts/iac-sentinel.sh --smoke",
+        "bash scripts/iac-policy-test.sh"
       ],
       "machines-lint": [
         "bash scripts/machines-lint.sh"

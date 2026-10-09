@@ -1,0 +1,11 @@
+# spec.template.spec depth → Enforce fails.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pinned, namespace: default }
+spec:
+  selector: { matchLabels: { app: pinned } }
+  template:
+    metadata: { labels: { app: pinned } }
+    spec:
+      nodeName: wk-02
+      containers: [{ name: c, image: alpine:3.24 }]

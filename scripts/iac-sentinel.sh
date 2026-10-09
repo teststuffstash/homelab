@@ -212,15 +212,19 @@ evaluate() {
     # sentinel's OWN master clone, never the scanned tree: a hostile PR editing its copy of
     # the exception list changes nothing here.
     exc="$POLICY_DIR/exceptions/${repo}.yaml"
+    # --audit-warn: a `validationFailureAction: Audit` policy (iac-cronjob-needs-priority,
+    # 2026-10-09) reports as `warn: N` and leaves `fail:`/the exit code alone — a warning in the
+    # log, never a red status. Without it the CLI counts Audit results as fails. Enforce policies
+    # are unaffected. (Per-POLICY: a per-rule failureAction defeats it — see pinned-pods-priority.yaml.)
     if [ -f "$exc" ]; then
-      kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" --exceptions "$exc" 2>&1)"
+      kout="$(kyverno apply "$POLICY_DIR" --audit-warn --resource "$tree/.sentinel-resources.yaml" --exceptions "$exc" 2>&1)"
     else
       # Say it. A missing exceptions file is not an error (a repo may legitimately need no
       # waivers) but it CHANGES THE VERDICT, and saying nothing is what made the worktree
       # defect above cost a debugging session: the run looked like it worked and returned 35
       # authentic-looking violations.
       log "[$repo] no exceptions file at $exc — kyverno running with NO exceptions"
-      kout="$(kyverno apply "$POLICY_DIR" --resource "$tree/.sentinel-resources.yaml" 2>&1)"
+      kout="$(kyverno apply "$POLICY_DIR" --audit-warn --resource "$tree/.sentinel-resources.yaml" 2>&1)"
     fi
     krc=$?
     if [ $krc -ne 0 ]; then
@@ -239,10 +243,12 @@ evaluate() {
       else
         VIOLATIONS=$((VIOLATIONS + nfail))
         log "[$repo#$pr@$ref] VIOLATION kyverno (${nfail} failing):"
-        printf '%s\n' "$kout" | grep -E "fail|→|message" | head -20 | sed 's/^/    /'
+        printf '%s\n' "$kout" | grep -E "fail|→|message" | grep -v "as audit warning" | head -20 | sed 's/^/    /'
         metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"kyverno\"} ${nfail}"
       fi
     fi
+    nwarn="$(printf '%s' "$kout" | grep -oE 'warn: [0-9]+' | grep -oE '[0-9]+' | head -1)"
+    [ "${nwarn:-0}" -gt 0 ] 2>/dev/null && log "[$repo#$pr@$ref] kyverno AUDIT warnings: ${nwarn} (Audit policies — reported, not counted as violations)"
   fi
   t_kyverno=$(( $(now_ms) - t0 ))
 

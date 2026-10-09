@@ -111,7 +111,7 @@ without ever holding it whole (`restore-from-blocks.py` does this for anything o
 
 - The data PVC is RWO, which is a **node**-level lock: a second pod pinned to the Garage pod's node
   mounts the same claim read-only. No host paths, no privilege. Delete it afterwards — a
-  `nodeName`-pinned second mounter would pin the volume to that node.
+  node-pinned second mounter (hostname affinity in `forensics-pod.yaml`) would pin the volume to that node.
 - `python:3.14-slim` carries stdlib `compression.zstd`, so the pod needs no pip.
 - The Garage image has no shell and no coreutils; `kubectl exec garage-0 -- /garage …` is the only
   thing that runs in it.
