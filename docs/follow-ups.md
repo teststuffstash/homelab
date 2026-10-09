@@ -1104,9 +1104,9 @@ the block needs pruning, not more headings.
       produces, for the ones carrying no `node`/`instance`/pod label at all — a ConfigMap, so the
       FU-195 durability caveat is retired. Mechanism: [`agents/roles.md`](agents/roles.md)
       §responder; evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md).
-      **Next:** at FU-249's step (3), run one real `node-maintenance` window and confirm the
-      DaemonSet-rollout class costs no triage session; and a STALE declared window mutes its names
-      cluster-wide (a 09-30 one stood ~2 days, closed 10-02) — the `now` lane needs a window-expiry belt.
+      **Next:** ownership by SILENCE (operator 2026-10-09; spike §2026-10-09 gap 1) — leased claims +
+      a close tail + a responder grace instead of the by-name skip, closed windows kept as per-day dig history;
+      build in flight (seat subagent, `feat/window-claims-by-silence`), then prove it in a real window.
 - [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
       (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
       `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage
@@ -1373,15 +1373,15 @@ the block needs pruning, not more headings.
       Either way the Workspace must be able to go green. Link: [`docs/cloudflare.md`](cloudflare.md)
       §PublicRoute completion table (RUM row, #1311).
 
-- [ ] **FU-249** — **Responder PAUSED 2026-09-16 → REPLACED, not re-enabled (ADR-148, 2026-10-03): POINTER.**
-      The Sensor's never-matching `alert-dep` filter stays until the replacement lands. Evidence (the
-      09-26→10-03 old-vs-new replay, the per-alert digs): [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md)
-      §2026-10-03. **Next, in order:** (1) DONE 2026-10-03 — the `triage: none|now|dig` label on every
-      rule + the upstream relabel map + the lint (PR#2193, live; oracle-fleet's 5 stack rules still unlabelled); (2) the FU-232 subject residuals the audit found
-      (kube-state-metrics pod alerts keyed `alert:<name>`/the exporter IP, github-exporter + pushgateway jobs
-      missing from the reporter list, the `job=kubelet` witness fixture, a subject ledger blind to alertname);
-      (3) route `triage="now"` + crosscheck + `responder-behaviour-test` §routing + roles.md, then delete the
-      filter; (4) the grouped deep dig (FU-231's consumer leg is its output). Relates FU-230, FU-231.
+- [ ] **FU-249** — **The ADR-148 lanes (`now` responder + grouped deep dig) are LIVE since 2026-10-04 (PR#2212); the
+      old per-blip lane is gone: POINTER.** Steps (1)–(4) done (labels PR#2193; subject residuals, `now` routing,
+      filter deleted, deep dig PR#2212). Evidence + the 10-07→10-09 mapping (seven gaps, owners named):
+      [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md) §2026-10-09. **Next:** (a) the dig's
+      7-day dedup never matched (finding shape ≠ `explain_prior` key) — fix in flight (seat subagent,
+      `fix/deep-dig-prior-shape`); (b) a dig `explained` verdict must persist (not re-dig nightly); (c) the
+      READER for dig findings + `now` triage prose — operator's choice of surface, FU-231 (a); (d) `now`-lane
+      grouping (one cause → N sessions); (e) the lane's own dependency cone (WAN loss → retries held the
+      subscription slots). oracle-fleet's 5 rules still lack `triage` (stack lane). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat unread in Loki
       for six days (2026-09-10). **Detector LANDED + PROVEN LIVE 2026-09-23** (#1948): an Alloy
       `stage.metrics` counter on the kmsg stream → `KernelOopsCaptured` per node, a sender-side metric

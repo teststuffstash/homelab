@@ -97,7 +97,7 @@ never the session's arc — that is TICK-LOG's.)
   unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
   503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week; the arming chain's step 2 (an out-of-cone revert actor — the deploy-revert Sensor runs ON Argo Workflows) needs the operator's ruling on WHERE it runs (management box / ARC-hosted Actions workflow / in-cluster webhook receiver outside Argo) before steps 3–5 (pin-lint `reverted-charts` memory, bad-pin drill, one `matchPackageNames` line). (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
   `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
-  Standing from 10-04: G7 (`dig` alerts have no reader while the responder is paused), G8 (regen that
+  Standing from 10-04: G7 (`dig` findings have no reader — FU-249 (c)), G8 (regen that
   rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
   no actor — but see #2254: the worker-adapts leg DID fire on CHANGES_REQUESTED), updater skip /
   `rebaseWhen` for Renovate branches.
@@ -277,11 +277,10 @@ never the session's arc — that is TICK-LOG's.)
   Next steps + the operator's disk-tag question are on **FU-280**. **FU-286:** PR#1963 (talosctl from a
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
-- **⚑ RESPONDER — REPLACED, NOT UN-PAUSED (ADR-148, FU-249, 2026-10-03).** Keep the Sensor filter. Step (1)
-  LIVE (PR#2193: every rule carries `triage`, upstream via the relabel map). Next: the subject-key residuals
-  (FU-249 (2)) → route `triage="now"` with the crosscheck and §routing test, then delete the filter → the
-  grouped deep dig. oracle-fleet's own rules (ert-pipeline ×2, oracle-gateway ×3) still carry no `triage` —
-  the stack's lane (`patterns/observability.md` §3).
+- **⚑ RESPONDER — the ADR-148 lanes are LIVE since 10-04 (PR#2212); "disabled" = the OLD per-blip lane
+  only (operator, 10-09).** Gaps + owners: FU-249 / FU-230, evidence spike §2026-10-09. In flight 10-09:
+  the dig dedup fix and window claims-by-silence (seat subagents). Operator decision open: the READER
+  surface for dig findings (FU-249 (c)). oracle-fleet's 5 rules still lack `triage` (stack lane).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.
   Theme #1907's assembly (`goal/1906-scan → master`) is the one codeowner read, and it has not been
