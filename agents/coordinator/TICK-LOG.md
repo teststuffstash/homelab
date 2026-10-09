@@ -12980,3 +12980,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
   alert on run-level `github_workflow_run_duration_seconds` by (repo, workflow, event), ≥20 runs in both the 7d and the
   21–28d baseline window (operator: per-PR delta measurement rejected as noise; weekly retro vs long-window alert →
   the alert). FU-310 mint was held by the gate — doable now, so dispatched instead.
+- **Subagent landed both:** #2410 one-rule fixture pairs for the long horizons (slowest fixture 97 → 17 s; whole
+  prometheus-rules-lint 107 → 39 s; 354 groups / 1107 assertions unchanged; `loop-health-minutes-burn` at
+  evaluation_interval 5m — constant inputs, `for:` edge kept at 1m in loop-health). #2411 `GithubCiWallTimeDrift`
+  (group `github-ci-drift`, 1h eval, `for: 6h`, median-of-runs 7d > 1.5× the 21–28d baseline AND > 120 s, ≥20 runs
+  each window, `max by id` dedups exporter restarts). Unmeasured: the hourly [7d] query cost; non-master push runs
+  count in the push median (no branch filter).
