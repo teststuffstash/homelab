@@ -65,5 +65,16 @@ check "$T/gov" 'RasmusSoot'                0 "$NOT_WORKER" "seat/operator login"
 # Control: the worker on a non-governance diff is ok.
 check "$T/docs" 'homelab-agents-1234[bot]' 0 "touches no governance path" "worker, docs-only diff (control)"
 
+# homelab#1736: master advances on a governance path AFTER the worker's docs branch forked. The lint
+# diffs three-dot (merge base → head; the header's #1441 (b) block), so with base = master's tip
+# master's .agents/ write is never the worker's → ok. A two-dot diff would list it and go red.
+mkrepo "$T/behind" "docs/note.md"
+git -C "$T/behind" checkout -q -b master-ahead base
+mkdir -p "$T/behind/.agents" && echo m >"$T/behind/.agents/fix.yaml"
+git -C "$T/behind" add -A && git -C "$T/behind" commit -q -m "master: governance write"
+git -C "$T/behind" checkout -q master
+git -C "$T/behind" tag -f base "$(git -C "$T/behind" rev-parse master-ahead)" >/dev/null
+check "$T/behind" 'homelab-agents-1234[bot]' 0 "touches no governance path" "worker, docs branch BEHIND a master governance write (#1736, three-dot)"
+
 echo "governance-lint-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
