@@ -188,9 +188,19 @@ cmd_select() {
       ($r.data.result // []) | map(.metric) | reduce .[] as $m ($l; if .[$m.alertname] then . else .[$m.alertname] = $m end)')"
   done
 
-  WINDOWS="$(dig_window_json | jq -c --arg now "$(date -u -d "@$DIG_NOW" +%Y-%m-%dT%H:%M:%SZ)" \
-      '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty | select((.until // "") > $now) ]' 2>/dev/null || true)"
+  # A window EXPLAINS while it is live for triage — its lease (`until`) or a closed window's tail
+  # (`tail_until`, FU-230 2026-10-09). The rest of the retained record (agents/seat-window.sh keeps
+  # closed and lapsed windows ≥ 4 days) rides the digest as HISTORY: context the session can match
+  # against an alert's onset day, never an automatic explanation — a window two days ago does not
+  # explain a recurrence today.
+  local wraw; wraw="$(dig_window_json 2>/dev/null || true)"
+  WINDOWS="$(printf '%s' "$wraw" | jq -c --arg now "$(date -u -d "@$DIG_NOW" +%Y-%m-%dT%H:%M:%SZ)" \
+      '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty | select(((.tail_until // .until) // "") > $now) ]' 2>/dev/null || true)"
   [ -n "$WINDOWS" ] || WINDOWS='[]'
+  WIN_HISTORY="$(printf '%s' "$wraw" | jq -c --arg cut "$(date -u -d "@$(( DIG_NOW - DIG_LOOKBACK_D * 86400 ))" +%Y-%m-%dT%H:%M:%SZ)" \
+      '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty | select(((.tail_until // .until) // "") > $cut)
+         | {id, by, node, reason, alerts, opened_at, until, closed_at, tail_until} ] | sort_by(.opened_at // "")' 2>/dev/null || true)"
+  [ -n "$WIN_HISTORY" ] || WIN_HISTORY='[]'
   PRIOR="$(dig_prior_findings)"; printf '%s' "$PRIOR" | jq -e 'type == "array"' >/dev/null 2>&1 || PRIOR='[]'
 
   local tmp; tmp="$(mktemp -d)"; : > "$tmp/cand.jsonl"
@@ -246,7 +256,7 @@ cmd_select() {
 
   # (4) group by onset bucket + host, rank, cap
   local bucket=$(( DIG_ONSET_BUCKET_MIN * 60 ))
-  jq -sc --argjson b "$bucket" --argjson max "$DIG_MAX_GROUPS" --argjson now "$DIG_NOW" \
+  jq -sc --argjson b "$bucket" --argjson max "$DIG_MAX_GROUPS" --argjson now "$DIG_NOW" --argjson wh "$WIN_HISTORY" \
      --arg ts "$(date -u -d "@$DIG_NOW" +%Y-%m-%dT%H:%M:%SZ)" --slurpfile expl "$tmp/expl.jsonl" \
      --argjson p "$(jq -n --argjson sh "$DIG_STANDING_H" --argjson rd "$DIG_RECUR_DAYS" --argjson lb "$DIG_LOOKBACK_D" --argjson ob "$DIG_ONSET_BUCKET_MIN" --argjson mg "$DIG_MAX_GROUPS" --argjson rg "$DIG_REDIG_DAYS" \
         '{standing_h: $sh, recur_days: $rd, lookback_d: $lb, onset_bucket_min: $ob, max_groups: $mg, redig_days: $rg}')" '
@@ -261,7 +271,7 @@ cmd_select() {
     | sort_by(-(.alerts | length), -.max_standing_h, .key)
     | {schema: "deep-dig-digest/v1", ts: $ts, params: $p,
        groups: .[:$max], deferred: (.[$max:] | map({key, alerts: (.alerts | map("\(.alertname) (\(.subject))"))})),
-       explained: $expl,
+       explained: $expl, windows: $wh,
        counts: {candidates: (((map(.alerts | length) | add) // 0) + ($expl | length)),
                 unexplained: ((map(.alerts | length) | add) // 0), explained: ($expl | length),
                 groups: length, selected: (.[:$max] | length)}}' "$tmp/keep.jsonl" > "$tmp/digest.json" \

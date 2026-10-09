@@ -10,7 +10,7 @@
 #                                                        last replicas long-lived pods hold (DRY=1: report)
 #   bash scripts/node-maintenance.sh down      <node>   # preflight → settle → drain → talosctl shutdown
 #                                                        (settle also SILENCES the node's alerts in
-#                                                         Alertmanager; `up` expires the silence)
+#                                                         Alertmanager; `up` tails the silence 20m)
 #   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
 #   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → floors → settle → DRAIN → talosctl
 #                                                        upgrade → wait Ready + Longhorn healthy →
@@ -65,8 +65,8 @@
 #                                                             responder's declared-window record
 #                                                             (leg b, agents/seat-window.sh, for the
 #                                                             alert classes that carry no node /
-#                                                             instance / pod label at all); expire
-#                                                             both (all four are done for you by
+#                                                             instance / pod label at all); TAIL
+#                                                             both 20m past close, WINDOW_TAIL_MIN (done for you by
 #                                                             settle/down and up — FU-230);
 #                                                             SILENCE=0 opts the whole window out
 #   bash scripts/node-maintenance.sh upgrade-behind [cp|worker|all]   # every node BEHIND its declaration,
@@ -142,7 +142,8 @@ ALLOW_SCHEMATIC_CHANGE="${ALLOW_SCHEMATIC_CHANGE:-0}"  # accept the declared sch
 AM="${NM_AM:-http://192.168.40.14:9093}" # Alertmanager API (same default as agents/meta-events.sh)
 PROM="${NM_PROM:-http://192.168.40.13:9090}" # Prometheus (only `order`'s GARAGE ranking column reads it)
 REJOIN_TIMEOUT="${REJOIN_TIMEOUT:-900}"  # s — after a window: CNPG instances + the budgets over the node's pods whole again
-SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` expires it early
+SILENCE_HOURS="${SILENCE_HOURS:-3}"      # window silence lifetime; `up` tails it (WINDOW_TAIL_MIN)
+WINDOW_TAIL_MIN="${WINDOW_TAIL_MIN:-20}" # `up`: silences + declared record end this long AFTER Ready (FU-230)
 SILENCE="${SILENCE:-1}"                  # 0 = do not touch Alertmanager at all
 POD_GRACE_MIN="${POD_GRACE_MIN:-45}"     # the POD-scoped silence outlives the window on purpose
 
@@ -226,7 +227,7 @@ rides_running() {
 # A maintenance window is invisible to the alert path, and the responder then diagnoses OUR OWN
 # work: 2026-09-09's three thinkcentre windows cost ≥8 of the 12 daily triage sessions, and on
 # 2026-09-12 m70s's planned reboot became a careful "cannot determine crash vs power-loss" writeup
-# (homelab#261). So `settle`/`down` open a silence and `up` expires it.
+# (homelab#261). So `settle`/`down` open a silence and `up` tails it (WINDOW_TAIL_MIN past Ready — see silence_close).
 #
 # ⚠ WHICH LABEL: alerts do NOT reliably carry `node`. NodeRebooted fires on
 # node_boot_time_seconds, whose only node identifier is `instance=<ip>:9100` — a hand-issued
@@ -243,9 +244,8 @@ rides_running() {
 # bounded and named: a StatefulSet pod returns under the SAME name, so a genuine alert about one of
 # these pods stays suppressed until the grace expires. `up` leaves it running; SILENCE_CLOSE_PODS=1
 # expires it too.
-# ⚠ DURABILITY: silences live on Alertmanager's emptyDir (FU-195) — a monitoring restart mid-window
-# drops them and alerts resume, i.e. back to the old behaviour. Best-effort by construction: an
-# unreachable Alertmanager logs and never fails the window.
+# DURABILITY: silences survive a monitoring restart since FU-195 (the alertmanager-db PVC).
+# Best-effort by construction: an unreachable Alertmanager logs and never fails the window.
 SILENCE_OWNER() { printf 'node-maintenance.sh/%s%s' "$NODE" "${1:-}"; }
 
 has_zone_volume() { last_replicas 2>/dev/null | grep -q 'strict-local'; }
@@ -254,7 +254,13 @@ silence_open() {
   [ "$SILENCE" = 1 ] || { log "SILENCE=0 — not touching Alertmanager"; return 0; }
   local ip existing
   existing="$(silence_ids)"
-  if [ -n "$existing" ]; then log "window silence already active for $NODE: $(tr '\n' ' ' <<<"$existing")"; return 0; fi
+  if [ -n "$existing" ]; then
+    # Possibly a PREVIOUS window's tail (≤ WINDOW_TAIL_MIN left): same matchers, so stretch it to this
+    # window's term instead of letting it run out mid-window.
+    SEAT_WINDOW_AM="$AM" bash "$(dirname "$0")/../agents/seat-window.sh" tail-silences --created-by "$(SILENCE_OWNER)" \
+        --minutes "$((SILENCE_HOURS*60))" >/dev/null 2>&1 || true
+    log "window silence already active for $NODE: $(tr '\n' ' ' <<<"$existing") (extended to ${SILENCE_HOURS}h)"; return 0
+  fi
   ip="$(node_ip)"
   local matchers garage
   matchers="$(jq -cn --arg ip "$ip" --arg n "$NODE" '[
@@ -293,7 +299,7 @@ EOF
 post_silence() {
   local body id scope="${2:-}" secs="${3:-$((SILENCE_HOURS*3600))}"
   body="$(jq -cn --argjson matchers "$1" --arg by "$(SILENCE_OWNER "$scope")" --arg s "$secs" \
-    --arg c "node-maintenance window on $NODE ($(date -u +%FT%TZ)) — planned cordon/drain/shutdown. Expired by \`node-maintenance.sh up $NODE\`${scope:+ (the pod-name silence self-expires later — PodSigkilled looks back 30m)}." \
+    --arg c "node-maintenance window on $NODE ($(date -u +%FT%TZ)) — planned cordon/drain/shutdown. Tailed ${WINDOW_TAIL_MIN}m past Ready by \`node-maintenance.sh up $NODE\`${scope:+ (pod-name silence: self-expires on its own clock)}." \
     '{matchers:$matchers, startsAt:(now|todate), endsAt:((now + ($s|tonumber))|todate), createdBy:$by, comment:$c}')"
   id="$(curl -sf -m 10 -X POST -H 'Content-Type: application/json' -d "$body" "$AM/api/v2/silences" | jq -r '.silenceID // empty')"
   [ -n "$id" ] || return 1
@@ -309,20 +315,34 @@ silence_ids() {
     | jq -r --arg by "$(SILENCE_OWNER "${1:-}")" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null || true
 }
 
+# `up` TAILS the window rather than expiring it (operator ruling 2026-10-09, FU-230). Expiring at
+# Ready was too early by exactly one `for:`: nx-01's window closed 13:44Z and KubePodNotReady
+# (`for: 15m`) on its DaemonSet pods fired 13:45–13:47Z — four triage sessions on the seat's own
+# work. So the node/instance silences end WINDOW_TAIL_MIN (20m ≥ the longest `for:` of the window's
+# `now` alerts) after Ready, and the pods running on the node NOW — a reinstall mints new DaemonSet
+# pod names the pre-drain `#pods` silence never held — get a `#pods-tail` silence of the same length.
 silence_close() {
   [ "$SILENCE" = 1 ] || return 0
-  local ids id n=0
-  ids="$(silence_ids)"
-  if [ "${SILENCE_CLOSE_PODS:-0}" = 1 ]; then ids="$ids
-$(silence_ids '#pods')"
+  local id
+  if [ "${SILENCE_CLOSE_PODS:-0}" = 1 ]; then
+    for id in $(silence_ids '#pods'); do curl -sf -m 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null || warn "could not expire silence $id"; done
   elif [ -n "$(silence_ids '#pods')" ]; then
     log "leaving the pod-scoped silence to self-expire (≤${POD_GRACE_MIN}m) — PodSigkilled fires up to 30m after the kill; SILENCE_CLOSE_PODS=1 to expire it now"
   fi
-  [ -n "$ids" ] || { log "no window silence to expire for $NODE"; return 0; }
-  for id in $ids; do
-    if curl -sf -m 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null; then n=$((n+1)); else warn "could not expire silence $id — it self-expires in ≤${SILENCE_HOURS}h"; fi
-  done
-  ok "expired $n window silence(s) for $NODE"
+  if [ -n "$(silence_ids)" ]; then
+    SEAT_WINDOW_AM="$AM" bash "$(dirname "$0")/../agents/seat-window.sh" tail-silences --created-by "$(SILENCE_OWNER)" --minutes "$WINDOW_TAIL_MIN" \
+      && ok "window silence(s) for $NODE tail ${WINDOW_TAIL_MIN}m past Ready" \
+      || warn "could not tail the window silences — they self-expire at their own end (≤${SILENCE_HOURS}h)"
+  else
+    log "no window silence to tail for $NODE"
+  fi
+  local pods
+  pods="$(kubectl get pods -A --field-selector "spec.nodeName=$NODE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed '/^$/d' | sort -u || true)"
+  if [ -n "$pods" ] && [ "$WINDOW_TAIL_MIN" -gt 0 ]; then
+    post_silence "$(jq -cn --arg re "($(paste -sd'|' - <<<"$pods"))" '[{name:"pod", value:$re, isRegex:true, isEqual:true}]')" '#pods-tail' "$((WINDOW_TAIL_MIN*60))" \
+      && log "post-window pod silence covers $(wc -l <<<"$pods") pod name(s) on $NODE for ${WINDOW_TAIL_MIN}m" \
+      || warn "could not open the post-window pod silence — a late KubePodNotReady goes to the responder's grace"
+  fi
 }
 
 # ------------------------------------------------------- the DECLARED window (FU-230 leg b)
@@ -336,9 +356,10 @@ $(silence_ids '#pods')"
 # the losing game that sighting demonstrates.
 #
 # So the window DECLARES those names to the responder instead (agents/seat-window.sh → a ConfigMap
-# the triage reads). It suppresses only the LLM triage: the alerts still fire, still reach Home
-# Assistant and Grafana, and a person still sees them. The list is the classes a node-maintenance
-# window structurally produces and the label taxonomy structurally cannot reach.
+# the triage reads). It silences nothing: a named `now` alert gets the responder's grace (~10 min)
+# for a window claim, then a triage with the window in its brief (FU-230, 2026-10-09 — the
+# agents/seat-window.sh header). The list is the classes a node-maintenance window structurally
+# produces and the label taxonomy structurally cannot reach.
 DECLARED_ALERTS="${DECLARED_ALERTS:-KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,KubeNodeUnreachable,KubeletInstanceUnreachable,KubeNodeNotReady,KubePodNotReady,CiliumUnreachableNodes,CiliumAgentScrapeDown,TargetDown}"
 
 declare_open() {
@@ -359,7 +380,9 @@ declare_close() {
   [ "$SILENCE" = 1 ] || return 0
   # Only OUR records (--by): a seat's window on the same node — the reconciler's admitting window
   # above all — is the seat's to close.
-  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" --by node-maintenance.sh \
+  # Closed with a TAIL: the mutex (reconciler, apply loop) releases now; the responder keeps grace-
+  # ing the declared names for WINDOW_TAIL_MIN, matching the silences above.
+  bash "$(dirname "$0")/../agents/seat-window.sh" close --node "$NODE" --by node-maintenance.sh --tail-min "$WINDOW_TAIL_MIN" \
     || warn "could not close the declared window — it self-expires at its \`until\` (${SILENCE_HOURS}h)"
 }
 

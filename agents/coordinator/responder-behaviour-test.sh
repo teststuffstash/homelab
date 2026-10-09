@@ -40,7 +40,7 @@ command -v yq >/dev/null 2>&1 || { echo "responder-behaviour-test: needs yq (dev
 command -v jq >/dev/null 2>&1 || { echo "responder-behaviour-test: needs jq (devbox run -- bash $0)"; exit 2; }
 
 # ── the script under test, straight out of the manifest ─────────────────────────────────────────
-yq -r 'select(.kind == "WorkflowTemplate") | .spec.templates[] | select(.container != null) | .container.args[0]' \
+yq -r 'select(.kind == "WorkflowTemplate") | .spec.templates[] | select(.name == "respond") | .container.args[0]' \
    "$YAML" > "$TMP/respond.raw.sh"
 [ -s "$TMP/respond.raw.sh" ] || { echo "responder-behaviour-test: could not extract the script from $YAML"; exit 2; }
 sed "s#/work/homelab#$TMP/homelab#g" "$TMP/respond.raw.sh" > "$TMP/respond.sh"   # the one seam
@@ -117,7 +117,11 @@ exit 0
 EOF
 cat > "$BIN/curl" <<'EOF'
 #!/bin/bash
-printf '%s\n' "curl $*" >> "$H/calls.log"; exit 0
+printf '%s\n' "curl $*" >> "$H/calls.log"
+# Alertmanager's alert list (the FU-230 claim read): served from $H/am.json when the scenario has
+# one. ABSENT = an empty 200, which the clause must read as UNREADABLE, never as "nothing firing".
+case "$*" in */api/v2/alerts*) [ -f "$H/am.json" ] && cat "$H/am.json" ;; esac
+exit 0
 EOF
 # §A1 capture (FU-210): the bucket write recorder. Present ALWAYS, so the difference between the
 # two capture paths is the KEY, never the binary — which is the real production shape (the Secret
@@ -775,46 +779,139 @@ want      "an unreadable close actor says so by name" "close actor unreadable"
 wantnot   "…and does NOT claim a human close it cannot prove" "HUMAN-CLOSED"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
-section "FU-230 leg (b) — the DECLARED window"
-# Leg (a)'s Alertmanager silences match `node`, `instance`, the node's pod names and the zone
-# Garage set. One class is beyond all four: a rollout alert labelled by namespace + daemonset
-# carries neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence.
-# 2026-09-16 proved it twice — an nx-01 reinstall leaked KubeDaemonSetRolloutStuck with all four
-# arms armed, and wk-03's shutdown leaked five classes the seat then silenced by hand for 8 h. So
-# the seat DECLARES the names instead, and the responder reads that record.
+section "FU-230 — the DECLARED window: grace, then ownership by silence (ruling 2026-10-09)"
+# The window used to SKIP every alert it named, cluster-wide. Three defects (2026-10-08/09): the
+# record lapsed mid-window (fixed 2 h term → ~8 sessions on the 04:57Z KubePodNotReady burst),
+# `close` deleted it one `for:` early (nx-01 13:44Z → 4 sessions 13:45–13:47Z), and a NEW named
+# alert was owned by nobody. Now: a named, unclaimed `now` alert waits ONE grace in the
+# window-grace step (no semaphore), then `respond` re-reads Alertmanager — claimed (silenced) → no
+# session; cleared → no session; else triage with the window in the brief.
 
-_window() { # <alert,alert,...>
-  jq -n --arg a "$1" '{data:{"w-wk-03-1":({id:"wk-03-1", by:"node-maintenance.sh",
+_window() { # <alert,alert,...> [extra jq object]
+  jq -n --arg a "$1" --argjson x "${2:-{\}}" '{data:{"w-wk-03-1":({id:"wk-03-1", by:"node-maintenance.sh",
       opened_at:"2026-01-01T00:00:00Z", until:"2099-01-01T00:00:00Z", node:"wk-03", note:"",
       reason:"node-maintenance window on wk-03 — planned cordon/drain/shutdown",
-      alerts:($a|split(","))} | tojson)}}' > "$H/window.json"
+      alerts:($a|split(","))} + $x | tojson)}}' > "$H/window.json"
 }
+_am() { # <fp> <silencedBy-json-array> — Alertmanager's view of one alert, after the grace
+  jq -n --arg fp "$1" --argjson s "$2" '[{fingerprint:$fp, labels:{alertname:"x"}, status:{state:(if ($s|length) > 0 then "suppressed" else "active" end), silencedBy:$s, inhibitedBy:[]}}]' > "$H/am.json"
+}
+KPNR='{"alertname":"KubePodNotReady","namespace":"kube-system","pod":"cilium-przdf"}'
 
-scenario window-declared
-_window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
-go "$(alert w1 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
-want     "a declared alert spawns no session" "DECLARED WINDOW wk-03-1 names this alert"
+scenario window-claimed
+_window "KubePodNotReady,CiliumUnreachableNodes"; _am w1 '["s-123"]'
+go "$(alert w1 "$KPNR")"
+want     "a named alert the window CLAIMED (silence) spawns no session" "CLAIMED by silence s-123"
 wantnot  "…and never reaches the triage" "subject="
-wantcall "…with a ledger marker, so a deliberate stop is not a drop (FU-113a)" '"window-'
+wantcall "…with a claimed- marker, so a deliberate stop is not a drop (FU-113a)" '"claimed-'
+
+scenario window-unclaimed
+_window "KubePodNotReady,CiliumUnreachableNodes"; _am w1b '[]'
+go "$(alert w1b "$KPNR")"
+want      "a named alert NOBODY claimed after the grace triages (defect 3: owned by nobody → the responder)" "UNCLAIMED after the grace"
+want      "…a real triage" "subject=workload:kube-system/cilium"
+wantbrief "…and the brief names the window, id + reason" "DECLARED WINDOW wk-03-1 names this alert — node-maintenance window on wk-03"
+wantbrief "…as context to test, never as the conclusion" "a hypothesis to test"
+wantnocall "…and writes no window- or claimed- marker" '"claimed-'
+
+scenario window-cleared
+_window "KubePodNotReady"; printf '[]' > "$H/am.json"
+go "$(alert w1c "$KPNR")"
+want     "a named alert that cleared during the grace spawns no session" "cleared during the grace"
+wantcall "…with a window- marker" '"window-'
+
+scenario window-am-unreadable
+_window "KubePodNotReady"
+go "$(alert w1d "$KPNR")"
+want    "an UNREADABLE Alertmanager claims nothing (rule #6)" "Alertmanager unreadable"
+want    "…so the named alert triages" "UNCLAIMED after the grace"
+
+scenario window-tail
+_window "KubePodNotReady" '{"until":"2026-01-01T01:00:00Z","closed_at":"2026-01-01T01:00:00Z","tail_until":"2099-01-01T00:00:00Z"}'; _am w1e '["s-9"]'
+go "$(alert w1e "$KPNR")"
+want    "a CLOSED window in its tail still owns what it named (defect 2: the alert fires a for: after close)" "CLAIMED by silence s-9"
+want    "…and says it is in its tail" "tail until 2099-01-01T00:00:00Z"
+
+scenario window-tail-over
+_window "KubePodNotReady" '{"until":"2026-01-01T01:00:00Z","closed_at":"2026-01-01T01:00:00Z","tail_until":"2026-01-01T01:20:00Z"}'; _am w1f '["s-9"]'
+go "$(alert w1f "$KPNR")"
+wantnot "a closed window past its tail is history, not a window" "DECLARED WINDOW"
+want    "…and the alert triages" "subject=workload:kube-system/cilium"
 
 scenario window-undeclared
 _window "KubeDaemonSetRolloutStuck,CiliumUnreachableNodes"
 go "$(alert w2 '{"alertname":"GarageClusterFlapping","namespace":"garage","pod":"garage-2"}')"
-wantnot "an UNdeclared alert is not suppressed by an open window" "DECLARED WINDOW"
-want    "…and triages normally — scoping is by alert NAME, never by node or namespace" "subject=workload:garage/garage-2"
+wantnot   "an UNdeclared alert is not held by an open window" "DECLARED WINDOW wk-03-1 names"
+want      "…and triages at once — scoping is by alert NAME, never by node or namespace" "subject=workload:garage/garage-2"
+wantbrief "…with the live window in its brief as context" "A DECLARED WINDOW IS LIVE, and it does NOT name this alert"
 
 scenario window-expired
 jq -n '{data:{"w-old":({id:"wk-03-old", by:"node-maintenance.sh", opened_at:"2020-01-01T00:00:00Z",
    until:"2020-01-01T03:00:00Z", node:"wk-03", note:"", reason:"an old window",
    alerts:["KubeDaemonSetRolloutStuck"]} | tojson)}}' > "$H/window.json"
 go "$(alert w3 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
-wantnot "an EXPIRED window suppresses nothing" "DECLARED WINDOW"
+wantnot "an EXPIRED (lapsed) window holds nothing" "DECLARED WINDOW"
 want    "…and the alert triages" "subject=workload:kube-system/cilium"
+wantnocall "…and no Alertmanager read is spent without a live window" "/api/v2/alerts"
 
 scenario window-absent
 go "$(alert w4 '{"alertname":"KubeDaemonSetRolloutStuck","namespace":"kube-system","daemonset":"cilium"}')"
-wantnot "an unreadable/absent record reads as NO window (rule #6, suppressing direction)" "DECLARED WINDOW"
+wantnot "an unreadable/absent record reads as NO window (rule #6)" "DECLARED WINDOW"
 want    "…and the alert triages" "subject=workload:kube-system/cilium"
+
+# ── the window-grace STEP (its own template, extracted the same way) ──────────────────────────
+yq -r 'select(.kind == "WorkflowTemplate") | .spec.templates[] | select(.name == "window-grace") | .container.args[0]' \
+   "$YAML" > "$TMP/grace.sh"
+bash -n "$TMP/grace.sh" && [ -s "$TMP/grace.sh" ] && ok "the window-grace script extracts and parses" || bad "window-grace extract" "empty or invalid"
+grace() { # <payload> [attempt] → $GOUT, $GRC
+  GOUT="$(PAYLOAD="$1" GRACE_ATTEMPT="${2:-0}" AM_URL=http://am.test:9093 HOME="$TMP/home" PATH="$BIN:$PATH" bash "$TMP/grace.sh" 2>&1)"; GRC=$?
+}
+scenario grace-named-unclaimed
+_window "KubePodNotReady"; _am g1 '[]'
+grace "$(alert g1 "$KPNR")"
+[ "$GRC" -eq 1 ] && grep -q 'GRACE: one retry in 10m' <<<"$GOUT" && ok "a named, unclaimed alert DEFERS (exit 1 → the step's 10m retry)" || bad "grace named/unclaimed" "rc=$GRC: $GOUT"
+wantcall "…with a deferred- marker the crosscheck reads as 'will retry'" '"deferred-'
+scenario grace-retry
+_window "KubePodNotReady"; _am g2 '[]'
+grace "$(alert g2 "$KPNR")" 1
+[ "$GRC" -eq 0 ] && ok "the retry attempt always proceeds — ONE grace, never two" || bad "grace retry" "rc=$GRC: $GOUT"
+scenario grace-claimed
+_window "KubePodNotReady"; _am g3 '["s-1"]'
+grace "$(alert g3 "$KPNR")"
+[ "$GRC" -eq 0 ] && ok "an already-claimed alert does not wait" || bad "grace claimed" "rc=$GRC: $GOUT"
+scenario grace-unnamed
+_window "CiliumUnreachableNodes"; _am g4 '[]'
+grace "$(alert g4 "$KPNR")"
+[ "$GRC" -eq 0 ] && ok "an alert the window does NOT name does not wait (the narrower scope)" || bad "grace unnamed" "rc=$GRC: $GOUT"
+scenario grace-no-window
+grace "$(alert g5 "$KPNR")"
+[ "$GRC" -eq 0 ] && ok "no window record → no wait (unreadable reads as none)" || bad "grace no window" "rc=$GRC: $GOUT"
+scenario grace-am-unreadable
+_window "KubePodNotReady"
+grace "$(alert g6 "$KPNR")"
+[ "$GRC" -eq 1 ] && ok "an unreadable Alertmanager still graces a named alert (a delay, never a drop)" || bad "grace AM unreadable" "rc=$GRC: $GOUT"
+scenario grace-dig
+_window "KubePodNotReady"; _am g7 '[]'
+grace "$(alert g7 '{"alertname":"KubePodNotReady","namespace":"x","pod":"y","triage":"dig"}')"
+[ "$GRC" -eq 0 ] && ok "a triage:dig alert never waits (not this lane's)" || bad "grace dig" "rc=$GRC: $GOUT"
+scenario grace-tail
+_window "KubePodNotReady" '{"until":"2026-01-01T01:00:00Z","closed_at":"2026-01-01T01:00:00Z","tail_until":"2099-01-01T00:00:00Z"}'; _am g8 '[]'
+grace "$(alert g8 "$KPNR")"
+[ "$GRC" -eq 1 ] && ok "a closed window in its TAIL still graces what it named" || bad "grace tail" "rc=$GRC: $GOUT"
+
+# ── structure: the grace holds NO subscription slot ──────────────────────────────────────────
+WT='select(.kind == "WorkflowTemplate")'
+# yq prints a `---` separator for each non-matching document of this multi-doc file; drop them.
+yqw() { yq -r "$WT | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
+[ "$(yqw '.spec.synchronization // "none"')" = none ] \
+  && ok "no WORKFLOW-level semaphore (it would be held through the grace's backoff)" || bad "semaphore placement" "spec.synchronization is set"
+[ "$(yqw '.spec.templates[] | select(.name == "respond") | .synchronization.semaphores[0].configMapKeyRef.name')" = subscription-capacity ] \
+  && ok "the subscription semaphore sits on the respond step" || bad "semaphore placement" "respond has no subscription-capacity semaphore"
+[ "$(yqw '.spec.templates[] | select(.name == "window-grace") | .synchronization // "none"')" = none ] \
+  && ok "the window-grace step takes no semaphore" || bad "semaphore placement" "window-grace is synchronized"
+_order="$(yqw '.spec.templates[] | select(.name == "main") | [.steps[][].template] | join(",")')"
+[ "$(yqw '.spec.entrypoint')" = main ] && [ "$_order" = "window-grace,respond" ] \
+  && ok "main runs window-grace BEFORE respond" || bad "step order" "entrypoint=$(yqw '.spec.entrypoint') order=$_order"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "FU-210 / FU-231 — the §A1 transcript + finding record"

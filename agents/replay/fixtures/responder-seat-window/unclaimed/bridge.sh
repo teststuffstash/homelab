@@ -7,7 +7,7 @@ ORG="teststuffstash"
 NAME="KubeDaemonSetRolloutStuck"
 FP="7a89cabb930c2070"
 TODAY="2026-09-17"
-SEATWIN='[{"id":"wk-03-1789600000","by":"node-maintenance.sh","opened_at":"2026-09-17T05:00:00Z","until":"2026-09-17T08:00:00Z","reason":"cordon | drain | shutdown — the pipes are the point","node":"wk-03","note":"","alerts":["KubeDaemonSetRolloutStuck","KubeDaemonSetMisScheduled","KubeNodeUnreachable","KubeletInstanceUnreachable","KubeNodeNotReady","KubePodNotReady","CiliumUnreachableNodes","CiliumAgentScrapeDown","TargetDown"]}]'
-AMSTATE='{"7a89cabb930c2070":["s-123"]}'
+SEATWIN='[{"id":"wk-03-1789600000","by":"node-maintenance.sh","opened_at":"2026-09-17T05:00:00Z","until":"2026-09-17T08:00:00Z","reason":"node-maintenance window on wk-03 — planned cordon/drain/shutdown","node":"wk-03","note":"","alerts":["KubeDaemonSetRolloutStuck","KubeDaemonSetMisScheduled","KubeNodeUnreachable","KubeletInstanceUnreachable","KubeNodeNotReady","KubePodNotReady","CiliumUnreachableNodes","CiliumAgentScrapeDown","TargetDown"]}]'
+AMSTATE='{"7a89cabb930c2070":[]}'
 AM_OK=1
 for _ in 1; do

@@ -1,0 +1,22 @@
+# FU-230 — a named alert NOBODY claimed after the grace TRIAGES, with the window in its brief.
+#
+# CONDITION UNDER REPLAY. The same live wk-03 window names `KubeDaemonSetRolloutStuck`; the grace
+# has passed and Alertmanager still reports the alert active, silenced by nothing.
+#
+# WHAT IT REDS ON. The old gate: the name matched, so it skipped — and this is exactly defect 3
+# (2026-10-08/09: a new `now` alert inside a window owned by nobody). The PIN of this change: on
+# base the gate prints DECLARED WINDOW … no session and never reaches the triage.
+#
+# THE CONTRACT: no marker, one log line saying UNCLAIMED, and the alert falls through to an
+# ordinary triage — `reached.sh` printing IS the assertion (SEATWIN_NOTE carries the window into
+# the brief; the behaviour harness asserts the brief text).
+pins:
+  - IL-T03
+name: responder-seat-window-unclaimed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

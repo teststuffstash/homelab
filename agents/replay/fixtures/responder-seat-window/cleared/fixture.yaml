@@ -1,0 +1,19 @@
+# FU-230 — a named alert that stopped firing during the grace spawns no session.
+#
+# CONDITION UNDER REPLAY. The wk-03 window names `KubePodNotReady`; by the time `respond` runs (one
+# grace later) Alertmanager READ fine and no longer holds the fingerprint — the pod came back.
+#
+# WHAT IT REDS ON. A gate that triaged everything unclaimed would spend a budget slot on an alert
+# that resolved inside the window that caused it; the resolve leg already records the clear.
+#
+# THE CONTRACT: `window-` marker, no session, the line says "cleared during the grace".
+pins:
+  - IL-T03
+name: responder-seat-window-cleared
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

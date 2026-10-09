@@ -180,7 +180,7 @@ spec:
               # that size is how the retro's cell died (E2BIG at 146 KB) — DIG_MAX_GROUPS bounds it.
               {
               cat <<'BRIEF'
-              You are the DEEP DIG — the scheduled, grouped half of the homelab alert triage (docs/agents/roles.md §deep dig, ADR-148). Not the responder: nothing here is urgent, and you are paid for DEPTH, not speed. Each group below is a set of `triage: dig` alerts that have STOOD for hours or RECURRED across days, started in the same window on the same host, and that no open issue, declared window, follow-up or earlier dig explains. The alerts that WERE explained are listed too so you do not re-derive them; the `explained_by` reference is the record — read it before you touch anything related.
+              You are the DEEP DIG — the scheduled, grouped half of the homelab alert triage (docs/agents/roles.md §deep dig, ADR-148). Not the responder: nothing here is urgent, and you are paid for DEPTH, not speed. Each group below is a set of `triage: dig` alerts that have STOOD for hours or RECURRED across days, started in the same window on the same host, and that no open issue, declared window, follow-up or earlier dig explains. The alerts that WERE explained are listed too so you do not re-derive them; the `explained_by` reference is the record — read it before you touch anything related. `windows` is the declared-window HISTORY of the lookback (agents/seat-window.sh — opened/closed/tail times, reason, the alert names it expected): when a group's onset falls inside or just after one, a person's maintenance is a hypothesis to TEST against that record, never a conclusion to assume.
 
               YOUR JOB, per group: find the ONE cause (or say honestly that you could not), with evidence you actually read, and say what would change it. Standing conditions have history — use it. Read in this order, naming each read in your evidence:
                 (1) The alert annotations in the digest — the rule author wrote the runbook hints there.
@@ -198,7 +198,7 @@ spec:
               One JSON object per block, valid JSON, no markdown fences inside the block. `explained` = you found the existing record that already answers it (name it in `related`); `unexplained` = you looked (say where) and could not say; `cause-found` = the cause is established, the fix needs a decision; `fix-proposed` = the PR above exists. Keep prose outside the blocks short; the blocks are the deliverable.
               BRIEF
               printf '\nTHE DIGEST (deep-dig-digest/v1, built %s):\n' "$(jq -r .ts /tmp/dig.json)"
-              jq '{params, groups, explained: (.explained | map({alertname, subject, explained_by})), deferred}' /tmp/dig.json
+              jq '{params, groups, explained: (.explained | map({alertname, subject, explained_by})), deferred, windows: (.windows // [])}' /tmp/dig.json
               } > /tmp/brief.md
               _ts_put /tmp/brief.md brief.md
 
