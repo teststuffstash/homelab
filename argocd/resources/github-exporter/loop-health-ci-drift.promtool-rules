@@ -1,0 +1,33 @@
+# Hand copy of the github-ci-drift group (GithubCiWallTimeDrift) from prometheusrule.yaml — the
+# rules file loop-health-ci-drift.promtool-test loads. DRIFT-PINNED by `devbox run
+# prometheus-rules-lint` (expr+for vs the CR). Re-copy after an expr edit (ONE LINE — yq 4.x
+# rejects a newline inside the expression):
+#
+#   yq -o=json '{"groups": [.spec.groups[] | select(.name == "github-ci-drift")]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: github-ci-drift
+    interval: 1h
+    rules:
+      - alert: GithubCiWallTimeDrift
+        expr: |-
+          (
+            quantile by (repo, workflow, event) (0.5,
+              max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d])))
+            > 1.5 *
+            quantile by (repo, workflow, event) (0.5,
+              max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d)))
+          ) > 120
+          and on (repo, workflow, event)
+            count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d]))) >= 20
+          and on (repo, workflow, event)
+            count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d))) >= 20
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          # triage: slow drift — the per-job timings and the workflow's git history name the cause; a daily dig, never a page
+          triage: dig
+        annotations:
+          summary: "CI wall time drifting up: {{ $labels.repo }} {{ $labels.workflow }} ({{ $labels.event }})"
+          description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 21d))).'
