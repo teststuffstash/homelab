@@ -37,7 +37,7 @@ export MGMT_LEASE_DIR="$T/lease" MGMT_SENTINEL_DIR="$T/sentinel" MGMT_TEXTFILE_D
 mkdir -p "$T/text"
 # shellcheck source=mgmt-lease.sh
 . "$HERE/mgmt-lease.sh" || { echo "FATAL: could not source mgmt-lease.sh"; exit 1; }
-_yq() { ( cd "$WT" && devbox run --quiet -- yq "$@" ); }
+_yq() { if [ "${DEVBOX_SHELL_ENABLED:-}" = 1 ]; then ( cd "$WT" && yq "$@" ); else ( cd "$WT" && devbox run --quiet -- yq "$@" ); fi; }   # fast path: see mgmt-lib.sh _yq
 mgmt_gh_token() { printf 'test-token'; }
 GH_MODE="none"; GH_LOG="$T/gh.log"
 gh_api() {  # records every call; answers by GH_MODE
