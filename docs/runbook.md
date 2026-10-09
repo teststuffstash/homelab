@@ -695,7 +695,9 @@ per-class verbs; the steps below are what it does, for reading — not for typin
 2. **Guests down in order, API stays up.** One CP per hypervisor (ADR-133), so quorum rides on the
    other two: runners drained (`runner-maint drain`) + stopped → test VMs → workers
    (`node-maintenance down`) → the CP (`node-maintenance down` → `controlplane-upgrade.sh down`) →
-   the LXC(s).
+   the LXC(s). After a worker goes down, each next Talos leg first waits (≤`LONGHORN_TIMEOUT`, 1800 s)
+   for 0 degraded attached Longhorn volumes — the worker's replicas degrade, node-maintenance's
+   preflight refuses any degraded volume, and Longhorn rebuilds on its own (600 s replenishment wait).
 3. **The router node LAST**: if it is the CARP MASTER, `router-node.sh carp-maintenance <node>
    enter` first (the partner must read `.1=MASTER` before the VM stops — it may be your own network
    path), then `qm shutdown`; then `poweroff` (or `--reboot`). `up` runs `check` + `leave` after.

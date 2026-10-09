@@ -20,7 +20,9 @@
 #   opnsense-<nx02|pve>  router   LAST: if it holds .1 (CARP MASTER), `carp-maintenance enter` first and the
 #                                 partner must read MASTER before the VM stops (docs/router-move.md); up:
 #                                 `check <node>` green, then `carp-maintenance leave` (advskew preempts back)
-# DOWN order: window → runners → test VMs → workers → CP → LXCs → router → host poweroff (--reboot: reboot).
+# DOWN order: window → runners → test VMs → workers → CP → LXCs → router → host poweroff (--reboot: reboot);
+#             after a worker went down, each next Talos leg first waits for Longhorn healthy (the worker's
+#             shutdown degrades its volumes, and node-maintenance's preflight refuses ANY degraded one).
 # UP order:   power on (nx-02: BMC via the wallet entry nx-02-bmc-password, else the manual step; pve:
 #             by hand) → onboot guests self-start (a host that did NOT reboot: started here, in order)
 #             → workers up → CP up → runners undrain + verify → router check + leave → window closed.
@@ -36,7 +38,8 @@
 # Exit: 0 ok · 2 refused, nothing touched · 1 error / failed after acting (state is printed) · 64 usage.
 # Env: FORCE=1 (accept WARNs, passed to node-maintenance), DRY=1, SILENCE=0, SILENCE_HOURS (4),
 #      GUEST_TIMEOUT (600 s, per guest stop/start), HOST_TIMEOUT (900 s, host back on ssh),
-#      VERIFY_TIMEOUT (900 s, runner/router green after boot), HOST_ALERTS, NM_AM, PVE_SSH_KEY.
+#      VERIFY_TIMEOUT (900 s, runner/router green after boot), LONGHORN_TIMEOUT (1800 s, Longhorn healthy
+#      between Talos legs = the 600 s replica-replenishment wait + a rebuild), HOST_ALERTS, NM_AM, PVE_SSH_KEY.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,6 +54,7 @@ KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"; KEYX="$HOME/.claude/homelab-ke
 AM="${NM_AM:-http://192.168.40.14:9093}"
 DRY="${DRY:-0}"; FORCE="${FORCE:-0}"; SILENCE="${SILENCE:-1}"; SILENCE_HOURS="${SILENCE_HOURS:-4}"
 GUEST_TIMEOUT="${GUEST_TIMEOUT:-600}"; HOST_TIMEOUT="${HOST_TIMEOUT:-900}"; VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-900}"
+LONGHORN_TIMEOUT="${LONGHORN_TIMEOUT:-1800}"
 HOST_ALERTS="${HOST_ALERTS:-TargetDown,PveMetricsAbsent,PveMetricsStale,CiRunnerNodeExporterDown,RouterPairMasterCount,RouterWanGateSilent,LonghornBackupTargetDown,KubeNodeUnreachable,KubeNodeNotReady,KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,CiliumUnreachableNodes}"
 BY=host-maintenance.sh
 export FORCE
@@ -258,6 +262,7 @@ show() {
     assert_partner_master) printf 'wait until opnsense-%s reads .1=MASTER (≤60s)' "$PARTNER" ;;
     assert_all_stopped) printf 'refuse unless every guest on %s reads stopped' "$HOST" ;;
     wait_green) printf 'poll `%s` until it exits 0 (≤%ss)' "$(show "${@:2}")" "$VERIFY_TIMEOUT" ;;
+    longhorn_healthy) printf 'wait until no attached Longhorn volume reads non-healthy (≤%ss; Longhorn self-heals, nothing is touched)' "$LONGHORN_TIMEOUT" ;;
     host_power) printf 'ssh root@%s systemctl %s, then wait until ssh stops answering (≤300s)' "$HIP" "$2" ;;
     *) printf '%s' "$*" ;;
   esac
@@ -282,6 +287,26 @@ assert_all_stopped() {
   local up; up="$( { hv 'qm list'; hv 'pct list'; } | awk 'NR>1 && / running /')" || return 1
   [ -z "$up" ] || { log "still running on $HOST:"; sed 's/^/  /' <<<"$up" >&2; return 1; }
 }
+longhorn_healthy() { # wait only — the replica rebuild is Longhorn's own (replenishment wait, then a rebuild); never hand-act
+  local t=0 last=-60 v e bad prev=""
+  while :; do
+    if v="$(kubectl -n longhorn-system get volumes.longhorn.io -o json 2>/dev/null)" \
+       && bad="$(jq -r '.items[]|select(.status.state=="attached" and .status.robustness!="healthy")|"\(.metadata.name) \(.status.robustness)"' <<<"$v")"; then
+      [ -z "$bad" ] && { ok "Longhorn: 0 degraded attached volumes${prev:+ (after ${t}s)}"; return 0; }
+      [ -n "$prev" ] || { log "Longhorn degraded attached volume(s) — waiting for the self-heal:"; sed 's/^/  /' <<<"$bad" >&2; }
+      prev="$bad"
+      if [ $((t-last)) -ge 60 ]; then last=$t
+        e="$(kubectl -n longhorn-system get engines.longhorn.io -o json 2>/dev/null | jq -r '[.items[]|select(.status.rebuildStatus!=null and (.status.rebuildStatus|length)>0)
+              |"\(.spec.volumeName) " + ([.status.rebuildStatus[]|"\(.progress)%"]|join(","))]|join("; ")' 2>/dev/null)" || e=""
+        log "Longhorn: $(wc -l <<<"$bad") degraded after ${t}s${e:+ — rebuilding: $e}"
+      fi
+    else
+      prev="${prev:-unreadable}"; log "Longhorn volumes unreadable after ${t}s — counts as not healthy"
+    fi
+    [ $t -ge "$LONGHORN_TIMEOUT" ] && { log "TIMEOUT: Longhorn not healthy after ${LONGHORN_TIMEOUT}s:"; sed 's/^/  /' <<<"$prev" >&2; return 1; }
+    sleep 15; t=$((t+15))
+  done
+}
 host_power() { # poweroff|reboot — the ssh session drops with the host
   hv "systemctl $1" || true
   local t=0; while hv true 2>/dev/null; do sleep 5; t=$((t+5)); [ $t -ge 300 ] && { log "$HOST still answers ssh after 300s"; return 1; }; done
@@ -301,9 +326,12 @@ down() {
   while read -r k id name st c ob; do [ -n "$k" ] || continue
     run hv qm shutdown "$id" --timeout "$GUEST_TIMEOUT"; run wait_status qm "$id" "$name" stopped
   done <<<"$(of test running)"
+  local wk=0   # a worker went down this run: its volumes degrade, and the next Talos leg's preflight refuses that
   for cls in worker cp; do
     while read -r k id name st c ob; do [ -n "$k" ] || continue
+      [ "$wk" = 1 ] && run longhorn_healthy
       run nm down "$name"; run wait_status qm "$id" "$name" stopped
+      [ "$cls" = worker ] && wk=1
     done <<<"$(of "$cls" running)"
   done
   for cls in backup lxc; do
