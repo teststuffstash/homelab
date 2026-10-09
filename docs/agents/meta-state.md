@@ -13,8 +13,7 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-10-09 11:40Z — seat; TICK-LOG 2026-10-09 midday).** **WINDOW 2 WAN LEG DONE — the
   router pair is complete** (window `seat-1791544351-8289`, closed clean): pve's WAN cable in, the proof
   served WAN from pve 6 min, the FU-308 dead-man (#2399, merged) fired the failback on time; nx-02's gate
-  restarted while BACKUP (flood-off live on both). PR #2400 (router-move §Status) auto-merge armed — land
-  it if the updater race holds it. **Reads:** (1) FU-297 next = the weekly rebuild drill RED since 10-04
+  restarted while BACKUP (flood-off live on both). router-move §Status = #2400 (merged). **Reads:** (1) FU-297 next = the weekly rebuild drill RED since 10-04
   (`MgmtOpnsenseDrillFailed`, converge rc=2 in 9 s; next run Sun 10-11 03:37Z) — undiagnosed; (2) FU-307
   (`RouterMasterWanDark`) unblocked — the gate's carrier export rides a BACKUP-side restart; (3) the nx-02
   DIMM window (FU-289) is next for the router program; (4) loose: both router nodes carry the hostname
