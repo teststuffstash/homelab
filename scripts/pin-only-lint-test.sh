@@ -15,6 +15,9 @@ command -v jq >/dev/null || { echo "FAIL: jq not on PATH — run via \`devbox ru
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export PIN_ONLY_REPO="$T/repo" PIN_ONLY_GH="$T/gh-stub" STUB="$T/api" PIN_ONLY_SLUG="teststuffstash/synthetic"
+# The lint's CI arm (three-dot via GitHub's compare) must not be selected by a CI job's env leaking
+# in — the cases below set it explicitly where they mean it.
+unset PR_HEAD_SHA BASE_REF GITHUB_REPOSITORY GITHUB_EVENT_PATH
 
 # ── the gh stub: `gh api <path> --jq <expr>` → jq -r <expr> over $STUB/<path>; a missing file is
 # the 404 shape (non-zero, message on stderr) — exactly what an unknown tag returns upstream.
@@ -316,6 +319,74 @@ else
   fail=$((fail+1)); echo "FAIL initial-pin-owner-mismatch — wanted 'do not pair up', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
 fi
 git -C "$R2" checkout -q master
+
+# ── three-dot (homelab#1713 / #1736): master moves a GUARDED file after the branch forks. The
+# lint judges the branch's OWN diff (merge base → head), so master's change is never the PR's.
+# Master's commit is a NON-pin edit of openrouter-operator.yaml (chart: x → y — it reached master by
+# the operator path); each branch forks at BASE, BEFORE it. Two arms, both from the script's header:
+#   local  — HEAD is the branch, base = master's tip (a branch merely BEHIND master, #1713);
+#   CI     — HEAD is a synthetic refs/pull/N/merge (master tip + branch), base = the event-time
+#            base.sha, PR_HEAD_SHA = the branch tip, and the stubbed compare names the fork point as
+#            merge base (#1736: master advanced between the PR event and the checkout);
+#   shallow — the real CI shape: a depth-1 clone of that merge ref, base fetched at depth 1, the PR
+#            head read from an Actions event payload ($GITHUB_EVENT_PATH — no env wiring), and the
+#            merge base + head fetched by the lint itself from origin (a file:// remote here).
+# A branch that writes a non-pin line itself stays red in both arms, naming ITS file only.
+rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
+git -C "$R" checkout -q master && git -C "$R" reset -q --hard "$BASE"
+sed -i 's|chart: x|chart: y|' "$R/argocd/platform/openrouter-operator.yaml"
+git -C "$R" commit -q -am "master: operator edit of a guarded file"
+MASTER_TIP="$(git -C "$R" rev-parse HEAD)"
+mkdir -p "$STUB/repos/$PIN_ONLY_SLUG/compare"
+git -C "$R" config uploadpack.allowAnySHA1InWant true  # the shallow arm fetches by SHA, as from GitHub
+printf '{"merge_base_commit":{"sha":"%s"}}\n' "$BASE" >"$STUB/repos/$PIN_ONLY_SLUG/compare/master...pin-head"
+# three_dot_ <name> <want: ok | stderr keyword> <must-not-name> <edit shell on the branch>
+three_dot_() {
+  local name="$1" want="$2" absent="$3" edit="$4" head arm out rc ok
+  git -C "$R" checkout -q -b "td-$name" "$BASE"
+  ( cd "$R" && eval "$edit" ) >/dev/null 2>&1
+  git -C "$R" add -A && git -C "$R" commit -q -m "$name"; head="$(git -C "$R" rev-parse HEAD)"
+  # the stub is keyed by path; re-key the compare file to this branch's head sha
+  cp "$STUB/repos/$PIN_ONLY_SLUG/compare/master...pin-head" "$STUB/repos/$PIN_ONLY_SLUG/compare/master...$head"
+  for arm in local ci shallow; do
+    if [ "$arm" = local ]; then
+      out="$(bash "$LINT" "$MASTER_TIP" 2>&1)"; rc=$?
+    elif [ "$arm" = ci ]; then
+      git -C "$R" checkout -q --detach "$MASTER_TIP" && git -C "$R" merge -q --no-ff --no-edit "$head" >/dev/null
+      out="$(PR_HEAD_SHA="$head" BASE_REF=master GITHUB_REPOSITORY="$PIN_ONLY_SLUG" bash "$LINT" "$BASE" 2>&1)"; rc=$?
+    else
+      git -C "$R" branch -f "pull-merge-$name" HEAD  # the ci arm's merge commit, as refs/pull/N/merge
+      rm -rf "$T/shallow"; git clone -q --depth 1 --branch "pull-merge-$name" "file://$R" "$T/shallow"
+      git -C "$T/shallow" fetch -q --no-tags --depth=1 origin "$BASE"
+      printf '{"pull_request":{"head":{"sha":"%s"},"base":{"ref":"master"}}}\n' "$head" >"$T/event.json"
+      out="$(PIN_ONLY_REPO="$T/shallow" GITHUB_EVENT_PATH="$T/event.json" GITHUB_REPOSITORY="$PIN_ONLY_SLUG" bash "$LINT" "$BASE" 2>&1)"; rc=$?
+    fi
+    if [ "$want" = ok ]; then
+      [ $rc = 0 ] && grep -q '^pin-only-lint: OK' <<< "$out" && ok=1 || ok=0
+    else
+      [ $rc != 0 ] && grep -qF -- "$want" <<< "$out" && ok=1 || ok=0
+    fi
+    [ -n "$absent" ] && grep -qF -- "$absent" <<< "$out" && ok=0
+    if [ "$ok" = 1 ]; then pass=$((pass+1)); echo "PASS three-dot-$name [$arm] (rc $rc)"
+    else fail=$((fail+1)); echo "FAIL three-dot-$name [$arm] — wanted ${want}${absent:+, never naming $absent}, rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'; fi
+  done
+  git -C "$R" checkout -q master
+}
+# The renovate shape of #1713's acceptance: an arc-runner pin bump forked before master's edit → OK.
+three_dot_ behind-pin-bump ok openrouter-operator \
+  "sed -i 's|arc-runner:2026.9.1-gaaaa|arc-runner:2026.9.25-gbbbb|' argocd/platform/arc-runners.yaml"
+# A docs-only branch behind the same master edit → the no-op verdict, not master's file.
+three_dot_ behind-docs-only ok openrouter-operator "echo x > README.md"
+# The branch writes a non-pin line into a guarded file itself → still red, on arc-runners only.
+three_dot_ behind-smuggled 'may only receive PIN lines' openrouter-operator \
+  "echo '      privileged: true' >> argocd/platform/arc-runners.yaml"
+# Fail closed: the CI arm with no readable compare (no stub file → the 404 shape) is a FAIL, rc 2.
+out="$(PR_HEAD_SHA="$MASTER_TIP" BASE_REF=master GITHUB_REPOSITORY="$PIN_ONLY_SLUG" bash "$LINT" "$BASE" 2>&1)"; rc=$?
+if [ $rc = 2 ] && grep -q 'could not read the merge base' <<< "$out"; then
+  pass=$((pass+1)); echo "PASS three-dot-compare-unreadable (rc 2)"
+else
+  fail=$((fail+1)); echo "FAIL three-dot-compare-unreadable — wanted rc 2 'could not read the merge base', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
+fi
 
 echo "pin-only-lint-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

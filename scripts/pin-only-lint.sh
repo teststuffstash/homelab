@@ -129,25 +129,73 @@ if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
   exit 2
 fi
 
-changed="$(git diff --name-only "$BASE" HEAD | grep -E "$GUARDED" || true)"
-wf_changed="$(git diff --name-only "$BASE" HEAD | grep -E "$WORKFLOW_GUARDED" || true)"
+# homelab#1713 / #1736 — diff THREE-DOT: the branch's own changes since its fork, FROM the merge base
+# TO the branch head, never two-dot from a base tip. A two-dot diff attributes to the PR every
+# guarded-file change master made after the fork (a renovate PR merely BEHIND master, #1713) or in
+# the event→checkout gap (#1736, PR#1699's 42 s). The sibling of governance-lint's #1441 (b) fix —
+# same shape, same fail-closed rule; this lint needs the merge-base OBJECT too (the per-file -U0 and
+# `git show <rev>:<file>` checks compare head against the fork point, not against the base tip), so
+# in CI it asks GitHub's server-side three-dot compare for the merge base (depth-independent — the
+# checkout is a depth-1 merge ref) and fetches it + the head at depth 1; locally git has the history
+# and `git merge-base "$BASE" HEAD` is the same answer. (In CI the side is $BASE_REF.)
+# The CI arm reads PR_HEAD_SHA/BASE_REF from env, else from the Actions event payload itself
+# ($GITHUB_EVENT_PATH → .pull_request) — so no caller has to wire them: ci.yaml's step and every
+# repo on pin-only.reusable.yml (which runs THIS file from homelab master) get the arm unchanged,
+# and the local arm never meets a depth-1 merge ref (no merge-base there → it would fail closed).
+# OUT OF SCOPE (stated, #1736's comment): a master-sync PR into goal/** genuinely carries master's
+# content past its merge base, so three-dot ≡ two-dot there — that shape is not fixed here.
+if [ -z "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -r "$GITHUB_EVENT_PATH" ]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "pin-only-lint: FAIL — jq not on PATH, cannot read the PR head from \$GITHUB_EVENT_PATH; refusing to report success." >&2; exit 2
+  fi
+  PR_HEAD_SHA="$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+  [ -n "${BASE_REF:-}" ] || BASE_REF="$(jq -r '.pull_request.base.ref // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+fi
+if [ -n "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  if ! FROM="$("$GH" api "repos/${GITHUB_REPOSITORY}/compare/${BASE_REF:-master}...${PR_HEAD_SHA}" --jq '.merge_base_commit.sha' 2>&1)" \
+     || ! grep -Eq '^[0-9a-f]{40}$' <<< "$FROM"; then
+    echo "pin-only-lint: FAIL — could not read the merge base of ${BASE_REF:-master}...${PR_HEAD_SHA} from GitHub's compare (${FROM:-empty}); refusing to report success." >&2
+    exit 2
+  fi
+  TO="$PR_HEAD_SHA"
+  for rev in "$FROM" "$TO"; do
+    git cat-file -e "${rev}^{commit}" 2>/dev/null && continue
+    if ! git fetch -q --no-tags --depth=1 origin "$rev" 2>/dev/null || ! git cat-file -e "${rev}^{commit}" 2>/dev/null; then
+      echo "pin-only-lint: FAIL — could not fetch $rev (the three-dot side) from origin; refusing to report success." >&2
+      exit 2
+    fi
+  done
+else
+  if ! FROM="$(git merge-base "$BASE" HEAD 2>/dev/null)"; then
+    echo "pin-only-lint: FAIL — no merge-base between '$BASE' and HEAD (shallow checkout?); refusing to report success." >&2
+    exit 2
+  fi
+  TO=HEAD
+fi
+if ! all_changed="$(git diff --name-only "$FROM" "$TO")"; then
+  echo "pin-only-lint: FAIL — cannot diff $FROM...$TO; refusing to report success." >&2
+  exit 2
+fi
+
+changed="$(grep -E "$GUARDED" <<< "$all_changed" || true)"
+wf_changed="$(grep -E "$WORKFLOW_GUARDED" <<< "$all_changed" || true)"
 # (f): tofu/*.tf files are NOT guarded (owned, reviewed as usual) — only their ADDED image lines
 # are checked against the reverted-image memory, and only when there are any.
-tofu_changed="$(git diff --name-only "$BASE" HEAD | grep -E '^tofu/.*\.tf$' || true)"
+tofu_changed="$(grep -E '^tofu/.*\.tf$' <<< "$all_changed" || true)"
 TOFU_IMAGE_ADDED='^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"[A-Za-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?"$'
 added_images=""
 if [ -n "$tofu_changed" ]; then
   # shellcheck disable=SC2086  # word-splitting the newline list is the point
-  added_images="$(git diff "$BASE" HEAD -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
+  added_images="$(git diff "$FROM" "$TO" -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
 fi
 # (g): the lockfiles' ADDED provider versions, as "<name>@<version>" — read from the head's file per
 # provider block (a version line alone does not say whose it is), kept only where the base differs.
 lock_pairs() { awk '/^provider "/ { src = $2; gsub(/"/, "", src); n = split(src, p, "/"); name = p[n] }
                     /^[[:space:]]*version[[:space:]]*=/ && name != "" { v = $3; gsub(/"/, "", v); print name "@" v; name = "" }'; }
 added_providers=""
-for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)\.terraform\.lock\.hcl$' || true); do
-  new_pairs="$(git show "HEAD:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
-  old_pairs="$(git show "$BASE:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+for lf in $(grep -E '(^|/)\.terraform\.lock\.hcl$' <<< "$all_changed" || true); do
+  new_pairs="$(git show "$TO:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
+  old_pairs="$(git show "$FROM:$lf" 2>/dev/null | lock_pairs | sort -u || true)"
   added_providers="$added_providers $(comm -23 <(printf '%s\n' "$new_pairs") <(printf '%s\n' "$old_pairs") | tr '\n' ' ')"
 done
 added_providers="$(printf '%s\n' $added_providers | grep . | sort -u || true)"
@@ -158,13 +206,13 @@ added_providers="$(printf '%s\n' $added_providers | grep . | sort -u || true)"
 # `path:` source) contributes nothing, so a raw-manifest Application never reads the memory.
 TARGET_REVISION_ADDED='^\+[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?([[:space:]]+#.*)?[[:space:]]*$'
 added_charts=""
-for pf in $(git diff --name-only "$BASE" HEAD | grep -E '^argocd/platform/[^/]+\.ya?ml$' || true); do
-  chart="$(git show "HEAD:$pf" 2>/dev/null | awk '/^[[:space:]]*chart:[[:space:]]*[^[:space:]]/ { print $2; exit }' | tr -d "\"'" || true)"
+for pf in $(grep -E '^argocd/platform/[^/]+\.ya?ml$' <<< "$all_changed" || true); do
+  chart="$(git show "$TO:$pf" 2>/dev/null | awk '/^[[:space:]]*chart:[[:space:]]*[^[:space:]]/ { print $2; exit }' | tr -d "\"'" || true)"
   [ -n "$chart" ] || continue
   while read -r ver; do
     [ -n "$ver" ] || continue
     added_charts="${added_charts}${pf} ${chart}@${ver}"$'\n'
-  done <<< "$(git diff -U0 "$BASE" HEAD -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
+  done <<< "$(git diff -U0 "$FROM" "$TO" -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
 done
 added_charts="$(printf '%s' "$added_charts" | grep . | sort -u || true)"
 # (i): the ADDED lock versions — per changed devbox.lock, "<name>@<new>" for every package whose
@@ -180,12 +228,12 @@ lock_moved() {  # <old-json> <new-json> → "<name>@<new>" per line
     | "\(.key)@\(.value)"'
 }
 added_locks=""
-for lf in $(git diff --name-only "$BASE" HEAD | grep -E '(^|/)devbox\.lock$' || true); do
+for lf in $(grep -E '(^|/)devbox\.lock$' <<< "$all_changed" || true); do
   if ! command -v jq >/dev/null 2>&1; then
     echo "pin-only-lint: FAIL — jq not on PATH, cannot key the $lf diff (check (i)); refusing to report success." >&2; exit 2
   fi
-  new_json="$(git show "HEAD:$lf" 2>/dev/null || echo '{}')"
-  old_json="$(git show "$BASE:$lf" 2>/dev/null || echo '{}')"
+  new_json="$(git show "$TO:$lf" 2>/dev/null || echo '{}')"
+  old_json="$(git show "$FROM:$lf" 2>/dev/null || echo '{}')"
   if ! moved="$(lock_moved "$old_json" "$new_json" 2>&1)"; then
     echo "pin-only-lint: FAIL — cannot parse $lf at base/head (check (i)): $moved; refusing to report success." >&2; exit 2
   fi
@@ -282,7 +330,7 @@ if [ -n "$added_locks" ]; then
 fi
 for f in $changed; do
   # Content lines only: strip the +++/--- headers, keep real additions/removals.
-  offending="$(git diff -U0 "$BASE" HEAD -- "$f" \
+  offending="$(git diff -U0 "$FROM" "$TO" -- "$f" \
     | grep -E '^[-+][^-+]' \
     | grep -Ev "$PIN_LINE" || true)"
   if [ -n "$offending" ]; then
@@ -314,7 +362,7 @@ resolve_tag_commit() {
 }
 
 for f in $wf_changed; do
-  lines="$(git diff -U0 "$BASE" HEAD -- "$f" | grep -E '^[-+][^-+]' || true)"
+  lines="$(git diff -U0 "$FROM" "$TO" -- "$f" | grep -E '^[-+][^-+]' || true)"
   if [ -z "$lines" ]; then  # a rename / mode change / empty patch is not a pin bump
     echo "pin-only-lint: FAIL — $f changed without a single content line; a workflow may only receive action pin bumps via a PR." >&2
     rc=1; continue
