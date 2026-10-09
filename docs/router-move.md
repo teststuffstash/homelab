@@ -367,6 +367,10 @@ above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back 
 4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out —
    **`scripts/opnsense-router-node.sh carp-maintenance enter|leave|status nx02`**, never the raw API:
    the API verb is a toggle and `enable` does not leave maintenance (the 2026-10-08 incident, below).
+   `enter` arms a **dead-man on the node** (FU-308): a sleeper that leaves maintenance by itself after
+   `DEADMAN` seconds (default 900) if the demotion is still set, so a proof that cuts the seat's own
+   path (the jail rides `.1`) reverts without the seat; a completed `leave` disarms it. Run the proof
+   with the seat OFF the path it moves (hotspot + LAN cable) and a probe from outside the cut.
 
 **The 2026-10-02 "standby node served DHCP" trip, explained (2026-10-08).** pve's node had no
 DHCP server at all (Kea, dnsmasq, dhcpd all off; no API write that day). Its filter log for

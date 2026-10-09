@@ -113,14 +113,39 @@ killswitch_arm() {
 # (docs/router-move.md §Status, 2026-10-09). So: read the demotion FIRST, act only
 # when the state differs from the goal, and verify the VIP afterwards.
 carp_demotion() { node_ssh sysctl -n net.inet.carp.demotion 2>/dev/null; }
+# THE DEAD-MAN (FU-308): `enter` arms a sleeper ON THE NODE that leaves maintenance by itself after
+# DEADMAN seconds (default 900) if nobody did — the 2026-10-08 proof cut the seat's own WAN path
+# (the jail rides `.1`) and sat latched for nine hours. Runs on the node, not the jail: it must fire
+# when the jail is blind. Conditional (demotion still >= 240 → the same toggle the verb uses), so a
+# completed `leave` makes it a no-op; `leave` also kills it. `status` shows whether one is armed.
+DEADMAN_SH=/tmp/carp-deadman.sh; DEADMAN_PID=/tmp/carp-deadman.pid
+# Liveness by PIDFILE + `kill -0`, never `pgrep -f`: the name would also match the `sh -c` sshd runs
+# these strings in (reviewer, #2399). The sleeper removes its own pidfile when it ends.
+deadman_arm() {
+  local secs="${DEADMAN:-900}"
+  printf '%s\n' '#!/bin/sh' \
+    "# armed $(date -u +%FT%TZ) by scripts/opnsense-router-node.sh carp-maintenance enter (FU-308)" \
+    "sleep $secs" \
+    'if [ "$(sysctl -n net.inet.carp.demotion)" -ge 240 ]; then' \
+    '  echo "$(date -u +%FT%TZ) DEADMAN fired after '"$secs"'s: leaving CARP maintenance" >> /tmp/carp-deadman.log' \
+    '  /usr/local/bin/php /usr/local/opnsense/scripts/interfaces/carp_set_status.php maintenance >> /tmp/carp-deadman.log 2>&1; echo >> /tmp/carp-deadman.log' \
+    'else echo "$(date -u +%FT%TZ) deadman: not in maintenance, nothing to do" >> /tmp/carp-deadman.log; fi' \
+    "rm -f $DEADMAN_PID" \
+    | node_ssh "cat > $DEADMAN_SH && chmod +x $DEADMAN_SH; p=\$(cat $DEADMAN_PID 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null; nohup $DEADMAN_SH >/dev/null 2>&1 </dev/null & echo \$! > $DEADMAN_PID; sleep 0.3; kill -0 \$(cat $DEADMAN_PID) 2>/dev/null && echo armed" \
+    | grep -qx armed || die "dead-man did not arm on $HOST — not entering maintenance"
+  log "dead-man armed on $INV_HOST: leaves maintenance by itself in ${secs}s (DEADMAN=<s> to change)"
+}
+deadman_disarm() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then kill \$p && rm -f $DEADMAN_PID && echo 'dead-man disarmed'; else echo 'no dead-man was armed'; fi"; }
+deadman_status() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then echo \"dead-man ARMED (pid \$p)\"; else echo 'no dead-man'; fi; tail -n 2 /tmp/carp-deadman.log 2>/dev/null"; }
 carp_vip1() { api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[]? | select(.subnet=="192.168.2.1") | .status] | join(",")'; }
 carp_maintenance() {   # $1 = enter|leave|status
   local dem r i; [ -n "$API_CURL" ] || api_setup
   dem="$(carp_demotion)"; [ -n "$dem" ] || die "cannot read net.inet.carp.demotion on $HOST"
   case "$1" in
-    status) echo "$INV_HOST ($HOST): demotion=$dem .1=$(carp_vip1) $( [ "$dem" -ge 240 ] && echo 'IN maintenance' || echo 'not in maintenance')"; return 0 ;;
+    status) echo "$INV_HOST ($HOST): demotion=$dem .1=$(carp_vip1) $( [ "$dem" -ge 240 ] && echo 'IN maintenance' || echo 'not in maintenance'); $(deadman_status | tr '\n' ' ')"; return 0 ;;
     enter)
       [ "$dem" -ge 240 ] && { log "$INV_HOST already in maintenance (demotion $dem) — not toggling"; return 0; }
+      deadman_arm
       r="$(curl -sk -K "$API_CURL" --max-time 15 -X POST "https://$HOST/api/diagnostics/interface/carp_status/maintenance")"
       grep -q enter_maintenance <<<"$r" || die "unexpected answer: $r" ;;
     leave)
@@ -131,7 +156,7 @@ carp_maintenance() {   # $1 = enter|leave|status
   esac
   for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; dem="$(carp_demotion)"; [ "$1" = enter ] && [ "$dem" -ge 240 ] && break; [ "$1" = leave ] && [ "$dem" = 0 ] && break; done
   log "$1: demotion=$dem .1 on $INV_HOST = $(carp_vip1)"
-  case "$1:$dem" in enter:240|enter:24[1-9]|enter:2[5-9][0-9]) ;; leave:0) ;; *) die "demotion did not settle ($dem)";; esac
+  case "$1:$dem" in enter:240|enter:24[1-9]|enter:2[5-9][0-9]) ;; leave:0) log "$(deadman_disarm)" ;; *) die "demotion did not settle ($dem)";; esac
 }
 
 killswitch_disarm() { pve "systemctl stop $KS_UNIT; echo \"\$(date -u +%FT%TZ) disarmed\" >> $KS_LOG; echo 'disarmed (still enabled: re-arms at the next host boot)'"; }
