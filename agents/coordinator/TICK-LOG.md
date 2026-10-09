@@ -12878,7 +12878,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   The host window stays open until `host-maint up nx-02`; nx-01's until `node-maintenance up nx-01`.
 - **Findings:** (1) the host verb needs a Longhorn-healthy wait between its worker and CP legs (or the CP
   preflight scoped to the volumes the CP leg can hurt) — the first real run hit it; the FU mint is held by the
-  gate's bar (bounded, decided) → a subagent PR, this session. (2) `registry-fs`'s replica now lives
+  gate's bar (bounded, decided) → **#2402 (Opus subagent, merged 13:27Z, bot approved first pass)**: a `longhorn_healthy` step after EVERY worker leg taken down in the run (pve's three workers would each have refused the next), `LONGHORN_TIMEOUT` 1800 s, read failure = not healthy, runbook step updated; a RESUMED run with workers already stopped still does not wait (the re-run-after-heal shape). (2) `registry-fs`'s replica now lives
   off wk-04 — the runbook's documented single-worker class (FU-289 saw `registry-data` do the same 09-28 →
   `LonghornNodeOverProvisioned`); re-read after `up`. (3) `up nx-02` after a poweroff is the manual ipmitool
   step (no `nx-02-bmc-password` in the wallet, FU-288) — the RAM swap unplugs the chassis anyway, so WoL

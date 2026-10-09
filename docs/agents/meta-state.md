@@ -19,7 +19,7 @@ never the session's arc — that is TICK-LOG's.)
   nx-02 via the host verb's first real run — TICK-LOG 12:40–13:15Z); after the RAM swap: power buttons on both sleds,
   then `node-maintenance up nx-01` + `host-maint up nx-02` (manual ipmitool/power-on step, FU-288), confirm 3 CPs +
   etcd 3/3, re-read `registry-fs`'s replica placement (left wk-04 during the window); the host verb's
-  worker→CP Longhorn-healthy wait is a subagent PR in flight; (4) loose: both router nodes carry the hostname
+  Longhorn-healthy wait after each worker leg landed (#2402, 13:27Z); (4) loose: both router nodes carry the hostname
   `opnsense-test.teststuff.net` (seed carry-over, cosmetic, not sent to the ISP).
 - **⚑ PICKUP (2026-10-09 05:00Z — seat; TICK-LOG 2026-10-08 evening → 10-09 morning).** **Window 2 DONE:
   pve's node is the CARP BACKUP (Kea HA standby, BGP peer .71), WAN cable still OUT** — the WAN leg of the proof
