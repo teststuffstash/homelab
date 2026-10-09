@@ -13000,4 +13000,4 @@ updates or reverts as much as possible — mechanical revert or a responder."
   sessions ran 13:45–13:47.
 - **Operator rulings:** window ownership by SILENCE (claim/hand-off, leases, close tail, responder grace; HA muting
   accepted — operator watches Alertmanager in windows) → FU-230, subagent `feat/window-claims-by-silence`; dig
-  dedup shape fix → FU-249 (a), subagent `fix/deep-dig-prior-shape`. Open: the reader surface (FU-249 (c)).
+  dedup shape fix → FU-249 (a), subagent `fix/deep-dig-prior-shape`; reader = `/board-sweep` now (#2416), a retro-like batch reader later.

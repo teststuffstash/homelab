@@ -1378,8 +1378,8 @@ the block needs pruning, not more headings.
       filter deleted, deep dig PR#2212). Evidence + the 10-07→10-09 mapping (seven gaps, owners named):
       [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md) §2026-10-09. **Next:** (a) the dig's
       7-day dedup never matched (finding shape ≠ `explain_prior` key) — fix in flight (seat subagent,
-      `fix/deep-dig-prior-shape`); (b) a dig `explained` verdict must persist (not re-dig nightly); (c) the
-      READER for dig findings + `now` triage prose — operator's choice of surface, FU-231 (a); (d) `now`-lane
+      `fix/deep-dig-prior-shape`); (b)+(c) READER = `/board-sweep` (operator 10-09; PR#2416) — it adds the alert
+      name to the explaining FU/issue so the dig stops re-digging; a retro-like batch reader later; (d) `now`-lane
       grouping (one cause → N sessions); (e) the lane's own dependency cone (WAN loss → retries held the
       subscription slots). oracle-fleet's 5 rules still lack `triage` (stack lane). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat unread in Loki
