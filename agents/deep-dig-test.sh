@@ -205,23 +205,60 @@ go
 jqok "the seat's meta-state naming the alert explains it" '.explained[0].explained_by == "meta-state"'
 rm -f "$REPO_SNAP/docs/agents/meta-state.md"
 
+# The prior findings are what `harvest` REALLY writes: run select, wrap a session block for the
+# digest's group in the brief's markers, harvest it with the run's digest (DIG_DIGEST) — never a
+# hand-written {alertname, subject} object. That hand-written shape is the one the gate matched
+# and no harvested record ever carried: the fixture passed while the live gate re-dug the same
+# group four days running (2026-10-06…09).
+CFP_ALERT() { alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" --arg d "${1:-cf-api-proxy}" '$k + {namespace:$d, deployment:$d, triage:"dig"}')"; }
+prior_from_run() { # <finding-ts-epoch> <verdict> — harvest a finding for THIS scenario's group 0 → $H/prior.json
+  go
+  local key; key="$(jq -r '.groups[0].key' "$H/digest.json")"
+  # The session's `alerts` prose deliberately names nothing: the stamped members are the key.
+  { echo BEGIN-DIG-FINDING
+    jq -nc --arg g "$key" --arg v "$2" '{schema:"dig-finding/v1", group:$g, alerts:["(the session wrote prose here)"], verdict:$v,
+      cause:"", evidence:[], recommendation:"", pr:"", related:[], tool_gaps:[]}'
+    echo END-DIG-FINDING; } > "$H/prior-dig.log"
+  rm -rf "$H/prior-findings"
+  DIG_DIGEST="$H/digest.json" DIG_TS="$(iso "$1")" DIG_RUN=dig-x/dig-r1-x bash "$SEL" harvest "$H/prior-dig.log" "$H/prior-findings" >/dev/null 2>&1
+  jq -s '.' "$H/prior-findings"/finding-*.json > "$H/prior.json" 2>/dev/null || printf '[]' > "$H/prior.json"
+}
+
 scenario explained-prior-dig
-am "[$(alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
-jq -n --arg ts "$(iso $((NOW - 2*86400)))" '[{alertname:"KubeDeploymentReplicasMismatch", subject:"workload:cf-api-proxy/cf-api-proxy", ts:$ts, verdict:"cause-found"}]' > "$H/prior.json"
+am "[$(CFP_ALERT)]"
+prior_from_run $((NOW - 2*86400)) cause-found
+jq -e '.[0] | has("alertname") | not' "$H/prior.json" >/dev/null 2>&1 && jq -e '.[0].members == [{alertname:"KubeDeploymentReplicasMismatch", subject:"workload:cf-api-proxy/cf-api-proxy"}]' "$H/prior.json" >/dev/null 2>&1 \
+  && ok "the harvested record carries the digest's members, no top-level alertname (the real shape)" || bad "harvested prior shape" "$(cat "$H/prior.json")"
 go
-jqok "a dig finding for the same (alert, subject) 2 days ago explains it (no daily re-dig)" '(.explained[0].explained_by | startswith("dug "))'
+jqok "a HARVESTED dig finding for the same (alert, subject) 2 days ago explains it (no daily re-dig)" '.counts.unexplained == 0 and (.explained[0].explained_by | startswith("dug "))'
 
 scenario explained-prior-dig-stale
-am "[$(alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
-jq -n --arg ts "$(iso $((NOW - 9*86400)))" '[{alertname:"KubeDeploymentReplicasMismatch", subject:"workload:cf-api-proxy/cf-api-proxy", ts:$ts, verdict:"unexplained"}]' > "$H/prior.json"
+am "[$(CFP_ALERT)]"
+prior_from_run $((NOW - 9*86400)) unexplained
 go
 jqok "…but a finding older than the redig window does not (the condition is new again)" '.counts.unexplained == 1'
 
 scenario explained-prior-dig-other-subject
-am "[$(alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
-jq -n --arg ts "$(iso $((NOW - 86400)))" '[{alertname:"KubeDeploymentReplicasMismatch", subject:"workload:other/other", ts:$ts}]' > "$H/prior.json"
+am "[$(CFP_ALERT other)]"
+prior_from_run $((NOW - 86400)) cause-found
+am "[$(CFP_ALERT)]"
 go
 jqok "a finding on another SUBJECT of the same alert explains nothing" '.counts.unexplained == 1'
+
+# Findings harvested before the stamp (pre-2026-10-09, still in the bucket) carry only the
+# session's `alerts` strings in the brief's "<alertname> (<subject>)" form — the fallback key.
+scenario explained-prior-dig-legacy
+am "[$(CFP_ALERT)]"
+jq -n --arg ts "$(iso $((NOW - 86400)))" '[{schema:"dig-finding/v1", group:"2026-10-03T22:00:00Z|cluster",
+  alerts:["KubeDeploymentReplicasMismatch (workload:cf-api-proxy/cf-api-proxy)"], verdict:"unexplained", ts:$ts, run:"dig-x/dig-r1-x"}]' > "$H/prior.json"
+go
+jqok "a LEGACY (unstamped) finding naming the pair in its alerts strings still explains it" '(.explained[0].explained_by | startswith("dug "))'
+
+scenario explained-prior-dig-legacy-other
+am "[$(CFP_ALERT)]"
+jq -n --arg ts "$(iso $((NOW - 86400)))" '[{schema:"dig-finding/v1", group:"g", alerts:["KubeDeploymentReplicasMismatch (workload:other/other)"], verdict:"unexplained", ts:$ts}]' > "$H/prior.json"
+go
+jqok "…and a legacy finding on another subject explains nothing" '.counts.unexplained == 1'
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "grouping — onset and host are the correlation keys; the cap defers, never drops"
@@ -289,11 +326,18 @@ BEGIN-DIG-FINDING
 {"schema":"dig-finding/v1","group":"x","verdict":"maybe"}
 END-DIG-FINDING
 EOF
-DIG_TS=2026-10-04T06:30:00Z DIG_RUN=dig-2026-10-04/dig-r1-x bash "$SEL" harvest "$H/dig.log" "$H/findings" > "$H/h.out" 2> "$H/h.err"; RC=$?
+jq -n '{schema:"deep-dig-digest/v1", groups:[{key:"2026-10-03T18:00:00Z|192.168.2.182", alerts:[
+  {alertname:"NodeMemoryMajorPagesFaults", subject:"instance:192.168.2.182:9100", standing_h:12},
+  {alertname:"NodeDiskIOSaturation", subject:"instance:192.168.2.182:9100", standing_h:11}]}]}' > "$H/digest.json"
+DIG_DIGEST="$H/digest.json" DIG_TS=2026-10-04T06:30:00Z DIG_RUN=dig-2026-10-04/dig-r1-x bash "$SEL" harvest "$H/dig.log" "$H/findings" > "$H/h.out" 2> "$H/h.err"; RC=$?
 [ "$RC" -eq 0 ] && ok "harvest exits 0 when at least one block validates" || bad "harvest rc" "rc=$RC"
 [ "$(ls "$H/findings"/finding-*.json 2>/dev/null | wc -l | tr -d ' ')" = "2" ] && ok "two valid blocks → two finding files" || bad "finding count" "$(ls "$H/findings")"
 jq -e '.ts == "2026-10-04T06:30:00Z" and .run == "dig-2026-10-04/dig-r1-x" and .verdict == "cause-found"' "$H/findings/finding-1.json" >/dev/null 2>&1 \
   && ok "the record carries ts + run beside the session's fields" || bad "finding-1 shape" "$(cat "$H/findings/finding-1.json")"
+jq -e '.members == [{alertname:"NodeMemoryMajorPagesFaults", subject:"instance:192.168.2.182:9100"}, {alertname:"NodeDiskIOSaturation", subject:"instance:192.168.2.182:9100"}]' "$H/findings/finding-1.json" >/dev/null 2>&1 \
+  && ok "the record is stamped with ALL its digest group's members (the shell's key, not the session's alerts prose)" || bad "finding-1 members" "$(cat "$H/findings/finding-1.json")"
+grep -q 'finding-2.*not a group of the run.s digest' "$H/h.err" && jq -e '.members == []' "$H/findings/finding-2.json" >/dev/null 2>&1 \
+  && ok "a block whose group is not in the digest is kept, unstamped, and said so" || bad "unknown group stamp" "$(cat "$H/h.err")"
 grep -q 'did not validate' "$H/h.err" && ok "the block with an unknown verdict is dropped LOUDLY" || bad "invalid block dropped loudly" "$(cat "$H/h.err")"
 grep -q '2 finding(s) written .* (1 dropped)' "$H/h.out" && ok "…and the summary counts both" || bad "harvest summary" "$(cat "$H/h.out")"
 

@@ -397,7 +397,8 @@ never harder posture on quiet ones.
   name carries no `triage` there, so it is resolved from the relabel map as Alertmanager would), and
   that NOTHING already explains — a declared window naming it, an OPEN issue anywhere in the org
   whose title names it, an open follow-up item or the seat's meta-state naming it, or a dig finding
-  for the same (alert, subject) within 7 d. The explained set is RECORDED in the digest with its
+  for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
+  finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
   reason, so the session reads the record instead of re-deriving it. The subject is the responder's
   own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
   fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03

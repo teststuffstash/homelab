@@ -2,7 +2,7 @@
 # deep-dig-select — the deterministic half of the grouped deep dig (ADR-148 (3), FU-249 step 4).
 #
 #   bash agents/deep-dig-select.sh select [--out /tmp/dig.json]   # the digest: what to dig, grouped
-#   bash agents/deep-dig-select.sh harvest <session-log> <outdir>   # the session's finding blocks → files
+#   DIG_DIGEST=/tmp/dig.json bash agents/deep-dig-select.sh harvest <session-log> <outdir>   # finding blocks → files
 #
 # WHY A SEPARATE SCRIPT. The responder (agents/coordinator/responder-argo.yaml) is per-fingerprint
 # and real-time, and the 2026-10-03 audit (docs/spikes/responder-week-audit.md §2026-10-03) found
@@ -112,7 +112,7 @@ dig_window_json() {
   if [ -n "${DIG_WINDOW_FILE:-}" ]; then cat "$DIG_WINDOW_FILE" 2>/dev/null; return; fi
   kubectl -n agent-coordinator get cm responder-window -o json 2>/dev/null
 }
-dig_prior_findings() { # a JSON array of earlier dig findings (alertname, subject, ts) — empty when unreadable
+dig_prior_findings() { # a JSON array of earlier harvested dig findings (members, ts, verdict) — empty when unreadable
   if [ -n "${DIG_PRIOR_FILE:-}" ]; then cat "$DIG_PRIOR_FILE" 2>/dev/null; return; fi
   [ -n "${AGENT_TS_READER_ID:-}" ] && command -v s5cmd >/dev/null 2>&1 || return 0
   local d k tmp; tmp="$(mktemp -d)"
@@ -156,8 +156,16 @@ explain_meta() { # <alertname>
   grep -qF "$1" "$DIG_REPO/docs/agents/meta-state.md" 2>/dev/null && printf 'meta-state'
 }
 explain_prior() { # <alertname> <subject>
+  # The key is the finding's `members` — [{alertname, subject}], stamped by `harvest` from the
+  # run's OWN digest (the shell's key, never the session's prose). A finding harvested before the
+  # stamp existed (pre-2026-10-09) has only the session's `alerts` strings, "<alertname> (<subject>)"
+  # per the brief — parsed as the fallback so the already-stored week still dedups. The gate
+  # matched a top-level .alertname/.subject no harvested record ever carried, so the same group
+  # was re-dug daily (2026-10-06…09) while the fixture fed the never-produced shape.
   printf '%s' "$PRIOR" | jq -r --arg n "$1" --arg s "$2" --argjson cut "$(( DIG_NOW - DIG_REDIG_DAYS * 86400 ))" '
-    [ .[]? | select(.alertname == $n and .subject == $s)
+    def keys_of: if (.members | type) == "array" and (.members | length) > 0 then .members
+      else [ (.alerts // [])[]? | strings | capture("^(?<alertname>[^ (]+) \\((?<subject>.*)\\)$")? ] end;
+    [ .[]? | select(type == "object") | select(keys_of | any(.alertname == $n and .subject == $s))
       | select(((.ts // "") | if . == "" then 0 else (fromdateiso8601? // 0) end) > $cut) ]
     | first | if . == null then "" else "dug \(.ts) (\(.verdict // "?"))" end' 2>/dev/null
 }
@@ -276,18 +284,31 @@ cmd_select() {
 # ── harvest ──────────────────────────────────────────────────────────────────────────────────────
 # The session is told to wrap each group's finding in BEGIN-DIG-FINDING / END-DIG-FINDING lines
 # with ONE JSON object between them (`dig-finding/v1`). The shell extracts them, validates the
-# shape, and writes finding-N.json — the only artifact a later selection or the seat reads, so a
-# block that does not parse is dropped loudly rather than uploaded as a record.
+# shape, stamps `members` from the run's digest (DIG_DIGEST), and writes finding-N.json — the only
+# artifact a later selection or the seat reads, so a block that does not parse is dropped loudly
+# rather than uploaded as a record.
 cmd_harvest() {
-  local log="$1" out="$2" n=0 bad=0 blk
+  local log="$1" out="$2" n=0 bad=0 blk digest='{}'
   mkdir -p "$out"
+  # DIG_DIGEST: the run's own `select` output (the pod's /tmp/dig.json). Each finding is stamped
+  # with `members` — the {alertname, subject} pairs of the digest group its `group` key names —
+  # the machine key explain_prior dedups on. Unreadable ⇒ no stamp (loud), never a dropped finding.
+  if [ -n "${DIG_DIGEST:-}" ] && jq -e '.schema == "deep-dig-digest/v1"' "$DIG_DIGEST" >/dev/null 2>&1; then
+    digest="$(jq -c '{groups: [ .groups[]? | {key, alerts: [ .alerts[]? | {alertname, subject} ]} ]}' "$DIG_DIGEST")"
+  else
+    echo "harvest: no readable digest (DIG_DIGEST=${DIG_DIGEST:-unset}) — findings carry no members key" >&2
+  fi
   awk '/^BEGIN-DIG-FINDING/{f=1; next} /^END-DIG-FINDING/{f=0; print "\x1e"; next} f' "$log" \
   | awk -v RS='\x1e' 'NF {print > ("'"$out"'/raw-" NR ".json")}'
   for blk in "$out"/raw-*.json; do
     [ -f "$blk" ] || continue
     if jq -e '.schema == "dig-finding/v1" and (.group | type) == "string" and (.verdict | IN("explained","unexplained","cause-found","fix-proposed"))' "$blk" >/dev/null 2>&1; then
       n=$((n+1))
-      jq --arg ts "${DIG_TS:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" --arg run "${DIG_RUN:-}" '. + {ts: $ts, run: $run}' "$blk" > "$out/finding-$n.json"
+      jq --arg ts "${DIG_TS:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" --arg run "${DIG_RUN:-}" --argjson d "$digest" \
+        '. as $f | . + {ts: $ts, run: $run, members: ([ ($d.groups // [])[] | select(.key == $f.group) | .alerts[] | {alertname, subject} ])}' \
+        "$blk" > "$out/finding-$n.json"
+      jq -e '.members | length > 0' "$out/finding-$n.json" >/dev/null 2>&1 \
+        || echo "harvest: finding-$n's group \"$(jq -r .group "$blk")\" is not a group of the run's digest — no members stamped (re-dig dedup falls back to its alerts strings)" >&2
     else
       bad=$((bad+1)); echo "harvest: a finding block did not validate (schema/group/verdict) — dropped: $(head -c 200 "$blk" | tr '\n' ' ')" >&2
     fi
