@@ -461,7 +461,7 @@ the hypervisor's flooding, not the node's config.
   LB VIPs served from pve, DHCP kept leasing from nx-02's Kea (the HA primary, independent of CARP),
   WAN dark as expected. Observed on the way: Kea answers one DISCOVER with TWO offers (it binds
   both `.70` and `.1` on the LAN; clients take one, the other address sits reserved briefly).
-- 2026-10-08 19:40Z → 2026-10-09 04:46Z: **INCIDENT — the LAN had no internet for nine hours.**
+- 2026-10-08 19:40Z → 2026-10-09 04:46Z: **INCIDENT — the LAN had no internet for nine hours** ([postmortem](incidents/2026-10-08-carp-maintenance-not-left.md)).
   The proof's "back out" step called `carp_status/enable`, which only re-enables CARP; leaving
   maintenance is the SAME `carp_status/maintenance` verb toggled again (`carp_set_status.php`).
   nx-02 stayed demoted (240), pve kept `.1` with no WAN cable, and the jail's own API path rode
