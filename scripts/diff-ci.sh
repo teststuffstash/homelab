@@ -5,10 +5,10 @@
 # ONE HOME: this map is the canonical statement of "which paths feed which gate".
 # `.github/workflows/ci.yaml`'s changed-paths step eval-extracts PROM_PATHS/CLAUSE_PATHS from
 # THIS file (the scripts/pin-only-lint.sh one-home pattern; the #518 flip landed 2026-08-31) —
-# edit trigger sets here, never inline there. CI stays AUTHORITATIVE: a too-narrow mapping here
-# costs a surprise red in CI,
-# never a merged defect (CI's skip map only covers the two heavy suites; everything else
-# always runs there). The PR-context gates (pin-only-lint, governance-lint, the ADR-103
+# edit trigger sets here, never inline there. Since 2026-10-09 CI's PR skip map is the WHOLE MAP
+# (`--ci-outputs` below), so a too-narrow row CAN merge a defect a PR run skipped — the master push
+# runs every gate regardless, so the miss reds master on the next push and the fix is a wider row.
+# The PR-context gates (pin-only-lint, governance-lint, the ADR-103
 # ratchet) need the PR's base/author and do not run here.
 #
 # Usage: devbox run diff-ci [base-ref]
@@ -20,6 +20,12 @@
 #   without a MAP row (#2026's pin-only-lint-test — every worker's pre-flight went red on
 #   pristine master). With ci.yaml running it, a new step without a row reds the PR that
 #   adds the step, not the next person's pre-flight.
+#        devbox run diff-ci -- --ci-outputs <changed-files>
+#   The CI skip map (2026-10-09): one `<key>=true|false` line per MAP row for $GITHUB_OUTPUT,
+#   key = ci_key(task) below. Every ci.yaml gate step reads its own key with
+#   `if: steps.diff.outputs.<key> != 'false'` — absent (push / dispatch: the diff step is skipped)
+#   means RUN, so master pushes run everything (the net). Fails open: an empty/unreadable list,
+#   or a change to devbox.json/lock, ci.yaml or this file, prints true for every row.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -106,6 +112,20 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
 COVERAGE_ONLY=false
 if [ "${1:-}" = "--coverage-only" ]; then COVERAGE_ONLY=true; shift; fi
+# ci_key <task> — the GITHUB_OUTPUT key for a MAP row's task: non-alnum runs → '-', trimmed
+# (`mgmt-policy-test` → itself, `estimate-budget -- --self-test` → `estimate-budget-self-test`).
+ci_key() { printf '%s' "$1" | tr -cs 'a-zA-Z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//'; }
+if [ "${1:-}" = "--ci-outputs" ]; then
+  list="${2:-}"; all=false
+  if [ -z "$list" ] || [ ! -s "$list" ]; then all=true
+  elif grep -qE '^(devbox\.(json|lock)|\.github/workflows/ci\.yaml|scripts/diff-ci\.sh)$' "$list"; then all=true; fi
+  for entry in "${MAP[@]}"; do
+    task="${entry%%:*}"; regex="${entry#*:}"; v=false
+    if $all || grep -qE "$regex" "$list"; then v=true; fi
+    echo "$(ci_key "$task")=$v"
+  done
+  exit 0
+fi
 
 # ── coverage belt: every `devbox run <task>` in ci.yaml must appear in MAP or PR_ONLY, so a
 # new CI step cannot silently rot this map (the unexecuted-gate class, ADR-103's lesson).
