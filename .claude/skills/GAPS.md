@@ -344,3 +344,13 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `connection refused` on :4240) — a stale prober, not a network fault; cp-01's own agent saw
       all 13. It cleared by itself (past episodes 5–50 min). The alert reads the gauge, so it
       cannot tell stale from real — read `Last probed` before acting.
+- [ ] maintenance-window-G6 — **a proof that may cut the seat's own network path runs with no
+      self-revert, and the skill never asks.** The window-2 failover proof (2026-10-08) was a
+      background script because the jail's internet rides `.1`; its back-out step failed silently and
+      the session sat blind (`EAI_AGAIN`) for nine hours with nx-02 in CARP maintenance
+      (`docs/incidents/2026-10-08-carp-maintenance-not-left.md`). The skill's alert watch and
+      `check` both ride the same path and were equally blind. Sighted 2026-10-09 (seat). Next: the
+      skill asks, for any act on the router/WAN path, "does your own session ride what you are about
+      to move?" and, if yes, requires an armed dead-man revert BEFORE the act (FU-308) and a probe
+      from OUTSIDE the cut (the mgmt box over its own path, or the operator's phone).
+

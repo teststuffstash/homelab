@@ -21,8 +21,10 @@ never the session's arc — that is TICK-LOG's.)
   seat-1791485956-9934 CLOSED 05:21Z (`--force`: the aging rate alerts were the only delta). (5) **Postmortem
   written** — `docs/incidents/2026-10-08-carp-maintenance-not-left.md` (PR `docs/incident-2026-10-08-carp-maintenance`,
   auto-merge armed; land it if the sentinel/updater race holds it: #2395 needed `--admin` for that reason). Its
-  three open actions are the seat's to file: `RouterMasterWanDark` belt; responder retry backoff vs the
-  subscription semaphore (design-agents); a dead-man `leave` for unattended proofs. Loose, unfiled: Kea answers one DISCOVER with two offers (binds `.70`
+  actions FILED 2026-10-09 05:45Z: **FU-307** (`RouterMasterWanDark` belt — waits on an attended gate restart),
+  **FU-308** (dead-man `leave` for unattended proofs), FU-198 extended (retry backoff holds the subscription
+  semaphore — design-agents), GAPS maintenance-window-G6 (the skill asks "does your session ride what you move?");
+  Kea's two offers = a finding in router-move.md §Status, not tracked. Loose, unfiled: Kea answers one DISCOVER with two offers (binds `.70`
   and `.1`); a responder retry backoff of 4 h holds a subscription slot (`ArgoLockPlaneWedged` fired correctly —
   design-agents material); nx-02 free RAM ~6 GiB — the DIMM window (FU-289) is now unblocked by the router pair.
 - **⚑ PICKUP (2026-10-07 21:00Z — seat; TICK-LOG same date).** (1) Confirm the box loops recovered after the

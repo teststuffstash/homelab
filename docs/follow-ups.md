@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-307** (2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-309** (2026-10-09: FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -183,10 +183,30 @@ six OVERSIZE items pointer-ized into
       (its §Status is the history). State 2026-09-30: both nodes STANDING (nx-02 `.70`, pve `.71`, `/24`),
       CARP + pfsync + WAN gate + belt live; failover, rolling-update, split-brain, cold-start drills
       PASSED. 2026-10-01 ADR-145: two windows; window-1 prep DONE (Kea, HA drill, nx-02 reboot).
-      **2026-10-02: WINDOW 1 DONE — nx-02 serves `.1`** (#2166, #2161; the loss was the WAN cable;
-      Big Data running, cables out = the fallback). **Blocker:** pve's standby node sent a DHCP reply
-      as `.1` 17:14Z → kill switch stopped it (meta-state). **Next:** that root cause, soak, then window 2
-      (pve joins as BACKUP). Relates FU-097, FU-013, FU-298.
+      **2026-10-02: WINDOW 1 DONE — nx-02 serves `.1`** (#2166, #2161). **2026-10-08: WINDOW 2 DONE —
+      pve's node is the CARP BACKUP** (#2389 flood-off explains the 10-02 trip, #2390 change set; Kea HA
+      both, BGP 13+13), WAN cable on pve still OUT; the proof's back-out left nx-02 in maintenance 9 h
+      ([incident](incidents/2026-10-08-carp-maintenance-not-left.md) → #2395 `carp-maintenance` verb).
+      **Next:** cable in → the WAN leg (`carp-maintenance nx02 enter`/`leave`); restart nx-02's WAN gate
+      in an attended slot (pre-#2389 script; ≤3 s WAN blip); then the nx-02 DIMM window (FU-289).
+      Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
+      FU-013, FU-298, FU-307, FU-308.
+- [ ] **FU-307** — **No belt says "the pair's MASTER has no WAN."** 2026-10-08 19:40Z→04:46Z pve
+      held `.1` as MASTER with its WAN port carrier-less for nine hours; `RouterPairMasterCount` (1
+      master) and `RouterWanGateSilent` (gate alive) stayed green, while the gate's own gauges
+      (`router_node_carp_master{vmid="9171"} 1`, `router_node_wan_link 1`) carried the fact with no
+      rule reading them — and carrier/`WAN_GW` state is not exported at all. Deferred: the carrier
+      export lives in the gate script, whose restart blips the MASTER's WAN (attended slot).
+      **Next:** the gate's textfile adds `/sys/class/net/<wan-nic>/carrier`; rule `RouterMasterWanDark`
+      = master ∧ ¬carrier, `for: 2m`, promtool fixture at the 10-08 timestamps. ADR-144/145.
+- [ ] **FU-308** — **An unattended router proof can sever the seat's own path and nobody reverts.**
+      The window-2 failover proof ran from the jail, whose internet rides `.1`; its back-out step
+      silently failed (`carp_status/enable` ≠ leave maintenance) and the session went blind
+      (`EAI_AGAIN`) with the fault latched — the postmortem's third contributing factor. Window 1's
+      cutover script had the same shape and got lucky. Deferred: where the dead-man runs is a call
+      (hypervisor `systemd-run --on-active`, or `at` on the node), and it needs its own drill.
+      **Next:** `carp-maintenance enter` arms it BEFORE acting, `leave` disarms; drill once. Relates
+      FU-297; GAPS maintenance-window-G6.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on
@@ -977,7 +997,12 @@ the block needs pruning, not more headings.
       three: [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
       **Next:** upstream fixed the slot leak in v4.0.8 (#16471; v4.0.9–12 add more sync fixes); PR#2200
       bumps the chart to 1.0.24/v4.0.8 (unarmed — merge = live controller restart). After it lands, watch
-      `ArgoLockPlaneWedged`, then decide v4.0.12 (image override) or the 2.0.x chart. Relates FU-187, FU-088.
+      `ArgoLockPlaneWedged`, then decide v4.0.12 (image override) or the 2.0.x chart. **Re-sighted
+      2026-10-09 01:17Z** (the 10-08 WAN loss): five `respond-*` exhausted 5 retries each and sat in a
+      4-HOUR retry backoff holding all five `subscription-capacity/claude` slots — the 09-12 "benign
+      twin" by design, not a leak; 20 Pending, the belt fired correctly, `argo stop` ×5 drained it in
+      2 min. Design question for the agents sitting: a retry backoff must release the semaphore (or
+      the backoff caps below the belt's 30 m). Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
