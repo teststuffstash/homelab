@@ -1,0 +1,21 @@
+# Hand copy of GithubActionsMinutesHigh ALONE, lifted VERBATIM out of prometheusrule.yaml — the
+# rules file loop-health-minutes-burn.promtool-test loads (its long-horizon pro-rated cases run the
+# eval clock to 649h, so the file carries one rule, not the whole loop-health set — see the test's
+# header). DRIFT-PINNED by `devbox run prometheus-rules-lint` (expr+for vs the CR). Re-copy after
+# an expr edit (ONE LINE — yq 4.x rejects a newline inside the expression):
+#
+#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "GithubActionsMinutesHigh")]}]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: github
+    rules:
+      - alert: GithubActionsMinutesHigh
+        expr: sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))) > scalar(max(clamp_min(day_of_month() / days_in_month() * 3000, 300)))
+        for: 1h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: GitHub Actions hosted minutes burning above the elapsed share of quota
+          description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'

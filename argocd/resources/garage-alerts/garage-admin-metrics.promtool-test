@@ -151,75 +151,9 @@ tests:
         alertname: GarageTableEmpty
         exp_alerts: []
 
-  # ── 7/9 — 7D WINDOW GUARD: a wipe still unrecovered past 24h keeps firing (the regression guard)
-  # A table held data, then dropped to zero (the meta-wipe pattern), and stays empty for over a
-  # week. The alert must keep firing at 48h (which the round-1 24h window would have missed) and
-  # at 6d, and only stop after the 7d rolling window slides past the drop. This case pins the
-  # documented tradeoff — the rolling window is not "was ever populated", and a wipe still
-  # unrecovered 7 days after the drop stops alerting.
-  - interval: 1m
-    name: "GarageTableEmpty keeps firing on a wipe that stays unrecovered for days (the 24h-window regression guard)"
-    input_series:
-      - series: 'table_size{table_name="object",pod="garage-0"}'
-        values: '100+0x120 0+0x2880'
-    alert_rule_test:
-      # fires at 3h — well within the 7d window
-      - eval_time: 180m
-        alertname: GarageTableEmpty
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              pod: garage-0
-              table_name: object
-              triage: now
-            exp_annotations:
-              summary: "Garage table object is empty on garage-0"
-              description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
-      # fires at 48h — the load-bearing assertion: fails against 24h window, passes against 7d
-      - eval_time: 2880m
-        alertname: GarageTableEmpty
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              pod: garage-0
-              table_name: object
-              triage: now
-            exp_annotations:
-              summary: "Garage table object is empty on garage-0"
-              description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
-
-  # ── 8/9 — 7D BOUNDARY: the rolling window slides past the drop after 7 days ────────────────
-  # A table held data, dropped to zero, and stays empty. After 7 days the max_over_time window
-  # no longer includes any sample > 0, so the alert stops firing. This case pins the documented
-  # tradeoff — the rolling window is not "was ever populated".
-  # ⚠ The alert_rule_test at the 7d boundary uses promql_expr_test rather than alert_rule_test
-  # because promtool's range-query memory limit (~9900 samples) prevents a series long enough to
-  # be alive at t=10260. The promql_expr_test directly evaluates the max_over_time clause that
-  # distinguishes the new expr from the old one, proving the window has slid past the drop.
-  - interval: 1m
-    name: "GarageTableEmpty stops firing after the 7d rolling window slides past the drop"
-    input_series:
-      - series: 'table_size{table_name="object",pod="garage-0"}'
-        values: '100+0x120 0+0x9850'
-    alert_rule_test:
-      # fires at 3h — well within the 7d window
-      - eval_time: 180m
-        alertname: GarageTableEmpty
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              pod: garage-0
-              table_name: object
-              triage: now
-            exp_annotations:
-              summary: "Garage table object is empty on garage-0"
-              description: "A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage's health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly."
-    promql_expr_test:
-      # The max_over_time clause at 7d+1m: the window (121, 10201] excludes the last >0 sample
-      # at t=120, so the expression returns no data — the alert would not fire.
-      - expr: max_over_time(table_size[7d]) > 0
-        eval_time: 10201m
-        exp_samples: []
+  # ── 7/9 + 8/9 — the 7D WINDOW cases (eval clock out to 2880m / 10201m) live in
+  # garage-admin-metrics-table-empty.promtool-test against a one-rule copy (CI wall time,
+  # 2026-10-09): run here they evaluated this file's every rule for ~13,000 steps.
 
   # ── 9/9 — COVERAGE GUARD: a dead scrape is a page, not calm (seat, PR#965 gate read) ────────
   # Neither family exists (ServiceMonitor mismatch / metrics token / name drift). The two belts
@@ -363,27 +297,8 @@ tests:
       - eval_time: 17m
         alertname: GarageQuorumMembersRestarted
         exp_alerts: []
-  # ── GC BACKLOG: 600k parked for 26h fires; 600k for a day (the 24h tombstone delay) does not ─────────────────────
-  - interval: 5m
-    name: "GarageTableGcBacklog fires on a parked backlog, not on steady-state churn"
-    input_series:
-      - series: 'table_gc_todo_queue_length{pod="garage-2",table_name="version"}'
-        values: "600000+0x320"
-      - series: 'table_gc_todo_queue_length{pod="garage-1",table_name="version"}'
-        values: "150000+0x320"
-    alert_rule_test:
-      - eval_time: 25h55m
-        alertname: GarageTableGcBacklog
-        exp_alerts: []
-      - eval_time: 26h10m
-        alertname: GarageTableGcBacklog
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              pod: garage-2
-              triage: dig
-            exp_annotations:
-              summary: "Garage garage-2 has 600k GC items parked for 26h"
+  # ── GC BACKLOG (for: 26h — eval clock out to 26h10m) lives in
+  # garage-admin-metrics-gc-backlog.promtool-test against a one-rule copy (CI wall time).
 
   # ── GarageZoneDegraded: one zone down, quorum serving ──────────────────────────────────────────
   # The 2026-09-21 11:03–11:10Z shape: the down zone's own series vanishes, the other two read 0.
