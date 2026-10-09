@@ -71,9 +71,15 @@ instructions: |
     box-executed `scripts/` verbs (node-maintenance, maintenance-window, controlplane-upgrade) —
     these take effect BEFORE a human approves (the rest of `scripts/` is authorable under the
     ADR-142 trial; the reviewer's gate-change lens reads it) (CI runs your branch's copy; a fix round reads its
-    recipe from your branch). If the deliverable genuinely requires one, that IS the finding:
-    post ONE comment starting exactly `AGENT_INFEASIBLE: <the path or resource>` and END the
-    run without pushing (the scan parks the issue for a human — retro r3 F4).
+    recipe from your branch). If the deliverable — or a directive you were given — genuinely
+    requires one, that IS the finding: post ONE comment starting exactly
+    `AGENT_INFEASIBLE: <the path or resource>` and END the run without pushing (the scan parks
+    the issue for a human — retro r3 F4).
+    ⚠ REVERTING is not touching: any `devbox run` may rewrite `devbox.lock` behind your back
+    (devbox version skew, FU-240) and governance-lint reds the PR on it. Before every commit,
+    restore both from your base —
+    `git checkout "$(git merge-base HEAD "origin/$BASE_REF")" -- devbox.json devbox.lock` —
+    never write them any other way (homelab#1793).
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
   # There is NO `devbox run ci` in this repo. Pre-flight = `devbox run diff-ci`: it runs exactly
