@@ -28,17 +28,18 @@ GitHub-outage fallback, not a live read path, so its single mostly-idle runner d
 + tool versions live in the repo's `devbox.json` (+ `scripts/`), not in CI YAML. Consequences:
 
 - The same gate runs **locally and in CI**, identically (`devbox run ci` in the STACK repos —
-  homelab itself is the deliberate exception: no aggregate `ci` task, ~28 named `devbox run`
+  homelab itself is the deliberate exception: no aggregate `ci` task, ~45 named `devbox run`
   tasks run by `.github/workflows/ci.yaml`, which also carries inline blocks (the ADR-103
   ratchet, `tofu fmt`, the ghcr pre-warm, the changed-paths skip map) that gate the workflow
   rather than the code. Since 2026-08-31 (#518) the heavy suites (`prometheus-rules-lint`,
   `clause-replay`) and the pin-bump pre-warm run **backgrounded ∥ the serial steps** with
-  start/collect step pairs, and the heavies **skip entirely** when the PR's changed paths
-  cannot affect them — locally they are ordinary serial `devbox run` tasks, and
-  **`devbox run diff-ci`** is the local pre-flight that mirrors the whole idea: it runs only
-  the gates the current diff can affect, from the path→task map in `scripts/diff-ci.sh` — the
-  one home the workflow's skip step eval-extracts its trigger regexes from (#518). A coverage
-  belt inside diff-ci fails if ci.yaml runs a task the map doesn't know.
+  start/collect step pairs. Since 2026-10-09 **every** gate on a PR run **skips** when the PR's
+  changed paths cannot affect it, by the path→task map in `scripts/diff-ci.sh`
+  (`diff-ci -- --ci-outputs` → one `steps.diff.outputs.<task>` per row; #518 did this for the
+  heavies only, and PR wall crept from ~2 to ~5 min while the always-run serial chain grew).
+  **Master pushes run every gate** — the net that catches a too-narrow row. Locally,
+  **`devbox run diff-ci`** is the pre-flight over the same map. A coverage belt inside diff-ci
+  fails if ci.yaml runs a task the map doesn't know.
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.
