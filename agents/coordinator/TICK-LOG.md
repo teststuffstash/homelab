@@ -12827,4 +12827,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (192→192 targets, no new alerts). Records: FU-308 archived, FU-297/FU-307 updated, GAPS G6 narrowed,
   router-move §Status = #2400. Found on the way: the weekly rebuild drill red since 10-04 (FU-297 next);
   api.github.com answers 403 to our IP unauthenticated (probe noise, not WAN); both nodes' hostname `opnsense-test`.
+- **Operator asks after the fact: did the Cloudflare tunnels survive the blips, is mcp.minutark.ee up?** Read:
+  all four cloudflared pods (homelab ×2, oracle-fleet minutark ×2) lost ALL FOUR QUIC connections at each
+  failover ("timeout: no recent network activity" at +4–7 s — the WAN hole outlasts QUIC's idle detection),
+  first connection re-registered ~2 s later, the full set within 10–25 s; no pod restart (the 174/166 restarts
+  on the homelab pods all date from the overnight outage — liveness `/ready` killing a tunnel with no edge,
+  last at 04:43Z). Edge-visible gap per failover ≈5–10 s; no `probe_success` dip at 15 s scrape. mcp.minutark.ee:
+  MCP `initialize` → 200 in 0.1 s via Cloudflare; ha.teststuff.net 403 at the edge (mTLS, expected). Verdict:
+  the tunnels ride a failover as a reconnect, not an outage.
 
