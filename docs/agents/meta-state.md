@@ -10,6 +10,23 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-09 11:30Z — seat, mid-window; may be cut by a pop-os restart).** Window
+  `seat-1791544351-8289` OPEN (until 13:12Z; `devbox run maint -- list`) for the window-2 WAN leg. DONE
+  in it: pve's WAN cable IN at 11:13Z (1 Gb/s, gate held it dark — 0 frames out in 12 s, guest "no
+  carrier"); **PR #2399** = FU-308's dead-man inside `carp-maintenance enter` (pidfile version pushed
+  11:25Z after one review round; auto-merge armed; run the proof FROM the clone
+  `/workspace/homelab-clones/fu308-deadman` until it merges). NOT DONE: the proof. Sequence:
+  (1) `DEADMAN=360 devbox run -- bash scripts/opnsense-router-node.sh carp-maintenance nx02 enter`
+  (from the clone) → pve MASTER, its gate raises WAN, pve pulls Telia's lease on the shared MAC —
+  probe from the mgmt box (`curl https://ifconfig.me` → 176.46.101.184 expected); (2) while nx-02 is
+  BACKUP: `ANSIBLE_CONFIG=ansible/ansible.cfg devbox run -- ansible-playbook
+  ansible/pve-router-killswitch.yml --limit nx-02-host` (dry-run showed exactly: gate script + one
+  unit restart; no blip while BACKUP); (3) read pve's lease/BGP; (4) LET THE DEAD-MAN FIRE at 6 min
+  = the FU-308 drill (`carp-maintenance nx02 status` shows it; manual `leave` at 6:30 if not); then
+  `check pve`/`check nx02`, maint check/close, FU-308 → archive, FU-297 next, #2399 body gets the
+  observed enter/status/leave. Side finds: weekly rebuild drill RED since 10-04 (converge rc=2 in
+  9 s, `MgmtOpnsenseDrillFailed`, next run Sun 10-11 03:37Z — FU-297's belt, undiagnosed); both
+  nodes' hostname is `opnsense-test.teststuff.net` (seed carry-over, cosmetic, untracked).
 - **⚑ PICKUP (2026-10-09 05:00Z — seat; TICK-LOG 2026-10-08 evening → 10-09 morning).** **Window 2 DONE:
   pve's node is the CARP BACKUP (Kea HA standby, BGP peer .71), WAN cable still OUT** — the WAN leg of the proof
   waits for the cable (then: `carp-maintenance nx02 enter` → pve serves WAN → `leave`; the verb, never the raw API —
