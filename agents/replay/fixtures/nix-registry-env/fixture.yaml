@@ -1,0 +1,13 @@
+# The ride's empty global flake registry (2026-10-09, teststuffstash/sleep-tracking#67): devbox's
+# "Ensuring nixpkgs registry is downloaded" step made every ride's nix fetch
+# channels.nixos.org/flake-registry.json, which the egress CNP denies (1166 POLICY_DENIED drops in
+# 7 d, each a timed-out connect + retries). `flake-registry =` turns the global registry off;
+# direct `github:` refs (all devbox needs — measured in the jail, see the launcher note) still
+# resolve. This row pins the EXACT fragment spliced into the pod env: one NIX_CONFIG entry whose
+# value is the empty-registry line, so a later edit cannot drop it or mangle the quoting.
+name: nix-registry-env
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:nix-registry-env
+  - file:post.sh

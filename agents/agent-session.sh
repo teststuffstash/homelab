@@ -810,7 +810,7 @@ render_env_card() {
   else
     pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
   fi
-  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable); node → \`npm ci\`/\`npm install\` against \`\$NPM_CONFIG_REGISTRY\` (${npm_cache}, every ride, automatic — no registry.npmjs.org egress needed; a package-lock.json keeps its canonical \`https://registry.npmjs.org/…\` \`resolved\` URLs and npm swaps the host at fetch time, so never rewrite them to the proxy). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); the global nix flake registry is pinned EMPTY (\`\$NIX_CONFIG\`), so an indirect ref like \`nix run nixpkgs#foo\` fails fast — use \`devbox add\` or a direct \`github:NixOS/nixpkgs/<rev>#foo\` ref; container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable); node → \`npm ci\`/\`npm install\` against \`\$NPM_CONFIG_REGISTRY\` (${npm_cache}, every ride, automatic — no registry.npmjs.org egress needed; a package-lock.json keeps its canonical \`https://registry.npmjs.org/…\` \`resolved\` URLs and npm swaps the host at fetch time, so never rewrite them to the proxy). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
   # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
@@ -2174,6 +2174,23 @@ fi
 # (ansible/group_vars/opnsense.yml) → the same .40.35 VIP the CNP allows.
 NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
 
+# Empty global flake registry (2026-10-09; teststuffstash/sleep-tracking#67): `devbox install`'s
+# "Ensuring nixpkgs registry is downloaded" step runs `nix flake prefetch github:NixOS/nixpkgs/<rev>`
+# — a DIRECT ref — yet nix still downloads its global registry (channels.nixos.org/flake-registry.json)
+# first. The egress CNP denies that host: 1166 POLICY_DENIED drops in 7 d, every one a nix
+# connect left to time out and retry (5 attempts) before devbox shrugs "Fail" and continues.
+# Measured in the jail (devbox 0.18.3, nix 2.34.6, cold XDG cache): with the registry poisoned
+# the step fails exactly like that; with `flake-registry =` (empty) it fetches the direct ref
+# from api.github.com/codeload (both on the ride allowlist) and reports Success, and devbox
+# install/run/add of name@version + `github:` packages all work. Only INDIRECT refs
+# (`nix run nixpkgs#x`) stop resolving — fail-fast "cannot find flake 'flake:nixpkgs'" instead
+# of a hang; the env card names the direct form. Kill at the tool, not the allowlist (PR #503).
+# NIX_CONFIG is ONE env var: the agent-base entrypoint APPENDS its substituters lines to it
+# (agent-runtime entrypoint.sh, the NIX_CACHE_URL block) — it must never replace this value.
+# >>>REPLAY:nix-registry-env>>>
+NIX_ENV=$'        - name: NIX_CONFIG\n          value: "flake-registry ="'
+# <<<REPLAY:nix-registry-env<<<
+
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
 # via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
 # and adds the substituter so the per-pod `devbox install` skips the eval tax. Mount ONLY when
@@ -2711,6 +2728,8 @@ ${DIND_CONTAINER}
         # argocd/resources/devbox-search/ + ip-plan.md; the egress CNP allows .40.27 (composition.yaml).
         - name: DEVBOX_SEARCH_HOST
           value: "http://192.168.40.27"
+        # Empty global flake registry — see the nix-registry-env note above (sleep-tracking#67).
+${NIX_ENV}
         # FU-294: npm resolves through the baseline npm pull-through cache (VIP .40.35) — see the
         # NPM_CACHE_URL note above; argocd/resources/npm-cache/.
         - name: NPM_CONFIG_REGISTRY

@@ -1,0 +1,4 @@
+OUT NIX_ENV:
+OUT         - name: NIX_CONFIG
+OUT           value: "flake-registry ="
+RC 0
