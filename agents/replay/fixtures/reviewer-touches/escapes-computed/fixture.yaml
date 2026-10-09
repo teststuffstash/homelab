@@ -8,8 +8,11 @@
 #   2. Escapes into governance paths are marked with [GOVERNANCE]
 #   3. TOUCHES_ESCAPES is set and exported, available to the review prompt
 #   4. The escape list is printed to stderr for debugging
+#   5. (homelab#1794, PR#2391) the prompt's [GOVERNANCE] sentence DEFERS to .agents/review.md
+#      §BLOCKING's author test (worker = BLOCKING, other authors = context) — no flat
+#      "the diff is BLOCKING" verdict that contradicts the rubric for codeowner-authored PRs
 #
-# Parts: bridge.sh (seams: ISSUE, CHANGED, touches_check) + block:reviewer-touches-check
+# Parts: bridge.sh (seams: ISSUE, CHANGED, touches_check) + block:reviewer-touches-check + post.sh
 name: reviewer-touches-escapes-computed
 mode: actions
 source: agents/reviewer-session.sh
@@ -21,3 +24,4 @@ requires:
 parts:
   - file:bridge.sh
   - block:reviewer-touches-check
+  - file:post.sh
