@@ -364,7 +364,9 @@ above), `OPN_DHCP_SERVER`'s default → `kea`, and `RouterPairMasterCount` back 
    nx-02 FIRST (a primary with HA on and no partner serves after `max-response-delay`), then pve
    (a standby with no primary would ALSO start serving — two servers). The Cilium peer `.71` added.
 3. Checks: CARP MASTER/BACKUP as expected, the lease DB synced, BGP 26/26, the belts green.
-4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out.
+4. The proof: nx-02 into CARP maintenance → pve serves `.1`, DHCP, BGP routes, WAN; back out —
+   **`scripts/opnsense-router-node.sh carp-maintenance enter|leave|status nx02`**, never the raw API:
+   the API verb is a toggle and `enable` does not leave maintenance (the 2026-10-08 incident, below).
 
 **The 2026-10-02 "standby node served DHCP" trip, explained (2026-10-08).** pve's node had no
 DHCP server at all (Kea, dnsmasq, dhcpd all off; no API write that day). Its filter log for
@@ -447,6 +449,31 @@ the hypervisor's flooding, not the node's config.
   **Left for the window, each an operator call:** DHCP active/passive (dnsmasq has no CARP
   awareness — Kea's HA mode, or a gate-style toggle, is a fork), and Cilium's per-node peers +
   router-ids (a live cluster BGP change that redefines `CiliumBGPAllSessionsDown`).
+- 2026-10-02: **WINDOW 1 — nx-02 is the router** (TICK-LOG 2026-10-02 afternoon; meta-state carried
+  the pickup). The afternoon's "pve's standby node served DHCP as `.1`" kill-switch trip is the
+  finding written above §Status (2026-10-08): a relayed frame, fixed by the tap's `flood off`.
+- 2026-10-08 evening: **WINDOW 2 — pve's node joined as CARP BACKUP, WAN cable still out**
+  (operator: the join now, the WAN leg when the cable goes in; #2389 flood-off, #2390 change set).
+  nx-02 converged first (Kea HA primary), then pve (BACKUP, Kea HA standby, BGP, ddclient, ACME):
+  both `check`s green, Kea `hot-standby` on both and in touch, Cilium 13 sessions to each node
+  (26 prefixes), `RouterPairMasterCount` 1, pfsync nx-02 → pve. The failover proof (`maintenance`
+  on nx-02): pve MASTER in 0.5 s, 1 lost connection of 1152 at 10 Hz, `.1` + Unbound + HAProxy +
+  LB VIPs served from pve, DHCP kept leasing from nx-02's Kea (the HA primary, independent of CARP),
+  WAN dark as expected. Observed on the way: Kea answers one DISCOVER with TWO offers (it binds
+  both `.70` and `.1` on the LAN; clients take one, the other address sits reserved briefly).
+- 2026-10-08 19:40Z → 2026-10-09 04:46Z: **INCIDENT — the LAN had no internet for nine hours.**
+  The proof's "back out" step called `carp_status/enable`, which only re-enables CARP; leaving
+  maintenance is the SAME `carp_status/maintenance` verb toggled again (`carp_set_status.php`).
+  nx-02 stayed demoted (240), pve kept `.1` with no WAN cable, and the jail's own API path rode
+  that `.1`, so the session could neither see nor act until the operator's hotspot. Fix: toggle
+  maintenance off → nx-02 MASTER in ~1 s, its WAN gate up, LAN internet back at 04:46:09Z.
+  Residue: WAN-dependent alerts fired and cleared within minutes; 4 CI runs stranded in `queued`
+  (cancel + rerun); five responder workflows sat in a 4-hour retry backoff holding all five
+  `subscription-capacity/claude` slots (`ArgoLockPlaneWedged` fired correctly) — stopped by hand.
+  Lesson into code: the `carp-maintenance <node> enter|leave|status` verb reads the demotion
+  before acting and verifies the VIP after; the recipe names it, never the raw API. Standing: nx-02's
+  WAN gate still runs the pre-flood-off script (a gate restart blips the MASTER's WAN) — it takes
+  the new one at its next restart, or in an attended slot.
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
   database). The inert drills proved the machinery, not the service layer — the next evidence is
