@@ -2,7 +2,9 @@
 #
 # The responder triage session's brief gains a REMEDIATION-WOULD MARKER instruction block
 # telling the LLM to emit a structured line when its verdict names a mechanical remediation
-# it would have performed had the dial been armed, and to omit it for report-only verdicts.
+# it would have performed had the dial been armed — INDEPENDENT of fix-verdict (a report-only
+# verdict that names an imperative remediation MUST carry it; the only omit condition is "no
+# mechanical imperative remediation applies" — inverted 2026-10-09, goal#818 clause 3).
 #
 # This fixture verifies the instruction is present in the extracted brief by checking that
 # the YAML's embedded shell script contains the marker text.

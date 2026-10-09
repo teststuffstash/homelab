@@ -148,6 +148,21 @@ am "[$(alert KubeDaemonSetRolloutStuck $((NOW - 10*3600)) "$(jq -nc --argjson k 
 jq -n --arg u "$(iso $((NOW - 3600)))" '{data:{"w-1":({id:"wk-03-old", until:$u, reason:"old", alerts:["KubeDaemonSetRolloutStuck"]} | tojson)}}' > "$H/window.json"
 go
 jqok "an EXPIRED window explains nothing" '.counts.unexplained == 1'
+jqok "…but rides the digest as HISTORY (FU-230: closed/lapsed windows kept ≥ 4 days)" '.windows | map(.id) == ["wk-03-old"]'
+
+scenario explained-window-tail
+am "[$(alert KubeDaemonSetRolloutStuck $((NOW - 10*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"kube-system", daemonset:"cilium", triage:"dig"}')")]"
+jq -n --arg c "$(iso $((NOW - 600)))" --arg t "$(iso $((NOW + 600)))" '{data:{"w-1":({id:"wk-03-closed", until:$c, closed_at:$c, tail_until:$t, reason:"closed", alerts:["KubeDaemonSetRolloutStuck"]} | tojson)}}' > "$H/window.json"
+go
+jqok "a CLOSED window still in its tail explains what it named" '.counts.explained == 1 and (.explained[0].explained_by | startswith("window wk-03-closed"))'
+
+scenario window-history-lookback
+am '[]'
+jq -n --arg o "$(iso $((NOW - 9*86400)))" --arg y "$(iso $((NOW - 2*86400)))" '{data:{
+    "w-o":({id:"too-old", until:$o, closed_at:$o, tail_until:$o, reason:"r", alerts:["X"]} | tojson),
+    "w-y":({id:"two-days", until:$y, closed_at:$y, tail_until:$y, reason:"r", alerts:["X"]} | tojson)}}' > "$H/window.json"
+go
+jqok "history is bounded by the dig lookback (7 d), not the record's retention" '(.windows | map(.id)) == ["two-days"]'
 
 scenario explained-issue
 am "[$(alert LonghornDiskBelowSchedulingFloor $((NOW - 30*3600)) '{"node":"hp-01","job":"longhorn-backend","triage":"dig"}')]"

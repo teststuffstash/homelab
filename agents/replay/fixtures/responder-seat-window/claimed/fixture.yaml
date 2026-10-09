@@ -1,0 +1,25 @@
+# FU-230 — a named alert the seat's window CLAIMED spawns no session (ownership by silence, 2026-10-09).
+#
+# CONDITION UNDER REPLAY. `node-maintenance.sh down wk-03` is open and names
+# `KubeDaemonSetRolloutStuck`. The window-grace step has already held the alert once; in that time
+# the seat ran `maintenance-window.sh claim` and Alertmanager now reports the alert silenced
+# (`silencedBy: [s-123]`).
+#
+# WHAT IT REDS ON. Before 2026-10-09 the declared NAME alone skipped the triage — cluster-wide, so a
+# NEW alert of a declared name inside a window was owned by nobody (defect 3: the seat called it
+# "not my lane", the responder never looked). Now the name only buys a grace; what makes the alert
+# the window's is the window's own SILENCE on it. A gate that still skipped on the name would also
+# pass THIS row, which is why `unclaimed` (same window, no silence → triage) is the pin beside it.
+#
+# THE CONTRACT: no session (`reached.sh` never prints); a `claimed-` ledger marker (FU-113a — a
+# deliberate stop is not a drop); the log line names the window, its reason AND the silence id.
+pins:
+  - IL-T03
+name: responder-seat-window-claimed
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

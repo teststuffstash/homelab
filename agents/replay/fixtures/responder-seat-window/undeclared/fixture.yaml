@@ -1,4 +1,4 @@
-# FU-230 leg (b) — an alert OUTSIDE the declared set still triages. The witness.
+# FU-230 — an alert OUTSIDE the declared set triages at once (no grace). The witness.
 #
 # CONDITION UNDER REPLAY. The same live `wk-03` window as the declared twin, and
 # `GarageClusterFlapping` fires.

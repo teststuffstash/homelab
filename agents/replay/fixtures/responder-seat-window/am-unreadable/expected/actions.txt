@@ -1,0 +1,4 @@
+OUT → KubePodNotReady (c0ffee0000000002): DECLARED WINDOW wk-03-1789600000 names this alert — node-maintenance window on wk-03 — planned cordon/drain/shutdown, until 2026-09-17T08:00:00Z — UNCLAIMED after the grace; triaging, the brief names the window
+OUT REACHED: fell through to triage
+OUT REACHED: end
+RC 0

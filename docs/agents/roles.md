@@ -366,13 +366,35 @@ never harder posture on quiet ones.
   `KubeletInstanceUnreachable` and `KubePodNotReady` ×4, silenced by hand for 8 h. Enumerating
   `daemonset=~…` arms per alert name is the losing game that sighting demonstrates, so the seat
   DECLARES the names instead (`agents/seat-window.sh` → the `responder-window` ConfigMap, opened and
-  closed by `node-maintenance.sh settle/down` and `up`). Three properties are the design: it is a
-  ConfigMap, so it OUTLIVES a monitoring restart, which silences do not (FU-195); it scopes by alert
-  NAME and never by namespace, because a namespace-wide mute would have hidden the rf=3 rollout's
-  REAL findings (garage-2 flapping, the write-probe 400s); and it suppresses the TRIAGE only — the
-  alert still fires, still notifies, still shows in Grafana. An alert OUTSIDE the declared set
-  triages as usual, which is the other half of FU-230: 7 of the 9 confidently-wrong writes in the
-  09-04→11 audit had a cause the seat made outside the cluster's view.
+  closed by `node-maintenance.sh settle/down` and `up`). It scopes by alert NAME and never by
+  namespace, because a namespace-wide mute would have hidden the rf=3 rollout's REAL findings
+  (garage-2 flapping, the write-probe 400s), and it silences nothing by itself — the alert still
+  fires, still notifies, still shows in Grafana. An alert OUTSIDE the declared set triages at once,
+  with the live window named in its brief, which is the other half of FU-230: 7 of the 9
+  confidently-wrong writes in the 09-04→11 audit had a cause the seat made outside the cluster's view.
+  **OWNERSHIP BY SILENCE (operator ruling 2026-10-09).** The name used to SKIP the triage outright,
+  and three defects followed (2026-10-08/09): the record lapsed mid-window (`maintenance-window.sh
+  open` declared a fixed 2 h; window 2 opened 18:59Z, lapsed ~20:59Z, ran to 05:21Z — the 04:57Z
+  KubePodNotReady burst drew ~8 sessions); `close` deleted it at Ready, one `for:` too early (nx-01
+  closed 13:44Z, KubePodNotReady on its DaemonSet pods fired 13:45–13:47Z → 4 sessions); and a NEW
+  `now` alert inside a window was owned by nobody (the name muted the responder cluster-wide, the
+  seat called it "not my lane"). Now a named `now` alert gets a **grace**: the respond workflow's
+  `window-grace` step (no subscription semaphore — the semaphore moved from the workflow to the
+  `respond` step for this) defers it ONCE for 10 min through its own exit-1 retry, and in that time
+  the seat either takes it with a [window claim](../glossary.md) — an Alertmanager silence on its
+  labels under the window's id (`maintenance-window.sh claim`; durable since FU-195's PVC), so it
+  never reaches this lane again — or leaves it, and `respond` re-reads Alertmanager and triages it
+  with the window (id, reason) in the brief. Only alerts a window NAMES wait (the narrower scope):
+  an unnamed one is by the seat's own declaration not expected fallout. Under ADR-148 every `now`
+  alert carries pod/node/instance labels, so a silence can match it; the label-less class above is
+  `dig`. The record is a **lease**: the seat's watch (`maintenance-window.sh renew`, and `check`)
+  pushes `until` and the claims' `endsAt` forward, so a dead seat lets both lapse; `close` sets
+  `until` = now (the reconciler/apply-loop mutex releases at once), stamps `closed_at` and keeps a
+  triage-only **tail** (`tail_until`, 20 min ≥ the longest `for:` of the `now` alerts a window
+  produces) during which names still grace and claims stay up; node/host-maintenance tail their
+  silences the same way and re-silence the node's current pod names. Closed and lapsed records stay
+  ≥ 4 days as history (the deep dig reads them as onset context). Mechanism: `agents/seat-window.sh`
+  header; skill side: `.claude/skills/maintenance-window/SKILL.md` §Arm the watch.
   **A PERSON'S CLOSE DECIDES TOO (2026-09-17).** DECIDED-ONCE (#1733) keyed only on an OPEN issue,
   which left the worst hole of the pair: the operator closes a standing condition's issue — the
   strongest possible *I have decided, stop* — and the next UTC day finds no open record, runs a

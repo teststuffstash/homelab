@@ -137,7 +137,11 @@ transitions:
       - agents/replay/fixtures/responder-engagement/probe-failed
       - agents/replay/fixtures/responder-capture/uploads
       - agents/replay/fixtures/responder-capture/no-key
-      - agents/replay/fixtures/responder-seat-window/declared
+      - agents/replay/fixtures/responder-seat-window/claimed
+      - agents/replay/fixtures/responder-seat-window/unclaimed
+      - agents/replay/fixtures/responder-seat-window/cleared
+      - agents/replay/fixtures/responder-seat-window/am-unreadable
+      - agents/replay/fixtures/responder-seat-window/tail
       - agents/replay/fixtures/responder-seat-window/undeclared
       - agents/replay/fixtures/responder-seat-window/pipe-in-reason
       - agents/replay/fixtures/responder-decided-once/human-closed

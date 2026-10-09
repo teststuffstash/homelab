@@ -1,0 +1,4 @@
+CALL kubectl -n agent-coordinator patch cm responder-seen --type merge -p {"data":{"fp-c0ffee0000000001":"window-2026-09-17"}}
+OUT → KubePodNotReady (c0ffee0000000001): DECLARED WINDOW wk-03-1789600000 names this alert — node-maintenance window on wk-03 — planned cordon/drain/shutdown, until 2026-09-17T08:00:00Z — cleared during the grace (Alertmanager no longer holds it); marker written, no session
+OUT REACHED: end
+RC 0
