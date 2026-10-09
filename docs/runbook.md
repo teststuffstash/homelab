@@ -684,16 +684,25 @@ ranking two disks is BIOS setup (`Hard Disk Drive BBS Priorities`), driven over 
 `bios2.py` recipe in the private hardware register (`hardware/docs/nx-6035-g5.md`). pve (the X99
 desktop) has no BMC — its console is the monitor.
 
-1. **Pre-flight:** Longhorn 0 degraded volumes; no agent rides mid-flight you care about.
-2. **Full-stop, not drain.** Since 2026-09-22 (ADR-133) pve hosts only ONE of three control planes
-   (cp-01). cp-02 (nx-02) and wk-metal-02 keep etcd quorum and serve the API on the VIP `.50`, so
-   the API stays UP through the window. Metal workloads keep running headless, and a clean stop is just the planned version of
-   the whole-lab power loss the platform already survives (§Power-loss below).
-3. `qm shutdown` workers + ci-runner + `pct shutdown 210` (parallel is fine), **cp-01 LAST**
-   (one etcd member; quorum rides on the other two), then `poweroff` on pve. wk-01/wk-02 take longest (Longhorn detach).
-4. All guests + the LXC carry `onboot=1` and the X99 powers on after AC restore — on boot
-   everything self-starts and the cluster reforms with no hands (verified: 10/10 Ready,
-   ~10 min plug-out to all-Ready).
+**The recipe is the verb** — [`scripts/host-maintenance.sh`](../scripts/host-maintenance.sh)
+(`devbox run host-maint -- preflight|down|up <nx-02|pve>`; `DRY=1 … down` prints the ordered plan;
+attended, [management-box.md](management-box.md) §"Hypervisor: the host verb"). It composes the
+per-class verbs; the steps below are what it does, for reading — not for typing.
+
+1. **Pre-flight** (`preflight`, read-only): every guest classified, node-maintenance's preflight
+   per Talos guest, the CP's etcd/cilium gates, no Longhorn backup InProgress (nx-02 holds the
+   backup target), and — if this host's router node holds `.1` — the partner's `check` green.
+2. **Guests down in order, API stays up.** One CP per hypervisor (ADR-133), so quorum rides on the
+   other two: runners drained (`runner-maint drain`) + stopped → test VMs → workers
+   (`node-maintenance down`) → the CP (`node-maintenance down` → `controlplane-upgrade.sh down`) →
+   the LXC(s).
+3. **The router node LAST**: if it is the CARP MASTER, `router-node.sh carp-maintenance <node>
+   enter` first (the partner must read `.1=MASTER` before the VM stops — it may be your own network
+   path), then `qm shutdown`; then `poweroff` (or `--reboot`). `up` runs `check` + `leave` after.
+4. Every guest but the test VMs carries `onboot=1` and the X99 powers on after AC restore — on
+   boot everything self-starts and the cluster reforms with no hands (verified: 10/10 Ready,
+   ~10 min plug-out to all-Ready). `up` waits for that (nx-02: BMC power-on from the wallet entry
+   `nx-02-bmc-password` once it exists), then runs each verb's `up`/`undrain`/`check`+`leave`.
 5. **Post:** `devbox run nodes` all Ready · Longhorn degraded count returns to 0 (replica
    re-sync is normal for ~minutes) · new kernel active (`uname -r`).
 

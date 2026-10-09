@@ -318,7 +318,9 @@ Mechanism of the BGP half: [`bgp.md`](bgp.md).
   then a real host reboot, ~3 min to SSH). On the boot: the kill switch at 9.04 s and the WAN gate
   at 9.05 s, `pve-guests` at 29.9 s; the router VM self-started with its WAN tap DOWN (BACKUP) and
   `onboot` still 1; `router-node.sh check nx02` all green, prod unharmed; cp-02 + wk-04 Ready, 13/13,
-  targets back to baseline. The cold-start drill's declarative ordering is now observed.
+  targets back to baseline. The cold-start drill's declarative ordering is now observed. Since the
+  pair it is one verb, `devbox run host-maint -- down|up nx-02` (runbook §Proxmox host maintenance),
+  which runs `carp-maintenance nx02 enter` before the router VM stops when nx-02 holds `.1`.
 - **The WAN gate counts ANY CARP advert** (`router-wangate.sh`: `ip proto 112`, every vhid): the
   trial VIP `.72` comes off both nodes, and the fake-ISP cable (nx-02 `eno2` ↔ pve `enp6s0`) comes
   out — else pve, `.72`'s MASTER, raises its WAN beside nx-02 on the shared MAC.

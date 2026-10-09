@@ -314,6 +314,9 @@
       "runner-maint": [
         "bash scripts/runner-maintenance.sh \"$@\""
       ],
+      "host-maint": [
+        "bash scripts/host-maintenance.sh \"$@\""
+      ],
       "runner-maint-self-test": [
         "bash scripts/runner-maintenance-self-test.sh"
       ],
