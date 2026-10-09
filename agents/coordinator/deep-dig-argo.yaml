@@ -209,7 +209,7 @@ spec:
 
               # ── 3. HARVEST + CAPTURE, before anything can fail ───────────────────────────────
               N=0
-              if DIG_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" DIG_RUN="dig-${DAY}/dig-r1-${TS_RUN}" bash agents/deep-dig-select.sh harvest /tmp/dig.log /tmp/findings; then
+              if DIG_DIGEST=/tmp/dig.json DIG_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" DIG_RUN="dig-${DAY}/dig-r1-${TS_RUN}" bash agents/deep-dig-select.sh harvest /tmp/dig.log /tmp/findings; then
                 N="$(ls /tmp/findings/finding-*.json 2>/dev/null | wc -l | tr -d ' ')"
               else
                 echo "deep-dig: the session produced NO valid finding block for $GROUPS group(s) — the transcript is the only record"

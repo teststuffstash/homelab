@@ -1,0 +1,2 @@
+#!/bin/sh
+printf 'CALL s5cmd %s\n' "$*" >> "$REPLAY_ACTIONS"

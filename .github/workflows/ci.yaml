@@ -195,6 +195,13 @@ jobs:
         if: steps.diff.outputs.responder-behaviour-test != 'false'
         run: devbox run responder-behaviour-test
 
+      # The deep dig's selector/harvest harness (ADR-148). It had a diff-ci MAP row but no step, so its
+      # fixtures never ran in CI — the window in which `explain_prior` keyed on a shape the harvester
+      # never wrote and still passed (#2415).
+      - name: Deep-dig selector harness (devbox run deep-dig-test)
+        if: steps.diff.outputs.deep-dig-test != 'false'
+        run: devbox run deep-dig-test
+
       # The ConfigMap-shipped Python (exporters, the proxy/router) is the other thing manifest-lint
       # can't see — it validates the YAML wrapper, never the script inside, so a syntax error only
       # surfaced when ArgoCD rolled the pod (#173, found landing the #153 fix). Parse-only: no

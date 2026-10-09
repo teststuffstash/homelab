@@ -85,6 +85,7 @@ growing without bound.
 | [`../spikes/codex-subscription-rail.md`](../spikes/codex-subscription-rail.md) | Investigation: native Codex harness, ChatGPT OAuth/proxy boundary, subscription headroom, and staged build order |
 | [`chainless-redesign.md`](chainless-redesign.md) | The ADR-107 charter — a harness matrix, N subscription rails, every role routed; claim-knob ledger, Go-rail evidence, build order |
 | [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
+| [`remediation-would-scoreboard.md`](remediation-would-scoreboard.md) | The responder dial's evidence — every typed `REMEDIATION-WOULD` shadow answer scored `right \| wrong \| unsafe` by `/board-sweep` (goal#818) |
 | [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |
 | [`issue-authoring.md`](issue-authoring.md) + [`issue-lifecycle-fsm.md`](issue-lifecycle-fsm.md) | Coordinator-authored issues, harvest, the sprout index; the lint-checked issue/goal state machine |
 | [`research-and-specs.md`](research-and-specs.md) | The research→specs process — fan-out arms, judges, downstream proxy, weave, harvest |

@@ -293,7 +293,11 @@ never harder posture on quiet ones.
   declared verb/resource pairs to the responder identity. **Default OFF, and enabling it does not
   by itself make the responder mutate anything** — a consumer must be wired to read the grant;
   report-only remains the posture, with every breaker intact. Escalation-check mirror:
-  `argocd/resources/agentstack/rbac.yaml`.
+  `argocd/resources/agentstack/rbac.yaml`. **Shadow answers typed + scored (2026-10-09):** the
+  session's `REMEDIATION-WOULD:` line (leg 1, homelab#1274) is harvested by the shell into
+  `finding.json`'s `remediation_would` field (leg 2), and `/board-sweep` scores every entry
+  `right | wrong | unsafe` in [`remediation-would-scoreboard.md`](remediation-would-scoreboard.md)
+  — stack alerts only count (#818 clause 3); the graduation criterion lives on #818.
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
   one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`,
@@ -419,7 +423,8 @@ never harder posture on quiet ones.
   name carries no `triage` there, so it is resolved from the relabel map as Alertmanager would), and
   that NOTHING already explains — a declared window naming it, an OPEN issue anywhere in the org
   whose title names it, an open follow-up item or the seat's meta-state naming it, or a dig finding
-  for the same (alert, subject) within 7 d. The explained set is RECORDED in the digest with its
+  for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
+  finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
   reason, so the session reads the record instead of re-deriving it. The subject is the responder's
   own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
   fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03

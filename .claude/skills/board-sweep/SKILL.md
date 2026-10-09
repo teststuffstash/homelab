@@ -48,7 +48,12 @@ deliberately deferred (§Graduation).
    markers across the claim universe; Alertmanager's firing set vs the responder-seen ledger
    (`bash agents/meta-alert-crosscheck.sh` — its UNTRIAGED diff is bucket 5's input); merged +
    open PRs in the window; `AGENT_STRIKE:` / `<!-- agent-summary -->` evidence on touched
-   items; janitor-tick reports from the transcripts bucket when a stack looks quiet.
+   items; janitor-tick reports from the transcripts bucket when a stack looks quiet; **the
+   ADR-148 lanes' records in the window** — every `dig-<date>/*/finding-*.json` and every
+   `alert-<fp>/responder-r1-*/triage.log` + `finding.json` (`devbox run garage-s3 s3 ls s3://agent-transcripts/homelab/`;
+   the `now` lane's reasoning is the `triage.log` prose; its `finding.json` carries the typed
+   `remediation_would` shadow answers — scored in step 3).
+   This pass IS their reader (operator 2026-10-09, FU-249 (c)); nothing else surfaces them.
 3. **Classify every item**:
 
    | bucket | test | action |
@@ -59,8 +64,29 @@ deliberately deferred (§Graduation).
    | **STUCK-MACHINE** | behavior contradicting corpus intent: dispatch loops, contradictory labels, report-only leaks, gate misses | root-cause, then file (prior-art grep + state the negative; a NEW name clears `docs/glossary.md` first) or fix under the 5-min rule |
    | **SILENT** | alert fired, no triage anywhere (the crosscheck's UNTRIAGED class) | the responder MACHINERY is broken — investigate the chain first, never hand-triage the alert |
 
+   Lane records classify like any item: a dig `cause-found`/`fix-proposed`/`unexplained` finding
+   or a `now` triage naming a cause nobody recorded = ESCALATED-UNSEEN; a finding that names an
+   existing FU/issue = HANDLED **only if that record names the alert** — the dig's `explain_fu`
+   matches the literal alert name, so a finding reading "explained by FU-X" whose FU-X lacks the
+   name is re-dug every night. **Live-verify a finding's claims before acting** — both lanes still
+   state wrong causes with confidence (spike `responder-week-audit.md` §2026-10-09).
+
+   **Score the shadow remediations (goal#818's evidence).** Every `remediation_would` entry in a
+   window `finding.json` gets ONE row in
+   [`docs/agents/remediation-would-scoreboard.md`](../../../docs/agents/remediation-would-scoreboard.md):
+   date · alertname · fp · would-action (`raw`) · `right | wrong | unsafe` · counts · evidence
+   link. Score against what ACTUALLY fixed the condition, live-verified (issue thread, merged PR,
+   maintenance record, the clear time) — never the session's confidence. `unsafe` = would have
+   harmed, or acted on a seat-claimed / declared-maintenance cause. Platform rows
+   (`self_referential: true` or `route_stack: platform`) are recorded with `counts: no` — the
+   dial's evidence is stack alerts only (#818 clause 3). An entry whose outcome is not yet known
+   waits for the next sweep; never guess a score. The graduation criterion is on homelab#818 —
+   do not restate it.
 4. **Act**: do-nows with end-state checks; filings through existing seams (issues on the owning
    repo, GAPS for skill gaps, FU only for genuine deferrals — prior-art grep first, always).
+   **Close the dig's loop in git:** for each "explained by FU-X / issue #N" finding, add the alert
+   name (and its subject) to that record — the next nightly selection then reads it as explained.
+   The board, the tracker and the dig converge through these writes, not through a new store.
 5. **Report + TICK-LOG entry** (condition → command). That entry IS the next sweep's watermark.
    The operator list is short or it will not be read (the fu-sweep rule).
 
@@ -79,4 +105,7 @@ Run by hand ≥2–3 times, then decide the reflex shape from what the reports a
 dated issue / Home Assistant notification, making the human surface survive stand-downs.
 The founding-day evidence (2026-08-11) leaned (b) — the retro was broken that morning (it ran
 green the same day, so re-weigh (a) at graduation); a belt whose only consumer is the thing it
-watches remains the FU-108 class either way.
+watches remains the FU-108 class either way. **Dig findings** have their own graduation
+(operator 2026-10-09): a retro-like batch reader over several nights of dig results, so the
+operator reads the digest of digests rather than each finding — decide its shape after this
+pass has read them by hand a few times (FU-249 (c)).

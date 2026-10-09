@@ -376,6 +376,7 @@ is stale, so it cannot drift the way the prose register did.
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
+| `responder-capture/remediation-would` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/uploads` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-cause-line/absent` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-cause-line/already-bound` | actions | - | `agents/coordinator/responder-argo.yaml` | - |

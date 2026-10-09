@@ -12986,3 +12986,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (group `github-ci-drift`, 1h eval, `for: 6h`, median-of-runs 7d > 1.5× the 21–28d baseline AND > 120 s, ≥20 runs
   each window, `max by id` dedups exporter restarts). Unmeasured: the hourly [7d] query cost; non-master push runs
   count in the push median (no branch filter).
+
+## 2026-10-09 evening — handover loose ends, the ADR-148 lanes read against three days (seat)
+- **Handover (overnight 4 PRs):** all merged (#2393 by the operator). Loose ends: footprint-less WORKER PR keeps
+  the governance BLOCK (operator ruling → `.agents/review.md` 38dd90ba, direct — governance file); reviewer
+  prompt `[GOVERNANCE]` sentence defers to the rubric's author test → #2413 (c2c6c965, subagent); #1736's
+  goal/** master-sync shape → #2412; non-pin ci.yaml = operator lane by ADR (no item); pr-wait "exit 0 then 4" =
+  a superseded background wait reporting late (seen again on #2413's subagent) — not filed.
+- **Responder design read (slice: ADR-148, the audit spike, roles.md, live bucket + ledger):** the `now` lane and
+  deep dig are LIVE since 10-04 (#2212); the operator's "disabled" = the OLD lane. 10-07→10-09 mapping + seven
+  gaps → spike §2026-10-09 (#2414). Corrections taken: the 10-08 "DNS outage" = the WAN loss (the dig ran 04:58,
+  the record landed 05:29); the 13:45 "DISABLED, all declared" read was wrong — the window closed 13:44 and 4
+  sessions ran 13:45–13:47.
+- **Operator rulings:** window ownership by SILENCE (claim/hand-off, leases, close tail, responder grace; HA muting
+  accepted — operator watches Alertmanager in windows) → FU-230, subagent `feat/window-claims-by-silence`; dig
+  dedup shape fix → FU-249 (a), subagent `fix/deep-dig-prior-shape`; reader = `/board-sweep` now (#2416), a retro-like batch reader later.
