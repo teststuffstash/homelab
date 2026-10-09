@@ -52,8 +52,15 @@ want "A1: REMEDIATION-WOULD MARKER section header" "REMEDIATION-WOULD MARKER"
 want "A2: marker format instruction"               "REMEDIATION-WOULD: <verb>"
 want "A3: example remediation line"                "delete oracle-fleet/pod/"
 want "A4: at-most-one-per-session guard"           "At most one per distinct remediation per session"
-want "A5: report-only exclusion"                   "Do NOT emit this line when your verdict is report-only"
-want "A6: no-mechanical-remediation exclusion"     "when no mechanical remediation applies"
+# A5/A6 were inverted 2026-10-09 (homelab#1274 design, goal#818 clause 3): the old brief said
+# "Do NOT emit this line when your verdict is report-only", which suppressed the marker in exactly
+# the class the dial measures — an IMPERATIVE remediation is not a PR, so those triages land
+# report-only. The marker is now independent of fix-verdict; its only omit condition is "no
+# mechanical imperative remediation applies".
+want    "A5: marker is independent of fix-verdict"          "This line is INDEPENDENT of your fix-verdict"
+want    "A5b: report-only + imperative remediation MUST carry it" "a report-only verdict that names an imperative remediation MUST still carry the line"
+want    "A6: the only omit condition is no imperative remediation" "The ONLY reason to omit it: no mechanical imperative remediation applies."
+wantnot "A6b: the report-only suppression is gone"          "Do NOT emit this line when your verdict is report-only"
 want "A7: GitOps class excluded (dial class only)" "takes NO marker"
 
 # ── verify the HARD RULES section is still present (no regression) ──────────────────────────────
