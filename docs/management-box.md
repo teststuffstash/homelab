@@ -634,6 +634,17 @@ planned, not built:
 
 It enters the ledger above as box-run only after its first unattended success.
 
+### Hypervisor: the host verb (2026-10-09)
+
+A whole Proxmox host (nx-02, pve) goes down through
+[`scripts/host-maintenance.sh`](../scripts/host-maintenance.sh) (`devbox run host-maint --
+preflight|down|up <host>`): a composer over the verbs above — guests read live from `qm`/`pct list`
+and classified by name, then the runner verb, `node-maintenance` (control planes via
+`controlplane-upgrade.sh`), `pct shutdown`, and the router node's `carp-maintenance` last, in the
+order [runbook §Proxmox host maintenance](runbook.md#proxmox-host-maintenance-window-updates--reboot)
+gives. It opens its own host window (an `instance` silence + a declared window). **Attended**,
+like the runner verb; box wiring is not built.
+
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
 **Tracked by:** FU-235 (the diff), FU-244 (flags out of git). The ArgoCD model
