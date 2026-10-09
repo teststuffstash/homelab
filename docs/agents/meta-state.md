@@ -20,9 +20,8 @@ never the session's arc — that is TICK-LOG's.)
   requests from wk-04's displaced pods → `fstrim-guard` OutOfcpu / `ArgoCDAppDegraded node-fstrim` (pods never move
   back); **DONE 15:05Z (TICK-LOG 14:05–15:05Z): #2403 exception, #2404 PriorityClass `node-maintenance` + affinity on the 10 fstrim
   CronJobs (live: two preemptions, guard green, alerts gone 14:38Z), #2405 Kyverno `pinned-pods-priority` (Enforce) +
-  `cronjob-needs-priority` (Audit, 10 warnings, sentinel `--audit-warn`).** OPERATOR decision, unfiled: a descheduler (or
-  topology spread) so displaced pods move back after windows — wk-01/wk-02 still ~95 % booked; and whether the 10 Audit
-  warnings get a class each; `coordinator-sensor` crashlooping; HA plug sensors
+  `cronjob-needs-priority` (Audit, 10 warnings, sentinel `--audit-warn`).** The descheduler is **FU-309** (operator-deferred, 15:10Z); open for the operator: whether the 10 Audit-warned CronJobs
+  get a class each; `coordinator-sensor` crashlooping; HA plug sensors
   laptop3/laptop4/pve stale since 12:51Z; the RAM re-plan for nx-02's VMs is the operator's; (4) loose: both router nodes carry the hostname
   `opnsense-test.teststuff.net` (seed carry-over, cosmetic, not sent to the ISP).
 - **⚑ PICKUP (2026-10-09 05:00Z — seat; TICK-LOG 2026-10-08 evening → 10-09 morning).** **Window 2 DONE:
