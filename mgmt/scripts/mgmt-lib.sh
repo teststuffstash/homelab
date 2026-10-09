@@ -125,7 +125,9 @@ mgmt_policy_load() {
   fi
   printf '%s' "$f"
 }
-_yq() { ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); }
+# Already inside a devbox env (CI's `devbox run mgmt-policy-test`, a `devbox shell`): the pinned yq is
+# on PATH — a nested `devbox run` per call cost ~0.15 s locally, ~1128 calls = ~150 s of the CI step.
+_yq() { if [ "${DEVBOX_SHELL_ENABLED:-}" = 1 ]; then ( cd "${REPO:-$PWD}" && yq "$@" ); else ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); fi; }
 # mgmt_policy_get <policy> <expr> — yq over the policy file, raw lines out
 mgmt_policy_get() { _yq -r "$2" "$1"; }
 
