@@ -156,7 +156,7 @@ need_vm() { # <vm> — a ci-runner VM that machines.yaml knows, with its ip → 
 }
 
 # ── silences (the shape of node-maintenance.sh §"the window silence") ────────────────────────────
-# The declared window (seat-window.sh) only quiets the responder's triage; the PAGE goes through
+# The declared window (seat-window.sh) only graces the responder's triage; the PAGE goes through
 # Alertmanager, so `run` silences what the replace raises (2026-10-08, the first attended run paged on
 # all three). One silence per matcher set — Alertmanager ANDs the matchers inside one silence:
 #   1. instance=~"<ip>(:[0-9]+)?" — every alert keyed on the VM's own exporter: CiRunnerNodeExporterDown,

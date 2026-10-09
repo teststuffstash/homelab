@@ -2,8 +2,10 @@
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
 #   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply]
-#   bash scripts/maintenance-window.sh check [--id <window-id>]
-#   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]
+#   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease
+#   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — the skill's watch calls it
+#   bash scripts/maintenance-window.sh claim [--id <window-id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>)
+#   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]   # mutex released now, triage tail ${MAINT_TAIL_MIN:-20}m
 #   bash scripts/maintenance-window.sh list              # the windows this tool has open (its state slots)
 #   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
 #   bash scripts/maintenance-window.sh snapshot          # probes 1–4 as JSON on stdout; exit 1 if any read failed
@@ -17,6 +19,16 @@
 # would have closed the subagent's window (GAPS maintenance-window-G1). A slot lives until its
 # `close` succeeds, so a stale one from a dead session makes the no-`--id` form refuse: `list`,
 # then `close --id <it> --force`.
+#
+# THE WINDOW IS A LEASE (operator ruling 2026-10-09, FU-230 — agents/seat-window.sh §OWNERSHIP BY
+# SILENCE). `open` without `--hours` declares for MAINT_LEASE_MIN (30) and the seat keeps it alive:
+# `check` and `renew` push `until` (and every claim's silence) to now+lease, so a dead session's
+# window lapses within one lease instead of a fixed term that can end mid-window — window 2 of
+# 2026-10-08 declared `--hours 2`, lapsed ~20:59Z while the work ran to 05:21Z, and the 04:57Z
+# KubePodNotReady burst drew ~8 sessions. An unattended caller (runner-maintenance.sh,
+# helm-release-evidence.sh) has no watch to renew, so it passes `--hours` and keeps a fixed term.
+# `claim` turns a new `now` alert into the window's own (an Alertmanager silence on its labels,
+# under the lease) — the outcome the responder's grace waits for. `close` TAILS instead of deleting.
 #
 # `snapshot` + `compare` are the UNATTENDED form — no window, no CI probe (the caller has no gh):
 # the management box's apply loop brackets a Talos config apply with them (mgmt/scripts/mgmt-apply.sh,
@@ -48,6 +60,8 @@
 set -euo pipefail
 
 ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+LEASE_MIN="${MAINT_LEASE_MIN:-30}"   # the declared window's lease (header §THE WINDOW IS A LEASE)
+TAIL_MIN="${MAINT_TAIL_MIN:-20}"     # close's triage-only tail ≈ the longest `for:` of a window's `now` alerts
 STATE_DIR="${MAINT_STATE_DIR:-$HOME/.claude/maintenance-window}"
 # Per-window slot: $STATE_DIR/<key>/{baseline.json,window-id,meta.json}. <key> IS the seat-window
 # id for every slot `open` writes; `window-id` inside is the id close hands to seat-window.sh (it
@@ -279,7 +293,7 @@ baseline_readable() { # <snapshot-file>
 }
 
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours=2 node="" admit="" admit_apply=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=1; shift ;;
@@ -308,8 +322,12 @@ cmd_open() {
     echo "open: refusing to bank a baseline with unread signals — fix the read and re-run" >&2
     rm -rf "$pend"; exit 1
   }
-  local args=(open --reason "$reason" --alerts "$alerts" --hours "$hours"
-              --note "opened by scripts/maintenance-window.sh; baseline in $STATE_DIR/<this id>/")
+  # No --hours = a LEASE the session renews (header); --hours = a fixed term for an unattended caller.
+  local term=(--minutes "$LEASE_MIN") until_; until_="$(date -u -d "+${LEASE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -n "$hours" ]; then term=(--hours "$hours"); until_="$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)"; fi
+  local tnote="a ${LEASE_MIN}m lease renewed by check/renew"; [ -z "$hours" ] || tnote="a fixed ${hours}h term"
+  local args=(open --reason "$reason" --alerts "$alerts" "${term[@]}"
+              --note "opened by scripts/maintenance-window.sh; baseline in $STATE_DIR/<this id>/; $tnote")
   [ -n "$node" ] && args+=(--node "$node")
   [ -n "$admit" ] && args+=(--admit-reconciler)
   [ -n "$admit_apply" ] && args+=(--admit-apply)
@@ -326,10 +344,11 @@ cmd_open() {
   fi
   printf '%s' "$id" > "$pend/window-id"
   jq -n --arg id "$id" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg until "$(date -u -d "+${hours} hours" +%Y-%m-%dT%H:%M:%SZ)" \
-        '{id:$id, reason:$reason, opened_at:$at, until:$until}' > "$pend/meta.json"
+        --arg until "$until_" --argjson lease "$([ -n "$hours" ] && echo false || echo true)" \
+        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease}' > "$pend/meta.json"
   mv "$pend" "$STATE_DIR/$id"
-  echo "  maintenance-window slot: $id — pass '--id $id' to check/close if any other session may have a window open"
+  echo "  maintenance-window slot: $id — pass '--id $id' to check/renew/claim/close if any other session may have a window open"
+  [ -n "$hours" ] || echo "  a ${LEASE_MIN}m LEASE: the background watch must call 'renew --id $id' (check renews too) or the declaration lapses"
 }
 
 # ---- slot resolution --------------------------------------------------------------------------
@@ -482,11 +501,29 @@ cmd_close() {
   # Close only the window this tool opened: `--all` also closed windows other sessions had
   # declared (a spike's close removed a concurrent seat window, 2026-09-21).
   if [ -s "$WID" ]; then
-    bash "$ROOT/agents/seat-window.sh" close --id "$(cat "$WID")"
+    bash "$ROOT/agents/seat-window.sh" close --id "$(cat "$WID")" --tail-min "$TAIL_MIN"
   else
     echo "close: no recorded window id — closing none; 'bash agents/seat-window.sh list' to find it" >&2
   fi
   rm -rf "${STATE_DIR:?}/${SLOT:?}"
+}
+
+# The lease (header): extend the declared window and its claims. Non-zero = the record is gone,
+# closed or LAPSED — the declaration no longer covers this window, which the seat must hear.
+cmd_renew() {
+  [ -s "$WID" ] || { echo "renew: no recorded window id for slot $SLOT — nothing to renew" >&2; return 1; }
+  bash "$ROOT/agents/seat-window.sh" renew --id "$(cat "$WID")" --minutes "$LEASE_MIN" || {
+    echo "  ⚠ the declared window $(cat "$WID") is NOT live any more — the responder triages its named alerts at once" >&2
+    echo "    and claims lapse; 'close --id $SLOT --force' and re-open if the work continues" >&2
+    return 1; }
+  [ ! -f "$STATE_DIR/$SLOT/meta.json" ] || {
+    local u; u="$(date -u -d "+${LEASE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+    jq --arg u "$u" 'if .until < $u then .until = $u else . end' "$STATE_DIR/$SLOT/meta.json" > "$STATE_DIR/$SLOT/meta.json.n" \
+      && mv "$STATE_DIR/$SLOT/meta.json.n" "$STATE_DIR/$SLOT/meta.json"; }
+}
+cmd_claim() {
+  [ -s "$WID" ] || { echo "claim: no recorded window id for slot $SLOT" >&2; return 1; }
+  bash "$ROOT/agents/seat-window.sh" claim --id "$(cat "$WID")" "$@"
 }
 
 # The cilium backend probe on its own, with no baseline and no window — for a caller that has
@@ -519,17 +556,27 @@ cmd_compare() {
 
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
-  check|close)
-    verb="$1"; shift; id=""
+  check|close|renew|claim)
+    verb="$1"; shift; id=""; pass=()
     while [ $# -gt 0 ]; do
       case "$1" in
         --id)    [ -n "${2:-}" ] || { echo "$verb: --id needs a window id" >&2; exit 64; }; id="$2"; shift 2 ;;
-        --force) [ "$verb" = close ] || { echo "check: unknown arg --force" >&2; exit 64; }; FORCE=1; shift ;;
+        --force) [ "$verb" = close ] || { echo "$verb: unknown arg --force" >&2; exit 64; }; FORCE=1; shift ;;
+        --alert|--match|--fp)
+                 [ "$verb" = claim ] || { echo "$verb: unknown arg: $1" >&2; exit 64; }
+                 [ -n "${2:-}" ] || { echo "claim: $1 needs a value" >&2; exit 64; }; pass+=("$1" "$2"); shift 2 ;;
         *) echo "$verb: unknown arg: $1" >&2; exit 64 ;;
       esac
     done
     use_slot "$verb" "$id"
-    if [ "$verb" = check ]; then cmd_check; else cmd_close; fi ;;
+    case "$verb" in
+      # check renews AFTER it reads: the lease is the session saying "I am still here", and a check
+      # is that. Its rc stays the cluster verdict; a lapsed lease prints its own ⚠ on stderr.
+      check) rc=0; cmd_check || rc=$?; cmd_renew || true; exit "$rc" ;;
+      close) cmd_close ;;
+      renew) cmd_renew ;;
+      claim) cmd_claim "${pass[@]}" ;;
+    esac ;;
   list) shift; cmd_list ;;
   # `|| exit $?` so the exit CODE survives: the caller distinguishes 2 (roll the DaemonSet) from
   # 3 (do not) — under `set -e` a bare call would exit non-zero all the same, but silently
@@ -537,5 +584,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] | check [--id <id>] | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] | check [--id <id>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
 esac

@@ -437,15 +437,18 @@ Talos API VIP moves on the graceful shutdown by itself (a few seconds of API bli
 **The window also declares itself to the alert path, in two halves that cover different label
 shapes** (FU-230; `SILENCE=0` opts out of both). `settle`/`down` open Alertmanager silences keyed on
 `node`, `instance`, the node's pod names and — on a zone node — the Garage health set, and `up`
-expires them; those silences live on an emptyDir, so a monitoring restart mid-window drops them
-(FU-195). They cannot reach the rollout class at all: `KubeDaemonSetRolloutStuck` and kin carry
-neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence. So the
-same acts also open a **declared window** ([`agents/seat-window.sh`](../agents/seat-window.sh) → a
-ConfigMap the responder reads, [glossary](glossary.md)) naming those alert NAMES, which suppresses
-the LLM triage for them only — they still fire, still notify, still show in Grafana. Declare one by
-hand for work this script does not drive (a Proxmox host window, a cable):
-`bash agents/seat-window.sh open --reason "…" --alerts A,B --hours 3`, then `close --node <n>`;
-`list` shows what is live.
+TAILS them 20 min past Ready (plus a fresh silence over the node's current pod names — a reinstall
+mints new ones), because what the window caused fires up to its `for:` after the node is back
+(FU-230, 2026-10-09). They cannot reach the rollout class at all: `KubeDaemonSetRolloutStuck` and
+kin carry neither `node` nor `instance`, and the pod that goes Pending is minted AFTER the silence.
+So the same acts also open a **declared window** ([`agents/seat-window.sh`](../agents/seat-window.sh)
+→ a ConfigMap the responder reads, [glossary](glossary.md)) naming those alert NAMES: a named
+`now` alert gets a ~10-min grace for a **window claim** before the responder triages it with the
+window in its brief ([roles.md §responder](agents/roles.md)). Declare one by hand for work this
+script does not drive (a cable): `bash agents/seat-window.sh open --reason "…" --alerts A,B --hours 3`,
+then `close --node <n>` (or `--id`); `claim`/`renew` as in the
+[maintenance-window skill](../.claude/skills/maintenance-window/SKILL.md); `list` shows what is live
+and what is in its tail.
 
 Two lessons from the first run:
 

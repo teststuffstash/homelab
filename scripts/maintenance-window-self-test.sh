@@ -389,7 +389,7 @@ grep -q "pass '--id w1'" <<<"$out" && ok "open prints the id to pass" || bad "op
 out="$(FAKE_ALERTS="Watchdog" mw check)"; rc=$?
 [ "$rc" -eq 0 ] && ok "check without --id uses the one open window" || bad "single-window check rc=$rc: $out"
 out="$(FAKE_ALERTS="Watchdog" mw close)"; rc=$?
-[ "$rc" -eq 0 ] && grep -q '^close close --id w1$' "$FAKE_STATE/seat-window.log" && [ ! -e "$MAINT_STATE_DIR/w1" ] \
+[ "$rc" -eq 0 ] && grep -q '^close close --id w1 --tail-min 20$' "$FAKE_STATE/seat-window.log" && [ ! -e "$MAINT_STATE_DIR/w1" ] \
   && ok "close without --id closes the one window and drops its slot" || bad "single-window close rc=$rc: $out / $(cat "$FAKE_STATE/seat-window.log")"
 
 # 7b. Two concurrent opens keep SEPARATE baselines: w2 before a Foo alert, w3 after it.
@@ -417,13 +417,13 @@ out="$(FAKE_ALERTS="Watchdog Foo" mw check)"; rc=$?
 # 7d. close --id closes ONLY that window; the other slot survives, and is then the one.
 out="$(FAKE_ALERTS="Watchdog Foo" mw close --id w3)"; rc=$?
 [ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w3" ] && [ -f "$MAINT_STATE_DIR/w2/baseline.json" ] \
-  && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w3" ] \
+  && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w3 --tail-min 20" ] \
   && ok "close --id w3 closes only w3" || bad "close --id w3 rc=$rc: $out / $(cat "$FAKE_STATE/seat-window.log")"
 out="$(FAKE_ALERTS="Watchdog Foo" mw close)"; rc=$?
 [ "$rc" -ne 0 ] && grep -q "REFUSING to close" <<<"$out" && [ -e "$MAINT_STATE_DIR/w2" ] \
   && ok "the remaining window's close still gates on ITS baseline (Foo is new to w2)" || bad "w2 close rc=$rc: $out"
 out="$(FAKE_ALERTS="Watchdog Foo" mw close --force --id w2)"; rc=$?
-[ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w2" ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w2" ] \
+[ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w2" ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id w2 --tail-min 20" ] \
   && ok "close --force --id (either order) closes it" || bad "close --force --id w2 rc=$rc: $out"
 
 # 7e. Unknown / path-shaped ids are refused, not resolved.
@@ -438,9 +438,191 @@ jq '.alerts=["Watchdog"]' "$TMP/baseline.fixture.json" > "$MAINT_STATE_DIR/basel
 out="$(FAKE_ALERTS="Watchdog" mw list)"
 grep -q "old-7" <<<"$out" && [ ! -e "$MAINT_STATE_DIR/baseline.json" ] && ok "a pre-slot baseline migrates into a slot" || bad "legacy migration: $out"
 out="$(FAKE_ALERTS="Watchdog" mw close)"; rc=$?
-[ "$rc" -eq 0 ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id old-7" ] \
+[ "$rc" -eq 0 ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id old-7 --tail-min 20" ] \
   && ok "a migrated window closes by its recorded id" || bad "legacy close rc=$rc: $out"
 unset FAKE_STATE
+
+# ---------------------------------------------------------------------------------------------
+# 8. LEASES, CLAIMS AND THE TAIL (operator ruling 2026-10-09, FU-230). Three defects, one per
+# assertion block: (1) a fixed `--hours 2` declaration lapsed mid-window (window 2, 2026-10-08:
+# lapsed ~20:59Z, work ran to 05:21Z, ~8 sessions on the 04:57Z burst) → the window is a LEASE the
+# watch renews; (2) close DELETED the record at Ready and KubePodNotReady (`for: 15m`) fired after it
+# (nx-01, 13:44Z close → 13:45–13:47Z, 4 sessions) → close TAILS; (3) a named alert muted the
+# responder cluster-wide and nobody owned it → CLAIM, an Alertmanager silence under the lease.
+# The REAL agents/seat-window.sh runs against a stateful fake ConfigMap + fake Alertmanager.
+S8="$TMP/s8"; mkdir -p "$S8/bin" "$S8/am"
+cat > "$S8/bin/kubectl" <<STUB
+#!/usr/bin/env bash
+# The responder-window ConfigMap lives in \$FAKE_CM; every other read falls through to the
+# section-wide fake (nodes, pods, cilium) so maintenance-window.sh open/check still see a cluster.
+case " \$* " in *" cm "*) ;; *) exec "$TMP/bin/kubectl" "\$@" ;; esac
+f="\${FAKE_CM:?}"; p=""; prev=""; for a in "\$@"; do [ "\$prev" = -p ] && p="\$a"; prev="\$a"; done
+case " \$* " in
+  *" get cm "*" -o json "*) [ -f "\$f" ] || { echo 'Error from server (NotFound)' >&2; exit 1; }; cat "\$f" ;;
+  *" get cm "*) [ -f "\$f" ] ;;
+  *" create cm "*) [ -f "\$f" ] || printf '{"data":{}}' > "\$f" ;;
+  *" patch cm "*"--type merge"*) jq --argjson p "\$p" '.data = ((.data // {}) + \$p.data)' "\$f" > "\$f.n" && mv "\$f.n" "\$f" ;;
+  *" patch cm "*"--type json"*)
+    k="\$(jq -r '.[0].path | sub("^/data/";"")' <<<"\$p")"
+    jq --arg k "\$k" 'del(.data[\$k])' "\$f" > "\$f.n" && mv "\$f.n" "\$f" ;;
+esac
+STUB
+cat > "$S8/bin/curl" <<STUB
+#!/usr/bin/env bash
+# Alertmanager (/api/v2/) is served from \$FAKE_AM; Prometheus falls through to the fake above.
+case "\$*" in */api/v2/*) ;; *) exec "$TMP/bin/curl" "\$@" ;; esac
+d="\${FAKE_AM:?}"; m=GET; data=""; url=""; prev=""
+for a in "\$@"; do case "\$prev" in -X) m="\$a";; -d) data="\$a";; esac; case "\$a" in http*) url="\$a";; esac; prev="\$a"; done
+[ -d "\$d" ] || exit 7
+[ -f "\$d/silences.json" ] || echo '[]' > "\$d/silences.json"
+case "\$m \$url" in
+  "GET "*/api/v2/silences) cat "\$d/silences.json" ;;
+  "GET "*/api/v2/alerts*) cat "\$d/alerts.json" 2>/dev/null || echo '[]' ;;
+  "POST "*/api/v2/silences)
+    id="\$(jq -r '.id // empty' <<<"\$data")"
+    if [ -n "\$id" ]; then jq --argjson b "\$data" 'map(if .id == \$b.id then (. + \$b) else . end)' "\$d/silences.json" > "\$d/s.n"
+    else id="s\$(( \$(jq length "\$d/silences.json") + 1 ))"
+         jq --argjson b "\$data" --arg id "\$id" '. + [\$b + {id:\$id, status:{state:"active"}}]' "\$d/silences.json" > "\$d/s.n"; fi
+    mv "\$d/s.n" "\$d/silences.json"; printf '{"silenceID":"%s"}' "\$id" ;;
+  "DELETE "*/api/v2/silence/*)
+    jq --arg id "\${url##*/}" 'map(if .id == \$id then .status.state = "expired" else . end)' "\$d/silences.json" > "\$d/s.n"; mv "\$d/s.n" "\$d/silences.json" ;;
+  *) exit 22 ;;
+esac
+STUB
+chmod +x "$S8/bin/kubectl" "$S8/bin/curl"
+REPO8="$TMP/repo8"; mkdir -p "$REPO8/scripts" "$REPO8/agents"
+cp "$ROOT/scripts/maintenance-window.sh" "$REPO8/scripts/"; cp "$ROOT/agents/seat-window.sh" "$REPO8/agents/"
+export FAKE_CM="$S8/cm.json" FAKE_AM="$S8/am"
+sw() { PATH="$S8/bin:$PATH" SEAT_WINDOW_AM=http://am.test:9093 bash "$REPO8/agents/seat-window.sh" "$@" 2>&1; }
+mw8() { PATH="$S8/bin:$PATH" SEAT_WINDOW_AM=http://am.test:9093 DEVBOX_PROJECT_ROOT="$REPO8" MAINT_STATE_DIR="$S8/state" \
+        FAKE_PROM=1 FAKE_UP=100 FAKE_ALERTS="Watchdog" bash "$REPO8/scripts/maintenance-window.sh" "$@" 2>&1; }
+rec() { jq -c --arg id "$1" '[.data[] | fromjson | select(.id == $id)] | first' "$FAKE_CM"; }
+iso() { date -u -d "$1" +%Y-%m-%dT%H:%M:%SZ; }
+claims() { jq -c --arg by "seat-window/$1" '[.[] | select(.createdBy == $by and .status.state != "expired")]' "$FAKE_AM/silences.json"; }
+setuntil() { # <id> <iso> — age a record in place
+  jq --arg id "$1" --arg u "$2" '.data |= with_entries(if (.value | fromjson | .id) == $id then .value = (.value | fromjson | .until = $u | tojson) else . end)' \
+    "$FAKE_CM" > "$FAKE_CM.n" && mv "$FAKE_CM.n" "$FAKE_CM"
+}
+
+# 8a. open --minutes: a lease, not a term.
+out="$(sw open --reason "lease test" --alerts KubePodNotReady,TargetDown --minutes 30)"
+W="$(sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' <<<"$out")"
+u="$(rec "$W" | jq -r .until)"
+[[ "$u" > "$(iso '+25 minutes')" && "$u" < "$(iso '+35 minutes')" ]] && ok "open --minutes 30 declares a 30-minute lease" || bad "lease until=$u: $out"
+
+# 8b. claim: the grammar refuses name-wide and unscoped pod-regex claims; a good one is a silence
+# on the alert's labels, under the window's lease, comment naming the window.
+out="$(sw claim --id "$W" --alert KubePodNotReady --match 'pod=~cilium-.*')"; rc=$?
+[ "$rc" -ne 0 ] && grep -q 'namespace' <<<"$out" && ok "a pod=~ claim without namespace= is refused" || bad "unscoped pod regex rc=$rc: $out"
+out="$(sw claim --id "$W" --alert KubePodNotReady --match 'alertname=KubePodNotReady')"; rc=$?
+[ "$rc" -ne 0 ] && ok "a name-only claim (the old cluster-wide mute) is refused" || bad "name-only claim rc=$rc: $out"
+out="$(sw claim --id "$W" --alert KubePodNotReady --match 'namespace=kube-system,pod=~.*')"; rc=$?
+[ "$rc" -ne 0 ] && ok "a match-everything regex is refused" || bad "match-all claim rc=$rc: $out"
+out="$(sw claim --id "$W" --alert KubePodNotReady --match 'namespace=kube-system,pod=~cilium-.*')"; rc=$?
+c="$(claims "$W")"
+[ "$rc" -eq 0 ] && jq -e --arg u "$u" --arg w "$W" 'length == 1 and .[0].endsAt == $u and (.[0].comment | contains($w))
+      and (.[0].matchers | any(.name == "pod" and .isRegex and .value == "cilium-.*"))
+      and (.[0].matchers | any(.name == "alertname" and .value == "KubePodNotReady"))' <<<"$c" >/dev/null \
+  && ok "claim = a silence on the alert's labels, endsAt = the lease, comment names the window" || bad "claim rc=$rc: $out / $c"
+printf '[{"fingerprint":"fp9","labels":{"alertname":"TargetDown","job":"x","namespace":"ns"},"status":{"state":"active"}}]' > "$FAKE_AM/alerts.json"
+out="$(sw claim --id "$W" --fp fp9)"; rc=$?
+[ "$rc" -eq 0 ] && jq -e '[.[] | select(.matchers | any(.name == "job" and .value == "x"))] | length == 1' <<<"$(claims "$W")" >/dev/null \
+  && ok "claim --fp derives equality matchers from the alert's own labels" || bad "claim --fp rc=$rc: $out"
+
+# 8c. renew pushes the lease AND every claim with it.
+out="$(sw renew --id "$W" --minutes 90)"; rc=$?
+u2="$(rec "$W" | jq -r .until)"
+[ "$rc" -eq 0 ] && [[ "$u2" > "$(iso '+85 minutes')" ]] && jq -e --arg u "$u2" 'all(.[]; .endsAt == $u)' <<<"$(claims "$W")" >/dev/null \
+  && ok "renew extends the lease and the claims' endsAt together" || bad "renew rc=$rc until=$u2: $out / $(claims "$W")"
+out="$(sw renew --id "$W" --minutes 5)"
+[ "$(rec "$W" | jq -r .until)" = "$u2" ] && ok "renew never shortens a longer lease" || bad "renew --minutes 5 shortened: $out"
+SEAT_WINDOW_BY=nm sw open --reason "node w" --alerts X --node n1 --minutes 30 >/dev/null
+sw has --node n1 --by nm >/dev/null && ok "has sees a live window" || bad "has missed the live window"
+
+# 8d. close: mutex released NOW (every `until > now` reader), tail for the responder, claims tail.
+out="$(sw close --id "$W" --tail-min 20)"; rc=$?
+r="$(rec "$W")"; now="$(iso now)"
+[ "$rc" -eq 0 ] && [[ ! "$(jq -r .until <<<"$r")" > "$now" ]] && [ -n "$(jq -r '.closed_at // ""' <<<"$r")" ] \
+  && [[ "$(jq -r .tail_until <<<"$r")" > "$(iso '+15 minutes')" ]] \
+  && ok "close keeps the record: until=now (mutex released), closed_at, tail_until ≈ now+20m" || bad "close rc=$rc: $out / $r"
+mutex="$(jq -c --arg now "$now" '[.data[] | fromjson | select((.until // "") > $now) | .id]' "$FAKE_CM")"
+jq -e --arg w "$W" 'index($w) | not' <<<"$mutex" >/dev/null && ok "…the mgmt readers' filter (until > now) no longer sees it" || bad "closed window still live to the mutex: $mutex"
+jq -e --arg t "$(jq -r .tail_until <<<"$r")" 'length == 2 and all(.[]; .endsAt == $t)' <<<"$(claims "$W")" >/dev/null \
+  && ok "…and its claims now end with the tail, not at the close" || bad "claims after close: $(claims "$W")"
+grep -q 'triage tail until' <<<"$(sw list)" && ok "list shows a closed window in its tail" || bad "list lost the tailing window: $(sw list)"
+out="$(sw renew --id "$W")"; rc=$?
+[ "$rc" -ne 0 ] && grep -q CLOSED <<<"$out" && ok "renew refuses a closed window" || bad "renew after close rc=$rc: $out"
+out="$(sw claim --id "$W" --alert TargetDown --match 'job=y')"; rc=$?
+[ "$rc" -ne 0 ] && ok "claim refuses a closed window" || bad "claim after close rc=$rc: $out"
+out="$(sw close --id "$W")"
+grep -q 'no matching window' <<<"$out" && ok "a closed window is history, not a close target" || bad "re-close: $out"
+out="$(sw close --node n1 --by nm)"
+sw has --node n1 --by nm >/dev/null && bad "a --node/--by close left the window live to has" || ok "a --node/--by close releases has at once"
+[ "$(sw list | head -1)" = "no live seat window" ] && grep -q 'still in their triage tail' <<<"$(sw list)" \
+  && ok "list: 'no live seat window' first (helm-release-evidence greps it), the tails after" || bad "list with only tails: $(sw list)"
+
+# 8e. A dead seat: the lease lapses and renew says so (exit 1) — never a silent re-open.
+jq --arg p "$(iso '-5 minutes')" '.data["w-dead"] = ({id:"dead-1", by:"seat", until:$p, reason:"dead", alerts:["X"], node:"", note:""} | tojson)' "$FAKE_CM" > "$FAKE_CM.n" && mv "$FAKE_CM.n" "$FAKE_CM"
+out="$(sw renew --id dead-1)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q LAPSED <<<"$out" && ok "renew of a lapsed lease exits 1 (LAPSED)" || bad "lapsed renew rc=$rc: $out"
+
+# 8f. History: ≥ 4 days kept for the deep dig, older pruned by the next write.
+jq --arg o "$(iso '-5 days')" --arg y "$(iso '-3 days')" '.data["w-old"] = ({id:"old", until:$o, closed_at:$o, tail_until:$o, reason:"r", alerts:["X"]} | tojson)
+      | .data["w-young"] = ({id:"young", until:$y, closed_at:$y, tail_until:$y, reason:"r", alerts:["X"]} | tojson)' "$FAKE_CM" > "$FAKE_CM.n" && mv "$FAKE_CM.n" "$FAKE_CM"
+sw open --reason gc --alerts X --minutes 5 >/dev/null
+jq -e '(.data | has("w-old") | not) and (.data | has("w-young"))' "$FAKE_CM" >/dev/null \
+  && ok "history older than 4 days is pruned on write; 3-day-old history stays" || bad "gc: $(jq -c '.data | keys' "$FAKE_CM")"
+
+# 8g. tail-silences: a verb's own silences (node-maintenance.sh/<node>) end at now+N, not now.
+jq '. + [{id:"nm1", createdBy:"node-maintenance.sh/n1", matchers:[{name:"node",value:"n1",isRegex:false,isEqual:true}], startsAt:"2026-01-01T00:00:00Z", endsAt:"2099-01-01T00:00:00Z", comment:"c", status:{state:"active"}}]' \
+  "$FAKE_AM/silences.json" > "$FAKE_AM/s.n" && mv "$FAKE_AM/s.n" "$FAKE_AM/silences.json"
+out="$(sw tail-silences --created-by node-maintenance.sh/n1 --minutes 20)"; rc=$?
+e="$(jq -r '.[] | select(.id == "nm1") | "\(.status.state) \(.endsAt)"' "$FAKE_AM/silences.json")"
+[ "$rc" -eq 0 ] && [ "${e%% *}" = active ] && [[ "${e#* }" > "$(iso '+15 minutes')" && "${e#* }" < "$(iso '+25 minutes')" ]] \
+  && ok "tail-silences retimes a verb's silences to now+20m instead of expiring them" || bad "tail-silences rc=$rc: $out / $e"
+out="$(FAKE_AM=/nonexistent/x sw tail-silences --created-by node-maintenance.sh/n1)"; rc=$?
+[ "$rc" -ne 0 ] && ok "tail-silences exits non-zero when Alertmanager is unreadable" || bad "unreadable AM tail rc=$rc: $out"
+
+# 8h. maintenance-window.sh: open without --hours is a LEASE; --hours is a fixed term.
+out="$(mw8 open --reason "mw lease")"; rc=$?
+M="$(sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' <<<"$out")"
+mu="$(rec "$M" | jq -r .until)"
+[ "$rc" -eq 0 ] && [[ "$mu" < "$(iso '+35 minutes')" ]] && grep -q "must call 'renew --id $M'" <<<"$out" \
+  && jq -e '.lease == true' "$S8/state/$M/meta.json" >/dev/null \
+  && ok "maint open (no --hours) declares a 30m lease and says the watch must renew it" || bad "maint open rc=$rc until=$mu: $out"
+out="$(mw8 open --reason "mw fixed" --hours 3)"; F="$(sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' <<<"$out")"
+[[ "$(rec "$F" | jq -r .until)" > "$(iso '+170 minutes')" ]] && ok "maint open --hours 3 keeps a fixed term (unattended callers)" || bad "maint --hours: $out"
+
+# 8i. renew / check renew; claim passes through; close tails; a lapsed lease is loud.
+out="$(MAINT_LEASE_MIN=60 mw8 renew --id "$M")"; rc=$?
+[ "$rc" -eq 0 ] && [[ "$(rec "$M" | jq -r .until)" > "$(iso '+55 minutes')" ]] && ok "maint renew extends the declared window" || bad "maint renew rc=$rc: $out"
+out="$(MAINT_LEASE_MIN=120 mw8 check --id "$M")"; rc=$?
+[ "$rc" -eq 0 ] && [[ "$(rec "$M" | jq -r .until)" > "$(iso '+115 minutes')" ]] && ok "maint check renews the lease too (rc stays the cluster verdict)" || bad "check renew rc=$rc: $out"
+out="$(mw8 claim --id "$M" --alert KubePodNotReady --match 'namespace=longhorn-system,pod=~engine-image-.*')"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(claims "$M" | jq length)" = 1 ] && ok "maint claim creates the claim under the window's id" || bad "maint claim rc=$rc: $out"
+out="$(mw8 close --id "$M")"; rc=$?
+[ "$rc" -eq 0 ] && [ -n "$(rec "$M" | jq -r '.closed_at // ""')" ] && [[ "$(rec "$M" | jq -r .tail_until)" > "$(iso '+15 minutes')" ]] \
+  && [ ! -e "$S8/state/$M" ] && ok "maint close tails the declared window (history kept) and drops the slot" || bad "maint close rc=$rc: $out / $(rec "$M")"
+setuntil "$F" "2020-01-01T00:00:00Z"
+out="$(mw8 renew --id "$F")"; rc=$?
+[ "$rc" -ne 0 ] && grep -q 'NOT live any more' <<<"$out" && ok "maint renew of a lapsed window fails loudly (the watch hears it)" || bad "maint lapsed renew rc=$rc: $out"
+
+# 8j. node-maintenance.sh `up`'s close half (silence-close): the verb's silences TAIL past Ready, the
+# node's pods-as-of-now get a `#pods-tail` silence (reinstalls mint new DaemonSet pod names), and
+# its declared record closes with a tail — the nx-01 13:44Z → 13:45–13:47Z sessions (defect 2).
+cp "$ROOT/scripts/node-maintenance.sh" "$REPO8/scripts/"
+jq 'map(if .id == "nm1" then .endsAt = "2099-01-01T00:00:00Z" else . end)' "$FAKE_AM/silences.json" > "$FAKE_AM/s.n" && mv "$FAKE_AM/s.n" "$FAKE_AM/silences.json"
+SEAT_WINDOW_BY=node-maintenance.sh sw open --reason "nm window" --alerts KubePodNotReady --node n1 --hours 3 >/dev/null
+out="$(PATH="$S8/bin:$PATH" NM_AM=http://am.test:9093 bash "$REPO8/scripts/node-maintenance.sh" silence-close n1 2>&1)"; rc=$?
+e="$(jq -r '.[] | select(.id == "nm1") | "\(.status.state) \(.endsAt)"' "$FAKE_AM/silences.json")"
+[ "$rc" -eq 0 ] && [ "${e%% *}" = active ] && [[ "${e#* }" < "$(iso '+25 minutes')" ]] \
+  && ok "node-maintenance silence-close tails its silences (active, ≤20m) instead of expiring them" || bad "nm silence-close rc=$rc: $out / $e"
+jq -e '[.[] | select(.createdBy == "node-maintenance.sh/n1#pods-tail" and .status.state == "active")] | length == 1' "$FAKE_AM/silences.json" >/dev/null \
+  && ok "…and opens a #pods-tail silence over the node's CURRENT pod names" || bad "no #pods-tail silence: $out"
+nmr="$(jq -c '[.data[] | fromjson | select(.by == "node-maintenance.sh" and .node == "n1")] | first' "$FAKE_CM")"
+[ -n "$(jq -r '.closed_at // ""' <<<"$nmr")" ] && [[ "$(jq -r .tail_until <<<"$nmr")" > "$(iso '+15 minutes')" ]] \
+  && ok "…and its declared record closes with a triage tail" || bad "nm declared record: $nmr"
+unset FAKE_CM FAKE_AM
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: PASS"; exit 0; }

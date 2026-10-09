@@ -29,7 +29,7 @@
 #
 # The WINDOW is the host's own, beside the per-node ones node-maintenance opens: an Alertmanager
 # silence on instance=~ the host + its non-Talos guests' addresses, and a declared window
-# (agents/seat-window.sh --node <host> --by host-maintenance.sh) naming HOST_ALERTS. `up` closes both;
+# (agents/seat-window.sh --node <host> --by host-maintenance.sh) naming HOST_ALERTS. `up` tails both (WINDOW_TAIL_MIN, FU-230);
 # a failed `down` leaves them. SILENCE=0 opts out of both.
 #
 # ATTENDED today — the shape scripts/runner-maintenance.sh and scripts/helm-release-evidence.sh took
@@ -53,6 +53,7 @@ KEY="${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
 KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"; KEYX="$HOME/.claude/homelab-keepass/homelab.keyx"
 AM="${NM_AM:-http://192.168.40.14:9093}"
 DRY="${DRY:-0}"; FORCE="${FORCE:-0}"; SILENCE="${SILENCE:-1}"; SILENCE_HOURS="${SILENCE_HOURS:-4}"
+WINDOW_TAIL_MIN="${WINDOW_TAIL_MIN:-20}"   # `up`: silence + declared record tail ≈ the longest `for:` of the window's `now` alerts
 GUEST_TIMEOUT="${GUEST_TIMEOUT:-600}"; HOST_TIMEOUT="${HOST_TIMEOUT:-900}"; VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-900}"
 LONGHORN_TIMEOUT="${LONGHORN_TIMEOUT:-1800}"
 HOST_ALERTS="${HOST_ALERTS:-TargetDown,PveMetricsAbsent,PveMetricsStale,CiRunnerNodeExporterDown,RouterPairMasterCount,RouterWanGateSilent,LonghornBackupTargetDown,KubeNodeUnreachable,KubeNodeNotReady,KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,CiliumUnreachableNodes}"
@@ -130,10 +131,15 @@ silence_re() { # the host + its non-Talos guests (the Talos ones are node-mainte
 silence_ids() { curl -sf -m 10 "$AM/api/v2/silences" 2>/dev/null | jq -r --arg by "$BY/$HOST" '.[]|select(.createdBy==$by and .status.state!="expired")|.id' 2>/dev/null || true; }
 window_open() {
   [ "$SILENCE" = 1 ] || { log "SILENCE=0 — no host silence, no declared window"; return 0; }
-  if [ -n "$(silence_ids)" ]; then log "host silence already active"; else
+  # A previous window's TAILING silence (close keeps it ≤ WINDOW_TAIL_MIN) is the same matcher —
+  # stretch it to this window's term rather than letting it expire mid-window.
+  if [ -n "$(silence_ids)" ]; then
+    SEAT_WINDOW_AM="$AM" bash agents/seat-window.sh tail-silences --created-by "$BY/$HOST" --minutes "$((SILENCE_HOURS*60))" >/dev/null 2>&1 \
+      && log "host silence already active — extended to ${SILENCE_HOURS}h" || log "host silence already active"
+  else
     local body id
     body="$(jq -cn --arg re "$(silence_re)" --arg by "$BY/$HOST" --arg s "$((SILENCE_HOURS*3600))" \
-      --arg c "host-maintenance window on $HOST ($(date -u +%FT%TZ)) — expired by \`host-maintenance.sh up $HOST\`" \
+      --arg c "host-maintenance window on $HOST ($(date -u +%FT%TZ)) — tailed ${WINDOW_TAIL_MIN}m by \`host-maintenance.sh up $HOST\`" \
       '{matchers:[{name:"instance",value:$re,isRegex:true,isEqual:true}], startsAt:(now|todate),
         endsAt:((now+($s|tonumber))|todate), createdBy:$by, comment:$c}')"
     id="$(curl -sf -m 10 -X POST -H 'Content-Type: application/json' -d "$body" "$AM/api/v2/silences" | jq -r '.silenceID // empty')" || id=""
@@ -145,11 +151,17 @@ window_open() {
     --alerts "$HOST_ALERTS" --note "closed by \`host-maintenance.sh up $HOST\`" \
     || warn "could not declare the window to the responder"
 }
+# `up` TAILS the window instead of deleting it (FU-230, 2026-10-09): an alert whose condition began
+# inside the window fires up to its `for:` AFTER the host is back (nx-01, 13:44Z close → four
+# KubePodNotReady sessions 13:45–13:47Z), so the silence ends WINDOW_TAIL_MIN later and the declared
+# record keeps a triage tail of the same length — its mutex (reconciler, apply loop) releases at once.
 window_close() {
   [ "$SILENCE" = 1 ] || return 0
-  local id; for id in $(silence_ids); do
-    curl -sf -m 10 -X DELETE "$AM/api/v2/silence/$id" >/dev/null && ok "expired host silence $id" || warn "could not expire silence $id (self-expires)"; done
-  bash agents/seat-window.sh close --node "$HOST" --by "$BY" || warn "could not close the declared window (self-expires)"
+  if [ -n "$(silence_ids)" ]; then
+    SEAT_WINDOW_AM="$AM" bash agents/seat-window.sh tail-silences --created-by "$BY/$HOST" --minutes "$WINDOW_TAIL_MIN" \
+      && ok "host silence(s) tail ${WINDOW_TAIL_MIN}m" || warn "could not tail the host silence (it self-expires at its own end)"
+  fi
+  SEAT_WINDOW_AM="$AM" bash agents/seat-window.sh close --node "$HOST" --by "$BY" --tail-min "$WINDOW_TAIL_MIN" || warn "could not close the declared window (self-expires)"
 }
 
 # ---------------------------------------------------------------- probes

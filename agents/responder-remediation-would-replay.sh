@@ -34,7 +34,7 @@ wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2"; }
 printf '\033[1mresponder-remediation-would-replay\033[0m — #1274: REMEDIATION-WOULD shadow marker\n\n'
 
 section "1 — extract the embedded script from responder-argo.yaml"
-yq -r 'select(.kind == "WorkflowTemplate") | .spec.templates[] | select(.container != null) | .container.args[0]' \
+yq -r 'select(.kind == "WorkflowTemplate") | .spec.templates[] | select(.name == "respond") | .container.args[0]' \
    "$YAML" > "$TMP/script.sh" 2>"$TMP/yq-err.txt"
 RC=$?
 if [ "$RC" != 0 ]; then

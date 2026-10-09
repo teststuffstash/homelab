@@ -87,7 +87,7 @@ MAP=(
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
   "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^machines/"
-  "maint-self-test:^scripts/maintenance-window"
+  "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"

@@ -1,0 +1,20 @@
+# FU-230 — a CLOSED window in its TAIL still owns what it named (defect 2).
+#
+# CONDITION UNDER REPLAY. The wk-03 window CLOSED at 07:44Z (`until` = close, so the reconciler and
+# apply-loop mutex released then) with `tail_until` 08:04Z; KubePodNotReady (`for: 15m`) on a pod the
+# window bounced fires at 07:45Z and the seat's claim silence (tailed with the window) covers it.
+#
+# WHAT IT REDS ON. On 2026-10-09 nx-01's window closed 13:44Z, the record was DELETED, and
+# KubePodNotReady fired 13:45–13:47Z on its DaemonSet pods → four sessions on the seat's own work.
+#
+# THE CONTRACT: CLAIMED, `claimed-` marker, and the line says the window is in its tail.
+pins:
+  - IL-T03
+name: responder-seat-window-tail
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh

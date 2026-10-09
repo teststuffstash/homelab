@@ -39,12 +39,16 @@
 #                one comment that is also the last word. homelab#103 had been closed by the
 #                operator and reopened by this lane FIVE times since 2026-08-05; #100 and #121
 #                three times each.
-#   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore + the FU-088 latch
+#   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore (on the `respond` step) + the FU-088 latch
 #                + the FU-149 DAILY BUDGET LATCH (agents/responder-budget.sh): a binding
 #                RESPONDER_DAILY_MAX=12 sessions/day, checked before any per-alert work and again
 #                before each spawn, fail-CLOSED, with a gauge on the pushgateway and an INFO alert
 #                (ResponderTriageBudgetExhausted) when triage stops. It replaces the FU-113(c)
 #                incident cap, which had an `INC_SEEN == 0` escape hatch and so was never binding.
+#   window     = the DECLARED WINDOW (agents/seat-window.sh; FU-230, ruling 2026-10-09): a `now` alert a
+#                live window NAMES waits ONE grace (the window-grace step — 10 min, no semaphore) for
+#                the seat to CLAIM it with an Alertmanager silence; claimed → no session, unclaimed →
+#                triage with the window in the brief. Unnamed alerts triage at once, window in brief.
 #   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
 #                issues (inert, breaker #1); loop-smell → report-only stop
 #   dispatch   = SPLIT from triage (FU-133 dispatch half, 2026-08-07): the session's issue
@@ -175,12 +179,12 @@ metadata:
   name: respond
   namespace: agent-coordinator
 spec:
-  entrypoint: respond
+  entrypoint: main
   serviceAccountName: agent-coordinator
-  # Queue behind the shared subscription pool like review/coordinate workflows (FU-088 Argo layer).
-  synchronization:
-    semaphores:
-      - configMapKeyRef: { name: subscription-capacity, key: claude }
+  # The subscription semaphore (FU-088 Argo layer) sits on the `respond` TEMPLATE, not here: the
+  # declared-window GRACE below must defer WITHOUT holding a slot (FU-230, operator ruling
+  # 2026-10-09). A workflow-level lock is taken before the first pod and held through every retry
+  # backoff, so a ten-minute grace would have parked one of the pool's slots on a sleeping alert.
   # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
   # (coordinate-argo.yaml). Verbatim copy; keep in sync.
   # homelab#867 soft Longhorn-disk de-preference — same rationale.
@@ -210,12 +214,95 @@ spec:
     - { name: work, emptyDir: {} }
     - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
   templates:
+    - name: main
+      steps:
+        - - name: window-grace
+            template: window-grace
+            arguments: { parameters: [ { name: payload, value: "{{workflow.parameters.payload}}" } ] }
+        - - name: respond
+            template: respond
+            arguments: { parameters: [ { name: payload, value: "{{workflow.parameters.payload}}" } ] }
+    # ── THE DECLARED-WINDOW GRACE (FU-230, operator ruling 2026-10-09) ──────────────────────────
+    # A declared window (agents/seat-window.sh) used to SKIP the triage of every alert it named —
+    # cluster-wide, for as long as the record lived — and three defects followed (2026-10-08/09):
+    # the record lapsed mid-window (a fixed 2 h term; the 04:57Z KubePodNotReady burst drew ~8
+    # sessions), `close` deleted it one `for:` too early (nx-01 13:44Z → 4 sessions at 13:45–13:47Z),
+    # and a NEW `now` alert inside a window was owned by nobody: the name muted the responder and the
+    # seat decided "not my lane". Now ownership is a SILENCE: a named `now` alert that no silence
+    # covers waits here ONCE (exit 1 → this template's retry, 10 min backoff), the seat's window
+    # either CLAIMS it in that time (`maintenance-window.sh claim` → an Alertmanager silence on its
+    # labels, so its notification never reaches this lane again) or leaves it, and `respond` then
+    # re-reads Alertmanager and triages whatever is still unsilenced with the window named in the
+    # brief. Narrower of the two scopes the ruling offered, on purpose: only alerts a live window
+    # NAMES wait. An unnamed alert inside a window is by the seat's own declaration NOT expected
+    # fallout, so delaying it would only delay a real finding.
+    # No subscription slot is held: this template takes no semaphore and the backoff runs no pod.
+    # FAIL-OPEN to the triage: any read that fails → exit 0 (no grace), and the second attempt
+    # always exits 0 — this step can delay a triage by one grace and never drop one.
+    # Payloads are grouped by alertname (the agent-responder route's group_by), so a grace is per
+    # alert NAME, which is exactly the declared-window key.
+    - name: window-grace
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: respond-workflow }
+      retryStrategy:
+        limit: "1"
+        retryPolicy: OnFailure
+        backoff: { duration: "10m" }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          - { name: GRACE_ATTEMPT, value: "{{retries}}" }
+          - { name: AM_URL, value: "http://kube-prometheus-stack-alertmanager.monitoring.svc:9093" }
+        command: [bash, -lc]
+        args:
+          - |
+            set -u
+            NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; TODAY="$(date -u +%Y-%m-%d)"
+            if [ "${GRACE_ATTEMPT:-0}" != 0 ]; then
+              echo "window-grace: attempt ${GRACE_ATTEMPT} — the grace is served; respond re-reads Alertmanager and triages what is still unclaimed"; exit 0
+            fi
+            # Live FOR TRIAGE = the lease (`until`) or a closed window's tail (`tail_until`).
+            WINS="$(kubectl -n agent-coordinator get cm responder-window -o json 2>/dev/null \
+              | jq -c --arg now "$NOW" '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty
+                                        | select(((.tail_until // .until) // "") > $now) ]' 2>/dev/null || true)"
+            [ -n "$WINS" ] && [ "$WINS" != "[]" ] || { echo "window-grace: no declared window live — straight to triage"; exit 0; }
+            # Unreadable Alertmanager → every candidate counts as unclaimed (the grace still runs;
+            # it is a delay, never a drop).
+            AMS="$(curl -fsS --max-time 15 "$AM_URL/api/v2/alerts" 2>/dev/null \
+              | jq -c 'map({key: .fingerprint, value: ((.status.silencedBy // []) | length > 0)}) | from_entries' 2>/dev/null || true)"
+            [ -n "$AMS" ] || AMS='{}'
+            WAIT="$(printf '%s' "$PAYLOAD" | jq -r --argjson w "$WINS" --argjson s "$AMS" '
+                [ .alerts[]? | select(.status == "firing") | select((.labels.triage // "now") == "now")
+                  | . as $a | ($w | map(select((.alerts // []) | index($a.labels.alertname))) | first) as $hit
+                  | select($hit != null and ($s[$a.fingerprint // ""] // false) != true)
+                  | "\(.fingerprint // "?")\t\(.labels.alertname)\t\($hit.id)\t\($hit.reason)" ] | .[]' 2>/dev/null || true)"
+            [ -n "$WAIT" ] || { echo "window-grace: nothing in this payload is named by a live window and unclaimed — straight to triage"; exit 0; }
+            printf '%s\n' "$WAIT" | while IFS="$(printf '\t')" read -r gfp gname gid greason; do
+              # FU-113(a): a deliberate wait is a marker, never silence; `deferred-` is the value
+              # meta-alert-crosscheck.sh already reads as "will be retried", and respond overwrites it.
+              kubectl -n agent-coordinator patch cm responder-seen --type merge \
+                -p "{\"data\":{\"fp-$gfp\":\"deferred-$TODAY\"}}" >/dev/null 2>&1 || true
+              echo "window-grace: $gname ($gfp) is named by declared window $gid ($greason) and no silence claims it — GRACE: one retry in 10m, then respond triages it unless the window claims it"
+            done
+            exit 1
+        resources:
+          requests: { cpu: "10m", memory: "32Mi" }
+          limits: { memory: "128Mi" }
     - name: respond
       inputs:
         parameters:
           - { name: payload }
       metadata:
         labels: { app: respond-workflow }
+      # Queue behind the shared subscription pool like review/coordinate workflows (FU-088 Argo
+      # layer) — held from here on, AFTER the grace step above (template-level, see spec comment).
+      synchronization:
+        semaphores:
+          - configMapKeyRef: { name: subscription-capacity, key: claude }
       # FU-113(b): the responder must not trust the alert edge to refire — a latch-deferred
       # triage EXITS 1 and Argo re-runs it here with backoff (15m→2h, 6 tries ≈ the FU-088
       # window). The 24h fp ledger + deferred-markers keep retries idempotent; retries
@@ -236,6 +323,9 @@ spec:
           - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
           - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
           - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+          # The declared-window gate re-reads silences here (FU-230 grace). In-cluster service DNS,
+          # the fix-debounce pod's verified path — never the LAN VIP.
+          - { name: AM_URL, value: "http://kube-prometheus-stack-alertmanager.monitoring.svc:9093" }
           # Cost attribution (2026-08-08 label audit): the responder was one of the roles whose
           # sessions exported NO telemetry — its subscription-equiv cost was invisible on the
           # agent-cost dashboard. Same attrs contract as coordinator/reviewer-session.sh.
@@ -586,23 +676,40 @@ spec:
             # carry: the seat writes what it is doing and WHICH ALERT NAMES to expect
             # (agents/seat-window.sh → this ConfigMap), and the match is by alertname alone.
             # Scoped by NAME, never by namespace — a namespace-wide mute would have hidden the
-            # REAL findings of the rf=3 rollout (garage-2 flapping, the write-probe 400s).
-            # A ConfigMap rather than a silence because it OUTLIVES a monitoring restart, which
-            # silences do not (FU-195, the alertmanager-db emptyDir) — and because it carries the
-            # seat's own words, which is the other half of FU-230: 7 of the 9 confidently-wrong
-            # writes in the 09-04→11 audit had a cause the seat made outside the cluster's view.
+            # REAL findings of the rf=3 rollout (garage-2 flapping, the write-probe 400s). It
+            # carries the seat's own words, which is the other half of FU-230: 7 of the 9
+            # confidently-wrong writes in the 09-04→11 audit had a cause the seat made outside the
+            # cluster's view.
+            # ⚠ OWNERSHIP BY SILENCE since 2026-10-09 (operator ruling, FU-230): a declared name no
+            # longer SKIPS the triage. The window-grace step above already held a named, unclaimed
+            # alert for one grace; here the gate re-reads Alertmanager — claimed (a silence covers
+            # it) → no session; cleared → no session; still unclaimed → triage, with the window in
+            # the brief. "Live" for triage includes a closed window's TAIL (`tail_until`): an alert
+            # the window caused fires up to its `for:` after the close (nx-01, 13:44Z → 13:45Z).
             #
             # Read ONCE per workflow: a window does not meaningfully change mid-payload, and the
-            # alternative is one kubectl call per alert. Unreadable ⇒ EMPTY ⇒ everything triages,
-            # i.e. exactly today's behaviour (rule #6 — a window may only ever suppress a name a
-            # person deliberately declared).
+            # alternative is one kubectl call per alert. Unreadable ⇒ EMPTY ⇒ everything triages
+            # (rule #6 — a window may only ever hold back a name a person deliberately declared).
             SEATWIN="$(kubectl -n agent-coordinator get cm responder-window -o json 2>/dev/null \
               | jq -c --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                   '[ (.data // {}) | to_entries[] | (.value | fromjson?) // empty
-                     | select((.until // "") > $now) ]' 2>/dev/null || true)"
+                     | select(((.tail_until // .until) // "") > $now) ]' 2>/dev/null || true)"
             [ -n "${SEATWIN:-}" ] || SEATWIN='[]'
             SEATWIN_N="$(printf '%s' "$SEATWIN" | jq 'length' 2>/dev/null || echo 0)"
-            [ "${SEATWIN_N:-0}" -gt 0 ] && echo "→ $SEATWIN_N declared seat window(s) open: $(printf '%s' "$SEATWIN" | jq -r '[.[] | "\(.id) (\(.reason)) until \(.until)"] | join("; ")')"
+            [ "${SEATWIN_N:-0}" -gt 0 ] && echo "→ $SEATWIN_N declared seat window(s) live: $(printf '%s' "$SEATWIN" | jq -r '[.[] | "\(.id) (\(.reason)) \(if (.closed_at // "") != "" then "closed \(.closed_at), tail until \(.tail_until)" else "until \(.until)" end)"] | join("; ")')"
+            # The CLAIM read: fingerprint → the silences covering it, as Alertmanager sees it NOW
+            # (after the grace). Only when a window is live — no window, no claim to look for.
+            # AM_OK=0 (unreadable) ⇒ nothing reads as claimed and nothing as cleared ⇒ the alert
+            # triages (rule #6: an unread claim is not a claim).
+            AMSTATE='{}'; AM_OK=0
+            if [ "${SEATWIN_N:-0}" -gt 0 ]; then
+              if _am="$(curl -fsS --max-time 15 "${AM_URL:-http://kube-prometheus-stack-alertmanager.monitoring.svc:9093}/api/v2/alerts" 2>/dev/null)" \
+                 && AMSTATE="$(printf '%s' "$_am" | jq -ce 'map({key: .fingerprint, value: (.status.silencedBy // [])}) | from_entries' 2>/dev/null)"; then
+                AM_OK=1
+              else
+                AMSTATE='{}'; echo "→ Alertmanager unreadable — no alert reads as claimed by a window this run (they triage)"
+              fi
+            fi
 
             # </dev/null on the claude call below: a piped while-read loop's stdin IS the
             # remaining alerts — claude eats them and a multi-alert group triages only its
@@ -634,29 +741,35 @@ spec:
               esac
 
               # >>>REPLAY:responder-seat-window>>>
-              # The declared-window gate (FU-230 leg b). Keyed on the ALERT NAME alone — see the
-              # SEATWIN read above for why node/instance scoping is the losing game here. The
-              # alert still fired, still reached Home Assistant and Grafana, and a person still
-              # sees it; what this skips is the LLM triage that would spend a budget slot to
-              # conclude that a person did this.
-              # jq emits the FINISHED sentence, not fields for the shell to re-split. `reason` is
-              # free text the seat types (`seat-window.sh open --reason "…"`) and this line is the
-              # record of why a triage did not happen, so the shell should not have to be right
-              # about punctuation in it at all.
-              # ⚠ The `id|reason|until` join it replaced was NOT broken, and the first cut of this
-              # comment said it was (bot review round 1 flagged a truncation, round 2 refuted its
-              # own finding, and a two-line repro confirmed the outputs are byte-identical). The
-              # `%%|*` / `##*|` idiom isolates the FIRST and LAST fields, so any number of pipes in
-              # the middle one survives — which holds only because `id` (`<node>-<epoch>`) and
-              # `until` (ISO-8601) structurally cannot contain one. That was true, unstated, and
-              # load-bearing; a later `--id` or a human-readable `until` would have broken it
-              # silently. Emitting the sentence removes the invariant rather than documenting it.
+              # The declared-window gate (FU-230 leg b → ownership by silence, 2026-10-09). Keyed on
+              # the ALERT NAME — see the SEATWIN read above. A named alert reaches this point only
+              # after the window-grace step held it once; what decides it now is whether the seat's
+              # window CLAIMED it (an Alertmanager silence covers its fingerprint) in that time:
+              #   claimed  → no session, `claimed-` marker: the window owns it, by its own silence.
+              #   cleared  → no session, `window-` marker: it stopped firing during the grace.
+              #   neither  → TRIAGE, and the brief names the window: a named alert nobody claimed is
+              #              exactly the "owned by nobody" case (defect 3), so the responder owns it.
+              # An alert the window does NOT name triages at once, the window still in its brief.
+              # jq emits the FINISHED sentence, never fields for the shell to re-split — `reason` is
+              # free text the seat types, and pipes in it must not need the shell to be right.
+              SEATWIN_NOTE=""
               SW_HIT="$(printf '%s' "$SEATWIN" | jq -r --arg n "$NAME" \
                 '[ .[] | select((.alerts // []) | index($n)) ] | first
-                 | if . == null then "" else "DECLARED WINDOW \(.id) names this alert — \(.reason), until \(.until)" end' 2>/dev/null || true)"
+                 | if . == null then "" else "DECLARED WINDOW \(.id) names this alert — \(.reason), \(if (.closed_at // "") != "" then "closed \(.closed_at), tail until \(.tail_until)" else "until \(.until)" end)" end' 2>/dev/null || true)"
               if [ -n "$SW_HIT" ]; then
-                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"window-$TODAY\"}}" >/dev/null 2>&1 || true
-                echo "→ $NAME ($FP): $SW_HIT — marker written, no session"; continue
+                _sil="$(printf '%s' "$AMSTATE" | jq -r --arg fp "$FP" 'if has($fp) then (.[$fp] | join(",")) else "<absent>" end' 2>/dev/null || echo '<absent>')"
+                if [ "${AM_OK:-0}" = 1 ] && [ "$_sil" != "<absent>" ] && [ -n "$_sil" ]; then
+                  kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"claimed-$TODAY\"}}" >/dev/null 2>&1 || true
+                  echo "→ $NAME ($FP): $SW_HIT — CLAIMED by silence $_sil, the window owns it; marker written, no session"; continue
+                fi
+                if [ "${AM_OK:-0}" = 1 ] && [ "$_sil" = "<absent>" ]; then
+                  kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"window-$TODAY\"}}" >/dev/null 2>&1 || true
+                  echo "→ $NAME ($FP): $SW_HIT — cleared during the grace (Alertmanager no longer holds it); marker written, no session"; continue
+                fi
+                SEATWIN_NOTE="⚠ $SW_HIT. The seat's window had a grace to CLAIM this alert (an Alertmanager silence on its labels) and did not, so it is YOURS: triage it as you would any other. The window is CONTEXT, not a cause — a person was changing live infrastructure, which makes 'caused by the maintenance' a hypothesis to test (does this alert's object sit on what the window touched, did it start after the window opened?), never a conclusion to assume."
+                echo "→ $NAME ($FP): $SW_HIT — UNCLAIMED after the grace; triaging, the brief names the window"
+              elif [ "$(printf '%s' "$SEATWIN" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+                SEATWIN_NOTE="⚠ A DECLARED WINDOW IS LIVE, and it does NOT name this alert: $(printf '%s' "$SEATWIN" | jq -r '[ .[] | "\(.id) — \(.reason)" ] | join("; ")' 2>/dev/null). A person is changing live infrastructure right now; this alert is outside what they said to expect, so treat the window as context, not as the explanation."
               fi
               # <<<REPLAY:responder-seat-window<<<
 
@@ -1233,6 +1346,7 @@ spec:
             $SELF_NOTE
             $EGRESS_NOTE
             $RECLOSE_NOTE
+            $SEATWIN_NOTE
 
             ${WIN:+⚠ OBSERVATION WINDOW: ArgoCD app '$WIN' synced into this namespace within the last 120 minutes, so a deploy is the prime suspect and the -iac lane already owns this symptom — its deterministic revert (FU-044) may be acting on it right now. Do NOT open a fix PR and do NOT propose one: a revert racing a fix at the same symptom is the failure this rule exists to prevent. Report your evidence, name the app, and stop.}
 

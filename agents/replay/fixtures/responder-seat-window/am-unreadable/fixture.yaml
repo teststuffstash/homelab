@@ -1,0 +1,19 @@
+# FU-230 — an UNREADABLE Alertmanager claims nothing (rule #6).
+#
+# CONDITION UNDER REPLAY. The wk-03 window names `KubePodNotReady`, but the claim read failed
+# (AM_OK=0, AMSTATE empty).
+#
+# WHAT IT REDS ON. Reading "unreadable" as "cleared" (fingerprint absent) would drop a live alert;
+# reading it as "claimed" would mute one. The only safe direction is the triage.
+#
+# THE CONTRACT: no marker, UNCLAIMED, falls through to triage.
+pins:
+  - IL-T03
+name: responder-seat-window-am-unreadable
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-seat-window
+  - file:reached.sh
+  - file:post.sh
