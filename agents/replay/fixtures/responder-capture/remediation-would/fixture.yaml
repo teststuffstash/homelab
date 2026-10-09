@@ -1,0 +1,26 @@
+# goal#818 dial, leg 2 — the REMEDIATION-WOULD shadow lines are TYPED into finding.json.
+#
+# CONDITION UNDER REPLAY. The capture twin of `uploads`, except the session printed would-lines —
+# the #1274 marker (leg 1), `REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <reason>`,
+# line-anchored. Before this leg the line lived only in triage.log prose and the finding was
+# metadata (`verdict`, no cause), so nothing could score the shadow answers and the dial had no
+# evidence to graduate on.
+#
+# WHAT IT REDS ON. A writer that drops the field, asks the model for JSON instead of harvesting,
+# harvests a mid-line mention, loses a malformed line (it must stay `raw` so it is still scored),
+# or double-counts an echoed line. Scoring home: docs/agents/remediation-would-scoreboard.md.
+#
+# THE CONTRACT: `remediation_would` = one {verb,target,reason,raw} per DISTINCT line-anchored
+# marker, in order; `[]` when none (the `uploads` twin's `remediation_would=0`); schema id stays
+# `responder-finding/v1` (additive optional field).
+name: responder-capture-remediation-would
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:../uploads/bridge.sh
+  - file:bridge.sh
+  - block:responder-capture
+  - file:post.sh
+scrub:
+  - s#responder-r1-[0-9TZ]\{1,\}#responder-r1-<ts>#g
+  - s#/tmp/tmp\.[A-Za-z0-9]\{1,\}#<fixhome>#g

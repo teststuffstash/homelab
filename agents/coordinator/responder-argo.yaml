@@ -352,20 +352,44 @@ spec:
             # session, which is the generator #1733 just removed. Flipping that switch needs the
             # bucket to be readable from the pod, and the key is write-only by design — recorded
             # on FU-231 rather than worked around.
+            #
+            # `remediation_would` (goal#818 dial, leg 2 — leg 1 was #1274's emitter): every
+            # `REMEDIATION-WOULD: <verb> <ns>/<kind>/<name> — <reason>` line the session printed,
+            # HARVESTED from triage.log by this shell — the model is never asked for JSON. Each
+            # entry is {verb, target, reason, raw}; a line that does not parse to that shape keeps
+            # `raw` with null parts, so a malformed would-line is still scored rather than lost.
+            # `[]` when none. Additive under responder-finding/v1 (an optional field; no reader
+            # keys on its absence). Scored by /board-sweep into
+            # docs/agents/remediation-would-scoreboard.md — the evidence the dial graduates on.
+            _ts_would() { # <session-log> → JSON array on stdout, `[]` on any failure
+              jq -c -R -s '[ split("\n")[] | sub("\r$"; "")
+                          | select(test("^[[:space:]>*`-]*REMEDIATION-WOULD:"))
+                          | sub("^[[:space:]>*`-]*REMEDIATION-WOULD:[*`]*[[:space:]]*"; "")
+                          | sub("[*`[:space:]]+$"; "")
+                          | . as $raw
+                          | ((capture("^(?<verb>[^[:space:]]+)[[:space:]]+(?<target>[^[:space:]]+)[[:space:]]+(—|–|--?)[[:space:]]+(?<reason>.+)$"))
+                             // {verb: null, target: null, reason: null})
+                          | . + {raw: $raw} ]
+                        | reduce .[] as $e ([]; if any(.[]; .raw == $e.raw) then . else . + [$e] end)' \
+                "$1" 2>/dev/null || echo '[]'
+            }
             _ts_finding() { # <verdict> <issue-ref-or-empty> <route-repo>
               [ -n "$TS_PREFIX" ] || return 0
+              TS_WOULD="$(_ts_would /tmp/triage.log)"; [ -n "$TS_WOULD" ] || TS_WOULD='[]'
               jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg alertname "$NAME" --arg fp "$FP" \
                     --arg subject "$SUBJ" --arg verdict "${1:-none}" --arg issue "${2:-}" \
                     --arg route_repo "${3:-}" --arg route_stack "${ROUTE_STACK:-}" \
                     --arg selfref "${SELF_REF:+true}" --arg window "${WIN:-}" \
                     --arg model "${TS_MODEL:-}" --arg rail "${rail:-}" --arg pod "${HOSTNAME:-}" \
+                    --argjson would "$TS_WOULD" \
                     '{schema:"responder-finding/v1", ts:$ts, alertname:$alertname, fingerprint:$fp,
                       subject:$subject, verdict:$verdict, issue:$issue, route_repo:$route_repo,
                       route_stack:$route_stack, self_referential:($selfref == "true"),
-                      observation_window:$window, model:$model, rail:$rail, pod:$pod}' \
+                      observation_window:$window, model:$model, rail:$rail, pod:$pod,
+                      remediation_would:$would}' \
                 > /tmp/ts-finding.json 2>/dev/null || return 0
               _ts_put /tmp/ts-finding.json finding.json
-              echo "finding: recorded verdict='${1:-none}' issue='${2:-none}' → $TS_PREFIX/finding.json"
+              echo "finding: recorded verdict='${1:-none}' issue='${2:-none}' remediation_would=$(printf '%s' "$TS_WOULD" | jq 'length' 2>/dev/null || echo '?') → $TS_PREFIX/finding.json"
             }
             # <<<REPLAY:responder-capture<<<
 

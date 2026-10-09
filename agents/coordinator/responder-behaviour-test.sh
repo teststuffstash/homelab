@@ -111,6 +111,8 @@ for a in "$@"; do case "$a" in -*) ;; *) printf '%s' "$a" > "$H/brief.txt"; brea
 # A real session prints its report; the §A1 capture tees that into triage.log, and an EMPTY file
 # is deliberately not uploaded — so the stub must speak or the capture assertions pass vacuously.
 echo "triage report (stub): diagnosis and verdict would be here"
+# A scenario may script the session's further output (e.g. REMEDIATION-WOULD lines, goal#818 leg 2).
+[ -f "$H/session-says.txt" ] && cat "$H/session-says.txt"
 exit 0
 EOF
 cat > "$BIN/curl" <<'EOF'
@@ -876,6 +878,48 @@ wantbrief "remediation-would → brief carries the REMEDIATION-WOULD instruction
 wantbrief "remediation-would → instruction names the marker format" "REMEDIATION-WOULD: <verb>"
 wantbrief "remediation-would → instruction says do NOT emit for report-only" "Do NOT emit this line when your verdict is report-only"
 wantbrief "remediation-would → instruction says at most one per session" "At most one per distinct remediation per session"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "goal#818 leg 2 — the would-lines are TYPED into finding.json (remediation_would)"
+# Leg 1 (#1274) taught the session to print the line; until this leg it lived only in triage.log
+# prose and nothing could score it. The shell harvests every line-anchored marker deterministically
+# (never model-emitted JSON) into {verb,target,reason,raw}; /board-sweep scores the entries into
+# docs/agents/remediation-would-scoreboard.md. Three shapes: none → [], one, two (+ an echoed
+# duplicate collapsed, + a malformed line kept raw so it is still scored).
+wantwould() { # <label> <jq-predicate over the finding>
+  jq -e "$2" /tmp/ts-finding.json >/dev/null 2>&1 && ok "$1" || bad "$1" "finding.json fails: $2 — got $(jq -c .remediation_would /tmp/ts-finding.json 2>/dev/null)"
+}
+
+scenario would-none
+printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+go_ts "$(alert rw0 '{"alertname":"PVCNearFull","namespace":"oracle-fleet","persistentvolumeclaim":"x"}')"
+wantwould "no would-line → remediation_would is an EMPTY ARRAY (typed, not absent)" '.remediation_would == []'
+wantwould "…and the schema id stays responder-finding/v1 (additive field)" '.schema == "responder-finding/v1"'
+want      "…and the finding line reports the count" "remediation_would=0"
+
+scenario would-one
+printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+printf 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master\n' > "$H/session-says.txt"
+go_ts "$(alert rw1b '{"alertname":"PVCNearFull","namespace":"oracle-fleet","persistentvolumeclaim":"x"}')"
+wantwould "one would-line → one entry" '.remediation_would | length == 1'
+wantwould "…parsed into verb / target / reason" '.remediation_would[0] | .verb == "delete" and .target == "oracle-fleet/pod/ert-mock-7f9c4-x2v1b" and .reason == "CrashLoopBackOff on a config already fixed on master"'
+wantwould "…with the raw action text kept verbatim" '.remediation_would[0].raw | startswith("delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — ")'
+want      "…and the finding line reports the count" "remediation_would=1"
+
+scenario would-two
+printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+cat > "$H/session-says.txt" <<'SAYS'
+REMEDIATION-WOULD: delete monitoring/pod/loki-0 — WAL replay wedged on a torn segment
+some prose that mentions REMEDIATION-WOULD: mid-line is NOT a marker
+  - **REMEDIATION-WOULD:** restart oracle-fleet/deployment/ert-mock -- crashloop on a stale config
+REMEDIATION-WOULD: delete monitoring/pod/loki-0 — WAL replay wedged on a torn segment
+REMEDIATION-WOULD: clear the stuck thing
+SAYS
+go_ts "$(alert rw2 '{"alertname":"PVCNearFull","namespace":"oracle-fleet","persistentvolumeclaim":"x"}')"
+wantwould "two distinct would-lines (+ an echoed duplicate) → entries in order, duplicate collapsed" '[.remediation_would[].verb] == ["delete","restart",null]'
+wantwould "…a bulleted/bolded marker still parses (ASCII -- separator accepted)" '.remediation_would[1].target == "oracle-fleet/deployment/ert-mock"'
+wantwould "…a mid-line mention is NOT harvested" 'all(.remediation_would[]; .raw | contains("mid-line") | not)'
+wantwould "…a malformed line is kept raw with null parts, so it is still scored" '.remediation_would[2] == {verb:null,target:null,reason:null,raw:"clear the stuck thing"}'
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
