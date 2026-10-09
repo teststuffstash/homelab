@@ -478,6 +478,17 @@ the hypervisor's flooding, not the node's config.
   before acting and verifies the VIP after; the recipe names it, never the raw API. Standing: nx-02's
   WAN gate still runs the pre-flood-off script (a gate restart blips the MASTER's WAN) — it takes
   the new one at its next restart, or in an attended slot.
+- 2026-10-09 (window `seat-1791544351-8289`): **WINDOW 2 WAN LEG DONE — the pair is complete.** pve's WAN
+  cable in at 11:13Z: 1 Gb/s, the gate held pve dark (carp_master 0, wan_link 0, guest "no carrier", 0
+  frames out of the port in 12 s). The failover proof with the FU-308 dead-man (#2399, `DEADMAN=360`):
+  `carp-maintenance nx02 enter` 11:27:41Z → pve MASTER + WAN up 11:27:42.9Z, pve pulled the same lease
+  (176.46.101.184 on the shared MAC, default via Telia), ~5 s WAN gap seen from the mgmt box, `.1`/Unbound/
+  HAProxy uninterrupted, BGP 26 established, `check pve` green while serving; throughput through pve's x1
+  Realtek 378/378 Mbit/s (operator speedtest, wired) — the ISP is the ceiling. nx-02's WAN gate restarted
+  while BACKUP (flood-off script, kill switch stays retired) — no blip, which is the shape for any future
+  gate change. The dead-man fired at 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, pve dark at :46, ~9 s
+  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307) is now
+  unblocked — the gate's carrier export can ride the same BACKUP-side restart.
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
   database). The inert drills proved the machinery, not the service layer — the next evidence is
