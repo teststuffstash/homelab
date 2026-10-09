@@ -21,7 +21,8 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
   control — ADR-106) state the governance escapes as context, not BLOCK. A closing issue with no
   declared footprint (inert-filed reports carry none) is itself stated as context, not as an
   escape — except that a worker PR still blocks, since undeclared means every path escapes
-  (`agents/touches-check.sh`; homelab#1794 leaves that worker case open).
+  (`agents/touches-check.sh`; operator ruling 2026-10-09 on homelab#1794's open case: undeclared is
+  never a worker exemption — the BLOCK stands).
   ⚠ The ADR-097 compelled-counterpart classes are NEVER escapes and NEVER governance-blocking —
   `agents/replay/**`, top-level `agents/*-test.sh`/`agents/*-replay.sh` (not `agents/*/*`), and
   `docs/agents/*-fsm.{yaml,md}` (`agents/footprint.sh` `fp_replay_exempt` is the one predicate;
