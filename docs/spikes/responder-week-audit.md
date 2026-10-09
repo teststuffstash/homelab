@@ -378,3 +378,50 @@ the exporter's IP — every KubePodNotReady in the cluster becomes ONE subject, 
 mutes them all; github-exporter and pushgateway-pushed jobs are missing from the reporter list; the
 witness fixture uses `job=kubelet`, a shape that never occurs live; the per-day subject ledger is
 blind to alertname (PveGuestSwapped skipped the day PveHostSwapUsed triaged).
+
+## 2026-10-09 — the two ADR-148 lanes against three days of TICK-LOG (10-07 → 10-09)
+
+Method: the TICK-LOG entries 10-07 → 10-09 as the record of what happened; `ALERTS` by `triage`
+(15-min steps; stock rules resolved through `kube-prometheus-stack-triage.yaml`); the
+`responder-seen` ledger; the `respond-*` workflows still retained; every `dig-*` and `alert-*`
+record in `agent-transcripts`. Operator framing: the lane the operator calls *disabled* is the
+pre-#2212 per-blip responder; the `now` lane + the deep dig are its replacement, and they behaved
+far better (the DIMM window's 36 `dig` alerts cost no session — the old lane would have triaged
+them).
+
+| what happened | `now` lane | deep dig | found by |
+|---|---|---|---|
+| 10-07 pve RAM window | 16 `window-` skips — worked | — | planned |
+| 10-07 box loops wedged (FU-305) | no alert exists | — | seat |
+| 10-08 ci-runner-01 root fs 100% | no alert existed (FU-306 since) | — | oracle jail |
+| 10-08 runner-maintenance window | — | 10-09: "no record of the cause" (TICK-LOG not pushed yet) | planned |
+| 10-08 19:40 → 04:46 WAN loss (CARP maintenance left on) | 5 runs failed, then held all 5 `subscription-capacity/claude` slots in a 4 h retry (`ArgoLockPlaneWedged`) | 04:58: "cluster DNS outage, root cause not established" — the record landed 05:29 | operator |
+| 04:57 aftermath (arc listeners vs a cache with no upstream) | ~8 per-pod `KubePodNotReady` sessions, each "transient"; one blamed the gap on `for` + backoff | — | — |
+| 10-09 DIMM window | gate-only while open; 4 sessions 13:45–13:47 right after `up` closed it | next run would read 3 windows as a 3-day recurrence | planned |
+| nightly Garage lifecycle churn (FU-229) | — | re-dug 10-06, 07, 08, 09 | known |
+
+Every `now` firing of the period was window or outage aftermath; the real faults had no alert.
+Gaps, each with its owner:
+
+1. **The declared window's lifetime is not the window's.** `maintenance-window.sh open` declares
+   `--hours 2`: window 2's declaration lapsed ~20:59Z while the skill window stood to 05:21Z (no
+   `window-` ledger entry on 10-08); `close`/`up` delete the record before `for: 15m` aftermath
+   fires; and during a window a new `now` alert is owned by nobody (muted by name, waved off by the
+   seat). Fix shape (operator, 2026-10-09): ownership by SILENCE — claims leased while the window
+   is open, a tail at close, a responder GRACE instead of a by-name skip; closed windows kept as
+   per-day history for the dig. → FU-230.
+2. **The dig's 7-day dedup never matched** — `explain_prior` keys on `{alertname, subject}`, the
+   harvester writes `{group, alerts:["Name (subject)"]}`, and the fixture fed the key shape the
+   code expected (the 09-16 "a test can assert a bug as correct" class, again). → FU-249.
+3. **A dig `explained` verdict dies with the run** — `explain_fu` needs the literal alert name in an
+   FU, so "explained by FU-229, add the name" repeats nightly. → FU-249.
+4. **No reader for either lane's records** — `dig-*` findings and the `now` lane's triage prose
+   reach no seat surface (`roles.md` §deep dig: "surfacing … is the next step, not built"); the
+   `now` lane's `finding.json` is metadata only (`verdict: none`, the reasoning sits in
+   `triage.log`). → FU-231 (a), FU-249.
+5. **The `now` lane does not group** — one cause, N per-fingerprint sessions, each blind to the
+   pattern the dig's onset/host grouping would show. → FU-249.
+6. **The lane inside its own dependency cone** — WAN gone → failed runs retried while holding the
+   subscription slots; ADR-149's cone rule has no responder clause. → FU-249.
+7. **Unplanned incidents have no machine-readable record** before the wind-down push — rule, not
+   record type: an incident opens a window (gap 1's verbs). → FU-230.
