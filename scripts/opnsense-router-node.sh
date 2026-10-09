@@ -8,6 +8,7 @@
 #   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: standby = the inert rules + prod unharmed;
 #                                                          #            LIVE = the serving rules (ADR-145 window 1)
 #   bash scripts/opnsense-router-node.sh killswitch-arm|killswitch-disarm|killswitch-status <node>
+#   bash scripts/opnsense-router-node.sh carp-maintenance <node> enter|leave|status   # planned failover (demotion-aware)
 #   bash scripts/opnsense-router-node.sh fakeisp up|down|log     # PAIR: the WAN drills' fake ISP (nx-02 netns)
 #   bash scripts/opnsense-router-node.sh probe <secs>            # PAIR: held flow + fresh connects via the trial VIP
 #
@@ -103,6 +104,36 @@ killswitch_arm() {
   pve "[ ! -f $KS_LOG ] || mv $KS_LOG $KS_LOG.prev; systemctl start $KS_UNIT; sleep 1; systemctl is-active -q $KS_UNIT" \
     && log "kill switch armed ($KS_UNIT), log $KS_LOG" || die "$KS_UNIT did not start"
 }
+# CARP maintenance (docs/router-move.md §Window 2 step 4, the planned-failover lever): the node's
+# demotion goes +240 so the other node preempts; `leave` clears it and this node (if the lower
+# skew) takes the VIP back. ⚠ The API verb `diagnostics/interface/carp_status/maintenance` is a
+# TOGGLE (carp_set_status.php: in maintenance → leave, else enter) and `carp_status/enable` does
+# NOT leave maintenance — it only re-enables CARP. The 2026-10-08 failover proof called `enable`
+# to come back, nx-02 stayed demoted and pve (no WAN cable) held `.1` for nine hours
+# (docs/router-move.md §Status, 2026-10-09). So: read the demotion FIRST, act only
+# when the state differs from the goal, and verify the VIP afterwards.
+carp_demotion() { node_ssh sysctl -n net.inet.carp.demotion 2>/dev/null; }
+carp_vip1() { api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[]? | select(.subnet=="192.168.2.1") | .status] | join(",")'; }
+carp_maintenance() {   # $1 = enter|leave|status
+  local dem r i; [ -n "$API_CURL" ] || api_setup
+  dem="$(carp_demotion)"; [ -n "$dem" ] || die "cannot read net.inet.carp.demotion on $HOST"
+  case "$1" in
+    status) echo "$INV_HOST ($HOST): demotion=$dem .1=$(carp_vip1) $( [ "$dem" -ge 240 ] && echo 'IN maintenance' || echo 'not in maintenance')"; return 0 ;;
+    enter)
+      [ "$dem" -ge 240 ] && { log "$INV_HOST already in maintenance (demotion $dem) — not toggling"; return 0; }
+      r="$(curl -sk -K "$API_CURL" --max-time 15 -X POST "https://$HOST/api/diagnostics/interface/carp_status/maintenance")"
+      echo "$r" | grep -q enter_maintenance || die "unexpected answer: $r" ;;
+    leave)
+      [ "$dem" -ge 240 ] || { log "$INV_HOST not in maintenance (demotion $dem) — not toggling"; return 0; }
+      r="$(curl -sk -K "$API_CURL" --max-time 15 -X POST "https://$HOST/api/diagnostics/interface/carp_status/maintenance")"
+      echo "$r" | grep -q leave_maintenance || die "unexpected answer: $r" ;;
+    *) die "carp-maintenance enter|leave|status" ;;
+  esac
+  for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; dem="$(carp_demotion)"; [ "$1" = enter ] && [ "$dem" -ge 240 ] && break; [ "$1" = leave ] && [ "$dem" = 0 ] && break; done
+  log "$1: demotion=$dem .1 on $INV_HOST = $(carp_vip1)"
+  case "$1:$dem" in enter:240|enter:24[1-9]|enter:2[5-9][0-9]) ;; leave:0) ;; *) die "demotion did not settle ($dem)";; esac
+}
+
 killswitch_disarm() { pve "systemctl stop $KS_UNIT; echo \"\$(date -u +%FT%TZ) disarmed\" >> $KS_LOG; echo 'disarmed (still enabled: re-arms at the next host boot)'"; }
 killswitch_status() { pve "systemctl is-active -q $KS_UNIT && echo armed || echo NOT-ARMED; c=\$(grep -c TRIPPED $KS_LOG 2>/dev/null); echo \${c:-0}"; }
 
@@ -278,5 +309,6 @@ case "$cmd" in
   killswitch-arm) killswitch_arm ;;
   killswitch-disarm) killswitch_disarm ;;
   killswitch-status) killswitch_status ;;
+  carp-maintenance) carp_maintenance "${3:?enter|leave|status}" ;;
   *) sed -n '5,13p' "$0" >&2; exit 2 ;;
 esac
