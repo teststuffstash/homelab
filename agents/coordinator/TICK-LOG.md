@@ -12934,3 +12934,31 @@ updates or reverts as much as possible — mechanical revert or a responder."
   recurring key consults the day's window set (per-day explanation, not live-only). Agent-platform design — not
   acted on; no FU/GAPS entry matches (grep `recurring|closed window|window history`); the dig's consumer leg is
   FU-231's. Operator's call whether to file.
+
+## 2026-10-09 14:05–15:05Z — fstrim guard OutOfcpu → priority + affinity, and the Kyverno rule (seat → Opus subagent)
+
+- **Operator read: "what is usually done in k8s for this?"** → priority/preemption (the direct fix: the guard pinned
+  with `nodeName`, which bypasses the scheduler — kubelet `OutOfcpu`, no preemption, no retry), a headroom
+  placeholder (rejected: permanent reserve on 3900 m nodes), a descheduler (the "pods never move back" fix — new
+  component, operator's decision, unfiled). "What other jobs need it?" — only the 10 pinned fstrim CronJobs; 16
+  float. "Can I make a rule?" — Kyverno under `policy/iac/` IS the lint (the sentinel's commit status). Operator: "do it".
+- **Three PRs, not two:** **#2403** (14:08Z) — `iac-no-cluster-scoped` counts PriorityClass as platform-owned and the
+  sentinel reads `exceptions/homelab.yaml` from MASTER only, so the exception had to land first (#2349 pattern).
+  **#2404** (14:27Z) — PriorityClass `node-maintenance` (900000000, PreemptLowerPriority) + all 10 fstrim CronJobs on
+  hostname nodeAffinity + the class (tolerations `Exists` already cover cp-01/wk-03/cordons). **Live proof:** ArgoCD
+  synced 14:27:37Z; wk-01 guard preempted `registry/registry-…hbt8k` 14:33:00Z and completed 14:33:04Z; wk-02 guard
+  preempted `registry-cache/mirror-mcr-…878lr` 14:36:00Z, completed 14:36:04Z; both evicted pods landed on wk-04;
+  `CronJobNotSucceeding` + `ArgoCDAppDegraded node-fstrim` gone 14:38:34Z. Only TWO preemptions ever: after them
+  wk-01/wk-02 read 3643/3788 of 3900 m and every later guard run fit without evicting (15:05Z read).
+  **#2405** (14:58Z) — `policy/iac/pinned-pods-priority.yaml`: TWO ClusterPolicies (kyverno 1.19.1 CLI counts a
+  per-rule Audit inside a mixed policy as a hard fail even with `--audit-warn` — measured): `iac-pinned-pod-needs-priority`
+  Enforce (7 kinds, 3 template depths) + `iac-cronjob-needs-priority` Audit; `scripts/iac-sentinel.sh` now passes
+  `--audit-warn` (Audit misses = `warn: N`, status green); new `scripts/iac-policy-test.sh` + 6 `.fixture` files under
+  `scripts/fixtures/iac-policy/` (extension keeps them out of the tree scan), run by `sentinel-smoke`; the one tree
+  hit, `scripts/garage-forensics/forensics-pod.yaml`, moved to affinity. Sentinel on the head: 0 violations, 10 Audit
+  warnings (transcripts-sync, garage-meta-rotation, kps-lease-pre/postsync, garage-disruption, pg-backup,
+  registry-garbage-collect, gc-mirrors, garage-write-probe, opnsense-config-backup); the three -iac repos 0.
+- **Open, unfiled (operator's):** the preempted victims were single-replica registry services (a brief gap each) —
+  priority ranks, it does not rebalance; wk-01/wk-02 stay ~95 % booked until something moves the displaced pods
+  back to wk-04 → the descheduler question. The 4 Crossplane-made `*-agents/transcripts-crashnet` CronJobs never
+  reach the tree scan (Audit sees only repo YAML).
