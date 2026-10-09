@@ -12835,4 +12835,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   last at 04:43Z). Edge-visible gap per failover ≈5–10 s; no `probe_success` dip at 15 s scrape. mcp.minutark.ee:
   MCP `initialize` → 200 in 0.1 s via Cloudflare; ha.teststuff.net 403 at the edge (mTLS, expected). Verdict:
   the tunnels ride a failover as a reconnect, not an outage.
+- **Operator asks (12:00Z): what shuts nx-01/nx-02 down cleanly; should a host verb figure it all out?** Design read
+  (runbook §Proxmox host maintenance = pve-only prose pre-pair; router-move's nx-02 reboot drill pre-router-node; five
+  per-guest verbs; prior-art grep negative for a host-level verb): yes — a COMPOSER, attended first. Operator: "do it,
+  use sub-agents that are not fable" (Fable at 90 %/71 %). The FU mint was HELD by `fu-mint-gate` (bounded, decided →
+  do it now), correctly: no FU-309. Opus subagent built **#2401** `scripts/host-maintenance.sh preflight|down|up
+  <nx-02|pve>` (`devbox run host-maint`): live guest discovery, refusals (partner router node, etcd quorum, worker
+  preflights, Longhorn backup InProgress), order runner → test VMs → workers → CP (`controlplane-upgrade.sh down`) →
+  LXC → `carp-maintenance enter` + router VM last → host; `up` the reverse with `leave` at the end; runbook/router-move/
+  management-box/CLAUDE.md updated. Bot approved first round, merged 90f19d85 ~12:35Z. Live preflights of both hosts
+  ran read-only (exit 2 on FORCE-class warnings only); `DRY=1 down nx-02` printed 19 steps, changed nothing. Open:
+  no `nx-02-bmc-password` in the wallet (FU-288) so `up nx-02` after a poweroff prints the ipmitool step; CARP
+  maintenance across a router VM reboot is a persisted config flag (`virtualip_carp_maintenancemode`) but the boot
+  behaviour is unverified; no real down/up has run — the first attended run is the FU-289 DIMM window. GAPS G2
+  narrowed to the `maint watch` half.
 

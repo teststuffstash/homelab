@@ -282,6 +282,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       is for metal.
       RESIGHT 2026-09-24 (seat, registry cutover): a FOURTH copy, this time written as a bash script
       file with a failed-read counter (it held, and stayed silent across a clean window). Still no verb.
+      2026-10-09: the CP half is DONE and composed — `controlplane-upgrade.sh down|up` is what
+      `node-maintenance down <cp>` hands to, and the new hypervisor verb (`scripts/host-maintenance.sh
+      preflight|down|up <nx-02|pve>`, #2401) runs it inside a whole-host down/up. This entry now covers
+      only the `maint watch` half (the alert watch as a verb, not a re-typed snippet — this session
+      re-typed it once more, as a file under bash, and it worked; the point stands).
 - [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
       acceptance for any detector-first item (the standing build order: detector, let it fire on
       the real condition, then the fix) is to make the new alert fire on purpose — but `check`
