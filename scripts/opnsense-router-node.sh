@@ -122,11 +122,11 @@ carp_maintenance() {   # $1 = enter|leave|status
     enter)
       [ "$dem" -ge 240 ] && { log "$INV_HOST already in maintenance (demotion $dem) — not toggling"; return 0; }
       r="$(curl -sk -K "$API_CURL" --max-time 15 -X POST "https://$HOST/api/diagnostics/interface/carp_status/maintenance")"
-      echo "$r" | grep -q enter_maintenance || die "unexpected answer: $r" ;;
+      grep -q enter_maintenance <<<"$r" || die "unexpected answer: $r" ;;
     leave)
       [ "$dem" -ge 240 ] || { log "$INV_HOST not in maintenance (demotion $dem) — not toggling"; return 0; }
       r="$(curl -sk -K "$API_CURL" --max-time 15 -X POST "https://$HOST/api/diagnostics/interface/carp_status/maintenance")"
-      echo "$r" | grep -q leave_maintenance || die "unexpected answer: $r" ;;
+      grep -q leave_maintenance <<<"$r" || die "unexpected answer: $r" ;;
     *) die "carp-maintenance enter|leave|status" ;;
   esac
   for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; dem="$(carp_demotion)"; [ "$1" = enter ] && [ "$dem" -ge 240 ] && break; [ "$1" = leave ] && [ "$dem" = 0 ] && break; done
