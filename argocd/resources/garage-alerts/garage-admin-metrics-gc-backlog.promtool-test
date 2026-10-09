@@ -1,0 +1,41 @@
+# Behaviour fixture for GarageTableGcBacklog (`for: 26h`).
+#
+#   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-admin-metrics-gc-backlog.promtool-test
+#
+# CLOCK: promtool's test clock starts at 0. Range selectors are LEFT-OPEN in Prometheus 3.x, so
+# `[10m]` at t sees (t-10m, t] — a last real sample at T stays in range through T+9m at a 1m
+# interval and is gone at T+10m.
+#
+# WHY A SEPARATE PAIR: `promtool test rules` evaluates EVERY rule in its rule_files once per
+# evaluation_interval from 0 to each test group's last eval_time. GarageTableGcBacklog's `for:
+# 26h` puts this case at 26h10m — inside garage-admin-metrics.promtool-test that was every one of
+# that file's 10 rules at each 1m step. Here the rules file carries GarageTableGcBacklog ALONE.
+# Moved verbatim from garage-admin-metrics.promtool-test (CI wall time, 2026-10-09) — same inputs,
+# same eval_times, same assertions.
+rule_files:
+  - garage-admin-metrics-gc-backlog.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── GC BACKLOG: 600k parked for 26h fires; 600k for a day (the 24h tombstone delay) does not ─────────────────────
+  - interval: 5m
+    name: "GarageTableGcBacklog fires on a parked backlog, not on steady-state churn"
+    input_series:
+      - series: 'table_gc_todo_queue_length{pod="garage-2",table_name="version"}'
+        values: "600000+0x320"
+      - series: 'table_gc_todo_queue_length{pod="garage-1",table_name="version"}'
+        values: "150000+0x320"
+    alert_rule_test:
+      - eval_time: 25h55m
+        alertname: GarageTableGcBacklog
+        exp_alerts: []
+      - eval_time: 26h10m
+        alertname: GarageTableGcBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              pod: garage-2
+              triage: dig
+            exp_annotations:
+              summary: "Garage garage-2 has 600k GC items parked for 26h"

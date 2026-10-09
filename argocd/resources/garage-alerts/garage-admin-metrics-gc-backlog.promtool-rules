@@ -1,0 +1,20 @@
+# Hand copy of GarageTableGcBacklog ALONE from prometheusrule.yaml — the rules file
+# garage-admin-metrics-gc-backlog.promtool-test loads (long-horizon cases, so one rule, not the whole
+# group — see the test's header). Regenerate after every expr edit with:
+#
+#   yq -o=json '{"groups": [{"name": "garage-admin-metrics", "rules": [.spec.groups[].rules[] | select(.alert == "GarageTableGcBacklog")]}]}' argocd/resources/garage-alerts/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — re-add this header by hand after a regenerate.
+# ⚠ DRIFT-PINNED — scripts/prometheus-rules-lint.sh asserts expr+for equality with the CR.
+groups:
+  - name: garage-admin-metrics
+    rules:
+      - alert: GarageTableGcBacklog
+        expr: |
+          sum by (pod) (table_gc_todo_queue_length) > 500000
+        for: 26h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: Garage {{ $labels.pod }} has {{ $value | humanize }} GC items parked for 26h

@@ -1,0 +1,21 @@
+# Hand copy of GarageTableEmpty ALONE from prometheusrule.yaml — the rules file
+# garage-admin-metrics-table-empty.promtool-test loads (long-horizon cases, so one rule, not the whole
+# group — see the test's header). Regenerate after every expr edit with:
+#
+#   yq -o=json '{"groups": [{"name": "garage-admin-metrics", "rules": [.spec.groups[].rules[] | select(.alert == "GarageTableEmpty")]}]}' argocd/resources/garage-alerts/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — re-add this header by hand after a regenerate.
+# ⚠ DRIFT-PINNED — scripts/prometheus-rules-lint.sh asserts expr+for equality with the CR.
+groups:
+  - name: garage-admin-metrics
+    rules:
+      - alert: GarageTableEmpty
+        expr: |
+          table_size{table_name!~"multipart_upload|bucket_mpu_counter"} == 0 and max_over_time(table_size[7d]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: Garage table {{ $labels.table_name }} is empty on {{ $labels.pod }}
+          description: 'A Garage meta table that should hold data reports zero size. This is the pattern from the 2026-08-24 meta wipe (docs/incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md): the LMDB came back with empty tables after a hard VM stop. Check Garage''s health (`garage status`), the meta volume, and the pod logs. If multiple tables are empty simultaneously the meta store may need recovery from the snapshot belt (metadataAutoSnapshotInterval: 6h, snapshots in /mnt/data/meta_snapshots). This belt only fires within 7 days of the drop — if it resolves without the table refilling, the window has slid past the drop rather than the store having recovered; check `table_size` directly.'

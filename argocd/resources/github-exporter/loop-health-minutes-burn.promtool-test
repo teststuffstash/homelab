@@ -1,0 +1,63 @@
+# Behaviour fixture for GithubActionsMinutesHigh's PRO-RATED burn (FU-183/#746) — the long-horizon
+# cases split out of loop-health.promtool-test (CI wall time, 2026-10-09).
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/loop-health-minutes-burn.promtool-test
+#
+# WHY A SEPARATE PAIR: `promtool test rules` evaluates EVERY rule in its rule_files once per
+# evaluation_interval from 0 to each test group's last eval_time. The expr reads day_of_month() off
+# the eval clock, so the late-month case has to run the clock out to day 28 (649h = 38,940 steps);
+# inside loop-health.promtool-test that meant every one of that file's ~20 rules × 38,940 steps
+# (~97 s, the slowest fixture in CI). Here the rules file carries GithubActionsMinutesHigh ALONE.
+# The cases are moved verbatim — same inputs, same eval_times, same assertions. The roll/selector
+# case for this alert stays in loop-health.promtool-test beside its Pre331 witness.
+#
+# evaluation_interval 5m, not 1m (one rule alone at 1m still took ~20 s; at 5m ~4 s): these cases
+# pin the pro-rated THRESHOLD arithmetic against the clock, not the `for:` edge — every input here
+# is a constant series and every eval_time is a multiple of 5m, so the expr's truth at each asserted
+# instant (and how long it has held) is the same on a 5m rule clock as on a 1m one. The `for: 1h` boundary itself is pinned at
+# 1m resolution (59m silent / 61m firing) by the roll case in loop-health.promtool-test.
+rule_files:
+  - loop-health-minutes-burn.promtool-rules
+
+evaluation_interval: 5m
+
+tests:
+  # ── GithubActionsMinutesHigh — pro-rated burn: day-1 floor, day-4 runaway, late-month on-pace ──
+  # FU-183/#746: the flat 2400 threshold is replaced with a pro-rated burn expression that fires
+  # when month-to-date usage exceeds the elapsed share of quota: usage > (day_of_month / days_in_month)
+  # * 3000, with a 300-minute floor so one busy first day does not trip it. The three cases below
+  # exercise the floor, the mid-month runaway, and the late-month on-pace green.
+  - interval: 1m
+    name: "busy day-1 usage under the 300-minute floor does not fire"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "200+0x120"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts: []
+  - interval: 5m
+    name: "mid-month runaway usage fires (1500 by day 4 exceeds pro-rated 387)"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1500+0x880"
+    alert_rule_test:
+      - eval_time: 73h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "GitHub Actions hosted minutes burning above the elapsed share of quota"
+              description: "1500 hosted-runner minutes this month, past the elapsed share of the 3000-minute monthly quota (threshold = day_of_month/days_in_month × 3000, floored at 300; resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."
+  - interval: 5m
+    name: "late-month on-pace usage does not fire (2600 by day 28 is under pro-rated 2709)"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "2600+0x7790"
+    alert_rule_test:
+      - eval_time: 649h
+        alertname: GithubActionsMinutesHigh
+        exp_alerts: []

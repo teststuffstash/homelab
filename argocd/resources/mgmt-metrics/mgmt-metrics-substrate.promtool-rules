@@ -1,0 +1,25 @@
+# The mgmt-substrate group ALONE, lifted VERBATIM out of prometheusrule.yaml (annotations
+# stripped — the manifest is their one home) — the rules file mgmt-metrics-substrate.promtool-test
+# loads (its cases run the eval clock to 8d, so the file carries two rules, not the whole set — see
+# the test's header). DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after an expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | select(.name == "mgmt-substrate") | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/prometheusrule.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-substrate
+    rules:
+      - alert: MgmtSubstrateBehind
+        expr: |
+          mgmt_substrate_minors_behind >= 1
+            and on (component) mgmt_substrate_supported == 1
+        for: 7d
+        labels:
+          severity: warning
+          triage: none
+      - alert: MgmtSubstrateUnsupported
+        expr: |
+          mgmt_substrate_supported == 0
+        for: 1h
+        labels:
+          severity: warning
+          triage: none
