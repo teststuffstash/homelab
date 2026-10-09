@@ -152,9 +152,35 @@ while IFS= read -r dd; do
 done <<EOF_DDBELT
 $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u)
 EOF_DDBELT
+# ── skip-if belt (2026-10-09): the diff optimization is the STANDARD, not opt-in — every ci.yaml
+# step that runs a MAP task must gate on that task's own key (`if: steps.diff.outputs.<key> !=
+# 'false'`, key = ci_key), so a new step cannot silently run on every PR. PR_ONLY gates and the
+# utility invocations (`-- gh …`, `-- true`, the `--ci-outputs` producer itself) are exempt.
+while IFS=$'\t' read -r sname sif srun; do
+  while IFS= read -r inv; do
+    [ -n "$inv" ] || continue
+    case "$inv" in "-- gh "*|"-- true"|"diff-ci -- --ci-outputs"*) continue;; esac
+    task=""
+    for entry in "${MAP[@]}"; do
+      t="${entry%%:*}"
+      if [ "$inv" = "$t" ] || [ "${inv%% *}" = "$t" ]; then task="$t"; break; fi
+    done
+    [ -n "$task" ] || continue   # unknown tasks are the coverage belt's job above
+    for p in $PR_ONLY; do [ "$p" = "$task" ] && task=""; done
+    [ -n "$task" ] || continue
+    k=$(ci_key "$task")
+    case "$sif" in *"steps.diff.outputs.$k "*) ;; *)
+      echo "diff-ci: FAIL — ci.yaml step '$sname' runs '$task' without \`if: steps.diff.outputs.$k != 'false'\` (the skip map is standard — add it)" >&2; exit 2;;
+    esac
+  done <<EOF_INV
+$(printf '%s\n' "$srun" | grep -oE 'devbox run [^;|&]*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' || true)
+EOF_INV
+done <<EOF_STEPS
+$(yq -o=json '.jobs.ci.steps' .github/workflows/ci.yaml | jq -r '.[] | [(.name // .uses // "?"), ((.if // "") + " "), ((.run // "") | gsub("\n"; " ; "))] | @tsv')
+EOF_STEPS
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
-  echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption)"
+  echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption, and every MAP step gates on its own skip key)"
   exit 0
 fi
 
