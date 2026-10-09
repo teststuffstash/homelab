@@ -970,3 +970,65 @@ spec:
           annotations:
             summary: "Claude-harness rides have NO served-side telemetry ({{ $labels.project }}/{{ $labels.role }})"
             description: '{{ $labels.project }} {{ $labels.role }} has {{ $value }} requested claude model(s) whose (project, role) produced NO OTLP claude_code_* telemetry for 30m. The belt is blind to what served them. Absence never reads as agreement (the FU-108/FU-125 silent-success class): check the otel-collector ServiceMonitor for export failures, or assume rides died before exporting. Offending families: agent_model_unverifiable{project="{{ $labels.project }}",role="{{ $labels.role }}"}. Concrete requested≠served mismatch is AgentModelDrift, the sibling alert.'
+
+    # ── CI wall-time drift (2026-10-09) — the detector the 2026-08/10 creep lacked ──────────────
+    # homelab's required `ci` crept from a 1.7-min PR median (ISO week 33) to 4.8 min (W41), and
+    # master push from 5.0 to 10.9 min, with nothing alerting for six weeks: every run was green,
+    # so GithubWorkflowRunFailed never had a reason to look. This compares each (repo, workflow,
+    # event)'s OWN recent wall time against its OWN past — org-wide, every repo the exporter polls.
+    #
+    # THE METRIC SHAPE, and why the expr is built the way it is:
+    #  - github_workflow_run_duration_seconds is a GAUGE PER RUN (labels id/number/attempt/status/
+    #    conclusion/event/branch/runner — github-exporter.py run_series): updated_at − run_started_at,
+    #    the wall the operator waits on. A run's series exists only while the run sits in the
+    #    exporter's RUN_WINDOW_HOURS (24h) poll window. So "the median run over 7 days" is a median
+    #    ACROSS SERIES, not over time: max_over_time(...[7d]) collapses each run to its one value,
+    #    `max by (..., id)` collapses the duplicates an exporter-pod roll makes (instance/pod labels)
+    #    and a run's re-run attempts (the slower attempt counts), and quantile(0.5) across the
+    #    survivors is the per-run median. quantile_over_time over one series would be meaningless
+    #    here — each series is one run.
+    #  - status="completed", conclusion="success": an in-progress run emits a GROWING value, and a
+    #    failed/cancelled run's wall says nothing about how long a green run takes.
+    #  - grouped by event: push runs execute the full suite; pull_request runs are diff-scoped since
+    #    2026-10-09 (homelab#2408) — they drift (and drop) separately, never as one blended median.
+    #  - baseline = the 7-day window 21–28 days ago (`offset 21d`) — inside the 31d retention
+    #    (kube-prometheus-stack values), and three weeks back so a creep has had time to show.
+    #  - 1.5× the baseline median: a real step (a new job, a cold cache) is ≥1.5× within weeks;
+    #    week-to-week jitter on a 7-day median is far below it. A MEDIAN, not avg_over_time: one
+    #    hung run must not move it (the fixture's outlier case).
+    #  - floor 120 s on the current median: a 40 s → 80 s workflow is 2× and nobody's problem.
+    #  - ≥20 runs in BOTH windows, counted per run id (the same per-id collapse): a quiet repo's
+    #    median of three runs is noise, so quiet repos stay silent by design.
+    #  - interval 1h: the windows are 7 days wide, so an hourly read loses nothing, and the
+    #    [7d] range over every run series is the most expensive read in this file — 1/60th of the
+    #    default cadence. for: 6h = six consecutive hourly reads (a bad-scrape filter, no more).
+    #
+    # Fixture: loop-health-ci-drift.promtool-{rules,test} beside this file (creep fires at the
+    # exact hour the run-count guard is met + 6h; flat, failed-run storm, single outlier, 1.4×,
+    # under-floor and 10-run/two-pod shapes all silent, each with the contrast that shows it is
+    # its guard — not chance — holding it quiet).
+    - name: github-ci-drift
+      interval: 1h
+      rules:
+        - alert: GithubCiWallTimeDrift
+          expr: |-
+            (
+              quantile by (repo, workflow, event) (0.5,
+                max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d])))
+              > 1.5 *
+              quantile by (repo, workflow, event) (0.5,
+                max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d)))
+            ) > 120
+            and on (repo, workflow, event)
+              count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d]))) >= 20
+            and on (repo, workflow, event)
+              count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d))) >= 20
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: slow drift — the per-job timings and the workflow's git history name the cause; a daily dig, never a page
+            triage: dig
+          annotations:
+            summary: "CI wall time drifting up: {{ $labels.repo }} {{ $labels.workflow }} ({{ $labels.event }})"
+            description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 21d))).'
