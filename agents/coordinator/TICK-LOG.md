@@ -12883,3 +12883,41 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `LonghornNodeOverProvisioned`); re-read after `up`. (3) `up nx-02` after a poweroff is the manual ipmitool
   step (no `nx-02-bmc-password` in the wallet, FU-288) — the RAM swap unplugs the chassis anyway, so WoL
   cannot wake nx-01 either: power buttons, then `node-maintenance up nx-01` + `host-maint up nx-02`.
+
+## 2026-10-09 13:37–13:47Z — the FU-289 DIMM window closes: both sleds back, 125 GiB on nx-02, the alert picture (seat)
+
+- **Operator: "RAM is in, chassis has power. Did not press the power button. Start with nx-01?"** Yes.
+  `node-maintenance up nx-01` fired WoL from pve 13:37:50Z — **WoL cannot wake a box that lost AC** (the
+  script's own 120 s note fired 13:39:54Z); nx-01's BMC (.123) read `Chassis Power is off` → `chassis power on`
+  via ipmitool with the register's factory credentials 13:42:00Z (hand-typed, the FU-288 shape) → Ready 13:44:36Z
+  (~400 s PXE), uncordoned, CSI registered, Longhorn schedulable + 0 degraded, window + 2 silences closed, exit 0.
+- **nx-02** same path, in parallel: BMC .173 reachable on standby power, `chassis power on` 13:38:28Z (the host
+  verb's `up` printed its manual step and waited); ssh after ~110 s; onboot guests self-started (router, backup
+  LXC, cp-02, wk-04, ci-runner-02); wk-04 Ready after ~30 s + uncordon + CSI + 0 degraded; cp-02 already Ready →
+  uncordon, etcd whole (3), cilium holds the apiserver; runner undrain + verify green; `check nx02` green →
+  `carp-maintenance nx02 leave` → .70 MASTER holding .1, no dead-man; host silence + window closed 13:42:28Z,
+  exit 0 (1 WARN: opnsense-test onboot=0 stays down — started by hand `qm start 9110`, it was running before).
+- **Memory, read isolated:** nx-02 `free` 125 GiB, dmidecode 8 × `M393A2K40BB1-CRC` 16 GB in P1-DIMMA1/B1/C1/D1 +
+  P2-DIMME1/F1/G1/H1, NUMA 64283 + 64501 MB, 2400 MT/s rated / **2133 configured = the E5-2640 v4's ceiling, not a
+  population penalty**. nx-01 `talosctl get memorymodules`: 4 × 16 GB = 64 GB — but **2 × SK Hynix
+  `HMA42GR7MFR4N-TF` + 2 × Micron `36ASF2G72PZ-2G1A2`** (both 2Rx4 PC4-2133P): pve's set was mixed, so the
+  "no mixed node anywhere" placement did not hold for nx-01 — same spec class, trains fine, a register fact.
+  The RAM half of FU-289 is DONE (128 GB on nx-02).
+- **The alert picture (operator: "no silences — if the responder were enabled it would go crazy?"):** silences
+  were correct by construction — the node/instance/pod-keyed ones expire at each `up`, nx-01's lived until its
+  `up` (13:44Z). At 13:45Z 58 alerts fired unsilenced: **4 `triage=now`** (KubePodNotReady for nx-01's DaemonSet
+  pods — in the declared window's list), **36 `dig`** (PodSigkilled ×8, CiliumUnreachableNodes ×8 from the OTHER
+  nodes' cilium — the documented leak class, NodeRebooted ×5, DaemonSet stuck/misscheduled, BGP session down ×4
+  while .70 was dark), **18 `none`**. By 13:46Z every `now` alert had cleared; the `dig` set is the usual
+  post-window decay. **The responder is DISABLED (operator)** — consistent: the three `respond-*` runs
+  (13:29/13:34/13:42Z, the KubePodNotReady batches + a resolved ControlPlaneComponentRestarted) were the gate
+  pod only, 10–20 s, no session, **0 issues, 0 PRs since 12:40Z**; `deploy-revert-658g2` (node-fstrim Degraded at
+  e9db6a62 = #2402's merge) ran 10 s, acted on nothing.
+- **Residue, not self-healing (the pods-never-move-back class):** wk-04's displaced pods (grafana, unifi,
+  openrouter-proxy, transcripts-viewer, chart-revert, longhorn-ui, cloudflare-spend-probe) landed on wk-01/wk-02 →
+  CPU requests 3793/3888 of 3900 m → `fstrim-guard-wk-01/02` CronJob pods `OutOfcpu` (`CronJobNotSucceeding`,
+  `ArgoCDAppDegraded node-fstrim`) until something restarts them onto wk-04 (3148/15900 m). Also open at close:
+  `coordinator-sensor` 14 restarts (`KubePodCrashLooping`, dig), `LonghornDiskBelowSchedulingFloor hp-01` (dig),
+  HA plug sensors `laptop3/laptop4/pve` stale since 12:51Z (none — unrelated to the sleds?), `registry-fs`'s
+  third (failed) replica on wk-04 awaits Longhorn's cleanup, `OpnsenseConfigUnattributedRevision` = the
+  carp-maintenance enter/leave revisions.
