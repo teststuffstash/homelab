@@ -1,0 +1,87 @@
+# Pod-scheduling guard rails (2026-10-09 — the node-fstrim OutOfcpu window). Two rules, two
+# policies in ONE file, because the kyverno CLI decides Audit-vs-Enforce per POLICY: a per-rule
+# `validate.failureAction` mixed into one ClusterPolicy makes `--audit-warn` report the Audit rule
+# as a hard fail too (measured, kyverno 1.19.1) — so the Enforce rule and the Audit rule each get
+# their own ClusterPolicy document.
+#
+# THE EVENT. node-fstrim's CronJobs pinned their pods with `nodeName: <node>` and no PriorityClass.
+# `nodeName` bypasses the scheduler: the pod goes straight to the kubelet, which rejects it at
+# admission when the node's CPU requests are full — `OutOfcpu`, "Node didn't have enough
+# resource: cpu, requested: 50, used: 3888, capacity: 3900" on wk-01/wk-02 while a wk-04 window
+# had displaced pods onto them — and nothing retries or preempts. The guards failed every 15 min
+# (CronJobNotSucceeding + ArgoCDAppDegraded node-fstrim) until they moved to hostname nodeAffinity
+# + the node-maintenance PriorityClass (argocd/resources/node-fstrim/fstrim.yaml header).
+#
+#   iac-pinned-pod-needs-priority  ENFORCE — a pod template that sets `nodeName` must also set
+#     `priorityClassName`. (Preferred shape: no nodeName at all — required nodeAffinity on
+#     kubernetes.io/hostname, which goes through the scheduler and can preempt.)
+#   iac-cronjob-needs-priority     AUDIT (warning) — every Job/CronJob carries a
+#     `priorityClassName`. Scheduled work that loses to a full node simply does not run; most
+#     CronJobs in the tree lack one today, so this reports and never reds (the sentinel passes
+#     `--audit-warn`: a warning is printed, `fail:` stays 0, the status stays green).
+#
+# Template depths: Pod → spec; Deployment/StatefulSet/DaemonSet/ReplicaSet/Job → spec.template.spec;
+# CronJob → spec.jobTemplate.spec.template.spec. Kyverno's own autogen is OFF (annotation) — the
+# kinds are matched explicitly and the CEL picks the depth. Fixtures: scripts/fixtures/iac-policy/,
+# run by scripts/iac-policy-test.sh (part of `devbox run sentinel-smoke`).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-pinned-pod-needs-priority
+  annotations:
+    policies.kyverno.io/description: "a pod template that sets nodeName must also set priorityClassName"
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: pinned-pod-needs-priority
+      match:
+        any:
+          - resources:
+              kinds: [Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob]
+      validate:
+        cel:
+          variables:
+            - name: podSpec
+              expression: >-
+                object.kind == 'Pod' ? object.spec :
+                (object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec
+                                          : object.spec.template.spec)
+          expressions:
+            - expression: "!has(variables.podSpec.nodeName) || has(variables.podSpec.priorityClassName)"
+              message: >-
+                Pod template sets nodeName without priorityClassName. nodeName bypasses the
+                scheduler: on a node whose CPU requests are full the kubelet rejects the pod at
+                admission (OutOfcpu) — no preemption, no retry. Prefer required nodeAffinity on
+                kubernetes.io/hostname plus a PriorityClass (see node-fstrim, 2026-10-09).
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-cronjob-needs-priority
+  annotations:
+    policies.kyverno.io/description: "every Job/CronJob carries a priorityClassName (audit — warns, never reds)"
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+    - name: cronjob-needs-priority
+      match:
+        any:
+          - resources:
+              kinds: [Job, CronJob]
+      validate:
+        cel:
+          variables:
+            - name: podSpec
+              expression: >-
+                object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec
+                                         : object.spec.template.spec
+          expressions:
+            - expression: "has(variables.podSpec.priorityClassName)"
+              message: >-
+                Job/CronJob without priorityClassName — on a node whose CPU requests are full it
+                waits (or, if pinned, is rejected) instead of preempting lower-priority work.
+                Audit only: pick a PriorityClass when the job must run on schedule.

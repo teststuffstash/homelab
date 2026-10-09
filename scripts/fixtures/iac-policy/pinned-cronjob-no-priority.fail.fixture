@@ -1,0 +1,14 @@
+# The pre-2026-10-09 node-fstrim shape: nodeName-pinned, no PriorityClass → Enforce fails.
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: fstrim-guard-wk-01, namespace: node-maintenance }
+spec:
+  schedule: "3,18,33,48 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          nodeName: wk-01
+          tolerations: [{ operator: Exists }]
+          containers: [{ name: fstrim-guard, image: alpine:3.24 }]

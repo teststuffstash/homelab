@@ -1,0 +1,7 @@
+# Bare Pod depth (spec.nodeName) → Enforce fails.
+apiVersion: v1
+kind: Pod
+metadata: { name: pinned, namespace: default }
+spec:
+  nodeName: wk-01
+  containers: [{ name: c, image: alpine:3.24 }]

@@ -1,0 +1,10 @@
+# Neither rule concerns an unpinned Deployment → passes.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: floating, namespace: default }
+spec:
+  selector: { matchLabels: { app: floating } }
+  template:
+    metadata: { labels: { app: floating } }
+    spec:
+      containers: [{ name: c, image: alpine:3.24 }]

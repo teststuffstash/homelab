@@ -1,0 +1,12 @@
+# Floating (unpinned) CronJob without a PriorityClass → Audit warning only, never a fail.
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: floating, namespace: default }
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers: [{ name: c, image: alpine:3.24 }]
