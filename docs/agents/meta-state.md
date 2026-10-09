@@ -18,7 +18,10 @@ never the session's arc — that is TICK-LOG's.)
   (`RouterMasterWanDark`) unblocked — the gate's carrier export rides a BACKUP-side restart; (3) **the FU-289 DIMM window is DONE (13:47Z, TICK-LOG 13:37–13:47Z): nx-02 125 GiB, nx-01 64 GB (mixed Hynix/Micron —
   register fact), both windows closed, #2402 landed.** Residue to re-read next session: wk-01/wk-02 at 3793/3888 of 3900 m CPU
   requests from wk-04's displaced pods → `fstrim-guard` OutOfcpu / `ArgoCDAppDegraded node-fstrim` (pods never move
-  back — restart the displaced Deployments onto wk-04, or let it ride); `coordinator-sensor` crashlooping; HA plug sensors
+  back); **operator "do it" 14:05Z → subagent building two PRs in order: `fix/fstrim-priority-affinity` (PriorityClass
+  `node-maintenance` + nodeAffinity instead of `nodeName` on the 10 fstrim CronJobs, live-verified on the next guard run) then
+  `fix/iac-policy-pinned-pods-priority` (Kyverno: pinned pod needs priority = Enforce; CronJob needs priority = Audit) — check
+  both landed; the descheduler question (rebalance after windows) is the operator's, unfiled; `coordinator-sensor` crashlooping; HA plug sensors
   laptop3/laptop4/pve stale since 12:51Z; the RAM re-plan for nx-02's VMs is the operator's; (4) loose: both router nodes carry the hostname
   `opnsense-test.teststuff.net` (seed carry-over, cosmetic, not sent to the ISP).
 - **⚑ PICKUP (2026-10-09 05:00Z — seat; TICK-LOG 2026-10-08 evening → 10-09 morning).** **Window 2 DONE:
