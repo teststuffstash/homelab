@@ -10,6 +10,21 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-09 05:00Z — seat; TICK-LOG 2026-10-08 evening → 10-09 morning).** **Window 2 DONE:
+  pve's node is the CARP BACKUP (Kea HA standby, BGP peer .71), WAN cable still OUT** — the WAN leg of the proof
+  waits for the cable (then: `carp-maintenance nx02 enter` → pve serves WAN → `leave`; the verb, never the raw API —
+  #2395). Reads: (1) the 19:40Z→04:46Z WAN-loss incident (operator-accepted) — postmortem owed once settled
+  (`docs/incidents/`), residue to confirm cleared: `ArgoWorkflowsFailing`/`AgentLoopWorkflowsFailing` (6 h / 1 h
+  rates), `IacSentinelSilent`, the rerun CI runs 37882053399/37855286664/37833387822 + oracle-fleet 37832770991;
+  (2) nx-02's WAN gate still runs the pre-#2389 script — restart it in an attended slot (blips the MASTER's WAN
+  ≤3 s); (3) the 10-02 blocker is CLOSED (relayed frame, flood-off — router-move.md §Status); (4) window
+  seat-1791485956-9934 CLOSED 05:21Z (`--force`: the aging rate alerts were the only delta). (5) **Postmortem
+  written** — `docs/incidents/2026-10-08-carp-maintenance-not-left.md` (PR `docs/incident-2026-10-08-carp-maintenance`,
+  auto-merge armed; land it if the sentinel/updater race holds it: #2395 needed `--admin` for that reason). Its
+  three open actions are the seat's to file: `RouterMasterWanDark` belt; responder retry backoff vs the
+  subscription semaphore (design-agents); a dead-man `leave` for unattended proofs. Loose, unfiled: Kea answers one DISCOVER with two offers (binds `.70`
+  and `.1`); a responder retry backoff of 4 h holds a subscription slot (`ArgoLockPlaneWedged` fired correctly —
+  design-agents material); nx-02 free RAM ~6 GiB — the DIMM window (FU-289) is now unblocked by the router pair.
 - **⚑ PICKUP (2026-10-07 21:00Z — seat; TICK-LOG same date).** (1) Confirm the box loops recovered after the
   venv move: a `management-sentinel` status on open PR heads, `MgmtLeaseLoopStale` cleared, no `MgmtApplyLoopStale`;
   then FU-305's detector — the loops DID recover (sentinel/apply/lease clean 20:55–20:58Z). (2) #2368 (goal-child
@@ -178,7 +193,8 @@ never the session's arc — that is TICK-LOG's.)
   `pkg update` stuck from the double-`.1` minutes; `mgmt-tf apply` prompts `y`; Kea served only
   after a re-run; `opnsense.teststuff.net` came from Big Data's hostname → static override 3cf5bd16).
   `OpnsenseConfigUnattributedRevision` fires on every jail converge (root key) — FU-013's class.
-  **⚠ WINDOW-2 BLOCKER — pve's STANDBY node served DHCP as `.1`:** kill switch tripped 17:14:43Z on
+  **✅ WINDOW-2 BLOCKER CLOSED 2026-10-08 (a relayed frame, not a served lease — router-move.md §Status; window 2
+  itself done 2026-10-08 evening, see the 10-09 pickup). Kept for the record:** kill switch tripped 17:14:43Z on
   `02:00:c0:a8:02:47 > mower  192.168.2.1.67 > 192.168.2.150.68 BOOTP Reply` → VM 9171 stopped,
   onboot latched 0 (WAN gate still active). `check pve` was green at 17:02 (DHCP off, switch armed).
   Cause unknown: the seat's 17:02–17:14 acts all targeted nx-02 (`--limit`/`OPN_HOST=.70`); suspect
