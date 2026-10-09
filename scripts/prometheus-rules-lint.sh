@@ -185,19 +185,24 @@ fi
 # Fixture pairs live beside their PrometheusRule as <name>.promtool-{rules,test} (deliberately not
 # *.yaml — manifest-lint kubeconforms every yaml under argocd/resources/). `promtool test rules`
 # resolves rule_files relative to the test file's directory, so run each in place.
+# Fixtures are independent — run them ∥ (one per core), report in sorted order. Serial, the suite was
+# ~280 s of CI wall on 2026-10-09 (63 fixtures; two long-horizon ones are ~190 s of it).
 tests=0
-while IFS= read -r tf; do
-  [ -n "$tf" ] || continue
-  if out=$(cd "$(dirname "$tf")" && promtool test rules "$(basename "$tf")" 2>&1); then
-    echo "  ok  $tf (behaviour)"
-  else
-    echo "  FAIL $tf:"; printf '%s\n' "$out" | sed 's/^/    /'
-    rc=1
-  fi
-  tests=$((tests+1))
-done << EOF
-$(find argocd -name '*.promtool-test' 2>/dev/null | sort)
-EOF
+mapfile -t tfs < <(find argocd -name '*.promtool-test' 2>/dev/null | sort)
+if [ "${#tfs[@]}" -gt 0 ]; then
+  for i in "${!tfs[@]}"; do printf '%s\t%s\0' "$i" "${tfs[$i]}"; done \
+    | xargs -0 -P "$(nproc)" -I{} bash -c 'i="${1%%$(printf "\t")*}"; tf="${1#*$(printf "\t")}"; ( cd "$(dirname "$tf")" && promtool test rules "$(basename "$tf")" ) > "$2/bt.$i.out" 2>&1; echo $? > "$2/bt.$i.rc"' _ {} "$tmp"
+  for i in "${!tfs[@]}"; do
+    tf="${tfs[$i]}"
+    if [ "$(cat "$tmp/bt.$i.rc" 2>/dev/null)" = 0 ]; then
+      echo "  ok  $tf (behaviour)"
+    else
+      echo "  FAIL $tf:"; sed 's/^/    /' "$tmp/bt.$i.out" 2>/dev/null
+      rc=1
+    fi
+    tests=$((tests+1))
+  done
+fi
 [ "$tests" -gt 0 ] && echo "prometheus-rules-lint: $tests behaviour fixture(s) run"
 
 # DRIFT PIN (homelab#337, operator-lane; made BIDIRECTIONAL in #375): every *.promtool-rules file is
