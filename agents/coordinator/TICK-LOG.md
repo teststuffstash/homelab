@@ -12850,3 +12850,36 @@ updates or reverts as much as possible — mechanical revert or a responder."
   behaviour is unverified; no real down/up has run — the first attended run is the FU-289 DIMM window. GAPS G2
   narrowed to the `maint watch` half.
 
+
+## 2026-10-09 12:40–13:15Z — the FU-289 DIMM window opens: nx-01 + nx-02 dark, the host verb's first real run (seat)
+
+- **Operator: "nx-01 and host-maint nx-02 down for the ram swap. Run them and power down the machines."** FU-289's
+  placement plan (ONE combined window, whole chassis dark, after the router runs on pve — window 2 closed this
+  morning). Both read-only preflights first: nx-01 WARN-only (two Deployment pods, no replicas/volumes/rides);
+  nx-02 WARN-only (wk-04 volumes+StatefulSets, cp-02 single-replica Deployments), 3 Ready CPs, etcd 3/3,
+  router nx02 MASTER with pve green, no Longhorn backup InProgress. `DRY=1 down nx-02` = 19 steps.
+- **nx-01** `node-maintenance down` (FORCE=1): window `nx-01-1791549928-7057`, settled, drained, `talosctl
+  shutdown` 12:45:32Z, Ready=False 12:46:20Z. Dark.
+- **nx-02** `host-maint down` (FORCE=1), first run 12:47Z: host silence + declared window opened; ci-runner-02
+  drained + stopped (12:47:53Z), opnsense-test stopped, wk-04 `node-maintenance down` (drain retried the
+  Longhorn instance-manager PDB ~45 s while unifi/openrouter-proxy/grafana/eventbus detached; shutdown
+  12:49:10Z, Ready=False 12:49:44Z). **REFUSED at step 9 (cp-02)**: node-maintenance's CP preflight FAILs on
+  any degraded attached volume cluster-wide, and wk-04's shutdown had just degraded `registry-fs`
+  (pvc-8a14f095…, 150 GiB/42 GiB used, replicas=2 — one of them WAS on wk-04, failedAt 12:49:08Z; the other on
+  hp-01). The composer's worker leg leaves exactly the state its CP leg refuses. Observed, not hand-acted:
+  Longhorn's 600 s replenishment wait ran out ~12:59Z, the rebuild finished, healthy 13:08:17Z.
+- **Second run 13:09Z resumed cleanly over the stopped guests** (host silence + window read "already open", `of
+  <class> running` skipped the dark VMs): cp-02 via `controlplane-upgrade.sh down` (etcd snapshot
+  `/tmp/controlplane-upgrade-snapshots/cp-02-20261009T130949Z.snapshot` 317 MB rev 79876299; shutdown 13:10:09Z,
+  Ready=False 13:10:42Z; membership 3 with one dark, cilium holds the apiserver backend), no backup InProgress →
+  backup-garage LXC stopped, `carp-maintenance nx02 enter` → pve MASTER within 3 s, opnsense-nx02 stopped
+  13:11:44Z, all-stopped gate, `systemctl poweroff` 13:11:47Z, ssh gone 13:12:03Z. **Both boxes dark; :22/.59
+  and :50000/.58 closed; cluster = cp-01 + wk-metal-02 CPs, cp-02/nx-01/wk-04 NotReady,SchedulingDisabled.**
+  The host window stays open until `host-maint up nx-02`; nx-01's until `node-maintenance up nx-01`.
+- **Findings:** (1) the host verb needs a Longhorn-healthy wait between its worker and CP legs (or the CP
+  preflight scoped to the volumes the CP leg can hurt) — the first real run hit it; the FU mint is held by the
+  gate's bar (bounded, decided) → a subagent PR, this session. (2) `registry-fs`'s replica now lives
+  off wk-04 — the runbook's documented single-worker class (FU-289 saw `registry-data` do the same 09-28 →
+  `LonghornNodeOverProvisioned`); re-read after `up`. (3) `up nx-02` after a poweroff is the manual ipmitool
+  step (no `nx-02-bmc-password` in the wallet, FU-288) — the RAM swap unplugs the chassis anyway, so WoL
+  cannot wake nx-01 either: power buttons, then `node-maintenance up nx-01` + `host-maint up nx-02`.
