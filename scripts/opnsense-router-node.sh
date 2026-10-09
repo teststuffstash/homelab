@@ -118,7 +118,9 @@ carp_demotion() { node_ssh sysctl -n net.inet.carp.demotion 2>/dev/null; }
 # (the jail rides `.1`) and sat latched for nine hours. Runs on the node, not the jail: it must fire
 # when the jail is blind. Conditional (demotion still >= 240 → the same toggle the verb uses), so a
 # completed `leave` makes it a no-op; `leave` also kills it. `status` shows whether one is armed.
-DEADMAN_SH=/tmp/carp-deadman.sh
+DEADMAN_SH=/tmp/carp-deadman.sh; DEADMAN_PID=/tmp/carp-deadman.pid
+# Liveness by PIDFILE + `kill -0`, never `pgrep -f`: the name would also match the `sh -c` sshd runs
+# these strings in (reviewer, #2399). The sleeper removes its own pidfile when it ends.
 deadman_arm() {
   local secs="${DEADMAN:-900}"
   printf '%s\n' '#!/bin/sh' \
@@ -128,12 +130,13 @@ deadman_arm() {
     '  echo "$(date -u +%FT%TZ) DEADMAN fired after '"$secs"'s: leaving CARP maintenance" >> /tmp/carp-deadman.log' \
     '  /usr/local/bin/php /usr/local/opnsense/scripts/interfaces/carp_set_status.php maintenance >> /tmp/carp-deadman.log 2>&1; echo >> /tmp/carp-deadman.log' \
     'else echo "$(date -u +%FT%TZ) deadman: not in maintenance, nothing to do" >> /tmp/carp-deadman.log; fi' \
-    | node_ssh "cat > $DEADMAN_SH && chmod +x $DEADMAN_SH && pkill -f $DEADMAN_SH 2>/dev/null; nohup $DEADMAN_SH >/dev/null 2>&1 </dev/null & sleep 0.3; pgrep -qf $DEADMAN_SH && echo armed" \
+    "rm -f $DEADMAN_PID" \
+    | node_ssh "cat > $DEADMAN_SH && chmod +x $DEADMAN_SH; p=\$(cat $DEADMAN_PID 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null; nohup $DEADMAN_SH >/dev/null 2>&1 </dev/null & echo \$! > $DEADMAN_PID; sleep 0.3; kill -0 \$(cat $DEADMAN_PID) 2>/dev/null && echo armed" \
     | grep -qx armed || die "dead-man did not arm on $HOST — not entering maintenance"
   log "dead-man armed on $INV_HOST: leaves maintenance by itself in ${secs}s (DEADMAN=<s> to change)"
 }
-deadman_disarm() { node_ssh "pkill -f $DEADMAN_SH 2>/dev/null && echo 'dead-man disarmed' || echo 'no dead-man was armed'"; }
-deadman_status() { node_ssh "pgrep -qf $DEADMAN_SH && echo 'dead-man ARMED' || echo 'no dead-man'; tail -n 2 /tmp/carp-deadman.log 2>/dev/null"; }
+deadman_disarm() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then kill \$p && rm -f $DEADMAN_PID && echo 'dead-man disarmed'; else echo 'no dead-man was armed'; fi"; }
+deadman_status() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then echo \"dead-man ARMED (pid \$p)\"; else echo 'no dead-man'; fi; tail -n 2 /tmp/carp-deadman.log 2>/dev/null"; }
 carp_vip1() { api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[]? | select(.subnet=="192.168.2.1") | .status] | join(",")'; }
 carp_maintenance() {   # $1 = enter|leave|status
   local dem r i; [ -n "$API_CURL" ] || api_setup
