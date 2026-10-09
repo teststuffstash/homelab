@@ -10,6 +10,12 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-308** *(archived 2026-10-09)* — **An unattended router proof can sever the seat's own path and nobody
+  reverts.** PR#2399: `carp-maintenance <node> enter` arms a sleeper ON the node (pidfile + `kill -0`) that
+  runs the maintenance toggle after `DEADMAN` s (default 900) iff demotion ≥ 240; `leave` disarms, `status`
+  shows it. Drilled live 2026-10-09 in the window-2 WAN leg: fired at 360 s, nx-02 MASTER + WAN back in ~2 s.
+  Gotcha: never `pgrep -f` the sleeper's path (matches the ssh `sh -c`). GAPS maintenance-window-G6 keeps
+  the skill-side half (the "does your session ride what you move?" question).
 - **FU-295** *(archived 2026-10-06)* — **The box sentinel never reported on goal/** PRs.** PR#2299: goal/**
   heads get an immediate base-pass `success` ("box surface judged at the assembly PR to master"); assembly PRs
   to master are still fully planned. Verified live on Goal #2273's children (7/7 success, merges resumed).

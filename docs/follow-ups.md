@@ -187,26 +187,22 @@ six OVERSIZE items pointer-ized into
       pve's node is the CARP BACKUP** (#2389 flood-off explains the 10-02 trip, #2390 change set; Kea HA
       both, BGP 13+13), WAN cable on pve still OUT; the proof's back-out left nx-02 in maintenance 9 h
       ([incident](incidents/2026-10-08-carp-maintenance-not-left.md) → #2395 `carp-maintenance` verb).
-      **Next:** cable in → the WAN leg (`carp-maintenance nx02 enter`/`leave`); restart nx-02's WAN gate
-      in an attended slot (pre-#2389 script; ≤3 s WAN blip); then the nx-02 DIMM window (FU-289).
+      **2026-10-09: WAN LEG DONE — the pair is complete** (cable in, gate held pve dark; proof with the
+      FU-308 dead-man, pve served WAN 6 min at 378 Mbit/s, dead-man failed back; nx-02 gate restarted while
+      BACKUP; router-move §Status). **Next:** the weekly rebuild drill is RED since 10-04 (converge, harness
+      rc=2 after 9 s, `MgmtOpnsenseDrillFailed`; next run Sun 10-11 03:37Z) — read the box's drill log, likely
+      the #2166 inventory flip; then the nx-02 DIMM window (FU-289).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
 - [ ] **FU-307** — **No belt says "the pair's MASTER has no WAN."** 2026-10-08 19:40Z→04:46Z pve
       held `.1` as MASTER with its WAN port carrier-less for nine hours; `RouterPairMasterCount` (1
       master) and `RouterWanGateSilent` (gate alive) stayed green, while the gate's own gauges
       (`router_node_carp_master{vmid="9171"} 1`, `router_node_wan_link 1`) carried the fact with no
-      rule reading them — and carrier/`WAN_GW` state is not exported at all. Deferred: the carrier
-      export lives in the gate script, whose restart blips the MASTER's WAN (attended slot).
+      rule reading them — and carrier/`WAN_GW` state is not exported at all. Deferred then by
+      the gate restart's WAN blip — UNBLOCKED 2026-10-09: a gate restart on the BACKUP node costs nothing
+      (proven in the WAN-leg window; put nx-02 in maintenance first, or roll pve then nx-02).
       **Next:** the gate's textfile adds `/sys/class/net/<wan-nic>/carrier`; rule `RouterMasterWanDark`
       = master ∧ ¬carrier, `for: 2m`, promtool fixture at the 10-08 timestamps. ADR-144/145.
-- [ ] **FU-308** — **An unattended router proof can sever the seat's own path and nobody reverts.**
-      The window-2 failover proof ran from the jail, whose internet rides `.1`; its back-out step
-      silently failed (`carp_status/enable` ≠ leave maintenance) and the session went blind
-      (`EAI_AGAIN`) with the fault latched — the postmortem's third contributing factor. Window 1's
-      cutover script had the same shape and got lucky. Deferred: where the dead-man runs is a call
-      (hypervisor `systemd-run --on-active`, or `at` on the node), and it needs its own drill.
-      **Next:** `carp-maintenance enter` arms it BEFORE acting, `leave` disarms; drill once. Relates
-      FU-297; GAPS maintenance-window-G6.
 - [ ] **FU-208** — **runner image is oversized for the sentinel (4.9 GiB for a devbox-lint job).**
       Rollout shape SHIPPED 2026-09-04 (PR#1367): two DaemonSets split on `topology.kubernetes.io/zone`
       — metal two-at-a-time, pool VMs one-at-a-time behind an init gate on

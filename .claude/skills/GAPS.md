@@ -353,4 +353,6 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       skill asks, for any act on the router/WAN path, "does your own session ride what you are about
       to move?" and, if yes, requires an armed dead-man revert BEFORE the act (FU-308) and a probe
       from OUTSIDE the cut (the mgmt box over its own path, or the operator's phone).
+      2026-10-09: the dead-man half is BUILT + drilled (#2399, FU-308 archived) and the WAN-leg window ran
+      with the mgmt-box probe; the skill text still asks nothing — this entry now covers only that question.
 

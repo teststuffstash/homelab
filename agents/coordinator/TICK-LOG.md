@@ -12807,3 +12807,24 @@ updates or reverts as much as possible — mechanical revert or a responder."
   opportunity to check if WAN outage recovers on its own" → observe-first from then on (memory
   outage-recovery-observe-first); snapshots +0/+20 min in the postmortem. Window closed 05:21Z (`--force`, rate
   alerts aging). Wind-down: monitors stopped, transcripts synced, clones removed.
+
+## 2026-10-09 11:00–11:40Z — window-2 WAN leg: pve's cable in, the proof with the FU-308 dead-man, the pair complete (seat)
+
+- **Condition:** operator asks how confident we are in (a) plugging pve's WAN cable and (b) making pve MASTER;
+  FU-297 pickup after the 10-08 incident. Reads: gate rule = link iff CARP advert (carrier is never an input),
+  both nodes `check` green, pve on the #2389 gate, nx-02 on the pre-#2389 one (LAN tap still flooding), Telia
+  lease 30 min on the shared MAC. Answer: cable = safe any time; MASTER = proven on the LAN, one untested link
+  (pve's Realtek + Telia's lease handover), run attended with the back-out off the seat's path; permanent
+  swap not needed (the DIMM window uses `enter`).
+- **Command:** window `seat-1791544351-8289` (alert watch + cable watch + a probe loop ON the mgmt box —
+  outside the cut, GAPS G6). Cable in 11:13:19Z: 1 Gb/s, gate held pve dark, 0 frames out in 12 s. FU-308
+  built meanwhile: `carp-maintenance enter` arms a sleeper on the node (#2399; one review round — pidfile
+  instead of `pgrep -f`, hand-tested arm/status/disarm/run-out on the node; merged 11:30Z). Operator's
+  hotspot would not pair → "skip the hotspot": the dead-man is the net. `DEADMAN=360 enter` 11:27:41Z → pve
+  MASTER + WAN 11:27:42.9Z, same public IP, ~5 s gap, `.1`/Unbound/HAProxy continuous, BGP 26, `check pve`
+  green serving, 378/378 Mbit/s (operator speedtest). nx-02 gate play run while BACKUP (script + unit restart,
+  no blip). Dead-man fired 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, ~9 s gap. Window closed clean
+  (192→192 targets, no new alerts). Records: FU-308 archived, FU-297/FU-307 updated, GAPS G6 narrowed,
+  router-move §Status = #2400. Found on the way: the weekly rebuild drill red since 10-04 (FU-297 next);
+  api.github.com answers 403 to our IP unauthenticated (probe noise, not WAN); both nodes' hostname `opnsense-test`.
+
