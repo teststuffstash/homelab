@@ -12962,3 +12962,21 @@ updates or reverts as much as possible — mechanical revert or a responder."
   priority ranks, it does not rebalance; wk-01/wk-02 stay ~95 % booked until something moves the displaced pods
   back to wk-04 → the descheduler question. The 4 Crossplane-made `*-agents/transcripts-crashnet` CronJobs never
   reach the tree scan (Audit sees only repo YAML).
+
+## 2026-10-09 15:05–16:10Z — homelab CI wall creep: data, three speedups, the skip map made standard (second jail → seat)
+- **Trigger:** operator — a PR `ci` run took 13m28s (run 37946005186, #2405) against the ~2 min of #518. Data (GH API,
+  4981 completed runs W33–W41): PR median 1.7 → 4.8 min, master push 5.0 → 10.9 min (push had no skip map). Step
+  sample (65 runs): `mgmt-policy-test` 239–304 s SERIAL before the ∥ heavies (1128 `_yq` calls, each a nested
+  `devbox run`); `prometheus-rules-lint` ~250 s (63 promtool fixtures serial; `loop-health` 649h + `mgmt-metrics` 8d
+  horizons = 188 s — every rule evaluated per minute to the max eval_time); `publicroute-tf-validate` 141 s. The
+  diff-ci MAP held a row for every task but ci.yaml read only 4 regexes; replaying 21 Oct PRs through the full MAP:
+  109 → 74 step-min.
+- **Landed:** #2406 `_yq` uses PATH yq inside a devbox env (CI step → 115 s); #2407 promtool fixtures `xargs -P nproc`
+  (289 → 103 s local, mutation-checked); #2408 `diff-ci -- --ci-outputs` (one key per MAP row, fail-open on
+  devbox/ci.yaml/diff-ci changes); **2c5fc5ba direct** ci.yaml — all 43 gate steps `if: steps.diff.outputs.<key> !=
+  'false'` (operator ruling: PRs scoped, master push runs ALL = the net for a too-narrow row; first push run green
+  444 s, 50 steps, only PR-only steps skipped); #2409 belt — a MAP step without its `if:` reds.
+- **In flight (Opus subagent):** one-rule fixture split for the long-horizon promtool cases; a `triage: dig` drift
+  alert on run-level `github_workflow_run_duration_seconds` by (repo, workflow, event), ≥20 runs in both the 7d and the
+  21–28d baseline window (operator: per-PR delta measurement rejected as noise; weekly retro vs long-window alert →
+  the alert). FU-310 mint was held by the gate — doable now, so dispatched instead.
