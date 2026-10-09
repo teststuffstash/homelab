@@ -278,8 +278,9 @@ never the session's arc — that is TICK-LOG's.)
   nixpkgs rev at 1.14.1) was in flight at the sweep. Once it merges, `MgmtBeltCheckFailing{check="talos"}`
   should clear on the box's next pull. If it still fires, read the box's devbox resolution.
 - **⚑ RESPONDER — the ADR-148 lanes are LIVE since 10-04 (PR#2212); "disabled" = the OLD per-blip lane
-  only (operator, 10-09).** Gaps + owners: FU-249 / FU-230, evidence spike §2026-10-09. In flight 10-09:
-  the dig dedup fix and window claims-by-silence (seat subagents). Reader = `/board-sweep` (operator 10-09,
+  only (operator, 10-09).** Gaps + owners: FU-249 / FU-230, evidence spike §2026-10-09. Landed 10-09: dig dedup (#2415),
+  claims-by-silence (#2418 — PROVE in the next window: grace/claim/no-session), remediation_would typed +
+  scored (#2417, #2419). Reader = `/board-sweep` (operator 10-09,
   PR#2416); a retro-like batch reader over several nights later. oracle-fleet's 5 rules still lack `triage` (stack lane).
 - **⚑ GOAL #1906 (retro r5 batch, themed).** #1908/#1909/#1911 done. **#1910 is authored and UNQUEUED
   on purpose.** The operator reads Goal pin 3, then either queues it or rules it deferred on the store.

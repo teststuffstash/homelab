@@ -1106,7 +1106,8 @@ the block needs pruning, not more headings.
       §responder; evidence: [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md).
       **Next:** ownership by SILENCE (operator 2026-10-09; spike §2026-10-09 gap 1) — leased claims +
       a close tail + a responder grace instead of the by-name skip, closed windows kept as per-day dig history;
-      build in flight (seat subagent, `feat/window-claims-by-silence`), then prove it in a real window.
+      BUILT PR#2418 (fixtures only). **Prove in the next real window:** named alert → grace (no slot held) →
+      `claim` → no session; unclaimed → triage with the window in the brief; the post-`up` pod silence.
 - [ ] **FU-231** — **Findings to the bucket, issues only for actionable verdicts: POINTER**
       (operator direction 2026-09-11). Producer half shipped PR#1749 — a typed
       `finding.json` (`responder-finding/v1`) beside every transcript, the no-issue triage
