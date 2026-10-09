@@ -867,16 +867,24 @@ vline="$(grep -n 'verdict:' "$H/out.txt" | head -1 | cut -d: -f1)"
 section "#1274 — REMEDIATION-WOULD shadow marker (dial trial, leg 1)"
 # The responder triage session's output gains ONE structured line when its verdict names a
 # mechanical remediation it would have performed had the dial been armed. The brief carries the
-# instruction unconditionally (no stack conditional); the LLM emits the line when it would act
-# and omits it for report-only verdicts. The claude stub captures the brief, so we assert the
-# instruction shape here; the LLM-side emission is verified in production by the first real
-# stack-alert triage after merge.
+# instruction unconditionally (no stack conditional); the LLM emits the line whenever a mechanical
+# IMPERATIVE remediation applies — independent of fix-verdict — and omits it only when none does.
+# An imperative remediation (delete a wedged pod, clear a WAL) is not a PR, so those triages land
+# report-only: the old "do NOT emit when report-only" clause suppressed the marker in exactly the
+# class the dial measures (a 2026-10-09 triage wrote "No remediation applies, so there is no
+# REMEDIATION-WOULD line"). The claude stub captures the brief, so we assert the instruction shape
+# here; the LLM-side emission is verified in production by the first real stack-alert triage.
 
 scenario remediation-would-marker
 go "$(alert rw1 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet","severity":"warning"}')"
 wantbrief "remediation-would → brief carries the REMEDIATION-WOULD instruction" "REMEDIATION-WOULD MARKER"
 wantbrief "remediation-would → instruction names the marker format" "REMEDIATION-WOULD: <verb>"
-wantbrief "remediation-would → instruction says do NOT emit for report-only" "Do NOT emit this line when your verdict is report-only"
+wantbrief "remediation-would → ABSENT only when no imperative remediation applies" "The ONLY reason to omit it: no mechanical imperative remediation applies."
+wantbrief "remediation-would → the marker is independent of fix-verdict" "This line is INDEPENDENT of your fix-verdict"
+wantbrief "remediation-would → PRESENT on a report-only verdict that names one" "a report-only verdict that names an imperative remediation MUST still carry the line"
+grep -qF -- "Do NOT emit this line when your verdict is report-only" "$H/brief.txt" 2>/dev/null \
+  && bad "remediation-would → no report-only suppression clause" "brief still suppresses the marker on report-only" \
+  || ok "remediation-would → no report-only suppression clause"
 wantbrief "remediation-would → instruction says at most one per session" "At most one per distinct remediation per session"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -920,6 +928,17 @@ wantwould "two distinct would-lines (+ an echoed duplicate) → entries in order
 wantwould "…a bulleted/bolded marker still parses (ASCII -- separator accepted)" '.remediation_would[1].target == "oracle-fleet/deployment/ert-mock"'
 wantwould "…a mid-line mention is NOT harvested" 'all(.remediation_would[]; .raw | contains("mid-line") | not)'
 wantwould "…a malformed line is kept raw with null parts, so it is still scored" '.remediation_would[2] == {verb:null,target:null,reason:null,raw:"clear the stuck thing"}'
+
+# The shell half of the same contract: a REPORT-ONLY verdict whose session named an imperative
+# remediation keeps its would-line in finding.json — the harvest never keys on the verdict.
+scenario would-report-only
+printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+jq -n '[{number:42, body:"alert-fp:rw3\nfix-verdict: report-only"}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '{body:"alert-fp:rw3\nfix-verdict: report-only"}' > "$H/gh/verdict-issue.json"
+printf 'fix-verdict: report-only\nREMEDIATION-WOULD: delete monitoring/pod/loki-0 — WAL replay wedged on a torn segment\n' > "$H/session-says.txt"
+go_ts "$(alert rw3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+wantwould "report-only verdict + named imperative remediation → verdict recorded report-only" '.verdict == "report-only"'
+wantwould "…and the would-line is STILL typed (never suppressed by the verdict)" '.remediation_would | length == 1 and .[0].verb == "delete" and .[0].target == "monitoring/pod/loki-0"'
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
