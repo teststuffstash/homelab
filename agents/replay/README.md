@@ -341,6 +341,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
+| `nix-registry-env` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/default-profile` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/enforced-non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-hostaliases/monitor-mode` | actions | - | `agents/agent-session.sh` | - |
