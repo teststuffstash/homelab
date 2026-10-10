@@ -35,7 +35,10 @@ PROM_PATHS='^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock
 CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
 # #1315: the Composition, the two cluster pins it renders with (functions + provider version),
 # the gate's own script/fixtures, and the devbox closure that ships the nix provider.
-PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
+PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/xr-render-lib\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
+# xr-render (G4 class gate): every XRD/Composition + the committed XRs/claims it discovers + the two
+# cluster pins it renders with + the tool itself. Claims outside these dirs are the master-push net's.
+XR_RENDER_PATHS='^(argocd/resources/(agentstack|publicroute|crossplane)/|argocd/platform/crossplane\.yaml$|agents/fixer/.*agentstack\.yaml$|scripts/xr-render|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
 # the management box's policy + its readers (ADR-131): the stage-1 fixtures + the fail-closed reads
 MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|devbox\.(json|lock)$)'
 
@@ -54,6 +57,9 @@ MAP=(
   "edge-probe-self-test:^argocd/resources/cloudflare-exporter/"
   "spend-probe-self-test:^argocd/resources/cloudflare-exporter/"
   "publicroute-tf-validate:$PUBLICROUTE_PATHS"
+  # ci.yaml runs it PR-only as `xr-render -- --diff <base>` (base↔head render diff); locally the
+  # row renders every input at the worktree. Its ci.yaml step lands operator-direct (pin-only-guarded).
+  "xr-render:$XR_RENDER_PATHS"
   "argo-lint:^agents/coordinator/"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
