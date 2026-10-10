@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── cause-closed-green case
 # PR #10 has agent/error label with fleet-fault marker (cause=homelab#1000, CI green)
 # Expected: agent/error label REMOVED

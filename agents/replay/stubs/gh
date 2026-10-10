@@ -84,8 +84,28 @@ case "$WORDS" in
     ;;
 esac
 
+
 MUTATING_VERBS="comment edit close reopen merge review ready create delete rename transfer lock
 unlock pin unpin sync develop checkout add remove set"
+
+# GraphQL-pool DRAIN (FU-290, homelab#2476): STUB_GH_GRAPHQL=drained models the App installation's
+# GraphQL pool exhausted while its REST (core) pool still serves — the 2026-10-10 19:00Z state. Every
+# GraphQL MUTATION then fails exactly as gh does (the message below, exit 1): the `pr`/`issue`
+# porcelain mutations (edit — the --add-label/--remove-label flags included —, comment, close,
+# merge, …) and `api graphql` with a `mutation`. REST (`gh api` on a path, `gh label`, `gh run`)
+# keeps serving. Reads are NOT drained here (they still serve the world): this mode pins the WRITE
+# transport, and a fixture that wants a failed GraphQL read injects it per call as before.
+if [ "${STUB_GH_GRAPHQL:-ok}" = drained ]; then
+  _rp_gql_mut=0
+  case "$WORDS" in
+    'api graphql'|'api graphql '*) [ "${IS_API_WRITE:-0}" = 1 ] && _rp_gql_mut=1 ;;
+    'pr '*|'issue '*) _rp_is_mutation "$MUTATING_VERBS" "$WORDS" && _rp_gql_mut=1 ;;
+  esac
+  if [ "$_rp_gql_mut" = 1 ]; then
+    printf 'GraphQL: API rate limit already exceeded for installation ID 142724430\n' >&2
+    exit 1
+  fi
+fi
 
 if [ "${IS_API_WRITE:-0}" = 1 ] || _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
   # A mutation MAY still have a recording (gh prints the new comment's URL, and a clause that pipes

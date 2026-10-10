@@ -1,0 +1,6 @@
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/issues/500/labels -f labels[]=agent/error
+OUT [oracle-fleet] BREAKER on #500 (verdicts: total=1 at-head=1 approved-at-head=1) — agent/error, NOT dispatching
+OUT [oracle-fleet] WARN: could not add agent/error to #500 (gh's error above) — dispatch still skipped
+OUT REACHED: end
+ERR gh_label_add: teststuffstash/oracle-fleet#500 +agent/error FAILED (rc=1): gh: Not Found (HTTP 404)
+RC 0

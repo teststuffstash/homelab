@@ -5,10 +5,10 @@ CALL gh api repos/teststuffstash/homelab/issues/328/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh issue list --repo teststuffstash/homelab --state closed --limit 50 --json number,title,closedAt
 CALL gh issue list --repo teststuffstash/homelab --state open --limit 50 --json number,title --jq [.[] | select(.title | startswith("fleet-strike: error_class=unknown"))] | first | .number // ""
-CALL gh issue edit 326 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 327 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 328 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 329 --repo teststuffstash/homelab --add-label agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/326/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/327/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/328/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/329/labels -f labels[]=agent/error
 CALL date -u +%Y-%m-%dT%H:%M:%SZ
 CALL gh issue create --repo teststuffstash/homelab --title fleet-strike: error_class=unknown --label agent-fix --body 🤖 **Fleet strike filing** — inert platform issue (FU-200).\n\n**error_class:** `unknown`\n\n**Affected issues:** 326 327 328 329 \n\n**Detected at:** `TIMESTAMP`\n\nThis is a DEDUPED filing: one per error_class per 24h window. The affected issues carry `agent/error` and are human-first, report-only until the root cause is resolved.\n\n**What to do.** Investigate the platform-level pattern behind `unknown`. Each affected issue's ride transcript is in `s3://agent-transcripts/`. Once the root cause is fixed, strip `agent/error` from each affected issue to re-enable dispatch.
 CALL date -u +%Y-%m-%dT%H:%M:%SZ
@@ -57,11 +57,11 @@ CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
 CALL gh issue list --repo teststuffstash/homelab --state closed --limit 50 --json number,title,closedAt
 CALL gh issue list --repo teststuffstash/homelab --state open --limit 50 --json number,title --jq [.[] | select(.title | startswith("fleet-strike: error_class=unknown"))] | first | .number // ""
-CALL gh issue edit 326 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 327 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 328 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 329 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 330 --repo teststuffstash/homelab --add-label agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/326/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/327/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/328/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/329/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/330/labels -f labels[]=agent/error
 CALL date -u +%Y-%m-%dT%H:%M:%SZ
 CALL gh issue create --repo teststuffstash/homelab --title fleet-strike: error_class=unknown --label agent-fix --body 🤖 **Fleet strike filing** — inert platform issue (FU-200).\n\n**error_class:** `unknown`\n\n**Affected issues:** 326 327 328 329 330 \n\n**Detected at:** `TIMESTAMP`\n\nThis is a DEDUPED filing: one per error_class per 24h window. The affected issues carry `agent/error` and are human-first, report-only until the root cause is resolved.\n\n**What to do.** Investigate the platform-level pattern behind `unknown`. Each affected issue's ride transcript is in `s3://agent-transcripts/`. Once the root cause is fixed, strip `agent/error` from each affected issue to re-enable dispatch.
 CALL date -u +%Y-%m-%dT%H:%M:%SZ
@@ -83,10 +83,10 @@ CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
 CALL gh issue list --repo teststuffstash/homelab --state closed --limit 50 --json number,title,closedAt
 CALL gh api repos/teststuffstash/homelab/issues/999/comments?per_page=100
 CALL gh issue list --repo teststuffstash/homelab --state open --limit 50 --json number,title --jq [.[] | select(.title | startswith("fleet-strike: error_class=unknown"))] | first | .number // ""
-CALL gh issue edit 326 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 327 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 328 --repo teststuffstash/homelab --add-label agent/error
-CALL gh issue edit 329 --repo teststuffstash/homelab --add-label agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/326/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/327/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/328/labels -f labels[]=agent/error
+CALL gh api -X POST repos/teststuffstash/homelab/issues/329/labels -f labels[]=agent/error
 CALL date -u +%Y-%m-%dT%H:%M:%SZ
 CALL gh issue create --repo teststuffstash/homelab --title fleet-strike: error_class=unknown --label agent-fix --body 🤖 **Fleet strike filing** — inert platform issue (FU-200).\n\n**error_class:** `unknown`\n\n**Affected issues:** 326 327 328 329 \n\n**Detected at:** `TIMESTAMP`\n\nThis is a DEDUPED filing: one per error_class per 24h window. The affected issues carry `agent/error` and are human-first, report-only until the root cause is resolved.\n\n**What to do.** Investigate the platform-level pattern behind `unknown`. Each affected issue's ride transcript is in `s3://agent-transcripts/`. Once the root cause is fixed, strip `agent/error` from each affected issue to re-enable dispatch.
 CALL date -u +%Y-%m-%dT%H:%M:%SZ

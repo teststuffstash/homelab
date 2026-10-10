@@ -1,0 +1,16 @@
+# id | world | patch | env | expect | params
+# clean base: one verdict, none at head, under the cap — both breakers pass, the pick dispatches.
+clean                          | | | | dispatch
+# (1) impossible state: a bot approval at head / two verdicts at head.
+error-approved-at-head         | | | IN_V_HEAD=1 IN_V_HEAD_APPROVED=1 | error-trip | tot=1 at=1 ap=1
+error-two-at-head              | | | IN_V_TOTAL=2 IN_V_HEAD=2         | error-trip | tot=2 at=2 ap=0
+# refused REST write: gh's own error is in the log (ERR), the warning says so, no comment, no dispatch.
+error-label-refused            | | | IN_V_HEAD=1 IN_V_HEAD_APPROVED=1 STUB_GH_api_repos_teststuffstash_oracle_fleet_issues_500_labels=fail | error-refused |
+# (2) rounds exhausted at the cap (issue-keyed total) — arbitrate.
+arbitrate-at-cap               | | | IN_ROUNDS_TOTAL=12 | arbitrate-trip |
+arbitrate-label-refused        | | | IN_ROUNDS_TOTAL=12 STUB_GH_api_repos_teststuffstash_oracle_fleet_issues_500_labels=fail | arbitrate-refused |
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained): every GraphQL mutation fails "API rate limit
+# already exceeded for installation ID 142724430" while REST serves. The label still LANDS on both
+# breakers (RED on the pre-REST source: `gh pr edit --add-label` hit the drain and WARNed instead).
+error-approved-at-head-graphql-drained | | | IN_V_HEAD=1 IN_V_HEAD_APPROVED=1 STUB_GH_GRAPHQL=drained | error-trip-drained |
+arbitrate-at-cap-graphql-drained       | | | IN_ROUNDS_TOTAL=12 STUB_GH_GRAPHQL=drained                 | arbitrate-trip |

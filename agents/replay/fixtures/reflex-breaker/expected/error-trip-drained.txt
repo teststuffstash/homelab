@@ -1,0 +1,6 @@
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/issues/500/labels -f labels[]=agent/error
+CALL gh pr comment 500 --repo teststuffstash/oracle-fleet --body AGENT_ERROR: review-reflex circuit breaker tripped — this PR was selected for review with an impossible state (bot verdicts: 1 total, 1 since the newest commit, 1 of those approvals). Automation now skips this PR. A human: inspect the review thread + reflex logic, then remove the `agent/error` label to resume.
+OUT [oracle-fleet] BREAKER on #500 (verdicts: total=1 at-head=1 approved-at-head=1) — agent/error, NOT dispatching
+OUT [oracle-fleet] WARN: breaker comment on #500 failed
+OUT REACHED: end
+RC 0

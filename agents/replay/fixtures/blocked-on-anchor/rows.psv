@@ -10,3 +10,8 @@ line1  | line1 | | | held
 mid    | line1 | | | held
 absent | line1 | | | ordinary
 quoted | line1 | | | ordinary
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
+# fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
+# writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
+# the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
+absent-graphql-drained | line1 | | STUB_GH_GRAPHQL=drained | ordinary

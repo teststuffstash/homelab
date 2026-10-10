@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── the per-stack loop variables the goal-lane block reads. Every name here is a SCAN
 # variable set earlier in the per-repo loop (`slug`, `repo`, `openall`, `orphans`, `units`), never
 # a harness invention — a bridge that renames things is a bridge that pins a different clause.

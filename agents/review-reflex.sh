@@ -436,16 +436,21 @@ EOF_C9
   # gets `agent/arbitrate` (scan-actionable: the arbitrate clause dispatches an item session).
   # The two IMPOSSIBLE-STATE signatures (approval at head / duplicate verdicts at head) stay
   # `agent/error` — those mean the MACHINERY misbehaved, human-first.
+  # >>>REPLAY:reflex-breaker-error>>>
   if [ "$v_head_approved" -ge 1 ] || [ "$v_head" -ge 2 ]; then
     log "[$repo] BREAKER on #$pick (verdicts: total=$v_total at-head=$v_head approved-at-head=$v_head_approved) — agent/error, NOT dispatching"
-    if gh pr edit "$pick" --repo "$slug" --add-label "agent/error" >/dev/null 2>&1; then
+    # REST via gh_label_add (machine-comment.sh), never `gh pr edit --add-label` — FU-290's drained
+    # GraphQL pool failed the porcelain write while REST still served; gh's real error now lands in
+    # the log (stderr) instead of the guessed "label missing? token scope?".
+    if gh_label_add "$slug" "$pick" "agent/error"; then
       gh pr comment "$pick" --repo "$slug" --body "AGENT_ERROR: review-reflex circuit breaker tripped — this PR was selected for review with an impossible state (bot verdicts: ${v_total} total, ${v_head} since the newest commit, ${v_head_approved} of those approvals). Automation now skips this PR. A human: inspect the review thread + reflex logic, then remove the \`agent/error\` label to resume." >/dev/null 2>&1 \
         || log "[$repo] WARN: breaker comment on #$pick failed"
     else
-      log "[$repo] WARN: could not add agent/error to #$pick (label missing on repo? token scope?) — dispatch still skipped"
+      log "[$repo] WARN: could not add agent/error to #$pick (gh's error above) — dispatch still skipped"
     fi
     continue
   fi
+  # <<<REPLAY:reflex-breaker-error<<<
   # ISSUE-KEYED ROUNDS CEILING (homelab#156, FU-154). $v_total counts verdicts on THIS PR, and PR
   # identity is not the unit of the work: close-and-re-PR is a DESIGNED play as of 2026-08-08
   # (the merge-conflict lane re-landed #210 as #221, the coordinator closed #214 and re-queued its
@@ -486,18 +491,20 @@ EOF_C9
       log "[$repo] WARN: issue-keyed rounds probe FAILED (gh pr list --state all) — per-PR count stands for #$pick"
     fi
   fi
+  # >>>REPLAY:reflex-breaker-arbitrate>>>
   if [ "$rounds_total" -ge "$ROUNDS_MAX" ]; then
     log "[$repo] ROUNDS EXHAUSTED on #$pick (${rounds_total} bot verdicts on ${rounds_key} ≥ cap ${ROUNDS_MAX}) — agent/arbitrate (coordinator tie-break), NOT dispatching"
     gh label create "agent/arbitrate" --repo "$slug" --color "d93f0b" --force \
       --description "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)" >/dev/null 2>&1 || true
-    if gh pr edit "$pick" --repo "$slug" --add-label "agent/arbitrate" >/dev/null 2>&1; then
+    if gh_label_add "$slug" "$pick" "agent/arbitrate"; then
       mc_event "$slug" "$pick" arbitrate "ARBITRATE: ${rounds_total} bot review verdicts counted on ${rounds_key} (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
         || log "[$repo] WARN: arbitrate event on #$pick failed"
     else
-      log "[$repo] WARN: could not add agent/arbitrate to #$pick — dispatch still skipped"
+      log "[$repo] WARN: could not add agent/arbitrate to #$pick (gh's error above) — dispatch still skipped"
     fi
     continue
   fi
+  # <<<REPLAY:reflex-breaker-arbitrate<<<
 
   if "$KUBECTL" -n "$NS" get pods -l "app=agent-reviewer,project=${repo},pr=${pick}" \
         --no-headers 2>/dev/null | grep -q .; then

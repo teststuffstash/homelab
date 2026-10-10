@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── issue-side case
 # Issue #100 has agent/error label with fleet-fault marker (cause=homelab#1000, CI green via PR #20)
 # PR #20 fixes issue #100 and has green CI

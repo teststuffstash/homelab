@@ -1,0 +1,36 @@
+# reflex-breaker — review-reflex.sh's two circuit breakers, as one decision table (unpinned until
+# 2026-10-10; pinned with the FU-290 REST label-transport move).
+#
+# THE CONTRACT (review-reflex.sh §Breaker, merge-path.md escalation table). A pick reaching the
+# breakers is NEVER dispatched when either fires:
+#   (1) reflex-breaker-error — an IMPOSSIBLE state (a bot approval at head, or ≥2 bot verdicts at
+#       head): label `agent/error`, then ONE `AGENT_ERROR:` comment; a refused label write is a
+#       loud WARN and the dispatch is still skipped.
+#   (2) reflex-breaker-arbitrate — rounds exhausted (issue-keyed total ≥ ROUNDS_MAX): idempotent
+#       label create, label `agent/arbitrate`, one ARBITRATE summary event (mc_event); a refused
+#       label write is a loud WARN, the dispatch still skipped.
+# Neither fires ⇒ the pick falls through (post.sh prints DISPATCH).
+#
+# THE TRANSPORT (FU-290, homelab#2476). Both label writes ride REST via gh_label_add
+# (agents/machine-comment.sh) — never `gh pr edit --add-label`, a GraphQL mutation that failed
+# while the homelab-agents installation's GraphQL pool was drained (2026-10-10 19:00Z) and REST
+# still served. The refused-write rows pin that gh's REAL error reaches the log (stderr) in place
+# of the old guessed "label missing? token scope?". The `-graphql-drained` rows run the trip under
+# STUB_GH_GRAPHQL=drained (agents/replay/stubs/gh): the label still lands; on the error breaker
+# the porcelain `gh pr comment` (GraphQL, out of this change's scope) is what the drain refuses.
+#
+# The blocks are INVOKED from the shipped script by sentinel, never transcribed; bridge.sh holds
+# only the per-pick loop variables the blocks read (scan names: repo, slug, pick, v_*, rounds_*).
+# WORLDS. worlds/base (constructed — see its provenance.yaml).
+name: reflex-breaker
+mode: table
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:reflex-breaker-error
+  - block:reflex-breaker-arbitrate
+  - file:post.sh
+world: base
+rows: rows.psv
+env:
+  - MC_NOW=2026-10-10T20:00:00Z

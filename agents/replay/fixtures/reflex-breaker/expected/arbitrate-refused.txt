@@ -1,0 +1,7 @@
+CALL gh label create agent/arbitrate --repo teststuffstash/oracle-fleet --color d93f0b --force --description rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/issues/500/labels -f labels[]=agent/arbitrate
+OUT [oracle-fleet] ROUNDS EXHAUSTED on #500 (12 bot verdicts on issue #77 (2 PRs) ≥ cap 12) — agent/arbitrate (coordinator tie-break), NOT dispatching
+OUT [oracle-fleet] WARN: could not add agent/arbitrate to #500 (gh's error above) — dispatch still skipped
+OUT REACHED: end
+ERR gh_label_add: teststuffstash/oracle-fleet#500 +agent/arbitrate FAILED (rc=1): gh: Not Found (HTTP 404)
+RC 0

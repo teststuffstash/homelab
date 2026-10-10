@@ -14,3 +14,8 @@ not-major-lane              | approved     | gh/pr-view-738.json @ patches/label
 no-approval                 | recorded-738 |                                                                                             |                          | refused-no-approval  |
 reviews-unreadable          | approved     |                                                                                             | STUB_GH_pr_view_738=fail | unreadable           |
 end-state-not-proven        | approved     | gh/api-repos-teststuffstash-oracle-fleet-issues-738-labels.json @ patches/verify-still-in-progress.jq |                | not-proven           |
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
+# fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
+# writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
+# the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
+handoff-graphql-drained     | approved     |                                                                                             | STUB_GH_GRAPHQL=drained  | handoff              |

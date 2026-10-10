@@ -1,0 +1,19 @@
+# label-write-lint — no `gh pr|issue edit --add-label/--remove-label` in agents/.
+#
+# CONDITION UNDER REPLAY. The porcelain label flags are GraphQL mutations; the homelab-agents App
+# installation's GraphQL pool drains under load while REST still serves (FU-290; 2026-10-10 19:00Z,
+# homelab#2476 sat armed+DIRTY with no merge-conflict label). Label writes ride REST through
+# gh_label_add / gh_label_rm (agents/machine-comment.sh). Mechanism + the rule:
+# scripts/label-write-lint.py's docstring. The transport itself is replayed under a simulated drain
+# (STUB_GH_GRAPHQL=drained, agents/replay/stubs/gh) by the `*-graphql-drained` rows of updater,
+# reflex-breaker, major-handoff, c4c5-infeasible, ci-red-arbitrate-belt, blocked-on-anchor,
+# review-only-label-combinations and fleet-reader-rekey.
+#
+# mode: suite — a static property of agents/, not an action stream. Registered HERE so the replay
+# run every agents/ PR already executes carries it (no workflow edit), the sigpipe-lint pattern.
+name: label-write-lint
+mode: suite
+entrypoint: agents/replay/fixtures/label-write-lint/suite.sh
+requires:
+  - python3
+  - git

@@ -324,6 +324,7 @@ is stale, so it cannot drift the way the prose register did.
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `item-class/item-class` | actions | - | `agents/coordinator-scan.sh` | - |
 | `janitor-run-cmd-surfaces` | table | - | `agents/coordinator-session.sh` | - |
+| `label-write-lint` | suite | - | `-` | - |
 | `ledger-emitter-rounds/ledger-emitter-rounds` | suite | - | `-` | - |
 | `lens-posture/lens-posture` | suite | - | `-` | - |
 | `live-worker-pod` | table | - | `agents/kube.sh` | - |
@@ -369,6 +370,7 @@ is stale, so it cannot drift the way the prose register did.
 | `queued-classification/ready` | actions | - | `agents/coordinator-scan.sh` | - |
 | `queued-derivation/no-agent-fix` | actions | - | `agents/coordinator-scan.sh` | - |
 | `rail-degrade/rail-degrade` | suite | - | `-` | - |
+| `reflex-breaker` | table | base | `agents/review-reflex.sh` | - |
 | `reflex-tick/proceed` | actions | - | `agents/review-reflex.sh` | - |
 | `reflex-tick/skip` | actions | - | `agents/review-reflex.sh` | - |
 | `renovate-rebase-tick-adapted` | actions | - | `agents/coordinator-scan.sh` | - |

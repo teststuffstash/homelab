@@ -206,6 +206,9 @@
       "sigpipe-lint": [
         "python3 scripts/sigpipe-lint.py \"$@\""
       ],
+      "label-write-lint": [
+        "python3 scripts/label-write-lint.py \"$@\""
+      ],
       "goal-findings-self-test": [
         "bash agents/goal-findings.sh --self-test"
       ],

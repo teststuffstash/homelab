@@ -59,6 +59,9 @@ set -euo pipefail
 
 SLUG="${1:?usage: major-handoff.sh <owner/repo> <pr>}"
 PR="${2:?usage: major-handoff.sh <owner/repo> <pr>}"
+# gh_label_add / gh_label_rm — the ONE label-write transport, REST (FU-290: the porcelain
+# `gh pr edit --add-label` is a GraphQL mutation and fails when the installation's GraphQL pool drains).
+. "$(cd "$(dirname "$0")" && pwd)/machine-comment.sh"
 # >>>REPLAY:major-handoff-seams>>>
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity (same default as review-reflex.sh)
 LANE_LABEL="major"                                      # set by devbox-update.sh — the human-merge lane marker
@@ -158,7 +161,7 @@ if [ "$mode" = arm ]; then
     printf 'major-handoff: END STATE NOT PROVEN — arming auto-merge on %s#%s FAILED (packaging-only chart major); %s left in place\n' "$SLUG" "$PR" "$CLAIM_LABEL"
     exit 5
   fi
-  if ! gh pr edit "$PR" --repo "$SLUG" --remove-label "$CLAIM_LABEL" >/dev/null 2>&1; then
+  if ! gh_label_rm "$SLUG" "$PR" "$CLAIM_LABEL"; then
     printf 'major-handoff: END STATE NOT PROVEN — auto-merge armed on %s#%s but removing %s FAILED\n' "$SLUG" "$PR" "$CLAIM_LABEL"
     exit 5
   fi
@@ -180,11 +183,11 @@ fi
 # A refused ADD stops here with nothing removed — the label-less window is the state the ordering
 # exists to prevent. A refused REMOVE still leaves the handoff label in place (the belt/the human
 # sees both), so it is reported, not rolled back.
-if ! gh pr edit "$PR" --repo "$SLUG" --add-label "$HANDOFF_LABEL" >/dev/null 2>&1; then
+if ! gh_label_add "$SLUG" "$PR" "$HANDOFF_LABEL"; then
   printf 'major-handoff: END STATE NOT PROVEN — adding %s on %s#%s FAILED; %s left in place\n' "$HANDOFF_LABEL" "$SLUG" "$PR" "$CLAIM_LABEL"
   exit 5
 fi
-if ! gh pr edit "$PR" --repo "$SLUG" --remove-label "$CLAIM_LABEL" >/dev/null 2>&1; then
+if ! gh_label_rm "$SLUG" "$PR" "$CLAIM_LABEL"; then
   printf 'major-handoff: END STATE NOT PROVEN — %s added on %s#%s but removing %s FAILED\n' "$HANDOFF_LABEL" "$SLUG" "$PR" "$CLAIM_LABEL"
   exit 5
 fi
