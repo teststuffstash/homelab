@@ -10,6 +10,13 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ OPERATOR ASLEEP — seat autonomous (2026-10-10 ~19:30Z →). RESTORE `ANTHROPIC_UTIL_THRESHOLD_7D` 0.99 → 0.95**
+  (`argocd/resources/openrouter-proxy/deployment.yaml`, raised 0cdb1cdc on operator order to finish S9 PRs with reviews)
+  once the 7d window has reset. Class-7 LOCK DRILL ran: plant #2478 19:08Z → alert 19:19:13Z → chain PR #2480 19:19:54Z
+  (both sentinels GREEN on the baked lock = FU-305 proven) → **`governance-lint` refused the worker-authored lock
+  revert** (defect) → seat admin-merged #2480 19:45Z (38f4cd58). Fix + check (i) re-proposal test + §Last proven in
+  flight. CODEOWNERS un-own `/mgmt/nixos/flake.lock` = OPERATOR READ (patch in the session scratchpad; (j) hardened in
+  #2471) — Monday 03:00Z weekly PR waits on the operator once until it lands.
 - **⚑ S9 (2026-10-10 — seat; operator rulings this session).** #2427 MERGED (baseline fails closed; renovate.md §Scope =
   the platform/stack contract). Rulings: (1) #2014 = shape (a), the stamped version file + build ARGs, detector first;
   (2) ⚠ canary cells → 👤 by ruling (detector+revert substitutes in a one-cluster homelab); (3) class 9 / router:
