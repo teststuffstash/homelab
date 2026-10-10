@@ -161,7 +161,7 @@ v_cilium_backend() {
   cil="$(cilium_backends)" || { cil="0 0 0"; ok=false; }
   # shellcheck disable=SC2086
   msg="$(cilium_verdict "$ok" $cil)"; rc=$?
-  msg="$(printf '%s' "$msg" | head -1 | sed 's/^[[:space:]]*\(⚠\|ok\)[[:space:]]*//')"
+  msg="$(sed -n '1{s/^[[:space:]]*\(⚠\|ok\)[[:space:]]*//;p}' <<<"$msg")"
   case "$rc" in
     0) add cilium-backend ok ok "$msg" ;;
     2) add cilium-backend degraded missing-backend "$msg" ;;
