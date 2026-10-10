@@ -66,6 +66,13 @@
 #                sync, through controlplane-upgrade.sh (etcd quorum, snapshot, cilium gate).
 #   halt         MgmtRolloutDifferential firing (or unreadable — an unreadable gate is a no) → stage
 #                `halted`: no new sync, the pressure taints lifted; it resumes when the alert clears.
+#   verdict      (FU-302) the BOX VERDICT — mgmt-verdict.sh, the box's own Prometheus-free read (Talos
+#                API, kube API via the CP VIP, BGP, the VIPs, node Ready, ArgoCD). Read right before any
+#                sync, switch on or off: DOWN, or a verdict that cannot run, refuses the sync (pending,
+#                retried next tick — nothing touched). Degraded proceeds (the verb's own floors and the
+#                workload hold judge the finer grain). ANDed with the differential, never replacing it:
+#                with Prometheus unreadable the differential still halts. Never on a revert rollout
+#                (the differential's carve-out: the revert is the fix).
 #   hold         (FU-278, operator ruling 2026-09-22) the WORKLOAD read. At rollout start the loop
 #                snapshots every workload's health (`node-maintenance.sh workload-health`: top owner,
 #                class, revision, healthy) into rollout.json; after each window returns and again
@@ -112,6 +119,7 @@
 #            RECONCILE_DIFFERENTIAL_CMD "<cmd>" (prints the firing count; non-zero exit = unreadable)
 #            RECONCILE_KUBECTL "<cmd>" (kubectl for the taints)   RECONCILE_CANARY_TIMEOUT (s)
 #            RECONCILE_WORKLOAD_HEALTH_CMD "<cmd>" (workload-health's JSON lines; non-zero = unreadable)
+#   RECONCILE_VERDICT_CMD "<cmd>" (the box verdict: JSON on stdout, rc 0 ok / 2 degraded / 3 down / other = could not run)
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
 export HOME="${HOME:-/root}"
@@ -431,6 +439,11 @@ differential() {
   jq -e '.status == "success"' >/dev/null 2>&1 <<<"$r" || return 1
   jq -r '.data.result | length' <<<"$r"
 }
+# The box verdict (FU-302): rc 0 ok · 2 degraded · 3 down · anything else = could not run.
+verdict() {
+  if [ -n "${RECONCILE_VERDICT_CMD:-}" ]; then $RECONCILE_VERDICT_CMD; return; fi
+  ( cd "$REPO" && bash mgmt/scripts/mgmt-verdict.sh 2>/dev/null )   # tools from PATH + mgmt_tree_path above (FU-305)
+}
 # ── FU-278: the workload-health hold ────────────────────────────────────────────────────────────
 # The READ is node-maintenance.sh's (generic, no service named); the baseline and the rule are here.
 wh_read() {  # → every workload as ONE JSON array; non-zero = unreadable (never an empty "all fine")
@@ -699,6 +712,20 @@ other="$(jq -r --arg n "$n" '[.[] | select((.node // "") != $n or (.admit_reconc
 if [ -n "$other" ]; then
   set_node "$n" pending "$key" "another window is open: $other"
   save; emit stamp; log "$n: WIP 1 — a declared window is open ($other); retry next tick"; exit 0
+fi
+
+# FU-302 — the box's own verdict, right before the window opens. Not on a revert rollout.
+if ! { [ "$rollout_on" = true ] && [ -n "$RO" ] && [ "$(ro .kind)" = revert ]; }; then
+  vrc=0; vj="$(verdict)" || vrc=$?
+  vwhy="$(jq -r '.reasons | join("; ")' <<<"$vj" 2>/dev/null)"
+  case "$vrc" in
+    0) ;;
+    2) log "$n: box verdict degraded — proceeding (the verb's floors judge): $vwhy" ;;
+    3) set_node "$n" pending "$key" "the box verdict reads the cluster DOWN — refusing: $vwhy"
+       save; emit stamp; log "$n: box verdict DOWN — no sync this tick: $vwhy"; exit 0 ;;
+    *) set_node "$n" pending "$key" "the box verdict could not run (rc $vrc) — refusing (an unreadable gate is a no)"
+       save; emit stamp; log "$n: box verdict unreadable (rc $vrc) — no sync this tick"; exit 0 ;;
+  esac
 fi
 
 # ── 7. the sync: the verb, once ─────────────────────────────────────────────────────────────────
