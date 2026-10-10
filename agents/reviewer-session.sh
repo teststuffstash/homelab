@@ -583,7 +583,7 @@ PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null 
 # resolve|resolves|resolved) followed by #<n>, case-insensitive.
 if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
   _PR_BODY=\$(printf '%s' "\$_PR_META" | jq -r '.body // ""' 2>/dev/null || true)
-  _BODY_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#([0-9]+)\b' | head -1 | grep -oE '[0-9]+' || true)
+  _BODY_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\b(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#([0-9]+)\b' | sed -n 1p | grep -oE '[0-9]+' || true)
   if [ -n "\$_BODY_ISSUE" ]; then
     ISSUE="\$_BODY_ISSUE"
     echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
