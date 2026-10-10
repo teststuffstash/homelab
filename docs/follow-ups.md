@@ -1402,8 +1402,8 @@ the block needs pruning, not more headings.
       `stage.metrics` counter on the kmsg stream → `KernelOopsCaptured` per node, a sender-side metric
       (ADR-118; [`loki-tenancy.md`](loki-tenancy.md) §The belt could not stay in the ruler); synthetic
       `kernel BUG at` acceptance on wk-03. **2026-10-03:** both firings since (wk-04 10-01, nx-01 10-02) were
-      memcg OOM-killer `Call Trace:` dumps, not oopses — whether to subtract `invoked oom-killer` dumps is a
-      small rule call. **Next (install-time, the console half):** nx-01's BMC SOL is `ttyS1`, the metal image
+      memcg OOM-killer `Call Trace:` dumps, not oopses — RESOLVED 2026-10-10 (#2428: the marker is now
+      `RIP: 0010:`, kmsg fixture in `prometheus-rules-lint`; OOMs stay `PodSigkilled`'s). **Next (install-time, the console half):** nx-01's BMC SOL is `ttyS1`, the metal image
       ships `console=tty0` only — add `console=ttyS1,115200` to the image-factory `extraKernelArgs`. Relates FU-155.
 - [ ] **FU-234** — **Ride scratch and the `fast` tier: HOMED 2026-09-24, one loose end left.**
       `fast` had no backing disk from 2026-09-12 (the Optane pair left with `thinkcentre`) until
