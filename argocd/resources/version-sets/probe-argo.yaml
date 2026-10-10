@@ -1,0 +1,92 @@
+# version-set-probe — the drift belt's MEASUREMENT half (homelab#2014; probe.py's docstring has the
+# contract, prometheusrule.yaml the verdicts). Every 6 h:
+#   1. `pins`  reads homelab master (images.env, the version-set stamp, the jail's devbox.lock) and
+#              the live apiserver version, pushes the reference groups, emits the consumer list;
+#   2. `probe` runs ONCE PER CONSUMER IMAGE, inside that image (`image: {{item.image}}` from
+#              agents/images.env — the exact tags the launchers pin), and pushes what it ships.
+# No first-party tag is written here: the pinned images arrive as a runtime parameter, so this file
+# never needs a deploy-pin sweep and never drifts from what the cluster runs.
+#
+# Lives in agent-coordinator (the namespace whose egress policy already admits GitHub + the
+# monitoring namespace, and whose ServiceAccount the loop's workflows run as) but is synced by its
+# own Application (argocd/platform/version-sets.yaml) — read-only probe, no clause file.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: version-set-probe
+  namespace: agent-coordinator
+spec:
+  serviceAccountName: agent-coordinator
+  entrypoint: main
+  activeDeadlineSeconds: 1800
+  ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+  volumes:
+    - name: probe
+      configMap: { name: version-set-probe, defaultMode: 0555 }
+  templates:
+    - name: main
+      steps:
+        - - name: pins
+            template: pins
+        - - name: probe
+            template: probe
+            arguments:
+              parameters:
+                - { name: consumer, value: "{{item.consumer}}" }
+                - { name: image, value: "{{item.image}}" }
+            withParam: "{{steps.pins.outputs.parameters.consumers}}"
+
+    - name: pins
+      container:
+        image: python:3.14-slim@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9
+        command: [python3, /probe/probe.py, pins, --consumers-out, /tmp/consumers.json]
+        env:
+          - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+        volumeMounts:
+          - { name: probe, mountPath: /probe }
+        resources:
+          requests: { cpu: 20m, memory: 64Mi }
+          limits: { memory: 128Mi }
+      outputs:
+        parameters:
+          - name: consumers
+            valueFrom: { path: /tmp/consumers.json }
+
+    # Runs the CONSUMER's image with its entrypoint bypassed (agent-base's would clone a repo);
+    # python3 + claude + kubectl resolve from the image's own PATH (agent-base: the devbox harness
+    # profile, agent-coordinator: Debian + npm global). No secret is mounted into a consumer image.
+    - name: probe
+      inputs:
+        parameters:
+          - name: consumer
+          - name: image
+      container:
+        image: "{{inputs.parameters.image}}"
+        command: [python3, /probe/probe.py, probe, "{{inputs.parameters.consumer}}"]
+        env:
+          - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+          - { name: HOME, value: /tmp }
+        volumeMounts:
+          - { name: probe, mountPath: /probe }
+        resources:
+          requests: { cpu: 50m, memory: 128Mi }
+          limits: { memory: 512Mi }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: version-set-probe
+  namespace: agent-coordinator
+spec:
+  # 4×/day: the weekly devbox-update (Mon 03:00Z) → image rebuilds (Mon 06:00Z) → deploy-pin merges
+  # roll within hours, so a 6 h sample keeps a mid-rollout state from reading as drift for long.
+  schedules: ["23 */6 * * *"]
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  workflowSpec:
+    workflowTemplateRef: { name: version-set-probe }

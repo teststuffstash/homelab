@@ -1,0 +1,81 @@
+# Hand copy of the version-sets group from prometheusrule.yaml.
+# Regenerate after every expr edit with:
+#
+#   yq -o=json '{"groups": [{"name": "version-sets", "rules": [.spec.groups[].rules[]]}]}' argocd/resources/version-sets/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE ABOVE DOES NOT ROUND-TRIP COMMENTS — re-add this header BY HAND after every
+# regenerate. Drift-pinned by scripts/prometheus-rules-lint.sh (expr+for equality per alert name).
+
+groups:
+  - name: version-sets
+    rules:
+      - record: version_set:running_info
+        expr: max by (consumer, tool, version) (version_set_running_info{job="version_set_probe"})
+      - record: version_set:running_info
+        expr: |
+          max by (consumer, tool, version) (
+            label_replace(label_replace(label_replace(
+              (
+                max by (jail_name, otel_scope_version) (max_over_time(timestamp(max by (jail_name, otel_scope_version) ({__name__=~"claude_code_.+", role="jail", otel_scope_version!=""}))[3d:5m]))
+                  == on (jail_name) group_left
+                max by (jail_name) (max_over_time(timestamp(max by (jail_name, otel_scope_version) ({__name__=~"claude_code_.+", role="jail", otel_scope_version!=""}))[3d:5m]))
+              ) * 0 + 1,
+            "consumer", "jail/$1", "jail_name", "(.*)"),
+            "version", "$1", "otel_scope_version", "(.*)"),
+            "tool", "claude-code", "", "")
+          )
+      - alert: VersionSetMembersDisagree
+        expr: count by (tool) (count by (tool, version) (version_set:running_info{tool="claude-code"})) > 1
+        for: 1d
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: 'The {{ $labels.tool }} version set is split: {{ $value }} different versions are running'
+          description: 'Members of the {{ $labels.tool }} set (the worker image, the coordinator+reviewer image, the seat) run {{ $value }} different versions for over a day. Which member runs what: `version_set:running_info{tool="{{ $labels.tool }}"}`. Cluster images re-align when they rebuild from the stamp (homelab#2014, docs/dependency-upgrades.md §Version SETS); a jail/* member is the host-built seat — rebuild claude-jail on the host.'
+      - alert: VersionSetBehindPin
+        expr: |
+          (
+            version_set:running_info
+              unless on (consumer, tool) version_set:running_info{consumer="jail", tool="kubectl"}
+          )
+            unless on (tool, version) version_set_pin_info{job="version_set_probe"}
+            and on (tool) version_set_pin_info{job="version_set_probe"}
+        for: 2d
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: '{{ $labels.consumer }} ships {{ $labels.tool }} {{ $labels.version }}, not the stamped version'
+          description: '{{ $labels.consumer }} runs {{ $labels.tool }} {{ $labels.version }} for over two days while homelab master stamps a different version (`version_set_pin_info{tool="{{ $labels.tool }}"}`, from version-sets/devbox.lock). A cluster consumer has not rebuilt from the stamp (check its build-image run and deploy-pin PR); a jail/* consumer is the host-built seat — rebuild it.'
+      - alert: VersionSetKubectlSkew
+        expr: |
+          abs(
+            max by (consumer) (version_set_kubectl_minor{job="version_set_probe"})
+              - on () group_left max(version_set_fleet_kubernetes_minor{job="version_set_probe"})
+          ) > 1
+        for: 1h
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: '{{ $labels.consumer }} kubectl is {{ $value }} minors away from the fleet'
+          description: The kubectl {{ $labels.consumer }} ships is {{ $value }} minors from the live apiserver — outside the supported ±1 skew. Cluster images take kubectl from the version-set stamp bounded by the fleet minor (homelab#2014); `jail` is homelab devbox.lock's kubectl@latest.
+      - alert: VersionSetProbeStale
+        expr: time() - max by (consumer) (version_set_probe_generated_timestamp_seconds{job="version_set_probe"}) > 86400
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: version-set-probe has not pushed consumer={{ $labels.consumer }} for {{ $value | humanizeDuration }}
+          description: 'The 6-hourly CronWorkflow agent-coordinator/version-set-probe stopped refreshing this group, so the version-set verdicts are stale. `kubectl -n agent-coordinator get wf -l workflows.argoproj.io/cron-workflow=version-set-probe` and the newest pod log. A consumer REMOVED from agents/images.env leaves its group behind (the gateway has no TTL) — delete it: `curl -X DELETE http://prometheus-pushgateway.monitoring.svc:9091/metrics/job/version_set_probe/consumer/{{ $labels.consumer }}`.'
+      - alert: VersionSetProbeAbsent
+        expr: absent(version_set_probe_generated_timestamp_seconds{job="version_set_probe", consumer="pins"})
+        for: 1d
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: version-set-probe has never pushed its pins group
+          description: No `pins` group from agent-coordinator/version-set-probe for a day — the belt is blind. Check that the version-sets ArgoCD Application synced and the CronWorkflow ran.
