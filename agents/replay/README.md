@@ -318,6 +318,7 @@ is stale, so it cannot drift the way the prose register did.
 | `hermeticity-audit` | table | - | `~` | - |
 | `image-volumes/absent` | actions | - | `agents/agent-session.sh` | - |
 | `image-volumes/resolve` | actions | - | `agents/agent-session.sh` | - |
+| `images-env-concurrent-pins` | suite | - | `agents/images.env` | - |
 | `issue-body/issue-body` | suite | - | `-` | - |
 | `issue-derivation` | suite | - | `-` | - |
 | `item-class-batch/item-class-batch` | actions | - | `agents/coordinator-scan.sh` | - |
