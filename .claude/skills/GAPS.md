@@ -29,7 +29,9 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       rule; (b) `meta-state.md` is named only as a staleness risk, never as the input for the
       seat's declared parks/rulings that CORRECTLY-WAITING needs. Fix: classify each item to its
       island first, then read THAT island's slice. PR#2219 carries the per-item slice rule
-      (closes (a)); its island cut is loop-internal — the platform islands and (b) stay open.
+      (closes (a)); 2026-10-10 the island-first rule, the platform-island table (spike §C2)
+      and (b) were added there too — the operator gathers the platform refactor in that PR;
+      close this entry when it merges.
       Sighted 2026-10-10 (operator).
 
 ## handoff
