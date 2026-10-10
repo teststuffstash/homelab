@@ -92,6 +92,10 @@ ENV_TABLE=(
   # tofu/github, plan-only on the box (FU-238): the read-only PAT minted by scripts/github-mgmt-pat-bootstrap.sh
   "GITHUB_TOKEN=github-mgmt-readonly-pat"
   "MGMT_GH_APP_INSTALLATION_ID=github-sentinel-installation-id"
+  # the helm-apply evidence record's home OUTSIDE the cluster (FU-301): the backup Garage LXC's
+  # `helm-evidence` bucket + its own key (ansible/group_vars/garage_backup.yml — one key per bucket)
+  "HELM_EVIDENCE_S3_KEY_ID=helm-evidence-key-id"
+  "HELM_EVIDENCE_S3_SECRET=helm-evidence-secret"
 )
 
 # ── stage ───────────────────────────────────────────────────────────────────────────────────────
