@@ -66,7 +66,12 @@ spec:
         - name: config
           configMap: { name: loki-config }
   volumeClaimTemplates:
-    - metadata:
+    # apiVersion/kind declared: the API server stamps them into each template, and the template
+    # list is atomic under SSA — omitted, ArgoCD's predicted state drops them and the `logging`
+    # app sits OutOfSync forever (dependency-upgrades.md G4).
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]

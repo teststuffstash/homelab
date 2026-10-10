@@ -790,3 +790,7 @@ mechanism lives in the linked places.
    2026-10-10) will sit red on check (h) until 2.0.12+; the lens brief now states the
    **appVersion** delta from the chart index first (`agents/lenses/migration.md` §Charts, operator-direct the
    same evening — the #2238 miss).
+11. **Converge with the router's update path (operator, 2026-10-10)**: the lanes above and the router
+   build (FU-297) become one process. The box is the single applier outside ArgoCD, and the upgrade
+   lease is the shared in-flight record. The direction, its gaps and the open decisions are in
+   [`spikes/update-process-convergence.md`](spikes/update-process-convergence.md).

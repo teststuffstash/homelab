@@ -95,6 +95,8 @@ spec:
       fixer:
         budgetUSD: 5
         resetInterval: weekly
+        rideSize: standard # explicit (server default): a default stamped inside the atomic repos[] list leaves ArgoCD OutOfSync forever (dependency-upgrades.md G4)
+        readOnlyGrants: [] # explicit (server default), same G4 reason
         guardrail: none # paid stack chain — only-free would 403 before spend; budgetUSD bounds it
         docker: false # rides run pytest/devbox over agent-finalize; images build in CI, never in rides
         claudeTier: true # platform-stack posture (subscription cutover 2026-08-07, FU-134)
@@ -137,6 +139,8 @@ spec:
       fixer:
         budgetUSD: 5
         resetInterval: weekly
+        rideSize: standard # explicit (server default): a default stamped inside the atomic repos[] list leaves ArgoCD OutOfSync forever (dependency-upgrades.md G4)
+        readOnlyGrants: [] # explicit (server default), same G4 reason
         # `none`, not only-free: platform IaC is grounding-heavy and the stack chain is
         # deepseek-v4-flash-0731 (~$0.09/M, a PAID model) — only-free would 403 every completion
         # before spend and the ride could never start. budgetUSD is what bounds it.
@@ -189,6 +193,8 @@ spec:
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly
+        rideSize: standard # explicit (server default): a default stamped inside the atomic repos[] list leaves ArgoCD OutOfSync forever (dependency-upgrades.md G4)
+        readOnlyGrants: [] # explicit (server default), same G4 reason
         # `none` since 2026-08-05, matching every other fixer repo (operator direction — the sleep
         # and circles guardrails came off the day before, oracle-fleet's via oracle-iac#271). It was
         # only-free while the stack chain is PAID (deepseek-v4-flash-0731 + mimo/hy3), which after
