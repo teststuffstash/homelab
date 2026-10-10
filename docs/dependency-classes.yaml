@@ -194,6 +194,20 @@ classes:
     revert: {status: ok, text: "`git revert` — no runtime consumer"}
     canary: {status: ok, text: "the PR's own `ci` run exercises the exact dependency that ships"}
 
+  - id: 13
+    name: Management box closure (mgmt/nixos flake)
+    extract: mgmt_flake
+    where: "`mgmt/nixos/flake.lock` — nixpkgs (kernel, systemd, sshd AND the loops' tools: yq, kubectl, jq, curl, openssl, awscli2 — `boxTools` in `mgmt/nixos/hosts/mgmt/default.nix`, FU-305) + disko"
+    manager: "none — Renovate's `nix` manager is disabled with `devbox` in one packageRule (renovate-global.json — the `@latest` reason is devbox's, not a flake lock's); devbox-update re-resolves devbox locks only"
+    proof_head_prefixes: []
+    proof_paths: ["mgmt/nixos/flake.lock"]
+    proposer: {status: gap, text: "NOBODY proposes a flake.lock bump — the pin has not moved since the box was installed (nixpkgs 21a67dc, 2026-09-11). Since 2026-10-10 (FU-305) the gate loops' own tools ride this pin instead of master's devbox.lock, so its age is the box tools' age. Wiring options: a `nix flake update --flake ./mgmt/nixos` step in `devbox-update.yaml`'s homelab leg on its OWN branch (never in the devbox-lock PR — the two revert separately, docs/management-box.md §Two pins), or Renovate's `nix` manager scoped to this one lockfile; both touch `.github/` (operator-direct). Tracked in FU-305"}
+    merge_gate: {status: human, text: "the `/mgmt/` CODEOWNERS row — a closure change is a human read (ADR-129 amended 2026-09-14); a kernel-class bump wants someone near the power button (docs/management-box.md §Rollback layer 2)"}
+    deploy_edge: {status: ok, text: "`mgmt-pull` (hourly) re-activates the closure when `mgmt/nixos/` changed: `nixos-rebuild test` → `mgmt-confirm`'s box-local gate → `boot` (promote) or reboot back (docs/management-box.md §The update loop)"}
+    detector: {status: ok, text: "the `mgmt-confirm` gate (sshd, keys, network, systemd, store — box-local by design) + the loops' own staleness belts (`MgmtApplyLoopStale`, `MgmtLeaseLoopStale`, `MgmtReconcileLoopStale`, `MgmtBeltStale`) + `mgmt-tools-test` in CI (a loop that reaches for a tool the closure lacks fails `mgmt_x` loud)"}
+    revert: {status: ok, text: "`git revert` of the flake.lock commit — the next pull re-activates the previous closure; a never-boots kernel needs hands (§Rollback layer 2)"}
+    canary: {status: human, text: "one box, by the one-cluster canary ruling (operator 2026-10-10): `nixos-rebuild test` + the deadman gate substitute for a canary"}
+
 overrides:
   # keyed by the printed dependency name, or by the FULL row key (`<class>:<name>@<where>`) when the
   # same dependency appears in several places and only one of them differs

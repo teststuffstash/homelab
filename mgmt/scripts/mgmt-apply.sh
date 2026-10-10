@@ -53,6 +53,8 @@ fi
 exec 9>"$LOCK"; flock -w 600 9 || { log "PROBE-FAIL: lock busy for 10 min"; exit 1; }
 
 mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch failed"; exit 1; }
+# tofu/talosctl as master's devbox.lock pins them, read as DATA — devbox never runs here (FU-305)
+mgmt_tree_path "$REPO" || log "WARN a tree-locked tool is unresolvable from $REPO/devbox.lock (why above) — the steps that need it fail with that reason"
 sha="$(git -C "$REPO" rev-parse origin/master)" || exit 1
 deferred=0; deferred_n=0; deferred_unreadable=0   # FU-300: set by the window gate, read by emit_metrics
 trap 'emit_metrics $?' EXIT
@@ -289,7 +291,7 @@ for root in "${apply_roots[@]}"; do
   # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
   stateargs=""; [ -f "$REPO/$rel/backend.tf" ] || stateargs="-state=$MGMT_STATE_DIR/$root/terraform.tfstate"
   # shellcheck disable=SC2086
-  if ( cd "$REPO" && devbox run --quiet -- tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
+  if ( cd "$REPO" && tofu -chdir="$rel" apply -no-color -input=false $stateargs "$out" ) >"$out.apply.log" 2>&1; then
     log "$root: APPLIED (+$a ~$c -$d${osuf})"
     # the providers this apply EXERCISED (their create/update/delete code ran) — see mgmt_unexercised
     if [ -n "$changes" ] && locks="$(mgmt_lock_versions "$REPO/$rel/.terraform.lock.hcl")"; then

@@ -130,6 +130,11 @@ log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 now() { date -u +%s; }
 
 exec 9>"$DIR/.lock"; flock -n 9 || { log "another tick holds the lock — a sync is running"; exit 0; }
+# Tools (FU-305): yq/kubectl/jq from the box's closure on PATH; tofu + talosctl as THIS checkout's
+# devbox.lock pins them (the tree the reconciler acts on), read as data — devbox never runs here.
+# shellcheck source=mgmt-tools.sh
+. "$REPO/mgmt/scripts/mgmt-tools.sh"
+mgmt_tree_path "$REPO" || log "WARN a tree-locked tool is unresolvable from $REPO/devbox.lock (why above) — the steps that need it fail with that reason"
 
 ST='{}'; [ -s "$STATE" ] && ST="$(jq -c . "$STATE" 2>/dev/null)" || true
 [ -n "$ST" ] || { log "FATAL state file $STATE does not parse — refusing to guess (fix or remove it)"; exit 1; }
@@ -160,7 +165,7 @@ park_cause() {
 # could not tell — the same answer (rule #6: never fail into a write).
 node_verify() {  # <node>
   if [ -n "${RECONCILE_VERIFY:-}" ]; then $RECONCILE_VERIFY "$1"; return; fi
-  ( cd "$REPO" && INSTALL_TARGETS="$tf" devbox run --quiet -- bash scripts/node-maintenance.sh verify "$1" )
+  ( cd "$REPO" && INSTALL_TARGETS="$tf" bash scripts/node-maintenance.sh verify "$1" )
 }
 # Close the window the verb left open (its own silences + its `--by node-maintenance.sh` declared
 # record — silence-close touches nothing else, a seat's window least of all). Best effort: a
@@ -168,7 +173,7 @@ node_verify() {  # <node>
 close_verb_window() {  # <node>
   local rc=0
   if [ -n "${RECONCILE_WINDOW_CLOSE:-}" ]; then $RECONCILE_WINDOW_CLOSE "$1" || rc=$?
-  else ( cd "$REPO" && devbox run --quiet -- bash scripts/node-maintenance.sh silence-close "$1" ) || rc=$?; fi
+  else ( cd "$REPO" && bash scripts/node-maintenance.sh silence-close "$1" ) || rc=$?; fi
   if [ "$rc" = 0 ]; then log "$1: closed the verb's own window (silences + its declared record) — the park is the record now"
   else log "$1: closing the verb's own window FAILED (exit $rc) — it blocks new syncs until it expires"; fi
 }
@@ -240,7 +245,7 @@ save
 
 # ── 2. the policy: reconcile:auto nodes (default manual) + the rollout switch ────────────────────
 if [ -n "${RECONCILE_MACHINES_JSON:-}" ]; then mj="$(cat "$RECONCILE_MACHINES_JSON")"
-else mj="$(cd "$REPO" && devbox run --quiet -- yq -o=json machines/machines.yaml 2>/dev/null)"; fi
+else mj="$(cd "$REPO" && mgmt_x yq -o=json machines/machines.yaml 2>/dev/null)"; fi
 auto="$(jq -r '.machines[] | select(.reconcile == "auto") | .name' <<<"$mj" 2>/dev/null)" \
   || { log "FATAL machines/machines.yaml unreadable — no tick"; emit; exit 1; }
 [ "$(jq -r '.reconcile_rollout.enabled // false' <<<"$mj" 2>/dev/null)" = true ] && rollout_on=true
@@ -257,7 +262,7 @@ ST="$(jq -c --argjson keep "$(printf '%s\n' "$auto" | jq -R . | jq -sc 'map(sele
 kube() {
   if [ -n "${RECONCILE_KUBECTL:-}" ]; then $RECONCILE_KUBECTL "$@"; return; fi
   local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
-  ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" "$@" )
+  ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$kc" "$@" )
 }
 # The pressure (FU-273): the listed nodes carry TAINT_KEY=<target>:PreferNoSchedule, every other node
 # loses the key. Idempotent, and only this key is ever read or written. A failure is logged and
@@ -304,9 +309,9 @@ else
   # init EVERY run, lockfile read-only — a no-op while the cached providers match the lock, and
   # what heals them after a provider bump on master (the #2043 class; 2026-09-27 every reconcile
   # tick from 13:17Z died at the `output` below with the checkout initialised but plugins missing)
-  ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 ) \
+  ( cd "$REPO" && tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 ) \
     || { log "FATAL cannot initialise the main root — declaration unreadable"; emit; exit 1; }
-  ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu output -state="$MAIN_STATE" -json node_install_targets ) >"$tf" 2>/dev/null \
+  ( cd "$REPO" && tofu -chdir=tofu output -state="$MAIN_STATE" -json node_install_targets ) >"$tf" 2>/dev/null \
     || { log "FATAL tofu output node_install_targets failed"; emit; exit 1; }
 fi
 jq -e 'type == "object"' "$tf" >/dev/null 2>&1 || { log "FATAL node_install_targets is not a map"; emit; exit 1; }
@@ -388,7 +393,7 @@ RANKED=(); declare -A STOR=()
 load_rank() {
   local out risk node dv solo quorum garage lh
   if [ -n "${RECONCILE_ORDER_CMD:-}" ]; then out="$($RECONCILE_ORDER_CMD)" || return 1
-  else out="$(cd "$REPO" && INSTALL_TARGETS="$tf" ORDER_FORMAT=tsv devbox run --quiet -- bash scripts/node-maintenance.sh order 2>/dev/null)" || return 1; fi
+  else out="$(cd "$REPO" && INSTALL_TARGETS="$tf" ORDER_FORMAT=tsv bash scripts/node-maintenance.sh order 2>/dev/null)" || return 1; fi
   [ -n "$out" ] || return 1
   while IFS=$'\t' read -r risk node dv solo quorum garage lh; do
     [ -n "$node" ] || continue
@@ -416,7 +421,7 @@ evidence() {  # <node> <since>
   fi
   local rc=0
   if [ -n "${RECONCILE_EVIDENCE:-}" ]; then bash "$EVIDENCE" "$1" "$2" || rc=$?
-  else ( cd "$REPO" && devbox run --quiet -- bash "$EVIDENCE" "$1" "$2" ) || rc=$?; fi
+  else ( cd "$REPO" && bash "$EVIDENCE" "$1" "$2" ) || rc=$?; fi
   [ "$rc" = 0 ]
 }
 # How many MgmtRolloutDifferential alerts fire (C2's detector); a non-zero exit = unreadable.
@@ -431,7 +436,7 @@ differential() {
 wh_read() {  # → every workload as ONE JSON array; non-zero = unreadable (never an empty "all fine")
   local out
   if [ -n "${RECONCILE_WORKLOAD_HEALTH_CMD:-}" ]; then out="$($RECONCILE_WORKLOAD_HEALTH_CMD)" || return 1
-  else out="$(cd "$REPO" && devbox run --quiet -- bash scripts/node-maintenance.sh workload-health 2>/dev/null)" || return 1; fi
+  else out="$(cd "$REPO" && bash scripts/node-maintenance.sh workload-health 2>/dev/null)" || return 1; fi
   jq -se 'length > 0 and all(.[]; (.key | type) == "string" and (.healthy | type) == "boolean")' >/dev/null 2>&1 <<<"$out" || return 1
   jq -sc . <<<"$out"
 }
@@ -681,7 +686,7 @@ fi
 if [ -n "${RECONCILE_WINDOWS_JSON:-}" ]; then wj="$(cat "$RECONCILE_WINDOWS_JSON")"
 else
   kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
-  if cm="$(cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json 2>&1)"; then
+  if cm="$(cd "$REPO" && mgmt_x kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json 2>&1)"; then
     wj="$(jq -c --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '[(.data // {}) | to_entries[] | (.value | fromjson?) // empty | select((.until // "") > $now)]' <<<"$cm")" || wj=""
   elif grep -q NotFound <<<"$cm"; then wj='[]'
   else wj=""; fi
@@ -705,9 +710,9 @@ log "$n: SYNC → $key — $verb (its own preflight, floors, drain, install, ver
 rc=0
 if [ "$verb" = controlplane-upgrade.sh ]; then
   if [ -n "${RECONCILE_CP_VERB:-}" ]; then $RECONCILE_CP_VERB "$n" || rc=$?
-  else ( cd "$REPO" && devbox run --quiet -- bash scripts/controlplane-upgrade.sh "$n" ) || rc=$?; fi
+  else ( cd "$REPO" && bash scripts/controlplane-upgrade.sh "$n" ) || rc=$?; fi
 elif [ -n "${RECONCILE_VERB:-}" ]; then $RECONCILE_VERB upgrade "$n" || rc=$?
-else ( cd "$REPO" && devbox run --quiet -- bash scripts/node-maintenance.sh upgrade "$n" ) || rc=$?; fi
+else ( cd "$REPO" && bash scripts/node-maintenance.sh upgrade "$n" ) || rc=$?; fi
 case "$rc" in
   0)
     # Completion is the DIFF, not the verb's word: re-read this node the same way the tick did.

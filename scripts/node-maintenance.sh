@@ -711,9 +711,9 @@ load_targets() {
     # ssh-es to the box with the JAIL's key — from the box itself that key is not there, which is
     # why every box-side upgrade needed a hand-made INSTALL_TARGETS dump until 2026-09-21.
     log "reading the declared install targets from the local main state (on the box)"
-    [ -d "$REPO/tofu/.terraform" ] || ( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null ) \
+    [ -d "$REPO/tofu/.terraform" ] || ( cd "$REPO" && tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null ) \
       || { fail "cannot initialise the main root in $REPO"; return 1; }
-    TARGETS_JSON="$( cd "$REPO" && devbox run --quiet -- tofu -chdir=tofu output \
+    TARGETS_JSON="$( cd "$REPO" && tofu -chdir=tofu output \
       -state="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}" -json node_install_targets )" \
       || { fail "could not read node_install_targets from the local main state"; return 1; }
   else
