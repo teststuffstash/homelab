@@ -572,6 +572,14 @@ _mgmt_plan_digest() {
     | [.address, (.change.actions | join("+")), ((.index // "") | tostring),
        (if ((.change.after_unknown // {}) | if type == "object" then .apply_mode else false end) == true then "(unknown)"
         else ((.change.after // {}).apply_mode // "(unset)") end)] | @tsv' "$json" > "$out.talos"
+  # seventh side channel, LOCAL ONLY: the helm_release changes the plan would make — the helm gate
+  # (mgmt_helm_gate) and the apply bracket (mgmt/scripts/mgmt-helm.sh, FU-301) read it.
+  # "address<TAB>actions<TAB>release<TAB>namespace<TAB>from-version<TAB>to-version" — names and
+  # chart versions only (a version is no secret; values never enter this file).
+  jq -r '.resource_changes[]? | select(.type == "helm_release" and .change.actions != ["no-op"])
+    | [.address, (.change.actions | join("+")),
+       ((.change.after // .change.before // {}).name // ""), ((.change.after // .change.before // {}).namespace // ""),
+       ((.change.before // {}).version // "-"), ((.change.after // {}).version // "-")] | @tsv' "$json" > "$out.helm"
   # fifth side channel: every MANAGED resource type the plan carries (no-ops and deletes included —
   # i.e. every type in state or config) — what mgmt_schema_upgrades compares on a provider-pin head
   jq -r '[.resource_changes[]? | select(.mode == "managed") | .type] | unique[]' "$json" > "$out.types"
@@ -702,7 +710,8 @@ mgmt_plan_default_backfill() {
 mgmt_apply_allowed() {
   local pol="$1" root="$2" addr acts ok pat globs_out
   local -a globs
-  globs_out="$(mgmt_policy_get "$pol" ".apply_addresses.\"$root\"[]?")" || return 1
+  # + the `apply_helm` rows' addresses (FU-301): inside the allowlist, then mgmt_helm_gate + the bracket
+  globs_out="$(mgmt_policy_get "$pol" "(.apply_addresses.\"$root\"[]?), (.apply_helm.\"$root\"[]?.address)")" || return 1
   globs=(); [ -n "$globs_out" ] && mapfile -t globs <<<"$globs_out"
   while IFS=$'\t' read -r addr acts; do
     [ -n "$addr" ] || continue
@@ -749,6 +758,34 @@ mgmt_talos_gate() {
   done <"$out.talos"
   return 0
 }
+
+# mgmt_helm_gate <policy> <root> <plan-out> <changes on stdin> → the PRECONDITION on an unattended
+# `helm_release` apply (FU-301, docs/management-box.md §MB3 "Helm release applies"). One refusal per
+# offending change, "rule<TAB>address<TAB>detail"; empty = the bracket may run.
+#   helm-not-listed  the release is not an `apply_helm.<root>` row (mgmt_apply_allowed already refuses
+#                    it — repeated here so the gate holds on its own)
+#   helm-action      not an in-place `update` — an install or an uninstall of a substrate release is human
+#   helm-not-alone   the plan changes anything besides ONE helm_release: the record must be about one
+#                    release (two changes in one window make both records worthless — the
+#                    helm-release-evidence.sh rule), and a second release would need its own lease
+# rc 1 = the side channel or the policy is unreadable — the caller refuses, never "no helm change".
+mgmt_helm_gate() {
+  local pol="$1" root="$2" out="$3" addr acts n listed changes
+  [ -f "$out.helm" ] || { echo "helm side channel missing ($out.helm)" >&2; return 1; }
+  changes="$(cat)"
+  [ -s "$out.helm" ] || return 0
+  listed="$(mgmt_policy_get "$pol" ".apply_helm.\"$root\"[]?.address")" || return 1
+  n="$(printf '%s\n' "$changes" | grep -c .)"
+  while IFS=$'\t' read -r addr acts _; do
+    [ -n "$addr" ] || continue
+    grep -qxF "$addr" <<<"$listed" || { printf 'helm-not-listed\t%s\tnot an apply_helm.%s row\n' "$addr" "$root"; continue; }
+    [ "$acts" = update ] || { printf 'helm-action\t%s\t%s\n' "$addr" "$acts"; continue; }
+    [ "$n" -le 1 ] || printf 'helm-not-alone\t%s\t%s changed addresses in the plan\n' "$addr" "$n"
+  done <"$out.helm"
+  return 0
+}
+# mgmt_helm_row <policy> <root> <address> → the `apply_helm` row as compact JSON (cap_min, engine_order…)
+mgmt_helm_row() { _yq -o=json -I=0 ".apply_helm.\"$2\"[]? | select(.address == \"$3\")" "$1"; }
 
 # ── the declared-window gate (FU-300) ──────────────────────────────────────────────────────────
 # The apply loop's WIP 1 across windows it did not open — the reconciler's rule (mgmt-reconcile.sh

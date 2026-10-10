@@ -48,6 +48,12 @@
 #   no_policy     the lease's subject is not in policy/mgmt/upgrade-leases.yaml
 #   not_pin_only  the lease's commit changed more than the pin (+ keep/regen) — a human reads it
 #   conflict      `git revert` conflicted — never forced, nothing pushed
+#   forward_only  the lease's subject is a `tofu/helm_release.*` the management box applied itself (FU-301,
+#                 mgmt/scripts/mgmt-helm.sh): the operator's ruling is forward only — NEVER a revert PR. The
+#                 lease outliving its deadline means that apply was not confirmed (a bad verdict the box
+#                 stopped on, or a box that died mid-bracket); it is counted every tick it stands and
+#                 MgmtHelmApplyStopped names it. Not in mgmt_lease_expired (nothing is waiting on a PR).
+#                 A person deletes the lease once the record is read (docs/management-box.md §MB3).
 #   error         push / PR / label / arm failed, or a read failed mid-revert — the pre-click 403
 #                 lands here; the lease stays and the next tick RESUMES where it stopped (a branch
 #                 on origin → the PR step; an open un-armed PR → labels + arm) — never a rebuild,
@@ -73,7 +79,7 @@ LEASE_NS="${MGMT_LEASE_NS:-agent-coordinator}"
 LEASE_LABEL="${MGMT_LEASE_LABEL:-homelab.teststuff.net/upgrade-lease}"
 POLICY_PATH="policy/mgmt/upgrade-leases.yaml"
 BRANCH_PREFIX="revert-chart-lease-"
-OUTCOMES="reverted already no_policy not_pin_only conflict error"
+OUTCOMES="reverted already no_policy not_pin_only conflict error forward_only"
 # The revert commit's identity, passed per call (the mgmt-sentinel merge precedent): the box's root has
 # NO git identity, and `git revert` then stages the revert and dies at the commit — read as `conflict`
 # on every tick (S9 drill 2026-10-10, the first live expiry). Never rely on the host's git config.
@@ -288,6 +294,9 @@ lease_main() {
     exp="$(jq -r .expected_end <<<"$L")"
     if [ -z "$exp" ]; then outcome error "$(jq -r .name <<<"$L")" "lease has no expected-end — unreadable record"; n_exp=$((n_exp+1)); continue; fi
     if [ "$exp" \> "$now" ]; then active=$((active+1)); continue; fi
+    case "$(jq -r .subject <<<"$L")" in
+      tofu/*) outcome forward_only "$(jq -r .name <<<"$L")" "$(jq -r .subject <<<"$L") $(jq -r .from <<<"$L") → $(jq -r .to <<<"$L") unconfirmed since $exp — a box helm apply is forward only (FU-301): no revert; read the record, then delete the lease"; continue ;;
+    esac
     n_exp=$((n_exp+1))
     revert_lease "$L" "$POL"
   done <<<"$leases"

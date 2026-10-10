@@ -182,7 +182,7 @@
         },
         "contents": {
           "level": "write",
-          "why": "renovate branches; devbox-update.sh pushes; runner-image warm-store lockfile fetch (private repos)"
+          "why": "renovate branches; devbox-update.sh pushes; runner-image warm-store lockfile fetch (private repos); version-sets-dispatch.yaml POSTs repository_dispatch to agent-coordinator + agent-runtime (homelab#2014)"
         },
         "pull_requests": {
           "level": "write",
