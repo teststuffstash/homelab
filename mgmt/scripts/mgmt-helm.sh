@@ -74,6 +74,43 @@ _hkilltree() { local c; for c in $(cat /proc/"$1"/task/*/children 2>/dev/null); 
 _hsleep() { sleep "$1"; }
 _hstate() { printf '%s' "${MGMT_STATE_DIR:-/var/lib/mgmt/state}/main/terraform.tfstate"; }
 
+_hdate() { date -u -d "$1" +%Y-%m-%dT%H:%M:%SZ; }   # the test stubs it with its fake clock
+# ── the lease, on the engine moves (operator 2026-10-10: "renew on PROGRESS") ──────────────────────
+# One move budget = HELM_ENGINE_TIMEOUT (the per-volume convergence bound) + HELM_TAIL (the settle + the
+# verdict poll after the last move). The lease RENEWS only when a volume CONVERGED: expected-end = now +
+# one budget, never past the max-end fixed at begin. A hung actor stops renewing → the lease expires
+# within one budget → the lease loop's `forward_only` → MgmtHelmApplyStopped (the dead-man, unchanged).
+HELM_TAIL="${MGMT_HELM_TAIL:-$(( ${MGMT_HELM_SETTLE:-600} + ${MGMT_POSTCHECK_TIMEOUT:-900} + 300 ))}"
+helm_move_budget() { echo $(( HELM_ENGINE_TIMEOUT + HELM_TAIL )); }
+# helm_lease_renew <dir> → patches expected-end = min(now + budget, max-end); rc≠0 logged by the caller
+helm_lease_renew() {
+  local d="$1" lease new max
+  lease="$(cat "$d/lease-name" 2>/dev/null)"; max="$(cat "$d/max-end" 2>/dev/null)"
+  [ -n "$lease" ] && [ -n "$max" ] || return 1
+  new="$(_hdate "+$(helm_move_budget) seconds")"; [ "$new" \> "$max" ] && new="$max"
+  _hk -n "$HELM_LEASE_NS" patch cm "$lease" --type merge -p "{\"data\":{\"expected-end\":\"$new\"}}" >/dev/null 2>&1 || return 1
+  echo "renew $(date -u +%H:%M:%SZ) expected-end $new" >>"$d/lease-renewals.log"
+  # the window rides the same progress: a dead actor's window lapses within one budget too
+  _hwin renew --id "$(cat "$d/window-id")" --minutes "$(( $(helm_move_budget) / 60 + 30 ))" >/dev/null 2>&1 || true
+}
+# helm_lease_check <release> → rc 0 no lease of this release; rc 1 a LIVE one (in flight — the caller
+# does not begin); rc 2 one PAST DUE (expected-end, capped at max-end, in the past): its actor died or
+# stopped without confirming → write the STOP marker (→ MgmtHelmApplyStopped) and name it. Never a quiet
+# refusal on every tick (operator 2026-10-10); a human clears the marker + the lease, once. rc 3 = unreadable.
+helm_lease_check() {
+  local rel="$1" j e m now_
+  j="$(_hk -n "$HELM_LEASE_NS" get cm "upgrade-lease-tofu-helm-$rel" -o json 2>&1)" || { grep -q NotFound <<<"$j" && return 0; return 3; }
+  e="$(jq -r '.data["expected-end"] // ""' <<<"$j")"; m="$(jq -r '.data["max-end"] // ""' <<<"$j")"
+  [ -n "$m" ] && [ "$e" \> "$m" ] && e="$m"
+  now_="$(_hdate now)"
+  [ -n "$e" ] && [ "$e" \> "$now_" ] && return 1
+  printf '%s\t%s\t%s\t%s\t%s\n' "$(jq -r '.data.sha // "?"' <<<"$j")" "$(jq -r '.data.subject // "?"' <<<"$j")" \
+    "$(jq -r '"\(.data.from // "?")→\(.data.to // "?")"' <<<"$j")" "-" \
+    "stale lease upgrade-lease-tofu-helm-$rel by $(jq -r '.data.by // "?"' <<<"$j"), expected-end $e passed with no confirm — its actor died or stopped; read the record, then clear (marker + lease)" >"$ADIR/helm-stopped"
+  log "helm: STOP — lease upgrade-lease-tofu-helm-$rel is past due ($e) with no actor confirming it; $ADIR/helm-stopped written"
+  return 2
+}
+
 # ── pure reads (no cluster; the test feeds them files) ───────────────────────────────────────────
 # helm_drift <tf-name> <state-file> <live-history.json> <live-values.json> → one "helm-live-drift<TAB>…"
 # line per mismatch between what the box last APPLIED (the state file — never the refreshed plan, whose
@@ -204,26 +241,38 @@ lh_fresh_backup() {
 }
 
 # ── 2 begin ──────────────────────────────────────────────────────────────────────────────────────
-# helm_begin <dir> <tf-name> <release> <ns> <sha> <from> <to> <cap-min> → the window, the lease, the
-# baseline, `before` and the timeline. rc≠0 = not begun (the caller does NOT apply; what was opened is
-# closed again here). Writes $dir/{window-id,lease-name,watch.pid}.
+# helm_begin <dir> <tf-name> <release> <ns> <sha> <from> <to> <cap-min> [<mode> <moves>] → the window,
+# the lease, the baseline, `before` and the timeline. rc≠0 = not begun (the caller does NOT apply; what
+# was opened is closed again here). Writes $dir/{window-id,lease-name,watch.pid,meta.tsv}.
+# mode `apply` (default): the chart bracket in the mgmt-apply tick — lease expected-end = max-end = start
+#   + cap_min. mode `engines`: the longhorn engine moves in their own unit (mgmt-helm-engines.sh) — the
+#   lease RENEWS ON PROGRESS (§The lease, below): expected-end = start + one move budget + the tail;
+#   max-end = start + <moves> × the move budget + the tail, fixed up front; the window likewise renews.
 helm_begin() {
-  local d="$1" name="$2" rel="$3" ns="$4" sha="$5" from="$6" to="$7" cap="$8" wid lease now_ end
+  local d="$1" name="$2" rel="$3" ns="$4" sha="$5" from="$6" to="$7" cap="$8" mode="${9:-apply}" moves="${10:-0}" wid lease now_ end maxend wmin by
   mkdir -p "$d"
-  _hwin open --reason "box helm apply: helm_release.$name $from → $to (${sha:0:8}) — mgmt/scripts/mgmt-helm.sh, FU-301" \
-    --alerts "$HELM_DECLARED_ALERTS" --minutes "$(( cap + 30 ))" \
+  if [ "$mode" = engines ]; then
+    end="$(_hdate "+$(helm_move_budget) seconds")"; maxend="$(_hdate "+$(( moves * HELM_ENGINE_TIMEOUT + HELM_TAIL )) seconds")"
+    wmin="$(( $(helm_move_budget) / 60 + 30 ))"; by=mgmt-helm-engines
+  else
+    end="$(_hdate "+${cap} minutes")"; maxend="$end"; wmin="$(( cap + 30 ))"; by=mgmt-apply
+  fi
+  # (3) a lease of this release still standing — the previous actor's: live = in flight (not begun);
+  # past due = its actor died or STOPPED unconfirmed → a STOP, never a silent refusal every tick
+  helm_lease_check "$rel"; case $? in 1) log "helm: lease of $rel still in flight — not begun"; return 1 ;; 2) return 1 ;; esac
+  _hwin open --reason "box helm $mode: helm_release.$name $from → $to (${sha:0:8}) — mgmt/scripts/mgmt-helm.sh, FU-301" \
+    --alerts "$HELM_DECLARED_ALERTS" --minutes "$wmin" \
     --note "forward only: a bad verdict STOPS the box (lease kept, window kept, MgmtHelmApplyStopped) — nothing reverts" \
     >"$d/window-open.log" 2>&1 || { log "helm: window did not open"; return 1; }
   wid="$(sed -n 's/^✓ window \([^ ]*\) open .*/\1/p' "$d/window-open.log" | head -1)"
   [ -n "$wid" ] || { log "helm: window id unreadable"; return 1; }
   printf '%s' "$wid" >"$d/window-id"
   lease="upgrade-lease-tofu-helm-$rel"
-  now_="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; end="$(date -u -d "+${cap} minutes" +%Y-%m-%dT%H:%M:%SZ)"
   jq -n --arg n "$lease" --arg ns "$HELM_LEASE_NS" --arg l "$HELM_LEASE_LABEL" --arg subj "tofu/helm_release.$name" \
-        --arg chart "$rel" --arg sha "$sha" --arg from "$from" --arg to "$to" --arg end "$end" --arg w "$wid" \
+        --arg chart "$rel" --arg sha "$sha" --arg from "$from" --arg to "$to" --arg end "$end" --arg max "$maxend" --arg w "$wid" --arg by "$by" \
     '{apiVersion:"v1", kind:"ConfigMap", metadata:{name:$n, namespace:$ns, labels:{($l):"true"}},
-      data:{subject:$subj, chart:$chart, sha:$sha, from:$from, to:$to, "expected-end":$end, "max-end":$end,
-            by:"mgmt-apply", reason:("box helm apply under window " + $w + " — forward only (FU-301): an expired lease here is a STOP, never a revert")}}' \
+      data:{subject:$subj, chart:$chart, sha:$sha, from:$from, to:$to, "expected-end":$end, "max-end":$max,
+            by:$by, reason:("box helm bracket under window " + $w + " — forward only (FU-301): an expired lease here is a STOP, never a revert")}}' \
     >"$d/lease.json"
   if ! _hk create -f "$d/lease.json" >/dev/null 2>"$d/lease.err"; then
     log "helm: lease $lease not created ($(tail -c 200 "$d/lease.err")) — closing the window, not applying"
@@ -240,8 +289,9 @@ helm_begin() {
   fi
   _hev snapshot >"$d/before.json" 2>"$d/before.err" || log "helm: WARN before snapshot partial ($(tail -c 160 "$d/before.err"))"
   ( _hev watch "$(( HELM_SETTLE + cap * 60 ))" 20 >"$d/timeline.jsonl" 2>/dev/null ) & printf '%s' "$!" >"$d/watch.pid"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$rel" "$ns" "$sha" "$from" "$to" >"$d/meta.tsv"
-  log "helm: begun — window $wid, lease $HELM_LEASE_NS/$lease (expected-end $end), record $d"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$rel" "$ns" "$sha" "$from" "$to" "$mode" >"$d/meta.tsv"
+  printf '%s' "$maxend" >"$d/max-end"
+  log "helm: begun ($mode) — window $wid, lease $HELM_LEASE_NS/$lease (expected-end $end, max-end $maxend), record $d"
 }
 
 # ── 4 engines (longhorn) ─────────────────────────────────────────────────────────────────────────
@@ -277,7 +327,9 @@ helm_lh_engines() {
       # back where it was: on the new image, and healthy again if it was healthy (a detached volume
       # reads `unknown` before and after)
       if [ "$cur" = "$img" ] && { [ "$was" != healthy ] || [ "$rob" = healthy ]; }; then
-        echo "ok   $v ($cls, $st) → $img [$was → $rob] $(( $(_hnow) - t0 ))s${seen:+ (converged by itself after: $seen)}" >>"$d/engines.log"; break
+        echo "ok   $v ($cls, $st) → $img [$was → $rob] $(( $(_hnow) - t0 ))s${seen:+ (converged by itself after: $seen)}" >>"$d/engines.log"
+        helm_lease_renew "$d" || echo "WARN lease renewal after $v failed — the lease may expire (a STOP, the safe side)" >>"$d/engines.log"
+        break
       fi
       [ $(( $(_hnow) - t0 )) -lt "$HELM_ENGINE_TIMEOUT" ] || { echo "FAIL $v ($cls, $st): image=$cur robustness=$rob after ${HELM_ENGINE_TIMEOUT}s" >>"$d/engines.log"; return 2; }
       _hsleep 10
@@ -286,33 +338,38 @@ helm_lh_engines() {
   return 0
 }
 
-# ── resume: a chart already applied, engines left behind (FU-301, operator 2026-10-10) ───────────
-# helm_lh_resume <policy> <root> <sha> → rc 0 nothing to resume / the bracket ran and CONFIRMED; rc 2 it
-# STOPPED; rc 1 a read failed (the caller logs it, the next tick re-reads). Called by mgmt-apply on a tick
-# whose master is already applied. When the longhorn row exists, no STOP marker stands and some v1 volume
-# is not on the manager's `--engine-image`, the box runs the SAME bracket with no apply: window, lease,
-# verdict baseline, before → the ordered engine moves → verdict. This is how a STOP is resumed once a human
-# has read it and cleared it (§Helm release applies "Clearing a stop") — the box itself never retries: a
-# STOP marker keeps this path shut until a person removes it.
-helm_lh_resume() {
-  local pol="$1" root="$2" sha="$3" row cap order ns ver img n d st
+# ── the engine moves: their own unit (FU-301, operator 2026-10-10) ───────────────────────────────
+# helm_lh_drift <policy> <root> → prints "<n>\t<ns>\t<chart-version>\t<order>\t<cap>" when the longhorn row
+# exists and n > 0 v1 volumes are not on the manager's `--engine-image`; nothing when there is nothing to
+# move; rc 1 = a read failed. Cheap enough for every apply tick (two kubectl reads).
+helm_lh_drift() {
+  local pol="$1" root="$2" row ns ver img n t st
   row="$(mgmt_helm_row "$pol" "$root" helm_release.longhorn)" || return 1
   [ -n "$row" ] || return 0
-  [ -s "$ADIR/helm-stopped" ] && return 0
   st="$(_hstate)"
   ns="$(jq -r '.resources[]? | select(.type == "helm_release" and .name == "longhorn") | .instances[0].attributes.namespace // empty' "$st" 2>/dev/null)"
   ver="$(jq -r '.resources[]? | select(.type == "helm_release" and .name == "longhorn") | .instances[0].attributes.metadata.version // empty' "$st" 2>/dev/null)"
   [ -n "$ns" ] && [ -n "$ver" ] || return 1
-  d="$(mktemp -d)"
-  _hk -n "$ns" get ds longhorn-manager -o json >"$d/ds.json" 2>/dev/null && _hk -n "$ns" get volumes.longhorn.io -o json >"$d/v.json" 2>/dev/null \
-    || { rm -rf "$d"; return 1; }
-  img="$(lh_engine_image "$d/ds.json")"; [ -n "$img" ] || { rm -rf "$d"; return 1; }
-  n="$(lh_engine_plan "$d/v.json" "$img" "x" | grep -c .)"; rm -rf "$d"
+  t="$(mktemp -d)"
+  _hk -n "$ns" get ds longhorn-manager -o json >"$t/ds.json" 2>/dev/null && _hk -n "$ns" get volumes.longhorn.io -o json >"$t/v.json" 2>/dev/null \
+    || { rm -rf "$t"; return 1; }
+  img="$(lh_engine_image "$t/ds.json")"; [ -n "$img" ] || { rm -rf "$t"; return 1; }
+  n="$(lh_engine_plan "$t/v.json" "$img" "x" | grep -c .)"; rm -rf "$t"
   [ "$n" -gt 0 ] || return 0
-  cap="$(jq -r '.cap_min // 120' <<<"$row")"; order="$(jq -r '(.engine_order // []) | join(",")' <<<"$row")"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$ns" "$ver" "$(jq -r '(.engine_order // []) | join(",")' <<<"$row")" "$(jq -r '.cap_min // 120' <<<"$row")"
+}
+# helm_lh_engines_run <policy> <root> <sha> → the engine bracket (mgmt-helm-engines.sh's body): rc 0 nothing
+# to do or CONFIRMED; rc 2 STOPPED (marker); rc 1 not begun (a read failed, a window holds, a live lease).
+# A STOP marker keeps it shut until a person removes it — the box never retries on its own.
+helm_lh_engines_run() {
+  local pol="$1" root="$2" sha="$3" dr n ns ver order cap d
+  [ -s "$ADIR/helm-stopped" ] && { log "helm: engines — STOP marker stands; nothing moves until a human clears it"; return 0; }
+  dr="$(helm_lh_drift "$pol" "$root")" || { log "helm: engines — drift read failed"; return 1; }
+  [ -n "$dr" ] || return 0
+  IFS=$'\t' read -r n ns ver order cap <<<"$dr"
   d="$HELM_EVIDENCE_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-box-longhorn-engines-$ver"
-  log "helm: resume — $n v1 volume(s) not on ${img##*:} under longhorn $ver; engine moves only, no apply"
-  helm_begin "$d" longhorn longhorn "$ns" "$sha" "$ver" "$ver" "$cap" || return 1
+  log "helm: engines — $n v1 volume(s) not on the manager's engine under longhorn $ver; moves only, no apply"
+  helm_begin "$d" longhorn longhorn "$ns" "$sha" "$ver" "$ver" "$cap" engines "$n" || { [ -s "$ADIR/helm-stopped" ] && return 2; return 1; }
   helm_end "$d" 0 "$order"
 }
 
@@ -339,9 +396,11 @@ helm_cluster_verdict() {
 # helm_end <dir> <apply-rc> <engine-order csv> → rc 0 confirmed / 2 STOPPED. Never reverts anything.
 helm_end() {
   local d="$1" arc="$2" order="${3:-}" name rel ns sha from to wid lease erc=0 vrc=0 pid
-  IFS=$'\t' read -r name rel ns sha from to <"$d/meta.tsv"
+  local mode
+  IFS=$'\t' read -r name rel ns sha from to mode <"$d/meta.tsv"
   wid="$(cat "$d/window-id")"; lease="$(cat "$d/lease-name")"
-  if [ "$arc" = 0 ] && [ "$rel" = longhorn ]; then helm_lh_engines "$d" "$ns" "$order" || erc=2; fi
+  # the engine moves run in their OWN bracket and unit (mgmt-helm-engines.sh), never inside the apply tick
+  if [ "$arc" = 0 ] && [ "${mode:-apply}" = engines ]; then helm_lh_engines "$d" "$ns" "$order" || erc=2; fi
   _hsleep "$HELM_SETTLE"
   pid="$(cat "$d/watch.pid" 2>/dev/null)"; [ -n "$pid" ] && { _hkilltree "$pid"; wait "$pid" 2>/dev/null; }
   _hev snapshot >"$d/after.json" 2>"$d/after.err" || true

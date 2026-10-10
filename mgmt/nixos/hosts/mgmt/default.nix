@@ -475,6 +475,28 @@ in
   # the push, the one operator click; pre-click every revert lands as outcome `error`, alerted).
   # Shares the sentinel/apply flock; its own clone under /var/lib/mgmt/lease. Offset from the
   # sentinel (*:0/5) and the apply loop (*:2/5) so the three never queue on the lock at once.
+  # The longhorn ENGINE MOVES (FU-301, operator 2026-10-10): their own oneshot, started by the apply tick
+  # (`systemctl start --no-block`) — never a timer — so a multi-hour run never holds the apply loop's tick.
+  #   TimeoutStartSec = infinity — bounded by construction instead: one move ≤ HELM_ENGINE_TIMEOUT (60 min,
+  #     then STOP), a finite move list, and the ⚓ lease renewed only on PROGRESS: a hung run stops renewing,
+  #     its lease expires within one move budget and the lease loop's `forward_only` fires the dead-man
+  #     (MgmtHelmApplyStopped). A wall-clock cap here would only re-create the 2026-10-10 kill.
+  #   restartIfChanged = false — an activation never kills a run mid-move (the drill-2 lesson, #2466).
+  systemd.services.mgmt-helm-engines = {
+    description = "management box: longhorn engine moves under their own window + progress-renewed lease (FU-301)";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = boxTools;
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "infinity";
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = "${repoPath}/mgmt/scripts/mgmt-helm-engines.sh";
+  };
+
   systemd.services.mgmt-lease = {
     description = "management upgrade-lease loop: expired lease → pin-only revert PR";
     after = [ "network-online.target" ];

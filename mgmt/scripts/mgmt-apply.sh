@@ -43,6 +43,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/mgmt-lib.sh"
 # shellcheck source=mgmt-helm.sh
 . "$HERE/mgmt-helm.sh"
+_mgmt_unit_active() { systemctl is-active --quiet "$1"; }        # seams: mgmt-helm-test stubs them
+_mgmt_unit_start()  { systemctl start --no-block "$1"; }
 
 ORG="${ORG:-teststuffstash}"; MGMT_REPO="${MGMT_REPO:-homelab}"
 REPO_URL="${MGMT_REPO_URL:-https://github.com/${ORG}/${MGMT_REPO}.git}"
@@ -144,14 +146,14 @@ if [ -z "$last" ]; then
   log "first run — baseline set at ${sha:0:8}, nothing applied"; stamp "$sha"; exit 0
 fi
 if [ "$sha" = "$last" ]; then
-  # FU-301 — a longhorn chart applied with engines left behind (a cleared STOP): resume the engine moves
-  # under the same bracket (mgmt_helm.sh helm_lh_resume). Windows hold it like any apply; off the lock.
-  if [ "${MGMT_SHADOW:-0}" != 1 ] && POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")"; then
-    if [ -n "$(mgmt_helm_row "$POL" main helm_release.longhorn 2>/dev/null)" ] && [ ! -s "$ADIR/helm-stopped" ]; then
-      if held="$(mgmt_apply_window_gate)"; then
-        flock -u 9; helm_lh_resume "$POL" main "$sha"; hr=$?; flock -w 600 9 || true
-        case $hr in 1) log "helm: resume read failed — next tick re-reads" ;; 2) log "helm: resume STOPPED (marker written)" ;; esac
-      fi
+  # FU-301 — a longhorn chart applied with v1 volumes still on the old engine: START the engine bracket in
+  # its OWN unit (mgmt-helm-engines.service, mgmt/scripts/mgmt-helm-engines.sh) and return — the moves can
+  # take hours and the apply loop stays a 1-minute tick. Never while a STOP marker stands, never twice
+  # (a oneshot that is already active is not restarted). Declared windows gate it inside the unit.
+  if [ "${MGMT_SHADOW:-0}" != 1 ] && [ ! -s "$ADIR/helm-stopped" ] && POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")"; then
+    if dr="$(helm_lh_drift "$POL" main)" && [ -n "$dr" ]; then
+      if _mgmt_unit_active mgmt-helm-engines.service; then log "helm: engines unit running (${dr%%$'\t'*} volume(s) left)"
+      else log "helm: ${dr%%$'\t'*} v1 volume(s) off the manager's engine — starting mgmt-helm-engines.service"; _mgmt_unit_start mgmt-helm-engines.service || log "helm: WARN could not start mgmt-helm-engines.service"; fi
     fi
     rm -f "$POL"
   fi
