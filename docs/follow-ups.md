@@ -532,8 +532,9 @@ the block needs pruning, not more headings.
       revert PR wedged the same way. **Class fix PR#2457 (2026-10-10):** no gate loop runs devbox — tools from the
       box's closure (`boxTools`), tofu/talosctl/helm read from the clone's devbox.lock as data (split:
       docs/management-box.md §Two pins); `mgmt-tools-test` drives the no-plan verdict past a poisoned devbox.
-      LIVE 10-10 16:53Z. **Next:** the in-cluster iac-sentinel (required) still `devbox run`s master — fix it,
-      then the class-7 lock revert drill (dependency-upgrades §Last proven);
+      LIVE 10-10 16:53Z. The in-cluster iac-sentinel (required) runs the runner image's BAKED lock (ruling 10-10:
+      `/opt/baked/homelab`, warm-one bakes only a realised pair — §Two pins). **Next:** the class-7 lock revert
+      drill once the baked image is pinned (dependency-upgrades §Last proven);
       a flake.lock proposer (class 13 ⚠, `.github/` operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
       20:15–21:10Z).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
