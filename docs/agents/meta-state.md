@@ -10,6 +10,14 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ S9 (2026-10-10 — seat; operator rulings this session).** #2427 MERGED (baseline fails closed; renovate.md §Scope =
+  the platform/stack contract). Rulings: (1) #2014 = shape (a), the stamped version file + build ARGs, detector first;
+  (2) ⚠ canary cells → 👤 by ruling (detector+revert substitutes in a one-cluster homelab); (3) class 9 / router:
+  updates converge into ONE process with the router build — an Opus design pass writes the direction (a `docs/spikes/`
+  PR) for a NEXT session. In flight as seat subagents: kps lease revert drill → arm kps majors (step 5); lock revert drill;
+  class-4 + helm install-tool proposers; KernelOops OOM + pr-wait SIGPIPE; hygiene (dashboards, deps-pin-guard,
+  dead update-pr-branch callers) + G4; #2014; canary ruling. Stack-side residue handed to sleep-tracking (redundant
+  rules, frser double-label).
 - **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
   `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
   both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
