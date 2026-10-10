@@ -82,6 +82,20 @@ spec:
             _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
             git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
             cd /work/homelab
+            # THE BAKED LOCK (operator ruling 2026-10-10, FU-305, #1991): the tools come from the
+            # IMAGE's realised homelab devbox.{json,lock} (docker/arc-runner/warm-one.sh), never
+            # master's — one unrealisable lock entry fails `devbox run` wholesale, so a bad lock on
+            # master would stop this required context from posting on the very PR that reverts it.
+            # A lock that fails to bake never ships, so this always realises; the rules, engines and
+            # policy still come from master. Accepted lag: tool versions move at the runner-image
+            # pin, not at the lock merge (`sentinel-smoke` in ci proves the PR's lock beforehand).
+            # An image older than the bake has no /opt/baked — the old behaviour, said out loud.
+            if [ -f /opt/baked/homelab/devbox.lock ] && [ -f /opt/baked/homelab/devbox.json ]; then
+              cp /opt/baked/homelab/devbox.json /opt/baked/homelab/devbox.lock .
+              echo "toolchain: baked lock ($(sha256sum devbox.lock | cut -c1-12))"
+            else
+              echo "toolchain: MASTER lock — this image predates /opt/baked (FU-305)"
+            fi
             exec devbox run -- bash scripts/iac-sentinel.sh
         env:
           - { name: HOME, value: "/home/runner" }
