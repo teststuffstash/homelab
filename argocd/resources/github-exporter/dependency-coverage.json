@@ -41,8 +41,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-09T20:07:36Z",
-      "last_proven_pr": 2422,
+      "last_proven": "2026-10-10T14:46:19Z",
+      "last_proven_pr": 2448,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 4
@@ -190,6 +190,24 @@
       "name": "JS CI tooling (Deno)",
       "owner_may_leave": false,
       "rows": 2
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "proposer"
+      ],
+      "gap_rows": 2,
+      "human_cells": [
+        "canary",
+        "merge_gate"
+      ],
+      "human_rows": 0,
+      "id": 13,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Management box closure (mgmt/nixos flake)",
+      "owner_may_leave": false,
+      "rows": 2
     }
   ],
   "generated_by": "scripts/dependency-coverage.py (devbox run dependency-coverage) — never hand-edit",
@@ -212,9 +230,9 @@
         "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "3": {
-        "merged_at": "2026-10-09T20:07:36Z",
-        "pr": 2422,
-        "title": "deploy: agent-base 2026.10.9-g4bd7c9b9b57d"
+        "merged_at": "2026-10-10T14:46:19Z",
+        "pr": 2448,
+        "title": "deploy: agent-base 2026.10.10-gecc27ef3a872"
       },
       "5": {
         "merged_at": "2026-10-10T11:52:34Z",
@@ -359,14 +377,14 @@
         "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
-        "merged_at": "2026-10-09T20:07:36Z",
-        "pr": 2422,
-        "title": "deploy: agent-base 2026.10.9-g4bd7c9b9b57d"
+        "merged_at": "2026-10-10T14:46:19Z",
+        "pr": 2448,
+        "title": "deploy: agent-base 2026.10.10-gecc27ef3a872"
       },
       "3:agent-coordinator": {
-        "merged_at": "2026-10-05T14:14:12Z",
-        "pr": 2265,
-        "title": "deploy: agent-coordinator 2026.10.5-gca94f4a2dd99"
+        "merged_at": "2026-10-10T14:21:28Z",
+        "pr": 2443,
+        "title": "deploy: agent-coordinator 2026.10.10-g56f8197a03de"
       },
       "3:homelab/arc-runner": {
         "merged_at": "2026-10-07T20:56:11Z",
@@ -744,7 +762,7 @@
       "key": "1:kube-prometheus-stack",
       "last_proven": "2026-10-09T22:20:55Z",
       "name": "kube-prometheus-stack",
-      "version": "91.9.0",
+      "version": "91.8.2",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -984,9 +1002,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-base",
-      "last_proven": "2026-10-09T20:07:36Z",
+      "last_proven": "2026-10-10T14:46:19Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.9-g4bd7c9b9b57d",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.10-gecc27ef3a872",
       "where": [
         "agents/images.env"
       ]
@@ -997,9 +1015,9 @@
         "deploy_edge"
       ],
       "key": "3:agent-coordinator",
-      "last_proven": "2026-10-05T14:14:12Z",
+      "last_proven": "2026-10-10T14:21:28Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.5-gca94f4a2dd99; 32 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.10-g56f8197a03de; 32 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1873,7 +1891,8 @@
         ".github/workflows/devbox-update.yaml",
         ".github/workflows/renovate-approve.reusable.yml",
         ".github/workflows/renovate.yaml",
-        ".github/workflows/runner-image.yaml"
+        ".github/workflows/runner-image.yaml",
+        ".github/workflows/version-sets-dispatch.yaml"
       ]
     },
     {
@@ -1965,6 +1984,32 @@
       "version": "11.17.2",
       "where": [
         "scripts/mermaid-lint/deno.json"
+      ]
+    },
+    {
+      "class": 13,
+      "gap_columns": [
+        "proposer"
+      ],
+      "key": "13:nix-community/disko",
+      "last_proven": null,
+      "name": "nix-community/disko",
+      "version": "ff8702b4de27",
+      "where": [
+        "mgmt/nixos/flake.lock"
+      ]
+    },
+    {
+      "class": 13,
+      "gap_columns": [
+        "proposer"
+      ],
+      "key": "13:NixOS/nixpkgs",
+      "last_proven": null,
+      "name": "NixOS/nixpkgs",
+      "version": "nixos-26.05@21a67dc47014",
+      "where": [
+        "mgmt/nixos/flake.lock"
       ]
     }
   ]

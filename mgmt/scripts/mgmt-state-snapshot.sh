@@ -51,7 +51,10 @@ BUCKET="${TOFU_STATE_BUCKET:-homelab-tofu-state}"
 ITER=600000
 
 log() { printf '%s snapshot: %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-tool() { ( cd "$REPO" && devbox run --quiet -- "$@" ); }
+# openssl/jq/aws from the box's closure on PATH, never master's devbox (FU-305 — mgmt-tools.sh)
+# shellcheck source=mgmt-tools.sh
+. "$REPO/mgmt/scripts/mgmt-tools.sh"
+tool() { ( cd "$REPO" && mgmt_x "$@" ); }
 
 LOCK_HELD=0
 [ "${1:-}" = "--lock-held" ] && { LOCK_HELD=1; shift; }
@@ -88,7 +91,7 @@ snap_one() {
     cp "$src" "$tmpdir/state"
   else
     ( set +u; cd "$REPO" && TOFU_STATE_ROOT_DIR="$REPO/tofu/$root" . scripts/tofu-state-env.sh >/dev/null 2>&1
-      devbox run --quiet -- aws s3 cp --only-show-errors "s3://$BUCKET/$root/terraform.tfstate" "$tmpdir/state" ) \
+      mgmt_x aws s3 cp --only-show-errors "s3://$BUCKET/$root/terraform.tfstate" "$tmpdir/state" ) \
       || { log "$root: could not fetch s3://$BUCKET/$root/terraform.tfstate — skipped"; return 0; }
   fi
   serial="$(field .serial "$tmpdir/state")"; lineage="$(field .lineage "$tmpdir/state")"

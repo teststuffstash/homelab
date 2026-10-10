@@ -527,14 +527,14 @@ the block needs pruning, not more headings.
       below GitHub's 2.329.0 registration floor until a recreate) — Renovate-track it (every bump = a VM replace
       the box must then run) or install `latest` at boot (the runner self-updates anyway).
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
-      2026-10-07 20:15Z → ~21:10Z: #2362 moved Python 3.12.8→3.14.7; `devbox.json` `VENV_DIR` =
-      `$HOME/.cache/devbox-venv/homelab` is ONE venv per HOST, and `/var/lib/homelab` was still on the old lock →
-      devbox's "overwrite it? (y/n)" exits 1 non-interactive → `mgmt-sentinel` posted no status (every PR BLOCKED),
-      `mgmt-apply`/`mgmt-lease` PROBE-FAILed; the same prompt hit `pr-wait` in the oracle jail's clone (handoff
-      10-08). Cleared once mgmt-pull moved the checkout to the new lock (+ stale venv moved aside). RECURS every
-      Python bump. **Next:** `MgmtSentinelLoopStale` belt beside `MgmtApplyLoopStale` (+ replay 20:15–21:10Z), then
-      a per-checkout venv (`docs/patterns/python-stack.md` rule 5 — already the CI rule), and surface devbox's stderr
-      in mgmt-lib's yq calls (`mgmt/scripts/mgmt-sentinel.sh:238`/`:246` log only "policy unreadable").
+      2026-10-07: #2362's Python bump hit devbox's venv "overwrite? (y/n)" → every box `devbox run` exited 1 → no
+      `management-sentinel` verdict (every PR BLOCKED), apply/lease PROBE-FAILed; the 10-10 lock drill found the
+      revert PR wedged the same way. **Class fix PR#2457 (2026-10-10):** no gate loop runs devbox — tools from the
+      box's closure (`boxTools`), tofu/talosctl/helm read from the clone's devbox.lock as data (split:
+      docs/management-box.md §Two pins); `mgmt-tools-test` drives the no-plan verdict past a poisoned devbox.
+      **Next:** activate + live proof, then the class-7 lock revert drill (dependency-upgrades §Next steps 10(b));
+      a flake.lock proposer (class 13 ⚠, `.github/` operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
+      20:15–21:10Z); the in-cluster iac-sentinel still `devbox run`s master (the box's tick is its fallback).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran
