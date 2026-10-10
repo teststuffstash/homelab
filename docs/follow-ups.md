@@ -546,7 +546,9 @@ the block needs pruning, not more headings.
       default-branch leg; fixed + detected by #2366 (`DispatchClauseStorm`). **Next:** re-read the hourly
       troughs after one clean day; only then decide whether the per-consumer meter is still needed.
       **2026-10-10:** the coordinator-git CORE series was blind too (REST `/rate_limit` misreports core
-      the same way) until #2442 read it from a counted request's headers.
+      the same way) until #2442 read it from a counted request's headers. **2026-10-10 19:00Z: drained
+      again** (installation 142724430) during a ~20-PR seat day — the updater's GraphQL label write failed and
+      #2476 sat armed+DIRTY unlabelled (labeler moving to REST, seat PR in flight).
 - [ ] **FU-311** — **Every jail shares ONE user-PAT rate pool.** All mono/stack jail PATs (and their
       subagents, and `exporter-pat`) are the operator's identity, and GitHub counts the primary limit per
       USER: one 5000/h core pool (two PATs read one counter, 2026-10-10). A seat subagent's hand-rolled
