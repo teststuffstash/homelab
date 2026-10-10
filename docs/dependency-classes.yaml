@@ -37,7 +37,7 @@ classes:
     deploy_edge: {status: ok, text: "ArgoCD `syncPolicy.automated` — a merge IS the deploy (27 of 34 Applications auto-sync)"}
     detector: {status: ok, text: "`ArgoCDAppDegraded` (15 m) / `ArgoCDAppSyncFailed` (10 m) since 2026-10-04 (argocd/resources/argocd-metrics/, `triage: dig` → responder) + the generic rollout belt; ArgoCD health stays shallow (the meta-11 schema-skew outage stayed green on a tcpSocket probe) — the deep contract probe is FU-102"}
     revert: {status: human, text: "a human `git revert` — the FU-044 deterministic revert is scoped to first-party image pins; extending it to charts REJECTED (operator 2026-08-04, IAC-G09: CRD/schema downgrades are not reversible by a revert)"}
-    canary: {status: gap, text: "none — a chart bump lands on the only instance; the ARC controller/runners move in ONE grouped Renovate PR (three files, one version — `groupName: arc`), which is lockstep, not a canary"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — arc-runners-large before arc-runners, if the grouped ARC bump ever splits"}
 
   - id: 2
     name: In-cluster images, GitOps
@@ -51,7 +51,7 @@ classes:
     deploy_edge: {status: ok, text: "ArgoCD auto-sync of the manifest — path-scoped per resource dir"}
     detector: {status: ok, text: "`ArgoCDAppDegraded` / `ArgoCDAppSyncFailed` since 2026-10-04 + the generic rollout belt + the per-service alert belts where they exist (11 of 16 rows have one); no post-deploy contract probe (FU-102)"}
     revert: {status: human, text: "a human `git revert`; the FU-044 chain's pin-only predicate covers FIRST-PARTY pins only (class 3)"}
-    canary: {status: gap, text: "none — single replica for most of these"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — the one class-2 dependency that already runs several (the `registry` mirrors: mirror-docker-io before mirror-ghcr/mirror-mcr)"}
 
   - id: 3
     name: First-party images
@@ -65,7 +65,7 @@ classes:
     deploy_edge: {status: ok, text: "ArgoCD auto-sync; the deploy-pin sweep bumps every mirrored literal by git-grep (images.env header) — a ref with a DIFFERENT tag than images.env is one the sweep missed (⚠ on the row)"}
     detector: {status: ok, text: "`ArgoCDAppDegraded` since 2026-10-04; ArgoCD Degraded → `/deploy-degraded` was wired 2026-08-04 but its first hop was DEAD until #2217 (recipient `webhook:agent-loop`, 150 failed deliveries) — never fired by a real Degraded app for that reason; `ArgoCDNotificationDeliveryFailing` now watches the hop; a bare `:latest`-equivalent ref is still invisible"}
     revert: {status: ok, text: "the cluster pin IS the revert (operator 2026-09-27): `deploy-revert-argo.yaml`'s pin-only predicate opens the revert PR; the FU-1990 sibling chain proved the shape end to end in the 2026-09-27 drill (agent-coordinator#20 → #21, ~3.5 min)"}
-    canary: {status: gap, text: "none — the pin rolls every consumer at once (the coordinator, the reviewer, the sentinel, the transcript viewer)"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — the transcript viewer (read-only, lowest blast of the four consumers) before the coordinator/reviewer/sentinel"}
 
   - id: 4
     name: Helm charts, tofu-managed
@@ -79,7 +79,7 @@ classes:
     deploy_edge: {status: human, text: "the management box applies only the allowlisted residue; a `helm_release` change refuses to a human `devbox run mgmt-tf -- apply` (docs/management-box.md §The test surface)"}
     detector: {status: ok, text: "`MgmtApplyResidueStanding` — merged-but-unapplied residue alerts after 24 h (FU-252); plan-on-PR shows the diff before merge"}
     revert: {status: human, text: "`git revert` + a human apply; ArgoCD/Longhorn downgrades carry CRD/schema risk (IAC-G09)"}
-    canary: {status: gap, text: "none — one release per chart"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — `argocd-apps` before `argo-cd`/`longhorn` (same least-valuable-first logic as the migration order in §\"Order, least-valuable first\")"}
 
   - id: 5
     name: Tofu providers
@@ -93,7 +93,7 @@ classes:
     deploy_edge: {status: ok, text: "an empty plan IS the deploy: the box's next plan/apply runs the new provider binary (registry-signed, hash-verified by tofu); nothing to apply by construction"}
     detector: {status: ok, text: "the sentinel's plan-on-PR (red = `provider bump changes the plan`, by design) + `MgmtApplyResidueStanding` on main; post-merge, `MgmtApplyErroredOnNewProvider` names the provider when the first CHANGING apply under a new version errors (2026-10-04, docs/management-box.md §MB3); the external roots plan read-only on the box (FU-237/FU-238)"}
     revert: {status: ok, text: "`git revert` of the lockfile + the same empty plan; lockfile-only BY GATE since 2026-10-04 — a pin that would raise a stored schema/identity version never merges on the sentinel, so the downgrade reads the state back (docs/management-box.md §MB3); the `tofu-provider-revert` chain (2026-10-04, agents/coordinator/deploy-revert-argo.yaml) reverts the introducing pin on `MgmtApplyErroredOnNewProvider` — DRILLED 2026-10-04 (synthetic alert → #2209 merged + applied, no human; §Last proven); provider MAJORS armed 2026-10-04 behind this chain (ADR-141 amended)"}
-    canary: {status: gap, text: "none — `tofu/provisioning` is the low-blast root a provider bump could land on first, but nothing orders the roots"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — `tofu/provisioning` before `tofu/` (main), the low-blast root a provider bump could land on first"}
 
   - id: 6
     name: Cluster substrate
@@ -122,7 +122,7 @@ classes:
     deploy_edge: {status: ok, text: "self-deploying for CI and the jail (`devbox run` reads the lock); the agent-base image rebuilds weekly (class 3 carries the pin)"}
     detector: {status: gap, text: "CI on the PR is the only check; nothing compares the jail's, the runner's and the worker image's resolved versions (the #2014 version-set gap; FU-240 for the box↔jail devbox skew)"}
     revert: {status: ok, text: "`git revert` of the lock — nothing else references the store paths; mechanised 2026-10-07 as the `workflow-pin-revert` lock shape (`revert-lock-<sha8>`, `reverted-locks:` memory → pin-only-lint check (i)), drill pending (§Next steps 10)"}
-    canary: {status: gap, text: "none — every repo moves in the same weekly pass by design (alignment over caution)"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here — deliberately so (alignment over caution is the design, not a gap); natural first target if that ever splits — `oracle-iac`/`sleep-iac` (deploy-config repos, no live service of their own) before the app repos they deploy"}
 
   - id: 8
     name: GitHub Actions
@@ -150,7 +150,7 @@ classes:
     deploy_edge: {status: gap, text: "NONE — a merge deploys nothing until a human runs `scripts/opnsense-playbook.sh`; the FU-097 gap, sharpest here (this is the router)"}
     detector: {status: gap, text: "no nightly `--check` diff; a merged OPNsense change sits until a human remembers"}
     revert: {status: human, text: "`git revert` + a human playbook run; an in-cluster applier would sit inside its own blast radius (the dependency-cone rule)"}
-    canary: {status: gap, text: "none — one router; Matchbox (near-zero cone) is the natural first target"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — Matchbox (near-zero cone) before OPNsense"}
 
   - id: 10
     name: arc-runner image inputs
@@ -164,7 +164,7 @@ classes:
     deploy_edge: {status: ok, text: "`runner-image.yaml` builds on the merge and opens the `runner-image-pin` PR (class 3 lands it)"}
     detector: {status: ok, text: "the image build in `ci` (push: false) fails the PR; `GithubWorkflowRunFailed` covers the master build"}
     revert: {status: ok, text: "the cluster pin is the revert (the previous `arc-runner:` tag stays pullable); the FU-1990 chain covers the workflow half"}
-    canary: {status: gap, text: "none — the pin PR rolls both scale sets (arc-runners + arc-runners-large) together"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — arc-runners-large before arc-runners, if the pin PR ever splits the two scale sets"}
 
   - id: 11
     name: Harness + tool versions baked into first-party images
@@ -178,7 +178,7 @@ classes:
     deploy_edge: {status: ok, text: "a rebuild is a new build-date tag → deploy-pin rolls it (weekly `schedule` since 2026-09-27)"}
     detector: {status: gap, text: "nothing checks the three claude-code versions agree, or kubectl's skew against the fleet minor (#2014)"}
     revert: {status: ok, text: "the cluster pin is the revert (operator 2026-09-27)"}
-    canary: {status: gap, text: "none"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — claude-jail (the dev jail image, not a live cluster workload) before agent-runtime/agent-coordinator"}
 
   - id: 12
     name: JS CI tooling (Deno)
