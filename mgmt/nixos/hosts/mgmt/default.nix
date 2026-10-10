@@ -53,6 +53,21 @@ let
   # BIOS-boot partition IS what that legacy entry boots, and it needs no NVRAM at all. Nothing is
   # lost: boot counting does not exist in this pin either way (docs/management-box.md §Rollback).
   bootMode = "bios";
+
+  # The loops' TOOLS (FU-305, operator order 2026-10-10): the gate's own machinery never depends on
+  # the tree it judges, nor on master's devbox toolchain — a bad devbox.lock on master wedged the
+  # sentinel silent (2026-10-07), so the revert PR could never get its required check. These come
+  # from THIS closure, pinned by mgmt/nixos/flake.lock, on every loop unit's `path`. The three
+  # tools whose version is part of the change a loop acts on — tofu, talosctl, helm — are read
+  # from the checkout's devbox.lock as DATA and realised by nix (mgmt/scripts/mgmt-tools.sh,
+  # mgmt_tree_path); devbox itself never runs in a gate loop. A bump of this list's versions is a
+  # flake.lock bump (docs/dependency-classes.yaml, the mgmt-flake class).
+  boxTools = with pkgs; [
+    bash coreutils findutils util-linux gnugrep gawk gnused
+    git nix curl jq openssl openssh
+    yq-go kubectl awscli2
+    iproute2 iputils dnsutils netcat-gnu
+  ];
 in
 {
   # ── identity + network ────────────────────────────────────────────────────────────────────────
@@ -172,17 +187,15 @@ in
     '';
   }];
 
-  # ── the toolchain is NOT here ─────────────────────────────────────────────────────────────────
-  # tofu/talosctl/ansible come from the repo's devbox.lock (the same pin the jail uses), via
-  # `devbox run` inside the checkout below. Only what is needed to GET there lives in the closure.
-  environment.systemPackages = with pkgs; [
-    git
+  # ── the toolchain: boxTools above for the loops; devbox only for the report-only/attended rest ──
+  # devbox stays installed for what is NOT gate machinery: the belt's OPNsense --check
+  # (scripts/opnsense-playbook.sh), the weekly rebuild drill, an operator's shell. MGMT_BOX makes
+  # mgmt-tools.sh refuse a devbox fallback in an ssh session too (mgmt-tf's remote half).
+  environment.systemPackages = boxTools ++ (with pkgs; [
     devbox
-    curl
-    jq
-    openssl
     rsync
-  ];
+  ]);
+  environment.variables.MGMT_BOX = "1";
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
     trusted-users = [ "root" ];
@@ -330,11 +343,12 @@ in
     description = "drift belt: tofu plan + talosctl skew + opnsense --check (report only)";
     after = [ "mgmt-checkout.service" ];
     wants = [ "mgmt-checkout.service" ];
-    path = with pkgs; [ bash git devbox nix curl jq coreutils gnugrep gawk gnused ]; # same reason as the gate
+    # devbox: check_ansible's opnsense-playbook.sh only — every other belt check runs on boxTools
+    path = boxTools ++ [ pkgs.devbox ];
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "30m";
-      Environment = [ "HOME=/root" "MODE=belt" ];
+      Environment = [ "HOME=/root" "MODE=belt" "MGMT_BOX=1" ];
       # The credentials. NOT in this closure (public repo, world-readable store): a root-only file
       # placed by mgmt/scripts/mgmt-provision-secrets.sh (--extra-files at install, --push to rotate),
       # read at each start so a rotation needs no restart. The leading "-" means a missing file
@@ -370,11 +384,11 @@ in
     description = "tofu state snapshots: dated, encrypted, round-trip verified (every root)";
     after = [ "mgmt-checkout.service" "network-online.target" ];
     wants = [ "mgmt-checkout.service" ];
-    path = with pkgs; [ bash git devbox nix coreutils gnugrep gnused findutils util-linux ];
+    path = boxTools;
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "20m";
-      Environment = [ "HOME=/root" ];
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ]; # TOFU_STATE_PASSPHRASE + the Garage state key
     };
     script = "${repoPath}/mgmt/scripts/mgmt-state-snapshot.sh";
@@ -398,11 +412,11 @@ in
     description = "management sentinel: plan open PR heads behind the input allowlist, verdict-only back";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    path = boxTools;
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "40m";
-      Environment = [ "HOME=/root" ];
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/mgmt/scripts/mgmt-sentinel.sh";
@@ -425,7 +439,12 @@ in
     description = "management apply loop: master → plan → apply-allowlist → apply";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    path = boxTools;
+    # restartIfChanged = false — the reconciler's/drill's rule, for the same reason: a mgmt-pull activation
+    # that changes this unit must never kill a running tick. FU-301 drill 2 (2026-10-10): a closure
+    # activation at 16:53:21Z SIGTERMed the tick 10 min after it applied argo-cd 9.5.22, mid-settle — no
+    # verdict, the lease left to expire, the window left open. The timer's next tick picks up the new unit.
+    restartIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
       # 5h, was 40m: a box helm apply (FU-301, mgmt/scripts/mgmt-helm.sh) runs its whole bracket inside
@@ -433,7 +452,7 @@ in
       # apply (argo-cd's helm timeout 15m), one-at-a-time engine moves (≤15m each, stops at the first
       # failure) and the settle. Plain ticks still take a minute; the timer never stacks a oneshot.
       TimeoutStartSec = "5h";
-      Environment = [ "HOME=/root" ];
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/mgmt/scripts/mgmt-apply.sh";
@@ -460,11 +479,11 @@ in
     description = "management upgrade-lease loop: expired lease → pin-only revert PR";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
+    path = boxTools;
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "20m";
-      Environment = [ "HOME=/root" ];
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/mgmt/scripts/mgmt-lease.sh";
@@ -493,12 +512,12 @@ in
     description = "node reconciler: reconcile:auto nodes to their declared install (report + one attempt)";
     after = [ "mgmt-checkout.service" "network-online.target" ];
     wants = [ "mgmt-checkout.service" "network-online.target" ];
-    path = with pkgs; [ bash git devbox nix curl jq openssh util-linux coreutils findutils gnugrep gawk gnused ];
+    path = boxTools;
     restartIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "5h";
-      Environment = [ "HOME=/root" ];
+      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/mgmt/scripts/mgmt-reconcile.sh";

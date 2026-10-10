@@ -24,7 +24,7 @@ spec:
     # and semaphore slots no longer leaked when the limit fetch fails on release (#16471 —
     # FU-198). Both were 4.0-branch cherry-picks (#16408/#16405) that landed natively upstream
     # ahead of v4.1.0-rc1, so v4.1.4 carries them directly — retained, not reverted.
-    targetRevision: 2.0.9
+    targetRevision: 2.0.11
     helm:
       valuesObject:
         crds:

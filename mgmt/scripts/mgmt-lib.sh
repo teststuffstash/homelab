@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # mgmt-lib — shared helpers for the management box's two loops (ADR-131, docs/management-box.md
 # §MB3): mgmt/scripts/mgmt-sentinel.sh (plan-on-PR) and mgmt/scripts/mgmt-apply.sh (master → apply).
-# SOURCED, never run. Tools: bash git curl jq openssl coreutils gnugrep gawk gnused + `devbox run`
-# (tofu, yq) — resolved from $REPO, a checkout of this repo. No `gh`: the box mints its own App
-# token (mgmt_gh_token) — gh is not in the closure and the App IS the identity (ADR-130).
+# SOURCED, never run. Tools: bash git curl jq openssl coreutils gnugrep gawk gnused yq — the box's OWN
+# closure (mgmt/nixos) — + tofu, read from $REPO's devbox.lock as data (mgmt-tools.sh: never `devbox
+# run`, FU-305). No `gh`: the box mints its own App token (mgmt_gh_token) — gh is not in the closure
+# and the App IS the identity (ADR-130).
 #
 # Env the callers set (from /var/lib/mgmt/sentinel.env — mgmt/scripts/mgmt-provision-secrets.sh):
 #   MGMT_GH_APP_ID MGMT_GH_APP_INSTALLATION_ID MGMT_GH_APP_KEY_FILE   the homelab-sentinel App
@@ -18,6 +19,8 @@
 
 _mgmt_log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 declare -F log >/dev/null 2>&1 || log() { _mgmt_log "$@"; }   # a sourcing script's own log() wins (iac-sentinel.sh)
+# shellcheck source=mgmt-tools.sh
+. "$(dirname "${BASH_SOURCE[0]}")/mgmt-tools.sh"   # mgmt_x / mgmt_tree_path — where every tool comes from
 
 MGMT_API="https://api.github.com"
 _MGMT_TOKEN=""
@@ -125,9 +128,10 @@ mgmt_policy_load() {
   fi
   printf '%s' "$f"
 }
-# Already inside a devbox env (CI's `devbox run mgmt-policy-test`, a `devbox shell`): the pinned yq is
-# on PATH — a nested `devbox run` per call cost ~0.15 s locally, ~1128 calls = ~150 s of the CI step.
-_yq() { if [ "${DEVBOX_SHELL_ENABLED:-}" = 1 ]; then ( cd "${REPO:-$PWD}" && yq "$@" ); else ( cd "${REPO:-$PWD}" && devbox run --quiet -- yq "$@" ); fi; }
+# yq from PATH: the box's closure on the box (FU-305 — a `devbox run yq` from master's tree is what a
+# bad devbox.lock wedged), the devbox shell in CI/the jail (a nested `devbox run` per call cost ~150 s
+# of the CI step). mgmt_x falls back to devbox in the jail only.
+_yq() { ( cd "${REPO:-$PWD}" && mgmt_x yq "$@" ); }
 # mgmt_policy_get <policy> <expr> — yq over the policy file, raw lines out
 mgmt_policy_get() { _yq -r "$2" "$1"; }
 
@@ -217,7 +221,7 @@ mgmt_schema_upgrades() {
 # provider/version pairs, the lockfile copied beside it (readonly — the hashes still verify).
 # The real root cannot answer this: `providers schema` insists on an initialised BACKEND (S3 +
 # encryption env on cloudflare/provisioning), and the schema is the providers', not the state's.
-# Run from the TRUSTED tree like mgmt_plan_root. rc 1 = no lockfile, or no schema came back.
+# tofu from PATH (mgmt_tree_path, like mgmt_plan_root). rc 1 = no lockfile, or no schema came back.
 mgmt_provider_schema() {
   local dir="$1" out="$2" tmp rc
   [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] && [ -s "$dir/.terraform.lock.hcl" ] || return 1
@@ -229,8 +233,8 @@ mgmt_provider_schema() {
   export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"
   (
     cd "$REPO" || exit 1
-    devbox run --quiet -- tofu -chdir="$tmp" init -input=false -lockfile=readonly >/dev/null 2>&1 || exit 1
-    devbox run --quiet -- tofu -chdir="$tmp" providers schema -json >"$out" 2>/dev/null
+    tofu -chdir="$tmp" init -input=false -lockfile=readonly >/dev/null 2>&1 || exit 1
+    tofu -chdir="$tmp" providers schema -json >"$out" 2>/dev/null
   ) && jq -e '.provider_schemas | type == "object"' "$out" >/dev/null 2>&1; rc=$?
   rm -rf "$tmp"; return $rc
 }
@@ -368,7 +372,7 @@ mgmt_root_excludes() {
   types_out="$(mgmt_policy_get "$pol" ".roots.\"$root\".plan_exclude_types[]?")" || return 1
   [ -n "$types_out" ] || return 0
   mapfile -t types <<<"$types_out"
-  addrs="$( cd "$REPO" && devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null )" || return 1
+  addrs="$( cd "$REPO" && tofu -chdir="$dir" state list 2>/dev/null )" || return 1
   printf '%s\n' "$addrs" \
     | while IFS= read -r addr; do for t in "${types[@]}"; do case "$addr" in "$t".*) printf -- '-exclude=%s\n' "$addr" ;; esac; done; done
 }
@@ -468,11 +472,11 @@ mgmt_stage1() {
 # 1 error (stderr+stdout captured to <plan-out>.log). main = local state via -state=; a root
 # with backend.tf = tofu-state-env.sh in a subshell (the mgmt-probe.sh pattern).
 # ⚠ EXECUTION SURFACE (review finding on homelab#1619): <checkout> may be an UNTRUSTED PR
-# worktree. Nothing of it is ever executed — `devbox run` resolves devbox.json (its init_hook
-# runs!) from the cwd, so every tool invocation runs FROM $REPO (the loop's own clone, reset to
-# origin/master each run) and tofu is pointed at the worktree by ABSOLUTE -chdir; the state-env
+# worktree. Nothing of it is ever executed — tofu is the one $REPO's devbox.lock pins (the loop's
+# own clone, reset to origin/master each run; read as DATA by mgmt_tree_path, devbox never runs —
+# FU-305), it runs FROM $REPO and is pointed at the worktree by ABSOLUTE -chdir; the state-env
 # script is $REPO's copy, never the worktree's. Stage 1 judges the tofu tree only, and this is
-# what makes that sufficient.
+# what makes that sufficient. The head's own devbox.lock/devbox.json are never read.
 mgmt_plan_root() {
   local co="$1" pol="$2" root="$3" out="$4" lock="${5:-false}" dir rel logf varfile stateargs
   logf="$out.log"
@@ -480,6 +484,7 @@ mgmt_plan_root() {
   rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "dir of root $root unreadable from the policy — refusing to plan" >"$logf"; return 1; }
   dir="$co/$rel"
   [ -n "${REPO:-}" ] && [ -f "$REPO/devbox.json" ] || { echo "REPO unset or not a checkout — refusing to run tooling from the plan tree" >"$logf"; return 1; }
+  command -v tofu >/dev/null 2>&1 || { echo "tofu is not on PATH — the box resolves it from $REPO/devbox.lock (mgmt_tree_path; the loop's log says why it could not)" >"$logf"; return 1; }
   varfile=""; [ -n "${TOFU_VAR_DIR:-}" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
   stateargs=""
   if [ ! -f "$dir/backend.tf" ]; then
@@ -490,25 +495,25 @@ mgmt_plan_root() {
   mkdir -p "${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"; export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/mgmt/plugin-cache}"
   (
     set +u
-    cd "$REPO" || exit 1   # the TRUSTED tree: devbox.json + scripts/ from origin/master
+    cd "$REPO" || exit 1   # the TRUSTED tree: scripts/ + the tofu pin from origin/master
     if [ -f "$dir/backend.tf" ]; then
       TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root" >&2; exit 1; }
     fi
     # per-root env hook from the TRUSTED tree (mgmt/scripts/mgmt-root-env/<root>.sh) — e.g. github's App keys
     [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"
-    devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
-      || { echo "tofu init failed for $root" >&2; devbox run --quiet -- tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
+    tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 \
+      || { echo "tofu init failed for $root" >&2; tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     excl_out="$(mgmt_root_excludes "$pol" "$root" "$dir")" || { echo "plan_exclude_types for $root could not be resolved (policy or state list unreadable) — not planning un-excluded" >&2; exit 1; }
     excludes=(); [ -n "$excl_out" ] && mapfile -t excludes <<<"$excl_out"
     # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
     printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
     # every address in state — the verdict's "not planned" set is this minus what the plan carried,
     # so an exclusion's DEPENDENTS (tofu excludes them too, silently) are named as well
-    devbox run --quiet -- tofu -chdir="$dir" state list 2>/dev/null | sort > "$out.state" || true
+    tofu -chdir="$dir" state list 2>/dev/null | sort > "$out.state" || true
     # shellcheck disable=SC2086
     # -no-color: the verdict quotes this log's tail — ANSI escapes made the first cloudflare
     # failure unreadable in the PR comment (homelab#1634)
-    devbox run --quiet -- tofu -chdir="$dir" plan -no-color -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
+    tofu -chdir="$dir" plan -no-color -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
   ) >"$logf" 2>&1
   local rc=$?
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac
@@ -532,7 +537,7 @@ mgmt_plan_changes() {
       TOFU_STATE_ROOT_DIR="$dir" . "$REPO/scripts/tofu-state-env.sh" >/dev/null 2>&1 || { echo "tofu-state-env.sh failed for $root (show)" >&2; exit 1; }
     fi
     [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"
-    devbox run --quiet -- tofu -chdir="$dir" show -json "$out" 2>&1
+    tofu -chdir="$dir" show -json "$out" 2>&1
   )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | cut -c1-300)" >&2; return 1; }
   printf '%s' "$json" | mgmt_plan_digest "$out" \
     || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
@@ -803,7 +808,7 @@ mgmt_helm_row() { _yq -o=json -I=0 ".apply_helm.\"$2\"[]? | select(.address == \
 # declared one yet), the reconciler's reading too.
 _mgmt_windows_get() {  # raw ConfigMap JSON on stdout; the fixture test stubs this
   local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
-  ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json )
+  ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$kc" -n agent-coordinator get cm responder-window -o json )
 }
 mgmt_windows_live() {
   local cm err rc
@@ -832,9 +837,9 @@ mgmt_apply_window_gate() {
 # mgmt_health <snapshot|compare <file>> — scripts/maintenance-window.sh's probes (firing alert
 # names, sum(up), cilium's kubernetes-apiserver backend on every node, hard-failed pods, node
 # count), run from the TRUSTED tree like every other tool here. ONE home for the probes: the box
-# calls the same script the seat's window does. KUBECONFIG: the script falls back to
-# /var/lib/mgmt/kubeconfig on the box (devbox.json points it at a checkout path that is absent there).
-mgmt_health() { ( cd "$REPO" && devbox run --quiet -- bash "$REPO/scripts/maintenance-window.sh" "$@" ); }
+# calls the same script the seat's window does. Its kubectl/jq/curl come from PATH (the box closure;
+# the jail's devbox shell). KUBECONFIG: the script falls back to /var/lib/mgmt/kubeconfig on the box.
+mgmt_health() { ( cd "$REPO" && bash "$REPO/scripts/maintenance-window.sh" "$@" ); }
 # mgmt_post_check <baseline-file> → polls `compare` after an apply. Waits MGMT_POSTCHECK_SETTLE s
 # (default 180: an apiserver restart drops the cilium backend within the first minute — reading
 # earlier would pass before the regression exists), then every MGMT_POSTCHECK_INTERVAL s (30)

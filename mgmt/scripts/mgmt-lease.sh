@@ -89,7 +89,7 @@ GIT_ID=(-c user.name=management-lease -c user.email=management-lease@homelab.inv
 # raw ConfigMap LIST JSON on stdout — the responder-window read path (_mgmt_windows_get), by label
 _mgmt_leases_get() {
   local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig
-  ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$kc" -n "$LEASE_NS" get cm -l "$LEASE_LABEL=true" -o json )
+  ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$kc" -n "$LEASE_NS" get cm -l "$LEASE_LABEL=true" -o json )
 }
 _now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
