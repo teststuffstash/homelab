@@ -42,8 +42,11 @@ spec:
             # over to opencode-go/kimi-k3 when this latch fires (#424, PR#435) and the Go rail
             # live end-to-end (PR#433/#434/#436, seat-probed: real completion + metered ledger
             # row), a latched week degrades to the second subscription instead of deferring.
+            # 0.99 TEMPORARY (operator 2026-10-10 ~19:25Z): the week resets soon and nothing else is
+            # running — spend the tail on proper reviews for the S9 PRs in flight. Restore 0.95 after
+            # the 7d reset (meta-state pickup).
             - name: ANTHROPIC_UTIL_THRESHOLD_7D
-              value: "0.95"
+              value: "0.99"
             # FU-088 concurrency semaphore, EXPLICIT since 2026-08-08 (was the code default 3):
             # operator upgraded the subscription Max 5x → Max 20x and raised this to 5. The
             # utilization thresholds above need NO recalibration — they read Anthropic's own
