@@ -20,6 +20,12 @@ never the session's arc — that is TICK-LOG's.)
   rules, frser double-label). **Scope widened (operator 10-10): S9 ends with the LONG-TERM fixes — box + router
   working, no residual FUs to resurface** → FU-301 (box applies helm, never acts on failure — ruled), FU-302, and
   #2431's waves 0–4 are S9 work. Class-4 chart PRs un-armed until FU-301's allowlist lands.
+  **Landed 10-10:** kps lease REVERT drilled (#2441; box fixes #2429/#2437) + kps/CRD majors ARMED (#2444) —
+  proofs owed: 91.9.0 re-proposal red on check (h), first lens-armed 92.x merges; G12 PROVEN (aebaaedd, CI
+  37997640367); #2014 shape (a) LIVE (#2433/#2439, ac#25, ar#170) — OPERATOR: claude-jail host rebuild (seat on
+  2.1.281; `VersionSetMembersDisagree` ~10-11 13:27Z = the class 7/11 detector proof) + 3 operator-direct workflow
+  patches (stamp→rebuild dispatch). **Lock revert drill NOT run** — a bad lock on master reds its own PR and
+  wedges the box sentinel (runs `devbox run yq` from master) so the revert can't merge: ruling owed.
 - **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
   `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
   both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
