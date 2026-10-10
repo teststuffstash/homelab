@@ -100,11 +100,26 @@ renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 
 # In-cluster the WorkflowTemplate hands coordinator-git (issues:write across the agent repos) as
 # UPDATER_LABEL_TOKEN; absent (a jail hand-run), the main token is tried and a refusal stays
 # loud-but-non-fatal.
+#
+# ⚠ REST, NEVER `gh pr edit --add-label`/`--remove-label` (homelab#2476, FU-290's 2026-10-10 19:00Z
+# drain). `gh pr edit` label flags are GraphQL mutations (addLabelsToLabelable/removeLabelsFrom…);
+# when the App installation's GraphQL pool is drained (installation 142724430, "API rate limit
+# already exceeded") the write fails even though the installation's REST pool is still open — and
+# the old code then printed a WRONG diagnosis ("token lacks issues:write?"), so #2476 sat armed +
+# DIRTY with no label and no correct signal either. `gh api -X POST/DELETE .../labels[...]` draws on
+# the separate REST (core) pool and keeps labeling live through a GraphQL-only drain. Label creation
+# rides the same REST call so neither leg ever touches GraphQL.
 label_conflict() {
-  GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh label create merge-conflict --repo "$REPO" --color e11d21 \
-    --description "PR branch conflicts with master — updater can't auto-resolve" --force >/dev/null 2>&1 || true
-  GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh pr edit "$1" --repo "$REPO" --add-label merge-conflict \
-    || echo "updater[$REPO]: could not label #$1 merge-conflict (token lacks issues:write?) — the */15 pass retries"
+  local tok="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" create_err add_err
+  create_err="$(GH_TOKEN="$tok" gh api -X POST "repos/$REPO/labels" \
+    -f name=merge-conflict -f color=e11d21 \
+    -f description="PR branch conflicts with master — updater can't auto-resolve" 2>&1 >/dev/null)" || true
+  # A create failure is expected and fine once the label exists (422 "already_exists") — the add
+  # below is what actually matters, and it reports create's real error too if that one is why it fails.
+  if ! add_err="$(GH_TOKEN="$tok" gh api -X POST "repos/$REPO/issues/$1/labels" \
+      -f 'labels[]=merge-conflict' 2>&1 >/dev/null)"; then
+    echo "updater[$REPO]: could not label #$1 merge-conflict — ${add_err:-gh gave no output}${create_err:+ (label create: $create_err)} — the */15 pass retries"
+  fi
 }
 
 # ── leg 1: the main pick ── oldest armed + BEHIND + not-changes-requested, ONE per (repo, base)
@@ -343,6 +358,8 @@ jq -c '.[]' <<<"$PRS" | while read -r pr; do
   if [ "$armed" = "true" ] && [ "$dirty" = "true" ]; then
     [ "$has" = "true" ] || label_conflict "$n"
   elif [ "$has" = "true" ]; then
-    GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh pr edit "$n" --repo "$REPO" --remove-label merge-conflict || true
+    # REST, not `gh pr edit --remove-label` (same #2476/FU-290 class as label_conflict above) — a
+    # 404 (already gone) is fine, any other failure is swallowed same as before (best-effort clear).
+    GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh api -X DELETE "repos/$REPO/issues/$n/labels/merge-conflict" >/dev/null 2>&1 || true
   fi
 done
