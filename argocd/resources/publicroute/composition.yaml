@@ -74,8 +74,11 @@ spec:
                  v1alpha1 claims (legacy, no profile field) default to consumer-class rendering
                  for backwards compatibility. */}}
             {{- $profile := or $xr.spec.profile "consumer" }}
+            {{- /* G4 (S9 #1985): the XRD carries NO schema default — each fallback lives where
+                 it is read (zone, backend.protocol/noTLSVerify, replicas, rateLimit.threshold),
+                 and an optional object is gated by hasKey, never by truthiness. */}}
             {{- $rateLimit := 1200 }}
-            {{- if $xr.spec.rateLimit }}{{ $rateLimit = $xr.spec.rateLimit.threshold }}{{ end }}
+            {{- if hasKey $xr.spec "rateLimit" }}{{ $rateLimit = default 1200 (get $xr.spec.rateLimit "threshold") }}{{ end }}
             {{- /* ADR-123: operational paths are non-public by DEFAULT on every claim, both
                  profiles. The claim opts a default path back into public service per path
                  (.spec.operationalPaths.public); the list itself is a platform constant. */}}
