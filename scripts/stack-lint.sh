@@ -112,10 +112,11 @@ lint_stack() { # <name>
     say PROBE-FAILED REG-02 "$stack" "cluster unreachable — claim state unknown"
   fi
 
-  # REG-04 — the AgentStack's ArgoCD app is Synced. An OutOfSync app almost always means the claim
-  # OMITS a server-default field the API server stamps into the stored object (the claim must
-  # declare EVERY defaulted field it relies on — arrays, enums AND bools; see agent-fixer.yaml's
-  # ignoreDifferences note). The app name is carried on the claim's own tracking-id annotation.
+  # REG-04 — the AgentStack's ArgoCD app is Synced. Historically an OutOfSync app meant the claim
+  # omitted a schema-defaulted field the API server stamped into the stored object; since
+  # 2026-10-10 (G4) the XRD carries no schema defaults (manifest-lint), so look at the app's diff
+  # instead (agent-fixer.yaml's ignoreDifferences note). The app name is carried on the claim's
+  # own tracking-id annotation.
   if [ "$KUBE_OK" = 1 ]; then
     local app appsync
     app=$(timeout 10 kubectl get agentstack "$stack" -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}' 2>/dev/null | cut -d: -f1)
@@ -126,7 +127,7 @@ lint_stack() { # <name>
       case "$appsync" in
         Synced) say OK REG-04 "$stack" "ArgoCD app $app Synced" ;;
         "")     say PROBE-FAILED REG-04 "$stack" "ArgoCD app $app not found/readable" ;;
-        *)      say FAIL REG-04 "$stack" "ArgoCD app $app is $appsync — claim likely omits a server-default field (declare it explicitly; see agent-fixer.yaml)" ;;
+        *)      say FAIL REG-04 "$stack" "ArgoCD app $app is $appsync — read the app's diff (argocd app diff $app); a schema default on the XRD would be a manifest-lint regression (G4)" ;;
       esac
     fi
   else

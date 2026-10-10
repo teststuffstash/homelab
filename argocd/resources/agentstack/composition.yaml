@@ -54,6 +54,14 @@ spec:
         inline:
           template: |
             {{- $xr := .observed.composite.resource }}
+            {{- /* G4 class fix: the XRD carries NO schema `default:` under spec (manifest-lint
+                 enforces) — an API-server-stamped default OutOfSyncs every ArgoCD-applied claim.
+                 So EVERY optional field is defaulted HERE, where it is read: `default <v> (get …)`
+                 for values, `hasKey` (never truthiness) for an optional OBJECT whose presence
+                 gates a render — an explicit `{}` must still render, as it did when the schema
+                 stamped its children into it. */}}
+            {{- $mainRepo := default "homelab" (get $xr.spec "mainRepo") }}
+            {{- $loop := default (dict) (get $xr.spec "loop") }}
             {{- $profileFQDNs := dict
                   "python" (list "pypi.org" "files.pythonhosted.org")
                   "node"   (list "registry.npmjs.org")
@@ -255,7 +263,7 @@ spec:
             subjects:
               - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
             {{- range $r := $xr.spec.repos }}
-            {{- if $r.fixer }}
+            {{- if hasKey $r "fixer" }}
             ---
             apiVersion: rbac.authorization.k8s.io/v1
             kind: Role
@@ -286,7 +294,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
-            {{- if and $xr.spec.loop (get $xr.spec.loop "perStack") }}
+            {{- if get $loop "perStack" }}
             {{- $stack := $xr.metadata.name }}
             {{- $loopns := printf "%s-agents" $stack }}
             ---
@@ -612,7 +620,7 @@ spec:
                           env:
                             - { name: HOME, value: "/home/node" }
                             - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
-                            - { name: MAIN_REPO, value: {{ $xr.spec.mainRepo | quote }} }
+                            - { name: MAIN_REPO, value: {{ $mainRepo | quote }} }
                             - { name: STACK, value: {{ $stack | quote }} }
                             # WRITE-ONLY pair — there is no reader key in this namespace, by design.
                             # Not optional: the pod parks in CreateContainerConfigError until ESO has
@@ -802,7 +810,7 @@ spec:
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
-            {{- if get $xr.spec.loop "graduated" }}
+            {{- if get $loop "graduated" }}
             ---
             # FU-080 per-stack REVIEW backstop: the stack's OWN review reflex — SCAN_STACK-scoped, dispatching
             # reviewer pods INTO {{ $loopns }} as agentstack-loop (reviewer-session.sh --loop-ns; the
@@ -1053,7 +1061,7 @@ spec:
                 # while this policy is still MONITOR so the enforce flip cannot blind them (the
                 # spec.mcp lesson, #1283).
                 {{- range $rr := $xr.spec.repos }}
-                {{- if $rr.fixer }}
+                {{- if hasKey $rr "fixer" }}
                 {{- range $o := default (list) (get (default (dict) $rr.fixer.egress) "ownServices") }}
                 - toEndpoints:
                     - matchLabels:
@@ -1073,7 +1081,7 @@ spec:
                 # cannot turn every declared volume into a loudly-unmounted one.
                 {{- $ivhosts := dict }}
                 {{- range $rr := $xr.spec.repos }}
-                {{- if $rr.fixer }}
+                {{- if hasKey $rr "fixer" }}
                 {{- range $iv := default (list) (get $rr.fixer "imageVolumes") }}
                 {{- $_ := set $ivhosts (index (splitList "/" $iv.reference) 0) true }}
                 {{- end }}
@@ -1151,7 +1159,7 @@ spec:
                           # template had no GH_TOKEN at all, and anonymous git from our IP 401-throttles under
                           # load. Absent/refused token degrades to the old anonymous clone, never a new FATAL.
                           GH_TOKEN="$(curl -fsS --max-time 10 --retry 3 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator" 2>/dev/null || true)"
-                          _hu="https://github.com/teststuffstash/homelab.git"; _mu="https://github.com/teststuffstash/{{ $xr.spec.mainRepo }}.git"
+                          _hu="https://github.com/teststuffstash/homelab.git"; _mu="https://github.com/teststuffstash/{{ $mainRepo }}.git"
                           _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
                           timeout 120 git clone -c "$_ah" --depth 1 -b master "$_hu" /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
@@ -1159,7 +1167,7 @@ spec:
                           fi
                           git clone -c "$_ah" --depth 1 "$_mu" /work/main
                           if [ ! -f /work/main/.agents/probe.md ]; then
-                            echo "NO PROBE BRIEF: {{ $xr.spec.mainRepo }}/.agents/probe.md does not exist — the prober is enabled but has nothing to run. Write the brief (roles.md §prober; oracle UC-1 probe-e2e is the donor shape)."; exit 0
+                            echo "NO PROBE BRIEF: {{ $mainRepo }}/.agents/probe.md does not exist — the prober is enabled but has nothing to run. Write the brief (roles.md §prober; oracle UC-1 probe-e2e is the donor shape)."; exit 0
                           fi
                           # Run the probe session, capturing the full report
                           CLAUDE_EXIT=0
@@ -1264,7 +1272,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- range $r := $xr.spec.repos }}
-            {{- if $r.storage }}
+            {{- if hasKey $r "storage" }}
             ---
             # ADR-089 quota-as-contract: the claim's per-tier caps become a ResourceQuota, so an
             # over-cap PVC fails at CREATE with a legible error (instead of wedging unschedulable
@@ -1285,7 +1293,7 @@ spec:
                 longhorn-fast.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "fast") | quote }}
                 longhorn-scratch.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "scratch") | quote }}
             {{- end }}
-            {{- if $r.labels }}
+            {{- if hasKey $r "labels" }}
             ---
             # FU-068 (Issues tier): the repo's AUTHORITATIVE label set — platform taxonomy + the
             # claim's labels.extra. Any label outside this list is DELETED on sync (that is the
@@ -1312,9 +1320,9 @@ spec:
                     {{- end }}
                   {{- end }}
             {{- end }}
-            {{- if $r.fixer }}
+            {{- if hasKey $r "fixer" }}
             {{- $fx := $r.fixer }}
-            {{- /* nested schema defaults only apply when the parent key exists — re-default here */}}
+            {{- /* every fixer.* default lives here (no schema defaults, G4) — keep in step with the XRD descriptions */}}
             {{- $eg := default (dict) $fx.egress }}
             {{- $profile := default "none" (get $eg "profile") }}
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
