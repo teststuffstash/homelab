@@ -132,7 +132,7 @@ deadman_arm() {
     'else echo "$(date -u +%FT%TZ) deadman: not in maintenance, nothing to do" >> /tmp/carp-deadman.log; fi' \
     "rm -f $DEADMAN_PID" \
     | node_ssh "cat > $DEADMAN_SH && chmod +x $DEADMAN_SH; p=\$(cat $DEADMAN_PID 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null; nohup $DEADMAN_SH >/dev/null 2>&1 </dev/null & echo \$! > $DEADMAN_PID; sleep 0.3; kill -0 \$(cat $DEADMAN_PID) 2>/dev/null && echo armed" \
-    | grep -qx armed || die "dead-man did not arm on $HOST — not entering maintenance"
+    | grep -cx armed >/dev/null || die "dead-man did not arm on $HOST — not entering maintenance"
   log "dead-man armed on $INV_HOST: leaves maintenance by itself in ${secs}s (DEADMAN=<s> to change)"
 }
 deadman_disarm() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then kill \$p && rm -f $DEADMAN_PID && echo 'dead-man disarmed'; else echo 'no dead-man was armed'; fi"; }

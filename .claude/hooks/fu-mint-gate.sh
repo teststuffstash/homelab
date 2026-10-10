@@ -20,7 +20,7 @@ for id in $(printf '%s' "$input" | grep -oE '\[ \] \*\*FU-[0-9]{3}\*\*' | grep -
   grep -qE "^[[:space:]]*- (\[.\] )?\*\*$id\*\*" "$dir/follow-ups.md" "$dir/follow-ups-archive.md" 2>/dev/null || new="$new $id"
 done
 [ -n "$new" ] || exit 0
-sid=$(printf '%s' "$input" | grep -oE '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+sid=$(printf '%s' "$input" | grep -oE '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -n 1p | sed 's/.*"\([^"]*\)"$/\1/')
 state="${TMPDIR:-/tmp}/fu-mint-gate-${sid:-nosession}"
 mkdir -p "$state" 2>/dev/null
 first=""
