@@ -18,13 +18,27 @@ homelab/.github/workflows/renovate.yaml   scheduled runner on the ARC tier, runs
    ▼
 homelab/.github/renovate-global.json      the SUPPLY-CHAIN BASELINE enforced on EVERY repo (below)
    ▼
-<repo>/renovate.json                      per-repo automerge preferences only, on top of the baseline
+<repo>/renovate.json                      per-repo EXTRACTION coverage + automerge preferences (§Scope)
    ▼
 reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automerge`-labelled PRs →
                                           satisfies required-approval → GitHub merges on CI-green
                                           (idempotent since 2026-08-11: per-PR concurrency group +
                                           fail-closed APPROVED-at-head dup check — homelab#114)
 ```
+
+**Scope — who owns what.**
+- The baseline **fails closed**: every non-major update a named rule does not place lands in
+  `deps-review`, armed — so every ecosystem has a reader with no platform work (the catch-all rules in
+  `renovate-global.json`; their description says how they avoid the `addLabels` union).
+- Explicit rules only **lower** cost (a class → mechanical `automerge`, or dev vs runtime tiers), and are
+  added when a pattern appears in ≥2 stacks.
+- One blessed variant per language gets first-class lanes (Python = uv, i.e. the `pep621` manager);
+  other variants work at review cost.
+- A stack's `renovate.json` owns **extraction** coverage (`managerFilePatterns`, `customManagers`,
+  `ignorePaths` for repo-specific files — e.g. dropping the `**/tests/**` preset skip) plus automerge
+  preferences, and never overrides a lane (majors → `automerge` is out of contract).
+- A lane hole a stack finds is a baseline bug — report it to homelab (#1988's no-lane class;
+  `devbox run renovate-lane-lint` is the check).
 
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
 Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
@@ -55,6 +69,8 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 
 - **Digest bumps automerge** (base-image `@sha256`, SHA-pinned Actions). A human comparing two hashes
   is security theatre; the real gates are the **cooldown + CI + the reviewer reflex**, not eyeballs.
+  Dockerfile tag **patch** bumps ride the same mechanical lane — the image build in CI is the gate
+  (minor stays `deps-review`).
 - **Reviewable bumps go to the LLM reviewer, not a human** — runtime dep *version* bumps (changelogs
   exist; they run in prod), major base-image changes. These carry `deps-review`, arm
   auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the

@@ -68,17 +68,17 @@
       "automerge": true
     },
     {
-      "description": "Python DEV deps (pytest/ruff/…) patch/minor — mechanical automerge. poetry added 2026-07-16 (allure-behavior-snippets): same dep class, same lane, regardless of package manager.",
-      "matchManagers": ["pep621", "uv", "poetry"],
-      "matchDepTypes": ["devDependencies", "dev-dependencies"],
+      "description": "Python DEV deps (pytest/ruff/…) patch/minor — mechanical automerge. uv is the BLESSED Python variant (docs/renovate.md §Scope): Renovate has no `uv` manager, uv projects ride `pep621`, whose dev depTypes are `dependency-groups` (PEP 735, uv's `[dependency-groups]`) and `tool.uv.dev-dependencies` — the old `devDependencies`/`dev-dependencies`/`uv` values matched no pep621 dep (2026-10-10, the fail-closed pass). poetry keeps its `dev-dependencies` (allure-behavior-snippets, 2026-07-16); poetry's named groups fall to the catch-all below (review cost).",
+      "matchManagers": ["pep621", "poetry"],
+      "matchDepTypes": ["dependency-groups", "tool.uv.dev-dependencies", "dev-dependencies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["automerge"],
       "automerge": true
     },
     {
-      "description": "Python RUNTIME deps (boto3/…) patch/minor — meaningful (runs in prod, changelogs exist) → the LLM `deps-review` lane: armed, reviewed by the merge-path review reflex, worker adapts on CHANGES_REQUESTED (FU-046). poetry added 2026-07-16.",
-      "matchManagers": ["pep621", "uv", "poetry"],
-      "matchDepTypes": ["dependencies"],
+      "description": "Python RUNTIME deps (boto3/…) patch/minor — meaningful (runs in prod, changelogs exist) → the LLM `deps-review` lane: armed, reviewed by the merge-path review reflex, worker adapts on CHANGES_REQUESTED (FU-046). pep621/uv runtime = `project.dependencies`; poetry = `dependencies`. The same lane as the catch-all — this rule names the class, the catch-all would land it here anyway.",
+      "matchManagers": ["pep621", "poetry"],
+      "matchDepTypes": ["project.dependencies", "dependencies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["deps-review"],
       "automerge": true
@@ -118,6 +118,13 @@
       "matchManagers": ["dockerfile"],
       "matchUpdateTypes": ["minor"],
       "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "Dockerfile image TAG patch (e.g. `COPY --from=ghcr.io/astral-sh/uv:0.12.23`, python 3.12.6→3.12.7) — the image build in CI is the gate → mechanical `automerge` (2026-10-10; was a no-lane hole worked around per stack — sleep-tracking#180, snore-recorder).",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["patch"],
+      "addLabels": ["automerge"],
       "automerge": true
     },
     {
@@ -179,6 +186,27 @@
       "description": "Class 1/2 (charts in argocd/platform, images in argocd/resources) patch/minor → the LLM `deps-review` lane (FU-046): armed, the merge-path review reflex reviews, APPROVED merges, ArgoCD auto-sync is the deploy edge. Not `automerge`: a chart minor re-renders manifests and an image minor runs in prod — there is something to read. Digest bumps take the mechanical rule at the top; majors take the catch-all below (un-armed, `major` — the CRD-carrying charts Argo/Crossplane/cert-manager/ESO/CNPG reach the human lane by update type, IAC-G09).",
       "matchManagers": ["argocd", "kubernetes"],
       "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "FAIL-CLOSED catch-all, part 1 — managers with NO explicit lane rule (pip_requirements, pip_setup, pipenv, gomod, maven, gradle, cargo, bundler, docker-compose, helm-values, …): non-major patch/minor → `deps-review`, armed. Every ecosystem gets a reader with no platform work (docs/renovate.md §Scope); an explicit rule only LOWERS cost. Shape: Renovate UNIONS `addLabels` across matching rules (config/options `mergeable: true`) and has no remove, so a blanket catch-all would add `deps-review` on top of every `automerge` lane (lane-lint `two-lanes`). Instead it matches the COMPLEMENT: the negated list is exactly the managers that own explicit non-major lane rules above. ⚠ ADDING an explicit non-major lane rule for a new manager = add `!<manager>` here in the same change, or that class gets two lanes. Digests/pins: the digest/pin rule at the top (all managers). Majors: the `major` rule below.",
+      "matchManagers": ["!github-actions", "!pre-commit", "!pep621", "!poetry", "!npm", "!deno", "!terraform", "!dockerfile", "!custom.regex", "!argocd", "!kubernetes"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "FAIL-CLOSED catch-all, part 2 — the residue INSIDE a partly-owned manager: pep621/poetry dep types the two Python rules above do not name (`project.optional-dependencies`, `build-system.requires`, `tool.uv.sources`, poetry extras and named groups, …) → `deps-review`, armed. Both managers always set a depType, so the negation cannot miss a typeless dep. Every other partly-owned manager is covered on patch+minor by its explicit rules.",
+      "matchManagers": ["pep621", "poetry"],
+      "matchDepTypes": ["!dependency-groups", "!tool.uv.dev-dependencies", "!dev-dependencies", "!project.dependencies", "!dependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "FAIL-CLOSED catch-all, part 3 — update TYPES no explicit rule names, on any manager: `replacement` (config:recommended's replacements:all preset — a package renamed/moved upstream, a real read), `lockFileMaintenance` (opt-in per repo; carries runtime deps), `rollback` → `deps-review`, armed. No other rule lists these types, so no union.",
+      "matchUpdateTypes": ["replacement", "lockFileMaintenance", "rollback"],
       "addLabels": ["deps-review"],
       "automerge": true
     },
