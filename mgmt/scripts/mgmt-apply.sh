@@ -18,6 +18,11 @@
 #               exit 0, mgmt_apply_deferred_window 1. A window opened with --admit-apply does not hold
 #               it. An unreadable registry defers too, as a PROBE-FAIL (exit 1). A span touching no
 #               apply root still stamps: it changes nothing a window could be watching.
+#   verdict    then the BOX VERDICT (FU-302, mgmt-verdict.sh — Prometheus-free): DOWN defers exactly as a
+#               window does (no plan/apply/stamp/status, exit 0, mgmt_apply_deferred_verdict 1); a verdict
+#               that cannot run defers as a PROBE-FAIL (exit 1); ok/degraded proceed. A NEW gate, ANDed
+#               with the window gate — there was no cluster read here before. The Talos bracket's
+#               post-check also requires the verdict no worse than its baseline (ANDed with `compare`).
 #   providers  a successful apply that CHANGED addresses records, per root, the locked version of each
 #               provider owning one ($ADIR/exercised-<root>.tsv); an apply that ERRORS while such a
 #               provider's locked version is not the exercised one publishes
@@ -57,6 +62,7 @@ mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch failed"; exit 1
 mgmt_tree_path "$REPO" || log "WARN a tree-locked tool is unresolvable from $REPO/devbox.lock (why above) — the steps that need it fail with that reason"
 sha="$(git -C "$REPO" rev-parse origin/master)" || exit 1
 deferred=0; deferred_n=0; deferred_unreadable=0   # FU-300: set by the window gate, read by emit_metrics
+deferred_verdict=0                                 # FU-302: set by the box-verdict gate
 trap 'emit_metrics $?' EXIT
 last=""; [ -f "$ADIR/applied-rev" ] && last="$(cat "$ADIR/applied-rev")"
 refused=""; [ -f "$ADIR/refused-rev" ] && refused="$(cat "$ADIR/refused-rev")"
@@ -124,6 +130,9 @@ mgmt_apply_deferred_windows $deferred_n
 # HELP mgmt_apply_deferred_window_unreadable 1 while the last tick deferred because the declared-window registry could not be read.
 # TYPE mgmt_apply_deferred_window_unreadable gauge
 mgmt_apply_deferred_window_unreadable $deferred_unreadable
+# HELP mgmt_apply_deferred_verdict 1 while the last tick DEFERRED a plan because the box verdict read the cluster DOWN or could not run (FU-302).
+# TYPE mgmt_apply_deferred_verdict gauge
+mgmt_apply_deferred_verdict $deferred_verdict
 # HELP mgmt_apply_errored_unexercised 1 per provider while master's standing refusal is an apply ERROR in <root> and that provider owns a changed address at a version no successful changing apply has run yet (exercised = the last one that did, or unknown).
 # TYPE mgmt_apply_errored_unexercised gauge
 PROM
@@ -183,6 +192,21 @@ elif [ "$wrc" != 0 ]; then
   log "PROBE-FAIL: declared-window registry (agent-coordinator/responder-window) unreadable — DEFERRING ${sha:0:8} (an unreadable gate is a no): no plan, no stamp; next run retries"
   exit 1
 fi
+
+# FU-302 — the box's OWN verdict on the cluster, read without Prometheus (mgmt-verdict.sh): an apply
+# onto a cluster the box reads as DOWN waits, like a window — a deferral, not a verdict on the commit.
+# docs/management-box.md §"The box verdict".
+vj="$(mgmt_verdict 2>"$ADIR/verdict.err")"; vrc=$?
+vwhy="$(jq -r '.reasons | join("; ")' <<<"$vj" 2>/dev/null)"
+case "$vrc" in
+  0|2) log "box verdict: $(mgmt_verdict_name "$vrc")${vwhy:+ — $vwhy}" ;;
+  3) deferred_verdict=1
+     log "DEFERRED ${sha:0:8}: the box verdict reads the cluster DOWN — $vwhy — no plan, no apply, no stamp; next tick re-reads"
+     exit 0 ;;
+  *) deferred_verdict=1
+     log "PROBE-FAIL: the box verdict could not run (rc $vrc: $(tail -1 "$ADIR/verdict.err" 2>/dev/null)) — DEFERRING ${sha:0:8} (an unreadable gate is a no); next run retries"
+     exit 1 ;;
+esac
 
 hits="$(mgmt_stage1 "$POL" "$REPO" "$last" "$sha")" || { log "PROBE-FAIL: stage 1 could not run (policy unreadable) — not applying, not stamping; next run retries"; exit 1; }
 # The provider-pin shape (ADR-131 amended 2026-09-27) is ADMITTED on a master span exactly as on a
@@ -258,13 +282,18 @@ for root in "${apply_roots[@]}"; do
   # The health BASELINE, before any Talos config apply (the /maintenance-window `open`, unattended).
   # An unreadable one is not a refusal — it is a probe failure: no apply, no stamp, the next tick
   # retries (a check that measured nothing must never be the "before" of a comparison).
-  hbase="$ADIR/health-baseline.json"; rm -f "$hbase"
+  hbase="$ADIR/health-baseline.json"; rm -f "$hbase"; vbase=""
   if [ "$talos_n" -gt 0 ]; then
+    # The verdict's baseline, fresh (the gate's read above is a plan old): the post-check ANDs it.
+    vbase=0; mgmt_verdict >"$ADIR/verdict-baseline.json" 2>/dev/null || vbase=$?
+    if [ "$(mgmt_verdict_rank "$vbase")" -ge 2 ]; then
+      log "PROBE-FAIL: box verdict $(mgmt_verdict_name "$vbase") before $talos_n Talos config apply(s) — not applying, not stamping; next run retries"; exit 1
+    fi
     if ! mgmt_health snapshot >"$hbase" 2>"$hbase.err"; then
       log "PROBE-FAIL: health baseline unreadable before $talos_n Talos config apply(s) — not applying, not stamping; next run retries"
       sed 's/^/    /' "$hbase.err"; exit 1
     fi
-    log "$root: health baseline taken ($(jq -r '"alerts=\(.alerts|length) up=\(.up) pods_bad=\(.pods_bad) cilium_have=\(.cilium_have) nodes=\(.nodes)"' "$hbase"))"
+    log "$root: health baseline taken ($(jq -r '"alerts=\(.alerts|length) up=\(.up) pods_bad=\(.pods_bad) cilium_have=\(.cilium_have) nodes=\(.nodes)"' "$hbase"); box verdict $(mgmt_verdict_name "$vbase"))"
   fi
   # FU-301 — the helm bracket's first half: preflight refusals, then window + lease + evidence. A
   # preflight REFUSAL waits for a new commit or a human (refused-rev: a failed restore point must not
@@ -318,7 +347,7 @@ for root in "${apply_roots[@]}"; do
       # post-check-failed marker (→ mgmt_apply_post_check_failed → MgmtApplyPostCheckFailed) — and
       # does NOT revert (FU-273: default forward; a revert is a human commit). The apply HAPPENED,
       # so the sha is still stamped below.
-      if regress="$(mgmt_post_check "$hbase")"; then
+      if regress="$(mgmt_post_check "$hbase" "$vbase")"; then
         rm -f "$ADIR/post-check-failed"
         mgmt_post_status "$sha" "$CTX" success "$root: +$a ~$c -$d${osuf} applied by the management box · post-check clean"
       else

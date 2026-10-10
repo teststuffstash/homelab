@@ -162,13 +162,6 @@ six OVERSIZE items pointer-ized into
       `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. ⚠ `dependency-upgrades.md`'s
       Cilium canary cell is inherited from class 6 — Cilium never had one. **Next:** evidence storage the box can
       reach (it lives in the jail's `~/.claude/helm-evidence/`), then the box brackets helm applies with it.
-- [ ] **FU-302** — **The box has no view of the cluster that bypasses Prometheus** (its alert reads ride a
-      Cilium BGP VIP). Ruling 2026-10-02 reframes `management-box.md` "The second alert path": no
-      out-of-band notification wanted ("otherwise it burns until I get home") — the box needs its OWN
-      verdict for its gates: Talos API, kube API via the CP VIP, `kubectl exec` into cilium (BGP), LAN HTTP
-      to BGP VIPs, Prometheus/Alertmanager `/-/ready`. Most reads exist (maintenance-window probes 3–4, the
-      belt's node diff). Doc row LANDED (PR#2198). **Next:** one verdict function
-      `mgmt-apply` + `mgmt-reconcile` call.
 - [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants

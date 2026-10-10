@@ -80,12 +80,25 @@ case "$1 $2" in
 esac
 EOF
 
+# The box verdict (FU-302, mgmt-verdict.sh's contract: JSON + rc 0 ok / 2 degraded / 3 down / other =
+# could not run). FAKE_VERDICT = ok | degraded | down | broken; every call recorded in $VDCALLS.
+export RECONCILE_VERDICT_CMD="bash $T/verdict.sh" VDCALLS="$T/vdcalls"
+cat >"$T/verdict.sh" <<'EOF'
+echo call >>"$VDCALLS"
+case "${FAKE_VERDICT:-ok}" in
+  ok)       echo '{"verdict":"ok","reasons":[]}' ;;
+  degraded) echo '{"verdict":"degraded","reasons":["prometheus: unreachable — x"]}'; exit 2 ;;
+  down)     echo '{"verdict":"down","reasons":["kube-api: unreachable — x"]}'; exit 3 ;;
+  *)        exit 1 ;;
+esac
+EOF
+
 # SWITCH: extra top-level JSON (the reconcile_rollout block) — empty = the pre-rollout inventory.
 machines() { printf '{%s"machines":%s}' "${SWITCH:+$SWITCH,}" "$1" >"$RECONCILE_MACHINES_JSON"; }
 targets()  { printf '%s' "$1" >"$RECONCILE_TARGETS_JSON"; }
 live()     { printf '%s' "$1" >"$LIVE"; }
 windows()  { printf '%s' "$1" >"$RECONCILE_WINDOWS_JSON"; }
-reset()    { rm -rf "$RECONCILE_DIR" "$CALLS" "$KCALLS" "$VCALLS" "$WCALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*
+reset()    { rm -rf "$RECONCILE_DIR" "$CALLS" "$KCALLS" "$VCALLS" "$WCALLS" "$VDCALLS"; rm -f "$MGMT_TEXTFILE_DIR"/*
              unset FAKE_RC FAKE_NOOP FAKE_DIFF_FAIL FAKE_INSTALLED FAKE_LEAVE_WINDOW FAKE_VERIFY_RC; windows '[]'; }
 cause()    { jq -r --arg n "$1" '.[$n].cause // ""' "$RECONCILE_DIR/state.json" 2>/dev/null; }
 vcalls()   { [ -f "$VCALLS" ] && grep -c . "$VCALLS" || echo 0; }
@@ -214,6 +227,18 @@ reset; machines "[$W,{\"name\":\"wk-01\",\"reconcile\":\"auto\"}]"; targets "$D2
 check "two diffs → ONE sync per tick, the other queued" eval '[ "$(calls)" = 1 ] && [ "$(st wk-03)" = idle ] && [ "$(st wk-01)" = pending ] && grep -q "queued behind wk-03" "$RECONCILE_DIR/state.json"'
 tick
 check "…and the queued one goes on the next tick" eval '[ "$(calls)" = 2 ] && [ "$(st wk-01)" = idle ] && [ "$(tail -1 $CALLS)" = "upgrade wk-01" ]'
+
+# ── FU-302: the box verdict, read right before the sync (switch off and on alike) ──
+reset; machines "[$W]"; targets "$D2"; live "$V1"; FAKE_VERDICT=down tick
+check "box verdict DOWN → pending (refused), verb not run, the reason names it" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ] && grep -q "verdict reads the cluster DOWN" "$RECONCILE_DIR/state.json" && [ "$(cat $T/rc)" = 0 ]'
+FAKE_VERDICT=broken tick
+check "box verdict could not run → pending (an unreadable gate is a no), verb not run" eval '[ "$(st wk-03)" = pending ] && [ "$(calls)" = 0 ] && grep -q "could not run" "$RECONCILE_DIR/state.json"'
+FAKE_VERDICT=degraded tick
+check "box verdict degraded → the sync proceeds, logged" eval '[ "$(st wk-03)" = idle ] && [ "$(calls)" = 1 ] && grep -q "box verdict degraded" "$T/out"'
+reset; machines "[$W]"; targets "$D1"; live "$V1"; FAKE_VERDICT=down tick
+check "nothing to sync → the verdict is never read" eval '[ ! -f "$VDCALLS" ] && [ "$(st wk-03)" = idle ]'
+reset; machines "[$W]"; targets "$D2"; live "$V1"; windows '[{"id":"m70s-1","node":"m70s","by":"seat"}]'; FAKE_VERDICT=down tick
+check "a window refuses first; the verdict is not read behind it" eval '[ ! -f "$VDCALLS" ] && grep -q "another window is open" "$RECONCILE_DIR/state.json"'
 
 # ── guards ──
 reset; machines '[{"name":"cp-01","reconcile":"auto"}]'; targets '{"cp-01":{"version":"v2","schematic":"s","role":"controlplane"}}'
@@ -385,8 +410,11 @@ check "…and the next rollout picks them up (same target: fleet stage, no secon
 rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick; tick   # wk-03, nx-01 on v2
 fleet_targets v1; FAKE_DIFFERENTIAL=1 tick
 check "older target → a REVERT rollout: no canary, not halted by the differential" eval '[ "$(ro .target)" = v1 ] && [ "$(ro .kind)" = revert ] && [ "$(ro .stage)" = fleet ] && [ "$(lastcall)" = "upgrade wk-03" ]'
-FAKE_DIFFERENTIAL=1 tick
-check "…the moved nodes first, then done" eval '[ "$(lastcall)" = "upgrade nx-01" ]'
+FAKE_DIFFERENTIAL=1 FAKE_VERDICT=down tick
+check "…the moved nodes first, then done — a revert is not refused by a DOWN verdict either (the revert is the fix)" eval '[ "$(lastcall)" = "upgrade nx-01" ]'
+# FU-302 ANDed with the differential: a forward rollout with the differential clear and the verdict DOWN refuses
+rreset; fleet_machines; fleet_targets v2; fleet_live v1; FAKE_VERDICT=down tick
+check "forward rollout, differential clear, box verdict DOWN → no sync, the pick pending on the verdict" eval '[ "$(calls)" = 0 ] && [ "$(st wk-03)" = pending ] && grep -q "verdict reads the cluster DOWN" "$RECONCILE_DIR/state.json"'
 
 # ── one rollout at a time: a node declared at another version waits ──
 rreset; fleet_machines; fleet_targets v2 cp-01=v1 cp-02=v1; fleet_live v1 cp-01=v0; tick

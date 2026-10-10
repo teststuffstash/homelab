@@ -840,19 +840,38 @@ mgmt_apply_window_gate() {
 # calls the same script the seat's window does. Its kubectl/jq/curl come from PATH (the box closure;
 # the jail's devbox shell). KUBECONFIG: the script falls back to /var/lib/mgmt/kubeconfig on the box.
 mgmt_health() { ( cd "$REPO" && bash "$REPO/scripts/maintenance-window.sh" "$@" ); }
-# mgmt_post_check <baseline-file> → polls `compare` after an apply. Waits MGMT_POSTCHECK_SETTLE s
+# ── the box verdict (FU-302, docs/management-box.md §"The box verdict") ──────────────────────────
+# mgmt_verdict [args] → mgmt-verdict.sh's JSON on stdout: the box's OWN read of the cluster (Talos API,
+# kube API via the CP VIP, cilium BGP + apiserver backend by exec, LAN HTTP to the BGP VIPs, node
+# Ready, ArgoCD health, Prometheus/Alertmanager /-/ready) — it answers with Prometheus or the VIPs
+# down. rc 0 ok · 2 degraded · 3 down · 1 could not run. From the same tree as mgmt_health; tools from
+# PATH (FU-305: the box closure + the caller's mgmt_tree_path talosctl), never devbox.
+mgmt_verdict() { ( cd "$REPO" && bash "$REPO/mgmt/scripts/mgmt-verdict.sh" "$@" ); }
+# mgmt_verdict_rank <rc> → the order a bracket compares (0 ok < 1 degraded < 2 down < 3 could not run);
+# mgmt_verdict_name <rc> → its word.
+mgmt_verdict_rank() { case "$1" in 0) echo 0 ;; 2) echo 1 ;; 3) echo 2 ;; *) echo 3 ;; esac; }
+mgmt_verdict_name() { case "$1" in 0) echo ok ;; 2) echo degraded ;; 3) echo down ;; *) echo "unreadable(rc $1)" ;; esac; }
+# mgmt_post_check <baseline-file> [<baseline-verdict-rc>] → polls `compare` after an apply. Waits MGMT_POSTCHECK_SETTLE s
 # (default 180: an apiserver restart drops the cilium backend within the first minute — reading
 # earlier would pass before the regression exists), then every MGMT_POSTCHECK_INTERVAL s (30)
 # until a clean reading or MGMT_POSTCHECK_TIMEOUT s (900) since the apply. rc 0 = a clean reading;
 # rc 2 = still regressed at the deadline, the LAST reading's ⚠ lines on stdout. An unreadable probe
 # is a regression (maintenance-window's rule: "we could not look" is never ok).
+# With a baseline verdict rc (FU-302) a clean reading ALSO needs the box verdict no worse than it —
+# ANDed, not replacing: `compare` diffs the alert/scrape view, the verdict adds the reads Prometheus
+# cannot give when it is the thing that broke (Talos API, BGP sessions, the VIPs from the LAN).
 mgmt_post_check() {
-  local base="$1" settle="${MGMT_POSTCHECK_SETTLE:-180}" every="${MGMT_POSTCHECK_INTERVAL:-30}"
-  local deadline="${MGMT_POSTCHECK_TIMEOUT:-900}" t0 out
+  local base="$1" vbase="${2:-}" settle="${MGMT_POSTCHECK_SETTLE:-180}" every="${MGMT_POSTCHECK_INTERVAL:-30}"
+  local deadline="${MGMT_POSTCHECK_TIMEOUT:-900}" t0 out vj vrc
   t0="$(_mgmt_now)"
   _mgmt_sleep "$settle"
   while :; do
-    if out="$(mgmt_health compare "$base" 2>&1)"; then return 0; fi
+    if out="$(mgmt_health compare "$base" 2>&1)"; then
+      [ -n "$vbase" ] || return 0
+      vrc=0; vj="$(mgmt_verdict 2>/dev/null)" || vrc=$?
+      [ "$(mgmt_verdict_rank "$vrc")" -le "$(mgmt_verdict_rank "$vbase")" ] && return 0
+      out="  ⚠ box verdict worse than its baseline: $(mgmt_verdict_name "$vbase") → $(mgmt_verdict_name "$vrc")$(jq -r '.reasons | if length > 0 then " — " + join("; ") else "" end' <<<"$vj" 2>/dev/null)"
+    fi
     [ $(( $(_mgmt_now) - t0 + every )) -le "$deadline" ] || break
     _mgmt_sleep "$every"
   done

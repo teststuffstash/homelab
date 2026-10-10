@@ -117,6 +117,26 @@ spec:
               `bash agents/seat-window.sh list` (the DEFERRED line in `journalctl -u mgmt-apply -n 20`
               on 192.168.2.53 names it). Close it if the work is done (`seat-window.sh close --id <id>`);
               re-open with `--admit-apply` if the box may apply during it.
+        # FU-302 — the apply loop DEFERS while the box verdict (mgmt/scripts/mgmt-verdict.sh, the box's
+        # own Prometheus-free read of the cluster) says DOWN or cannot run (docs/management-box.md §"The
+        # box verdict"). Like a window deferral it posts no status and completes its tick. A cluster
+        # that is really down fires its own alerts long before 2 h — so this one standing alone is the
+        # DISAGREEMENT case: the box reads the cluster down while Prometheus sees it scraping the box.
+        - alert: MgmtApplyDeferredByVerdict
+          expr: |
+            mgmt_apply_deferred_verdict == 1
+          for: 2h
+          # triage dig: either a real outage (its own alerts carry it) or the box's view disagreeing
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "The management box has deferred master's apply for 2h: its own verdict reads the cluster DOWN"
+            description: >-
+              mgmt-apply has a master change to plan and has deferred it for 2 hours because the box
+              verdict (mgmt/scripts/mgmt-verdict.sh — Talos API, kube API via the CP VIP, cilium BGP,
+              the BGP VIPs from the LAN, node Ready, ArgoCD health) reads the cluster DOWN, or could
+              not run. Prometheus is evidently scraping the box, so compare: `ssh root@192.168.2.53
+              'cd /var/lib/homelab && devbox run --quiet mgmt-verdict -- --format text'` names the
+              failing read; the DEFERRED line in `journalctl -u mgmt-apply -n 20` carries the reasons.
         # S9 #1988 (2026-10-04) — the provider-bump failure signal. A provider pin plans EMPTY at
         # merge (the sentinel's gate), so its create/update/delete code first runs on a LATER,
         # unrelated apply; when that apply errors and a provider owning one of its addresses is at a
