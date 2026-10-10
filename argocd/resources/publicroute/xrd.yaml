@@ -40,7 +40,7 @@ spec:
               properties:
                 zone:
                   type: string
-                  default: teststuff.net
+                  default: teststuff.net # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: >-
                     Which zone the route lives in (ADR-101 zone classes). Platform zone
                     (teststuff.net, the default): any namespace may claim inside its delegated
@@ -66,16 +66,16 @@ spec:
                     protocol:
                       type: string
                       enum: [http, https]
-                      default: http
+                      default: http # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                     originServerName:
                       type: string
                       description: TLS SNI/verify name when protocol=https.
                     noTLSVerify:
                       type: boolean
-                      default: false
+                      default: false # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 replicas:
                   type: integer
-                  default: 1
+                  default: 1 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: cloudflared connector replicas in the claiming namespace.
     - name: v1alpha2
       served: true
@@ -90,7 +90,7 @@ spec:
               properties:
                 zone:
                   type: string
-                  default: teststuff.net
+                  default: teststuff.net # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: >-
                     Which zone the route lives in (ADR-101 zone classes). Platform zone
                     (teststuff.net, the default): any namespace may claim inside its delegated
@@ -125,13 +125,13 @@ spec:
                     protocol:
                       type: string
                       enum: [http, https]
-                      default: http
+                      default: http # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                     originServerName:
                       type: string
                       description: TLS SNI/verify name when protocol=https.
                     noTLSVerify:
                       type: boolean
-                      default: false
+                      default: false # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 rateLimit:
                   type: object
                   description: >-
@@ -146,7 +146,7 @@ spec:
                         Bounds: 60-6000.
                       minimum: 60
                       maximum: 6000
-                      default: 1200
+                      default: 1200 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 origins:
                   type: array
                   description: >-
@@ -206,5 +206,5 @@ spec:
                         as the sibling `header` field.
                 replicas:
                   type: integer
-                  default: 1
+                  default: 1 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: cloudflared connector replicas in the claiming namespace.
