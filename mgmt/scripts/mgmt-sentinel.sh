@@ -54,6 +54,8 @@ fi
 exec 9>"$SDIR/.lock"; flock -w 600 9 || { log "PROBE-FAIL: lock busy for 10 min"; exit 1; }
 
 mgmt_clone "$REPO" "$REPO_URL" || { log "PROBE-FAIL: clone/fetch of $REPO_URL failed"; exit 1; }
+# tofu/talosctl as master's devbox.lock pins them, read as DATA — devbox never runs here (FU-305)
+mgmt_tree_path "$REPO" || log "WARN a tree-locked tool is unresolvable from $REPO/devbox.lock (why above) — the steps that need it fail with that reason"
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master
 trap 'rm -f "$POL"' EXIT
 
@@ -68,7 +70,7 @@ trap 'rm -f "$POL"' EXIT
 # fetched every run and can be an hour ahead of what runs (2026-09-28 12:06Z: a re-judge wore a
 # new tag while the old script ran, and the "proof" it produced was the old engine's). The policy
 # is read from the clone's origin/master every run, so its blob id is the right input for it.
-ENGINE_REV="$( { cat "$0" "$HERE/mgmt-lib.sh"; git -C "$REPO" rev-parse origin/master:policy/mgmt/plan-input.yaml; } 2>/dev/null | sha256sum | cut -c1-7)" || ENGINE_REV=""
+ENGINE_REV="$( { cat "$0" "$HERE/mgmt-lib.sh" "$HERE/mgmt-tools.sh"; git -C "$REPO" rev-parse origin/master:policy/mgmt/plan-input.yaml; } 2>/dev/null | sha256sum | cut -c1-7)" || ENGINE_REV=""
 case "$ENGINE_REV" in *[!0-9a-f]*|'') ENGINE_REV="";; esac
 [ -n "$ENGINE_REV" ] || log "engine revision unreadable — verdicts fall back to the per-sha memo this run"
 ETAG="${ENGINE_REV:+[e:$ENGINE_REV] }"

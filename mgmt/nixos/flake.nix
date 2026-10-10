@@ -1,8 +1,9 @@
 # The management box (R12) — ADR-129, mechanism in docs/management-box.md.
 #
-# Deliberately a SUBDIRECTORY flake: the repo root belongs to devbox (devbox.json/devbox.lock),
-# which is the TOOLCHAIN pin for both the jail and this box. This flake pins only the SYSTEM
-# CLOSURE (kernel, glibc, systemd, sshd). Two pins, two revert paths, one git.
+# Deliberately a SUBDIRECTORY flake: the repo root belongs to devbox (devbox.json/devbox.lock), the
+# jail's toolchain pin — the box reads only its tofu/talosctl/helm entries, as data. This flake pins
+# the SYSTEM CLOSURE (kernel, glibc, systemd, sshd) AND the loops' own tools (`boxTools` — the gate
+# never runs master's devbox, FU-305). Two pins, two revert paths, one git (docs/management-box.md).
 #
 # Install (once, from a USB stick — the stick carries only an SSH-able installer). `--extra-files`
 # is not optional: sshd GENERATES a host key when none is present, and a reinstall that regenerates
