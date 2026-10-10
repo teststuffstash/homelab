@@ -41,8 +41,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-10T18:39:34Z",
-      "last_proven_pr": 2472,
+      "last_proven": "2026-10-10T19:50:09Z",
+      "last_proven_pr": 2481,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 4
@@ -226,9 +226,9 @@
         "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "3": {
-        "merged_at": "2026-10-10T18:39:34Z",
-        "pr": 2472,
-        "title": "arc-runners: pin runner image 2026.10.10-g86686ec2a0a5"
+        "merged_at": "2026-10-10T19:50:09Z",
+        "pr": 2481,
+        "title": "arc-runners: pin runner image 2026.10.10-g38f4cd58695b"
       },
       "4": {
         "merged_at": "2026-10-10T17:38:28Z",
@@ -388,9 +388,9 @@
         "title": "deploy: agent-coordinator 2026.10.10-gd303a3b5bd8d"
       },
       "3:homelab/arc-runner": {
-        "merged_at": "2026-10-10T18:39:34Z",
-        "pr": 2472,
-        "title": "arc-runners: pin runner image 2026.10.10-g86686ec2a0a5"
+        "merged_at": "2026-10-10T19:50:09Z",
+        "pr": 2481,
+        "title": "arc-runners: pin runner image 2026.10.10-g38f4cd58695b"
       },
       "4:argo-cd": {
         "merged_at": "2026-10-10T17:16:53Z",
@@ -1068,9 +1068,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:homelab/arc-runner",
-      "last_proven": "2026-10-10T18:39:34Z",
+      "last_proven": "2026-10-10T19:50:09Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.10-g86686ec2a0a5 (×3)",
+      "version": "2026.10.10-g38f4cd58695b (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
