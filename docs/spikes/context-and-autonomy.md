@@ -94,6 +94,28 @@ build-order history (spikes); `merge-path.md` narrative (42) is incident history
 leave the read plan since the YAML is the source. **≈520 KB leaves; ≈250–300 KB stays** —
 about 70k tokens, a routine load instead of a 300k exception.
 
+### C2. The platform outside the loop is growing islands too (operator, 2026-10-10)
+
+§C cuts the agent loop only. The rest of the platform is catching up: until now the loop held
+most of the heavy context, and it will stay the heaviest, but each of these now has its own
+owning docs, its own lane and its own failure classes:
+
+| Island (candidate) | Owning docs |
+|---|---|
+| Dependency upgrades / Renovate | `docs/dependency-upgrades.md`, `docs/dependency-classes.yaml`, `docs/renovate.md` |
+| The management box | `docs/management-box.md` |
+| The router pair (OPNsense CARP) | `docs/router-move.md`, `docs/opnsense-test-vm.md` |
+| The cluster substrate (3 CPs, disks, Garage, services) | `docs/controlplane-ha.md`, `docs/storage-ledger.md`, `docs/garage.md`, `docs/longhorn-backup.md`, `SERVICES.md` |
+
+Not measured: §C's co-change method has not been run on these, so the cut is the operator's
+reading, not a number yet. The consequence for every multi-domain reader (the sweeps, the
+design skill's founding read, the seat's startup) is the same as for the loop: **classify the
+item to its island, then read that island's slice** — the 2026-10-10 sweep question ("does
+board-sweep need the design-agents corpus?") had no right answer because the skills knew one
+context. The sweep skills carry that rule in this PR, plus `meta-state.md` as the input for
+the seat's declared parks (CORRECTLY-WAITING's named gate), which they named only as a
+staleness risk.
+
 ### D. Context the human pays (first draft, still true)
 
 | What | Size |
@@ -226,7 +248,8 @@ grows on the intake and fix sides, never the approval side). *Settles:* days fro
 coordinator island's own context, loaded per clause; the first draft's hygiene items ride along
 as one-liners — `session-ctx --startup` thresholds as lints, the Agents block of the tracker back
 to issues, containers and `agent/done` issues closing on date predicates, meta-state as a
-machine-readable pickup list. *Settles:* `--startup` ≤ 40 KB; the design-agents read plan
+machine-readable pickup list; the platform islands of §C2 each get an owning-docs index the
+sweeps and `/design` route through (the loop's is the design-agents read plan). *Settles:* `--startup` ≤ 40 KB; the design-agents read plan
 ≤ 300 KB.
 
 **Order.** P0 is a ruleset edit; P1 and P3 are the backlog itself; P2 is the first island and the
@@ -241,7 +264,9 @@ template for the coordinator's; P4 and P5 are what make P6 safe; P7 falls out of
   paragraphs reduced to their rules; every rule kept.
 - `board-sweep` + `fu-sweep` — the "run the design-agents read plan first" rule (forbidden since
   2026-09-27) replaced by the slice rule; fu-sweep's and design-agents' descriptions reduced to
-  when-to-use; a stale "34 of 57" figure replaced by "read the lint output".
+  when-to-use; a stale "34 of 57" figure replaced by "read the lint output". 2026-10-10: the
+  slice rule became island-first (§C2), and board-sweep's gather reads `meta-state.md` + the
+  window's TICK-LOG for declared parks.
 
 ## Loose ends found, not filed (second jail — the primary mints)
 

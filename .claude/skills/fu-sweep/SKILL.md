@@ -20,12 +20,15 @@ prints the live open count and the oversize items — read those, never a rememb
 
 ## Hard rules
 
-- **Agents items: slice, never the whole corpus.** Most open items are agent-platform. The full
-  [`design-agents`](../design-agents/SKILL.md) read is operator-typed only (2026-09-27); do NOT
-  read `docs/agents/` wholesale as the workaround. Classify each agents item from the section
-  its text links or names (grep the corpus by the item's keywords); an item whose verdict needs
-  a design judgment you cannot ground from its slice is **OPERATOR** — write the question into
-  the sweep report, leave the item unchanged. If a [`board-sweep`](../board-sweep/SKILL.md) ran
+- **Island first, then the slice — never a whole corpus.** Route each item to its island (the
+  agent loop, dependency upgrades, the management box, the router pair, the cluster substrate —
+  spike `context-and-autonomy.md` §C2) and classify it from that island's owning docs: the
+  section its text links or names (grep by the item's keywords). Agent-loop items are still the
+  most; the full [`design-agents`](../design-agents/SKILL.md) read is operator-typed only
+  (2026-09-27) — do NOT read `docs/agents/` wholesale as the workaround. An item whose verdict
+  needs a design judgment you cannot ground from its slice is **OPERATOR** — write the question
+  into the sweep report, leave the item unchanged. An item parked or ruled in
+  `docs/agents/meta-state.md` is CORRECTLY-WAITING on that ruling, not stale. If a [`board-sweep`](../board-sweep/SKILL.md) ran
   this session, its HANDLED bucket IS step 2's machine-lane delta — verify by substance and
   move on.
 - **This is not a closing spree.** "Close the stale ones" produces a small tracker and a large
