@@ -219,7 +219,8 @@ apply_case helm-longhorn-update allowed            "$POL_HELM" "[$(helm_rc longh
 # Cilium is class 6 by ruling — never a row, so always outside (a human apply)
 apply_case helm-cilium          outside            "$POL_HELM" "[$(helm_rc cilium cilium '["update"]' 1.19.1 1.19.2)]"
 # without the rows (master before the policy change) a helm change stays outside — the code alone widens nothing
-apply_case helm-no-rows         outside            "$POL" "[$H_APPS]"
+POL_NOHELM="$T/policy-nohelm.yaml"; _yq 'del(.apply_helm)' "$POL" >"$POL_NOHELM"
+apply_case helm-no-rows         outside            "$POL_NOHELM" "[$H_APPS]"
 apply_case helm-create          helm-action        "$POL_HELM" "[$(helm_rc argocd_apps argocd-apps '["create"]' - 2.0.6)]"
 apply_case helm-replace         helm-action        "$POL_HELM" "[$(helm_rc argocd_apps argocd-apps '["delete","create"]' 2.0.5 2.0.6)]"
 apply_case helm-plus-residue    helm-not-alone     "$POL_HELM" "[$H_APPS, "'{"address":"kubernetes_config_map.x","type":"kubernetes_config_map","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
