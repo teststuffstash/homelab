@@ -557,6 +557,7 @@ is stale, so it cannot drift the way the prose register did.
 | `updater` | table | - | `-` | MP-T02 |
 | `workflow-pin-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-lock-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `workflow-pin-revert-lock-flake-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 <!-- replay-index:end -->
 
