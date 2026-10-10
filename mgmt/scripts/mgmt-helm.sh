@@ -29,7 +29,7 @@
 #                 chart upgrade leaves every volume on the old engine. The box moves them ONE AT A TIME,
 #                 least valuable disk class first (the policy row's `engine_order`), each waited to the new
 #                 image AND back to its old robustness before the next; the first that does not stops it
-#   5 end         settle, `after`, the VERDICT (verdict seam below — the FU-302 swap point), the health
+#   5 end         settle, `after`, the VERDICT (the evidence verdict + the box verdict, FU-302), the health
 #                 compare; the record goes to the backup Garage. Good → the lease is deleted (confirmed)
 #                 and the window closed. Bad → STOP: the lease STAYS (the lease loop reads a `tofu/` subject
 #                 as `forward_only` — never a revert PR), the window stays open (it holds the apply loop
@@ -44,12 +44,6 @@ HELM_LEASE_LABEL="${MGMT_LEASE_LABEL:-homelab.teststuff.net/upgrade-lease}"
 HELM_SETTLE="${MGMT_HELM_SETTLE:-600}"          # after the apply (and the engine moves) before `after` is read
 HELM_ENGINE_TIMEOUT="${MGMT_HELM_ENGINE_TIMEOUT:-900}"   # per volume
 HELM_BACKUP_TIMEOUT="${MGMT_HELM_BACKUP_TIMEOUT:-1800}"  # the Longhorn on-demand backups, all together
-# The verdict's alert SCOPE (drill 1, 2026-10-10: GithubRateLimitLow — GitHub's API quota, fired by the
-# shared App pool mid-compare — STOPPED a clean argocd-apps roll). A new firing alert is a finding only
-# when its name is in the cone a substrate helm roll can reach: this ERE, or a declared name below.
-# Everything else is RECORDED (verdict-noted.txt, summary.txt) and left to the responder — a static
-# scope, not a diagnosis: the box still never reads WHY an alert fires.
-HELM_CONE_ALERTS="${MGMT_HELM_CONE_ALERTS:-^(Kube|Cilium|Longhorn|ArgoCD|Etcd|CoreDNS|Prometheus|Alertmanager|TargetDown$|Watchdog$)}"
 # The names a helm roll of these releases structurally produces (the window graces them, silences nothing).
 HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymentReplicasMismatch,KubeDeploymentRolloutStuck,KubeDaemonSetRolloutStuck,KubeStatefulSetReplicasMismatch,KubeStatefulSetUpdateNotRolledOut,ArgoCDAppDegraded,ArgoCDAppOutOfSync,LonghornVolumeDegraded,TargetDown}"
 
@@ -228,8 +222,11 @@ helm_begin() {
     _hwin close --id "$wid" --tail-min 0 >/dev/null 2>&1 || true; return 1
   fi
   printf '%s' "$lease" >"$d/lease-name"
-  if ! mgmt_health snapshot >"$d/health-before.json" 2>"$d/health-before.err"; then
-    log "helm: health baseline unreadable — not applying (lease deleted, window closed)"
+  # the box verdict's baseline (FU-302, management-box.md §The box verdict): DOWN or unrunnable = no apply
+  local vbase=0; mgmt_verdict >"$d/box-verdict-before.json" 2>"$d/box-verdict-before.err" || vbase=$?
+  printf '%s' "$vbase" >"$d/box-verdict-before.rc"
+  if [ "$(mgmt_verdict_rank "$vbase")" -ge 2 ]; then
+    log "helm: box verdict $(mgmt_verdict_name "$vbase") before the apply — not applying (lease deleted, window closed)"
     _hk -n "$HELM_LEASE_NS" delete cm "$lease" >/dev/null 2>&1 || true
     _hwin close --id "$wid" --tail-min 0 >/dev/null 2>&1 || true; return 1
   fi
@@ -278,47 +275,24 @@ helm_lh_engines() {
 }
 
 # ── 5 end ────────────────────────────────────────────────────────────────────────────────────────
-# helm_cluster_verdict <dir> <release> → rc 0 good / 2 bad, findings in $d/verdict.txt.
-# ════ FU-302 SWAP POINT ════ the box's own cluster verdict (a box CLI with machine-readable output) is
-# being built in parallel. Until it lands this composes the reads the box already has: the evidence
-# verdict (Kubernetes API + `kubectl exec` into cilium — Prometheus-free) and the maintenance-window
-# compare, polled (it DOES read Prometheus; an unreadable probe there is a finding, never "fine"). When
-# FU-302 merges, its verdict replaces the compare call below and keeps the evidence verdict — the
-# contract stays rc 0/2 + findings lines.
+# helm_cluster_verdict <dir> <release> → rc 0 good / 2 bad, findings in $d/verdict.txt. Two reads, both
+# must pass: the evidence verdict (scripts/helm-release-evidence.sh — release-scoped: rolled, deployed,
+# BGP, Longhorn robustness, ArgoCD health, before vs after) and the BOX VERDICT (FU-302,
+# mgmt/scripts/mgmt-verdict.sh, docs/management-box.md §The box verdict — Talos, kube API, BGP, VIPs,
+# nodes, ArgoCD, Prometheus/Alertmanager readiness) polled until it ranks no worse than its baseline
+# from helm_begin. The box verdict REPLACED the maintenance-window compare (the declared FU-302 swap,
+# 2026-10-10): no Prometheus alert names any more — drill 1 stopped a clean roll on GitHub's API quota.
 helm_cluster_verdict() {
-  local d="$1" rel="$2" rc=0
+  local d="$1" rel="$2" rc=0 vbase line
   : >"$d/verdict.txt"
   _hev verdict "$d/before.json" "$d/after.json" "$rel" >"$d/verdict.json" 2>>"$d/verdict.txt" || rc=2
   jq -r '.findings[]?' "$d/verdict.json" 2>/dev/null | sed 's/^/evidence: /' >>"$d/verdict.txt"
-  # the compare is POLLED (mgmt_post_check — the Talos post-check's own loop, settle already spent
-  # above): a transient roll alert that clears inside MGMT_POSTCHECK_TIMEOUT is not a regression
-  : >"$d/verdict-noted.txt"
-  if ! MGMT_POSTCHECK_SETTLE=0 mgmt_post_check "$d/health-before.json" >"$d/health-compare.txt" 2>&1; then
-    helm_scope_health "$d/health-compare.txt" "$d/verdict-noted.txt" >"$d/health-findings.txt"
-    if [ -s "$d/health-findings.txt" ]; then rc=2; sed 's/^/health: /' "$d/health-findings.txt" >>"$d/verdict.txt"; fi
+  vbase="$(cat "$d/box-verdict-before.rc" 2>/dev/null)"; vbase="${vbase:-1}"
+  if ! line="$(mgmt_verdict_poll "$vbase" "$d/box-verdict-after.json")"; then
+    rc=2; echo "box: ${line:-box verdict poll failed without a finding}" >>"$d/verdict.txt"
   fi
   [ "$rc" = 0 ] && [ ! -s "$d/verdict.txt" ] && return 0
   return 2
-}
-# helm_scope_health <compare-findings> <noted-out> → the findings that COUNT on stdout: every non-alert
-# probe line unchanged; a "NEW firing alerts: a, b" line keeps only the cone's names (HELM_CONE_ALERTS
-# or HELM_DECLARED_ALERTS), the rest go to <noted-out> as "outside the cone: <name>".
-helm_scope_health() {
-  local line names n keep
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    case "$line" in
-      "NEW firing alerts: "*)
-        names="${line#NEW firing alerts: }"; keep=""
-        while IFS= read -r n; do
-          n="$(sed 's/^ *//; s/ *$//' <<<"$n")"; [ -n "$n" ] || continue
-          if grep -qE "$HELM_CONE_ALERTS" <<<"$n" || tr ',' '\n' <<<"$HELM_DECLARED_ALERTS" | grep -qxF "$n"; then keep="$keep${keep:+, }$n"
-          else echo "outside the cone: $n" >>"$2"; fi
-        done < <(tr ',' '\n' <<<"$names")
-        [ -z "$keep" ] || echo "NEW firing alerts: $keep" ;;
-      *) echo "$line" ;;
-    esac
-  done <"$1"
 }
 # helm_end <dir> <apply-rc> <engine-order csv> → rc 0 confirmed / 2 STOPPED. Never reverts anything.
 helm_end() {
@@ -336,7 +310,7 @@ helm_end() {
     _hev diff "$d/before.json" "$d/after.json" 2>/dev/null || echo "(diff unreadable)"
     [ -s "$d/engines.log" ] && { echo "== longhorn engines"; cat "$d/engines.log"; }
     echo "== verdict"; if [ -s "$d/verdict.txt" ]; then cat "$d/verdict.txt"; else echo "ok"; fi
-    [ -s "$d/verdict-noted.txt" ] && { echo "== noted, not findings (new alerts outside the cone — the responder's)"; cat "$d/verdict-noted.txt"; }
+    echo "== box verdict $(mgmt_verdict_name "$(cat "$d/box-verdict-before.rc" 2>/dev/null)") → $(jq -r '.verdict // "?"' "$d/box-verdict-after.json" 2>/dev/null)"
   } >"$d/summary.txt"
   _hev upload "$d" >>"$d/upload.log" 2>&1 || log "helm: WARN record not uploaded to the backup Garage — kept at $d"
   if [ "$arc" = 0 ] && [ "$erc" = 0 ] && [ "$vrc" = 0 ] && [ ! -s "$d/verdict.txt" ]; then
