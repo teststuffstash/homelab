@@ -84,11 +84,10 @@ spec:
               for an hour, so the sync loop is not converging. Get the controller's own diff with
               `argocd app diff {{ $labels.name }}`, or the API's
               /api/v1/applications/{{ $labels.name }}/managed-resources (normalizedLiveState vs
-              predictedLiveState). The usual cause is a field the API server or a controller stamps
-              into the live object that git does not declare, typically inside a list ArgoCD owns
-              atomically under ServerSideApply. Declare it in git. Use ignoreDifferences only for a
-              field nobody should set from git, because with RespectIgnoreDifferences=true an ignored
-              field never applies. History: docs/dependency-upgrades.md gap register G4.
+              predictedLiveState). Check whether that diff shows a field the API server or a
+              controller stamps into the live object that git does not declare. See
+              docs/dependency-upgrades.md gap register G4 for the 2026-10-10 cases and the
+              declare-in-git rule.
         - alert: ArgoCDNotificationDeliveryFailing
           # The FU-044 revert chain's first hop. 150 failures / 0 successes over 2026-07-27 → 10-04
           # went unseen because this counter was never scraped.
