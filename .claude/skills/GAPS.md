@@ -18,6 +18,19 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
       Sighted 2026-08-11.
 
+## board-sweep
+
+- [ ] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) gates its WHOLE pass on the
+      design-agents corpus, but most of it is mechanical: gather (crosscheck, `gh search`, S3
+      lane listings), and Renovate/dependency PRs, whose lanes are deterministic (ADR-141,
+      ADR-143, `classes.yaml`) and need no corpus (operator 2026-10-10). Also: (a) "run the
+      design-agents read plan" predates the typed-only rule, so it reads as if the skill could
+      load the corpus itself; (b) `meta-state.md` is named only as a staleness risk, never as the
+      input for the seat's declared parks/rulings that CORRECTLY-WAITING needs. Fix: split each
+      skill into a mechanical stage (no corpus, any seat) and a corpus-gated judgment stage
+      (STUCK-MACHINE / agent/* ESCALATED-UNSEEN / agents FUs); the 2026-10-03 fu-sweep's
+      "no-judgement scope" is the first sample of the split. Sighted 2026-10-10 (operator).
+
 ## handoff
 
 - [ ] handoff-G1 — a stack handoff/issue comment that DIAGNOSES a platform fault was acted on as a
