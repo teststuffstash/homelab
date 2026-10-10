@@ -20,7 +20,10 @@ case "$1 $2" in
     head="$(printf '%s\n' "$@" | grep -A1 -x -- --commit | tail -1)"
     [ -f "$WORLD/red-$head" ] && cat "$WORLD/red-$head"; exit 0 ;;
   "api "*)
-    case "$2" in */commits/*/status) h="${2#*/commits/}"; h="${h%/status}"; f="$WORLD/status-$h"; [ -f "$f" ] && jq -r "$4" <"$f"; exit 0 ;; esac
+    case "$2" in */commits/*/status) h="${2#*/commits/}"; h="${h%/status}"
+      # gh on an API error: the error JSON on STDOUT, non-zero exit (the 2026-10-10 rate-limit shape)
+      [ -f "$WORLD/status-err-$h" ] && { cat "$WORLD/status-err-$h"; exit 1; }
+      f="$WORLD/status-$h"; [ -f "$f" ] && jq -r "$4" <"$f"; exit 0 ;; esac
     exit 0 ;;
 esac
 echo "stub: unexpected $*" >&2; exit 64
@@ -62,6 +65,11 @@ case_ multi-merged-plus-conflict 6 "#9 MERGE CONFLICT" 8 9
 { v OPEN APPROVED k1 MERGEABLE; } >"$WORLD/view-11"
 echo '{"statuses":[{"context":"ci","state":"success","description":"ok"},{"context":"management-sentinel","state":"failure","description":"plan errored: main"}]}' >"$WORLD/status-k1"
 case_ status-red-exits-4 4 "#11 STATUS RED at head — management-sentinel: plan errored: main" 11
+# an UNREADABLE status (a 403 rate limit: gh prints the error JSON on stdout, exits 1) is not a red
+# status — keep waiting; the PR then merges and the run exits 0 (was a false exit 4, #2433/#2439)
+{ v OPEN APPROVED m1 MERGEABLE; v MERGED APPROVED m1 MERGEABLE; } >"$WORLD/view-12"
+printf '{\n\t"message": "API rate limit exceeded for user ID 1.",\n\t"status": "403"\n}\n' >"$WORLD/status-err-m1"
+case_ status-api-error-not-red 0 "pr-wait: MERGED" 12
 # a timeout names the PRs still open
 { v OPEN REVIEW_REQUIRED j1 MERGEABLE; } >"$WORLD/view-10"
 out="$(bash "$HERE/pr-wait.sh" 10 --interval 1 --timeout 1 --no-arm 2>&1)"; rc=$?

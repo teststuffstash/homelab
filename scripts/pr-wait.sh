@@ -120,9 +120,13 @@ check_pr() {
   # COMMIT STATUSES at head too (2026-10-04): `management-sentinel` (the box) and the other
   # required non-Actions gates post a STATUS, not a run — `gh run list` never sees them, and the
   # drill PR #2209 sat APPROVED + BLOCKED on a red sentinel for this script's whole hour.
+  # `|| sred=""`, never `|| true` inside the substitution: on an API error (a 403 rate limit) gh
+  # prints the error JSON on STDOUT and exits non-zero, and `|| true` kept that text as a "red
+  # status" — two false exit-4 terminals in one seat-subagent run on 2026-10-10 (#2433, #2439).
+  # An unreadable status is "not known red": keep waiting, the next poll re-reads.
   sred="$("$GH" api "/repos/${REPO}/commits/${head}/status" \
           --jq '[.statuses[] | select(.state == "failure" or .state == "error")] | first // empty | "\(.context): \(.description)"' \
-          2>/dev/null || true)"
+          2>/dev/null)" || sred=""
   if [ -n "$sred" ]; then
     echo "pr-wait: #${pr} STATUS RED at head — ${sred}"
     echo "pr-wait: read it with: gh pr view ${pr} --repo ${REPO} --comments (the gate's own comment carries the detail)"
