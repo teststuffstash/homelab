@@ -520,17 +520,14 @@ the block needs pruning, not more headings.
       below GitHub's 2.329.0 registration floor until a recreate) — Renovate-track it (every bump = a VM replace
       the box must then run) or install `latest` at boot (the runner self-updates anyway).
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
-      2026-10-07: #2362's Python bump hit devbox's venv "overwrite? (y/n)" → every box `devbox run` exited 1 → no
-      `management-sentinel` verdict (every PR BLOCKED), apply/lease PROBE-FAILed; the 10-10 lock drill found the
-      revert PR wedged the same way. **Class fix PR#2457 (2026-10-10):** no gate loop runs devbox — tools from the
-      box's closure (`boxTools`), tofu/talosctl/helm read from the clone's devbox.lock as data (split:
-      docs/management-box.md §Two pins); `mgmt-tools-test` drives the no-plan verdict past a poisoned devbox.
-      LIVE 10-10 16:53Z. The in-cluster iac-sentinel (required) runs the runner image's BAKED lock (ruling 10-10:
-      `/opt/baked/homelab`, warm-one bakes only a realised pair — §Two pins). **Next:** the class-7 lock revert
-      drill once the baked image is pinned (dependency-upgrades §Last proven);
-      the flake.lock proposer = the weekly devbox-update PR (ruling 10-10; pin-only-lint (j), CODEOWNERS carve-out
-      operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
-      20:15–21:10Z).
+      2026-10-07: #2362's Python bump hit devbox's venv prompt → every box `devbox run` exited 1 → no
+      `management-sentinel` verdict, apply/lease PROBE-FAILed. **Class fix PR#2457 (LIVE 10-10 16:53Z):** no gate
+      loop runs devbox (box closure `boxTools`; the lock read as data); the required iac-sentinel runs the runner
+      image's BAKED lock (ruling 10-10) — both halves: docs/management-box.md §Two pins. Class-7 lock revert
+      DRILLED 10-10 (#2478→#2480, both sentinels green; governance-lint red the chain's own revert → its
+      revert-lock arm, PR#2482 — dependency-upgrades §Last proven). **Next:** a hands-off rerun; the flake.lock
+      proposer = the weekly devbox-update PR (ruling 10-10; pin-only-lint (j), CODEOWNERS carve-out
+      operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran

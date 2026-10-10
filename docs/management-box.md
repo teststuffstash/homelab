@@ -647,6 +647,16 @@ window make both records worthless, and a second release would need its own leas
    **The wait is bounded at 60 min per volume** (`HELM_ENGINE_TIMEOUT`, ≈2× the first breakage record
    below): one patch, then reads only — Longhorn's own retry converging inside the bound is a pass,
    logged with what the box saw meanwhile; waiting on the substrate is not the box acting on it.
+   **The moves run in their OWN bracket and unit** (since 2026-10-10 night — the first run held the apply
+   tick for hours and hit the unit's 5 h cap): the apply tick only notices v1 volumes off the manager's
+   engine and `systemctl start --no-block mgmt-helm-engines.service` (`mgmt/scripts/mgmt-helm-engines.sh`,
+   its own clone, `TimeoutStartSec=infinity`, `restartIfChanged = false`); the chart bracket (items 1–3,
+   5) confirms the chart roll alone. **Its lease renews on PROGRESS**: one move budget = the 60-min wait
+   + the settle/verdict tail; begin sets `expected-end` = now + one budget and fixes `max-end` = now +
+   moves × 60 min + the tail; each CONVERGED volume renews `expected-end` = now + one budget, never past
+   `max-end` (the window renews with it). No convergence, no renewal: a hung or killed run's lease runs out
+   within one budget and the lease loop's `forward_only` fires `MgmtHelmApplyStopped` — the ADR-150
+   dead-man unchanged; renewal is ADR-150 (2)'s own "renewals never pass `max-end`".
 5. **Verdict** (`helm_cluster_verdict`): the evidence `verdict` verb AND the box verdict (FU-302),
    both Prometheus-free. The evidence rules compare after against before: every release `deployed`;
    the applied release rolled (observed = generation, ready = updated = desired) with every pod Ready;
@@ -671,10 +681,13 @@ mid-bracket and never wrote a verdict). **Clearing a stop**: read `summary.txt`,
 /var/lib/mgmt/apply/helm-stopped`, `kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`,
 `devbox run maint -- close --id <window>`. The unit's `TimeoutStartSec` is 5 h for this bracket.
 **Resume.** A STOP inside the engine moves leaves the chart applied and volumes on the old engine. On a
-tick whose master is already applied, with the longhorn row present, no marker and no window holding it,
-the loop runs the same bracket with no apply (`helm_lh_resume`: window, lease, verdict baseline, the
-remaining moves in order, verdict) — so clearing the stop IS the resume. The box never resumes itself
-while the marker stands.
+tick whose master is already applied, with the longhorn row present and no marker, the apply tick starts
+the engines unit again (`helm_lh_engines_run`: window, lease, verdict baseline, the remaining moves in
+order, verdict) — so clearing the stop IS the resume. The box never resumes itself while the marker
+stands. **A stale lease is a STOP, not a wedge:** any bracket that finds its release's lease still
+standing reads it — live (inside `expected-end`) = in flight, not begun; PAST DUE = its actor died or
+stopped unconfirmed → the marker is written naming the lease (`MgmtHelmApplyStopped`), so a killed run
+never leaves the loop refusing quietly every tick. One documented clear covers both: marker + lease.
 
 **Breakage records — the data the 2026-10-02 ruling waits for** (one dated line each; the record is the
 detail):
