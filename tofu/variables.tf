@@ -298,7 +298,11 @@ variable "nodes" {
     # member in that chassis is this disk (nx-01 carries `fast` alone, PR#1956), so `longhorn-bulk`
     # can never place both replicas of a volume inside the twin. Re-ask this if a SECOND bulk disk
     # ever lands on an nx node — that is the moment the zone names must collapse.
-    wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 80, longhorn = true, hypervisor = "nx-02",
+    # disk_gb 80→110 (2026-10-10, operator): wk-04 is the only untainted node with room for a 4-CPU
+    # batch request, so oracle's what-if builds (~39 GB emptyDir scratch each) all land here, and
+    # 46 of its 81 GB were cached images. Grows nvme-thin's provisioned total to ~262 of 233.6 GiB
+    # (real use 45%) — metered by PveThinPool*; read the POOL before growing again.
+    wk-04 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 110, longhorn = true, hypervisor = "nx-02",
       hostpci_mapping = "wk04-sn530",
       numa_pin        = true,
       longhorn_disks  = [{ device = "/dev/disk/by-id/nvme-eui.e8238fa6bf530001001b448b49e4a8d0", name = "sn530", tags = ["bulk"] }]
