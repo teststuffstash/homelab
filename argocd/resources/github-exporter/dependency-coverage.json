@@ -49,14 +49,11 @@
     },
     {
       "complete": false,
-      "gap_cells": [
-        "proposer"
-      ],
-      "gap_rows": 3,
+      "gap_cells": [],
+      "gap_rows": 0,
       "human_cells": [
         "canary",
         "deploy_edge",
-        "merge_gate",
         "revert"
       ],
       "human_rows": 0,
@@ -1052,9 +1049,7 @@
     },
     {
       "class": 4,
-      "gap_columns": [
-        "proposer"
-      ],
+      "gap_columns": [],
       "key": "4:argo-cd",
       "last_proven": null,
       "name": "argo-cd",
@@ -1066,9 +1061,7 @@
     },
     {
       "class": 4,
-      "gap_columns": [
-        "proposer"
-      ],
+      "gap_columns": [],
       "key": "4:argocd-apps",
       "last_proven": null,
       "name": "argocd-apps",
@@ -1080,9 +1073,7 @@
     },
     {
       "class": 4,
-      "gap_columns": [
-        "proposer"
-      ],
+      "gap_columns": [],
       "key": "4:longhorn",
       "last_proven": null,
       "name": "longhorn",

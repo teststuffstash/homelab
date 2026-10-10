@@ -128,8 +128,9 @@
       "automerge": true
     },
     {
-      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The two VERSION-SET partners (crossplane engine digest, cloudflared in tofu/cloudflare) are excluded so their grouped PRs ride the argocd/kubernetes lane's labels. Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float.",
+      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The two VERSION-SET partners (crossplane engine digest, cloudflared in tofu/cloudflare) are excluded so their grouped PRs ride the argocd/kubernetes lane's labels. Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float. Two later members: (1) the `install-tool helm` version of the G12 postUpgradeTasks rule (helm/helm, the two `renovate-global.json` customManagers below — S9 #1988, 2026-10-10): no CI exercises it, but the file sits under the `/.github/` CODEOWNERS row, so the operator's approval is its gate and the next kube-prometheus-stack branch's postUpgradeTasks run is its proof; (2) `matchDatasources: !helm` keeps the class-4 tofu charts (the `# renovate:` annotation manager below) OUT of this lane — they ride the `deps-review` rule after the next one.",
       "matchManagers": ["custom.regex"],
+      "matchDatasources": ["!helm"],
       "matchPackageNames": ["!crossplane/crossplane", "!cloudflare/cloudflared"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
@@ -140,6 +141,14 @@
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["crossplane/crossplane", "cloudflare/cloudflared"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "Class 4 — Helm charts, TOFU-managed (docs/dependency-upgrades.md §The dependency inventory; S9 #1988, 2026-10-10): the `helm_release` charts whose version is a `var.*` default (argo-cd, argocd-apps, longhorn — the `# renovate:` annotation manager below; Cilium is class 6 and carries no annotation, human-proposed by ruling). patch/minor → `deps-review`, armed: the merge-path reviewer + migration lens read the changelog and the management sentinel's plan-on-PR posts the changed addresses — but a MERGE IS NOT A DEPLOY here: a `helm_release` address is outside the box's apply allowlist (docs/management-box.md §The test surface), so the box refuses the plan to a human `devbox run mgmt-tf -- apply`, run under `helm-evidence` (FU-301: no unattended helm apply until breakage data exists), and `MgmtApplyResidueStanding` alerts if it sits 24 h. Majors → the un-armed catch-all (human lane).",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["helm"],
+      "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["deps-review"],
       "automerge": true
     },
@@ -252,7 +261,7 @@
       "automerge": true
     },
     {
-      "description": "kube-prometheus-stack: the upstream alert-name list RIDES the Renovate branch (gap register G12, docs/dependency-upgrades.md §Worked case). prometheus-rules-lint reds every chart bump until scripts/upstream-alerts-refresh.sh re-renders argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt for the pinned chart — a `helm pull`, so the lint never runs it, and #2225/#2245 each sat red until the seat ran it by hand. postUpgradeTasks runs it on the branch after the pin moves (executionMode branch: once per PR, not per member — the prometheus-operator-crds group partner needs no render), fileFilters commits ONLY the rendered list, and the commands are allowlisted exactly in the top-level `allowedCommands` (compiled as templates first; no shell executor, so two plain commands, no `&&`). The Renovate image is the SLIM one (renovatebot/github-action default `ghcr.io/renovatebot/renovate:<version>`, no `-full`): containerbase + jq, no helm — `install-tool helm v4.3.0` (the full image's own helm) installs it at runtime (slim keeps binarySource=install; the runtime user ran prepare-tool). The script is yq-free for the same reason (its header). A bump with NO new alert name is born CI-green; a bump that ADDS a name stays red on the lint naming it — the `deps-review` worker-adapts leg classifies it in kube-prometheus-stack-triage.yaml (that judgment never rides a script). Lane and arming unchanged (the class-1 deps-review rule above, the kube-prometheus-stack group).",
+      "description": "kube-prometheus-stack: the upstream alert-name list RIDES the Renovate branch (gap register G12, docs/dependency-upgrades.md §Worked case). prometheus-rules-lint reds every chart bump until scripts/upstream-alerts-refresh.sh re-renders argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt for the pinned chart — a `helm pull`, so the lint never runs it, and #2225/#2245 each sat red until the seat ran it by hand. postUpgradeTasks runs it on the branch after the pin moves (executionMode branch: once per PR, not per member — the prometheus-operator-crds group partner needs no render), fileFilters commits ONLY the rendered list, and the commands are allowlisted exactly in the top-level `allowedCommands` (compiled as templates first; no shell executor, so two plain commands, no `&&`). The Renovate image is the SLIM one (renovatebot/github-action default `ghcr.io/renovatebot/renovate:<version>`, no `-full`): containerbase + jq, no helm — `install-tool helm v<x.y.z>` (the full image's own helm line; the version is Renovate-proposed since 2026-10-10 by the two helm/helm customManagers, which rewrite the command AND its `allowedCommands` entry in one branch) installs it at runtime (slim keeps binarySource=install; the runtime user ran prepare-tool). The script is yq-free for the same reason (its header). A bump with NO new alert name is born CI-green; a bump that ADDS a name stays red on the lint naming it — the `deps-review` worker-adapts leg classifies it in kube-prometheus-stack-triage.yaml (that judgment never rides a script). Lane and arming unchanged (the class-1 deps-review rule above, the kube-prometheus-stack group).",
       "matchManagers": ["argocd"],
       "matchDatasources": ["helm"],
       "matchPackageNames": ["kube-prometheus-stack"],
@@ -312,6 +321,34 @@
       "matchStrings": ["cloudflare/cloudflared:(?<currentValue>[0-9]{4}\\.[0-9]+\\.[0-9]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
       "depNameTemplate": "cloudflare/cloudflared",
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Class 4 — Helm charts, tofu-managed: a `# renovate: datasource=<ds> depName=<chart> registryUrl=<repo>` comment on the line above a variable's `default = \"<version>\"` in the main root (`tofu/*.tf`). The terraform manager reads `helm_release.version` LITERALS only; these releases say `version = var.<x>`, so until this manager every chart bump was a hand edit (0 Renovate PRs, dependency-upgrades.md §Ground truth). Opt-in by annotation: `cilium_version` stays un-annotated (class 6 — human-proposed until ROADMAP G-D). The registryUrl repeats the `repository =` of the helm_release it feeds — change both together. Lane: the class-4 `deps-review` rule above.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^tofu\\/[^\\/]+\\.tf$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) registryUrl=(?<registryUrl>[^\\s]+)\\s*\\n\\s*default\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ]
+    },
+    {
+      "description": "The helm version the G12 postUpgradeTasks rule installs (`install-tool helm v<x.y.z>`, the kube-prometheus-stack rule above) — half 1 of 2: the command string itself. The surrounding quotes anchor it to the JSON string, so prose mentioning the command is never extracted. Half 2 (next) rewrites the escaped `allowedCommands` entry; both are depName helm/helm, so one branch moves both and the command keeps matching its allowlist EXACTLY (docs/renovate.md §Gotchas: an unmatched command fails the task). Lane: the custom.regex automerge rule above, behind the `/.github/` codeowner row.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github\\/renovate-global\\.json$/"],
+      "matchStrings": ["\"install-tool helm v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "Half 2 of the helm/helm pin: the `allowedCommands` entry, whose dots are regex-escaped in the file (`v4\\\\.3\\\\.0` in JSON source), so the version cannot be captured as one value. The three parts are captured separately, `currentValueTemplate` rebuilds the plain version (so it groups with half 1), and `autoReplaceStringTemplate` writes the escaped form back from newMajor/newMinor/newPatch — Renovate's post-update re-extraction compares the rebuilt value, so a wrong rewrite fails the branch instead of shipping an unmatched allowlist.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github\\/renovate-global\\.json$/"],
+      "matchStrings": ["\"\\^install-tool helm v(?<hmaj>[0-9]+)\\\\\\\\\\.(?<hmin>[0-9]+)\\\\\\\\\\.(?<hpat>[0-9]+)\\$\""],
+      "currentValueTemplate": "{{{hmaj}}}.{{{hmin}}}.{{{hpat}}}",
+      "autoReplaceStringTemplate": "\"^install-tool helm v{{{newMajor}}}\\\\.{{{newMinor}}}\\\\.{{{newPatch}}}$\"",
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ]
 }
