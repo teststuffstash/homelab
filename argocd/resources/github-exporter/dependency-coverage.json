@@ -10,8 +10,8 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-10-09T22:20:55Z",
-      "last_proven_pr": 2423,
+      "last_proven": "2026-10-10T17:01:34Z",
+      "last_proven_pr": 2462,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
       "rows": 15
@@ -41,14 +41,14 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-10T14:46:19Z",
-      "last_proven_pr": 2448,
+      "last_proven": "2026-10-10T16:05:50Z",
+      "last_proven_pr": 2454,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 4
     },
     {
-      "complete": false,
+      "complete": true,
       "gap_cells": [],
       "gap_rows": 0,
       "human_cells": [
@@ -58,8 +58,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-10-10T17:16:53Z",
+      "last_proven_pr": 2464,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -215,9 +215,9 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-10-09T22:20:55Z",
-        "pr": 2423,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v91.9.0"
+        "merged_at": "2026-10-10T17:01:34Z",
+        "pr": 2462,
+        "title": "Update Helm release argo-workflows to v2.0.11"
       },
       "10": {
         "merged_at": "2026-10-06T22:26:00Z",
@@ -230,9 +230,14 @@
         "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "3": {
-        "merged_at": "2026-10-10T14:46:19Z",
-        "pr": 2448,
-        "title": "deploy: agent-base 2026.10.10-gecc27ef3a872"
+        "merged_at": "2026-10-10T16:05:50Z",
+        "pr": 2454,
+        "title": "deploy: agent-coordinator 2026.10.10-gef55ef1372b6"
+      },
+      "4": {
+        "merged_at": "2026-10-10T17:16:53Z",
+        "pr": 2464,
+        "title": "Update Helm release argo-cd to v9.7.1"
       },
       "5": {
         "merged_at": "2026-10-10T11:52:34Z",
@@ -272,9 +277,9 @@
         "title": "Update Helm release argo-events to v2.4.27"
       },
       "1:argo-workflows": {
-        "merged_at": "2026-10-08T04:10:21Z",
-        "pr": 2378,
-        "title": "chore(deps): update helm release argo-workflows to v2.0.9"
+        "merged_at": "2026-10-10T17:01:34Z",
+        "pr": 2462,
+        "title": "Update Helm release argo-workflows to v2.0.11"
       },
       "1:cloudnative-pg": {
         "merged_at": "2026-10-05T03:59:42Z",
@@ -382,14 +387,19 @@
         "title": "deploy: agent-base 2026.10.10-gecc27ef3a872"
       },
       "3:agent-coordinator": {
-        "merged_at": "2026-10-10T14:21:28Z",
-        "pr": 2443,
-        "title": "deploy: agent-coordinator 2026.10.10-g56f8197a03de"
+        "merged_at": "2026-10-10T16:05:50Z",
+        "pr": 2454,
+        "title": "deploy: agent-coordinator 2026.10.10-gef55ef1372b6"
       },
       "3:homelab/arc-runner": {
         "merged_at": "2026-10-07T20:56:11Z",
         "pr": 2375,
         "title": "arc-runners: pin runner image 2026.10.7-g44d3e2f9a6d6"
+      },
+      "4:argo-cd": {
+        "merged_at": "2026-10-10T17:16:53Z",
+        "pr": 2464,
+        "title": "Update Helm release argo-cd to v9.7.1"
       },
       "5:Infisical/infisical@tofu/infisical": {
         "merged_at": "2026-09-27T12:28:32Z",
@@ -649,9 +659,9 @@
       "class": 1,
       "gap_columns": [],
       "key": "1:argo-workflows",
-      "last_proven": "2026-10-08T04:10:21Z",
+      "last_proven": "2026-10-10T17:01:34Z",
       "name": "argo-workflows",
-      "version": "2.0.9",
+      "version": "2.0.11",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -1015,9 +1025,9 @@
         "deploy_edge"
       ],
       "key": "3:agent-coordinator",
-      "last_proven": "2026-10-10T14:21:28Z",
+      "last_proven": "2026-10-10T16:05:50Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.10-g56f8197a03de; 32 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.10-gef55ef1372b6; 32 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1069,9 +1079,9 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:argo-cd",
-      "last_proven": null,
+      "last_proven": "2026-10-10T17:16:53Z",
       "name": "argo-cd",
-      "version": "9.5.21",
+      "version": "9.7.1",
       "where": [
         "tofu/argocd.tf",
         "tofu/variables.tf"
@@ -1083,7 +1093,7 @@
       "key": "4:argocd-apps",
       "last_proven": null,
       "name": "argocd-apps",
-      "version": "2.0.5",
+      "version": "2.0.6",
       "where": [
         "tofu/argocd.tf",
         "tofu/variables.tf"
