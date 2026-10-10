@@ -409,6 +409,24 @@ def extract_deno():
     return rows
 
 
+def extract_mgmt_flake():
+    # the management box's OWN closure (class 13, FU-305): every locked flake input — nixpkgs (the
+    # kernel AND, since 2026-10-10, the loops' tools: yq/kubectl/jq/awscli2 …) and disko
+    path = os.path.join(ROOT, "mgmt", "nixos", "flake.lock")
+    if not os.path.exists(path):
+        return []
+    rows = []
+    for name, node in sorted((json.loads(read(path)).get("nodes") or {}).items()):
+        lk = node.get("locked") or {}
+        if not lk.get("rev"):
+            continue
+        dep = f"{lk.get('owner', '?')}/{lk.get('repo', name)}"
+        ref = (node.get("original") or {}).get("ref")
+        rows.append({"name": dep, "version": f"{ref + '@' if ref else ''}{lk['rev'][:12]}", "where": [rel(path)],
+                     "match": [lk["rev"][:12]]})
+    return rows
+
+
 def extract_all(registry):
     refs = parse_image_refs()
     extractors = {
@@ -423,6 +441,7 @@ def extract_all(registry):
         "ansible": extract_ansible,
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
+        "mgmt_flake": extract_mgmt_flake,
         "none": lambda: [],
     }
     rows = []
